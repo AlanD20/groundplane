@@ -78,31 +78,44 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 		zones = append(zones, zoneID)
 	}
 	sort.Strings(zones)
+	desiredRevisionID, desiredZones, err := componentTaskDesiredProjectionZones(
+		ctx, repository.store, source, intent, zones,
+	)
+	if err != nil {
+		return componentTaskChange{}, err
+	}
 
-	keys := make([]string, 0, 2+len(intent.Candidates)+(2*len(zones)))
+	keys := make([]string, 0, 4+len(intent.Candidates)+(2*len(zones)))
 	keys = append(
 		keys,
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		environmentComposeProjectionKey(intent.EnvironmentID),
+		environmentBlueprintHeadKey(intent.EnvironmentID),
+		environmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID),
 	)
 	for _, candidate := range intent.Candidates {
 		keys = append(keys, componentKey(candidate.Current.Desired.ID))
 	}
 	for _, zoneID := range zones {
-		keys = append(keys, zoneKey(zoneID))
+		keys = append(keys, componentAddressRegistryKey(zoneID))
 	}
 	for _, zoneID := range zones {
-		keys = append(keys, componentAddressRegistryKey(zoneID))
+		keys = append(keys, deletionTombstoneKey("zone", zoneID))
 	}
 	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return componentTaskChange{}, err
 	}
-	if state == nil || len(state.Values) != len(keys) || state.Values[1] == nil {
+	if state == nil || len(state.Values) != len(keys) || state.Values[1] == nil ||
+		state.Values[2] == nil || state.Values[3] == nil {
 		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component retry state is incomplete")
 	}
 	if state.Values[0] != nil && ids.Validate(ids.KindTask, string(state.Values[0].Value)) != nil {
 		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component retry ownership is corrupt")
+	}
+	headRevisionID, err := decodeTaskReference(state.Values[2].Value)
+	if err != nil || headRevisionID != desiredRevisionID {
+		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component retry Environment head changed")
 	}
 	projection, err := decodeEnvironmentComposeProjection(state.Values[1].Value)
 	if err != nil {
@@ -124,10 +137,12 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 			{Key: componentTaskIntentKey(retry.ID)},
 			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 			{Key: environmentComposeProjectionKey(intent.EnvironmentID), ModRevision: state.Values[1].ModRevision},
+			{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[2].ModRevision},
+			{Key: environmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID), ModRevision: state.Values[3].ModRevision},
 		},
 	}
 	for index, candidate := range intent.Candidates {
-		value := state.Values[index+2]
+		value := state.Values[index+4]
 		if value == nil || value.ModRevision != candidate.CurrentRevision {
 			return componentTaskChange{}, errs.New(
 				errs.KindStateConflict,
@@ -151,22 +166,16 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 
 	zoneRecords := make(map[string]ZoneRecord, len(zones))
 	registries := make(map[string]componentAddressRegistry, len(zones))
-	zoneOffset := 2 + len(intent.Candidates)
-	registryOffset := zoneOffset + len(zones)
+	registryOffset := 4 + len(intent.Candidates)
+	tombstoneOffset := registryOffset + len(zones)
 	for index, zoneID := range zones {
-		zoneValue := state.Values[zoneOffset+index]
-		if zoneValue == nil {
+		if state.Values[tombstoneOffset+index] != nil {
 			return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component retry Zone was removed")
 		}
-		zone, decodeErr := decodeZoneRecord(zoneValue.Value)
-		if decodeErr != nil {
-			return componentTaskChange{}, decodeErr
-		}
-		if zone.Desired.ID != zoneID || zone.EnvironmentID != intent.EnvironmentID {
-			return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component retry Zone ownership changed")
-		}
+		zone := desiredZones[zoneID]
 		registryValue := state.Values[registryOffset+index]
 		registry := componentAddressRegistry{Reservations: map[string]string{}}
+		var decodeErr error
 		if registryValue != nil {
 			registry, decodeErr = decodeEnvelope[componentAddressRegistry](
 				registryValue.Value,
@@ -178,9 +187,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 		}
 		zoneRecords[zoneID] = zone
 		registries[zoneID] = registry
-		change.conditions = append(change.conditions, Condition{
-			Key: zoneKey(zoneID), ModRevision: zoneValue.ModRevision,
-		})
+		change.conditions = append(change.conditions, Condition{Key: deletionTombstoneKey("zone", zoneID)})
 		registryCondition := Condition{Key: componentAddressRegistryKey(zoneID)}
 		if registryValue != nil {
 			registryCondition.ModRevision = registryValue.ModRevision
@@ -356,25 +363,41 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		zones = append(zones, zoneID)
 	}
 	sort.Strings(zones)
+	desiredRevisionID, desiredZones, err := componentTaskDesiredProjectionZones(
+		ctx, repository.store, task, intent, zones,
+	)
+	if err != nil {
+		return componentTaskChange{}, err
+	}
 
-	keys := make([]string, 0, 1+len(intent.Candidates)+(2*len(zones)))
-	keys = append(keys, componentTaskActiveEnvironmentKey(intent.EnvironmentID))
+	keys := make([]string, 0, 3+len(intent.Candidates)+(2*len(zones)))
+	keys = append(
+		keys,
+		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
+		environmentBlueprintHeadKey(intent.EnvironmentID),
+		environmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID),
+	)
 	for _, candidate := range intent.Candidates {
 		keys = append(keys, componentKey(candidate.Current.Desired.ID))
 	}
 	for _, zoneID := range zones {
-		keys = append(keys, zoneKey(zoneID))
+		keys = append(keys, componentAddressRegistryKey(zoneID))
 	}
 	for _, zoneID := range zones {
-		keys = append(keys, componentAddressRegistryKey(zoneID))
+		keys = append(keys, deletionTombstoneKey("zone", zoneID))
 	}
 	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return componentTaskChange{}, err
 	}
 	if state == nil || len(state.Values) != len(keys) || state.Values[0] == nil ||
+		state.Values[1] == nil || state.Values[2] == nil ||
 		string(state.Values[0].Value) != task.ID {
 		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate ownership changed")
+	}
+	headRevisionID, err := decodeTaskReference(state.Values[1].Value)
+	if err != nil || headRevisionID != desiredRevisionID {
+		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate Environment head changed")
 	}
 
 	change := componentTaskChange{
@@ -382,10 +405,12 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		conditions: []Condition{
 			{Key: componentTaskIntentKey(task.ID), ModRevision: intentValue.ModRevision},
 			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: state.Values[0].ModRevision},
+			{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[1].ModRevision},
+			{Key: environmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID), ModRevision: state.Values[2].ModRevision},
 		},
 	}
 	for index, candidate := range intent.Candidates {
-		value := state.Values[index+1]
+		value := state.Values[index+3]
 		if value == nil || value.ModRevision != candidate.CurrentRevision {
 			return componentTaskChange{}, errs.New(
 				errs.KindStateConflict,
@@ -410,21 +435,15 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	zoneRecords := make(map[string]ZoneRecord, len(zones))
 	registries := make(map[string]componentAddressRegistry, len(zones))
 	registryValues := make(map[string]*KeyValue, len(zones))
-	zoneOffset := 1 + len(intent.Candidates)
-	registryOffset := zoneOffset + len(zones)
+	registryOffset := 3 + len(intent.Candidates)
+	tombstoneOffset := registryOffset + len(zones)
 	for index, zoneID := range zones {
-		zoneValue := state.Values[zoneOffset+index]
-		if zoneValue == nil {
+		if state.Values[tombstoneOffset+index] != nil {
 			return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate Zone was removed")
 		}
-		zone, decodeErr := decodeZoneRecord(zoneValue.Value)
-		if decodeErr != nil {
-			return componentTaskChange{}, decodeErr
-		}
-		if zone.Desired.ID != zoneID || zone.EnvironmentID != intent.EnvironmentID {
-			return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate Zone ownership changed")
-		}
+		zone := desiredZones[zoneID]
 		registryValue := state.Values[registryOffset+index]
+		var decodeErr error
 		registry := componentAddressRegistry{Reservations: map[string]string{}}
 		if registryValue != nil {
 			registry, decodeErr = decodeEnvelope[componentAddressRegistry](
@@ -438,9 +457,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		zoneRecords[zoneID] = zone
 		registries[zoneID] = registry
 		registryValues[zoneID] = registryValue
-		change.conditions = append(change.conditions, Condition{
-			Key: zoneKey(zoneID), ModRevision: zoneValue.ModRevision,
-		})
+		change.conditions = append(change.conditions, Condition{Key: deletionTombstoneKey("zone", zoneID)})
 		registryCondition := Condition{Key: componentAddressRegistryKey(zoneID)}
 		if registryValue != nil {
 			registryCondition.ModRevision = registryValue.ModRevision
@@ -599,6 +616,51 @@ func validateComponentTaskOwner(task TaskRecord, intent ComponentTaskIntent) err
 		return errs.New(errs.KindStateConflict, "Component candidate does not belong to its Task")
 	}
 	return nil
+}
+
+func componentTaskDesiredProjectionZones(
+	ctx context.Context,
+	store taskRepositoryStore,
+	task TaskRecord,
+	intent ComponentTaskIntent,
+	zones []string,
+) (string, map[string]ZoneRecord, error) {
+	desiredRevisionID := task.Params[EnvironmentDesiredRevisionParam]
+	if ids.Validate(ids.KindTask, desiredRevisionID) != nil {
+		return "", nil, errs.New(errs.KindStateConflict, "Component Task desired revision is invalid")
+	}
+	hierarchy := &HierarchyRepository{store: store}
+	projection, found, err := hierarchy.GetEnvironmentComposeProjectionRevision(
+		ctx, intent.EnvironmentID, desiredRevisionID,
+	)
+	if err != nil {
+		return "", nil, err
+	}
+	if !found || projection.Record.EnvironmentID != intent.EnvironmentID ||
+		projection.Record.RevisionID != desiredRevisionID ||
+		projection.Record.RenderGeneration != uint64(task.RenderGeneration) {
+		return "", nil, errs.New(
+			errs.KindStateConflict,
+			"Component Task desired projection changed",
+		)
+	}
+	projected := make(map[string]ZoneRecord, len(projection.Record.DesiredZones))
+	for _, desired := range projection.Record.DesiredZones {
+		zone, joinErr := joinEnvironmentZone(projection, desired)
+		if joinErr != nil {
+			return "", nil, joinErr
+		}
+		projected[zone.Record.Desired.ID] = zone.Record
+	}
+	result := make(map[string]ZoneRecord, len(zones))
+	for _, zoneID := range zones {
+		zone, ok := projected[zoneID]
+		if !ok {
+			return "", nil, errs.New(errs.KindStateConflict, "Component Task Zone is not in its desired projection")
+		}
+		result[zoneID] = zone
+	}
+	return desiredRevisionID, result, nil
 }
 
 func validateComponentTaskReservations(

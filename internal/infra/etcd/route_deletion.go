@@ -65,21 +65,21 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 		)
 	}
 
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys: []string{
-			routeOwnerKey(route.Record.EnvironmentID, route.Record.Desired.ID),
-			routeMatchKey(route.Record.EnvironmentID, route.Record.Desired.Host, route.Record.Desired.Path),
-		},
-		Revision: route.ReadRevision,
-	})
+	if projection == nil || intent.CurrentProjection == nil || intent.CandidateProjection == nil {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Route desired head is unavailable")
+	}
+	audit := EnvironmentDesiredMutationAudit{Route: &EnvironmentRouteMutationAudit{
+		Action: EnvironmentRouteMutationRemove, BaseRevisionID: intent.CurrentProjection.RevisionID,
+		RouteID: route.Record.Desired.ID,
+	}}
+	publication, err := prepareRouteHeadPublication(
+		ctx, repository.store, task, marker, intent.CurrentProjection,
+		*intent.CandidateProjection, audit, intent.CurrentProjectionRevision,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if indexes == nil || len(indexes.Values) != 2 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
-		string(indexes.Values[0].Value) != route.Record.Desired.ID ||
-		string(indexes.Values[1].Value) != route.Record.Desired.ID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Route deletion indexes are corrupt")
-	}
+	defer clearRouteHeadPublication(publication)
 
 	task = cloneTaskRecord(task)
 	if task.IdempotencyKey == "" {
@@ -119,24 +119,10 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
-		{Key: routeKey(route.Record.Desired.ID), ModRevision: route.Revision},
-		{
-			Key:         routeOwnerKey(route.Record.EnvironmentID, route.Record.Desired.ID),
-			ModRevision: indexes.Values[0].ModRevision,
-		},
-		{
-			Key: routeMatchKey(
-				route.Record.EnvironmentID,
-				route.Record.Desired.Host,
-				route.Record.Desired.Path,
-			),
-			ModRevision: indexes.Values[1].ModRevision,
-		},
-		{Key: routeRemovalIntentKey(task.ID)},
-		{Key: tombstoneKey},
 		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: serviceKey(target.Record.Desired.ID), ModRevision: target.Revision},
+		{Key: routeRemovalIntentKey(task.ID)},
+		{Key: tombstoneKey},
 		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID)},
 		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID)},
 		{Key: deletionTombstoneKey("service", target.Record.Desired.ID)},
@@ -146,12 +132,8 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 			Key: deletionTombstoneKey(string(DeletionTargetTenant), project.Record.TenantID),
 		})
 	}
-	if projection != nil {
-		conditions = append(conditions,
-			Condition{Key: environmentComposeProjectionKey(environment.Record.ID), ModRevision: projection.Revision},
-			Condition{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)},
-		)
-	}
+	conditions = append(conditions, Condition{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)})
+	conditions = append(conditions, publication.conditions...)
 	mutations := []Mutation{
 		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
 		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
@@ -160,11 +142,8 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 		{Type: MutationPut, Key: tombstoneKey, Value: tombstoneValue},
 		{Type: MutationPut, Key: routeRemovalIntentKey(task.ID), Value: intentValue},
 	}
-	if projection != nil {
-		mutations = append(mutations, Mutation{
-			Type: MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
-		})
-	}
+	mutations = append(mutations, Mutation{Type: MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID)})
+	mutations = append(mutations, publication.mutations...)
 	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -173,14 +152,26 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	classify := func(revision int64, values []*KeyValue) error {
+		if len(values) == len(conditions) {
+			activeKey := componentTaskActiveEnvironmentKey(environment.Record.ID)
+			for index, condition := range conditions {
+				if condition.Key == activeKey && !conditionMatchesRead(condition, values[index]) {
+					return errs.New(
+						errs.KindResourceInUse,
+						"Environment component reconciliation is in progress",
+					)
+				}
+			}
+		}
+		return classifyRouteHeadConflict(conditions)(revision, values)
+	}
 	plan, err := newTaskIdempotencyMutationPlan(
 		task,
 		initiation,
 		conditions,
 		mutations,
-		classifyRouteDeletionStartConflict(
-			environment, project, target, route, projection, indexes.Values, task.OperationID,
-		),
+		classify,
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

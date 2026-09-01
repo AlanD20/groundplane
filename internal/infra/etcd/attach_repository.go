@@ -36,6 +36,47 @@ type attachRemovalStore interface {
 	GetMany(context.Context, GetManyRequest) (*GetManyResult, error)
 }
 
+func attachDesiredHeadConditions(
+	consumerEnvironmentID string,
+	consumerRevision int64,
+	backingService Versioned[ServiceRecord],
+	services []Versioned[ServiceRecord],
+) ([]Condition, error) {
+	candidates := make([]Condition, 0, len(services)+2)
+	candidates = append(candidates,
+		Condition{
+			Key:         environmentBlueprintHeadKey(consumerEnvironmentID),
+			ModRevision: consumerRevision,
+		},
+		serviceDesiredCondition(backingService),
+	)
+	for _, service := range services {
+		candidates = append(candidates, serviceDesiredCondition(service))
+	}
+
+	conditions := make([]Condition, 0, len(candidates))
+	for _, candidate := range candidates {
+		duplicate := false
+		for _, condition := range conditions {
+			if condition.Key != candidate.Key {
+				continue
+			}
+			if condition.ModRevision != candidate.ModRevision {
+				return nil, errs.New(
+					errs.KindStateConflict,
+					"attach Service desired heads disagree on the Environment revision",
+				)
+			}
+			duplicate = true
+			break
+		}
+		if !duplicate {
+			conditions = append(conditions, candidate)
+		}
+	}
+	return conditions, nil
+}
+
 func NewAttachRepository(store Store) (*AttachRepository, error) {
 	if store == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Attach repository store is required")
@@ -133,6 +174,15 @@ func (repository *AttachRepository) CreateAttachWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(planReferenceValue)
+	desiredHeadConditions, err := attachDesiredHeadConditions(
+		record.EnvironmentID,
+		scope.ComposeProjection.Revision,
+		scope.BackingService,
+		scope.Services,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 
 	conditions := []Condition{
 		{Key: taskKey(task.ID)},
@@ -148,7 +198,6 @@ func (repository *AttachRepository) CreateAttachWithTask(
 		{Key: projectKey(scope.Project.Record.ID), ModRevision: scope.Project.Revision},
 		{Key: environmentKey(scope.BackingEnvironment.Record.ID), ModRevision: scope.BackingEnvironment.Revision},
 		{Key: projectKey(scope.BackingProject.Record.ID), ModRevision: scope.BackingProject.Revision},
-		{Key: serviceKey(scope.BackingService.Record.Desired.ID), ModRevision: scope.BackingService.Revision},
 		{Key: deletionTombstoneKey("attach", record.ID)},
 		{Key: deletionTombstoneKey("environment", record.EnvironmentID)},
 		{Key: deletionTombstoneKey("project", scope.Project.Record.ID)},
@@ -164,11 +213,8 @@ func (repository *AttachRepository) CreateAttachWithTask(
 			Key:         environmentBlueprintRootKey(record.EnvironmentID, renderInput.BlueprintRevisionID),
 			ModRevision: scope.BlueprintRevision.Revision,
 		},
-		{
-			Key:         environmentBlueprintHeadKey(record.EnvironmentID),
-			ModRevision: scope.ComposeProjection.Revision,
-		},
 	}
+	conditions = append(conditions, desiredHeadConditions...)
 	mutations := []Mutation{
 		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
 		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
@@ -186,7 +232,6 @@ func (repository *AttachRepository) CreateAttachWithTask(
 	for _, service := range scope.Services {
 		serviceID := service.Record.Desired.ID
 		conditions = append(conditions,
-			Condition{Key: serviceKey(serviceID), ModRevision: service.Revision},
 			Condition{Key: attachServiceKey(serviceID, record.ID)},
 			Condition{Key: deletionTombstoneKey("service", serviceID)},
 		)
@@ -469,6 +514,15 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(planReferenceValue)
+	desiredHeadConditions, err := attachDesiredHeadConditions(
+		current.Record.EnvironmentID,
+		scope.ComposeProjection.Revision,
+		scope.BackingService,
+		scope.Services,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 
 	conditions := []Condition{
 		{Key: taskKey(task.ID)},
@@ -482,7 +536,6 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		{Key: projectKey(scope.Project.Record.ID), ModRevision: scope.Project.Revision},
 		{Key: environmentKey(scope.BackingEnvironment.Record.ID), ModRevision: scope.BackingEnvironment.Revision},
 		{Key: projectKey(scope.BackingProject.Record.ID), ModRevision: scope.BackingProject.Revision},
-		{Key: serviceKey(scope.BackingService.Record.Desired.ID), ModRevision: scope.BackingService.Revision},
 		{Key: deletionTombstoneKey("attach", current.Record.ID)},
 		{Key: deletionTombstoneKey("environment", current.Record.EnvironmentID)},
 		{Key: deletionTombstoneKey("project", scope.Project.Record.ID)},
@@ -497,11 +550,8 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 			Key:         environmentBlueprintRootKey(current.Record.EnvironmentID, renderInput.BlueprintRevisionID),
 			ModRevision: scope.BlueprintRevision.Revision,
 		},
-		{
-			Key:         environmentBlueprintHeadKey(current.Record.EnvironmentID),
-			ModRevision: scope.ComposeProjection.Revision,
-		},
 	}
+	conditions = append(conditions, desiredHeadConditions...)
 	mutations := []Mutation{
 		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
 		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
@@ -515,7 +565,6 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 	for _, service := range scope.Services {
 		serviceID := service.Record.Desired.ID
 		conditions = append(conditions,
-			Condition{Key: serviceKey(serviceID), ModRevision: service.Revision},
 			Condition{Key: deletionTombstoneKey("service", serviceID)},
 		)
 	}

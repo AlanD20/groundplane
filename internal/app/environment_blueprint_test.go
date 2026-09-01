@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +20,71 @@ import (
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
 )
+
+func TestEnvironmentBlueprintTopologyProjectionExcludesRuntimeAndObservation(t *testing.T) {
+	// Rationale: the sealed desired revision is assembled from validated
+	// publication candidates without copying Controller-owned runtime state.
+	t.Parallel()
+	at := time.Date(2026, 8, 31, 13, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)
+	zone, err := etcd.NewZoneRecord(environmentID, core.Zone{
+		ID: ids.NewAt(ids.KindNetwork, at, 2), Name: "private", Subnet: "10.30.0.0/24",
+		OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
+	})
+	if err != nil {
+		t.Fatalf("NewZoneRecord() error = %v", err)
+	}
+	serviceRecord, err := etcd.NewServiceRecord(environmentID, core.Service{
+		ID: ids.NewAt(ids.KindService, at, 3), Name: "api", Image: "example/api:1",
+	}, "")
+	if err != nil {
+		t.Fatalf("NewServiceRecord() error = %v", err)
+	}
+	serviceRecord, err = etcd.SetServiceRuntimeIntent(serviceRecord, core.ServiceRuntimeIntentStopped)
+	if err != nil {
+		t.Fatalf("SetServiceRuntimeIntent() error = %v", err)
+	}
+	routeRecord, err := etcd.NewRouteRecord(environmentID, core.Route{
+		ID: ids.NewAt(ids.KindRoute, at, 4), Host: "api.example.test", Path: "/",
+		TargetServiceID: serviceRecord.Desired.ID, TargetPort: 8080, Exposure: "public",
+	})
+	if err != nil {
+		t.Fatalf("NewRouteRecord() error = %v", err)
+	}
+	routeDesired := routeRecord.Desired
+	routeDesired.Exposure = "internal"
+	routeRecord, err = etcd.ReplaceRouteDesired(routeRecord, routeDesired)
+	if err != nil {
+		t.Fatalf("ReplaceRouteDesired() error = %v", err)
+	}
+	routeRecord, err = etcd.SetRouteObservation(routeRecord, etcd.RouteObservation{
+		Status: etcd.RouteObservedServed, DesiredGeneration: routeRecord.DesiredGeneration,
+		Provider: etcd.RouteProviderObservation{
+			ComponentID: ids.NewAt(ids.KindComponent, at, 5), DefinitionDigest: strings.Repeat("a", 64),
+			CatalogDigest: strings.Repeat("b", 64), InputRevision: 7, InputGeneration: 8,
+		},
+	})
+	if err != nil {
+		t.Fatalf("SetRouteObservation() error = %v", err)
+	}
+
+	zones, services, routes := environmentBlueprintTopologyProjection(
+		[]etcd.EnvironmentBlueprintZoneChange{{Record: zone}},
+		[]etcd.EnvironmentBlueprintServiceChange{{Record: serviceRecord}},
+		[]etcd.EnvironmentBlueprintRouteChange{{Record: routeRecord}},
+	)
+	wantZones := []etcd.EnvironmentZoneProjection{{EnvironmentID: environmentID, Desired: zone.Desired}}
+	wantServices := []etcd.EnvironmentServiceProjection{{
+		EnvironmentID: environmentID, BackingNetworkID: serviceRecord.BackingNetworkID, Desired: serviceRecord.Desired,
+	}}
+	wantRoutes := []etcd.EnvironmentRouteProjection{{
+		EnvironmentID: environmentID, Desired: routeRecord.Desired, DesiredGeneration: routeRecord.DesiredGeneration,
+	}}
+	if !reflect.DeepEqual(zones, wantZones) || !reflect.DeepEqual(services, wantServices) ||
+		!reflect.DeepEqual(routes, wantRoutes) {
+		t.Fatalf("desired topology projection = %#v/%#v/%#v", zones, services, routes)
+	}
+}
 
 // Rationale: idempotency must compare the verified logical Blueprint rather than unstable multipart framing or map order.
 func TestEnvironmentBlueprintIntentManifestIsCanonical(t *testing.T) {
@@ -139,7 +205,6 @@ func TestPrepareEnvironmentBlueprintRouteChangesPreservesImmutableTarget(t *test
 func TestPreserveEnvironmentBlueprintResourcesCarriesForwardOmittedResources(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 22, 21, 0, 0, 0, time.UTC)
-	environmentID := ids.NewAt(ids.KindEnvironment, at, 9)
 	serviceID := ids.NewAt(ids.KindService, at, 10)
 	networkID := ids.NewAt(ids.KindNetwork, at, 11)
 	volumeID := ids.NewAt(ids.KindVolume, at, 12)
@@ -148,12 +213,10 @@ func TestPreserveEnvironmentBlueprintResourcesCarriesForwardOmittedResources(t *
 		"api":       {Name: "api", Image: "example/api:1"},
 		"api__blue": {Name: "api__blue", Image: "caddy:2"},
 	}, Networks: composetypes.Networks{"backend": {}}, Volumes: composetypes.Volumes{"data": {}}}
-	err := preserveEnvironmentBlueprintResources(project, prior, etcd.EnvironmentComposeProjection{
-		EnvironmentID: environmentID,
-		Services:      []etcd.EnvironmentComposeIdentity{{ID: serviceID, Name: "api"}},
-		Networks:      []etcd.EnvironmentComposeIdentity{{ID: networkID, Name: "backend"}},
-		Volumes:       []etcd.EnvironmentVolumeIdentity{{ID: volumeID, Key: "data", Slug: "data"}},
-	}, true)
+	err := preserveEnvironmentBlueprintResources(project, prior, controller.ComposeIdentitySnapshot{
+		Services: []controller.ComposeResourceIdentity{{ID: serviceID, Name: "api"}},
+		Networks: []controller.ComposeResourceIdentity{{ID: networkID, Name: "backend"}},
+	}, []etcd.EnvironmentVolumeIdentity{{ID: volumeID, Key: "data", Slug: "data"}}, true)
 	if err != nil {
 		t.Fatalf("preserveEnvironmentBlueprintResources() error = %v", err)
 	}
@@ -220,10 +283,9 @@ volumes:
 	}
 	projection := etcd.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, ComposeArtifact: artifact, NormalizedCompose: authoredCanonical,
-		Services: []etcd.EnvironmentComposeIdentity{
-			{ID: serviceID, Name: "api"},
-			{ID: generatedServiceID, Name: "router"},
-		},
+		DesiredServices: []etcd.EnvironmentServiceProjection{{
+			EnvironmentID: environmentID, Desired: core.Service{ID: serviceID, Name: "api"},
+		}},
 		Volumes: []etcd.EnvironmentVolumeIdentity{{ID: "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV", Key: "data", Slug: "data"}},
 	}
 	authored, err := authoredComposeIdentitySnapshot(projection)
@@ -233,13 +295,12 @@ volumes:
 	if !reflect.DeepEqual(authored.Services, []controller.ComposeResourceIdentity{{ID: serviceID, Name: "api"}}) {
 		t.Fatalf("authored Service identities = %#v", authored.Services)
 	}
-	projection.Services = environmentComposeIdentities(authored.Services)
 	prior, err := controller.LoadNormalizedEnvironmentProject(context.Background(), projection)
 	if err != nil {
 		t.Fatalf("load normalized desired revision: %v", err)
 	}
 	candidate := &composetypes.Project{}
-	if err := preserveEnvironmentBlueprintResources(candidate, prior, projection, true); err != nil {
+	if err := preserveEnvironmentBlueprintResources(candidate, prior, authored, projection.Volumes, true); err != nil {
 		t.Fatalf("preserve normalized desired revision: %v", err)
 	}
 	if candidate.Services["api"].Image != "example/api:1" {
@@ -337,16 +398,14 @@ func TestSelectRuntimeFilesCarriesOnlyReferencesFromMergedProject(t *testing.T) 
 func TestPreserveEnvironmentBlueprintResourcesPreservesDisabledServicesWithoutDuplication(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 22, 21, 30, 0, 0, time.UTC)
-	environmentID := ids.NewAt(ids.KindEnvironment, at, 16)
 	serviceID := ids.NewAt(ids.KindService, at, 17)
 	prior := &composetypes.Project{DisabledServices: composetypes.Services{
 		"worker": {Name: "worker", Image: "example/worker:1"},
 	}}
 	project := &composetypes.Project{}
-	if err := preserveEnvironmentBlueprintResources(project, prior, etcd.EnvironmentComposeProjection{
-		EnvironmentID: environmentID,
-		Services:      []etcd.EnvironmentComposeIdentity{{ID: serviceID, Name: "worker"}},
-	}, true); err != nil {
+	if err := preserveEnvironmentBlueprintResources(project, prior, controller.ComposeIdentitySnapshot{
+		Services: []controller.ComposeResourceIdentity{{ID: serviceID, Name: "worker"}},
+	}, nil, true); err != nil {
 		t.Fatalf("preserveEnvironmentBlueprintResources() error = %v", err)
 	}
 	if _, found := project.Services["worker"]; found {
@@ -362,10 +421,9 @@ func TestPreserveEnvironmentBlueprintResourcesPreservesDisabledServicesWithoutDu
 	prior = &composetypes.Project{Services: composetypes.Services{
 		"worker": {Name: "worker", Image: "example/worker:old"},
 	}}
-	if err := preserveEnvironmentBlueprintResources(project, prior, etcd.EnvironmentComposeProjection{
-		EnvironmentID: environmentID,
-		Services:      []etcd.EnvironmentComposeIdentity{{ID: serviceID, Name: "worker"}},
-	}, true); err != nil {
+	if err := preserveEnvironmentBlueprintResources(project, prior, controller.ComposeIdentitySnapshot{
+		Services: []controller.ComposeResourceIdentity{{ID: serviceID, Name: "worker"}},
+	}, nil, true); err != nil {
 		t.Fatalf("preserveEnvironmentBlueprintResources(existing disabled) error = %v", err)
 	}
 	if _, found := project.Services["worker"]; found || project.DisabledServices["worker"].Image != "example/worker:new" {
@@ -376,17 +434,15 @@ func TestPreserveEnvironmentBlueprintResourcesPreservesDisabledServicesWithoutDu
 func TestPreserveEnvironmentBlueprintResourcesRejectsAmbiguousServiceCandidates(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 22, 22, 30, 0, 0, time.UTC)
-	environmentID := ids.NewAt(ids.KindEnvironment, at, 18)
 	serviceID := ids.NewAt(ids.KindService, at, 19)
 	project := &composetypes.Project{}
 	prior := &composetypes.Project{Services: composetypes.Services{
 		"api__blue":  {Name: "api__blue", Image: "example/api:blue"},
 		"api__green": {Name: "api__green", Image: "example/api:green"},
 	}}
-	err := preserveEnvironmentBlueprintResources(project, prior, etcd.EnvironmentComposeProjection{
-		EnvironmentID: environmentID,
-		Services:      []etcd.EnvironmentComposeIdentity{{ID: serviceID, Name: "api"}},
-	}, true)
+	err := preserveEnvironmentBlueprintResources(project, prior, controller.ComposeIdentitySnapshot{
+		Services: []controller.ComposeResourceIdentity{{ID: serviceID, Name: "api"}},
+	}, nil, true)
 	if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
 		t.Fatalf("ambiguous retained Service error = %v, want resource.in_use", err)
 	}
@@ -395,7 +451,6 @@ func TestPreserveEnvironmentBlueprintResourcesRejectsAmbiguousServiceCandidates(
 func TestPreserveEnvironmentBlueprintResourcesCarriesNativeConfigAndSecretReferences(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 22, 23, 0, 0, 0, time.UTC)
-	environmentID := ids.NewAt(ids.KindEnvironment, at, 20)
 	serviceID := ids.NewAt(ids.KindService, at, 21)
 	prior := &composetypes.Project{
 		Services: composetypes.Services{"api": {Name: "api", Image: "example/api:1"}},
@@ -403,10 +458,9 @@ func TestPreserveEnvironmentBlueprintResourcesCarriesNativeConfigAndSecretRefere
 		Secrets:  composetypes.Secrets{"app-secret": {Name: "app-secret", File: "secrets/app.secret"}},
 	}
 	project := &composetypes.Project{}
-	if err := preserveEnvironmentBlueprintResources(project, prior, etcd.EnvironmentComposeProjection{
-		EnvironmentID: environmentID,
-		Services:      []etcd.EnvironmentComposeIdentity{{ID: serviceID, Name: "api"}},
-	}, true); err != nil {
+	if err := preserveEnvironmentBlueprintResources(project, prior, controller.ComposeIdentitySnapshot{
+		Services: []controller.ComposeResourceIdentity{{ID: serviceID, Name: "api"}},
+	}, nil, true); err != nil {
 		t.Fatalf("preserveEnvironmentBlueprintResources(configs and secrets) error = %v", err)
 	}
 	if config, found := project.Configs["app-config"]; !found || config.File != "config/app.conf" {
@@ -420,7 +474,6 @@ func TestPreserveEnvironmentBlueprintResourcesCarriesNativeConfigAndSecretRefere
 func TestPreserveEnvironmentBlueprintResourcesCarriesNativeVolumeConfig(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 22, 23, 30, 0, 0, time.UTC)
-	environmentID := ids.NewAt(ids.KindEnvironment, at, 22)
 	volumeID := ids.NewAt(ids.KindVolume, at, 23)
 	priorVolume := composetypes.VolumeConfig{
 		Name:       "authored-data",
@@ -432,10 +485,8 @@ func TestPreserveEnvironmentBlueprintResourcesCarriesNativeVolumeConfig(t *testi
 	prior := &composetypes.Project{Volumes: composetypes.Volumes{"data": priorVolume}}
 	project := &composetypes.Project{}
 
-	err := preserveEnvironmentBlueprintResources(project, prior, etcd.EnvironmentComposeProjection{
-		EnvironmentID: environmentID,
-		Volumes:       []etcd.EnvironmentVolumeIdentity{{ID: volumeID, Key: "data", Slug: "stable-data"}},
-	}, true)
+	err := preserveEnvironmentBlueprintResources(project, prior, controller.ComposeIdentitySnapshot{},
+		[]etcd.EnvironmentVolumeIdentity{{ID: volumeID, Key: "data", Slug: "stable-data"}}, true)
 	if err != nil {
 		t.Fatalf("preserve omitted volume: %v", err)
 	}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -241,10 +242,7 @@ func TestTaskPlanResolverPinsAndRebuildsRouteMutationProviderProcedure(t *testin
 	if err := resolver.EnableRoutePlans(reader); err != nil {
 		t.Fatalf("EnableRoutePlans() error = %v", err)
 	}
-	route, err := etcd.NewRouteRecord(projection.EnvironmentID, core.Route{
-		ID: projection.Routes[0].ID, Host: projection.Routes[0].Host, Path: projection.Routes[0].Path,
-		Exposure: "public", TargetServiceID: projection.Services[0].ID, TargetPort: 8080,
-	})
+	route, err := etcd.NewRouteRecord(projection.EnvironmentID, projection.DesiredRoutes[0].Desired)
 	if err != nil {
 		t.Fatalf("NewRouteRecord() error = %v", err)
 	}
@@ -299,6 +297,7 @@ func routeRemovalPlanTestState(
 	identity.TenantSlug = "acme"
 	identity.ProjectSlug = "shop"
 	at := time.Date(2026, 8, 23, 4, 0, 0, 0, time.UTC)
+	projection.DesiredRoutes[0].DesiredGeneration = 1
 	catalog[0].Plan = routeRemovalPlanProviderRenderer{}.Plan
 	componentProjection, err := projectPinnedEnvironmentComponents(
 		project,
@@ -310,7 +309,7 @@ func routeRemovalPlanTestState(
 			Implementation: core.ComponentKindIngressCaddy,
 			Enabled:        true,
 			Settings: core.ComponentCapabilitySettings{
-				ZoneID: projection.Networks[0].ID,
+				ZoneID: projection.DesiredZones[0].Desired.ID,
 			},
 		}},
 		nil,
@@ -319,6 +318,30 @@ func routeRemovalPlanTestState(
 	if err != nil {
 		t.Fatalf("project Route removal fixture components: %v", err)
 	}
+	identities := ComposeIdentitySnapshot{
+		Services: append([]ComposeResourceIdentity(nil), componentProjection.Services...),
+		Networks: desiredZoneResourceIdentities(projection.DesiredZones),
+		Volumes:  composeVolumeResourceIdentities(projection.Volumes),
+	}
+	for _, service := range projection.DesiredServices {
+		identities.Services = append(identities.Services, ComposeResourceIdentity{
+			ID: service.Desired.ID, Name: service.Desired.Name,
+		})
+	}
+	services, err := ProjectServiceProjection(componentProjection.Project, identities, projection.ServiceExtensions)
+	if err != nil {
+		t.Fatalf("project Route removal fixture services: %v", err)
+	}
+	projection.DesiredServices = make([]etcd.EnvironmentServiceProjection, len(services))
+	for index, service := range services {
+		projection.DesiredServices[index] = etcd.EnvironmentServiceProjection{
+			EnvironmentID: projection.EnvironmentID,
+			Desired:       service,
+		}
+	}
+	sort.Slice(projection.DesiredServices, func(left, right int) bool {
+		return projection.DesiredServices[left].Desired.ID < projection.DesiredServices[right].Desired.ID
+	})
 	normalized, err := MarshalNormalizedEnvironmentProject(componentProjection.Project)
 	if err != nil {
 		t.Fatalf("marshal Route removal fixture normalized Compose: %v", err)
@@ -364,7 +387,7 @@ x-gp-components:
     implementation: caddy
     enabled: true
     settings:
-      zone_id: ` + projection.Networks[0].ID + "\n")
+		zone_id: ` + projection.DesiredZones[0].Desired.ID + "\n")
 	base := &blueprintPlanReader{
 		tenant: etcd.TenantRecord{ID: identity.TenantID, Slug: identity.TenantSlug, Name: "Acme"},
 		project: etcd.ProjectRecord{
@@ -387,7 +410,7 @@ x-gp-components:
 	intent, err := etcd.NewRouteRemovalIntent(
 		taskID,
 		identity.EnvironmentID,
-		projection.Routes[0].ID,
+		projection.DesiredRoutes[0].Desired.ID,
 		17,
 		&etcd.Versioned[etcd.EnvironmentComposeProjection]{
 			Record: projection, Revision: 18, ReadRevision: 18,

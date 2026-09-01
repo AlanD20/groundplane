@@ -8,6 +8,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/compose-spec/compose-go/v2/loader"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -86,4 +87,48 @@ func TestProjectEnvironmentServiceNativeComposePreservesOperatorFields(t *testin
 	if strings.Contains(native, "com.groundplane.") || strings.Contains(native, "x-gp-resource") {
 		t.Fatalf("native Compose retains Controller-owned metadata: %q", native)
 	}
+}
+
+func TestServiceArtifactRejectsComponentManagedOrdinaryActions(t *testing.T) {
+	// Rationale: an ordinary Service detail or mutation must not bypass Component
+	// ownership merely because the managed Service is present in the Compose artifact.
+	t.Parallel()
+	at := time.Date(2026, 8, 31, 10, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)
+	serviceID := ids.NewAt(ids.KindService, at, 2)
+	componentID := ids.NewAt(ids.KindComponent, at, 3)
+	artifact := &agentpb.ComposeArtifact{
+		ArtifactId: ids.NewAt(ids.KindConfig, at, 4),
+		OwnerKind:  agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT, OwnerId: environmentID,
+		CanonicalYaml: []byte("services:\n  caddy:\n    image: caddy:2\n"),
+		Services: []*agentpb.ComposeService{{
+			ServiceId: serviceID, ComposeName: "caddy",
+			ExpectedLabels: []*agentpb.LabelPair{{Key: composeLabelComponentID, Value: componentID}},
+		}},
+	}
+	if _, err := ProjectEnvironmentServiceNativeCompose(
+		artifact, "caddy",
+	); !isArtifactErrorKind(err, errs.KindServiceNotFound) {
+		t.Fatalf("ProjectEnvironmentServiceNativeCompose(generated) error = %v", err)
+	}
+	for _, action := range []ServiceArtifactAction{ServiceArtifactEdit, ServiceArtifactRemove} {
+		_, err := MutateEnvironmentServiceArtifact(artifact, ServiceArtifactMutation{
+			Action: action,
+			Desired: core.Service{
+				ID: serviceID, Name: "caddy", Image: "caddy:2", Strategy: core.StrategyRecreate,
+				OnFailure: core.OnFailureSwitchBack, Replicas: 1,
+			},
+			ArtifactID: ids.NewAt(ids.KindConfig, at, 5), PlanID: ids.NewAt(ids.KindPlan, at, 6),
+			TenantID: ids.NewAt(ids.KindTenant, at, 7), ProjectID: ids.NewAt(ids.KindProject, at, 8),
+			RenderGeneration: 2,
+		})
+		if !isArtifactErrorKind(err, errs.KindResourceInUse) {
+			t.Fatalf("MutateEnvironmentServiceArtifact(%s, generated) error = %v", action, err)
+		}
+	}
+}
+
+func isArtifactErrorKind(err error, kind errs.Kind) bool {
+	actual, ok := errs.KindOf(err)
+	return ok && actual == kind
 }

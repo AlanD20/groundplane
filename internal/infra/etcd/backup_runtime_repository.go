@@ -497,12 +497,12 @@ func backupRunExternalConditions(
 	for _, source := range run.Sources {
 		allowed[backupSourceKey(source.SourceID)] = struct{}{}
 		if source.Snapshot.Postgres != nil {
-			allowed[serviceKey(source.Snapshot.Postgres.BackingServiceID)] = struct{}{}
+			allowed[environmentBlueprintHeadKey(source.Snapshot.Postgres.BackingEnvironmentID)] = struct{}{}
 		}
 		if source.Snapshot.Volume != nil {
 			allowed[environmentComposeProjectionKey(source.Snapshot.Volume.EnvironmentID)] = struct{}{}
 			for _, service := range source.Snapshot.Volume.Services {
-				allowed[serviceKey(service.ServiceID)] = struct{}{}
+				allowed[serviceRuntimeKey(service.ServiceID)] = struct{}{}
 			}
 		}
 		if source.Snapshot.Config != nil {
@@ -1525,7 +1525,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 					snapshot.BackingProjectID,
 				),
 				environmentKey(snapshot.BackingEnvironmentID),
-				serviceKey(snapshot.BackingServiceID),
+				environmentBlueprintHeadKey(snapshot.BackingEnvironmentID),
 			}, fixedRevision)
 			if readErr != nil {
 				clearBackupRuntimeMutations(mutations)
@@ -1549,7 +1549,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 				{attachFactsKey(source.TargetID), snapshot.AttachFactsRevision},
 				{projectKey(snapshot.BackingProjectID), snapshot.BackingProjectRevision},
 				{environmentKey(snapshot.BackingEnvironmentID), snapshot.BackingEnvironmentRevision},
-				{serviceKey(snapshot.BackingServiceID), snapshot.BackingServiceRevision},
+				{environmentBlueprintHeadKey(snapshot.BackingEnvironmentID), snapshot.BackingServiceRevision},
 			} {
 				if err := addCondition(fact.key, fact.revision); err != nil {
 					clearBackupRuntimeMutations(mutations)
@@ -1564,7 +1564,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 				environmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID),
 			}
 			for _, service := range snapshot.Services {
-				keys = append(keys, serviceKey(service.ServiceID))
+				keys = append(keys, serviceRuntimeKey(service.ServiceID))
 			}
 			read, readErr := repository.readFixedKeys(ctx, keys, fixedRevision)
 			if readErr != nil {
@@ -1598,7 +1598,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			}
 			for _, service := range snapshot.Services {
 				if err := addCondition(
-					serviceKey(service.ServiceID),
+					serviceRuntimeKey(service.ServiceID),
 					service.ServiceRevision,
 				); err != nil {
 					clearBackupRuntimeMutations(mutations)
@@ -1721,9 +1721,7 @@ func validateBackupPostgresPublicationEvidence(
 	defer clear(facts.Ciphertext)
 	project, projectErr := decodeProject(values[2].Value)
 	environment, environmentErr := decodeEnvironment(values[3].Value)
-	service, serviceErr := decodeServiceRecord(values[4].Value)
-	if attachErr != nil || factsErr != nil || projectErr != nil || environmentErr != nil ||
-		serviceErr != nil {
+	if attachErr != nil || factsErr != nil || projectErr != nil || environmentErr != nil {
 		return corruptBackupRuntimeRecord()
 	}
 	if attach.ID != source.TargetID || attach.EnvironmentID != snapshot.ConsumerEnvironmentID ||
@@ -1731,9 +1729,7 @@ func validateBackupPostgresPublicationEvidence(
 		attach.BackingEnvironmentID != snapshot.BackingEnvironmentID ||
 		attach.BackingServiceID != snapshot.BackingServiceID || facts.AttachID != source.TargetID ||
 		project.ID != snapshot.BackingProjectID || project.Kind != ProjectKindBacking ||
-		environment.ID != snapshot.BackingEnvironmentID || environment.ProjectID != project.ID ||
-		service.Desired.ID != snapshot.BackingServiceID ||
-		service.EnvironmentID != snapshot.BackingEnvironmentID {
+		environment.ID != snapshot.BackingEnvironmentID || environment.ProjectID != project.ID {
 		return errs.New(errs.KindStateConflict, "postgres backup publication evidence changed")
 	}
 	return nil
@@ -1765,14 +1761,20 @@ func validateBackupVolumePublicationEvidence(
 	}
 	for index, expected := range snapshot.Services {
 		value := values[index+offset]
+		if expected.ServiceRevision == 0 {
+			if value != nil || expected.PriorIntent != BackupServiceIntentRunning {
+				return errs.New(errs.KindStateConflict, "volume service publication evidence changed")
+			}
+			continue
+		}
 		if value == nil || value.ModRevision != expected.ServiceRevision {
 			return errs.New(errs.KindStateConflict, "volume service publication evidence changed")
 		}
-		service, decodeErr := decodeServiceRecord(value.Value)
+		service, decodeErr := decodeServiceRuntimeRecord(value.Value)
 		if decodeErr != nil {
 			return corruptBackupRuntimeRecord()
 		}
-		if service.Desired.ID != expected.ServiceID ||
+		if service.ServiceID != expected.ServiceID ||
 			service.EnvironmentID != snapshot.EnvironmentID ||
 			string(service.Runtime.RuntimeIntent) != string(expected.PriorIntent) {
 			return errs.New(errs.KindStateConflict, "volume service publication evidence changed")

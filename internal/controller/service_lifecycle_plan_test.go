@@ -64,9 +64,13 @@ func TestServiceLifecyclePlanCompilesPinnedStartDependenciesAcrossRestart(t *tes
 		migrateID = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 	)
 	reader.revision.Files[0].Content = []byte("not runtime authority")
-	reader.projection.Services = []etcd.EnvironmentComposeIdentity{
-		{ID: apiID, Name: "api"},
-		{ID: migrateID, Name: "migrate"},
+	reader.projection.DesiredServices = []etcd.EnvironmentServiceProjection{
+		{EnvironmentID: reader.environment.ID, Desired: core.Service{
+			ID: apiID, Name: "api", Image: "example/api:1", Zones: []string{"frontend"},
+		}},
+		{EnvironmentID: reader.environment.ID, Desired: core.Service{
+			ID: migrateID, Name: "migrate", Image: "example/migrate:1", Zones: []string{"frontend"},
+		}},
 	}
 	reader.projection.Volumes = nil
 	input := etcd.ServiceLifecycleRenderInput{

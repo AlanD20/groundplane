@@ -109,9 +109,10 @@ func buildAttachTaskRenderInput(
 		BlueprintRevisionID:    scope.BlueprintRevision.Record.RevisionID,
 		ArtifactID:             artifactID,
 		RenderGeneration:       scope.ComposeProjection.Record.RenderGeneration,
-		Services:               cloneEnvironmentComposeIdentities(scope.ComposeProjection.Record.Services),
-		Networks:               cloneEnvironmentComposeIdentities(scope.ComposeProjection.Record.Networks),
+		Services:               attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
+		Networks:               attachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones),
 		Volumes:                slices.Clone(scope.ComposeProjection.Record.Volumes),
+		VolumeMounts:           slices.Clone(scope.ComposeProjection.Record.VolumeMounts),
 		NetworkJoins:           joins,
 		ConsumerServiceIDs:     []string{record.ServiceID},
 		GrantAttachIDs:         append([]string(nil), record.GrantAttachIDs...),
@@ -128,13 +129,13 @@ func resolveAttachNetworkJoins(
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil || projection.EnvironmentID != environmentID {
 		return nil, errs.New(errs.KindValidationFailed, "Attach network union Environment is invalid")
 	}
-	allowedServices := make(map[string]struct{}, len(projection.Services))
-	for _, service := range projection.Services {
-		allowedServices[service.ID] = struct{}{}
+	allowedServices := make(map[string]struct{}, len(projection.DesiredServices))
+	for _, service := range projection.DesiredServices {
+		allowedServices[service.Desired.ID] = struct{}{}
 	}
-	ownedNetworks := make(map[string]struct{}, len(projection.Networks))
-	for _, network := range projection.Networks {
-		ownedNetworks[network.ID] = struct{}{}
+	ownedNetworks := make(map[string]struct{}, len(projection.DesiredZones))
+	for _, network := range projection.DesiredZones {
+		ownedNetworks[network.Desired.ID] = struct{}{}
 	}
 
 	seenAttaches := make(map[string]struct{}, len(attaches))
@@ -195,8 +196,22 @@ func resolveAttachNetworkJoins(
 	return joins, nil
 }
 
-func cloneEnvironmentComposeIdentities(
-	values []etcd.EnvironmentComposeIdentity,
-) []etcd.EnvironmentComposeIdentity {
-	return slices.Clone(values)
+func attachTaskServiceSnapshots(
+	values []etcd.EnvironmentServiceProjection,
+) []etcd.AttachTaskServiceSnapshot {
+	snapshots := make([]etcd.AttachTaskServiceSnapshot, len(values))
+	for index, value := range values {
+		snapshots[index] = etcd.AttachTaskServiceSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}
+	}
+	return snapshots
+}
+
+func attachTaskOwnedNetworkSnapshots(
+	values []etcd.EnvironmentZoneProjection,
+) []etcd.AttachTaskOwnedNetworkSnapshot {
+	snapshots := make([]etcd.AttachTaskOwnedNetworkSnapshot, len(values))
+	for index, value := range values {
+		snapshots[index] = etcd.AttachTaskOwnedNetworkSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}
+	}
+	return snapshots
 }

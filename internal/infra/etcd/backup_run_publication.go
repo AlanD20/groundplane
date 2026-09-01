@@ -465,7 +465,7 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 	backingRead, err := repository.readFixedKeys(ctx, []string{
 		projectKey(attach.BackingProjectID),
 		environmentKey(attach.BackingEnvironmentID),
-		serviceKey(attach.BackingServiceID),
+		environmentBlueprintHeadKey(attach.BackingEnvironmentID),
 	}, fixedRevision)
 	if err != nil {
 		return BackupRunSourceAttemptRecord{}, err
@@ -480,14 +480,14 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 	}
 	project, projectErr := decodeProject(backingRead.Values[0].Value)
 	environment, environmentErr := decodeEnvironment(backingRead.Values[1].Value)
-	service, serviceErr := decodeServiceRecord(backingRead.Values[2].Value)
+	service, serviceErr := findServiceAtRevision(ctx, repository.store, attach.BackingServiceID, fixedRevision)
 	if projectErr != nil || environmentErr != nil || serviceErr != nil || project.Kind != ProjectKindBacking ||
 		environment.ProjectID != project.ID ||
 		environment.ID != attach.BackingEnvironmentID ||
-		service.EnvironmentID != environment.ID ||
-		service.Desired.ID != attach.BackingServiceID ||
-		service.Desired.Adapter != "postgres:16" ||
-		service.Desired.Image != "postgres:16-alpine" {
+		service.Record.EnvironmentID != environment.ID ||
+		service.Record.Desired.Adapter != "postgres:16" ||
+		service.Record.Desired.Image != "postgres:16-alpine" ||
+		service.Revision != backingRead.Values[2].ModRevision {
 		return BackupRunSourceAttemptRecord{}, errs.New(
 			errs.KindStateConflict,
 			"postgres:16 backing evidence changed",
@@ -526,7 +526,7 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 		BackingProjectRevision:     backingRead.Values[0].ModRevision,
 		BackingEnvironmentID:       environment.ID,
 		BackingEnvironmentRevision: backingRead.Values[1].ModRevision,
-		BackingServiceID:           service.Desired.ID,
+		BackingServiceID:           service.Record.Desired.ID,
 		BackingServiceRevision:     backingRead.Values[2].ModRevision,
 		AttachFactsRevision:        read.Values[1].ModRevision,
 		Database:                   identity.Database,
@@ -584,9 +584,9 @@ func (repository *BackupRuntimeRepository) manualBackupVolumeConsumers(
 	projection EnvironmentComposeProjection,
 	fixedRevision int64,
 ) ([]BackupVolumeServiceSnapshot, error) {
-	serviceKeys := make(map[string]string, len(projection.Services))
-	for _, identity := range projection.Services {
-		serviceKeys[identity.ID] = identity.Name
+	serviceKeys := make(map[string]string, len(projection.DesiredServices))
+	for _, desired := range projection.DesiredServices {
+		serviceKeys[desired.Desired.ID] = desired.Desired.Name
 	}
 	mounts := make(map[string][]string)
 	for _, mount := range projection.VolumeMounts {
@@ -601,53 +601,45 @@ func (repository *BackupRuntimeRepository) manualBackupVolumeConsumers(
 	}
 	sort.Strings(serviceIDs)
 	result := make([]BackupVolumeServiceSnapshot, 0)
-	for start := 0; start < len(serviceIDs); start += maximumTransactionOperations {
-		end := min(start+maximumTransactionOperations, len(serviceIDs))
-		keys := make([]string, end-start)
-		for index, serviceID := range serviceIDs[start:end] {
-			keys[index] = serviceKey(serviceID)
+	for _, serviceID := range serviceIDs {
+		service, serviceErr := findServiceAtRevision(ctx, repository.store, serviceID, fixedRevision)
+		if serviceErr != nil || service.Record.EnvironmentID != environmentID {
+			return nil, errs.New(errs.KindStateConflict, "Volume consumer Service evidence changed")
 		}
-		read, err := repository.readFixedKeys(ctx, keys, fixedRevision)
-		if err != nil {
-			return nil, err
-		}
-		for index, value := range read.Values {
-			if value == nil {
-				clearKeyValues(read.Values)
+		mountPaths := mounts[service.Record.Desired.ID]
+		if len(mountPaths) != 0 {
+			composeKey := serviceKeys[service.Record.Desired.ID]
+			if composeKey == "" && backupVolumeTargetsGeneratedService(
+				projection.Components,
+				service.Record.Desired.ID,
+			) {
+				composeKey = service.Record.Desired.Name
+			}
+			if composeKey == "" {
 				return nil, errs.New(
 					errs.KindStateConflict,
-					"Volume consumer Service is unavailable",
+					"Volume consumer projection is incomplete",
 				)
 			}
-			service, decodeErr := decodeServiceRecord(value.Value)
-			if decodeErr != nil || service.Desired.ID != serviceIDs[start+index] ||
-				service.EnvironmentID != environmentID {
-				clearKeyValues(read.Values)
-				return nil, errs.New(
-					errs.KindStateConflict,
-					"Volume consumer Service evidence changed",
-				)
-			}
-			mountPaths := mounts[service.Desired.ID]
-			if len(mountPaths) != 0 {
-				composeKey := serviceKeys[service.Desired.ID]
-				if composeKey == "" {
-					clearKeyValues(read.Values)
-					return nil, errs.New(
-						errs.KindStateConflict,
-						"Volume consumer projection is incomplete",
-					)
-				}
-				result = append(result, BackupVolumeServiceSnapshot{
-					ServiceID: service.Desired.ID, ServiceRevision: value.ModRevision,
-					ComposeKey: composeKey, MountPaths: mountPaths,
-					PriorIntent: BackupServiceRuntimeIntent(service.Runtime.RuntimeIntent),
-				})
-			}
+			result = append(result, BackupVolumeServiceSnapshot{
+				ServiceID: service.Record.Desired.ID, ServiceRevision: serviceRuntimeRevision(service),
+				ComposeKey: composeKey, MountPaths: mountPaths,
+				PriorIntent: BackupServiceRuntimeIntent(service.Record.Runtime.RuntimeIntent),
+			})
 		}
-		clearKeyValues(read.Values)
 	}
 	return result, nil
+}
+
+func backupVolumeTargetsGeneratedService(components []ComponentRecord, serviceID string) bool {
+	for _, component := range components {
+		for _, generatedServiceID := range component.Runtime.GeneratedServices {
+			if generatedServiceID == serviceID {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (publication *PreparedBackupRunPublication) Record() BackupRunRecord {

@@ -279,34 +279,21 @@ func newReleaseGroupPublisherFixture(
 	project, environment := createEnvironmentBlueprintOwners(t, repository)
 	now := time.Date(2026, 8, 27, 15, 0, 0, 0, time.UTC)
 	serviceIDs := make([]string, memberCount)
-	identities := make([]EnvironmentComposeIdentity, memberCount)
 	artifactServices := make([]*agentpb.ComposeService, memberCount)
-	mutations := make([]Mutation, 0, memberCount*2+5)
+	mutations := make([]Mutation, 0, memberCount+5)
+	desiredServices := make([]EnvironmentServiceProjection, memberCount)
 	for index := range serviceIDs {
 		serviceID := ids.NewAt(ids.KindService, now, int64(100+index))
 		serviceIDs[index] = serviceID
 		name := "service-" + leftPadReleaseGroupIndex(index)
-		identities[index] = EnvironmentComposeIdentity{ID: serviceID, Name: name}
 		artifactServices[index] = &agentpb.ComposeService{
 			ServiceId:   serviceID,
 			ComposeName: name,
 		}
-		record, err := NewServiceRecord(
-			environment.Record.ID,
-			core.Service{ID: serviceID, Name: name, Image: "example.invalid/" + name + ":1"},
-			"",
-		)
-		if err != nil {
-			t.Fatalf("NewServiceRecord() error = %v", err)
+		desiredServices[index] = EnvironmentServiceProjection{
+			EnvironmentID: environment.Record.ID,
+			Desired:       core.Service{ID: serviceID, Name: name, Image: "example.invalid/" + name + ":1"},
 		}
-		value, err := encodeServiceRecord(record)
-		if err != nil {
-			t.Fatalf("encodeServiceRecord() error = %v", err)
-		}
-		mutations = append(mutations,
-			Mutation{Type: MutationPut, Key: serviceKey(serviceID), Value: value},
-			Mutation{Type: MutationPut, Key: serviceOwnerKey(environment.Record.ID, serviceID), Value: []byte(serviceID)},
-		)
 	}
 	canonicalYAML := []byte("services: {}\\n")
 	digest := sha256.Sum256(canonicalYAML)
@@ -328,7 +315,7 @@ func newReleaseGroupPublisherFixture(
 		EnvironmentID:     environment.Record.ID,
 		RevisionID:        ids.NewAt(ids.KindTask, now, 701),
 		RenderGeneration:  1,
-		Services:          identities,
+		DesiredServices:   desiredServices,
 		ComposeArtifact:   artifactValue,
 		NormalizedCompose: []byte("services: {}\n"),
 	}

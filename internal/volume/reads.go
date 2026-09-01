@@ -14,6 +14,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -280,10 +282,7 @@ func volumeMountImpactItems(
 	projection etcd.EnvironmentComposeProjection,
 	volumeID string,
 ) []apiTypes.VolumeDeletionImpactItem {
-	names := make(map[string]string, len(projection.Services))
-	for _, service := range projection.Services {
-		names[service.ID] = service.Name
-	}
+	names := volumeConsumerServiceNames(projection, volumeID)
 	items := make([]apiTypes.VolumeDeletionImpactItem, 0)
 	for _, mount := range projection.VolumeMounts {
 		if mount.VolumeID != volumeID {
@@ -297,6 +296,44 @@ func volumeMountImpactItems(
 	}
 	sort.Slice(items, func(left, right int) bool { return items[left].ID < items[right].ID })
 	return items
+}
+
+func volumeConsumerServiceNames(projection etcd.EnvironmentComposeProjection, volumeID string) map[string]string {
+	addressed := make(map[string]struct{})
+	for _, mount := range projection.VolumeMounts {
+		if mount.VolumeID == volumeID {
+			addressed[mount.ServiceID] = struct{}{}
+		}
+	}
+	names := make(map[string]string, len(addressed))
+	for _, service := range projection.DesiredServices {
+		if _, exists := addressed[service.Desired.ID]; exists {
+			names[service.Desired.ID] = service.Desired.Name
+			delete(addressed, service.Desired.ID)
+		}
+	}
+	if len(addressed) == 0 {
+		return names
+	}
+	generatedOwners := make(map[string]string, len(addressed))
+	for _, component := range projection.Components {
+		for _, serviceID := range component.Runtime.GeneratedServices {
+			if _, exists := addressed[serviceID]; exists {
+				generatedOwners[serviceID] = component.Desired.ID
+			}
+		}
+	}
+	artifact := &agentpb.ComposeArtifact{}
+	if proto.Unmarshal(projection.ComposeArtifact, artifact) != nil {
+		return names
+	}
+	for _, service := range artifact.GetServices() {
+		owner, generated := generatedOwners[service.GetServiceId()]
+		if generated && owner == service.GetOwnerComponentId() {
+			names[service.GetServiceId()] = service.GetComposeName()
+		}
+	}
+	return names
 }
 
 func volumeRemovalImpactItems(

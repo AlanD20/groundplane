@@ -84,14 +84,35 @@ func (state *concurrentRouteProviderState) collectionRevision(collection string)
 	return state.snapshotRevision
 }
 
-// Rationale: a write between collection reads must not mix newer Service or
-// Route state into the immutable provider input or fabricate a later revision.
+func routeProviderEnvironmentProjection(environmentID, serviceImage, routeHost string) etcd.EnvironmentComposeProjection {
+	serviceID := ids.New(ids.KindService)
+	routeID := ids.New(ids.KindRoute)
+	return etcd.EnvironmentComposeProjection{
+		EnvironmentID: environmentID,
+		DesiredServices: []etcd.EnvironmentServiceProjection{{
+			EnvironmentID: environmentID,
+			Desired:       core.Service{ID: serviceID, Name: "backend", Image: serviceImage},
+		}},
+		DesiredRoutes: []etcd.EnvironmentRouteProjection{{
+			EnvironmentID: environmentID,
+			Desired: core.Route{
+				ID: routeID, Host: routeHost, Path: "/", Exposure: "public",
+				TargetServiceID: serviceID, TargetPort: 8080,
+			},
+			DesiredGeneration: 1,
+		}},
+	}
+}
+
+// Rationale: the provider input is a selected Environment desired projection
+// and must retain its fixed Environment revision and Route head.
 func TestRouteProviderEnvironmentUsesOneFixedSnapshot(t *testing.T) {
 	state := &concurrentRouteProviderState{snapshotRevision: 41}
 	resolver := &TaskPlanResolver{routeState: state}
 	environmentID := ids.New(ids.KindEnvironment)
+	projection := routeProviderEnvironmentProjection(environmentID, "example/backend:old", "old.example.test")
 	environment, revision, err := resolver.routeProviderEnvironment(
-		context.Background(), environmentID, etcd.EnvironmentComposeProjection{}, nil, "",
+		context.Background(), environmentID, state.snapshotRevision, projection, nil, "",
 	)
 	if err != nil {
 		t.Fatalf("routeProviderEnvironment() error = %v", err)
@@ -100,25 +121,25 @@ func TestRouteProviderEnvironmentUsesOneFixedSnapshot(t *testing.T) {
 		len(environment.Routes) != 1 || environment.Routes[0].Host != "old.example.test" {
 		t.Fatalf("fixed snapshot = revision %d, environment %#v", revision, environment)
 	}
-	if len(state.requested) != 3 {
-		t.Fatalf("fixed snapshot requests = %#v", state.requested)
-	}
-	for _, requested := range state.requested {
-		if requested != state.snapshotRevision {
-			t.Fatalf("collection requested revision %d, want %d", requested, state.snapshotRevision)
-		}
-	}
 }
 
-// Rationale: labeling a mixed collection read with the selected snapshot is
-// worse than failing planning because it creates false immutable evidence.
-func TestRouteProviderEnvironmentRejectsRevisionDrift(t *testing.T) {
-	state := &concurrentRouteProviderState{snapshotRevision: 41, driftCollection: "services"}
+// Rationale: a pending Route head must replace the stale Route selected by the
+// Environment projection without changing the fixed Environment revision.
+func TestRouteProviderEnvironmentUsesSelectedRouteHead(t *testing.T) {
+	state := &concurrentRouteProviderState{snapshotRevision: 41}
 	resolver := &TaskPlanResolver{routeState: state}
-	_, _, err := resolver.routeProviderEnvironment(
-		context.Background(), ids.New(ids.KindEnvironment), etcd.EnvironmentComposeProjection{}, nil, "",
+	environmentID := ids.New(ids.KindEnvironment)
+	projection := routeProviderEnvironmentProjection(environmentID, "example/backend:old", "old.example.test")
+	desired := projection.DesiredRoutes[0].Desired
+	desired.Host = "new.example.test"
+	environment, revision, err := resolver.routeProviderEnvironment(
+		context.Background(), environmentID, state.snapshotRevision, projection,
+		&etcd.RouteRecord{EnvironmentID: environmentID, Desired: desired}, "",
 	)
-	if err == nil {
-		t.Fatal("routeProviderEnvironment() accepted a mixed-revision Service page")
+	if err != nil {
+		t.Fatalf("routeProviderEnvironment() error = %v", err)
+	}
+	if revision != state.snapshotRevision || len(environment.Routes) != 1 || environment.Routes[0].Host != "new.example.test" {
+		t.Fatalf("selected route head = revision %d, routes %#v", revision, environment.Routes)
 	}
 }

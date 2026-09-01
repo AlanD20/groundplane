@@ -15,6 +15,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -72,6 +73,13 @@ func (fake *fakeServiceMutationRepository) GetProject(
 	string,
 ) (etcd.Versioned[etcd.ProjectRecord], error) {
 	return fake.project, nil
+}
+
+func (fake *fakeServiceMutationRepository) GetService(
+	context.Context,
+	string,
+) (etcd.Versioned[etcd.ServiceRecord], error) {
+	return etcd.Versioned[etcd.ServiceRecord]{Record: fake.record, Revision: 10, ReadRevision: 10}, nil
 }
 
 func (fake *fakeServiceMutationRepository) ListZones(
@@ -187,13 +195,16 @@ func TestServiceCreationCommitsExactResponseAndZoneFence(t *testing.T) {
 	tenantID := ids.NewAt(ids.KindTenant, at, 4)
 	revisionID := ids.NewAt(ids.KindTask, at, 5)
 	artifactID := ids.NewAt(ids.KindConfig, at, 6)
-	canonical := []byte("networks: {}\nservices: {}\n")
+	canonical := []byte("networks:\n  backend:\n    ipam:\n      config:\n        - subnet: 10.40.0.0/24\nservices: {}\n")
 	digest := sha256.Sum256(canonical)
 	artifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
 		ArtifactId: artifactID, OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
 		OwnerId: environmentID, ProjectName: "gp-" + strings.ToLower(environmentID),
 		CanonicalYaml: canonical, YamlSha256: digest[:],
 		AuthorizedVolumeDir: "/var/lib/groundplane/vol/tenant/project/" + environmentID,
+		Networks: []*agentpb.ComposeNetwork{{
+			NetworkId: zoneID, ComposeName: "backend", DockerName: "gp_net_" + zoneID,
+		}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -224,18 +235,31 @@ func TestServiceCreationCommitsExactResponseAndZoneFence(t *testing.T) {
 			Record: etcd.EnvironmentComposeProjection{
 				EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
 				ComposeArtifact: artifact, NormalizedCompose: canonical,
+				DesiredZones: []etcd.EnvironmentZoneProjection{{
+					EnvironmentID: environmentID,
+					Desired: core.Zone{
+						ID: zoneID, Name: "backend", Subnet: "10.40.0.0/24",
+						OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
+					},
+				}},
 			},
 			Revision: 11, ReadRevision: 11,
 		},
 		zones: etcd.Page[etcd.ZoneRecord]{
 			Items: []etcd.Versioned[etcd.ZoneRecord]{
-				{Record: etcd.ZoneRecord{EnvironmentID: environmentID}, Revision: 9, ReadRevision: 9},
+				{
+					Record: etcd.ZoneRecord{
+						EnvironmentID: environmentID,
+						Desired: core.Zone{
+							ID: zoneID, Name: "backend", Subnet: "10.40.0.0/24",
+							OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
+						},
+					},
+					Revision: 9, ReadRevision: 9,
+				},
 			},
 		},
 	}
-	repository.zones.Items[0].Record.Desired.ID = zoneID
-	repository.zones.Items[0].Record.Desired.Name = "backend"
-	repository.zones.Items[0].Record.Desired.Subnet = "10.40.0.0/24"
 	idempotency := &fakeServiceMutationIdempotency{
 		evidence: serviceMutationEvidence{durable: projectCreationTestEvidence().durable},
 	}
@@ -269,7 +293,10 @@ func TestServiceCreationCommitsExactResponseAndZoneFence(t *testing.T) {
 		created.RuntimeIntent != apiTypes.ServiceRuntimeIntentRunning ||
 		created.Name != input.Name ||
 		len(repository.references.Zones) != 1 ||
-		repository.references.Zones[0].Record.Desired.ID != zoneID {
+		repository.references.Zones[0].Record.Desired.ID != zoneID ||
+		len(repository.projection.Record.DesiredServices) != 1 ||
+		repository.projection.Record.DesiredServices[0].Desired.ID != created.ID ||
+		repository.projection.Record.DesiredServices[0].Desired.Name != input.Name {
 		t.Fatalf("created Service/references = %#v/%#v", created, repository.references)
 	}
 	if repository.record.Desired.ID != created.ID || repository.marker.Locator.Route != serviceCreationRoute ||
@@ -325,8 +352,62 @@ func TestServiceCreationBootstrapsMissingEnvironmentDesiredState(t *testing.T) {
 		t.Fatalf("bootstrap Compose artifact error = %v", err)
 	}
 	if response.Status != http.StatusCreated || repository.projection.Record.EnvironmentID != environmentID ||
-		repository.projection.Record.RenderGeneration != 1 || len(repository.projection.Record.Services) != 1 ||
+		repository.projection.Record.RenderGeneration != 1 ||
+		len(repository.projection.Record.DesiredServices) != 1 ||
+		repository.projection.Record.DesiredServices[0].Desired.Name != "web" ||
 		artifact.GetOwnerId() != environmentID || artifact.GetAuthorizedVolumeDir() != volumeDir {
 		t.Fatalf("bootstrap response/projection/artifact = %#v/%#v/%#v", response, repository.projection.Record, artifact)
 	}
+}
+
+func TestServiceMutationsRejectComponentGeneratedService(t *testing.T) {
+	// Rationale: ordinary edit and remove actions must not acquire mutation
+	// authority over a Service generated and managed by a Component.
+	t.Parallel()
+	at := time.Date(2026, time.August, 31, 9, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)
+	serviceID := ids.NewAt(ids.KindService, at, 2)
+	component, err := etcd.NewComponentRecord(core.Component{
+		ID: ids.NewAt(ids.KindComponent, at, 3), Owner: core.ComponentOwnerEnvironment,
+		OwnerID: environmentID, Kind: core.ComponentKindIngressCaddy,
+		GeneratedServices: []string{serviceID},
+	})
+	if err != nil {
+		t.Fatalf("NewComponentRecord() error = %v", err)
+	}
+	repository := &fakeServiceMutationRepository{
+		record: etcd.ServiceRecord{
+			EnvironmentID: environmentID,
+			Desired: core.Service{
+				ID: serviceID, Name: "caddy", Image: "caddy:2", Strategy: core.StrategyRecreate,
+				OnFailure: core.OnFailureSwitchBack, Replicas: 1,
+			},
+			Runtime: core.ServiceRuntime{ServiceID: serviceID, RuntimeIntent: core.ServiceRuntimeIntentRunning},
+		},
+		projection: etcd.Versioned[etcd.EnvironmentComposeProjection]{
+			Record: etcd.EnvironmentComposeProjection{
+				EnvironmentID: environmentID, Components: []etcd.ComponentRecord{component},
+			},
+			Revision: 10, ReadRevision: 10,
+		},
+	}
+	service, err := newServiceMutationService(repository, &fakeServiceMutationIdempotency{})
+	if err != nil {
+		t.Fatalf("newServiceMutationService() error = %v", err)
+	}
+	if _, err := service.EditService(
+		context.Background(), serviceID, apiTypes.ServiceEdit{}, "edit-generated-0001",
+	); !isAppErrorKind(err, errs.KindResourceInUse) {
+		t.Fatalf("EditService(generated) error = %v", err)
+	}
+	if _, err := service.RemoveService(
+		context.Background(), serviceID, "remove-generated-0001",
+	); !isAppErrorKind(err, errs.KindResourceInUse) {
+		t.Fatalf("RemoveService(generated) error = %v", err)
+	}
+}
+
+func isAppErrorKind(err error, kind errs.Kind) bool {
+	actual, ok := errs.KindOf(err)
+	return ok && actual == kind
 }

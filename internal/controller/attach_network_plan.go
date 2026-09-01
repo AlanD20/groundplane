@@ -36,8 +36,12 @@ func ProjectAttachNetworks(
 		return nil, errs.New(errs.KindInternal, "Attach network projection input is invalid")
 	}
 	removeManagedAttachNetworks(project)
-	serviceNames := make(map[string]string, len(projection.Services))
-	for _, service := range projection.Services {
+	identities, err := ComposeIdentitySnapshotFromProjection(projection)
+	if err != nil {
+		return nil, err
+	}
+	serviceNames := make(map[string]string, len(identities.Services))
+	for _, service := range identities.Services {
 		serviceNames[service.ID] = service.Name
 	}
 	if project.Networks == nil {

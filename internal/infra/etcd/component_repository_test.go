@@ -77,7 +77,12 @@ func componentRepositoryTestHierarchy(
 	t *testing.T,
 ) (*ComponentRepository, *memoryHierarchyStore, Versioned[EnvironmentRecord], Versioned[ProjectRecord]) {
 	t.Helper()
-	_, store, environment, project := serviceRepositoryTestHierarchy(t)
+	store := newMemoryHierarchyStore()
+	hierarchy, err := newHierarchyRepository(store)
+	if err != nil {
+		t.Fatalf("newHierarchyRepository() error = %v", err)
+	}
+	project, environment := createEnvironmentBlueprintOwners(t, hierarchy)
 	repository, err := newComponentRepository(store)
 	if err != nil {
 		t.Fatalf("newComponentRepository() error = %v", err)

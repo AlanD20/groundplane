@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -106,7 +107,7 @@ func TestTaskPlanResolverRebuildsProfileOnlyBlueprintAsReconcileToEmpty(t *testi
 	if err != nil {
 		t.Fatalf("marshal profile-only Blueprint fixture artifact: %v", err)
 	}
-	reader.projection.Services = nil
+	reader.projection.DesiredServices = nil
 	reader.projection.ComposeArtifact = encoded
 	task.Materializations = nil
 	task.Steps = append([]etcd.TaskStepRecord(nil), task.Steps[1:]...)
@@ -134,6 +135,8 @@ func blueprintPlanTestState(t *testing.T) (*blueprintPlanReader, etcd.TaskRecord
 		taskID        = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		artifactID    = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		planID        = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		serviceID     = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		networkID     = "net_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	)
 	at := time.Date(2026, 8, 22, 20, 0, 0, 0, time.UTC)
 	content := []byte(`kind: environment
@@ -166,12 +169,13 @@ volumes:
 		},
 		projection: etcd.EnvironmentComposeProjection{
 			EnvironmentID: environmentID, RevisionID: taskID, RenderGeneration: 1,
-			Services: []etcd.EnvironmentComposeIdentity{{
-				ID: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", Name: "api",
-			}},
-			Networks: []etcd.EnvironmentComposeIdentity{{
-				ID: "net_01ARZ3NDEKTSV4RRFFQ69G5FAV", Name: "frontend",
-			}},
+			DesiredZones: []etcd.EnvironmentZoneProjection{{EnvironmentID: environmentID, Desired: core.Zone{
+				ID: networkID, Name: "frontend", Subnet: "10.40.0.0/24",
+				OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
+			}}},
+			DesiredServices: []etcd.EnvironmentServiceProjection{{EnvironmentID: environmentID, Desired: core.Service{
+				ID: serviceID, Name: "api", Image: "example/api:latest", Zones: []string{"frontend"},
+			}}},
 			Volumes: []etcd.EnvironmentVolumeIdentity{{
 				ID: "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV", Slug: "app-data", Key: "app-data",
 			}},

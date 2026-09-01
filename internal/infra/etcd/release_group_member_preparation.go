@@ -88,23 +88,19 @@ func (repository *TaskRepository) prepareReleaseGroupMemberEvidence(
 	group domain.Group,
 	projection EnvironmentComposeProjection,
 ) ([]Condition, error) {
-	projectionMembers := make(map[string]struct{}, len(projection.Services))
-	for _, identity := range projection.Services {
-		if ids.Validate(ids.KindService, identity.ID) != nil {
+	desiredMembers := make(map[string]EnvironmentServiceProjection, len(projection.DesiredServices))
+	for _, desired := range projection.DesiredServices {
+		if ids.Validate(ids.KindService, desired.Desired.ID) != nil {
 			return nil, corruptRecord()
 		}
-		if _, duplicate := projectionMembers[identity.ID]; duplicate {
+		if _, duplicate := desiredMembers[desired.Desired.ID]; duplicate {
 			return nil, corruptRecord()
 		}
-		projectionMembers[identity.ID] = struct{}{}
+		desiredMembers[desired.Desired.ID] = desired
 	}
-	keys := make([]string, 0, len(group.ServiceIDs)*3)
+	keys := make([]string, 0, len(group.ServiceIDs))
 	for _, serviceID := range group.ServiceIDs {
-		keys = append(keys,
-			serviceKey(serviceID),
-			serviceOwnerKey(group.EnvironmentID, serviceID),
-			deletionTombstoneKey("service", serviceID),
-		)
+		keys = append(keys, deletionTombstoneKey("service", serviceID))
 	}
 	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
 	if err != nil {
@@ -115,26 +111,13 @@ func (repository *TaskRepository) prepareReleaseGroupMemberEvidence(
 	}
 	conditions := make([]Condition, 0, len(group.ServiceIDs))
 	for index, serviceID := range group.ServiceIDs {
-		recordValue := result.Values[index*3]
-		ownerValue := result.Values[index*3+1]
-		deletionValue := result.Values[index*3+2]
-		if recordValue == nil || ownerValue == nil {
+		deletionValue := result.Values[index]
+		desired, found := desiredMembers[serviceID]
+		generated := releaseGroupTargetsGeneratedService(projection.Components, serviceID, group.EnvironmentID)
+		if (!found || desired.EnvironmentID != group.EnvironmentID) && !generated {
 			return nil, errs.New(
 				errs.KindServiceNotFound,
 				"release group member service was not found in the environment",
-			)
-		}
-		service, decodeErr := decodeServiceRecord(recordValue.Value)
-		_, enabled := projectionMembers[serviceID]
-		if decodeErr != nil || service.Desired.ID != serviceID ||
-			service.EnvironmentID != group.EnvironmentID ||
-			!bytes.Equal(ownerValue.Value, []byte(serviceID)) {
-			return nil, corruptRecord()
-		}
-		if !enabled {
-			return nil, errs.New(
-				errs.KindResourceInUse,
-				"release group member service is not enabled in the environment compose project",
 			)
 		}
 		if deletionValue != nil {
@@ -151,4 +134,22 @@ func (repository *TaskRepository) prepareReleaseGroupMemberEvidence(
 		})
 	}
 	return conditions, nil
+}
+
+func releaseGroupTargetsGeneratedService(
+	components []ComponentRecord,
+	serviceID string,
+	environmentID string,
+) bool {
+	for _, component := range components {
+		if component.Desired.OwnerID != environmentID {
+			continue
+		}
+		for _, generatedServiceID := range component.Runtime.GeneratedServices {
+			if generatedServiceID == serviceID {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -3,6 +3,7 @@ package controller
 import (
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
@@ -25,11 +26,13 @@ func TestProjectAttachNetworksAddsExternalConsumerMemberships(t *testing.T) {
 	}, Networks: composetypes.Networks{"frontend": {}}}
 	projection := etcd.EnvironmentComposeProjection{
 		EnvironmentID: environmentID,
-		Services: []etcd.EnvironmentComposeIdentity{
-			{ID: apiID, Name: "api"},
-			{ID: workerID, Name: "worker"},
+		DesiredServices: []etcd.EnvironmentServiceProjection{
+			{EnvironmentID: environmentID, Desired: core.Service{ID: apiID, Name: "api"}},
+			{EnvironmentID: environmentID, Desired: core.Service{ID: workerID, Name: "worker"}},
 		},
-		Networks: []etcd.EnvironmentComposeIdentity{{ID: "net_01ARZ3NDEKTSV4RRFFQ69G5FAX", Name: "frontend"}},
+		DesiredZones: []etcd.EnvironmentZoneProjection{{EnvironmentID: environmentID, Desired: core.Zone{
+			ID: "net_01ARZ3NDEKTSV4RRFFQ69G5FAX", Name: "frontend",
+		}}},
 	}
 	external, err := ProjectAttachNetworks(project, projection, []etcd.AttachTaskNetworkJoin{
 		{NetworkID: postgresID, ServiceIDs: []string{apiID}},

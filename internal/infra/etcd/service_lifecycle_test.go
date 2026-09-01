@@ -7,6 +7,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func TestServiceLifecycleRenderInputPinsAppliedProjection(t *testing.T) {
@@ -15,6 +16,12 @@ func TestServiceLifecycleRenderInputPinsAppliedProjection(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, time.August, 23, 13, 0, 0, 0, time.UTC)
 	serviceID := ids.NewAt(ids.KindService, at, 1)
+	desired := core.Service{
+		ID: serviceID, Name: "api", Image: "api:1",
+		Strategy: core.StrategyRecreate, OnFailure: core.OnFailureSwitchBack, Replicas: 1,
+	}
+	projection := serviceRecordTestProjection(t, ids.NewAt(ids.KindEnvironment, at, 5), desired)
+	projection.RenderGeneration = 9
 	input := ServiceLifecycleRenderInput{
 		PlanID: ids.NewAt(ids.KindPlan, at, 2), ServiceID: serviceID,
 		TenantID: ids.NewAt(ids.KindTenant, at, 3), TenantSlug: "acme",
@@ -22,23 +29,18 @@ func TestServiceLifecycleRenderInputPinsAppliedProjection(t *testing.T) {
 		EnvironmentID: ids.NewAt(ids.KindEnvironment, at, 5), EnvironmentName: "production",
 		AuthorizedVolumeDir: "/var/lib/groundplane/vol/test",
 		ArtifactID:          ids.NewAt(ids.KindConfig, at, 6),
-		Projection: EnvironmentComposeProjection{
-			EnvironmentID: ids.NewAt(ids.KindEnvironment, at, 5),
-			RevisionID:    ids.NewAt(ids.KindTask, at, 7), RenderGeneration: 9,
-			Services: []EnvironmentComposeIdentity{{ID: serviceID, Name: "api"}},
-		},
+		Projection:          projection,
 	}
-	input.Projection = withTestEnvironmentComposeArtifact(input.Projection)
 	value, err := encodeServiceLifecycleRenderInput(input)
 	if err != nil {
 		t.Fatalf("encodeServiceLifecycleRenderInput() error = %v", err)
 	}
 	decoded, err := decodeServiceLifecycleRenderInput(value)
-	if err != nil || decoded.PlanID != input.PlanID || decoded.Projection.Services[0].ID != serviceID {
+	if err != nil || decoded.PlanID != input.PlanID || decoded.Projection.DesiredServices[0].Desired.ID != serviceID {
 		t.Fatalf("decodeServiceLifecycleRenderInput() = %#v, %v", decoded, err)
 	}
-	input.Projection.Services[0].Name = "changed"
-	if decoded.Projection.Services[0].Name != "api" {
+	input.Projection.DesiredServices[0].Desired.Name = "changed"
+	if decoded.Projection.DesiredServices[0].Desired.Name != "api" {
 		t.Fatalf("decoded render input aliases caller = %#v", decoded)
 	}
 }
@@ -108,21 +110,22 @@ func TestServiceLifecycleAbortReleasesActiveFence(t *testing.T) {
 		t.Fatalf("CreateEnvironment() error = %v", err)
 	}
 	serviceID := ids.NewAt(ids.KindService, at, 5)
-	record, err := NewServiceRecord(environment.Record.ID, core.Service{
+	desired := core.Service{
 		ID: serviceID, Name: "api", Image: "api:1", Zones: []string{"frontend"},
 		Strategy: core.StrategyRecreate, OnFailure: core.OnFailureSwitchBack, Replicas: 1,
-	}, "")
-	if err != nil {
-		t.Fatalf("NewServiceRecord() error = %v", err)
 	}
-	current, err := services.CreateService(ctx, environment, project, record)
+	projection := serviceRecordTestProjection(t, environment.Record.ID, desired)
+	seedServiceRepositoryTestDesiredProjection(t, store, projection)
+	seedServiceRepositoryTestRuntime(t, store, ServiceRuntimeRecord{
+		EnvironmentID: environment.Record.ID, ServiceID: serviceID,
+		Runtime: core.ServiceRuntime{ServiceID: serviceID, RuntimeIntent: core.ServiceRuntimeIntentRunning},
+	})
+	current, err := services.GetService(ctx, serviceID)
 	if err != nil {
-		t.Fatalf("CreateService() error = %v", err)
+		t.Fatalf("GetService() error = %v", err)
 	}
-	replacement, err := SetServiceRuntimeIntent(current.Record, core.ServiceRuntimeIntentStopped)
-	if err != nil {
-		t.Fatalf("SetServiceRuntimeIntent() error = %v", err)
-	}
+	replacement := current.Record
+	replacement.Runtime.RuntimeIntent = core.ServiceRuntimeIntentStopped
 	task := validTaskRecord(at.Add(time.Second))
 	task.Owner = mustEnvironmentTaskOwner(t, project.Record, environment.Record)
 	task.Executor = TaskExecutorController
@@ -148,6 +151,15 @@ func TestServiceLifecycleAbortReleasesActiveFence(t *testing.T) {
 	if err != nil || conflict != nil || outcome != IdempotencyKnownApplied {
 		t.Fatalf("Service lifecycle outcome/conflict/error = %v/%v/%v", outcome, conflict, err)
 	}
+	runtimeRead, err := store.Get(ctx, serviceRuntimeKey(serviceID))
+	if err != nil || runtimeRead.Entry == nil || runtimeRead.Entry.ModRevision != result.revision {
+		t.Fatalf("Service runtime sidecar after lifecycle = %#v, %v", runtimeRead, err)
+	}
+	runtimeRecord, err := decodeServiceRuntimeRecord(runtimeRead.Entry.Value)
+	if err != nil || runtimeRecord.Runtime.RuntimeIntent != core.ServiceRuntimeIntentStopped ||
+		runtimeRecord.ServiceID != serviceID || runtimeRecord.EnvironmentID != environment.Record.ID {
+		t.Fatalf("decoded Service runtime sidecar = %#v, %v", runtimeRecord, err)
+	}
 	epoch, err := store.Get(ctx, environmentMutationEpochKey(environment.Record.ID))
 	if err != nil || epoch.Entry == nil || epoch.Entry.ModRevision != result.revision {
 		t.Fatalf("Service lifecycle mutation epoch = %#v, %v", epoch, err)
@@ -163,6 +175,26 @@ func TestServiceLifecycleAbortReleasesActiveFence(t *testing.T) {
 	active, err := store.Get(ctx, serviceLifecycleActiveKey(serviceID))
 	if err != nil || active.Entry != nil {
 		t.Fatalf("active Service lifecycle fence after abort = %#v, %v", active, err)
+	}
+	staleAt := task.CreatedAt.Add(3 * time.Second)
+	staleTask := task
+	staleTask.ID = ids.NewAt(ids.KindTask, staleAt, 8)
+	staleTask.OperationID = ids.NewAt(ids.KindOperation, staleAt, 9)
+	staleTask.PlanID = ids.NewAt(ids.KindPlan, staleAt, 10)
+	staleTask.IdempotencyKey = "service-stale-runtime-key-0001"
+	staleTask.CreatedAt = staleAt
+	staleTask.UpdatedAt = staleAt
+	staleTask.Steps = []TaskStepRecord{{ID: ids.NewAt(ids.KindStep, staleAt, 11)}}
+	staleMarker := pendingTaskMarker(staleTask)
+	staleMarker.Locator.ScopeID = environment.Record.ID
+	staleMarker.Locator.Route = "/services/{id}/stop"
+	staleMarker.ReplayTarget = &IdempotencyReplayTarget{Kind: IdempotencyReplayTargetService, ID: serviceID}
+	staleReplacement := current.Record
+	staleReplacement.Runtime.RuntimeIntent = core.ServiceRuntimeIntentStopped
+	if _, err := services.BeginServiceLifecycleWithTask(
+		ctx, tenant, project, environment, current, staleReplacement, nil, nil, staleTask, staleMarker,
+	); !isKind(err, errs.KindStateConflict) {
+		t.Fatalf("stale Service runtime CAS error = %v", err)
 	}
 	retryAt := task.CreatedAt.Add(2 * time.Second)
 	retryID := ids.NewAt(ids.KindTask, retryAt, 7)

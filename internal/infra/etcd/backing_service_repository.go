@@ -127,21 +127,23 @@ func (repository *BackingServiceRepository) composeBackingService(
 			"Backing-service Environment projection is inconsistent",
 		)
 	}
-	serviceID, err := repository.singleOwnerID(
-		ctx, serviceOwnerPrefix(environmentID), ids.KindService, project.ReadRevision,
+	projection, found, err := currentEnvironmentProjectionAtRevision(ctx, repository.store, environmentID, project.ReadRevision)
+	if err != nil {
+		return Versioned[BackingServiceRecord]{}, err
+	}
+	if !found || len(projection.Record.DesiredServices) != 1 {
+		return Versioned[BackingServiceRecord]{}, errs.New(
+			errs.KindInternal, "Backing-service desired projection is inconsistent",
+		)
+	}
+	serviceID := projection.Record.DesiredServices[0].Desired.ID
+	service, err := joinEnvironmentService(
+		ctx, repository.store, projection, serviceID, environmentBlueprintHeadKey(environmentID),
 	)
 	if err != nil {
 		return Versioned[BackingServiceRecord]{}, err
 	}
-	serviceValue, err := repository.primaryAtRevision(ctx, serviceKey(serviceID), project.ReadRevision)
-	if err != nil {
-		return Versioned[BackingServiceRecord]{}, err
-	}
-	service, err := decodeServiceRecord(serviceValue.Value)
-	if err != nil {
-		return Versioned[BackingServiceRecord]{}, err
-	}
-	if service.Desired.ID != serviceID || service.EnvironmentID != environmentID || service.Desired.Adapter == "" {
+	if service.Record.EnvironmentID != environmentID || service.Record.Desired.Adapter == "" {
 		return Versioned[BackingServiceRecord]{}, errs.New(
 			errs.KindInternal,
 			"Backing-service Service projection is inconsistent",
@@ -150,9 +152,9 @@ func (repository *BackingServiceRepository) composeBackingService(
 	return Versioned[BackingServiceRecord]{
 		Record: BackingServiceRecord{
 			ProjectID: project.Record.ID, EnvironmentID: environmentID, ServiceID: serviceID,
-			BackingNetworkID: service.BackingNetworkID,
+			BackingNetworkID: service.Record.BackingNetworkID,
 		},
-		Revision:     max(project.Revision, environmentValue.ModRevision, serviceValue.ModRevision),
+		Revision:     max(project.Revision, environmentValue.ModRevision, service.Revision, serviceRuntimeRevision(service)),
 		ReadRevision: project.ReadRevision,
 	}, nil
 }

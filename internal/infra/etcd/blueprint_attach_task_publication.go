@@ -34,9 +34,9 @@ func prepareBlueprintAttachTaskPublication(
 			"Blueprint Attach preparation is owned by another Task",
 		)
 	}
-	serviceIDs := make(map[string]struct{}, len(projection.Services))
-	for _, service := range projection.Services {
-		serviceIDs[service.ID] = struct{}{}
+	serviceIDs := make(map[string]struct{}, len(projection.DesiredServices))
+	for _, service := range projection.DesiredServices {
+		serviceIDs[service.Desired.ID] = struct{}{}
 	}
 	intentValue, err := encodeBlueprintAttachTaskIntent(preparation.Intent)
 	if err != nil {
@@ -77,7 +77,7 @@ func prepareBlueprintAttachTaskPublication(
 			Condition{Key: deletionTombstoneKey("attach", record.ID)},
 			Condition{Key: projectKey(record.BackingProjectID), ModRevision: input.BackingProject.Revision},
 			Condition{Key: environmentKey(record.BackingEnvironmentID), ModRevision: input.BackingEnvironment.Revision},
-			Condition{Key: serviceKey(record.BackingServiceID), ModRevision: input.BackingService.Revision},
+			serviceDesiredCondition(input.BackingService),
 		)
 		publication.mutations = append(publication.mutations,
 			Mutation{Type: MutationPut, Key: attachKey(record.ID), Value: recordValue},

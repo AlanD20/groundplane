@@ -82,10 +82,9 @@ func prepareReleaseHookPublicationFragment(evidence ReleasePublicationEvidence) 
 		appendRevision(scriptSetBodyGenerationKey(
 			execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID, execution.ScriptGeneration,
 		), sources.BodyGeneration.Revision)
-		appendRevision(serviceKey(execution.ServiceID), sources.Service.Revision)
-		appendRevision(environmentComposeProjectionKey(execution.EnvironmentID), sources.AppliedProjection.Revision)
-		for _, network := range sources.Networks {
-			appendRevision(zoneKey(network.Record.Desired.ID), network.Revision)
+		fragment.conditions = append(fragment.conditions, serviceDesiredCondition(sources.Service))
+		for _, condition := range scriptExecutionProjectionConditions(sources) {
+			appendRevision(condition.Key, condition.ModRevision)
 		}
 		fragment.mutations = append(fragment.mutations,
 			Mutation{Type: MutationPut, Key: scriptExecutionKey(execution.ID), Value: executionValue},

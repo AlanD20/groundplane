@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -22,35 +23,6 @@ func TestClassifyBackingServiceCreationUsesCurrentConditionLayout(t *testing.T) 
 	}
 }
 
-// Rationale: PostgreSQL backing creation used to publish two catalog
-// Components, adding six compares and seven mutations to the exact plan.
-func TestPostgreSQLBackingServiceCreationTransactionBudget(t *testing.T) {
-	t.Parallel()
-	marker := testDirectMarker()
-	corrected := &idempotencyMutationPlan{
-		conditions: make([]Condition, 43),
-		mutations:  make([]Mutation, 44),
-	}
-	if got := environmentBlueprintTransactionOperationCount(corrected, marker); got != 90 {
-		t.Fatalf("corrected PostgreSQL backing shape operation count = %d, want 90", got)
-	}
-	if err := validateEnvironmentDesiredPublicationBudget(corrected, marker); err != nil {
-		t.Fatalf("corrected PostgreSQL backing shape rejected: %v", err)
-	}
-
-	legacy := &idempotencyMutationPlan{
-		conditions: make([]Condition, 49),
-		mutations:  make([]Mutation, 51),
-	}
-	if got := environmentBlueprintTransactionOperationCount(legacy, marker); got != 103 {
-		t.Fatalf("legacy PostgreSQL backing shape operation count = %d, want 103", got)
-	}
-	if err := validateEnvironmentDesiredPublicationBudget(legacy, marker); err == nil ||
-		!strings.Contains(err.Error(), "96 compare-and-mutation limit") {
-		t.Fatalf("legacy PostgreSQL backing shape error = %v, want transaction-limit rejection", err)
-	}
-}
-
 func TestValidateBackingServiceComponentsRejectsNonEmpty(t *testing.T) {
 	t.Parallel()
 	err := validateBackingServiceComponents([]ComponentRecord{{}})
@@ -60,5 +32,72 @@ func TestValidateBackingServiceComponentsRejectsNonEmpty(t *testing.T) {
 	if kind, ok := errs.KindOf(err); !ok || kind != errs.KindValidationFailed ||
 		!strings.Contains(err.Error(), "zero Environment Components") {
 		t.Fatalf("validateBackingServiceComponents() error = %v, want validation rejection", err)
+	}
+}
+
+func TestBackingServiceCreationValidatesDesiredTopology(t *testing.T) {
+	t.Parallel()
+	const (
+		projectID     = "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		serviceID     = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		networkID     = "net_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		volumeID      = "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		taskID        = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	)
+	zone := core.Zone{
+		ID: networkID, Name: "database", Subnet: "10.40.1.0/24",
+		OwnerKind: core.ZoneOwnerBackingProject, OwnerID: projectID,
+	}
+	service := core.Service{
+		ID: serviceID, Name: "postgres", Image: "postgres:16-alpine",
+		Strategy: core.StrategyRecreate, Adapter: "postgres:16", Command: []string{"postgres"},
+	}
+	creation := BackingServiceCreation{
+		Project:     ProjectRecord{ID: projectID},
+		Environment: EnvironmentRecord{ID: environmentID},
+		Zone:        ZoneRecord{EnvironmentID: environmentID, Desired: zone},
+		Service: ServiceRecord{
+			EnvironmentID: environmentID, BackingNetworkID: networkID, Desired: service,
+		},
+		Claim: EnvironmentBlueprintStageClaim{
+			EnvironmentID: environmentID, RevisionID: taskID, TaskID: taskID,
+			SourceKind: EnvironmentBlueprintSourceApply, RenderGeneration: 1,
+		},
+		Revision: EnvironmentDesiredRevisionIdentity{EnvironmentID: environmentID, RevisionID: taskID},
+		Task:     TaskRecord{ID: taskID},
+		Projection: EnvironmentComposeProjection{
+			EnvironmentID: environmentID, RevisionID: taskID, RenderGeneration: 1,
+			ComposeArtifact: []byte{1},
+			DesiredZones:    []EnvironmentZoneProjection{{EnvironmentID: environmentID, Desired: zone}},
+			DesiredServices: []EnvironmentServiceProjection{{
+				EnvironmentID: environmentID, BackingNetworkID: networkID, Desired: service,
+			}},
+			Volumes: []EnvironmentVolumeIdentity{{ID: volumeID}},
+			VolumeMounts: []EnvironmentServiceVolumeMount{{
+				ServiceID: serviceID, VolumeID: volumeID, Target: "/var/lib/postgresql/data",
+			}},
+		},
+	}
+	if err := validateBackingServiceProjection(creation); err != nil {
+		t.Fatalf("validateBackingServiceProjection() error = %v", err)
+	}
+
+	changedService := creation
+	changedService.Projection.DesiredServices = append(
+		[]EnvironmentServiceProjection(nil), creation.Projection.DesiredServices...,
+	)
+	changedService.Projection.DesiredServices[0].Desired.Image = "postgres:17-alpine"
+	if err := validateBackingServiceProjection(changedService); err == nil {
+		t.Fatal("validateBackingServiceProjection() accepted a changed desired Service")
+	}
+
+	changedZone := creation
+	changedZone.Projection.DesiredZones = append(
+		[]EnvironmentZoneProjection(nil), creation.Projection.DesiredZones...,
+	)
+	changedZone.Projection.DesiredZones[0].Desired.Internal = true
+	if err := validateBackingServiceProjection(changedZone); err == nil {
+		t.Fatal("validateBackingServiceProjection() accepted a changed desired Zone")
 	}
 }

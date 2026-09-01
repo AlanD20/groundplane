@@ -86,11 +86,18 @@ func (inertBackingZoneCascadeRepository) GetSystemTaskInitiation(
 	return etcd.TaskInitiation{}, nil
 }
 
+func (inertBackingZoneCascadeRepository) GetZoneRemovalIntent(
+	context.Context, string,
+) (etcd.Versioned[etcd.ZoneRemovalIntent], bool, error) {
+	return etcd.Versioned[etcd.ZoneRemovalIntent]{}, false, nil
+}
+
 func (inertBackingZoneCascadeRepository) HandoffBackingZoneDeletion(
 	context.Context,
 	etcd.Versioned[etcd.ZoneRecord],
 	string,
 	etcd.Versioned[etcd.DeletionTombstoneRecord],
+	etcd.ZoneRemovalIntent,
 	etcd.TaskRecord,
 	etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {

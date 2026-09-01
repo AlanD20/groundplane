@@ -442,7 +442,7 @@ func taskPruningAttachRenderInput(now time.Time, planID string) AttachTaskRender
 		BlueprintRevisionID: ids.NewAt(ids.KindTask, now, 1715),
 		ArtifactID:          ids.NewAt(ids.KindConfig, now, 1716),
 		RenderGeneration:    1,
-		Services: []EnvironmentComposeIdentity{
+		Services: []AttachTaskServiceSnapshot{
 			{ID: ids.NewAt(ids.KindService, now, 1717), Name: "app"},
 		},
 		ConsumerServiceIDs: []string{ids.NewAt(ids.KindService, now, 1717)},

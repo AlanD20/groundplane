@@ -5,7 +5,6 @@ import (
 	"maps"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -65,23 +64,12 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 		return routeTaskChange{}, err
 	}
 
-	primary, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys: []string{
-			routeKey(intent.RouteID),
-			deletionTombstoneKey(string(DeletionTargetRoute), intent.RouteID),
-		},
-		Revision: revision,
-	})
+	if intent.CurrentProjection == nil {
+		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route desired projection is unavailable for removal retry")
+	}
+	route, err := routeAtProjection(ctx, repository.store, *intent.CurrentProjection, intent.CurrentProjectionRevision, revision, intent.RouteID)
 	if err != nil {
 		return routeTaskChange{}, err
-	}
-	if primary == nil || len(primary.Values) != 2 || primary.Values[0] == nil || primary.Values[1] != nil ||
-		primary.Values[0].ModRevision != intent.RouteRevision {
-		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route is not available for removal retry")
-	}
-	route, err := decodeRouteRecord(primary.Values[0].Value)
-	if err != nil || route.Desired.ID != intent.RouteID || route.EnvironmentID != intent.EnvironmentID {
-		return routeTaskChange{}, corruptRecord()
 	}
 
 	parents, keys, err := repository.readRouteRetryDependencies(ctx, route, intent, revision)
@@ -93,7 +81,6 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 		conditions: []Condition{
 			{Key: routeRemovalIntentKey(source.ID), ModRevision: intentValue.ModRevision},
 			{Key: routeRemovalIntentKey(retry.ID)},
-			{Key: routeKey(intent.RouteID), ModRevision: primary.Values[0].ModRevision},
 			{Key: deletionTombstoneKey(string(DeletionTargetRoute), intent.RouteID)},
 		},
 	}
@@ -166,30 +153,17 @@ func (repository *TaskRepository) prepareRouteMutationTaskRetry(
 		retry.RenderGeneration != source.RenderGeneration || !maps.Equal(retry.Params, source.Params) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation retry changed its pinned Task")
 	}
-	stateKeys := []string{routeKey(intent.RouteID), componentTaskActiveEnvironmentKey(intent.EnvironmentID)}
-	if intent.Provider != nil {
-		stateKeys = append(stateKeys, environmentComposeProjectionKey(intent.EnvironmentID))
-	}
+	stateKeys := []string{componentTaskActiveEnvironmentKey(intent.EnvironmentID)}
 	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: stateKeys, Revision: revision})
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	if state == nil || len(state.Values) != len(stateKeys) || state.Values[0] == nil || state.Values[1] != nil {
+	if state == nil || len(state.Values) != len(stateKeys) || state.Values[0] != nil {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation retry state changed")
 	}
-	record, err := decodeRouteRecord(state.Values[0].Value)
-	if err != nil || !sameRouteDesiredVersion(record, intent.Route) {
+	current, found, err := currentEnvironmentProjectionAtRevision(ctx, repository.store, intent.EnvironmentID, revision)
+	if err != nil || !found || !routeMutationSelectedProjection(current.Record, source, intent) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation retry desired state changed")
-	}
-	if intent.Provider != nil {
-		if intent.CurrentProjection == nil || state.Values[2] == nil ||
-			state.Values[2].ModRevision != intent.CurrentProjectionRevision {
-			return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation retry applied projection changed")
-		}
-		projection, decodeErr := decodeEnvironmentComposeProjection(state.Values[2].Value)
-		if decodeErr != nil || !sameRouteRemovalProjection(projection, *intent.CurrentProjection) {
-			return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation retry applied projection changed")
-		}
 	}
 	retryIntent := cloneRouteMutationIntent(intent)
 	retryIntent.TaskID, retryIntent.Status, retryIntent.CreatedAt, retryIntent.TerminalAt =
@@ -204,13 +178,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskRetry(
 	conditions := []Condition{
 		{Key: routeMutationIntentKey(source.ID), ModRevision: read.Values[0].ModRevision},
 		{Key: routeMutationIntentKey(retry.ID)},
-		{Key: routeKey(intent.RouteID), ModRevision: state.Values[0].ModRevision},
 		{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
-	}
-	if intent.Provider != nil {
-		conditions = append(conditions, Condition{
-			Key: environmentComposeProjectionKey(intent.EnvironmentID), ModRevision: state.Values[2].ModRevision,
-		})
 	}
 	return routeTaskChange{
 		applies:    true,
@@ -229,11 +197,13 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 	intent RouteRemovalIntent,
 	revision int64,
 ) (*GetManyResult, []string, error) {
+	service, err := findServiceAtRevision(ctx, repository.store, route.Desired.TargetServiceID, revision)
+	if err != nil || service.Record.EnvironmentID != route.EnvironmentID {
+		return nil, nil, errs.New(errs.KindResourceInUse, "Route retry target Service is unavailable")
+	}
 	baseKeys := []string{
-		routeOwnerKey(route.EnvironmentID, route.Desired.ID),
-		routeMatchKey(route.EnvironmentID, route.Desired.Host, route.Desired.Path),
 		environmentKey(route.EnvironmentID),
-		serviceKey(route.Desired.TargetServiceID),
+		service.Record.desiredFenceKey,
 		deletionTombstoneKey(string(DeletionTargetEnvironment), route.EnvironmentID),
 		deletionTombstoneKey("service", route.Desired.TargetServiceID),
 	}
@@ -242,17 +212,14 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 		return nil, nil, err
 	}
 	if base == nil || len(base.Values) != len(baseKeys) || base.Values[0] == nil || base.Values[1] == nil ||
-		base.Values[2] == nil || base.Values[3] == nil || base.Values[4] != nil || base.Values[5] != nil ||
-		string(base.Values[0].Value) != route.Desired.ID || string(base.Values[1].Value) != route.Desired.ID {
+		base.Values[2] != nil || base.Values[3] != nil {
 		return nil, nil, errs.New(errs.KindResourceInUse, "Route retry hierarchy is unavailable")
 	}
-	environment, err := decodeEnvironment(base.Values[2].Value)
+	environment, err := decodeEnvironment(base.Values[0].Value)
 	if err != nil || environment.ID != route.EnvironmentID {
 		return nil, nil, corruptRecord()
 	}
-	service, err := decodeServiceRecord(base.Values[3].Value)
-	if err != nil || service.Desired.ID != route.Desired.TargetServiceID ||
-		service.EnvironmentID != route.EnvironmentID {
+	if base.Values[1].ModRevision != service.Revision {
 		return nil, nil, corruptRecord()
 	}
 	extraKeys := []string{
@@ -289,24 +256,18 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 		values = append(values, tenantRead.Values[0])
 	}
 	if intent.CurrentProjection != nil {
-		projectionKey := environmentComposeProjectionKey(intent.EnvironmentID)
 		activeKey := componentTaskActiveEnvironmentKey(intent.EnvironmentID)
-		projectionRead, readErr := repository.store.GetMany(ctx, GetManyRequest{
-			Keys: []string{projectionKey, activeKey}, Revision: revision,
+		activeRead, readErr := repository.store.GetMany(ctx, GetManyRequest{
+			Keys: []string{activeKey}, Revision: revision,
 		})
 		if readErr != nil {
 			return nil, nil, readErr
 		}
-		if projectionRead == nil || len(projectionRead.Values) != 2 || projectionRead.Values[0] == nil ||
-			projectionRead.Values[1] != nil || projectionRead.Values[0].ModRevision != intent.CurrentProjectionRevision {
-			return nil, nil, errs.New(errs.KindStateConflict, "Route retry applied projection changed")
+		if activeRead == nil || len(activeRead.Values) != 1 || activeRead.Values[0] != nil {
+			return nil, nil, errs.New(errs.KindStateConflict, "Route retry reconciliation ownership changed")
 		}
-		projection, decodeErr := decodeEnvironmentComposeProjection(projectionRead.Values[0].Value)
-		if decodeErr != nil || !sameRouteRemovalProjection(projection, *intent.CurrentProjection) {
-			return nil, nil, errs.New(errs.KindStateConflict, "Route retry applied projection changed")
-		}
-		keys = append(keys, projectionKey, activeKey)
-		values = append(values, projectionRead.Values...)
+		keys = append(keys, activeKey)
+		values = append(values, activeRead.Values[0])
 	}
 	return &GetManyResult{Values: values, ReadRevision: revision}, keys, nil
 }
@@ -347,57 +308,38 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 	}
 
 	keys := []string{
-		routeKey(intent.RouteID),
 		deletionTombstoneKey(string(DeletionTargetRoute), intent.RouteID),
+		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
+		environmentBlueprintHeadKey(intent.EnvironmentID),
 	}
 	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	if state == nil || len(state.Values) != 2 || state.Values[0] == nil || state.Values[1] == nil ||
-		state.Values[0].ModRevision != intent.RouteRevision {
+	if state == nil || len(state.Values) != len(keys) || state.Values[0] == nil || state.Values[1] == nil ||
+		state.Values[2] == nil || string(state.Values[1].Value) != task.ID ||
+		state.Values[2].ModRevision != intent.CurrentProjectionRevision {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route removal state is incomplete")
 	}
-	route, err := decodeRouteRecord(state.Values[0].Value)
-	if err != nil || route.Desired.ID != intent.RouteID || route.EnvironmentID != intent.EnvironmentID {
-		return routeTaskChange{}, corruptRecord()
-	}
-	tombstone, err := decodeDeletionTombstone(state.Values[1].Value)
+	tombstone, err := decodeDeletionTombstone(state.Values[0].Value)
 	if err != nil || tombstone.TargetKind != DeletionTargetRoute || tombstone.TargetID != intent.RouteID ||
 		tombstone.TargetRevision != intent.RouteRevision || tombstone.TaskID != task.ID ||
 		tombstone.Phase != routeRemovalTombstonePhase(intent) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route deletion tombstone changed")
 	}
-
-	companionKeys := []string{
-		routeOwnerKey(route.EnvironmentID, route.Desired.ID),
-		routeMatchKey(route.EnvironmentID, route.Desired.Host, route.Desired.Path),
+	selectedRevisionID, err := decodeTaskReference(state.Values[2].Value)
+	if err != nil || intent.CurrentProjection == nil || selectedRevisionID != intent.CurrentProjection.RevisionID {
+		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route removal selected projection changed")
 	}
-	if intent.CurrentProjection != nil {
-		companionKeys = append(companionKeys,
-			environmentComposeProjectionKey(intent.EnvironmentID),
-			componentTaskActiveEnvironmentKey(intent.EnvironmentID),
-		)
+	projection, found, err := currentEnvironmentProjectionAtRevision(
+		ctx, repository.store, intent.EnvironmentID, revision,
+	)
+	if err != nil || !found || projection.Revision != intent.CurrentProjectionRevision ||
+		!sameRouteRemovalProjection(projection.Record, *intent.CurrentProjection) {
+		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route removal selected projection changed")
 	}
-	companions, err := repository.store.GetMany(ctx, GetManyRequest{Keys: companionKeys, Revision: revision})
-	if err != nil {
-		return routeTaskChange{}, err
-	}
-	if companions == nil || len(companions.Values) != len(companionKeys) || companions.Values[0] == nil ||
-		companions.Values[1] == nil || string(companions.Values[0].Value) != intent.RouteID ||
-		string(companions.Values[1].Value) != intent.RouteID {
-		return routeTaskChange{}, errs.New(errs.KindInternal, "Route deletion indexes are inconsistent")
-	}
-	if intent.CurrentProjection != nil {
-		if companions.Values[2] == nil || companions.Values[3] == nil ||
-			companions.Values[2].ModRevision != intent.CurrentProjectionRevision ||
-			string(companions.Values[3].Value) != task.ID {
-			return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route removal projection ownership changed")
-		}
-		projection, decodeErr := decodeEnvironmentComposeProjection(companions.Values[2].Value)
-		if decodeErr != nil || !sameRouteRemovalProjection(projection, *intent.CurrentProjection) {
-			return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route removal applied projection changed")
-		}
+	if _, err := routeAtProjection(ctx, repository.store, projection.Record, projection.Revision, revision, intent.RouteID); err != nil {
+		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route removal selected Route changed")
 	}
 
 	terminalIntent, err := terminalRouteRemovalIntent(intent, terminalStatus, terminalAt)
@@ -412,13 +354,12 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 		applies: true,
 		conditions: []Condition{
 			{Key: routeRemovalIntentKey(task.ID), ModRevision: intentValue.ModRevision},
-			{Key: routeKey(intent.RouteID), ModRevision: state.Values[0].ModRevision},
 			{
 				Key:         deletionTombstoneKey(string(DeletionTargetRoute), intent.RouteID),
-				ModRevision: state.Values[1].ModRevision,
+				ModRevision: state.Values[0].ModRevision,
 			},
-			{Key: companionKeys[0], ModRevision: companions.Values[0].ModRevision},
-			{Key: companionKeys[1], ModRevision: companions.Values[1].ModRevision},
+			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: state.Values[1].ModRevision},
+			{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[2].ModRevision},
 		},
 		mutations: []Mutation{
 			{Type: MutationPut, Key: routeRemovalIntentKey(task.ID), Value: intentBytes},
@@ -426,34 +367,38 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 		},
 		values: [][]byte{intentBytes},
 	}
-	if intent.CurrentProjection != nil {
-		change.conditions = append(change.conditions,
-			Condition{Key: companionKeys[2], ModRevision: companions.Values[2].ModRevision},
-			Condition{Key: companionKeys[3], ModRevision: companions.Values[3].ModRevision},
-		)
-		change.mutations = append(change.mutations, Mutation{
-			Type: MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID),
-		})
-	}
+	change.mutations = append(change.mutations, Mutation{Type: MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)})
 	if terminalStatus == TaskStatusCompleted {
-		change.mutations = append(change.mutations,
-			Mutation{Type: MutationDelete, Key: routeOwnerKey(route.EnvironmentID, route.Desired.ID)},
-			Mutation{
-				Type: MutationDelete,
-				Key:  routeMatchKey(route.EnvironmentID, route.Desired.Host, route.Desired.Path),
-			},
-			Mutation{Type: MutationDelete, Key: routeKey(intent.RouteID)},
-		)
-		if intent.CandidateProjection != nil {
-			projectionValue, encodeErr := encodeEnvironmentComposeProjection(*intent.CandidateProjection)
-			if encodeErr != nil {
+		change.mutations[0] = Mutation{Type: MutationDelete, Key: routeRemovalIntentKey(task.ID)}
+		promotion, promotionErr := prepareRouteHeadPromotion(ctx, repository.store, intent, revision)
+		if promotionErr != nil {
+			clearRouteTaskChange(change)
+			return routeTaskChange{}, promotionErr
+		}
+		change.conditions = append(change.conditions, promotion.conditions...)
+		change.mutations = append(change.mutations, promotion.mutations...)
+		change.values = append(change.values, promotion.values...)
+		observation, readErr := repository.store.GetMany(ctx, GetManyRequest{
+			Keys: []string{routeObservationKey(intent.RouteID)}, Revision: revision,
+		})
+		if readErr != nil {
+			clearRouteTaskChange(change)
+			return routeTaskChange{}, readErr
+		}
+		if observation == nil || len(observation.Values) != 1 {
+			clearRouteTaskChange(change)
+			return routeTaskChange{}, errs.New(errs.KindInternal, "Route observation read is incomplete")
+		}
+		if observation.Values[0] != nil {
+			if _, decodeErr := decodeRouteObservation(observation.Values[0].Value); decodeErr != nil {
 				clearRouteTaskChange(change)
-				return routeTaskChange{}, encodeErr
+				return routeTaskChange{}, decodeErr
 			}
-			change.values = append(change.values, projectionValue)
-			change.mutations = append(change.mutations, Mutation{
-				Type: MutationPut, Key: environmentComposeProjectionKey(intent.EnvironmentID), Value: projectionValue,
-			})
+			change.conditions = append(change.conditions, Condition{Key: routeObservationKey(intent.RouteID), ModRevision: observation.Values[0].ModRevision})
+			change.mutations = append(change.mutations, Mutation{Type: MutationDelete, Key: routeObservationKey(intent.RouteID)})
+			clear(observation.Values[0].Value)
+		} else {
+			change.conditions = append(change.conditions, Condition{Key: routeObservationKey(intent.RouteID)})
 		}
 	}
 	return change, nil
@@ -488,31 +433,32 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 	if intent.Status != TaskStatusPending {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation intent is not pending")
 	}
-	stateKeys := []string{routeKey(intent.RouteID), componentTaskActiveEnvironmentKey(intent.EnvironmentID)}
-	if intent.Provider != nil {
-		stateKeys = append(stateKeys, environmentComposeProjectionKey(intent.EnvironmentID))
+	stateKeys := []string{
+		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
+		routeObservationKey(intent.RouteID),
 	}
 	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: stateKeys, Revision: revision})
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	if state == nil || len(state.Values) != len(stateKeys) || state.Values[0] == nil || state.Values[1] == nil ||
-		string(state.Values[1].Value) != task.ID {
+	if state == nil || len(state.Values) != len(stateKeys) || state.Values[0] == nil ||
+		string(state.Values[0].Value) != task.ID {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation ownership changed")
 	}
-	record, err := decodeRouteRecord(state.Values[0].Value)
-	if err != nil || !sameRouteDesiredVersion(record, intent.Route) {
+	desiredProjection, found, err := currentEnvironmentProjectionAtRevision(ctx, repository.store, intent.EnvironmentID, revision)
+	if err != nil || !found {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation desired state changed")
 	}
-	if intent.Provider != nil {
-		if state.Values[2] == nil || state.Values[2].ModRevision != intent.CurrentProjectionRevision {
-			return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation applied projection changed")
+	var desired *EnvironmentRouteProjection
+	for index := range desiredProjection.Record.DesiredRoutes {
+		if desiredProjection.Record.DesiredRoutes[index].Desired.ID == intent.RouteID {
+			desired = &desiredProjection.Record.DesiredRoutes[index]
+			break
 		}
-		projection, decodeErr := decodeEnvironmentComposeProjection(state.Values[2].Value)
-		if decodeErr != nil || intent.CurrentProjection == nil ||
-			!sameRouteRemovalProjection(projection, *intent.CurrentProjection) {
-			return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation applied projection changed")
-		}
+	}
+	if desired == nil || desired.DesiredGeneration != intent.Route.DesiredGeneration ||
+		!routeDesiredEqual(desired.Desired, intent.Route.Desired) {
+		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation desired state changed")
 	}
 	status := RouteObservedUnserved
 	var provider RouteProviderObservation
@@ -529,9 +475,10 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 			InputGeneration:  intent.Provider.InputGeneration,
 		}
 	}
-	record, err = SetRouteObservation(record, RouteObservation{
-		Status: status, DesiredGeneration: record.DesiredGeneration, Provider: provider,
-	})
+	observationRecord, err := NewRouteObservationRecord(
+		intent.EnvironmentID, intent.RouteID, intent.Route.DesiredGeneration,
+		RouteObservation{Status: status, DesiredGeneration: intent.Route.DesiredGeneration, Provider: provider},
+	)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
@@ -539,7 +486,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	routeValue, err := encodeRouteRecord(record)
+	routeValue, err := encodeRouteObservation(observationRecord)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
@@ -548,35 +495,29 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 		clear(routeValue)
 		return routeTaskChange{}, err
 	}
+	observationCondition := Condition{Key: routeObservationKey(intent.RouteID)}
+	if state.Values[1] != nil {
+		prior, decodeErr := decodeRouteObservation(state.Values[1].Value)
+		if decodeErr != nil || prior.EnvironmentID != intent.EnvironmentID || prior.RouteID != intent.RouteID {
+			clear(routeValue)
+			clear(intentValue)
+			return routeTaskChange{}, corruptRecord()
+		}
+		observationCondition.ModRevision = state.Values[1].ModRevision
+	}
 	change := routeTaskChange{
 		applies: true,
 		conditions: []Condition{
 			{Key: routeMutationIntentKey(task.ID), ModRevision: read.Values[0].ModRevision},
-			{Key: routeKey(intent.RouteID), ModRevision: state.Values[0].ModRevision},
-			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: state.Values[1].ModRevision},
+			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: state.Values[0].ModRevision},
+			observationCondition,
 		},
 		mutations: []Mutation{
 			{Type: MutationPut, Key: routeMutationIntentKey(task.ID), Value: intentValue},
-			{Type: MutationPut, Key: routeKey(intent.RouteID), Value: routeValue},
+			{Type: MutationPut, Key: routeObservationKey(intent.RouteID), Value: routeValue},
 			{Type: MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 		},
 		values: [][]byte{routeValue, intentValue},
-	}
-	if intent.Provider != nil {
-		change.conditions = append(change.conditions, Condition{
-			Key: environmentComposeProjectionKey(intent.EnvironmentID), ModRevision: state.Values[2].ModRevision,
-		})
-		if terminalStatus == TaskStatusCompleted {
-			projectionValue, encodeErr := encodeEnvironmentComposeProjection(*intent.CandidateProjection)
-			if encodeErr != nil {
-				clearRouteTaskChange(change)
-				return routeTaskChange{}, encodeErr
-			}
-			change.values = append(change.values, projectionValue)
-			change.mutations = append(change.mutations, Mutation{
-				Type: MutationPut, Key: environmentComposeProjectionKey(intent.EnvironmentID), Value: projectionValue,
-			})
-		}
 	}
 	return change, nil
 }
@@ -601,6 +542,9 @@ func (repository *TaskRepository) validateRouteTaskAcknowledgementReplay(
 		return errs.New(errs.KindInternal, "Route removal replay read is incomplete")
 	}
 	if intentRead.Values[0] == nil {
+		if terminalStatus == TaskStatusCompleted {
+			return validateCompletedRouteHeadReplay(ctx, repository.store, task, revision)
+		}
 		return nil
 	}
 	intent, err := decodeRouteRemovalIntent(intentRead.Values[0].Value)
@@ -616,7 +560,6 @@ func (repository *TaskRepository) validateRouteTaskAcknowledgementReplay(
 	}
 	state, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{
-			routeKey(intent.RouteID),
 			deletionTombstoneKey(string(DeletionTargetRoute), intent.RouteID),
 			componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		},
@@ -625,20 +568,26 @@ func (repository *TaskRepository) validateRouteTaskAcknowledgementReplay(
 	if err != nil {
 		return err
 	}
-	if state == nil || len(state.Values) != 3 || state.Values[1] != nil {
+	if state == nil || len(state.Values) != 2 || state.Values[0] != nil || state.Values[1] != nil {
 		return errs.New(errs.KindStateConflict, "Route removal terminal fence is inconsistent")
 	}
-	if terminalStatus == TaskStatusCompleted && state.Values[0] != nil {
-		return errs.New(errs.KindStateConflict, "completed Route removal retained its target")
+	if intent.CandidateProjection == nil {
+		return errs.New(errs.KindStateConflict, "Route removal terminal projection is missing")
 	}
-	if terminalStatus != TaskStatusCompleted && state.Values[0] == nil {
-		return errs.New(errs.KindStateConflict, "failed Route removal lost its target")
+	if terminalStatus == TaskStatusCompleted {
+		return errs.New(errs.KindStateConflict, "completed Route removal retained its active intent")
 	}
-	if state.Values[2] != nil {
-		activeTaskID := string(state.Values[2].Value)
-		if activeTaskID == task.ID || ids.Validate(ids.KindTask, activeTaskID) != nil {
-			return errs.New(errs.KindStateConflict, "terminal Route removal remains active")
-		}
+	staging, err := prepareRouteHeadPromotion(ctx, repository.store, intent, revision)
+	if err != nil {
+		return err
+	}
+	clearRouteHeadPublication(staging)
+	projection, found, projectionErr := currentEnvironmentProjectionAtRevision(
+		ctx, repository.store, intent.EnvironmentID, revision,
+	)
+	if projectionErr != nil || !found || intent.CurrentProjection == nil ||
+		!sameRouteRemovalProjection(projection.Record, *intent.CurrentProjection) {
+		return errs.New(errs.KindStateConflict, "Route removal terminal projection changed")
 	}
 	return nil
 }
@@ -666,35 +615,43 @@ func (repository *TaskRepository) validateRouteMutationTaskAcknowledgementReplay
 		intent.TerminalAt == nil || task.FinishedAt == nil || !intent.TerminalAt.Equal(*task.FinishedAt) {
 		return true, errs.New(errs.KindStateConflict, "Route mutation replay evidence changed")
 	}
-	stateKeys := []string{routeKey(intent.RouteID), componentTaskActiveEnvironmentKey(intent.EnvironmentID)}
-	if intent.Provider != nil {
-		stateKeys = append(stateKeys, environmentComposeProjectionKey(intent.EnvironmentID))
-	}
+	stateKeys := []string{componentTaskActiveEnvironmentKey(intent.EnvironmentID)}
 	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: stateKeys, Revision: revision})
 	if err != nil {
 		return true, err
 	}
-	if state == nil || len(state.Values) != len(stateKeys) || state.Values[0] == nil {
+	if state == nil || len(state.Values) != len(stateKeys) || state.Values[0] != nil {
 		return true, errs.New(errs.KindStateConflict, "Route mutation replay state is incomplete")
 	}
-	record, err := decodeRouteRecord(state.Values[0].Value)
-	if err != nil || !sameRouteDesiredVersion(record, intent.Route) || state.Values[1] != nil && string(state.Values[1].Value) == task.ID {
-		return true, errs.New(errs.KindStateConflict, "Route mutation replay state changed")
-	}
-	if intent.Provider != nil {
-		if state.Values[2] == nil {
-			return true, errs.New(errs.KindStateConflict, "Route mutation terminal projection is missing")
-		}
-		projection, decodeErr := decodeEnvironmentComposeProjection(state.Values[2].Value)
-		want := intent.CurrentProjection
-		if terminalStatus == TaskStatusCompleted {
-			want = intent.CandidateProjection
-		}
-		if decodeErr != nil || want == nil || !sameRouteRemovalProjection(projection, *want) {
-			return true, errs.New(errs.KindStateConflict, "Route mutation terminal projection changed")
-		}
+	projection, found, projectionErr := currentEnvironmentProjectionAtRevision(ctx, repository.store, intent.EnvironmentID, revision)
+	if projectionErr != nil || !found || !routeMutationSelectedProjection(projection.Record, task, intent) {
+		return true, errs.New(errs.KindStateConflict, "Route mutation terminal projection changed")
 	}
 	return true, nil
+}
+
+func routeMutationSelectedProjection(
+	projection EnvironmentComposeProjection,
+	task TaskRecord,
+	intent RouteMutationIntent,
+) bool {
+	if intent.CandidateProjection != nil {
+		return sameRouteRemovalProjection(projection, *intent.CandidateProjection)
+	}
+	selectedRevisionID := task.ID
+	if task.RetryOf != "" {
+		selectedRevisionID = task.RetryOf
+	}
+	if intent.Provider != nil || projection.RevisionID != selectedRevisionID {
+		return false
+	}
+	for _, route := range projection.DesiredRoutes {
+		if route.Desired.ID == intent.RouteID {
+			return route.DesiredGeneration == intent.Route.DesiredGeneration &&
+				routeDesiredEqual(route.Desired, intent.Route.Desired)
+		}
+	}
+	return false
 }
 
 func validateRouteMutationTaskOwner(task TaskRecord, intent RouteMutationIntent) error {

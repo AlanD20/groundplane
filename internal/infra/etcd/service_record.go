@@ -6,16 +6,15 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const servicePrefix = "/v1/records/services/"
-
-// ServiceRecord is the atomic durable boundary for one Service. Desired and
-// runtime remain distinct typed subrecords so Blueprint input cannot author or
-// overwrite Controller-owned operational intent.
+// ServiceRecord is the joined public view of immutable desired state and its
+// independently mutable runtime sidecar. It is never encoded as one record.
 type ServiceRecord struct {
 	EnvironmentID    string              `json:"environment_id"`
 	BackingNetworkID string              `json:"backing_network_id,omitempty"`
 	Desired          core.Service        `json:"desired"`
 	Runtime          core.ServiceRuntime `json:"runtime"`
+	desiredFenceKey  string
+	runtimeRevision  int64
 }
 
 // NewServiceRecord constructs the only accepted initial runtime state for a
@@ -69,20 +68,6 @@ func SetServiceRuntimeIntent(
 	return replacement, nil
 }
 
-func serviceKey(id string) string { return servicePrefix + id }
-
-func serviceNameKey(environmentID string, name string) string {
-	return "/v1/indexes/services/by-name/environment/" + environmentID + "/" + encodeDynamicSegment(name)
-}
-
-func serviceOwnerPrefix(environmentID string) string {
-	return "/v1/indexes/services/by-owner/environment/" + environmentID + "/"
-}
-
-func serviceOwnerKey(environmentID string, serviceID string) string {
-	return serviceOwnerPrefix(environmentID) + serviceID
-}
-
 func validateServiceRecord(record ServiceRecord) error {
 	if err := validateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
 		return err
@@ -109,22 +94,4 @@ func validateServiceRecord(record ServiceRecord) error {
 		return errs.New(errs.KindValidationFailed, "adapter-backed Service requires a stable backing network id")
 	}
 	return nil
-}
-
-func encodeServiceRecord(record ServiceRecord) ([]byte, error) {
-	if err := validateServiceRecord(record); err != nil {
-		return nil, err
-	}
-	return encodeEnvelope("service", record)
-}
-
-func decodeServiceRecord(value []byte) (ServiceRecord, error) {
-	record, err := decodeEnvelope[ServiceRecord](value, "service")
-	if err != nil {
-		return ServiceRecord{}, err
-	}
-	if err := validateServiceRecord(record); err != nil {
-		return ServiceRecord{}, corruptRecord()
-	}
-	return record, nil
 }

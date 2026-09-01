@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"crypto/sha256"
+	"fmt"
 	"net/http"
 	"reflect"
 	"strings"
@@ -16,7 +17,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func TestEnvironmentBlueprintPublishesSealedRevisionAndTaskAuthority(t *testing.T) {
+func TestEnvironmentBlueprintZonePoolPublishesSealedRevisionAndTaskAuthority(t *testing.T) {
 	// Rationale: publication must select an already sealed desired revision and
 	// advance the head, Task queue, and Environment mutation epoch atomically.
 	ctx := context.Background()
@@ -31,15 +32,15 @@ func TestEnvironmentBlueprintPublishesSealedRevisionAndTaskAuthority(t *testing.
 	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
 
 	desiredProjection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
-	zoneChanges := environmentBlueprintTestZoneChanges(t, repository, desiredProjection)
-	serviceChanges := environmentBlueprintTestServiceChanges(t, repository, desiredProjection)
-	serviceChanges[0].Record.Desired.Strategy = core.StrategyBlueGreen
-	serviceChanges[0].Record.Desired.DependsOn = map[string]core.ServiceDependency{
+	desiredProjection.DesiredServices[0].Desired.Strategy = core.StrategyBlueGreen
+	desiredProjection.DesiredServices[0].Desired.DependsOn = map[string]core.ServiceDependency{
 		"migrate": {
 			Condition: core.ServiceDependencyCompletedSuccessfully,
 			Phases:    []core.ServiceDependencyPhase{core.ServiceDependencyPhaseDeploy},
 		},
 	}
+	zoneChanges := environmentBlueprintTestZoneChanges(t, repository, desiredProjection)
+	serviceChanges := environmentBlueprintTestServiceChanges(t, repository, desiredProjection)
 	routeChanges := environmentBlueprintTestRouteChanges(t, repository, desiredProjection)
 	result := publishEnvironmentBlueprintTestRevision(
 		t, repository, project, environment, 0, revision, desiredProjection,
@@ -62,33 +63,185 @@ func TestEnvironmentBlueprintPublishesSealedRevisionAndTaskAuthority(t *testing.
 	if stored.Revision >= head.Revision {
 		t.Fatalf("sealed revision MVCC revision = %d, want before head publication %d", stored.Revision, head.Revision)
 	}
-	assertEnvironmentBlueprintZoneRevision(t, store, desiredProjection, head.Revision)
-	serviceRepository, err := newServiceRepository(store)
-	if err != nil {
-		t.Fatalf("newServiceRepository() error = %v", err)
-	}
-	service, err := serviceRepository.GetService(ctx, desiredProjection.Services[0].ID)
-	dependency := service.Record.Desired.DependsOn["migrate"]
-	if err != nil || service.Record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentRunning ||
-		service.Revision != head.Revision || service.Record.Desired.Strategy != core.StrategyBlueGreen ||
-		dependency.Condition != core.ServiceDependencyCompletedSuccessfully || len(dependency.Phases) != 1 ||
-		dependency.Phases[0] != core.ServiceDependencyPhaseDeploy {
-		t.Fatalf("GetService() = %#v, %v", service, err)
-	}
-	routeRepository, err := newRouteRepository(store)
-	if err != nil {
-		t.Fatalf("newRouteRepository() error = %v", err)
-	}
-	route, err := routeRepository.GetRoute(ctx, routeChanges[0].Record.Desired.ID)
-	if err != nil || route.Record.Desired.TargetServiceID != desiredProjection.Services[0].ID || route.Revision != head.Revision {
-		t.Fatalf("GetRoute() = %#v, %v", route, err)
-	}
+	assertEnvironmentBlueprintTopologyAuthority(t, store, desiredProjection)
 	projection, found, err := repository.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
 	if err != nil || !found || projection.Record.RevisionID != task.ID ||
 		projection.Record.RenderGeneration != 1 {
 		t.Fatalf("GetEnvironmentComposeProjection() = %#v, %v, %v", projection, found, err)
 	}
 	assertEnvironmentBlueprintTaskAuthority(t, store, environment.Record.ID, task, head.Revision)
+	markerKey, err := idempotencyMarkerKey(marker.Locator)
+	if err != nil {
+		t.Fatalf("idempotencyMarkerKey() error = %v", err)
+	}
+	assertEnvironmentBlueprintValue(t, store, markerKey)
+}
+
+type environmentBlueprintPublicationAuditStore struct {
+	hierarchyStore
+	reject           bool
+	comparisons      int
+	successMutations int
+	failureReads     int
+}
+
+func (store *environmentBlueprintPublicationAuditStore) Transact(
+	ctx context.Context,
+	conditions []Condition,
+	mutations []Mutation,
+) (TransactionResult, error) {
+	store.comparisons = len(conditions)
+	store.successMutations = len(mutations)
+	if store.reject {
+		store.failureReads = len(conditions)
+		return TransactionResult{
+			Revision: 1, FailureReads: make([]*KeyValue, len(conditions)),
+		}, nil
+	}
+	return store.hierarchyStore.Transact(ctx, conditions, mutations)
+}
+
+func TestEnvironmentBlueprintTopologyPublicationHasConstantCompactShape(t *testing.T) {
+	// Rationale: the sealed 6-Zone/13-Service/6-Route topology must publish by
+	// Environment head without consuming one transaction operation per resource.
+	for _, reject := range []bool{false, true} {
+		name := "success"
+		if reject {
+			name = "failure arm"
+		}
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			store := newMemoryHierarchyStore()
+			base, err := newHierarchyRepository(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			project, environment := createEnvironmentBlueprintOwners(t, base)
+			task := environmentBlueprintTestTask(t, project.Record, environment.Record, 13100)
+			projection := environmentBlueprintSizedTopologyProjection(t, environment.Record.ID, task.ID)
+			zones, services, routes := environmentBlueprintTopologyChanges(t, projection)
+			marker := environmentBlueprintTestMarker(task, environment.Record.ID)
+			claim := stageEnvironmentBlueprintForPublicationTest(
+				t,
+				base,
+				0,
+				environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n"),
+				projection,
+				marker,
+			)
+			audited := &environmentBlueprintPublicationAuditStore{
+				hierarchyStore: store,
+				reject:         reject,
+			}
+			repository, err := newHierarchyRepository(audited)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := repository.PublishEnvironmentDesiredRevisionWithTask(
+				ctx,
+				project,
+				environment,
+				0,
+				claim,
+				EnvironmentDesiredRevisionIdentity{
+					EnvironmentID: environment.Record.ID,
+					RevisionID:    task.ID,
+				},
+				projection,
+				zones,
+				services,
+				routes,
+				ReleaseGroupBlueprintPreparedMutation{},
+				ComponentTaskPreparation{},
+				BlueprintAttachTaskPreparation{},
+				task,
+				marker,
+			)
+			if err != nil {
+				t.Fatalf("PublishEnvironmentDesiredRevisionWithTask() error = %v", err)
+			}
+			if audited.comparisons != 21 || audited.successMutations != 12 {
+				t.Fatalf(
+					"publication partitions = %d/%d, want 21/12",
+					audited.comparisons,
+					audited.successMutations,
+				)
+			}
+			outcome, _, conflict, classifyErr := result.Classify()
+			if reject {
+				if audited.failureReads != 21 {
+					t.Fatalf("failure reads = %d, want 21", audited.failureReads)
+				}
+				if classifyErr != nil || outcome != IdempotencyKnownConflict || conflict == nil {
+					t.Fatalf("rejected publication = %v/%v/%v", outcome, conflict, classifyErr)
+				}
+				return
+			}
+			if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
+				t.Fatalf("publication = %v/%v/%v", outcome, conflict, classifyErr)
+			}
+			assertEnvironmentBlueprintTopologyAuthority(t, store, projection)
+		})
+	}
+}
+
+func environmentBlueprintSizedTopologyProjection(
+	t *testing.T,
+	environmentID string,
+	revisionID string,
+) EnvironmentComposeProjection {
+	t.Helper()
+	projection := desiredTopologyProjectionFixture(t)
+	projection.EnvironmentID = environmentID
+	projection.RevisionID = revisionID
+	for index := range projection.DesiredZones {
+		projection.DesiredZones[index].EnvironmentID = environmentID
+		projection.DesiredZones[index].Desired.OwnerID = environmentID
+		projection.DesiredZones[index].Desired.Subnet = fmt.Sprintf("10.40.%d.0/24", index+10)
+	}
+	for index := range projection.DesiredServices {
+		projection.DesiredServices[index].EnvironmentID = environmentID
+	}
+	for index := range projection.DesiredRoutes {
+		projection.DesiredRoutes[index].EnvironmentID = environmentID
+	}
+	return withTestEnvironmentComposeArtifact(projection)
+}
+
+func environmentBlueprintTopologyChanges(
+	t *testing.T,
+	projection EnvironmentComposeProjection,
+) (
+	[]EnvironmentBlueprintZoneChange,
+	[]EnvironmentBlueprintServiceChange,
+	[]EnvironmentBlueprintRouteChange,
+) {
+	t.Helper()
+	zones := make([]EnvironmentBlueprintZoneChange, len(projection.DesiredZones))
+	for index, desired := range projection.DesiredZones {
+		record, err := NewZoneRecord(projection.EnvironmentID, desired.Desired)
+		if err != nil {
+			t.Fatalf("NewZoneRecord() error = %v", err)
+		}
+		zones[index] = EnvironmentBlueprintZoneChange{Record: record}
+	}
+	services := make([]EnvironmentBlueprintServiceChange, len(projection.DesiredServices))
+	for index, desired := range projection.DesiredServices {
+		record, err := NewServiceRecord(projection.EnvironmentID, desired.Desired, desired.BackingNetworkID)
+		if err != nil {
+			t.Fatalf("NewServiceRecord() error = %v", err)
+		}
+		services[index] = EnvironmentBlueprintServiceChange{Record: record}
+	}
+	routes := make([]EnvironmentBlueprintRouteChange, len(projection.DesiredRoutes))
+	for index, desired := range projection.DesiredRoutes {
+		record, err := NewRouteRecord(projection.EnvironmentID, desired.Desired)
+		if err != nil {
+			t.Fatalf("NewRouteRecord() error = %v", err)
+		}
+		routes[index] = EnvironmentBlueprintRouteChange{Record: record}
+	}
+	return zones, services, routes
 }
 
 func TestEnvironmentBlueprintPublicationPreservesOldRevisionWhenHeadAdvances(t *testing.T) {
@@ -365,13 +518,30 @@ func environmentBlueprintTestProjection(
 	task TaskRecord,
 	generation uint64,
 ) EnvironmentComposeProjection {
+	serviceID := ids.NewAt(ids.KindService, task.CreatedAt, 70)
+	zoneID := ids.NewAt(ids.KindNetwork, task.CreatedAt, 71)
 	projection := EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: task.ID, RenderGeneration: generation,
-		Services: []EnvironmentComposeIdentity{{
-			ID: ids.NewAt(ids.KindService, task.CreatedAt, 70), Name: "api",
+		DesiredServices: []EnvironmentServiceProjection{{
+			EnvironmentID: environmentID,
+			Desired: core.Service{
+				ID: serviceID, Name: "api", Image: "example/api:1", Zones: []string{"default"},
+			},
 		}},
-		Networks: []EnvironmentComposeIdentity{{
-			ID: ids.NewAt(ids.KindNetwork, task.CreatedAt, 71), Name: "default",
+		DesiredZones: []EnvironmentZoneProjection{{
+			EnvironmentID: environmentID,
+			Desired: core.Zone{
+				ID: zoneID, Name: "default", Subnet: "10.40.10.0/24", Internal: true,
+				OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
+			},
+		}},
+		DesiredRoutes: []EnvironmentRouteProjection{{
+			EnvironmentID: environmentID,
+			Desired: core.Route{
+				ID: ids.NewAt(ids.KindRoute, task.CreatedAt, 74), Path: "/internal/*",
+				TargetServiceID: serviceID, TargetPort: 8080, Exposure: "internal",
+			},
+			DesiredGeneration: 1,
 		}},
 		Volumes: []EnvironmentVolumeIdentity{{
 			ID: ids.NewAt(ids.KindVolume, task.CreatedAt, 72), Slug: "app-data", Key: "app-data",
@@ -388,7 +558,8 @@ func environmentBlueprintTestProjection(
 		YamlSha256:          yamlDigest[:],
 		AuthorizedVolumeDir: "/var/lib/groundplane/vol/test",
 		Services: []*agentpb.ComposeService{{
-			ServiceId: projection.Services[0].ID, ComposeName: projection.Services[0].Name,
+			ServiceId:   projection.DesiredServices[0].Desired.ID,
+			ComposeName: projection.DesiredServices[0].Desired.Name,
 		}},
 		Volumes: []*agentpb.ComposeVolume{{
 			VolumeId: projection.Volumes[0].ID, ComposeName: projection.Volumes[0].Key,
@@ -422,12 +593,11 @@ func environmentBlueprintTestServiceChanges(
 	if err != nil {
 		t.Fatalf("newServiceRepository() error = %v", err)
 	}
-	changes := make([]EnvironmentBlueprintServiceChange, len(projection.Services))
-	for index, identity := range projection.Services {
-		desired := core.Service{ID: identity.ID, Name: identity.Name, Image: "example/" + identity.Name + ":1"}
-		current, err := services.GetService(context.Background(), identity.ID)
+	changes := make([]EnvironmentBlueprintServiceChange, len(projection.DesiredServices))
+	for index, desired := range projection.DesiredServices {
+		current, err := services.GetService(context.Background(), desired.Desired.ID)
 		if err == nil {
-			replacement, replaceErr := ReplaceServiceDesired(current.Record, desired)
+			replacement, replaceErr := ReplaceServiceDesired(current.Record, desired.Desired)
 			if replaceErr != nil {
 				t.Fatalf("ReplaceServiceDesired() error = %v", replaceErr)
 			}
@@ -438,7 +608,11 @@ func environmentBlueprintTestServiceChanges(
 		if !isKind(err, errs.KindServiceNotFound) {
 			t.Fatalf("GetService() error = %v", err)
 		}
-		record, recordErr := NewServiceRecord(projection.EnvironmentID, desired, "")
+		record, recordErr := NewServiceRecord(
+			projection.EnvironmentID,
+			desired.Desired,
+			desired.BackingNetworkID,
+		)
 		if recordErr != nil {
 			t.Fatalf("NewServiceRecord() error = %v", recordErr)
 		}
@@ -457,27 +631,28 @@ func environmentBlueprintTestRouteChanges(
 	if err != nil {
 		t.Fatalf("newRouteRepository() error = %v", err)
 	}
-	desired := core.Route{
-		ID: ids.NewAt(ids.KindRoute, serviceRecordTestTime(), 73), Path: "/internal/*",
-		TargetServiceID: projection.Services[0].ID, TargetPort: 8080, Exposure: "internal",
-	}
-	current, err := routes.GetRoute(context.Background(), desired.ID)
-	if err == nil {
-		replacement, replaceErr := ReplaceRouteDesired(current.Record, desired)
-		if replaceErr != nil {
-			t.Fatalf("ReplaceRouteDesired() error = %v", replaceErr)
+	changes := make([]EnvironmentBlueprintRouteChange, len(projection.DesiredRoutes))
+	for index, desired := range projection.DesiredRoutes {
+		current, err := routes.GetRoute(context.Background(), desired.Desired.ID)
+		if err == nil {
+			replacement, replaceErr := ReplaceRouteDesired(current.Record, desired.Desired)
+			if replaceErr != nil {
+				t.Fatalf("ReplaceRouteDesired() error = %v", replaceErr)
+			}
+			currentCopy := current
+			changes[index] = EnvironmentBlueprintRouteChange{Current: &currentCopy, Record: replacement}
+			continue
 		}
-		currentCopy := current
-		return []EnvironmentBlueprintRouteChange{{Current: &currentCopy, Record: replacement}}
+		if !isKind(err, errs.KindRouteNotFound) {
+			t.Fatalf("GetRoute() error = %v", err)
+		}
+		record, recordErr := NewRouteRecord(projection.EnvironmentID, desired.Desired)
+		if recordErr != nil {
+			t.Fatalf("NewRouteRecord() error = %v", recordErr)
+		}
+		changes[index] = EnvironmentBlueprintRouteChange{Record: record}
 	}
-	if !isKind(err, errs.KindRouteNotFound) {
-		t.Fatalf("GetRoute() error = %v", err)
-	}
-	record, recordErr := NewRouteRecord(projection.EnvironmentID, desired)
-	if recordErr != nil {
-		t.Fatalf("NewRouteRecord() error = %v", recordErr)
-	}
-	return []EnvironmentBlueprintRouteChange{{Record: record}}
+	return changes
 }
 
 func assertEnvironmentBlueprintValue(t *testing.T, store *memoryHierarchyStore, key string) {

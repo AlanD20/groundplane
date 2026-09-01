@@ -193,9 +193,9 @@ func validateSemanticAuthority(
 		task.Params[base.EnvironmentDesiredRevisionParam] != record.AppliedRevisionID {
 		return authorityConflict()
 	}
-	services := make(map[string]string, len(projection.Services))
-	for _, service := range projection.Services {
-		services[service.ID] = service.Name
+	services := make(map[string]string, len(projection.DesiredServices))
+	for _, service := range projection.DesiredServices {
+		services[service.Desired.ID] = service.Desired.Name
 	}
 	entries := make(map[string]string, len(projection.Entries))
 	for _, entry := range projection.Entries {

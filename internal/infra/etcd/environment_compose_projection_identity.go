@@ -28,17 +28,6 @@ func validateEnvironmentComposeProjectionAdvanceAllowingVolumeRemoval(
 	if previous.EnvironmentID != next.EnvironmentID || next.RenderGeneration != previous.RenderGeneration+1 {
 		return errs.New(errs.KindStateConflict, "Environment render generation did not advance exactly once")
 	}
-	if err := preserveEnvironmentComposeIdentities(
-		"service",
-		previous.Services,
-		next.Services,
-		removedComponentGeneratedServiceIDs(previous.Components, next.Components),
-	); err != nil {
-		return err
-	}
-	if err := preserveEnvironmentComposeIdentities("network", previous.Networks, next.Networks, nil); err != nil {
-		return err
-	}
 	return preserveEnvironmentVolumeIdentities(previous.Volumes, next.Volumes, removedVolumeID)
 }
 
@@ -66,9 +55,9 @@ func validateEnvironmentVolumeIdentities(values []EnvironmentVolumeIdentity) err
 }
 
 func validateEnvironmentServiceVolumeMounts(projection EnvironmentComposeProjection) error {
-	serviceIDs := make(map[string]struct{}, len(projection.Services))
-	for _, service := range projection.Services {
-		serviceIDs[service.ID] = struct{}{}
+	serviceIDs := make(map[string]struct{}, len(projection.DesiredServices))
+	for _, service := range projection.DesiredServices {
+		serviceIDs[service.Desired.ID] = struct{}{}
 	}
 	volumeIDs := make(map[string]struct{}, len(projection.Volumes))
 	for _, volume := range projection.Volumes {
@@ -127,69 +116,6 @@ func preserveEnvironmentVolumeIdentities(
 		}
 	}
 	return nil
-}
-
-func removedComponentGeneratedServiceIDs(
-	previous []ComponentRecord,
-	next []ComponentRecord,
-) map[string]struct{} {
-	retained := make(map[string]struct{})
-	for _, component := range next {
-		for _, serviceID := range component.Runtime.GeneratedServices {
-			retained[serviceID] = struct{}{}
-		}
-	}
-	removed := make(map[string]struct{})
-	for _, component := range previous {
-		for _, serviceID := range component.Runtime.GeneratedServices {
-			if _, keep := retained[serviceID]; !keep {
-				removed[serviceID] = struct{}{}
-			}
-		}
-	}
-	return removed
-}
-
-func preserveEnvironmentComposeIdentities(
-	kind string,
-	previous []EnvironmentComposeIdentity,
-	next []EnvironmentComposeIdentity,
-	allowedRemovedIDs map[string]struct{},
-) error {
-	byName := make(map[string]string, len(next))
-	for _, identity := range next {
-		byName[identity.Name] = identity.ID
-	}
-	for _, identity := range previous {
-		nextID, exists := byName[identity.Name]
-		if !exists {
-			if _, allowed := allowedRemovedIDs[identity.ID]; allowed {
-				continue
-			}
-			return errs.Newf(
-				errs.KindResourceInUse,
-				"Blueprint omits existing %s %s; remove it explicitly before apply",
-				kind,
-				identity.Name,
-			)
-		}
-		if nextID != identity.ID {
-			return errs.New(errs.KindStateConflict, "Environment Compose stable identity changed")
-		}
-	}
-	return nil
-}
-
-func validEnvironmentComposeName(value string) bool {
-	if value == "" || len(value) > 255 || !utf8.ValidString(value) || strings.IndexByte(value, 0) >= 0 {
-		return false
-	}
-	for _, character := range value {
-		if character <= ' ' || character == '/' || character == '\\' {
-			return false
-		}
-	}
-	return true
 }
 
 func corruptEnvironmentComposeProjection() error {

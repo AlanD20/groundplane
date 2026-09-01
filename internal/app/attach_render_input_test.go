@@ -54,6 +54,10 @@ func TestBuildAttachTaskRenderInputCreatesCompleteNetworkUnion(t *testing.T) {
 		input.ArtifactID != fixture.artifactID || input.BackingServiceID != fixture.backingServiceID {
 		t.Fatalf("buildAttachTaskRenderInput() identity = %#v", input)
 	}
+	if len(input.Volumes) != 1 || len(input.VolumeMounts) != 1 ||
+		input.VolumeMounts[0].VolumeID != input.Volumes[0].ID {
+		t.Fatalf("buildAttachTaskRenderInput() volume projection = %#v/%#v", input.Volumes, input.VolumeMounts)
+	}
 }
 
 // Rationale: detach publication must remove only the target membership and preserve every union edge
@@ -112,6 +116,7 @@ type attachRenderFixture struct {
 	backingServiceID string
 	apiID            string
 	workerID         string
+	volumeID         string
 	networkA         string
 	networkB         string
 	revisionID       string
@@ -134,6 +139,7 @@ func newAttachRenderFixture(t *testing.T) attachRenderFixture {
 		apiID:            ids.NewAt(ids.KindService, now, 7), workerID: ids.NewAt(ids.KindService, now, 8),
 		networkA: ids.NewAt(ids.KindNetwork, now, 9), networkB: ids.NewAt(ids.KindNetwork, now, 10),
 		revisionID: ids.NewAt(ids.KindTask, now, 11), artifactID: ids.NewAt(ids.KindConfig, now, 12),
+		volumeID: ids.NewAt(ids.KindVolume, now, 16),
 	}
 	fixture.scope = etcd.AttachCreateScope{
 		Tenant: etcd.Versioned[etcd.TenantRecord]{
@@ -162,10 +168,21 @@ func newAttachRenderFixture(t *testing.T) attachRenderFixture {
 			Record: etcd.EnvironmentComposeProjection{
 				EnvironmentID: fixture.environmentID, RevisionID: fixture.revisionID,
 				RenderGeneration: 4,
-				Services: []etcd.EnvironmentComposeIdentity{
-					{ID: fixture.apiID, Name: "api"}, {ID: fixture.workerID, Name: "worker"},
+				DesiredServices: []etcd.EnvironmentServiceProjection{
+					{EnvironmentID: fixture.environmentID, Desired: core.Service{ID: fixture.apiID, Name: "api"}},
+					{EnvironmentID: fixture.environmentID, Desired: core.Service{ID: fixture.workerID, Name: "worker"}},
 				},
-				Networks: []etcd.EnvironmentComposeIdentity{{ID: ids.NewAt(ids.KindNetwork, now, 20), Name: "app"}},
+				DesiredZones: []etcd.EnvironmentZoneProjection{{
+					EnvironmentID: fixture.environmentID,
+					Desired: core.Zone{
+						ID: ids.NewAt(ids.KindNetwork, now, 20), Name: "app",
+						OwnerKind: core.ZoneOwnerEnvironment, OwnerID: fixture.environmentID,
+					},
+				}},
+				Volumes: []etcd.EnvironmentVolumeIdentity{{ID: fixture.volumeID, Slug: "data", Key: "data"}},
+				VolumeMounts: []etcd.EnvironmentServiceVolumeMount{{
+					ServiceID: fixture.apiID, VolumeID: fixture.volumeID, Target: "/data",
+				}},
 			},
 			Revision: 5,
 		},

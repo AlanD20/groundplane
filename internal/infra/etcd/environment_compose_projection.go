@@ -16,11 +16,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type EnvironmentComposeIdentity struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
 type EnvironmentVolumeIdentity struct {
 	ID   string `json:"id"`
 	Slug string `json:"slug"`
@@ -34,10 +29,21 @@ type EnvironmentServiceVolumeMount struct {
 	ReadOnly  bool   `json:"read_only"`
 }
 
-type EnvironmentRouteIdentity struct {
-	ID   string `json:"id"`
-	Host string `json:"host,omitempty"`
-	Path string `json:"path"`
+type EnvironmentZoneProjection struct {
+	EnvironmentID string    `json:"environment_id"`
+	Desired       core.Zone `json:"desired"`
+}
+
+type EnvironmentServiceProjection struct {
+	EnvironmentID    string       `json:"environment_id"`
+	BackingNetworkID string       `json:"backing_network_id,omitempty"`
+	Desired          core.Service `json:"desired"`
+}
+
+type EnvironmentRouteProjection struct {
+	EnvironmentID     string     `json:"environment_id"`
+	Desired           core.Route `json:"desired"`
+	DesiredGeneration uint64     `json:"desired_generation"`
 }
 
 // EnvironmentComposeProjection is the sorted durable input for one Environment render.
@@ -49,12 +55,11 @@ type EnvironmentComposeProjection struct {
 	NormalizedCompose []byte                               `json:"normalized_compose"`
 	RuntimeFiles      []core.BlueprintFile                 `json:"runtime_files,omitempty"`
 	ServiceExtensions map[string]core.ServiceExtensionSpec `json:"service_extensions,omitempty"`
-	Services          []EnvironmentComposeIdentity         `json:"services,omitempty"`
-	Networks          []EnvironmentComposeIdentity         `json:"networks,omitempty"`
+	DesiredZones      []EnvironmentZoneProjection          `json:"desired_zones,omitempty"`
+	DesiredServices   []EnvironmentServiceProjection       `json:"desired_services,omitempty"`
+	DesiredRoutes     []EnvironmentRouteProjection         `json:"desired_routes,omitempty"`
 	Volumes           []EnvironmentVolumeIdentity          `json:"volumes,omitempty"`
 	VolumeMounts      []EnvironmentServiceVolumeMount      `json:"volume_mounts,omitempty"`
-	Routes            []EnvironmentRouteIdentity           `json:"routes,omitempty"`
-	SuppressedRoutes  []EnvironmentRouteIdentity           `json:"suppressed_routes,omitempty"`
 	Components        []ComponentRecord                    `json:"components,omitempty"`
 	Entries           []EntryRecord                        `json:"entries,omitempty"`
 	core.ServiceDependencyPlans
@@ -154,6 +159,36 @@ func (repository *HierarchyRepository) GetEnvironmentAppliedComposeProjection(
 	return Versioned[EnvironmentComposeProjection]{
 		Record: projection, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, true, nil
+}
+
+// EnvironmentZoneRemovalAuthorities binds the desired revision being edited
+// to the independently mutable projection last acknowledged by the runtime.
+type EnvironmentZoneRemovalAuthorities struct {
+	Desired Versioned[EnvironmentComposeProjection]
+	Applied Versioned[EnvironmentComposeProjection]
+}
+
+// GetEnvironmentZoneRemovalAuthorities reads both authorities required to
+// fence a Zone removal. Each returned revision belongs to its own etcd key.
+func (repository *HierarchyRepository) GetEnvironmentZoneRemovalAuthorities(
+	ctx context.Context,
+	environmentID string,
+) (EnvironmentZoneRemovalAuthorities, bool, error) {
+	desired, found, err := repository.GetEnvironmentComposeProjection(ctx, environmentID)
+	if err != nil || !found {
+		return EnvironmentZoneRemovalAuthorities{}, found, err
+	}
+	applied, found, err := repository.GetEnvironmentAppliedComposeProjection(ctx, environmentID)
+	if err != nil {
+		return EnvironmentZoneRemovalAuthorities{}, false, err
+	}
+	if !found {
+		return EnvironmentZoneRemovalAuthorities{}, false, errs.New(
+			errs.KindStateConflict,
+			"Environment applied projection is missing",
+		)
+	}
+	return EnvironmentZoneRemovalAuthorities{Desired: desired, Applied: applied}, true, nil
 }
 
 func (repository *HierarchyRepository) GetEnvironmentComposeProjection(
@@ -364,7 +399,7 @@ func validateEnvironmentComposeProjection(projection EnvironmentComposeProjectio
 		validateStableID(ids.KindTask, projection.RevisionID) != nil || projection.RenderGeneration == 0 {
 		return errs.New(errs.KindValidationFailed, "Environment Compose projection identity is invalid")
 	}
-	if err := validateEnvironmentComposeIdentities(ids.KindService, projection.Services); err != nil {
+	if err := validateEnvironmentServiceProjections(projection.EnvironmentID, projection.DesiredServices); err != nil {
 		return err
 	}
 	if err := validateEnvironmentNormalizedCompose(projection.NormalizedCompose); err != nil {
@@ -373,9 +408,9 @@ func validateEnvironmentComposeProjection(projection EnvironmentComposeProjectio
 	if err := core.ValidateNormalizedBlueprintFiles(projection.RuntimeFiles); err != nil {
 		return errs.Wrap(errs.KindValidationFailed, err)
 	}
-	names := make([]string, len(projection.Services))
-	for index, service := range projection.Services {
-		names[index] = service.Name
+	names := make([]string, len(projection.DesiredServices))
+	for index, service := range projection.DesiredServices {
+		names[index] = service.Desired.Name
 	}
 	if err := projection.ServiceDependencyPlans.Validate(names); err != nil {
 		return err
@@ -383,7 +418,7 @@ func validateEnvironmentComposeProjection(projection EnvironmentComposeProjectio
 	if err := validateEnvironmentServiceExtensions(names, projection.ServiceExtensions); err != nil {
 		return err
 	}
-	if err := validateEnvironmentComposeIdentities(ids.KindNetwork, projection.Networks); err != nil {
+	if err := validateEnvironmentZoneProjections(projection.EnvironmentID, projection.DesiredZones); err != nil {
 		return err
 	}
 	if err := validateEnvironmentVolumeIdentities(projection.Volumes); err != nil {
@@ -395,13 +430,7 @@ func validateEnvironmentComposeProjection(projection EnvironmentComposeProjectio
 	if err := validateEnvironmentProjectionArtifact(projection); err != nil {
 		return err
 	}
-	if err := validateEnvironmentRouteIdentities(projection.EnvironmentID, projection.Routes); err != nil {
-		return err
-	}
-	if err := validateEnvironmentRouteIdentities(projection.EnvironmentID, projection.SuppressedRoutes); err != nil {
-		return err
-	}
-	if err := validateEnvironmentRouteIdentitySets(projection.Routes, projection.SuppressedRoutes); err != nil {
+	if err := validateEnvironmentRouteProjections(projection.EnvironmentID, projection.DesiredRoutes); err != nil {
 		return err
 	}
 	if err := validateEnvironmentComponentProjection(projection.EnvironmentID, projection.Components); err != nil {
@@ -410,7 +439,7 @@ func validateEnvironmentComposeProjection(projection EnvironmentComposeProjectio
 	return validateEnvironmentEntryProjection(projection.EnvironmentID, projection.Entries)
 }
 
-// SuppressEnvironmentRoute removes a Route while pinning its old match and advancing generation.
+// ApplyEnvironmentRoute replaces the lossless desired Route and advances generation.
 func ApplyEnvironmentRoute(
 	current EnvironmentComposeProjection,
 	route RouteRecord,
@@ -425,70 +454,30 @@ func ApplyEnvironmentRoute(
 		)
 	}
 	next := cloneEnvironmentComposeProjection(current)
-	identity := EnvironmentRouteIdentity{ID: route.Desired.ID, Host: route.Desired.Host, Path: route.Desired.Path}
-	replaced := false
-	for index := range next.Routes {
-		if next.Routes[index].ID == identity.ID {
-			next.Routes[index] = identity
-			replaced = true
+	desired := EnvironmentRouteProjection{
+		EnvironmentID: route.EnvironmentID, Desired: route.Desired,
+		DesiredGeneration: route.DesiredGeneration,
+	}
+	desiredReplaced := false
+	for index := range next.DesiredRoutes {
+		if next.DesiredRoutes[index].Desired.ID == desired.Desired.ID {
+			next.DesiredRoutes[index] = desired
+			desiredReplaced = true
 			break
 		}
 	}
-	if !replaced {
-		next.Routes = append(next.Routes, identity)
+	if !desiredReplaced {
+		next.DesiredRoutes = append(next.DesiredRoutes, desired)
 	}
-	for index := 0; index < len(next.SuppressedRoutes); index++ {
-		if next.SuppressedRoutes[index].ID == identity.ID {
-			next.SuppressedRoutes = append(next.SuppressedRoutes[:index], next.SuppressedRoutes[index+1:]...)
-			break
-		}
-	}
-	sort.Slice(next.Routes, func(left, right int) bool {
-		return environmentRouteMatch(next.Routes[left]) < environmentRouteMatch(next.Routes[right])
+	sort.Slice(next.DesiredRoutes, func(left, right int) bool {
+		return next.DesiredRoutes[left].Desired.Host+"\x00"+next.DesiredRoutes[left].Desired.Path <
+			next.DesiredRoutes[right].Desired.Host+"\x00"+next.DesiredRoutes[right].Desired.Path
 	})
 	next.RenderGeneration++
 	if err := validateEnvironmentComposeProjectionAdvance(current, true, next); err != nil {
 		return EnvironmentComposeProjection{}, err
 	}
 	return next, nil
-}
-
-// SuppressEnvironmentRoute removes a Route while pinning its old match and advancing generation.
-func SuppressEnvironmentRoute(
-	current EnvironmentComposeProjection,
-	routeID string,
-) (EnvironmentComposeProjection, bool, error) {
-	if err := validateEnvironmentComposeProjection(current); err != nil {
-		return EnvironmentComposeProjection{}, false, err
-	}
-	if validateStableID(ids.KindRoute, routeID) != nil {
-		return EnvironmentComposeProjection{}, false, errs.New(
-			errs.KindValidationFailed,
-			"suppressed Environment Route id is invalid",
-		)
-	}
-	index := -1
-	for candidate := range current.Routes {
-		if current.Routes[candidate].ID == routeID {
-			index = candidate
-			break
-		}
-	}
-	if index < 0 {
-		return cloneEnvironmentComposeProjection(current), false, nil
-	}
-	next := cloneEnvironmentComposeProjection(current)
-	removed := next.Routes[index]
-	next.Routes = append(next.Routes[:index], next.Routes[index+1:]...)
-	next.SuppressedRoutes = append(next.SuppressedRoutes, removed)
-	sort.Slice(next.SuppressedRoutes, func(left int, right int) bool {
-		return environmentRouteMatch(next.SuppressedRoutes[left]) < environmentRouteMatch(next.SuppressedRoutes[right])
-	})
-	next.RenderGeneration++
-	if err := validateEnvironmentComposeProjectionAdvance(current, true, next); err != nil {
-		return EnvironmentComposeProjection{}, false, err
-	}
-	return next, true, nil
 }
 
 // RemoveEnvironmentEntry prepares the next applied projection for Entry removal.
@@ -536,6 +525,75 @@ func validateEnvironmentEntryProjection(environmentID string, values []EntryReco
 	return nil
 }
 
+func validateEnvironmentZoneProjections(
+	environmentID string,
+	values []EnvironmentZoneProjection,
+) error {
+	previousName := ""
+	seenIDs := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value.EnvironmentID != environmentID || value.Desired.Name <= previousName ||
+			validateZoneRecord(ZoneRecord{EnvironmentID: value.EnvironmentID, Desired: value.Desired}) != nil {
+			return errs.New(errs.KindValidationFailed, "Environment desired Zone projection is invalid or unsorted")
+		}
+		if _, duplicate := seenIDs[value.Desired.ID]; duplicate {
+			return errs.New(errs.KindValidationFailed, "Environment desired Zone projection id is duplicated")
+		}
+		seenIDs[value.Desired.ID] = struct{}{}
+		previousName = value.Desired.Name
+	}
+	return nil
+}
+
+func validateEnvironmentServiceProjections(
+	environmentID string,
+	values []EnvironmentServiceProjection,
+) error {
+	previousName := ""
+	seenIDs := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		record := ServiceRecord{
+			EnvironmentID: value.EnvironmentID, BackingNetworkID: value.BackingNetworkID, Desired: value.Desired,
+			Runtime: core.ServiceRuntime{
+				ServiceID: value.Desired.ID, RuntimeIntent: core.ServiceRuntimeIntentRunning,
+			},
+		}
+		if value.EnvironmentID != environmentID || value.Desired.Name <= previousName || validateServiceRecord(record) != nil {
+			return errs.New(errs.KindValidationFailed, "Environment desired Service projection is invalid or unsorted")
+		}
+		if _, duplicate := seenIDs[value.Desired.ID]; duplicate {
+			return errs.New(errs.KindValidationFailed, "Environment desired Service projection id is duplicated")
+		}
+		seenIDs[value.Desired.ID] = struct{}{}
+		previousName = value.Desired.Name
+	}
+	return nil
+}
+
+func validateEnvironmentRouteProjections(
+	environmentID string,
+	values []EnvironmentRouteProjection,
+) error {
+	previousMatch := ""
+	seenIDs := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		match := value.Desired.Host + "\x00" + value.Desired.Path
+		record := RouteRecord{
+			EnvironmentID: value.EnvironmentID, Desired: value.Desired, DesiredGeneration: value.DesiredGeneration,
+			Observed: RouteObservation{Status: RouteObservedUnserved, DesiredGeneration: value.DesiredGeneration},
+		}
+		if value.EnvironmentID != environmentID || match <= previousMatch || validateRouteRecord(record) != nil {
+			return errs.New(errs.KindValidationFailed, "Environment desired Route projection is invalid or unsorted")
+		}
+		if _, duplicate := seenIDs[value.Desired.ID]; duplicate {
+			return errs.New(errs.KindValidationFailed, "Environment desired Route projection id is duplicated")
+		}
+		seenIDs[value.Desired.ID] = struct{}{}
+		previousMatch = match
+	}
+	return nil
+}
+
 func validateEnvironmentComponentProjection(environmentID string, values []ComponentRecord) error {
 	if len(values) == 0 {
 		return nil
@@ -568,54 +626,6 @@ func validateEnvironmentComponentProjection(environmentID string, values []Compo
 	return nil
 }
 
-func validateEnvironmentRouteIdentities(environmentID string, values []EnvironmentRouteIdentity) error {
-	previousMatch := ""
-	idsSeen := make(map[string]struct{}, len(values))
-	for _, value := range values {
-		match := environmentRouteMatch(value)
-		record := RouteRecord{EnvironmentID: environmentID, Desired: core.Route{
-			ID: value.ID, Host: value.Host, Path: value.Path,
-			TargetServiceID: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", TargetPort: 1, Exposure: "internal",
-		}, DesiredGeneration: 1, Observed: RouteObservation{
-			Status: RouteObservedUnserved, DesiredGeneration: 1,
-		}}
-		if match <= previousMatch || validateRouteRecord(record) != nil {
-			return errs.New(errs.KindValidationFailed, "Environment Route identities are invalid or unsorted")
-		}
-		if _, duplicate := idsSeen[value.ID]; duplicate {
-			return errs.New(errs.KindValidationFailed, "Environment Route identity id is duplicated")
-		}
-		idsSeen[value.ID] = struct{}{}
-		previousMatch = match
-	}
-	return nil
-}
-
-func validateEnvironmentRouteIdentitySets(
-	active []EnvironmentRouteIdentity,
-	suppressed []EnvironmentRouteIdentity,
-) error {
-	idsSeen := make(map[string]struct{}, len(active))
-	matches := make(map[string]struct{}, len(active))
-	for _, value := range active {
-		idsSeen[value.ID] = struct{}{}
-		matches[environmentRouteMatch(value)] = struct{}{}
-	}
-	for _, value := range suppressed {
-		if _, duplicate := idsSeen[value.ID]; duplicate {
-			return errs.New(errs.KindValidationFailed, "Environment Route identity sets repeat an id")
-		}
-		if _, duplicate := matches[environmentRouteMatch(value)]; duplicate {
-			return errs.New(errs.KindValidationFailed, "Environment Route identity sets repeat a match")
-		}
-	}
-	return nil
-}
-
-func environmentRouteMatch(value EnvironmentRouteIdentity) string {
-	return value.Host + "\x00" + value.Path
-}
-
 func cloneEnvironmentComposeProjection(source EnvironmentComposeProjection) EnvironmentComposeProjection {
 	clone := source
 	clone.ServiceDependencyPlans = source.ServiceDependencyPlans.Clone()
@@ -631,12 +641,11 @@ func cloneEnvironmentComposeProjection(source EnvironmentComposeProjection) Envi
 		}
 	}
 	clone.ServiceExtensions = cloneEnvironmentServiceExtensions(source.ServiceExtensions)
-	clone.Services = append([]EnvironmentComposeIdentity(nil), source.Services...)
-	clone.Networks = append([]EnvironmentComposeIdentity(nil), source.Networks...)
+	clone.DesiredZones = append([]EnvironmentZoneProjection(nil), source.DesiredZones...)
+	clone.DesiredServices = append([]EnvironmentServiceProjection(nil), source.DesiredServices...)
+	clone.DesiredRoutes = append([]EnvironmentRouteProjection(nil), source.DesiredRoutes...)
 	clone.Volumes = append([]EnvironmentVolumeIdentity(nil), source.Volumes...)
 	clone.VolumeMounts = append([]EnvironmentServiceVolumeMount(nil), source.VolumeMounts...)
-	clone.Routes = append([]EnvironmentRouteIdentity(nil), source.Routes...)
-	clone.SuppressedRoutes = append([]EnvironmentRouteIdentity(nil), source.SuppressedRoutes...)
 	if source.Components != nil {
 		clone.Components = make([]ComponentRecord, len(source.Components))
 		for index, component := range source.Components {
@@ -726,35 +735,6 @@ func cloneEnvironmentServiceExtensions(
 	return result
 }
 
-func validateEnvironmentDependencyPlans(
-	services []EnvironmentComposeIdentity,
-	deploy core.ServiceDependencyPhasePlan,
-	rollback core.ServiceDependencyPhasePlan,
-) error {
-	names := make([]string, len(services))
-	for index, service := range services {
-		names[index] = service.Name
-	}
-	for _, selected := range []struct {
-		phase core.ServiceLifecyclePhase
-		plan  core.ServiceDependencyPhasePlan
-	}{
-		{phase: core.ServiceLifecycleDeploy, plan: deploy},
-		{phase: core.ServiceLifecycleRollback, plan: rollback},
-	} {
-		if selected.plan.Phase == "" && len(selected.plan.OrderedServices) == 0 && len(selected.plan.Edges) == 0 {
-			continue
-		}
-		if selected.plan.Phase != selected.phase {
-			return errs.New(errs.KindValidationFailed, "Environment dependency projection phase is invalid")
-		}
-		if err := core.ValidateServiceDependencyPhasePlan(names, selected.plan); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func validateEnvironmentProjectionArtifact(projection EnvironmentComposeProjection) error {
 	if len(projection.ComposeArtifact) == 0 ||
 		len(projection.ComposeArtifact) > EnvironmentBlueprintProjectionMaxBytes {
@@ -781,7 +761,7 @@ func validateEnvironmentProjectionArtifact(projection EnvironmentComposeProjecti
 	if subtle.ConstantTimeCompare(digest[:], artifact.GetYamlSha256()) != 1 {
 		return errs.New(errs.KindValidationFailed, "Environment normalized Compose artifact digest is invalid")
 	}
-	if len(artifact.GetServices()) != len(projection.Services) ||
+	if len(artifact.GetServices()) != len(projection.DesiredServices) ||
 		len(artifact.GetVolumes()) != len(projection.Volumes) {
 		return errs.New(errs.KindValidationFailed, "Environment normalized Compose artifact coverage is incomplete")
 	}
@@ -795,8 +775,8 @@ func validateEnvironmentProjectionArtifact(projection EnvironmentComposeProjecti
 		}
 		services[service.GetServiceId()] = service.GetComposeName()
 	}
-	for _, identity := range projection.Services {
-		if services[identity.ID] != identity.Name {
+	for _, service := range projection.DesiredServices {
+		if services[service.Desired.ID] != service.Desired.Name {
 			return errs.New(errs.KindValidationFailed, "Environment normalized Compose Service identity changed")
 		}
 	}
@@ -817,23 +797,6 @@ func validateEnvironmentProjectionArtifact(projection EnvironmentComposeProjecti
 	}
 	return nil
 }
-func validateEnvironmentComposeIdentities(kind ids.Kind, values []EnvironmentComposeIdentity) error {
-	previousName := ""
-	idsSeen := make(map[string]struct{}, len(values))
-	for _, value := range values {
-		if validateStableID(kind, value.ID) != nil || value.Name <= previousName ||
-			!core.ValidEnvironmentComposeName(value.Name) {
-			return errs.New(errs.KindValidationFailed, "Environment Compose identities are invalid or unsorted")
-		}
-		if _, duplicate := idsSeen[value.ID]; duplicate {
-			return errs.New(errs.KindValidationFailed, "Environment Compose identity id is duplicated")
-		}
-		idsSeen[value.ID] = struct{}{}
-		previousName = value.Name
-	}
-	return nil
-}
-
 func validateEnvironmentComposeProjectionAdvance(
 	previous EnvironmentComposeProjection,
 	hasPrevious bool,

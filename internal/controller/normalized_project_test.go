@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -67,10 +68,9 @@ func TestNormalizedEnvironmentArtifactUsesNormalizedComposeServiceIdentity(t *te
 	}
 	artifact, err := NormalizedEnvironmentArtifact(etcd.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, ComposeArtifact: runtime, NormalizedCompose: canonical,
-		Services: []etcd.EnvironmentComposeIdentity{
-			{ID: apiID, Name: "api"},
-			{ID: generatedID, Name: "router"},
-		},
+		DesiredServices: []etcd.EnvironmentServiceProjection{{EnvironmentID: environmentID, Desired: core.Service{
+			ID: apiID, Name: "api", Image: "example/api:1",
+		}}},
 	})
 	if err != nil {
 		t.Fatalf("NormalizedEnvironmentArtifact() error = %v", err)

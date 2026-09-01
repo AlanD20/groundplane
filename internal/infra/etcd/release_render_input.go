@@ -129,9 +129,19 @@ func validateReleaseRenderInput(input ReleaseRenderInput) error {
 	if needsPriorArtifact != (input.PriorArtifactID != "") || needsPriorArtifact != (input.PriorImage != "") {
 		return errs.New(errs.KindValidationFailed, "release prior topology artifact authority is invalid")
 	}
-	serviceNames := make([]string, len(input.Projection.Services))
-	for index, service := range input.Projection.Services {
-		serviceNames[index] = service.Name
+	serviceNames := make([]string, 0, len(input.Projection.DesiredServices)+1)
+	selected := false
+	desiredSelected := false
+	for _, service := range input.Projection.DesiredServices {
+		serviceNames = append(serviceNames, service.Desired.Name)
+		if service.Desired.ID == input.ServiceID {
+			desiredSelected = true
+			selected = service.Desired.Name == input.ServiceName
+		}
+	}
+	if !desiredSelected && releaseRenderTargetsGeneratedService(input.Projection.Components, input.ServiceID) {
+		serviceNames = append(serviceNames, input.ServiceName)
+		selected = true
 	}
 	if err := input.ServiceDependencyPlans.Validate(serviceNames); err != nil {
 		return errs.Wrap(errs.KindValidationFailed, err)
@@ -154,20 +164,24 @@ func validateReleaseRenderInput(input ReleaseRenderInput) error {
 	if validateEnvironmentComposeProjection(input.Projection) != nil || input.Projection.EnvironmentID != input.EnvironmentID {
 		return errs.New(errs.KindValidationFailed, "release render projection is invalid")
 	}
-	found := false
-	for _, service := range input.Projection.Services {
-		if service.ID == input.ServiceID && service.Name == input.ServiceName {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !selected {
 		return errs.New(errs.KindValidationFailed, "release render projection does not contain the selected service")
 	}
 	if err := validateReleaseHookRenderInputs(input.Hooks, input.ServiceID); err != nil {
 		return err
 	}
 	return nil
+}
+
+func releaseRenderTargetsGeneratedService(components []ComponentRecord, serviceID string) bool {
+	for _, component := range components {
+		for _, generatedServiceID := range component.Runtime.GeneratedServices {
+			if generatedServiceID == serviceID {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func cloneReleaseRenderInput(input ReleaseRenderInput) ReleaseRenderInput {

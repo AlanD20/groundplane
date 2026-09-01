@@ -46,6 +46,14 @@ func TestTaskPlanResolverBuildsAttachNetworkAndAdapterProcedure(t *testing.T) {
 	}
 }
 
+func TestTaskPlanResolverUsesDesiredAttachProjectionSnapshots(t *testing.T) {
+	registerAttachPlanManual.Do(manual.Register)
+	fixture := newAttachPlanFixture(t, "manual", false)
+	if _, err := fixture.resolver.ResolveExecutionPlan(context.Background(), fixture.task); err != nil {
+		t.Fatalf("ResolveExecutionPlan() error with desired projection snapshots = %v", err)
+	}
+}
+
 // Rationale: the locked manual adapter performs only the same pinned external-network reconciliation and
 // must never resolve credentials or manufacture an empty adapter procedure.
 func TestTaskPlanResolverBuildsManualNetworkOnlyAttach(t *testing.T) {
@@ -141,7 +149,18 @@ func newAttachPlanFixture(t *testing.T, adapterKey string, withGrant bool) attac
 	backingServiceID := ids.NewAt(ids.KindService, now, 4)
 	backingEnvironmentID := ids.NewAt(ids.KindEnvironment, now, 5)
 	networkID := ids.NewAt(ids.KindNetwork, now, 20)
-	consumerServiceID := reader.projection.Services[0].ID
+	consumerServiceID := reader.projection.DesiredServices[0].Desired.ID
+	consumerServiceName := reader.projection.DesiredServices[0].Desired.Name
+	ownedNetworkID := reader.projection.DesiredZones[0].Desired.ID
+	ownedNetworkName := reader.projection.DesiredZones[0].Desired.Name
+	reader.projection.DesiredServices = []etcd.EnvironmentServiceProjection{{
+		EnvironmentID: reader.environment.ID,
+		Desired:       core.Service{ID: consumerServiceID, Name: consumerServiceName},
+	}}
+	reader.projection.DesiredZones = []etcd.EnvironmentZoneProjection{{
+		EnvironmentID: reader.environment.ID,
+		Desired:       core.Zone{ID: ownedNetworkID, Name: ownedNetworkName},
+	}}
 	grantIDs := []string(nil)
 	factSets := []etcd.AttachFactSetMetadata(nil)
 	if withGrant {
@@ -193,9 +212,13 @@ func newAttachPlanFixture(t *testing.T, adapterKey string, withGrant bool) attac
 		BlueprintRevisionID: reader.revision.RevisionID,
 		ArtifactID:          ids.NewAt(ids.KindConfig, now, 21),
 		RenderGeneration:    reader.projection.RenderGeneration,
-		Services:            append([]etcd.EnvironmentComposeIdentity(nil), reader.projection.Services...),
-		Networks:            append([]etcd.EnvironmentComposeIdentity(nil), reader.projection.Networks...),
-		Volumes:             append([]etcd.EnvironmentVolumeIdentity(nil), reader.projection.Volumes...),
+		Services: []etcd.AttachTaskServiceSnapshot{{
+			ID: consumerServiceID, Name: consumerServiceName,
+		}},
+		Networks: []etcd.AttachTaskOwnedNetworkSnapshot{{
+			ID: ownedNetworkID, Name: ownedNetworkName,
+		}},
+		Volumes: append([]etcd.EnvironmentVolumeIdentity(nil), reader.projection.Volumes...),
 		NetworkJoins: []etcd.AttachTaskNetworkJoin{
 			{NetworkID: networkID, ServiceIDs: []string{consumerServiceID}},
 		},

@@ -3,35 +3,31 @@ package etcd
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func TestZoneRepositoryCreatesReadsAndPagesScopedRecords(t *testing.T) {
-	// Rationale: one atomic write must publish the Zone primary, scoped name,
-	// and Environment membership consumed by stable-id and fixed-revision reads.
+func TestZoneRepositoryReadsAndPagesSelectedProjection(t *testing.T) {
+	// Rationale: Zone reads must join only the selected Environment head and
+	// preserve the fixed-revision cursor contract.
 	t.Parallel()
 	ctx := context.Background()
-	repository, _, environment, project := zoneRepositoryTestHierarchy(t)
-	records := []ZoneRecord{
-		zoneRepositoryTestRecord(t, environment.Record.ID, 910, "backend"),
-		zoneRepositoryTestRecord(t, environment.Record.ID, 911, "frontend"),
+	repository, store, environment := zoneRepositoryTestHierarchy(t)
+	zones := []core.Zone{
+		zoneRepositoryTestZone(environment.Record.ID, 910, "backend"),
+		zoneRepositoryTestZone(environment.Record.ID, 911, "frontend"),
 	}
-	for _, record := range records {
-		if _, err := repository.CreateZone(ctx, environment, project, record); err != nil {
-			t.Fatalf("CreateZone(%s) error = %v", record.Desired.Name, err)
-		}
-	}
-	stored, err := repository.GetZone(ctx, records[0].Desired.ID)
-	if err != nil || stored.Record != records[0] {
+	projection := zoneRepositoryTestProjection(t, environment.Record.ID, 1001, zones...)
+	seedServiceRepositoryTestDesiredProjection(t, store, projection)
+
+	stored, err := repository.GetZone(ctx, zones[0].ID)
+	if err != nil || stored.Record.Desired != zones[0] || stored.Record.EnvironmentID != environment.Record.ID {
 		t.Fatalf("GetZone() = %#v, %v", stored, err)
 	}
 	first, err := repository.ListZones(ctx, environment.Record.ID, PageRequest{Limit: 1})
-	if err != nil || len(first.Items) != 1 || first.NextCursor == "" {
+	if err != nil || len(first.Items) != 1 || first.NextCursor == "" || first.Items[0].Record.Desired.Name != "backend" {
 		t.Fatalf("ListZones(first) = %#v, %v", first, err)
 	}
 	second, err := repository.ListZones(
@@ -39,114 +35,86 @@ func TestZoneRepositoryCreatesReadsAndPagesScopedRecords(t *testing.T) {
 		environment.Record.ID,
 		PageRequest{Limit: 1, Cursor: first.NextCursor},
 	)
-	if err != nil || len(second.Items) != 1 || second.NextCursor != "" || second.Revision != first.Revision {
+	if err != nil || len(second.Items) != 1 || second.NextCursor != "" || second.Revision != first.Revision ||
+		second.Items[0].Record.Desired.Name != "frontend" {
 		t.Fatalf("ListZones(second) = %#v, %v", second, err)
 	}
 }
 
-func TestZoneRepositoryEnforcesScopedNameAndAncestorFences(t *testing.T) {
-	// Rationale: Zone creation must atomically reject duplicate names and every
-	// deletion fence in its immutable hierarchy.
+func TestZoneRepositoryListPinsSelectedHeadRevision(t *testing.T) {
+	// Rationale: a fixed-revision read must retain the old immutable head even
+	// after a newer Environment projection is published.
 	t.Parallel()
 	ctx := context.Background()
-	repository, store, environment, project := zoneRepositoryTestHierarchy(t)
-	first := zoneRepositoryTestRecord(t, environment.Record.ID, 920, "backend")
-	if _, err := repository.CreateZone(ctx, environment, project, first); err != nil {
-		t.Fatalf("CreateZone(first) error = %v", err)
+	repository, store, environment := zoneRepositoryTestHierarchy(t)
+	initial := []core.Zone{
+		zoneRepositoryTestZone(environment.Record.ID, 920, "backend"),
+		zoneRepositoryTestZone(environment.Record.ID, 921, "frontend"),
 	}
-	duplicate := zoneRepositoryTestRecord(t, environment.Record.ID, 921, "backend")
-	if _, err := repository.CreateZone(ctx, environment, project, duplicate); !isKind(err, errs.KindNameConflict) {
-		t.Fatalf("CreateZone(duplicate) error = %v", err)
+	seedServiceRepositoryTestDesiredProjection(
+		t, store, zoneRepositoryTestProjection(t, environment.Record.ID, 1002, initial...),
+	)
+	head, err := store.Get(ctx, environmentBlueprintHeadKey(environment.Record.ID))
+	if err != nil || head == nil || head.Entry == nil {
+		t.Fatalf("read initial Environment head = %#v, %v", head, err)
 	}
-	if _, err := store.Transact(
-		ctx,
-		[]Condition{{Key: deletionTombstoneKey("environment", environment.Record.ID)}},
-		[]Mutation{{
-			Type: MutationPut, Key: deletionTombstoneKey("environment", environment.Record.ID), Value: []byte("fenced"),
-		}},
-	); err != nil {
-		t.Fatalf("install Environment fence: %v", err)
+	fixedRevision := head.ReadRevision
+
+	latest := append([]core.Zone(nil), initial...)
+	latest = append(latest, zoneRepositoryTestZone(environment.Record.ID, 922, "worker"))
+	seedServiceRepositoryTestDesiredProjection(
+		t, store, zoneRepositoryTestProjection(t, environment.Record.ID, 1003, latest...),
+	)
+
+	current, err := repository.ListZones(ctx, environment.Record.ID, PageRequest{Limit: 10})
+	if err != nil || len(current.Items) != 3 {
+		t.Fatalf("ListZones(current) = %#v, %v", current, err)
 	}
-	fenced := zoneRepositoryTestRecord(t, environment.Record.ID, 922, "egress")
-	if _, err := repository.CreateZone(ctx, environment, project, fenced); !isKind(err, errs.KindResourceInUse) {
-		t.Fatalf("CreateZone(fenced) error = %v", err)
+	fixed, err := repository.ListZones(ctx, environment.Record.ID, PageRequest{
+		Limit: 10, Revision: fixedRevision,
+	})
+	if err != nil || len(fixed.Items) != 2 || fixed.Revision != fixedRevision ||
+		fixed.Items[0].Record.Desired.Name != "backend" || fixed.Items[1].Record.Desired.Name != "frontend" {
+		t.Fatalf("ListZones(fixed) = %#v, %v", fixed, err)
 	}
 }
 
-func TestZoneRepositoryEnforcesEnvironmentPoolAndSiblingIsolation(t *testing.T) {
-	// Rationale: every Zone subnet must remain inside its Environment reservation
-	// and must not overlap any sibling Zone under concurrent-safe durable state.
-	t.Parallel()
-	ctx := context.Background()
-	repository, _, environment, project := zoneRepositoryTestHierarchy(t)
-	first := zoneRepositoryTestRecord(t, environment.Record.ID, 930, "backend")
-	first.Desired.Subnet = "10.34.30.0/24"
-	if _, err := repository.CreateZone(ctx, environment, project, first); err != nil {
-		t.Fatalf("CreateZone() error = %v", err)
+func zoneRepositoryTestProjection(
+	t *testing.T,
+	environmentID string,
+	revisionOffset int64,
+	zones ...core.Zone,
+) EnvironmentComposeProjection {
+	t.Helper()
+	projection := EnvironmentComposeProjection{
+		EnvironmentID:    environmentID,
+		RevisionID:       ids.NewAt(ids.KindTask, serviceRecordTestTime(), revisionOffset),
+		RenderGeneration: 1,
 	}
-	overlap := zoneRepositoryTestRecord(t, environment.Record.ID, 931, "frontend")
-	overlap.Desired.Subnet = "10.34.30.128/25"
-	if _, err := repository.CreateZone(ctx, environment, project, overlap); !isKind(err, errs.KindStateConflict) {
-		t.Fatalf("CreateZone(overlap) error = %v", err)
+	for _, zone := range zones {
+		projection.DesiredZones = append(projection.DesiredZones, EnvironmentZoneProjection{
+			EnvironmentID: environmentID, Desired: zone,
+		})
 	}
-	outside := zoneRepositoryTestRecord(t, environment.Record.ID, 932, "egress")
-	outside.Desired.Subnet = "10.99.0.0/24"
-	if _, err := repository.CreateZone(ctx, environment, project, outside); !isKind(err, errs.KindValidationFailed) {
-		t.Fatalf("CreateZone(outside pool) error = %v", err)
-	}
-}
-
-func TestZoneRepositoryIdempotentCreateCommitsReservationAndMarker(t *testing.T) {
-	// Rationale: a retried synchronous Zone request must never publish a subnet
-	// reservation without its exact replay evidence or create the Zone twice.
-	t.Parallel()
-	ctx := context.Background()
-	repository, _, environment, project := zoneRepositoryTestHierarchy(t)
-	record := zoneRepositoryTestRecord(t, environment.Record.ID, 940, "backend.v2")
-	marker := testDirectMarker()
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
-		Method: http.MethodPost, Route: "/zones", Key: "zone-create-key-0001",
-	}
-	marker.Response.Status = http.StatusCreated
-	if _, err := repository.CreateZoneIdempotent(ctx, environment, project, record, marker); err != nil {
-		t.Fatalf("CreateZoneIdempotent() error = %v", err)
-	}
-	if _, err := repository.CreateZoneIdempotent(ctx, environment, project, record, marker); err != nil {
-		t.Fatalf("CreateZoneIdempotent(replay) error = %v", err)
-	}
-	stored, err := repository.GetZone(ctx, record.Desired.ID)
-	if err != nil || stored.Record != record {
-		t.Fatalf("GetZone() = %#v, %v", stored, err)
-	}
+	return withTestEnvironmentComposeArtifact(projection)
 }
 
 func zoneRepositoryTestHierarchy(
 	t *testing.T,
-) (*ZoneRepository, *memoryHierarchyStore, Versioned[EnvironmentRecord], Versioned[ProjectRecord]) {
+) (*ZoneRepository, *memoryHierarchyStore, Versioned[EnvironmentRecord]) {
 	t.Helper()
-	_, store, environment, project := serviceRepositoryTestHierarchy(t)
+	_, store, environment, _ := serviceRepositoryTestHierarchy(t)
 	repository, err := newZoneRepository(store)
 	if err != nil {
 		t.Fatalf("newZoneRepository() error = %v", err)
 	}
-	return repository, store, environment, project
+	return repository, store, environment
 }
 
-func zoneRepositoryTestRecord(
-	t *testing.T,
-	environmentID string,
-	offset int64,
-	name string,
-) ZoneRecord {
-	t.Helper()
-	record, err := NewZoneRecord(environmentID, core.Zone{
+func zoneRepositoryTestZone(environmentID string, offset int64, name string) core.Zone {
+	return core.Zone{
 		ID: ids.NewAt(ids.KindNetwork, serviceRecordTestTime(), offset), Name: name,
 		Subnet: fmt.Sprintf("10.34.%d.0/24", offset-900), Internal: true,
 		OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
-	})
-	if err != nil {
-		t.Fatalf("NewZoneRecord() error = %v", err)
 	}
-	return record
 }

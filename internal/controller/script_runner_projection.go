@@ -58,16 +58,16 @@ func BuildManualScriptPlan(
 	if err != nil || service.Name != sources.Service.Record.Desired.Name {
 		return nil, errs.New(errs.KindStateConflict, "successful Release service definition is missing")
 	}
-	appliedProject, err := loadNormalizedEnvironmentProject(ctx, sources.AppliedProjection.Record)
+	desiredProject, err := loadNormalizedEnvironmentProject(ctx, sources.DesiredProjection.Record)
 	if err != nil {
 		return nil, err
 	}
-	appliedService, err := appliedProject.GetService(sources.RenderInput.Record.ServiceName)
-	if err != nil || appliedService.Name != sources.Service.Record.Desired.Name {
-		return nil, errs.New(errs.KindStateConflict, "applied Environment service topology is missing")
+	desiredService, err := desiredProject.GetService(sources.RenderInput.Record.ServiceName)
+	if err != nil || desiredService.Name != sources.Service.Record.Desired.Name {
+		return nil, errs.New(errs.KindStateConflict, "desired Environment service topology is missing")
 	}
 	service.Image = sources.Release.Intent.Image
-	service.Networks = appliedService.Networks
+	service.Networks = desiredService.Networks
 	if err := validateScriptServiceDisposition(service); err != nil {
 		return nil, err
 	}
@@ -86,7 +86,7 @@ func BuildManualScriptPlan(
 	if err != nil {
 		return nil, err
 	}
-	mounts, err := projectScriptMounts(appliedService, sources)
+	mounts, err := projectScriptMounts(desiredService, sources)
 	if err != nil {
 		return nil, err
 	}
@@ -113,11 +113,11 @@ func BuildManualScriptPlan(
 		ImageReference: service.Image, ImageDigest: imageDigest,
 		BlueprintBundleGeneration: sources.RenderInput.Record.Projection.RevisionID,
 		RenderGeneration:          sources.RenderInput.Record.Projection.RenderGeneration,
-		NetworkTopologyRevision:   uint64(sources.AppliedProjection.Revision),
+		NetworkTopologyRevision:   uint64(sources.DesiredProjection.Revision),
 		Networks:                  cloneScriptNetworks(networks), Mounts: cloneScriptMounts(mounts),
-		AppliedEnvironmentRevisionId:       sources.AppliedProjection.Record.RevisionID,
-		AppliedEnvironmentRenderGeneration: sources.AppliedProjection.Record.RenderGeneration,
-		AppliedEnvironmentModRevision:      uint64(sources.AppliedProjection.Revision),
+		AppliedEnvironmentRevisionId:       sources.DesiredProjection.Record.RevisionID,
+		AppliedEnvironmentRenderGeneration: sources.DesiredProjection.Record.RenderGeneration,
+		AppliedEnvironmentModRevision:      uint64(sources.DesiredProjection.Revision),
 		EntryBindings:                      cloneScriptEntryBindings(input.EntryBindings),
 		RunnerProjectionSha256:             projectionDigest,
 	}
@@ -318,9 +318,9 @@ func projectScriptNetworks(
 	service composetypes.ServiceConfig,
 	sources etcd.ScriptExecutionSources,
 ) ([]*agentpb.ScriptRunnerNetwork, error) {
-	identityByName := make(map[string]string, len(sources.AppliedProjection.Record.Networks))
-	for _, identity := range sources.AppliedProjection.Record.Networks {
-		identityByName[identity.Name] = identity.ID
+	identityByName := make(map[string]string, len(sources.DesiredProjection.Record.DesiredZones))
+	for _, desired := range sources.DesiredProjection.Record.DesiredZones {
+		identityByName[desired.Desired.Name] = desired.Desired.ID
 	}
 	revisionByID := make(map[string]int64, len(sources.Networks))
 	for _, network := range sources.Networks {
@@ -358,7 +358,7 @@ func projectScriptMounts(
 	sources etcd.ScriptExecutionSources,
 ) ([]*agentpb.ScriptRunnerMount, error) {
 	volumeIDByTarget := make(map[string]string)
-	for _, mount := range sources.AppliedProjection.Record.VolumeMounts {
+	for _, mount := range sources.DesiredProjection.Record.VolumeMounts {
 		if mount.ServiceID == sources.Service.Record.Desired.ID {
 			volumeIDByTarget[mount.Target] = mount.VolumeID
 		}
@@ -374,7 +374,7 @@ func projectScriptMounts(
 			return nil, err
 		}
 		result = append(result, &agentpb.ScriptRunnerMount{
-			SourceId: volumeID, SourceModRevision: uint64(sources.AppliedProjection.Revision), RenderedMount: projected,
+			SourceId: volumeID, SourceModRevision: uint64(sources.DesiredProjection.Revision), RenderedMount: projected,
 		})
 	}
 	sort.Slice(result, func(left, right int) bool {

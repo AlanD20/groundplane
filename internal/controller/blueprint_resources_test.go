@@ -44,6 +44,35 @@ func TestProjectServiceProjectionPreservesStableTopology(t *testing.T) {
 	}
 }
 
+func TestProjectServiceProjectionCanonicalizesIdentityOrder(t *testing.T) {
+	t.Parallel()
+	apiID := blueprintResourceID(ids.KindService, 30)
+	workerID := blueprintResourceID(ids.KindService, 31)
+	project := &composetypes.Project{Services: composetypes.Services{
+		"api":    {Image: "example/api:1"},
+		"worker": {Image: "example/worker:1"},
+	}}
+	identities := []ComposeResourceIdentity{
+		{ID: workerID, Name: "worker"},
+		{ID: apiID, Name: "api"},
+	}
+
+	services, err := ProjectServiceProjection(
+		project,
+		ComposeIdentitySnapshot{Services: identities},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("ProjectServiceProjection() error = %v", err)
+	}
+	if len(services) != 2 || services[0].ID != apiID || services[1].ID != workerID {
+		t.Fatalf("ProjectServiceProjection() = %#v", services)
+	}
+	if identities[0].Name != "worker" || identities[1].Name != "api" {
+		t.Fatalf("ProjectServiceProjection() mutated caller identities = %#v", identities)
+	}
+}
+
 // Rationale: release policy and lifecycle-phased dependencies are durable
 // desired decisions even when they cannot be represented as native Compose.
 func TestProjectServiceProjectionCarriesTypedGroundplaneServiceExtensions(t *testing.T) {

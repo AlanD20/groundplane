@@ -35,4 +35,5 @@ const (
 	TaskServiceEnvironmentParam          = "service_environment_id"
 	TaskZoneEnvironmentParam             = "zone_environment_id"
 	TaskZoneImpactTokenParam             = "zone_impact_token"
+	TaskZoneRemovalOperationParam        = "zone_removal_operation_id"
 )

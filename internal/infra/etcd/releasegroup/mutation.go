@@ -268,15 +268,15 @@ func (store *Store) loadMutationEvidence(ctx context.Context, group domain.Group
 		)
 	}
 
-	projectionMembers := make(map[string]struct{}, len(projection.Services))
-	for _, identity := range projection.Services {
-		if ids.Validate(ids.KindService, identity.ID) != nil {
+	projectionMembers := make(map[string]struct{}, len(projection.DesiredServices))
+	for _, desired := range projection.DesiredServices {
+		if ids.Validate(ids.KindService, desired.Desired.ID) != nil {
 			return mutationEvidence{}, corruptRecord()
 		}
-		if _, duplicate := projectionMembers[identity.ID]; duplicate {
+		if _, duplicate := projectionMembers[desired.Desired.ID]; duplicate {
 			return mutationEvidence{}, corruptRecord()
 		}
-		projectionMembers[identity.ID] = struct{}{}
+		projectionMembers[desired.Desired.ID] = struct{}{}
 	}
 	serviceKeys := make([]string, 0, len(group.ServiceIDs)*3)
 	for _, serviceID := range group.ServiceIDs {
@@ -303,6 +303,22 @@ func (store *Store) loadMutationEvidence(ctx context.Context, group domain.Group
 		}
 		service, decodeErr := decodeService(recordValue.Value)
 		_, enabled := projectionMembers[serviceID]
+		if !enabled {
+			for _, component := range projection.Components {
+				if component.Desired.OwnerID != group.EnvironmentID {
+					continue
+				}
+				for _, generatedServiceID := range component.Runtime.GeneratedServices {
+					if generatedServiceID == serviceID {
+						enabled = true
+						break
+					}
+				}
+				if enabled {
+					break
+				}
+			}
+		}
 		if decodeErr != nil || service.Desired.ID != serviceID || service.EnvironmentID != group.EnvironmentID ||
 			!bytes.Equal(ownerValue.Value, []byte(serviceID)) {
 			return mutationEvidence{}, corruptRecord()

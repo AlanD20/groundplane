@@ -235,7 +235,7 @@ func (resolver *TaskPlanResolver) ResolveExecutionPlan(
 			return resolver.resolveEnvironmentRemovalPlan(ctx, task)
 		}
 		if ids.Validate(ids.KindNetwork, task.Target) == nil {
-			return resolver.resolveZoneRemovalPlan(task)
+			return resolver.resolveZoneRemovalPlan(ctx, task)
 		}
 		if ids.Validate(ids.KindRoute, task.Target) == nil {
 			return resolver.resolveRouteRemovalPlan(ctx, task)
@@ -327,35 +327,6 @@ func (resolver *TaskPlanResolver) resolveHierarchyDeletionPlan(
 		return nil, err
 	}
 	return plan, nil
-}
-
-func (resolver *TaskPlanResolver) resolveZoneRemovalPlan(
-	task etcd.TaskRecord,
-) (*agentpb.ExecutionPlan, error) {
-	environmentID := task.Params[etcd.TaskZoneEnvironmentParam]
-	if task.Executor != etcd.TaskExecutorAgent || task.Type != etcd.TaskRemove ||
-		ids.Validate(ids.KindNetwork, task.Target) != nil ||
-		ids.Validate(ids.KindEnvironment, environmentID) != nil || len(task.Params) != 1 ||
-		len(task.Materializations) != 0 || len(task.Steps) != 1 ||
-		ids.Validate(ids.KindStep, task.Steps[0].ID) != nil || task.TimeoutSeconds <= 0 ||
-		task.TimeoutSeconds > math.MaxUint32 {
-		return nil, errs.New(errs.KindInternal, "durable Zone removal Task shape is invalid")
-	}
-	return BuildPlan(PlanBuildInput{
-		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
-		RenderGeneration: uint64(task.RenderGeneration),
-		Operation:        agentpb.PlanOperation_PLAN_OPERATION_REMOVE,
-		TargetID:         task.Target,
-		Steps: []*agentpb.ExecutionStep{{
-			StepId: task.Steps[0].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
-			Payload: &agentpb.ExecutionStep_ManagedNetworkRemove{
-				ManagedNetworkRemove: &agentpb.ManagedNetworkRemove{
-					NetworkId: task.Target, EnvironmentId: environmentID,
-					DockerName: "gp_net_" + strings.ToLower(task.Target),
-				},
-			},
-		}},
-	})
 }
 
 func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
@@ -894,18 +865,77 @@ func ComposeIdentitySnapshotFromProjection(
 			componentOwners[serviceID] = component.Desired.ID
 		}
 	}
-	convert := func(values []etcd.EnvironmentComposeIdentity) []ComposeResourceIdentity {
-		result := make([]ComposeResourceIdentity, len(values))
-		for index, value := range values {
-			result[index] = ComposeResourceIdentity{
-				ID: value.ID, Name: value.Name, ComponentID: componentOwners[value.ID],
+	services := make([]ComposeResourceIdentity, 0, len(projection.DesiredServices))
+	usedServiceIDs := make(map[string]struct{}, cap(services))
+	usedServiceNames := make(map[string]struct{}, cap(services))
+	desiredServiceNames := make(map[string]string, len(projection.DesiredServices))
+	desiredNames := make(map[string]struct{}, len(projection.DesiredServices))
+	for _, desired := range projection.DesiredServices {
+		service := desired.Desired
+		if ids.Validate(ids.KindService, service.ID) != nil || service.Name == "" {
+			return ComposeIdentitySnapshot{}, errs.New(errs.KindInternal, "desired Service render identity is invalid")
+		}
+		if _, duplicate := desiredServiceNames[service.ID]; duplicate {
+			return ComposeIdentitySnapshot{}, errs.New(errs.KindInternal, "desired Service render identity is duplicated")
+		}
+		if _, duplicate := desiredNames[service.Name]; duplicate {
+			return ComposeIdentitySnapshot{}, errs.New(errs.KindInternal, "desired Service render name is duplicated")
+		}
+		desiredServiceNames[service.ID] = service.Name
+		desiredNames[service.Name] = struct{}{}
+		if _, generated := componentOwners[service.ID]; generated {
+			continue
+		}
+		usedServiceIDs[service.ID] = struct{}{}
+		usedServiceNames[service.Name] = struct{}{}
+		services = append(services, ComposeResourceIdentity{ID: service.ID, Name: service.Name})
+	}
+	if len(componentOwners) != 0 {
+		artifact := &agentpb.ComposeArtifact{}
+		if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(projection.ComposeArtifact, artifact); err != nil {
+			return ComposeIdentitySnapshot{}, errs.New(errs.KindInternal, "Component generated Service render metadata is corrupt")
+		}
+		for _, service := range artifact.GetServices() {
+			componentID, generated := componentOwners[service.GetServiceId()]
+			if !generated {
+				continue
+			}
+			desiredName, desired := desiredServiceNames[service.GetServiceId()]
+			if !desired {
+				return ComposeIdentitySnapshot{}, errs.New(
+					errs.KindInternal, "Component generated Service is absent from desired projection",
+				)
+			}
+			if service.GetComposeName() == "" || service.GetComposeName() != desiredName {
+				return ComposeIdentitySnapshot{}, errs.New(errs.KindInternal, "Component generated Service render name is missing")
+			}
+			if _, duplicate := usedServiceIDs[service.GetServiceId()]; duplicate {
+				return ComposeIdentitySnapshot{}, errs.New(errs.KindInternal, "Component generated Service render identity is duplicated")
+			}
+			if _, duplicate := usedServiceNames[service.GetComposeName()]; duplicate {
+				return ComposeIdentitySnapshot{}, errs.New(errs.KindInternal, "Component generated Service render name is duplicated")
+			}
+			usedServiceIDs[service.GetServiceId()] = struct{}{}
+			usedServiceNames[service.GetComposeName()] = struct{}{}
+			services = append(services, ComposeResourceIdentity{
+				ID: service.GetServiceId(), Name: service.GetComposeName(), ComponentID: componentID,
+			})
+		}
+		for serviceID := range componentOwners {
+			if _, desired := desiredServiceNames[serviceID]; !desired {
+				return ComposeIdentitySnapshot{}, errs.New(
+					errs.KindInternal, "Component generated Service is absent from desired projection",
+				)
+			}
+			if _, found := usedServiceIDs[serviceID]; !found {
+				return ComposeIdentitySnapshot{}, errs.New(errs.KindInternal, "Component generated Service render metadata is missing")
 			}
 		}
-		return result
 	}
+	sort.Slice(services, func(left, right int) bool { return services[left].Name < services[right].Name })
 	return ComposeIdentitySnapshot{
-		Services: convert(projection.Services),
-		Networks: convert(projection.Networks),
+		Services: services,
+		Networks: desiredZoneResourceIdentities(projection.DesiredZones),
 		Volumes:  composeVolumeResourceIdentities(projection.Volumes),
 	}, nil
 }

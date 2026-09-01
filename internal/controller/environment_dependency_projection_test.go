@@ -31,10 +31,10 @@ func TestBuildEnvironmentComposeProjectionFreezesAlwaysForReleasePhases(t *testi
 		t.Fatal(err)
 	}
 	projection := etcd.EnvironmentComposeProjection{
-		Services: []etcd.EnvironmentComposeIdentity{
-			{ID: snapshot.Services[0].ID, Name: snapshot.Services[0].Name},
-			{ID: snapshot.Services[1].ID, Name: snapshot.Services[1].Name},
-			{ID: snapshot.Services[2].ID, Name: snapshot.Services[2].Name},
+		DesiredServices: []etcd.EnvironmentServiceProjection{
+			{Desired: core.Service{Name: snapshot.Services[0].Name}},
+			{Desired: core.Service{Name: snapshot.Services[1].Name}},
+			{Desired: core.Service{Name: snapshot.Services[2].Name}},
 		},
 		ServiceDependencyPlans: core.ServiceDependencyPlans{
 			DeployDependencyPlan: deploy, RollbackDependencyPlan: rollback,

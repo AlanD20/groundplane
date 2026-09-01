@@ -471,21 +471,38 @@ func TestConnectorAndBlueprintPublicationRejectHeldEnvironmentLock(t *testing.T)
 	})
 }
 
-// Rationale: the fully wrapped Blueprint transaction, not an incomplete base
-// estimate, must fit the exact 96 compare-and-mutation ceiling.
-func TestEnvironmentBlueprintTransactionOperationCountIncludesIdempotency(t *testing.T) {
+// Rationale: each wrapped Blueprint publication arm has its own 32-operation
+// partition; aggregate arithmetic must not let one arm consume another's room.
+func TestEnvironmentBlueprintPublicationPartitionsAreIndependentlyBounded(t *testing.T) {
 	t.Parallel()
-	marker := testDirectMarker()
-	plan := &idempotencyMutationPlan{
-		conditions: make([]Condition, 47),
-		mutations:  make([]Mutation, 46),
+	tests := []struct {
+		name             string
+		comparisons      int
+		successMutations int
+		failureReads     int
+		wantError        bool
+	}{
+		{name: "exact bound", comparisons: 32, successMutations: 32, failureReads: 32},
+		{name: "compare overflow", comparisons: 33, successMutations: 32, failureReads: 32, wantError: true},
+		{name: "success overflow", comparisons: 32, successMutations: 33, failureReads: 32, wantError: true},
+		{name: "failure overflow", comparisons: 32, successMutations: 32, failureReads: 33, wantError: true},
 	}
-	if got := environmentBlueprintTransactionOperationCount(plan, marker); got != 96 {
-		t.Fatalf("operation count = %d, want 96", got)
-	}
-	plan.conditions = append(plan.conditions, Condition{})
-	if got := environmentBlueprintTransactionOperationCount(plan, marker); got != 97 {
-		t.Fatalf("above-bound operation count = %d, want 97", got)
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateEnvironmentDesiredPublicationPartitionCounts(
+				test.comparisons,
+				test.successMutations,
+				test.failureReads,
+			)
+			if test.wantError && !isKind(err, errs.KindValidationFailed) {
+				t.Fatalf("partition validation error = %v", err)
+			}
+			if !test.wantError && err != nil {
+				t.Fatalf("partition validation error = %v", err)
+			}
+		})
 	}
 }
 

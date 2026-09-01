@@ -526,10 +526,8 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	}
 	taskID := claim.TaskID
 	now := claim.CreatedAt
-	authoredPreviousProjection := previousProjection.Record
-	authoredPreviousProjection.Services = environmentComposeIdentities(previous.Services)
 	if err := preserveEnvironmentBlueprintResources(
-		parsed.Project, priorProject, authoredPreviousProjection, hasProjection,
+		parsed.Project, priorProject, previous, previousProjection.Record.Volumes, hasProjection,
 	); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -788,10 +786,11 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	}
 	entryProjection.Materializations = append(entryProjection.Materializations, entryRemovals...)
 	componentProjection.Project = entryProjection.Project
+	attachZones, attachServices, _ := environmentBlueprintTopologyProjection(zoneChanges, serviceChanges, nil)
 	attachProjection := etcd.EnvironmentComposeProjection{
-		EnvironmentID: environmentID,
-		Services:      environmentComposeIdentities(renderIdentities.Services),
-		Networks:      environmentComposeIdentities(renderIdentities.Networks),
+		EnvironmentID:   environmentID,
+		DesiredZones:    attachZones,
+		DesiredServices: attachServices,
 	}
 	attachJoins, err := resolveAttachNetworkJoins(environmentID, attachProjection, preparedAttaches.effective, "")
 	if err != nil {
@@ -1004,6 +1003,10 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		pinnedComponents,
 		reconciledEntries.Current,
 	)
+	topologyZones, topologyServices, topologyRoutes := environmentBlueprintTopologyProjection(
+		zoneChanges, serviceChanges, routeChanges,
+	)
+	projection = desiredrevision.WithDesiredTopology(projection, topologyZones, topologyServices, topologyRoutes)
 	projection.ServiceDependencyPlans = dependencyPlans.Clone()
 	projectionEvidence, err := desiredrevision.PreflightProjection(projection)
 	if err != nil {
@@ -1269,14 +1272,34 @@ func (service *environmentBlueprintService) listBlueprintAttaches(
 	}
 }
 
-func environmentComposeIdentities(
-	values []controller.ComposeResourceIdentity,
-) []etcd.EnvironmentComposeIdentity {
-	result := make([]etcd.EnvironmentComposeIdentity, len(values))
-	for index, value := range values {
-		result[index] = etcd.EnvironmentComposeIdentity{ID: value.ID, Name: value.Name}
+func environmentBlueprintTopologyProjection(
+	zones []etcd.EnvironmentBlueprintZoneChange,
+	services []etcd.EnvironmentBlueprintServiceChange,
+	routes []etcd.EnvironmentBlueprintRouteChange,
+) ([]etcd.EnvironmentZoneProjection, []etcd.EnvironmentServiceProjection, []etcd.EnvironmentRouteProjection) {
+	zoneProjection := make([]etcd.EnvironmentZoneProjection, len(zones))
+	for index, change := range zones {
+		zoneProjection[index] = etcd.EnvironmentZoneProjection{
+			EnvironmentID: change.Record.EnvironmentID, Desired: change.Record.Desired,
+		}
 	}
-	return result
+	serviceProjection := make([]etcd.EnvironmentServiceProjection, len(services))
+	for index, change := range services {
+		serviceProjection[index] = etcd.EnvironmentServiceProjection{
+			EnvironmentID:    change.Record.EnvironmentID,
+			BackingNetworkID: change.Record.BackingNetworkID,
+			Desired:          change.Record.Desired,
+		}
+	}
+	routeProjection := make([]etcd.EnvironmentRouteProjection, len(routes))
+	for index, change := range routes {
+		routeProjection[index] = etcd.EnvironmentRouteProjection{
+			EnvironmentID:     change.Record.EnvironmentID,
+			Desired:           change.Record.Desired,
+			DesiredGeneration: change.Record.DesiredGeneration,
+		}
+	}
+	return zoneProjection, serviceProjection, routeProjection
 }
 
 func (service *environmentBlueprintService) prepareBlueprintComponents(
@@ -1705,45 +1728,80 @@ func environmentBlueprintState(
 func authoredComposeIdentitySnapshot(
 	projection etcd.EnvironmentComposeProjection,
 ) (controller.ComposeIdentitySnapshot, error) {
-	snapshot, err := composeIdentitySnapshot(projection)
+	project, err := controller.LoadNormalizedEnvironmentProject(context.Background(), projection)
 	if err != nil {
 		return controller.ComposeIdentitySnapshot{}, err
 	}
-	artifact, err := controller.NormalizedEnvironmentArtifact(projection)
-	if err != nil {
-		return controller.ComposeIdentitySnapshot{}, err
+	authoredNames := make(map[string]struct{}, len(project.Services)+len(project.DisabledServices))
+	for name := range project.Services {
+		authoredNames[name] = struct{}{}
 	}
-	authoredServiceIDs := make(map[string]string, len(artifact.GetServices()))
-	for _, service := range artifact.GetServices() {
-		if ids.Validate(ids.KindService, service.GetServiceId()) != nil || service.GetComposeName() == "" {
+	for name := range project.DisabledServices {
+		authoredNames[name] = struct{}{}
+	}
+	snapshot := controller.ComposeIdentitySnapshot{
+		Services: make([]controller.ComposeResourceIdentity, len(projection.DesiredServices)),
+		Networks: make([]controller.ComposeResourceIdentity, len(projection.DesiredZones)),
+		Volumes:  make([]controller.ComposeResourceIdentity, len(projection.Volumes)),
+	}
+	seenServiceIDs := make(map[string]string, len(projection.DesiredServices))
+	seenServiceNames := make(map[string]string, len(projection.DesiredServices))
+	for index, service := range projection.DesiredServices {
+		if service.EnvironmentID != projection.EnvironmentID || ids.Validate(ids.KindService, service.Desired.ID) != nil ||
+			service.Desired.Name == "" {
 			return controller.ComposeIdentitySnapshot{}, errs.New(
 				errs.KindInternal,
-				"Environment normalized Compose projection has an invalid authored Service identity",
+				"Environment desired projection has an invalid authored Service identity",
 			)
 		}
-		if name, duplicate := authoredServiceIDs[service.GetServiceId()]; duplicate && name != service.GetComposeName() {
+		if name, duplicate := seenServiceIDs[service.Desired.ID]; duplicate && name != service.Desired.Name {
 			return controller.ComposeIdentitySnapshot{}, errs.New(
 				errs.KindInternal,
-				"Environment normalized Compose projection repeats an authored Service identity",
+				"Environment desired projection repeats an authored Service id",
 			)
 		}
-		authoredServiceIDs[service.GetServiceId()] = service.GetComposeName()
-	}
-	services := make([]controller.ComposeResourceIdentity, 0, len(snapshot.Services))
-	for _, service := range snapshot.Services {
-		authoredName, authored := authoredServiceIDs[service.ID]
-		if !authored {
-			continue
-		}
-		if authoredName != service.Name {
+		if serviceID, duplicate := seenServiceNames[service.Desired.Name]; duplicate && serviceID != service.Desired.ID {
 			return controller.ComposeIdentitySnapshot{}, errs.New(
 				errs.KindInternal,
-				"Environment normalized Compose authored Service identity does not match its projection",
+				"Environment desired projection repeats an authored Service name",
 			)
 		}
-		services = append(services, service)
+		if _, authored := authoredNames[service.Desired.Name]; !authored {
+			return controller.ComposeIdentitySnapshot{}, errs.New(
+				errs.KindInternal,
+				"Environment desired Service is absent from normalized Compose",
+			)
+		}
+		delete(authoredNames, service.Desired.Name)
+		seenServiceIDs[service.Desired.ID] = service.Desired.Name
+		seenServiceNames[service.Desired.Name] = service.Desired.ID
+		snapshot.Services[index] = controller.ComposeResourceIdentity{ID: service.Desired.ID, Name: service.Desired.Name}
 	}
-	snapshot.Services = services
+	if len(authoredNames) != 0 {
+		return controller.ComposeIdentitySnapshot{}, errs.New(
+			errs.KindInternal,
+			"Environment normalized Compose has no desired Service identity",
+		)
+	}
+	for index, zone := range projection.DesiredZones {
+		if zone.EnvironmentID != projection.EnvironmentID || ids.Validate(ids.KindNetwork, zone.Desired.ID) != nil ||
+			zone.Desired.Name == "" {
+			return controller.ComposeIdentitySnapshot{}, errs.New(
+				errs.KindInternal,
+				"Environment desired projection has an invalid Zone identity",
+			)
+		}
+		snapshot.Networks[index] = controller.ComposeResourceIdentity{ID: zone.Desired.ID, Name: zone.Desired.Name}
+	}
+	for index, volume := range projection.Volumes {
+		if ids.Validate(ids.KindVolume, volume.ID) != nil || volume.Key == "" {
+			return controller.ComposeIdentitySnapshot{}, errs.New(
+				errs.KindInternal,
+				"Environment desired projection has an invalid Volume identity",
+			)
+		}
+		snapshot.Volumes[index] = controller.ComposeResourceIdentity{ID: volume.ID, Name: volume.Key}
+	}
 	return snapshot, nil
 }
 
@@ -1805,7 +1863,8 @@ func cloneEnvironmentBlueprintServiceExtension(extension core.ServiceExtensionSp
 func preserveEnvironmentBlueprintResources(
 	project *composetypes.Project,
 	prior *composetypes.Project,
-	previous etcd.EnvironmentComposeProjection,
+	previous controller.ComposeIdentitySnapshot,
+	previousVolumes []etcd.EnvironmentVolumeIdentity,
 	hasPrevious bool,
 ) error {
 	if project == nil || (hasPrevious && prior == nil) {
@@ -1878,9 +1937,9 @@ func preserveEnvironmentBlueprintResources(
 		}
 	}
 	if project.Volumes == nil {
-		project.Volumes = make(composetypes.Volumes, len(previous.Volumes))
+		project.Volumes = make(composetypes.Volumes, len(previousVolumes))
 	}
-	for _, volume := range previous.Volumes {
+	for _, volume := range previousVolumes {
 		if _, authored := project.Volumes[volume.Key]; authored {
 			continue
 		}
@@ -2036,10 +2095,4 @@ func environmentBlueprintVolumeMounts(
 		return leftKey < rightKey
 	})
 	return mounts, nil
-}
-
-func composeIdentitySnapshot(
-	projection etcd.EnvironmentComposeProjection,
-) (controller.ComposeIdentitySnapshot, error) {
-	return controller.ComposeIdentitySnapshotFromProjection(projection)
 }

@@ -210,31 +210,37 @@ func buildServiceDesiredProjection(
 	revisionID string,
 	generation uint64,
 ) (etcd.EnvironmentComposeProjection, error) {
-	candidate := current
+	if hasCurrent {
+		if err := rejectComponentGeneratedServiceTarget(current, record.Desired.ID); err != nil {
+			return etcd.EnvironmentComposeProjection{}, err
+		}
+	}
+	candidate := cloneEnvironmentDesiredProjection(current)
 	candidate.EnvironmentID = environment.ID
 	candidate.RevisionID = revisionID
 	candidate.RenderGeneration = generation
-	candidate.Services = append([]etcd.EnvironmentComposeIdentity(nil), current.Services...)
-	networks, err := serviceZoneNetworkIdentities(current.Networks, references.Zones)
-	if err != nil {
-		return etcd.EnvironmentComposeProjection{}, err
-	}
-	candidate.Networks = networks
-	candidate.Volumes = append([]etcd.EnvironmentVolumeIdentity(nil), current.Volumes...)
-	candidate.VolumeMounts = append([]etcd.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...)
-	candidate.Routes = append([]etcd.EnvironmentRouteIdentity(nil), current.Routes...)
-	candidate.SuppressedRoutes = append([]etcd.EnvironmentRouteIdentity(nil), current.SuppressedRoutes...)
-	candidate.Components = append([]etcd.ComponentRecord(nil), current.Components...)
-	candidate.Entries = append([]etcd.EntryRecord(nil), current.Entries...)
-	candidate.ServiceDependencyPlans = current.ServiceDependencyPlans.Clone()
 	if create {
-		candidate.Services = append(candidate.Services, etcd.EnvironmentComposeIdentity{
-			ID: record.Desired.ID, Name: record.Desired.Name,
+		candidate.DesiredServices = append(candidate.DesiredServices, etcd.EnvironmentServiceProjection{
+			EnvironmentID: record.EnvironmentID, BackingNetworkID: record.BackingNetworkID, Desired: record.Desired,
 		})
-		sort.Slice(candidate.Services, func(left, right int) bool {
-			return candidate.Services[left].Name < candidate.Services[right].Name
-		})
+	} else {
+		replaced := false
+		for index := range candidate.DesiredServices {
+			if candidate.DesiredServices[index].Desired.ID == record.Desired.ID {
+				candidate.DesiredServices[index] = etcd.EnvironmentServiceProjection{
+					EnvironmentID: record.EnvironmentID, BackingNetworkID: record.BackingNetworkID, Desired: record.Desired,
+				}
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			return etcd.EnvironmentComposeProjection{}, errs.New(errs.KindStateConflict, "Service desired record is absent")
+		}
 	}
+	sort.Slice(candidate.DesiredServices, func(left, right int) bool {
+		return candidate.DesiredServices[left].Desired.Name < candidate.DesiredServices[right].Desired.Name
+	})
 	artifact := &agentpb.ComposeArtifact{
 		OwnerKind:           agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
 		OwnerId:             environment.ID,
@@ -299,31 +305,6 @@ func serviceArtifactZones(references etcd.ServiceMutationReferences) []controlle
 	return zones
 }
 
-func serviceZoneNetworkIdentities(
-	current []etcd.EnvironmentComposeIdentity,
-	zones []etcd.Versioned[etcd.ZoneRecord],
-) ([]etcd.EnvironmentComposeIdentity, error) {
-	result := append([]etcd.EnvironmentComposeIdentity(nil), current...)
-	for _, zone := range zones {
-		identity := etcd.EnvironmentComposeIdentity{ID: zone.Record.Desired.ID, Name: zone.Record.Desired.Name}
-		found := false
-		for _, existing := range result {
-			if existing.ID == identity.ID || existing.Name == identity.Name {
-				if existing != identity {
-					return nil, errs.New(errs.KindInternal, "Service Zone identity conflicts with the Environment projection")
-				}
-				found = true
-				break
-			}
-		}
-		if !found {
-			result = append(result, identity)
-		}
-	}
-	sort.Slice(result, func(left, right int) bool { return result[left].Name < result[right].Name })
-	return result, nil
-}
-
 func buildServiceRemovalProjection(
 	tenantID string,
 	projectID string,
@@ -332,30 +313,27 @@ func buildServiceRemovalProjection(
 	revisionID string,
 	generation uint64,
 ) (etcd.EnvironmentComposeProjection, error) {
-	candidate := current
+	if err := rejectComponentGeneratedServiceTarget(current, record.Desired.ID); err != nil {
+		return etcd.EnvironmentComposeProjection{}, err
+	}
+	candidate := cloneEnvironmentDesiredProjection(current)
 	candidate.RevisionID = revisionID
 	candidate.RenderGeneration = generation
-	candidate.Services = make([]etcd.EnvironmentComposeIdentity, 0, len(current.Services)-1)
-	for _, identity := range current.Services {
-		if identity.ID != record.Desired.ID {
-			candidate.Services = append(candidate.Services, identity)
+	candidate.DesiredServices = make([]etcd.EnvironmentServiceProjection, 0, len(current.DesiredServices)-1)
+	for _, desired := range current.DesiredServices {
+		if desired.Desired.ID != record.Desired.ID {
+			candidate.DesiredServices = append(candidate.DesiredServices, desired)
 		}
 	}
-	if len(candidate.Services) != len(current.Services)-1 {
-		return etcd.EnvironmentComposeProjection{}, errs.New(errs.KindStateConflict, "Service desired identity is absent")
+	if len(candidate.DesiredServices) != len(current.DesiredServices)-1 {
+		return etcd.EnvironmentComposeProjection{}, errs.New(errs.KindStateConflict, "Service desired record is absent")
 	}
-	candidate.Networks = append([]etcd.EnvironmentComposeIdentity(nil), current.Networks...)
-	candidate.Volumes = append([]etcd.EnvironmentVolumeIdentity(nil), current.Volumes...)
 	candidate.VolumeMounts = candidate.VolumeMounts[:0]
 	for _, mount := range current.VolumeMounts {
 		if mount.ServiceID != record.Desired.ID {
 			candidate.VolumeMounts = append(candidate.VolumeMounts, mount)
 		}
 	}
-	candidate.Routes = append([]etcd.EnvironmentRouteIdentity(nil), current.Routes...)
-	candidate.SuppressedRoutes = append([]etcd.EnvironmentRouteIdentity(nil), current.SuppressedRoutes...)
-	candidate.Components = append([]etcd.ComponentRecord(nil), current.Components...)
-	candidate.Entries = append([]etcd.EntryRecord(nil), current.Entries...)
 	candidate.ServiceDependencyPlans = current.ServiceDependencyPlans.Clone().WithoutService(record.Desired.Name)
 	artifact := &agentpb.ComposeArtifact{}
 	if err := proto.Unmarshal(current.ComposeArtifact, artifact); err != nil {
@@ -394,6 +372,40 @@ func buildServiceRemovalProjection(
 		return etcd.EnvironmentComposeProjection{}, errs.Wrap(errs.KindInternal, err)
 	}
 	return candidate, nil
+}
+
+func rejectComponentGeneratedServiceTarget(projection etcd.EnvironmentComposeProjection, serviceID string) error {
+	for _, component := range projection.Components {
+		for _, generatedServiceID := range component.Runtime.GeneratedServices {
+			if generatedServiceID == serviceID {
+				return errs.New(errs.KindResourceInUse, "Service is managed by its owning Component")
+			}
+		}
+	}
+	return nil
+}
+
+func cloneEnvironmentDesiredProjection(current etcd.EnvironmentComposeProjection) etcd.EnvironmentComposeProjection {
+	runtimeFiles := make([]core.BlueprintFile, len(current.RuntimeFiles))
+	for index, file := range current.RuntimeFiles {
+		runtimeFiles[index] = core.BlueprintFile{Path: file.Path, Content: append([]byte(nil), file.Content...)}
+	}
+	return etcd.EnvironmentComposeProjection{
+		EnvironmentID: current.EnvironmentID, RevisionID: current.RevisionID,
+		RenderGeneration:       current.RenderGeneration,
+		ComposeArtifact:        append([]byte(nil), current.ComposeArtifact...),
+		NormalizedCompose:      append([]byte(nil), current.NormalizedCompose...),
+		RuntimeFiles:           runtimeFiles,
+		ServiceExtensions:      cloneDirectServiceExtensions(current.ServiceExtensions),
+		DesiredZones:           append([]etcd.EnvironmentZoneProjection(nil), current.DesiredZones...),
+		DesiredServices:        append([]etcd.EnvironmentServiceProjection(nil), current.DesiredServices...),
+		DesiredRoutes:          append([]etcd.EnvironmentRouteProjection(nil), current.DesiredRoutes...),
+		Volumes:                append([]etcd.EnvironmentVolumeIdentity(nil), current.Volumes...),
+		VolumeMounts:           append([]etcd.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...),
+		Components:             append([]etcd.ComponentRecord(nil), current.Components...),
+		Entries:                append([]etcd.EntryRecord(nil), current.Entries...),
+		ServiceDependencyPlans: current.ServiceDependencyPlans.Clone(),
+	}
 }
 
 func cloneDirectServiceExtensions(source map[string]core.ServiceExtensionSpec) map[string]core.ServiceExtensionSpec {

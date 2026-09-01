@@ -33,6 +33,19 @@ func (*releasePlanningTestStore) Snapshot(context.Context, io.Writer) error {
 
 func (*releasePlanningTestStore) Close() error { return nil }
 
+func releasePlanningTestProjection(
+	environmentID string,
+	task TaskRecord,
+) EnvironmentComposeProjection {
+	projection := environmentBlueprintTestProjection(environmentID, task, 1)
+	service := projection.DesiredServices[0].Desired
+	projection.DesiredServices = []EnvironmentServiceProjection{{
+		EnvironmentID: environmentID,
+		Desired:       service,
+	}}
+	return projection
+}
+
 func TestReleasePlanningLoadsPublishedBlueprintProjection(t *testing.T) {
 	ctx := context.Background()
 	store := &releasePlanningTestStore{memoryHierarchyStore: newMemoryHierarchyStore()}
@@ -43,7 +56,7 @@ func TestReleasePlanningLoadsPublishedBlueprintProjection(t *testing.T) {
 	project, environment := createEnvironmentBlueprintOwners(t, hierarchy)
 	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 90)
 	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
-	projection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
+	projection := releasePlanningTestProjection(environment.Record.ID, task)
 	result := publishEnvironmentBlueprintTestRevision(
 		t,
 		hierarchy,
@@ -78,11 +91,11 @@ func TestReleasePlanningLoadsPublishedBlueprintProjection(t *testing.T) {
 	if scope.Compose.Record.RevisionID != task.ID || scope.Compose.ReadRevision != scope.ReadRevision {
 		t.Fatalf("planning Compose projection = %#v", scope.Compose)
 	}
-	planning, err := ledger.LoadPlanningServices(ctx, scope, []string{projection.Services[0].ID})
+	planning, err := ledger.LoadPlanningServices(ctx, scope, []string{projection.DesiredServices[0].Desired.ID})
 	if err != nil {
 		t.Fatalf("LoadPlanningServices() error = %v", err)
 	}
-	if len(planning) != 1 || planning[0].Service.Record.Desired.ID != projection.Services[0].ID {
+	if len(planning) != 1 || planning[0].Service.Record.Desired.ID != projection.DesiredServices[0].Desired.ID {
 		t.Fatalf("planning Services = %#v", planning)
 	}
 }

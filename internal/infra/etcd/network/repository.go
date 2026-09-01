@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -28,7 +29,43 @@ type Repository struct {
 	attaches    *etcd.AttachRepository
 	tasks       *etcd.TaskRepository
 	idempotency *etcd.IdempotencyRepository
+	desired     *desiredrevisionstore.Repository
 	facts       RemovalDatabaseResolver
+}
+
+func (repository *Repository) EnableDesiredRevisions(desired *desiredrevisionstore.Repository) error {
+	if repository == nil || desired == nil {
+		return errs.New(errs.KindInternal, "Network desired revision persistence is not configured")
+	}
+	repository.desired = desired
+	return nil
+}
+
+func (repository *Repository) ClaimEnvironmentBlueprintStage(
+	ctx context.Context,
+	request etcd.EnvironmentBlueprintStageClaimRequest,
+) (etcd.EnvironmentBlueprintStageClaim, error) {
+	if repository.desired == nil {
+		return etcd.EnvironmentBlueprintStageClaim{}, errs.New(errs.KindInternal, "Network desired revision persistence is not configured")
+	}
+	return repository.desired.ClaimEnvironmentBlueprintStage(ctx, request)
+}
+
+func (repository *Repository) StageEnvironmentBlueprintRevision(
+	ctx context.Context,
+	request etcd.EnvironmentBlueprintStageRequest,
+) (etcd.EnvironmentBlueprintSeal, error) {
+	if repository.desired == nil {
+		return etcd.EnvironmentBlueprintSeal{}, errs.New(errs.KindInternal, "Network desired revision persistence is not configured")
+	}
+	return repository.desired.StageEnvironmentBlueprintRevision(ctx, request)
+}
+
+func (repository *Repository) PublishEnvironmentZoneDesiredRevisionDirect(
+	ctx context.Context,
+	input etcd.EnvironmentZoneDesiredPublication,
+) (etcd.IdempotencyTransactionResult, error) {
+	return repository.hierarchy.PublishEnvironmentZoneDesiredRevisionDirect(ctx, input)
 }
 
 // NewRepository constructs the complete Network persistence adapter.
@@ -113,26 +150,18 @@ func (repository *Repository) ListZones(
 	return repository.zones.ListZones(ctx, environmentID, request)
 }
 
-func (repository *Repository) CreateZoneIdempotent(
-	ctx context.Context,
-	environment etcd.Versioned[etcd.EnvironmentRecord],
-	project etcd.Versioned[etcd.ProjectRecord],
-	record etcd.ZoneRecord,
-	marker etcd.IdempotencyMarker,
-) (etcd.IdempotencyTransactionResult, error) {
-	return repository.zones.CreateZoneIdempotent(ctx, environment, project, record, marker)
-}
-
 func (repository *Repository) BeginZoneDeletionWithTask(
 	ctx context.Context,
 	environment etcd.Versioned[etcd.EnvironmentRecord],
 	project etcd.Versioned[etcd.ProjectRecord],
 	zone etcd.Versioned[etcd.ZoneRecord],
+	authorities etcd.EnvironmentZoneRemovalAuthorities,
 	tombstone etcd.DeletionTombstoneRecord,
+	intent etcd.ZoneRemovalIntent,
 	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
-	return repository.zones.BeginZoneDeletionWithTask(ctx, environment, project, zone, tombstone, task, marker)
+	return repository.zones.BeginZoneDeletionWithTask(ctx, environment, project, zone, authorities, tombstone, intent, task, marker)
 }
 
 func (repository *Repository) GetRoute(
@@ -175,6 +204,13 @@ func (repository *Repository) GetEnvironmentComposeProjection(
 	environmentID string,
 ) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
 	return repository.hierarchy.GetEnvironmentComposeProjection(ctx, environmentID)
+}
+
+func (repository *Repository) GetEnvironmentZoneRemovalAuthorities(
+	ctx context.Context,
+	environmentID string,
+) (etcd.EnvironmentZoneRemovalAuthorities, bool, error) {
+	return repository.hierarchy.GetEnvironmentZoneRemovalAuthorities(ctx, environmentID)
 }
 
 func (repository *Repository) GetEnvironmentAppliedComposeProjection(
@@ -240,13 +276,21 @@ func (repository *Repository) GetSystemTaskInitiation(
 	return repository.tasks.GetSystemTaskInitiation(ctx, id)
 }
 
+func (repository *Repository) GetZoneRemovalIntent(
+	ctx context.Context,
+	operationID string,
+) (etcd.Versioned[etcd.ZoneRemovalIntent], bool, error) {
+	return repository.hierarchy.GetZoneRemovalIntent(ctx, operationID)
+}
+
 func (repository *Repository) HandoffBackingZoneDeletion(
 	ctx context.Context,
 	zone etcd.Versioned[etcd.ZoneRecord],
 	parentTaskID string,
 	tombstone etcd.Versioned[etcd.DeletionTombstoneRecord],
+	intent etcd.ZoneRemovalIntent,
 	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
-	return repository.zones.HandoffBackingZoneDeletion(ctx, zone, parentTaskID, tombstone, task, marker)
+	return repository.zones.HandoffBackingZoneDeletion(ctx, zone, parentTaskID, tombstone, intent, task, marker)
 }

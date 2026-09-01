@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -19,11 +20,7 @@ func environmentBlueprintTestZoneChanges(
 	if err != nil {
 		t.Fatalf("newZoneRepository() error = %v", err)
 	}
-	desired := core.Zone{
-		ID: projection.Networks[0].ID, Name: projection.Networks[0].Name,
-		Subnet: "10.40.10.0/24", Internal: true,
-		OwnerKind: core.ZoneOwnerEnvironment, OwnerID: projection.EnvironmentID,
-	}
+	desired := projection.DesiredZones[0].Desired
 	current, err := zones.GetZone(context.Background(), desired.ID)
 	if err == nil {
 		currentCopy := current
@@ -39,26 +36,84 @@ func environmentBlueprintTestZoneChanges(
 	return []EnvironmentBlueprintZoneChange{{Record: record}}
 }
 
-func assertEnvironmentBlueprintZoneRevision(
+func assertEnvironmentBlueprintTopologyAuthority(
 	t *testing.T,
 	store *memoryHierarchyStore,
 	projection EnvironmentComposeProjection,
-	wantRevision int64,
 ) {
 	t.Helper()
-	zones, err := newZoneRepository(store)
+	want := make(map[string]string, len(projection.DesiredZones))
+	for _, zone := range projection.DesiredZones {
+		want[zone.Desired.ID] = zone.Desired.Subnet
+	}
+	result, err := store.Get(context.Background(), zonePoolRegistryKey(projection.EnvironmentID))
+	if err != nil || result.Entry == nil {
+		t.Fatalf("Zone pool registry = %#v, %v", result, err)
+	}
+	registry, err := decodeEnvelope[zonePoolRegistry](result.Entry.Value, "zone_pool_registry")
+	if err != nil || !reflect.DeepEqual(registry.Reservations, want) {
+		t.Fatalf("Zone pool reservations = %#v, %v; want %#v", registry.Reservations, err, want)
+	}
+
+	keys := make([]string, 0, len(projection.DesiredZones)+len(projection.DesiredRoutes)*4)
+	for _, zone := range projection.DesiredZones {
+		keys = append(keys, deletionTombstoneKey("zone", zone.Desired.ID))
+	}
+	for _, route := range projection.DesiredRoutes {
+		keys = append(keys,
+			routeKey(route.Desired.ID),
+			routeOwnerKey(projection.EnvironmentID, route.Desired.ID),
+			routeMatchKey(projection.EnvironmentID, route.Desired.Host, route.Desired.Path),
+			deletionTombstoneKey("route", route.Desired.ID),
+		)
+	}
+	for _, key := range keys {
+		result, err := store.Get(context.Background(), key)
+		if err != nil || result.Entry != nil {
+			t.Fatalf("topology key %q = %#v, %v", key, result, err)
+		}
+	}
+}
+
+func TestEnvironmentBlueprintZonePoolPublicationReplacesExactCandidateSet(t *testing.T) {
+	// Rationale: the candidate desired projection is the complete Zone subnet
+	// authority; reservations absent from it must not survive publication.
+	ctx := context.Background()
+	store := newMemoryHierarchyStore()
+	repository, err := newHierarchyRepository(store)
 	if err != nil {
-		t.Fatalf("newZoneRepository() error = %v", err)
+		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	zone, err := zones.GetZone(context.Background(), projection.Networks[0].ID)
-	if err != nil || zone.Record.Desired.Subnet != "10.40.10.0/24" || zone.Revision != wantRevision {
-		t.Fatalf("GetZone() = %#v, %v", zone, err)
+	project, environment := createEnvironmentBlueprintOwners(t, repository)
+	staleID := ids.NewAt(ids.KindNetwork, serviceRecordTestTime(), 800)
+	staleValue, err := encodeEnvelope("zone_pool_registry", zonePoolRegistry{Reservations: map[string]string{
+		staleID: "10.40.20.0/24",
+	}})
+	if err != nil {
+		t.Fatalf("encodeEnvelope() error = %v", err)
 	}
-	registry, err := zones.getZonePoolRegistry(context.Background(), projection.EnvironmentID)
-	if err != nil || registry.Record.Reservations[zone.Record.Desired.ID] != zone.Record.Desired.Subnet ||
-		registry.Revision != wantRevision {
-		t.Fatalf("Zone pool registry = %#v, %v", registry, err)
+	if _, err := store.Transact(ctx, nil, []Mutation{{
+		Type: MutationPut, Key: zonePoolRegistryKey(environment.Record.ID), Value: staleValue,
+	}}); err != nil {
+		t.Fatalf("seed Zone pool registry: %v", err)
 	}
+
+	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 805)
+	projection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
+	result := publishEnvironmentBlueprintTestRevision(
+		t, repository, project, environment, 0,
+		environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n"),
+		projection,
+		environmentBlueprintTestZoneChanges(t, repository, projection),
+		environmentBlueprintTestServiceChanges(t, repository, projection),
+		environmentBlueprintTestRouteChanges(t, repository, projection),
+		ComponentTaskPreparation{}, task, environmentBlueprintTestMarker(task, environment.Record.ID),
+	)
+	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict != nil ||
+		outcome != IdempotencyKnownApplied {
+		t.Fatalf("publication outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
+	}
+	assertEnvironmentBlueprintTopologyAuthority(t, store, projection)
 }
 
 func TestEnvironmentBlueprintZonePreparationRejectsOverlappingSubnets(t *testing.T) {
@@ -72,29 +127,28 @@ func TestEnvironmentBlueprintZonePreparationRejectsOverlappingSubnets(t *testing
 	_, environment := createEnvironmentBlueprintOwners(t, repository)
 	projection := EnvironmentComposeProjection{
 		EnvironmentID: environment.Record.ID,
-		Networks: []EnvironmentComposeIdentity{
-			{ID: ids.NewAt(ids.KindNetwork, serviceRecordTestTime(), 801), Name: "one"},
-			{ID: ids.NewAt(ids.KindNetwork, serviceRecordTestTime(), 802), Name: "two"},
+		DesiredZones: []EnvironmentZoneProjection{
+			{
+				EnvironmentID: environment.Record.ID,
+				Desired: core.Zone{
+					ID: ids.NewAt(ids.KindNetwork, serviceRecordTestTime(), 801), Name: "one",
+					Subnet: "10.40.10.0/24", OwnerKind: core.ZoneOwnerEnvironment,
+					OwnerID: environment.Record.ID,
+				},
+			},
+			{
+				EnvironmentID: environment.Record.ID,
+				Desired: core.Zone{
+					ID: ids.NewAt(ids.KindNetwork, serviceRecordTestTime(), 802), Name: "two",
+					Subnet: "10.40.10.128/25", OwnerKind: core.ZoneOwnerEnvironment,
+					OwnerID: environment.Record.ID,
+				},
+			},
 		},
 	}
-	changes := make([]EnvironmentBlueprintZoneChange, 0, 2)
-	for index, identity := range projection.Networks {
-		subnet := "10.40.10.0/24"
-		if index == 1 {
-			subnet = "10.40.10.128/25"
-		}
-		record, recordErr := NewZoneRecord(environment.Record.ID, core.Zone{
-			ID: identity.ID, Name: identity.Name, Subnet: subnet,
-			OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environment.Record.ID,
-		})
-		if recordErr != nil {
-			t.Fatalf("NewZoneRecord() error = %v", recordErr)
-		}
-		changes = append(changes, EnvironmentBlueprintZoneChange{Record: record})
-	}
-	if _, err := repository.prepareEnvironmentBlueprintZoneChanges(
-		context.Background(), environment, projection, changes,
+	if _, err := repository.prepareEnvironmentBlueprintZonePoolAtRevision(
+		context.Background(), environment.Record, projection.DesiredZones, environment.ReadRevision,
 	); err == nil {
-		t.Fatal("prepareEnvironmentBlueprintZoneChanges() accepted overlapping subnets")
+		t.Fatal("prepareEnvironmentBlueprintZonePoolAtRevision() accepted overlapping subnets")
 	}
 }

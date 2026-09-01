@@ -138,7 +138,7 @@ func (ledger *ReleaseLedger) LoadPlanningServices(
 		len(serviceIDs) > maximumReleasePublicationMembers {
 		return nil, errs.New(errs.KindValidationFailed, "release planning service selection is invalid")
 	}
-	keys := make([]string, 0, len(serviceIDs)*4)
+	keys := make([]string, 0, len(serviceIDs)*2)
 	seen := make(map[string]struct{}, len(serviceIDs))
 	for _, serviceID := range serviceIDs {
 		if ids.Validate(ids.KindService, serviceID) != nil {
@@ -148,8 +148,7 @@ func (ledger *ReleaseLedger) LoadPlanningServices(
 			return nil, errs.New(errs.KindValidationFailed, "release planning service is duplicated")
 		}
 		seen[serviceID] = struct{}{}
-		keys = append(keys, serviceKey(serviceID), serviceOwnerKey(scope.Environment.Record.ID, serviceID),
-			deletionTombstoneKey("service", serviceID), releaseProjectionKey(serviceID))
+		keys = append(keys, deletionTombstoneKey("service", serviceID), releaseProjectionKey(serviceID))
 	}
 	loaded, err := ledger.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: scope.ReadRevision})
 	if err != nil {
@@ -158,41 +157,50 @@ func (ledger *ReleaseLedger) LoadPlanningServices(
 	if loaded == nil || loaded.ReadRevision != scope.ReadRevision || len(loaded.Values) != len(keys) {
 		return nil, corruptReleaseRecord()
 	}
-	projected := make(map[string]struct{}, len(scope.Compose.Record.Services))
-	for _, identity := range scope.Compose.Record.Services {
-		projected[identity.ID] = struct{}{}
+	projected := make(map[string]struct{}, len(scope.Compose.Record.DesiredServices))
+	for _, desired := range scope.Compose.Record.DesiredServices {
+		projected[desired.Desired.ID] = struct{}{}
 	}
 	result := make([]ReleasePlanningService, len(serviceIDs))
 	for index, serviceID := range serviceIDs {
-		base := index * 4
-		if loaded.Values[base] == nil {
-			return nil, errs.New(errs.KindServiceNotFound, "service was not found")
-		}
-		if loaded.Values[base+1] == nil || !bytes.Equal(loaded.Values[base+1].Value, []byte(serviceID)) ||
-			loaded.Values[base+2] != nil {
+		base := index * 2
+		if loaded.Values[base] != nil {
 			return nil, errs.New(errs.KindResourceInUse, "release service ownership changed or is deleting")
 		}
-		record, err := decodeServiceRecord(loaded.Values[base].Value)
-		if err != nil || record.Desired.ID != serviceID || record.EnvironmentID != scope.Environment.Record.ID {
-			return nil, corruptReleaseRecord()
+		service, serviceErr := findServiceAtRevision(ctx, ledger.store, serviceID, scope.ReadRevision)
+		if serviceErr != nil {
+			return nil, serviceErr
 		}
-		if _, exists := projected[serviceID]; !exists {
+		if service.Record.EnvironmentID != scope.Environment.Record.ID {
+			return nil, errs.New(errs.KindServiceNotFound, "service was not found")
+		}
+		_, desired := projected[serviceID]
+		if !desired && !releasePlanningTargetsGeneratedService(scope.Compose.Record.Components, serviceID) {
 			return nil, errs.New(errs.KindValidationFailed, "release service is not in the applied Compose projection")
 		}
-		planning := ReleasePlanningService{Service: Versioned[ServiceRecord]{
-			Record: record, Revision: loaded.Values[base].ModRevision, ReadRevision: loaded.ReadRevision,
-		}}
-		if loaded.Values[base+3] != nil {
-			projection, err := decodeReleaseRecord[domain.ServiceProjection](loaded.Values[base+3].Value, "service-release-projection")
+		planning := ReleasePlanningService{Service: service}
+		if loaded.Values[base+1] != nil {
+			projection, err := decodeReleaseRecord[domain.ServiceProjection](loaded.Values[base+1].Value, "service-release-projection")
 			if err != nil || projection.EnvironmentID != scope.Environment.Record.ID || projection.ServiceID != serviceID {
 				return nil, corruptReleaseRecord()
 			}
 			planning.Projection = projection
-			planning.ProjectionRevision = loaded.Values[base+3].ModRevision
+			planning.ProjectionRevision = loaded.Values[base+1].ModRevision
 		}
 		result[index] = planning
 	}
 	return result, nil
+}
+
+func releasePlanningTargetsGeneratedService(components []ComponentRecord, serviceID string) bool {
+	for _, component := range components {
+		for _, generatedServiceID := range component.Runtime.GeneratedServices {
+			if generatedServiceID == serviceID {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (ledger *ReleaseLedger) GetPlanningServingIntent(

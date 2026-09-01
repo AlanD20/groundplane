@@ -23,7 +23,8 @@ type ScriptExecutionSources struct {
 	BodyGeneration    Versioned[ScriptBodyGenerationRecord]
 	Release           CurrentSuccessfulRelease
 	RenderInput       Versioned[ReleaseRenderInput]
-	AppliedProjection Versioned[EnvironmentComposeProjection]
+	DesiredHead       Versioned[EnvironmentBlueprintHead]
+	DesiredProjection Versioned[EnvironmentComposeProjection]
 	Networks          []Versioned[ZoneRecord]
 }
 
@@ -117,12 +118,12 @@ func (repository *ScriptRepository) loadExecutionSources(
 	if err != nil || tenant.ID != project.TenantID || tenant.DeletionTaskID != "" {
 		return ScriptExecutionSources{}, errs.New(errs.KindStateConflict, "Script Tenant is not runnable")
 	}
-	serviceValue, err := scriptExecutionValueAt(ctx, repository.store, serviceKey(metadata.ServiceID), revision)
+	service, err := findServiceAtRevision(ctx, repository.store, metadata.ServiceID, revision)
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
-	target, err := decodeServiceRecord(serviceValue.Value)
-	if err != nil || target.Desired.ID != metadata.ServiceID || target.EnvironmentID != environment.ID {
+	target := service.Record
+	if target.EnvironmentID != environment.ID {
 		return ScriptExecutionSources{}, errs.New(errs.KindStateConflict, "Script target Service is not runnable")
 	}
 
@@ -156,31 +157,22 @@ func (repository *ScriptRepository) loadExecutionSources(
 		renderInput.Record.Projection.RevisionID == "" || renderInput.Record.Projection.RenderGeneration == 0 {
 		return ScriptExecutionSources{}, corruptReleaseRecord()
 	}
-	appliedValue, err := scriptExecutionValueAt(
-		ctx, repository.store, environmentComposeProjectionKey(environment.ID), revision,
+	pinnedRevisionID := ""
+	if releaseID != "" {
+		pinnedRevisionID = renderInput.Record.Projection.RevisionID
+	}
+	desiredHead, desiredProjection, err := loadScriptExecutionDesiredProjection(
+		ctx, repository.store, environment.ID, pinnedRevisionID, revision,
 	)
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
-	applied, err := decodeEnvironmentComposeProjection(appliedValue.Value)
-	if err != nil || applied.EnvironmentID != environment.ID || applied.RevisionID == "" ||
-		applied.RenderGeneration == 0 {
-		return ScriptExecutionSources{}, errs.New(errs.KindStateConflict, "Script applied Environment projection is unavailable")
+	if releaseID != "" && !sameServiceRemovalProjection(desiredProjection.Record, renderInput.Record.Projection) {
+		return ScriptExecutionSources{}, corruptReleaseRecord()
 	}
-
-	networks := make([]Versioned[ZoneRecord], len(applied.Networks))
-	for index, identity := range applied.Networks {
-		value, err := scriptExecutionValueAt(ctx, repository.store, zoneKey(identity.ID), revision)
-		if err != nil {
-			return ScriptExecutionSources{}, err
-		}
-		network, err := decodeZoneRecord(value.Value)
-		if err != nil || network.Desired.ID != identity.ID || network.EnvironmentID != environment.ID {
-			return ScriptExecutionSources{}, errs.New(errs.KindStateConflict, "Script network source changed")
-		}
-		networks[index] = Versioned[ZoneRecord]{
-			Record: network, Revision: value.ModRevision, ReadRevision: revision,
-		}
+	networks, err := resolveScriptExecutionNetworks(desiredProjection)
+	if err != nil {
+		return ScriptExecutionSources{}, err
 	}
 
 	return ScriptExecutionSources{
@@ -190,18 +182,88 @@ func (repository *ScriptRepository) loadExecutionSources(
 		Environment: Versioned[EnvironmentRecord]{
 			Record: environment, Revision: environmentValue.ModRevision, ReadRevision: revision,
 		},
-		Service:   Versioned[ServiceRecord]{Record: target, Revision: serviceValue.ModRevision, ReadRevision: revision},
+		Service:   service,
 		ScriptSet: stored.Active,
 		Script:    Versioned[ScriptRecord]{Record: metadata, Revision: stored.Script.Revision, ReadRevision: revision},
 		BodyGeneration: Versioned[ScriptBodyGenerationRecord]{
 			Record: body, Revision: bodyValue.ModRevision, ReadRevision: revision,
 		},
 		Release: release, RenderInput: renderInput,
-		AppliedProjection: Versioned[EnvironmentComposeProjection]{
-			Record: applied, Revision: appliedValue.ModRevision, ReadRevision: revision,
-		},
+		DesiredHead: desiredHead, DesiredProjection: desiredProjection,
 		Networks: networks,
 	}, nil
+}
+
+func loadScriptExecutionDesiredProjection(
+	ctx context.Context,
+	store hierarchyStore,
+	environmentID string,
+	pinnedRevisionID string,
+	revision int64,
+) (Versioned[EnvironmentBlueprintHead], Versioned[EnvironmentComposeProjection], error) {
+	headValue, err := scriptExecutionValueAt(ctx, store, environmentBlueprintHeadKey(environmentID), revision)
+	if err != nil {
+		return Versioned[EnvironmentBlueprintHead]{}, Versioned[EnvironmentComposeProjection]{}, err
+	}
+	headRevisionID, err := decodeTaskReference(headValue.Value)
+	if err != nil {
+		return Versioned[EnvironmentBlueprintHead]{}, Versioned[EnvironmentComposeProjection]{},
+			corruptEnvironmentComposeProjection()
+	}
+	selectedRevisionID := pinnedRevisionID
+	if selectedRevisionID == "" {
+		selectedRevisionID = headRevisionID
+	}
+	rootValue, err := scriptExecutionValueAt(
+		ctx, store, environmentBlueprintRootKey(environmentID, selectedRevisionID), revision,
+	)
+	if err != nil {
+		return Versioned[EnvironmentBlueprintHead]{}, Versioned[EnvironmentComposeProjection]{}, err
+	}
+	seal, err := decodeEnvironmentBlueprintSeal(rootValue.Value)
+	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != selectedRevisionID {
+		return Versioned[EnvironmentBlueprintHead]{}, Versioned[EnvironmentComposeProjection]{},
+			corruptEnvironmentComposeProjection()
+	}
+	keys := make([]string, int(seal.ProjectionChunks))
+	for index := range keys {
+		keys[index] = environmentBlueprintChunkKeyFor(
+			environmentID, selectedRevisionID, EnvironmentBlueprintChunkProjection, uint32(index),
+		)
+	}
+	stream, readRevision, err := (&HierarchyRepository{store: store}).readEnvironmentBlueprintStreamAtRevision(
+		ctx, seal, "projection", keys, revision,
+	)
+	if err != nil {
+		return Versioned[EnvironmentBlueprintHead]{}, Versioned[EnvironmentComposeProjection]{}, err
+	}
+	defer clear(stream)
+	projection, err := decodeEnvironmentComposeProjection(stream)
+	if err != nil || readRevision != revision || projection.EnvironmentID != environmentID ||
+		projection.RevisionID != selectedRevisionID {
+		return Versioned[EnvironmentBlueprintHead]{}, Versioned[EnvironmentComposeProjection]{},
+			corruptEnvironmentComposeProjection()
+	}
+	return Versioned[EnvironmentBlueprintHead]{
+		Record:   EnvironmentBlueprintHead{EnvironmentID: environmentID, RevisionID: headRevisionID},
+		Revision: headValue.ModRevision, ReadRevision: revision,
+	}, Versioned[EnvironmentComposeProjection]{
+		Record: projection, Revision: rootValue.ModRevision, ReadRevision: revision,
+	}, nil
+}
+
+func resolveScriptExecutionNetworks(
+	projection Versioned[EnvironmentComposeProjection],
+) ([]Versioned[ZoneRecord], error) {
+	networks := make([]Versioned[ZoneRecord], len(projection.Record.DesiredZones))
+	for index, desired := range projection.Record.DesiredZones {
+		joined, err := joinEnvironmentZone(projection, desired)
+		if err != nil {
+			return nil, errs.New(errs.KindStateConflict, "Script network source changed")
+		}
+		networks[index] = joined
+	}
+	return networks, nil
 }
 
 func scriptExecutionValueAt(

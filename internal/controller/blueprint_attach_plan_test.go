@@ -25,7 +25,7 @@ func TestBlueprintAttachPlanReproducesPublishedProvisionThenCompose(t *testing.T
 	backingNetworkID := ids.NewAt(ids.KindNetwork, now, 4)
 	record, err := etcd.NewPendingAttachRecord(
 		attachID, reader.environment.ID, "api-db", ids.NewAt(ids.KindProject, now, 5),
-		backingEnvironmentID, backingServiceID, backingNetworkID, reader.projection.Services[0].ID,
+		backingEnvironmentID, backingServiceID, backingNetworkID, reader.projection.DesiredServices[0].Desired.ID,
 		attachID, nil,
 		[]etcd.AttachFactSetMetadata{{Facts: []etcd.AttachFactDefinition{{Key: "pg16_DATABASE"}}}},
 		taskID, now,

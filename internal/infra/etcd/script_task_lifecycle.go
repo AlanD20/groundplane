@@ -43,12 +43,16 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 		return scriptTaskChange{}, errs.New(errs.KindStateConflict, "Script is not available for deletion retry")
 	}
 	record := storage.Script.Record
+	service, err := findServiceAtRevision(ctx, repository.store, record.ServiceID, revision)
+	if err != nil || service.Record.EnvironmentID != record.EnvironmentID {
+		return scriptTaskChange{}, errs.New(errs.KindResourceInUse, "Script target Service is unavailable")
+	}
 	dependencies, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{
 			scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
 			scriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
 			environmentKey(record.EnvironmentID),
-			serviceKey(record.ServiceID),
+			service.Record.desiredFenceKey,
 		},
 		Revision: revision,
 	})
@@ -65,8 +69,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 	if err != nil || environment.ID != record.EnvironmentID {
 		return scriptTaskChange{}, corruptRecord()
 	}
-	service, err := decodeServiceRecord(dependencies.Values[3].Value)
-	if err != nil || service.Desired.ID != record.ServiceID || service.EnvironmentID != record.EnvironmentID {
+	if dependencies.Values[3].ModRevision != service.Revision {
 		return scriptTaskChange{}, corruptRecord()
 	}
 	parents, err := repository.store.GetMany(ctx, GetManyRequest{
@@ -74,7 +77,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 			projectKey(environment.ProjectID),
 			deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID),
 			deletionTombstoneKey(string(DeletionTargetProject), environment.ProjectID),
-			deletionTombstoneKey("service", service.Desired.ID),
+			deletionTombstoneKey("service", service.Record.Desired.ID),
 		},
 		Revision: revision,
 	})
@@ -103,11 +106,11 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 			},
 			{Key: deletionTombstoneKey(string(DeletionTargetScript), record.Desired.ID)},
 			{Key: environmentKey(environment.ID), ModRevision: dependencies.Values[2].ModRevision},
-			{Key: serviceKey(service.Desired.ID), ModRevision: dependencies.Values[3].ModRevision},
+			serviceDesiredCondition(service),
 			{Key: projectKey(project.ID), ModRevision: parents.Values[0].ModRevision},
 			{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID)},
 			{Key: deletionTombstoneKey(string(DeletionTargetProject), project.ID)},
-			{Key: deletionTombstoneKey("service", service.Desired.ID)},
+			{Key: deletionTombstoneKey("service", service.Record.Desired.ID)},
 			{Key: scriptSetActiveKey(record.EnvironmentID), ModRevision: storage.Active.Revision},
 		},
 	}

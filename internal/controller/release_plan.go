@@ -84,9 +84,9 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 	if task.Type == etcd.TaskRollback {
 		expectedPhase = core.ServiceLifecycleRollback
 	}
-	serviceNames := make([]string, len(first.Projection.Services))
-	for index, service := range first.Projection.Services {
-		serviceNames[index] = service.Name
+	serviceNames := make([]string, len(first.Projection.DesiredServices))
+	for index, service := range first.Projection.DesiredServices {
+		serviceNames[index] = service.Desired.Name
 	}
 	if first.ServiceDependencyPlans.Validate(serviceNames) != nil {
 		return nil, errs.New(errs.KindInternal, "frozen release dependency plan is invalid")

@@ -100,11 +100,6 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(poolRegistryValue)
-	zoneValue, err := encodeZoneRecord(creation.Zone)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clear(zoneValue)
 	zoneRegistryValue, err := encodeEnvelope("zone_pool_registry", zonePoolRegistry{
 		Reservations: map[string]string{creation.Zone.Desired.ID: creation.Zone.Desired.Subnet},
 	})
@@ -112,7 +107,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(zoneRegistryValue)
-	serviceValue, err := encodeServiceRecord(creation.Service)
+	serviceValue, err := encodeServiceRuntimeRecord(newServiceRuntimeRecord(creation.Service))
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -200,13 +195,8 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		{Type: MutationPut, Key: HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), creation.Environment.ID), Value: environmentCoordinationValue},
 		{Type: MutationPut, Key: scriptSetActiveKey(creation.Environment.ID), Value: scriptSetValue},
 		{Type: MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue},
-		{Type: MutationPut, Key: zoneKey(creation.Zone.Desired.ID), Value: zoneValue},
-		{Type: MutationPut, Key: zoneNameKey(creation.Environment.ID, creation.Zone.Desired.Name), Value: []byte(creation.Zone.Desired.ID)},
-		{Type: MutationPut, Key: zoneOwnerKey(creation.Environment.ID, creation.Zone.Desired.ID), Value: []byte(creation.Zone.Desired.ID)},
 		{Type: MutationPut, Key: zonePoolRegistryKey(creation.Environment.ID), Value: zoneRegistryValue},
-		{Type: MutationPut, Key: serviceKey(creation.Service.Desired.ID), Value: serviceValue},
-		{Type: MutationPut, Key: serviceNameKey(creation.Environment.ID, creation.Service.Desired.Name), Value: []byte(creation.Service.Desired.ID)},
-		{Type: MutationPut, Key: serviceOwnerKey(creation.Environment.ID, creation.Service.Desired.ID), Value: []byte(creation.Service.Desired.ID)},
+		{Type: MutationPut, Key: serviceRuntimeKey(creation.Service.Desired.ID), Value: serviceValue},
 	}
 	for index, component := range creation.Components {
 		mutations = append(mutations,
@@ -242,7 +232,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateEnvironmentDesiredPublicationBudget(plan, creation.Marker); err != nil {
+	if err := plan.enforceTransactionBounds(validateEnvironmentDesiredPublicationBudget); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	idempotency, err := newIdempotencyRepository(repository.store)
@@ -398,10 +388,14 @@ func validateBackingServiceProjection(creation BackingServiceCreation) error {
 		creation.Claim.SourceKind != EnvironmentBlueprintSourceApply || creation.Claim.RenderGeneration != 1 ||
 		projection.EnvironmentID != creation.Environment.ID || projection.RevisionID != creation.Task.ID ||
 		projection.RenderGeneration != 1 || len(projection.ComposeArtifact) == 0 ||
-		len(projection.Services) != 1 || len(projection.Networks) != 1 || len(projection.Volumes) != 1 ||
+		len(projection.Volumes) != 1 ||
+		len(projection.DesiredZones) != 1 || len(projection.DesiredServices) != 1 ||
 		len(projection.VolumeMounts) != 1 || len(projection.Entries) != len(creation.Entries) ||
-		projection.Services[0] != (EnvironmentComposeIdentity{ID: creation.Service.Desired.ID, Name: creation.Service.Desired.Name}) ||
-		projection.Networks[0] != (EnvironmentComposeIdentity{ID: creation.Zone.Desired.ID, Name: creation.Zone.Desired.Name}) ||
+		projection.DesiredZones[0].EnvironmentID != creation.Environment.ID ||
+		projection.DesiredZones[0].Desired != creation.Zone.Desired ||
+		projection.DesiredServices[0].EnvironmentID != creation.Environment.ID ||
+		projection.DesiredServices[0].BackingNetworkID != creation.Service.BackingNetworkID ||
+		!sameServiceRemovalDesired(projection.DesiredServices[0].Desired, creation.Service.Desired) ||
 		projection.VolumeMounts[0].ServiceID != creation.Service.Desired.ID ||
 		projection.VolumeMounts[0].VolumeID != projection.Volumes[0].ID {
 		return errs.New(errs.KindValidationFailed, "Backing-service desired projection is invalid")
@@ -444,14 +438,9 @@ func backingServiceCreationConditions(
 		{Key: HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), creation.Environment.ID)},
 		{Key: scriptSetActiveKey(creation.Environment.ID)},
 		{Key: environmentPoolRegistryKey, ModRevision: creation.PoolRegistry.Revision},
-		{Key: zoneKey(creation.Zone.Desired.ID)},
-		{Key: zoneNameKey(creation.Environment.ID, creation.Zone.Desired.Name)},
-		{Key: zoneOwnerKey(creation.Environment.ID, creation.Zone.Desired.ID)},
 		{Key: deletionTombstoneKey("zone", creation.Zone.Desired.ID)},
 		{Key: zonePoolRegistryKey(creation.Environment.ID)},
-		{Key: serviceKey(creation.Service.Desired.ID)},
-		{Key: serviceNameKey(creation.Environment.ID, creation.Service.Desired.Name)},
-		{Key: serviceOwnerKey(creation.Environment.ID, creation.Service.Desired.ID)},
+		{Key: serviceRuntimeKey(creation.Service.Desired.ID)},
 		{Key: deletionTombstoneKey("service", creation.Service.Desired.ID)},
 	}
 	for _, component := range creation.Components {
@@ -511,14 +500,9 @@ func classifyBackingServiceCreation(
 		environmentEpochCondition
 		environmentCoordinationCondition
 		environmentPoolCondition
-		zoneCondition
-		zoneNameCondition
-		zoneOwnerCondition
 		zoneTombstoneCondition
 		zonePoolCondition
 		serviceCondition
-		serviceNameCondition
-		serviceOwnerCondition
 		serviceTombstoneCondition
 		componentConditionStart
 	)
@@ -558,17 +542,11 @@ func classifyBackingServiceCreation(
 				(poolRegistry == nil || poolRegistry.ModRevision != creation.PoolRegistry.Revision)) {
 			return stateConflict("environment pool registry", "global")
 		}
-		if values[zoneNameCondition] != nil {
-			return errs.New(errs.KindNameConflict, "Backing-service Zone name is already in use")
-		}
-		if values[serviceNameCondition] != nil {
-			return errs.New(errs.KindNameConflict, "Backing-service Service name is already in use")
-		}
 		for _, index := range []int{
 			blueprintHeadCondition, projectCondition, projectOwnerCondition,
 			projectCoordinationCondition, environmentCondition, environmentOwnerCondition,
 			environmentEpochCondition, environmentCoordinationCondition,
-			zoneCondition, zoneOwnerCondition, zonePoolCondition, serviceCondition, serviceOwnerCondition,
+			zonePoolCondition, serviceCondition,
 		} {
 			if values[index] != nil {
 				return errs.New(errs.KindStateConflict, "Backing-service stable identity is already in use")

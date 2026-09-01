@@ -182,6 +182,37 @@ func TestEntryRemovalMaterializationTemplatesCloseEnvironmentScopes(t *testing.T
 	}
 }
 
+func TestEntryRemovalMaterializationTemplateUsesDesiredServiceIdentity(t *testing.T) {
+	t.Parallel()
+	_, intent, _ := entryRemovalPlanTestState(t, core.EnvEntry{
+		Kind: core.EntryKindEnv, Key: "TOKEN", Exposure: []string{"api"},
+	}, nil)
+	template, err := entryRemovalEnvironmentTemplate(intent, "api")
+	if err != nil {
+		t.Fatalf("entryRemovalEnvironmentTemplate() error = %v", err)
+	}
+	if template.ServiceID != intent.CandidateProjection.DesiredServices[0].Desired.ID ||
+		template.ServiceName != "api" || template.Destination != ServiceEnvFileName(intent.EnvironmentID, "api") {
+		t.Fatalf("desired service identity = %#v", template)
+	}
+}
+
+func TestEntryRemovalMaterializationTemplateResolvesGeneratedComponentService(t *testing.T) {
+	t.Parallel()
+	_, intent, _ := entryRemovalPlanTestState(t, core.EnvEntry{
+		Kind: core.EntryKindEnv, Key: "TOKEN", Exposure: []string{"caddy"},
+	}, nil)
+	generatedServiceID := intent.CandidateProjection.Components[0].Runtime.GeneratedServices[0]
+	template, err := entryRemovalEnvironmentTemplate(intent, "caddy")
+	if err != nil {
+		t.Fatalf("entryRemovalEnvironmentTemplate() error = %v", err)
+	}
+	if template.ServiceID != generatedServiceID || template.ServiceName != "caddy" ||
+		template.Destination != ServiceEnvFileName(intent.EnvironmentID, "caddy") {
+		t.Fatalf("generated component service identity = %#v", template)
+	}
+}
+
 // Rationale: durable Entry removal records cross a capability boundary, so
 // every closed output and storage variant must be translated explicitly and
 // future variants must fail closed instead of passing through by string cast.

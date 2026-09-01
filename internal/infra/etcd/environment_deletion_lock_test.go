@@ -782,21 +782,15 @@ func TestEnvironmentDeletionCompletionRejectsRetainedDurableChildren(t *testing.
 		key  func(*environmentDeletionLockFixture) string
 	}{
 		{
-			name: "zone",
-			key: func(fixture *environmentDeletionLockFixture) string {
-				return zoneOwnerPrefix(fixture.environment.Record.ID) + "retained"
-			},
-		},
-		{
 			name: "zone reservation",
 			key: func(fixture *environmentDeletionLockFixture) string {
 				return zonePoolRegistryKey(fixture.environment.Record.ID)
 			},
 		},
 		{
-			name: "service",
+			name: "Blueprint revision",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return serviceOwnerPrefix(fixture.environment.Record.ID) + "retained"
+				return environmentBlueprintRevisionsPrefix(fixture.environment.Record.ID) + "retained"
 			},
 		},
 		{
@@ -905,13 +899,33 @@ func TestEnvironmentDeletionCompletionFencesChildInsertionAtTerminalCommit(t *te
 	t.Parallel()
 	fixture := newEnvironmentDeletionLockFixture(t)
 	fixture.mustBegin(t)
+	projectionTask := environmentBlueprintTestTask(t, fixture.project.Record, fixture.environment.Record, 84)
+	projection := environmentBlueprintTestProjection(fixture.environment.Record.ID, projectionTask, 1)
+	desired := serviceRecordTestDesired()
+	desired.ID = ids.NewAt(ids.KindService, projectionTask.CreatedAt, 70)
+	desired.Name = "api"
+	projection.DesiredServices = []EnvironmentServiceProjection{{EnvironmentID: fixture.environment.Record.ID, Desired: desired}}
+	projectionValue, err := encodeEnvironmentComposeProjection(projection)
+	if err != nil {
+		t.Fatalf("encode Environment projection = %v", err)
+	}
+	defer clear(projectionValue)
+	headValue, err := encodeTaskReference(projection.RevisionID)
+	if err != nil {
+		t.Fatalf("encode Environment desired head = %v", err)
+	}
+	defer clear(headValue)
+	if transaction, transactErr := fixture.store.Transact(context.Background(), nil, []Mutation{
+		{Type: MutationPut, Key: environmentBlueprintHeadKey(fixture.environment.Record.ID), Value: headValue},
+		{Type: MutationPut, Key: environmentComposeProjectionKey(fixture.environment.Record.ID), Value: projectionValue},
+	}); transactErr != nil || !transaction.Succeeded {
+		t.Fatalf("seed Environment projection = %#v, %v", transaction, transactErr)
+	}
 	agentID := ids.NewAt(ids.KindAgent, fixture.now, 8084)
-	if _, found, err := fixture.tasks.ClaimNextTask(
-		context.Background(), agentID, 1, fixture.now.Add(time.Second),
-	); err != nil || !found {
+	if _, found, err := fixture.tasks.ClaimNextTask(context.Background(), agentID, 1, fixture.now.Add(time.Second)); err != nil || !found {
 		t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
 	}
-	childKey := serviceOwnerPrefix(fixture.environment.Record.ID) + "commit-race"
+	childKey := serviceRuntimeKey(desired.ID)
 	racingStore := &environmentDeletionFinalizationRaceStore{
 		memoryHierarchyStore: fixture.store,
 		environmentID:        fixture.environment.Record.ID,
@@ -933,16 +947,88 @@ func TestEnvironmentDeletionCompletionFencesChildInsertionAtTerminalCommit(t *te
 	if !racingStore.raced {
 		t.Fatal("terminal transaction did not reach the child insertion race")
 	}
-	assertEnvironmentDeletionCompanion(
-		t, fixture.store, environmentKey(fixture.environment.Record.ID), true,
-	)
-	assertEnvironmentDeletionCompanion(
-		t,
-		fixture.store,
-		deletionTombstoneKey(string(DeletionTargetEnvironment), fixture.environment.Record.ID),
-		true,
-	)
+	assertEnvironmentDeletionCompanion(t, fixture.store, environmentKey(fixture.environment.Record.ID), true)
+	assertEnvironmentDeletionCompanion(t, fixture.store,
+		deletionTombstoneKey(string(DeletionTargetEnvironment), fixture.environment.Record.ID), true)
 	assertEnvironmentDeletionCompanion(t, fixture.store, childKey, true)
+}
+
+// Rationale: successful Environment finalization removes the selected desired
+// head and projection before removing their owning Environment parent.
+func TestEnvironmentDeletionCompletionRemovesDesiredProjectionBeforeParent(t *testing.T) {
+	t.Parallel()
+	fixture := newEnvironmentDeletionLockFixture(t)
+	fixture.mustBegin(t)
+	projectionTask := environmentBlueprintTestTask(
+		t, fixture.project.Record, fixture.environment.Record, 84,
+	)
+	projection := environmentBlueprintTestProjection(
+		fixture.environment.Record.ID, projectionTask, 1,
+	)
+	projectionValue, err := encodeEnvironmentComposeProjection(projection)
+	if err != nil {
+		t.Fatalf("encode Environment projection = %v", err)
+	}
+	defer clear(projectionValue)
+	headValue, err := encodeTaskReference(projection.RevisionID)
+	if err != nil {
+		t.Fatalf("encode Environment desired head = %v", err)
+	}
+	defer clear(headValue)
+	if transaction, transactErr := fixture.store.Transact(context.Background(), nil, []Mutation{
+		{Type: MutationPut, Key: environmentBlueprintHeadKey(fixture.environment.Record.ID), Value: headValue},
+		{Type: MutationPut, Key: environmentComposeProjectionKey(fixture.environment.Record.ID), Value: projectionValue},
+	}); transactErr != nil || !transaction.Succeeded {
+		t.Fatalf("seed Environment projection = %#v, %v", transaction, transactErr)
+	}
+	agentID := ids.NewAt(ids.KindAgent, fixture.now, 8083)
+	if _, found, err := fixture.tasks.ClaimNextTask(
+		context.Background(), agentID, 1, fixture.now.Add(time.Second),
+	); err != nil || !found {
+		t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
+	}
+	recordingStore := &environmentDeletionMutationRecordingStore{
+		memoryHierarchyStore: fixture.store,
+		environmentID:        fixture.environment.Record.ID,
+	}
+	recordingTasks, err := newTaskRepository(recordingStore)
+	if err != nil {
+		t.Fatalf("newTaskRepository(recording) error = %v", err)
+	}
+	result := TaskResultRecord{
+		Kind: TaskResultEnvironmentDirectory, Diagnostic: TaskResultDiagnosticNone,
+	}
+	if _, err := recordingTasks.AcknowledgeTask(
+		context.Background(), agentID, 1, fixture.task.ID,
+		taskAssignmentIDForTest(t, recordingTasks, fixture.task.ID),
+		TaskStatusCompleted, result, fixture.now.Add(2*time.Second),
+	); err != nil {
+		t.Fatalf("AcknowledgeTask() error = %v", err)
+	}
+	headKey := environmentBlueprintHeadKey(fixture.environment.Record.ID)
+	projectionKey := environmentComposeProjectionKey(fixture.environment.Record.ID)
+	parentKey := environmentKey(fixture.environment.Record.ID)
+	headIndex, projectionIndex, parentIndex := -1, -1, -1
+	for index, key := range recordingStore.terminalMutationKeys {
+		switch key {
+		case headKey:
+			headIndex = index
+		case projectionKey:
+			projectionIndex = index
+		case parentKey:
+			parentIndex = index
+		}
+	}
+	if headIndex < 0 || projectionIndex < 0 || parentIndex < 0 ||
+		headIndex >= parentIndex || projectionIndex >= parentIndex {
+		t.Fatalf(
+			"terminal deletion order head/projection/parent = %d/%d/%d, mutations = %v",
+			headIndex, projectionIndex, parentIndex, recordingStore.terminalMutationKeys,
+		)
+	}
+	assertEnvironmentDeletionCompanion(t, fixture.store, headKey, false)
+	assertEnvironmentDeletionCompanion(t, fixture.store, projectionKey, false)
+	assertEnvironmentDeletionCompanion(t, fixture.store, parentKey, false)
 }
 
 // Rationale: immutable Task journals are historical audit records, not live
@@ -1182,14 +1268,37 @@ func (store *environmentDeletionFinalizationRaceStore) Transact(
 			}
 			store.raced = true
 			for _, condition := range conditions {
-				if condition.Prefix && strings.HasPrefix(store.childKey, condition.Key) {
+				if condition.Key == store.childKey ||
+					(condition.Prefix && strings.HasPrefix(store.childKey, condition.Key)) {
 					return TransactionResult{Succeeded: false, Revision: inserted.Revision}, nil
 				}
 			}
-			return TransactionResult{}, errs.New(
-				errs.KindInternal,
-				"terminal transaction did not compare the child prefix",
-			)
+			return TransactionResult{}, errs.New(errs.KindInternal,
+				"terminal transaction did not compare the child authority")
+		}
+	}
+	return store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
+}
+
+type environmentDeletionMutationRecordingStore struct {
+	*memoryHierarchyStore
+	environmentID        string
+	terminalMutationKeys []string
+}
+
+func (store *environmentDeletionMutationRecordingStore) Transact(
+	ctx context.Context,
+	conditions []Condition,
+	mutations []Mutation,
+) (TransactionResult, error) {
+	for _, mutation := range mutations {
+		if mutation.Type == MutationDelete && !mutation.Prefix &&
+			mutation.Key == environmentKey(store.environmentID) {
+			store.terminalMutationKeys = make([]string, 0, len(mutations))
+			for _, terminalMutation := range mutations {
+				store.terminalMutationKeys = append(store.terminalMutationKeys, terminalMutation.Key)
+			}
+			break
 		}
 	}
 	return store.memoryHierarchyStore.Transact(ctx, conditions, mutations)

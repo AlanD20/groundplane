@@ -136,8 +136,9 @@ type EnvironmentDesiredMutationAudit struct {
 	Service *EnvironmentServiceMutationAudit
 	Entry   *EnvironmentEntryMutationAudit
 	Entries []EnvironmentEntryMutationAudit
+	Zone    *EnvironmentZoneMutationAudit
+	Route   *EnvironmentRouteMutationAudit
 }
-
 type EnvironmentEntryMutationAction uint8
 
 const (
@@ -152,7 +153,6 @@ type EnvironmentEntryMutationAudit struct {
 	EntryID        string
 	Record         *EntryRecord
 }
-
 type EnvironmentServiceMutationAction uint8
 
 const (
@@ -167,7 +167,6 @@ type EnvironmentServiceMutationAudit struct {
 	ServiceID      string
 	Request        *EnvironmentServiceMutationRequest
 }
-
 type EnvironmentServiceMutationRequest struct {
 	EnvironmentID string           `json:"environment_id,omitempty"`
 	Name          string           `json:"name,omitempty"`
@@ -180,6 +179,42 @@ type EnvironmentServiceMutationRequest struct {
 	Expose        []string         `json:"expose,omitempty"`
 	Restart       string           `json:"restart,omitempty"`
 	Replicas      int              `json:"replicas"`
+}
+
+type EnvironmentZoneMutationAction uint8
+
+const EnvironmentZoneMutationCreate EnvironmentZoneMutationAction = 1
+const EnvironmentZoneMutationRemove EnvironmentZoneMutationAction = 3
+
+type EnvironmentZoneMutationAudit struct {
+	Action                 EnvironmentZoneMutationAction
+	BaseRevisionID, ZoneID string
+	Request                *EnvironmentZoneMutationRequest
+}
+type EnvironmentZoneMutationRequest struct {
+	EnvironmentID string `json:"environment_id"`
+	Name          string `json:"name"`
+	Subnet        string `json:"subnet"`
+	Internal      bool   `json:"internal"`
+}
+type EnvironmentRouteMutationAction uint8
+
+const EnvironmentRouteMutationCreate EnvironmentRouteMutationAction = 1
+const EnvironmentRouteMutationEdit EnvironmentRouteMutationAction = 2
+const EnvironmentRouteMutationRemove EnvironmentRouteMutationAction = 3
+
+type EnvironmentRouteMutationAudit struct {
+	Action                  EnvironmentRouteMutationAction
+	BaseRevisionID, RouteID string
+	Request                 *EnvironmentRouteMutationRequest
+}
+type EnvironmentRouteMutationRequest struct {
+	EnvironmentID   string `json:"environment_id,omitempty"`
+	Host            string `json:"host,omitempty"`
+	Path            string `json:"path,omitempty"`
+	Exposure        string `json:"exposure"`
+	TargetServiceID string `json:"target_service_id,omitempty"`
+	TargetPort      uint16 `json:"target_port,omitempty"`
 }
 
 type EnvironmentVolumeMutationAction uint8
@@ -370,13 +405,16 @@ func buildEnvironmentBlueprintStreams(request EnvironmentBlueprintStageRequest) 
 	}
 	auditDigest := sha256.Sum256(audit)
 	projectionDigest := sha256.Sum256(projection)
+	projectionResources := len(request.Projection.DesiredZones) + len(request.Projection.DesiredServices) +
+		len(request.Projection.DesiredRoutes) + len(request.Projection.Volumes) +
+		len(request.Projection.VolumeMounts) + len(request.Projection.Components) +
+		len(request.Projection.Entries)
 	descriptor := EnvironmentBlueprintStageDescriptor{
 		Claim: claim, State: EnvironmentBlueprintStageOpen, Bound: true,
 		AuditChunks: chunkCount32(len(audit)), AuditBytes: uint64(len(audit)), AuditSHA256: auditDigest,
 		ProjectionChunks: chunkCount32(len(projection)), ProjectionBytes: uint64(len(projection)),
-		ProjectionSHA256:    projectionDigest,
-		ProjectionResources: uint32(environmentComposeProjectionResourceCount(request.Projection)),
-		DependencyDigest:    request.DependencyDigest, UpdatedAt: claim.CreatedAt,
+		ProjectionSHA256: projectionDigest, ProjectionResources: uint32(projectionResources),
+		DependencyDigest: request.DependencyDigest, UpdatedAt: claim.CreatedAt,
 	}
 	if err := validateEnvironmentBlueprintStageDescriptor(descriptor); err != nil {
 		clear(audit)
@@ -386,94 +424,10 @@ func buildEnvironmentBlueprintStreams(request EnvironmentBlueprintStageRequest) 
 	return EnvironmentBlueprintStreams{Audit: audit, Projection: projection, Descriptor: descriptor}, nil
 }
 
-func encodeEnvironmentDesiredMutationAudit(value EnvironmentDesiredMutationAudit) ([]byte, error) {
-	if err := validateEnvironmentDesiredMutationAudit(value); err != nil {
-		return nil, err
-	}
-	body := blueprintRecordWriter{}
-	body.uint16(environmentBlueprintRecordSchema)
-	family := uint8(1)
-	var action uint8
-	if value.Service != nil {
-		family = 2
-		action = uint8(value.Service.Action)
-		body.string(value.Service.BaseRevisionID)
-		body.string(value.Service.ServiceID)
-		var request []byte
-		if value.Service.Request != nil {
-			var err error
-			request, err = json.Marshal(value.Service.Request)
-			if err != nil {
-				return nil, errs.Wrap(errs.KindInternal, err)
-			}
-		}
-		body.bytes(request)
-		clear(request)
-	} else if value.Entry != nil {
-		family = 3
-		action = uint8(value.Entry.Action)
-		body.string(value.Entry.BaseRevisionID)
-		body.string(value.Entry.EntryID)
-		var record []byte
-		if value.Entry.Record != nil {
-			var err error
-			record, err = json.Marshal(value.Entry.Record)
-			if err != nil {
-				return nil, errs.Wrap(errs.KindInternal, err)
-			}
-		}
-		body.bytes(record)
-		clear(record)
-	} else if len(value.Entries) != 0 {
-		family = 4
-		body.uint16(uint16(len(value.Entries)))
-		for _, entry := range value.Entries {
-			body.uint8(uint8(entry.Action))
-			body.string(entry.BaseRevisionID)
-			body.string(entry.EntryID)
-			var record []byte
-			if entry.Record != nil {
-				var err error
-				record, err = json.Marshal(entry.Record)
-				if err != nil {
-					return nil, errs.Wrap(errs.KindInternal, err)
-				}
-			}
-			body.bytes(record)
-			clear(record)
-		}
-	} else {
-		volume := value.Volume
-		action = uint8(volume.Action)
-		body.string(volume.VolumeID)
-		body.string(volume.Slug)
-		body.string(volume.Key)
-		if volume.KeySupplied {
-			body.uint8(1)
-		} else {
-			body.uint8(0)
-		}
-		body.digest(volume.PreconditionDigest)
-	}
-	if body.err != nil {
-		clear(body.value)
-		return nil, body.err
-	}
-	stream := make([]byte, 12, 12+len(body.value))
-	copy(stream[:4], []byte("GPMU"))
-	binary.BigEndian.PutUint16(stream[4:6], environmentBlueprintRecordSchema)
-	stream[6] = family
-	stream[7] = action
-	binary.BigEndian.PutUint32(stream[8:12], uint32(len(body.value)))
-	stream = append(stream, body.value...)
-	clear(body.value)
-	return stream, nil
-}
-
 func decodeEnvironmentDesiredMutationAudit(value []byte) (EnvironmentDesiredMutationAudit, error) {
 	if len(value) < 12 || string(value[:4]) != "GPMU" ||
 		binary.BigEndian.Uint16(value[4:6]) != environmentBlueprintRecordSchema ||
-		(value[6] != 1 && value[6] != 2 && value[6] != 3 && value[6] != 4) ||
+		value[6] < 1 || value[6] > 6 ||
 		int(binary.BigEndian.Uint32(value[8:12])) != len(value)-12 {
 		return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
 	}
@@ -499,22 +453,11 @@ func decodeEnvironmentDesiredMutationAudit(value []byte) (EnvironmentDesiredMuta
 			Action:         EnvironmentServiceMutationAction(value[7]),
 			BaseRevisionID: reader.string(128), ServiceID: reader.string(128),
 		}
-		request := reader.bytes(64 * 1024)
-		if len(request) != 0 {
-			service.Request = &EnvironmentServiceMutationRequest{}
-			if json.Unmarshal(request, service.Request) != nil {
-				clear(request)
-				return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
-			}
-			canonical, err := json.Marshal(service.Request)
-			if err != nil || !bytes.Equal(canonical, request) {
-				clear(request)
-				clear(canonical)
-				return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
-			}
-			clear(canonical)
+		var err error
+		service.Request, err = decodeEnvironmentMutationRequest[EnvironmentServiceMutationRequest](&reader)
+		if err != nil {
+			return EnvironmentDesiredMutationAudit{}, err
 		}
-		clear(request)
 		result.Service = service
 	} else if value[6] == 3 {
 		entry := &EnvironmentEntryMutationAudit{
@@ -522,24 +465,13 @@ func decodeEnvironmentDesiredMutationAudit(value []byte) (EnvironmentDesiredMuta
 			BaseRevisionID: reader.string(128),
 			EntryID:        reader.string(128),
 		}
-		record := reader.bytes(64 * 1024)
-		if len(record) != 0 {
-			entry.Record = &EntryRecord{}
-			if json.Unmarshal(record, entry.Record) != nil {
-				clear(record)
-				return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
-			}
-			canonical, err := json.Marshal(entry.Record)
-			if err != nil || !bytes.Equal(canonical, record) {
-				clear(record)
-				clear(canonical)
-				return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
-			}
-			clear(canonical)
+		var err error
+		entry.Record, err = decodeEnvironmentMutationRequest[EntryRecord](&reader)
+		if err != nil {
+			return EnvironmentDesiredMutationAudit{}, err
 		}
-		clear(record)
 		result.Entry = entry
-	} else {
+	} else if value[6] == 4 {
 		count := reader.uint16()
 		if count == 0 || count > core.MaximumBulkEntryCount {
 			return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
@@ -551,24 +483,35 @@ func decodeEnvironmentDesiredMutationAudit(value []byte) (EnvironmentDesiredMuta
 				BaseRevisionID: reader.string(128),
 				EntryID:        reader.string(128),
 			}
-			record := reader.bytes(64 * 1024)
-			if len(record) != 0 {
-				entry.Record = &EntryRecord{}
-				if json.Unmarshal(record, entry.Record) != nil {
-					clear(record)
-					return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
-				}
-				canonical, err := json.Marshal(entry.Record)
-				if err != nil || !bytes.Equal(canonical, record) {
-					clear(record)
-					clear(canonical)
-					return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
-				}
-				clear(canonical)
+			var err error
+			entry.Record, err = decodeEnvironmentMutationRequest[EntryRecord](&reader)
+			if err != nil {
+				return EnvironmentDesiredMutationAudit{}, err
 			}
-			clear(record)
 			result.Entries[index] = entry
 		}
+	} else if value[6] == 5 {
+		zone := &EnvironmentZoneMutationAudit{
+			Action: EnvironmentZoneMutationAction(value[7]), BaseRevisionID: reader.string(128),
+			ZoneID: reader.string(128),
+		}
+		var err error
+		zone.Request, err = decodeEnvironmentMutationRequest[EnvironmentZoneMutationRequest](&reader)
+		if err != nil {
+			return EnvironmentDesiredMutationAudit{}, err
+		}
+		result.Zone = zone
+	} else {
+		route := &EnvironmentRouteMutationAudit{
+			Action: EnvironmentRouteMutationAction(value[7]), BaseRevisionID: reader.string(128),
+			RouteID: reader.string(128),
+		}
+		var err error
+		route.Request, err = decodeEnvironmentMutationRequest[EnvironmentRouteMutationRequest](&reader)
+		if err != nil {
+			return EnvironmentDesiredMutationAudit{}, err
+		}
+		result.Route = route
 	}
 	if reader.done() != nil || validateEnvironmentDesiredMutationAudit(result) != nil {
 		return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
@@ -576,6 +519,34 @@ func decodeEnvironmentDesiredMutationAudit(value []byte) (EnvironmentDesiredMuta
 	return result, nil
 }
 
+func encodeEnvironmentMutationRequest[T any](value *T) ([]byte, error) {
+	if value == nil {
+		return nil, nil
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, errs.Wrap(errs.KindInternal, err)
+	}
+	return encoded, nil
+}
+
+func decodeEnvironmentMutationRequest[T any](reader *blueprintRecordReader) (*T, error) {
+	encoded := reader.bytes(64 * 1024)
+	defer clear(encoded)
+	if len(encoded) == 0 {
+		return nil, nil
+	}
+	var result T
+	if json.Unmarshal(encoded, &result) != nil {
+		return nil, corruptEnvironmentBlueprintStage()
+	}
+	canonical, err := json.Marshal(&result)
+	defer clear(canonical)
+	if err != nil || !bytes.Equal(canonical, encoded) {
+		return nil, corruptEnvironmentBlueprintStage()
+	}
+	return &result, nil
+}
 func validateEnvironmentDesiredMutationAudit(value EnvironmentDesiredMutationAudit) error {
 	kinds := 0
 	if value.Volume != nil {
@@ -588,6 +559,12 @@ func validateEnvironmentDesiredMutationAudit(value EnvironmentDesiredMutationAud
 		kinds++
 	}
 	if len(value.Entries) != 0 {
+		kinds++
+	}
+	if value.Zone != nil {
+		kinds++
+	}
+	if value.Route != nil {
 		kinds++
 	}
 	if kinds != 1 {
@@ -615,8 +592,14 @@ func validateEnvironmentDesiredMutationAudit(value EnvironmentDesiredMutationAud
 		}
 		return nil
 	}
+	if value.Zone != nil {
+		return validateEnvironmentZoneMutationAudit(*value.Zone)
+	}
+	if value.Route != nil {
+		return validateEnvironmentRouteMutationAudit(*value.Route)
+	}
 	if ids.Validate(ids.KindVolume, value.Volume.VolumeID) != nil ||
-		!validEnvironmentVolumeSlug(value.Volume.Slug) || !validEnvironmentVolumeKey(value.Volume.Key) {
+		!validEnvironmentVolumeSlug(value.Volume.Slug) || volumeidentity.ValidateKey(value.Volume.Key) != nil {
 		return errs.New(errs.KindValidationFailed, "Volume desired mutation audit is invalid")
 	}
 	switch value.Volume.Action {
@@ -699,6 +682,58 @@ func validateEnvironmentServiceMutationAudit(value EnvironmentServiceMutationAud
 	}
 	return nil
 }
+func validateEnvironmentZoneMutationAudit(value EnvironmentZoneMutationAudit) error {
+	if ids.Validate(ids.KindNetwork, value.ZoneID) != nil ||
+		(value.BaseRevisionID != "" && ids.Validate(ids.KindTask, value.BaseRevisionID) != nil) ||
+		(value.BaseRevisionID == "" && value.Action != EnvironmentZoneMutationCreate) {
+		return errs.New(errs.KindValidationFailed, "Zone desired mutation audit identity is invalid")
+	}
+	if value.Action == EnvironmentZoneMutationRemove && value.Request == nil {
+		return nil
+	}
+	if value.Action != EnvironmentZoneMutationCreate || value.Request == nil {
+		return errs.New(errs.KindValidationFailed, "Zone desired mutation audit action is invalid")
+	}
+	request := value.Request
+	if validateZoneRecord(ZoneRecord{EnvironmentID: request.EnvironmentID, Desired: core.Zone{
+		ID: value.ZoneID, Name: request.Name, Subnet: request.Subnet, Internal: request.Internal,
+		OwnerKind: core.ZoneOwnerEnvironment, OwnerID: request.EnvironmentID,
+	}}) != nil {
+		return errs.New(errs.KindValidationFailed, "Zone create audit request is invalid")
+	}
+	return nil
+}
+func validateEnvironmentRouteMutationAudit(value EnvironmentRouteMutationAudit) error {
+	if ids.Validate(ids.KindRoute, value.RouteID) != nil ||
+		(value.BaseRevisionID != "" && ids.Validate(ids.KindTask, value.BaseRevisionID) != nil) ||
+		(value.BaseRevisionID == "" && value.Action != EnvironmentRouteMutationCreate) {
+		return errs.New(errs.KindValidationFailed, "Route desired mutation audit identity is invalid")
+	}
+	if value.Action == EnvironmentRouteMutationRemove && value.Request == nil {
+		return nil
+	}
+	if value.Request == nil || value.Action == EnvironmentRouteMutationRemove {
+		return errs.New(errs.KindValidationFailed, "Route desired mutation audit action is invalid")
+	}
+	request := value.Request
+	if value.Action == EnvironmentRouteMutationCreate {
+		desired := core.Route{
+			ID: value.RouteID, Host: request.Host, Path: request.Path, Exposure: request.Exposure,
+			TargetServiceID: request.TargetServiceID, TargetPort: request.TargetPort,
+		}
+		if ids.Validate(ids.KindEnvironment, request.EnvironmentID) != nil ||
+			ids.Validate(ids.KindService, request.TargetServiceID) != nil || desired.Validate() != nil {
+			return errs.New(errs.KindValidationFailed, "Route create audit request is invalid")
+		}
+		return nil
+	}
+	if value.Action != EnvironmentRouteMutationEdit || request.EnvironmentID != "" || request.Host != "" ||
+		request.Path != "" || request.TargetServiceID != "" || request.TargetPort != 0 ||
+		(request.Exposure != "public" && request.Exposure != "internal") {
+		return errs.New(errs.KindValidationFailed, "Route edit audit changes immutable input")
+	}
+	return nil
+}
 
 func validEnvironmentVolumeSlug(value string) bool {
 	if len(value) < 1 || len(value) > 63 || value[0] == '-' || value[len(value)-1] == '-' {
@@ -710,38 +745,6 @@ func validEnvironmentVolumeSlug(value string) bool {
 		}
 	}
 	return true
-}
-
-func validEnvironmentVolumeKey(value string) bool {
-	return volumeidentity.ValidateKey(value) == nil
-}
-
-func chunkCount32(length int) uint32 {
-	if length == 0 {
-		return 0
-	}
-	return uint32((length + EnvironmentBlueprintChunkBytes - 1) / EnvironmentBlueprintChunkBytes)
-}
-
-func environmentComposeProjectionResourceCount(projection EnvironmentComposeProjection) int {
-	return len(projection.Services) + len(projection.Networks) + len(projection.Volumes) +
-		len(projection.Routes) + len(projection.SuppressedRoutes) + len(projection.Components) + len(projection.Entries)
-}
-
-func EnvironmentBlueprintDependencyDigest(projection EnvironmentComposeProjection) ([sha256.Size]byte, error) {
-	digest, _, err := EnvironmentBlueprintProjectionEvidence(projection)
-	return digest, err
-}
-
-func EnvironmentBlueprintProjectionEvidence(
-	projection EnvironmentComposeProjection,
-) ([sha256.Size]byte, uint64, error) {
-	value, err := encodeEnvironmentComposeProjection(projection)
-	if err != nil {
-		return [sha256.Size]byte{}, 0, err
-	}
-	defer clear(value)
-	return sha256.Sum256(value), uint64(len(value)), nil
 }
 
 func validateEnvironmentBlueprintStageClaim(claim EnvironmentBlueprintStageClaim) error {

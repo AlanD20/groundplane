@@ -1,8 +1,12 @@
 package app
 
 import (
+	"reflect"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/controller"
+	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -31,6 +35,46 @@ func TestPrepareEntryCreationAcceptsTransientSecretLiteral(t *testing.T) {
 	persisted.Source.Literal = ""
 	if err := persisted.Validate(); err != nil {
 		t.Fatalf("redacted Entry validation error = %v", err)
+	}
+}
+
+func TestEntryDesiredProjectionUsesAuthoritativeServiceIdentities(t *testing.T) {
+	t.Parallel()
+	const (
+		environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		serviceID     = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		zoneID        = "net_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	)
+	candidate := cloneEnvironmentDesiredProjection(etcd.EnvironmentComposeProjection{
+		EnvironmentID: environmentID,
+		DesiredZones: []etcd.EnvironmentZoneProjection{{
+			EnvironmentID: environmentID,
+			Desired: core.Zone{
+				ID: zoneID, Name: "private", Subnet: "10.40.0.0/24",
+				OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
+			},
+		}},
+		DesiredServices: []etcd.EnvironmentServiceProjection{{
+			EnvironmentID: environmentID,
+			Desired:       core.Service{ID: serviceID, Name: "api", Image: "example/api:1"},
+		}},
+		DesiredRoutes: []etcd.EnvironmentRouteProjection{{
+			EnvironmentID: environmentID,
+			Desired: core.Route{
+				ID: "rte_01ARZ3NDEKTSV4RRFFQ69G5FAV", Host: "api.example.test", Path: "/",
+				TargetServiceID: serviceID, TargetPort: 8080, Exposure: "public",
+			},
+			DesiredGeneration: 1,
+		}},
+	})
+	identities, err := entryDesiredServiceIdentities(candidate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []controller.ComposeResourceIdentity{{ID: serviceID, Name: "api"}}
+	if !reflect.DeepEqual(identities, want) || len(candidate.DesiredZones) != 1 ||
+		len(candidate.DesiredServices) != 1 || len(candidate.DesiredRoutes) != 1 {
+		t.Fatalf("Entry candidate identities = %#v, candidate = %#v", identities, candidate)
 	}
 }
 

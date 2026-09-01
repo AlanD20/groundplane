@@ -53,7 +53,20 @@ func TestStoreCreateValidatesMembershipScopeAndReplays(t *testing.T) {
 
 	foreign, foreignEnvironmentID, foreignServices := fixtureGroup(t, 40, "foreign")
 	seedEnvironmentAndServices(backend, foreignEnvironmentID, foreignServices)
-	backend.delete(serviceOwnerKey(foreignEnvironmentID, foreignServices[1]))
+	projectionResult, err := backend.Get(context.Background(), environmentComposeKey(foreignEnvironmentID))
+	if err != nil || projectionResult.Entry == nil {
+		t.Fatalf("read foreign desired projection: %#v, %v", projectionResult, err)
+	}
+	projection, err := decodeDurable[infraetcd.EnvironmentComposeProjection](
+		projectionResult.Entry.Value, "environment-compose-projection",
+	)
+	if err != nil {
+		t.Fatalf("decode foreign desired projection: %v", err)
+	}
+	projection.DesiredServices = projection.DesiredServices[:1]
+	backend.put(environmentComposeKey(foreignEnvironmentID), mustDurableValue(
+		"environment-compose-projection", projection,
+	))
 	_, err = store.createDirectFixture(context.Background(), foreign)
 	if !errors.Is(err, errs.New(errs.KindServiceNotFound, "")) {
 		t.Fatalf("cross-scope Create() error = %v, want service.not_found", err)
@@ -120,10 +133,8 @@ func TestStoreRemoveCannotBypassTaskFinalization(t *testing.T) {
 	if retained, err := store.Get(context.Background(), group.ID); err != nil || retained.Group.ID != group.ID {
 		t.Fatalf("Get() after rejected raw removal = %+v, %v", retained, err)
 	}
-	for _, serviceID := range serviceIDs {
-		if result, err := backend.Get(context.Background(), serviceKey(serviceID)); err != nil || result.Entry == nil {
-			t.Fatalf("member Service %s was removed: %+v, %v", serviceID, result, err)
-		}
+	if result, err := backend.Get(context.Background(), environmentComposeKey(environmentID)); err != nil || result.Entry == nil {
+		t.Fatalf("member Service desired projection was removed: %+v, %v", result, err)
 	}
 }
 
@@ -245,16 +256,19 @@ func seedEnvironmentAndServices(store *memoryStore, environmentID string, servic
 	store.put(environmentMutationEpochKey(environmentID), mustDurableValue("environment-mutation-epoch", epochRecord{EnvironmentID: environmentID}))
 	projection := infraetcd.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: blueprintRevisionID, RenderGeneration: 1,
-		Services: make([]infraetcd.EnvironmentComposeIdentity, len(serviceIDs)),
+		DesiredServices: make([]infraetcd.EnvironmentServiceProjection, len(serviceIDs)),
 	}
 	for index, serviceID := range serviceIDs {
-		projection.Services[index] = infraetcd.EnvironmentComposeIdentity{ID: serviceID, Name: fmt.Sprintf("service-%02d", index)}
-		desired := core.Service{ID: serviceID, Name: projection.Services[index].Name, Image: "example.invalid/image:tag"}
-		service := infraetcd.ServiceRecord{
+		name := fmt.Sprintf("service-%02d", index)
+		desired := core.Service{ID: serviceID, Name: name, Image: "example.invalid/image:tag"}
+		projection.DesiredServices[index] = infraetcd.EnvironmentServiceProjection{
+			EnvironmentID: environmentID,
+			Desired:       desired,
+		}
+		store.put(serviceKey(serviceID), mustDurableValue("service", infraetcd.ServiceRecord{
 			EnvironmentID: environmentID, Desired: desired,
 			Runtime: core.ServiceRuntime{ServiceID: serviceID, RuntimeIntent: core.ServiceRuntimeIntentRunning},
-		}
-		store.put(serviceKey(serviceID), mustDurableValue("service", service))
+		}))
 		store.put(serviceOwnerKey(environmentID, serviceID), []byte(serviceID))
 	}
 	store.put(environmentComposeKey(environmentID), mustDurableValue("environment-compose-projection", projection))

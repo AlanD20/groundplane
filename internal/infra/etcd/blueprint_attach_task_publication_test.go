@@ -44,7 +44,8 @@ func TestBlueprintAttachPublicationCarriesCandidateSetAndBackingFences(t *testin
 	backingService := Versioned[ServiceRecord]{
 		Record: ServiceRecord{
 			EnvironmentID: backingEnvironmentID, BackingNetworkID: backingNetworkID,
-			Desired: core.Service{ID: backingServiceID},
+			Desired:         core.Service{ID: backingServiceID},
+			desiredFenceKey: environmentBlueprintHeadKey(backingEnvironmentID),
 		},
 		Revision: 13,
 	}
@@ -66,9 +67,9 @@ func TestBlueprintAttachPublicationCarriesCandidateSetAndBackingFences(t *testin
 	}
 	publication, err := prepareBlueprintAttachTaskPublication(
 		Versioned[EnvironmentRecord]{Record: EnvironmentRecord{ID: environmentID}},
-		EnvironmentComposeProjection{Services: []EnvironmentComposeIdentity{
-			{ID: apiServiceID, Name: "api"},
-			{ID: workerServiceID, Name: "worker"},
+		EnvironmentComposeProjection{DesiredServices: []EnvironmentServiceProjection{
+			{EnvironmentID: environmentID, Desired: core.Service{ID: apiServiceID, Name: "api"}},
+			{EnvironmentID: environmentID, Desired: core.Service{ID: workerServiceID, Name: "worker"}},
 		}},
 		TaskRecord{ID: taskID, Target: environmentID},
 		preparation,

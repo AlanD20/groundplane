@@ -106,6 +106,7 @@ type routeRemovalRepositoryFake struct {
 	environment          etcd.Versioned[etcd.EnvironmentRecord]
 	project              etcd.Versioned[etcd.ProjectRecord]
 	target               etcd.Versioned[etcd.ServiceRecord]
+	serviceEvidence      *routeRemovalServiceEvidenceStore
 	route                etcd.Versioned[etcd.RouteRecord]
 	projection           *etcd.Versioned[etcd.EnvironmentComposeProjection]
 	conflicts            int
@@ -132,10 +133,14 @@ func (fake *routeRemovalRepositoryFake) GetProject(
 }
 
 func (fake *routeRemovalRepositoryFake) GetService(
-	context.Context,
-	string,
+	ctx context.Context,
+	id string,
 ) (etcd.Versioned[etcd.ServiceRecord], error) {
-	return fake.target, nil
+	services, err := etcd.NewServiceRepository(fake.serviceEvidence)
+	if err != nil {
+		return etcd.Versioned[etcd.ServiceRecord]{}, err
+	}
+	return services.GetService(ctx, id)
 }
 
 func (fake *routeRemovalRepositoryFake) GetRoute(
@@ -200,6 +205,109 @@ type routeRemovalTransactionStore struct {
 	indexRevision int64
 	revision      int64
 	conflict      bool
+}
+
+type routeRemovalServiceEvidenceStore struct {
+	etcd.Store
+	environmentID string
+	projection    etcd.EnvironmentComposeProjection
+	headValue     []byte
+	rootValue     []byte
+	chunkValue    []byte
+	headKey       string
+	rootKey       string
+	chunkKey      string
+	readRevision  int64
+}
+
+func (store *routeRemovalServiceEvidenceStore) Range(
+	_ context.Context,
+	request etcd.RangeRequest,
+) (*etcd.RangeResult, error) {
+	if request.Prefix != "/v1/records/environment-blueprints/" {
+		return &etcd.RangeResult{ReadRevision: store.readRevision, ResponseRevision: store.readRevision}, nil
+	}
+	return &etcd.RangeResult{
+		Values:       []etcd.KeyValue{{Key: store.headKey, ModRevision: store.readRevision}},
+		ReadRevision: store.readRevision, ResponseRevision: store.readRevision,
+	}, nil
+}
+
+func (store *routeRemovalServiceEvidenceStore) GetMany(
+	_ context.Context,
+	request etcd.GetManyRequest,
+) (*etcd.GetManyResult, error) {
+	values := make([]*etcd.KeyValue, len(request.Keys))
+	for index, key := range request.Keys {
+		switch key {
+		case store.headKey:
+			values[index] = &etcd.KeyValue{Key: key, Value: append([]byte(nil), store.headValue...), ModRevision: store.readRevision}
+		case store.rootKey:
+			values[index] = &etcd.KeyValue{Key: key, Value: append([]byte(nil), store.rootValue...), ModRevision: store.readRevision}
+		case store.chunkKey:
+			values[index] = &etcd.KeyValue{Key: key, Value: append([]byte(nil), store.chunkValue...), ModRevision: store.readRevision}
+		}
+	}
+	return &etcd.GetManyResult{Values: values, ReadRevision: store.readRevision, ResponseRevision: store.readRevision}, nil
+}
+
+func routeRemovalServiceEvidence(
+	t *testing.T,
+	environmentID string,
+	service etcd.ServiceRecord,
+	route etcd.RouteRecord,
+	at time.Time,
+) *routeRemovalServiceEvidenceStore {
+	t.Helper()
+	revisionID := ids.NewAt(ids.KindTask, at, 7)
+	projection := etcd.EnvironmentComposeProjection{
+		EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
+		DesiredServices: []etcd.EnvironmentServiceProjection{{
+			EnvironmentID: environmentID, Desired: service.Desired,
+		}},
+		DesiredRoutes: []etcd.EnvironmentRouteProjection{{
+			EnvironmentID: environmentID, Desired: route.Desired, DesiredGeneration: route.DesiredGeneration,
+		}},
+		NormalizedCompose: routeRemovalTestNormalizedCompose(t),
+	}
+	projection.ComposeArtifact = routeRemovalTestComposeArtifact(projection)
+	projectionValue, err := etcd.EncodeEnvironmentComposeProjectionStorage(projection)
+	if err != nil {
+		t.Fatalf("EncodeEnvironmentComposeProjectionStorage() error = %v", err)
+	}
+	projectionDigest := sha256.Sum256(projectionValue)
+	audit := []byte("route removal fixture")
+	auditDigest := sha256.Sum256(audit)
+	dependencyDigest := sha256.Sum256([]byte("route removal dependency"))
+	sealValue, err := etcd.EncodeDesiredRevisionSeal(etcd.EnvironmentBlueprintSeal{
+		EnvironmentID: environmentID, RevisionID: revisionID,
+		SourceKind: etcd.EnvironmentBlueprintSourceMutation, RenderGeneration: 1, ProjectionSchema: 1,
+		AuditChunks: 1, AuditBytes: uint64(len(audit)), AuditSHA256: auditDigest,
+		ProjectionChunks: 1, ProjectionBytes: uint64(len(projectionValue)), ProjectionSHA256: projectionDigest,
+		ProjectionResources: 1, DependencyDigest: dependencyDigest,
+	})
+	if err != nil {
+		t.Fatalf("EncodeDesiredRevisionSeal() error = %v", err)
+	}
+	chunkValue, err := etcd.EncodeDesiredRevisionChunk(etcd.EnvironmentBlueprintChunk{
+		Family: etcd.EnvironmentBlueprintChunkProjection, LogicalLength: uint32(len(projectionValue)),
+		Digest: projectionDigest, Data: projectionValue,
+	})
+	if err != nil {
+		t.Fatalf("EncodeDesiredRevisionChunk() error = %v", err)
+	}
+	headValue, err := etcd.EncodeCapabilityTaskReference(revisionID)
+	if err != nil {
+		t.Fatalf("EncodeCapabilityTaskReference() error = %v", err)
+	}
+	headKey := "/v1/records/environment-blueprints/" + environmentID + "/current"
+	return &routeRemovalServiceEvidenceStore{
+		environmentID: environmentID, projection: projection,
+		headValue: headValue, rootValue: sealValue, chunkValue: chunkValue,
+		headKey: headKey, rootKey: etcd.DesiredRevisionRootKey(environmentID, revisionID),
+		chunkKey:     etcd.DesiredRevisionChunkKey(environmentID, revisionID, etcd.EnvironmentBlueprintChunkProjection, 0),
+		readRevision: 13,
+	}
 }
 
 func (store *routeRemovalTransactionStore) GetMany(
@@ -332,7 +440,7 @@ func (fake *routeRemovalPlanFake) PrepareRouteRemovalTask(
 	if fake.err != nil {
 		return etcd.RouteRemovalTaskPreparation{}, fake.err
 	}
-	if intent.CandidateProjection == nil {
+	if intent.CandidateProjection == nil || len(intent.CandidateProjection.Components) == 0 {
 		return etcd.RouteRemovalTaskPreparation{Intent: intent, Task: task}, nil
 	}
 	componentID := intent.CandidateProjection.Components[0].Desired.ID
@@ -387,7 +495,10 @@ func routeRemovalServiceState(
 	routeID := ids.NewAt(ids.KindRoute, at, 5)
 	target, err := etcd.NewServiceRecord(
 		environmentID,
-		core.Service{ID: serviceID, Name: "api", Image: "api:1"},
+		core.Service{
+			ID: serviceID, Name: "api", Image: "api:1",
+			Strategy: core.StrategyRecreate, Replicas: 1,
+		},
 		"",
 	)
 	if err != nil {
@@ -422,6 +533,10 @@ func routeRemovalServiceState(
 			}},
 			Revision: 14, ReadRevision: 14,
 		},
+	}
+	repository.serviceEvidence = routeRemovalServiceEvidence(t, environmentID, target, repository.route.Record, at)
+	repository.projection = &etcd.Versioned[etcd.EnvironmentComposeProjection]{
+		Record: repository.serviceEvidence.projection, Revision: 13, ReadRevision: 13,
 	}
 	idempotency := &routeRemovalIdempotencyFake{}
 	plans := &routeRemovalPlanFake{}
@@ -474,11 +589,12 @@ func TestRouteRemovalSelectsAgentProviderPlanForAppliedRoute(t *testing.T) {
 	repository, _, plans, service := routeRemovalServiceState(t)
 	at := service.now()
 	caddyServiceID := ids.NewAt(ids.KindService, at, 20)
+	zoneID := ids.NewAt(ids.KindNetwork, at, 24)
 	component, err := etcd.NewComponentRecord(core.Component{
 		ID: ids.NewAt(ids.KindComponent, at, 21), Owner: core.ComponentOwnerEnvironment,
 		OwnerID: repository.environment.Record.ID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
 		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-			ZoneID: ids.NewAt(ids.KindNetwork, at, 24),
+			ZoneID: zoneID,
 		}},
 		GeneratedServices: []string{caddyServiceID}, PinnedIPv4: "10.70.0.2", Healthy: true,
 	})
@@ -495,10 +611,21 @@ func TestRouteRemovalSelectsAgentProviderPlanForAppliedRoute(t *testing.T) {
 	projection := etcd.EnvironmentComposeProjection{
 		EnvironmentID: repository.environment.Record.ID,
 		RevisionID:    ids.NewAt(ids.KindTask, at, 22), RenderGeneration: 7,
-		Services: []etcd.EnvironmentComposeIdentity{{ID: caddyServiceID, Name: "caddy"}},
-		Routes: []etcd.EnvironmentRouteIdentity{{
-			ID: repository.route.Record.Desired.ID, Host: repository.route.Record.Desired.Host,
-			Path: repository.route.Record.Desired.Path,
+		DesiredServices: []etcd.EnvironmentServiceProjection{
+			{EnvironmentID: repository.environment.Record.ID, Desired: repository.target.Record.Desired},
+			{EnvironmentID: repository.environment.Record.ID, Desired: core.Service{
+				ID: caddyServiceID, Name: "caddy", Image: "caddy:1",
+				Strategy: core.StrategyRecreate, Replicas: 1,
+			}},
+		},
+		DesiredZones: []etcd.EnvironmentZoneProjection{{
+			EnvironmentID: repository.environment.Record.ID,
+			Desired: core.Zone{ID: zoneID, Name: "frontend", Subnet: "10.70.1.0/24",
+				OwnerKind: core.ZoneOwnerEnvironment, OwnerID: repository.environment.Record.ID},
+		}},
+		DesiredRoutes: []etcd.EnvironmentRouteProjection{{
+			EnvironmentID: repository.environment.Record.ID, Desired: repository.route.Record.Desired,
+			DesiredGeneration: repository.route.Record.DesiredGeneration,
 		}},
 		Components: []etcd.ComponentRecord{component, edge},
 	}
@@ -530,11 +657,12 @@ func TestRouteRemovalPropagatesProviderPlannerError(t *testing.T) {
 	repository, _, plans, service := routeRemovalServiceState(t)
 	at := service.now()
 	caddyServiceID := ids.NewAt(ids.KindService, at, 30)
+	zoneID := ids.NewAt(ids.KindNetwork, at, 34)
 	component, err := etcd.NewComponentRecord(core.Component{
 		ID: ids.NewAt(ids.KindComponent, at, 31), Owner: core.ComponentOwnerEnvironment,
 		OwnerID: repository.environment.Record.ID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
 		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-			ZoneID: ids.NewAt(ids.KindNetwork, at, 34),
+			ZoneID: zoneID,
 		}},
 		GeneratedServices: []string{caddyServiceID}, PinnedIPv4: "10.70.0.3", Healthy: true,
 	})
@@ -551,10 +679,21 @@ func TestRouteRemovalPropagatesProviderPlannerError(t *testing.T) {
 	projection := etcd.EnvironmentComposeProjection{
 		EnvironmentID: repository.environment.Record.ID,
 		RevisionID:    ids.NewAt(ids.KindTask, at, 32), RenderGeneration: 9,
-		Services: []etcd.EnvironmentComposeIdentity{{ID: caddyServiceID, Name: "caddy"}},
-		Routes: []etcd.EnvironmentRouteIdentity{{
-			ID: repository.route.Record.Desired.ID, Host: repository.route.Record.Desired.Host,
-			Path: repository.route.Record.Desired.Path,
+		DesiredServices: []etcd.EnvironmentServiceProjection{
+			{EnvironmentID: repository.environment.Record.ID, Desired: repository.target.Record.Desired},
+			{EnvironmentID: repository.environment.Record.ID, Desired: core.Service{
+				ID: caddyServiceID, Name: "caddy", Image: "caddy:1",
+				Strategy: core.StrategyRecreate, Replicas: 1,
+			}},
+		},
+		DesiredZones: []etcd.EnvironmentZoneProjection{{
+			EnvironmentID: repository.environment.Record.ID,
+			Desired: core.Zone{ID: zoneID, Name: "frontend", Subnet: "10.70.1.0/24",
+				OwnerKind: core.ZoneOwnerEnvironment, OwnerID: repository.environment.Record.ID},
+		}},
+		DesiredRoutes: []etcd.EnvironmentRouteProjection{{
+			EnvironmentID: repository.environment.Record.ID, Desired: repository.route.Record.Desired,
+			DesiredGeneration: repository.route.Record.DesiredGeneration,
 		}},
 		Components: []etcd.ComponentRecord{component, edge},
 	}
@@ -588,9 +727,11 @@ func routeRemovalTestNormalizedCompose(t *testing.T) []byte {
 func routeRemovalTestComposeArtifact(projection etcd.EnvironmentComposeProjection) []byte {
 	canonicalYAML := []byte("services: {}\n")
 	digest := sha256.Sum256(canonicalYAML)
-	services := make([]*agentpb.ComposeService, len(projection.Services))
-	for index, service := range projection.Services {
-		services[index] = &agentpb.ComposeService{ServiceId: service.ID, ComposeName: service.Name}
+	services := make([]*agentpb.ComposeService, len(projection.DesiredServices))
+	for index, service := range projection.DesiredServices {
+		services[index] = &agentpb.ComposeService{
+			ServiceId: service.Desired.ID, ComposeName: service.Desired.Name,
+		}
 	}
 	value, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
 		ArtifactId: "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV",

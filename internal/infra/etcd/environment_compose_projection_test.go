@@ -1,7 +1,10 @@
 package etcd
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
+	"reflect"
 	"sort"
 	"testing"
 	"time"
@@ -11,62 +14,138 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func TestEnvironmentComposeProjectionPinsSortedRouteIdentities(t *testing.T) {
-	// Rationale: restart-safe Caddy rendering must recover the stable Route IDs
-	// assigned at apply without consulting mutable Route records.
+func TestEnvironmentComposeProjectionRoundTripsLosslessDesiredTopology(t *testing.T) {
+	// Rationale: a queued qa-workload Blueprint Task must own the exact six Zones,
+	// thirteen Services, and six Routes it was published to reconcile.
 	t.Parallel()
-	now := time.Date(2026, 8, 22, 22, 0, 0, 0, time.UTC)
-	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
-		EnvironmentID:    ids.NewAt(ids.KindEnvironment, now, 1),
-		RevisionID:       ids.NewAt(ids.KindTask, now, 2),
-		RenderGeneration: 1,
-		Routes: []EnvironmentRouteIdentity{
-			{ID: ids.NewAt(ids.KindRoute, now, 3), Host: "api.example.com", Path: "/"},
-			{ID: ids.NewAt(ids.KindRoute, now, 4), Host: "app.example.com", Path: "/app/*"},
-		},
-	})
+	projection := desiredTopologyProjectionFixture(t)
 	encoded, err := encodeEnvironmentComposeProjection(projection)
 	if err != nil {
 		t.Fatalf("encodeEnvironmentComposeProjection() error = %v", err)
 	}
 	decoded, err := decodeEnvironmentComposeProjection(encoded)
-	if err != nil || len(decoded.Routes) != 2 || decoded.Routes[1].ID != projection.Routes[1].ID {
-		t.Fatalf("decodeEnvironmentComposeProjection() = %#v, %v", decoded, err)
+	if err != nil {
+		t.Fatalf("decodeEnvironmentComposeProjection() error = %v", err)
 	}
-	projection.Routes[0], projection.Routes[1] = projection.Routes[1], projection.Routes[0]
-	if _, err := encodeEnvironmentComposeProjection(projection); !errors.Is(
-		err,
-		errs.New(errs.KindValidationFailed, ""),
-	) {
-		t.Fatalf("encodeEnvironmentComposeProjection(unsorted Routes) error = %v", err)
+	if len(decoded.DesiredZones) != 6 || len(decoded.DesiredServices) != 13 || len(decoded.DesiredRoutes) != 6 ||
+		!reflect.DeepEqual(decoded.DesiredZones, projection.DesiredZones) ||
+		!reflect.DeepEqual(decoded.DesiredServices, projection.DesiredServices) ||
+		!reflect.DeepEqual(decoded.DesiredRoutes, projection.DesiredRoutes) {
+		t.Fatalf("decoded desired topology = %d/%d/%d %#v", len(decoded.DesiredZones),
+			len(decoded.DesiredServices), len(decoded.DesiredRoutes), decoded)
+	}
+	if bytes.Contains(encoded, []byte("runtime_intent")) || bytes.Contains(encoded, []byte(`"observed"`)) {
+		t.Fatalf("sealed desired projection contains runtime or observed state: %q", encoded)
+	}
+
+	baseDigest, _, err := EnvironmentBlueprintProjectionEvidence(projection)
+	if err != nil {
+		t.Fatalf("EnvironmentBlueprintProjectionEvidence() error = %v", err)
+	}
+	mutations := []struct {
+		name   string
+		mutate func(*EnvironmentComposeProjection)
+	}{
+		{name: "Zone desired field", mutate: func(value *EnvironmentComposeProjection) {
+			value.DesiredZones[0].Desired.Internal = !value.DesiredZones[0].Desired.Internal
+		}},
+		{name: "Service desired field", mutate: func(value *EnvironmentComposeProjection) {
+			value.DesiredServices[0].Desired.Image = "postgres:16.9"
+		}},
+		{name: "Service backing network", mutate: func(value *EnvironmentComposeProjection) {
+			value.DesiredServices[0].BackingNetworkID = value.DesiredZones[1].Desired.ID
+		}},
+		{name: "Route desired field", mutate: func(value *EnvironmentComposeProjection) {
+			value.DesiredRoutes[0].Desired.Exposure = "internal"
+		}},
+		{name: "Route desired generation", mutate: func(value *EnvironmentComposeProjection) {
+			value.DesiredRoutes[0].DesiredGeneration++
+		}},
+	}
+	for _, test := range mutations {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			changed := cloneEnvironmentComposeProjection(projection)
+			test.mutate(&changed)
+			changedBytes, err := encodeEnvironmentComposeProjection(changed)
+			if err != nil {
+				t.Fatalf("encode changed projection: %v", err)
+			}
+			changedDigest, _, err := EnvironmentBlueprintProjectionEvidence(changed)
+			if err != nil {
+				t.Fatalf("changed projection evidence: %v", err)
+			}
+			if bytes.Equal(changedBytes, encoded) || changedDigest == baseDigest {
+				t.Fatal("desired topology change did not change sealed bytes and digest")
+			}
+		})
 	}
 }
 
-// Rationale: Route removal must advance the applied render exactly once while
-// retaining the old Blueprint match for deterministic Component regeneration.
-func TestSuppressEnvironmentRouteMovesIdentityOutOfEffectiveSet(t *testing.T) {
+func desiredTopologyProjectionFixture(t *testing.T) EnvironmentComposeProjection {
+	t.Helper()
+	now := time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
+	projection := EnvironmentComposeProjection{
+		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 2), RenderGeneration: 1,
+	}
+	for index := 0; index < 6; index++ {
+		zone := core.Zone{
+			ID: ids.NewAt(ids.KindNetwork, now, int64(10+index)), Name: fmt.Sprintf("zone-%02d", index),
+			Subnet: fmt.Sprintf("10.200.%d.0/24", index), OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
+		}
+		projection.DesiredZones = append(projection.DesiredZones, EnvironmentZoneProjection{
+			EnvironmentID: environmentID, Desired: zone,
+		})
+	}
+	for index := 0; index < 13; index++ {
+		service := core.Service{
+			ID: ids.NewAt(ids.KindService, now, int64(30+index)), Name: fmt.Sprintf("service-%02d", index),
+			Image: fmt.Sprintf("example/service:%d", index),
+		}
+		backingNetworkID := ""
+		if index == 0 {
+			service.Adapter = "postgres:16"
+			backingNetworkID = projection.DesiredZones[0].Desired.ID
+		}
+		projection.DesiredServices = append(projection.DesiredServices, EnvironmentServiceProjection{
+			EnvironmentID: environmentID, BackingNetworkID: backingNetworkID, Desired: service,
+		})
+	}
+	for index := 0; index < 6; index++ {
+		route := core.Route{
+			ID: ids.NewAt(ids.KindRoute, now, int64(50+index)), Host: fmt.Sprintf("route-%02d.example.test", index),
+			Path: "/", TargetServiceID: projection.DesiredServices[index].Desired.ID,
+			TargetPort: uint16(8000 + index), Exposure: "public",
+		}
+		projection.DesiredRoutes = append(projection.DesiredRoutes, EnvironmentRouteProjection{
+			EnvironmentID: environmentID, Desired: route, DesiredGeneration: uint64(index + 1),
+		})
+	}
+	return withTestEnvironmentComposeArtifact(projection)
+}
+
+func TestApplyEnvironmentRouteMutatesDesiredRoutesOnly(t *testing.T) {
 	t.Parallel()
-	now := time.Date(2026, 8, 23, 1, 0, 0, 0, time.UTC)
-	routeID := ids.NewAt(ids.KindRoute, now, 3)
+	now := time.Date(2026, 8, 22, 22, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
 	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
-		EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 1),
-		RevisionID:    ids.NewAt(ids.KindTask, now, 2), RenderGeneration: 7,
-		Routes: []EnvironmentRouteIdentity{{ID: routeID, Host: "app.example.com", Path: "/app/*"}},
+		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 2), RenderGeneration: 1,
 	})
-	next, changed, err := SuppressEnvironmentRoute(projection, routeID)
+	route, err := NewRouteRecord(environmentID, core.Route{
+		ID: ids.NewAt(ids.KindRoute, now, 3), Host: "app.example.com", Path: "/app/*",
+		TargetServiceID: ids.NewAt(ids.KindService, now, 4), TargetPort: 8080, Exposure: "public",
+	})
 	if err != nil {
-		t.Fatalf("SuppressEnvironmentRoute() error = %v", err)
+		t.Fatalf("NewRouteRecord() error = %v", err)
 	}
-	if !changed || next.RenderGeneration != 8 || len(next.Routes) != 0 ||
-		len(next.SuppressedRoutes) != 1 || next.SuppressedRoutes[0].ID != routeID {
-		t.Fatalf("SuppressEnvironmentRoute() = %#v, changed=%t", next, changed)
+	next, err := ApplyEnvironmentRoute(projection, route)
+	if err != nil {
+		t.Fatalf("ApplyEnvironmentRoute() error = %v", err)
 	}
-	if len(projection.Routes) != 1 || len(projection.SuppressedRoutes) != 0 {
-		t.Fatalf("SuppressEnvironmentRoute() mutated input = %#v", projection)
-	}
-	replayed, changed, err := SuppressEnvironmentRoute(next, routeID)
-	if err != nil || changed || len(replayed.SuppressedRoutes) != 1 {
-		t.Fatalf("SuppressEnvironmentRoute(replay) = %#v, %t, %v", replayed, changed, err)
+	if next.RenderGeneration != 2 || len(next.DesiredRoutes) != 1 ||
+		next.DesiredRoutes[0].Desired.ID != route.Desired.ID || len(projection.DesiredRoutes) != 0 {
+		t.Fatalf("ApplyEnvironmentRoute() = %#v; input = %#v", next, projection)
 	}
 }
 
@@ -141,7 +220,6 @@ func TestEnvironmentComposeProjectionRejectsDuplicateGeneratedServiceOwnership(t
 	}
 	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 75), RenderGeneration: 1,
-		Services:   []EnvironmentComposeIdentity{{ID: serviceID, Name: "shared"}},
 		Components: []ComponentRecord{caddy, tunnel},
 	})
 	if err := validateEnvironmentComposeProjection(projection); !errors.Is(
@@ -226,70 +304,5 @@ func TestRemoveEnvironmentEntryDropsPinnedGeneration(t *testing.T) {
 	replayed, changed, err := RemoveEnvironmentEntry(next, entryID)
 	if err != nil || changed || replayed.RenderGeneration != 8 {
 		t.Fatalf("RemoveEnvironmentEntry(replay) = %#v, %t, %v", replayed, changed, err)
-	}
-}
-
-// Rationale: explicit Component disable may remove only its generated Service;
-// authored Service omission must remain blocked by the same projection CAS.
-func TestEnvironmentComposeProjectionAdvanceAllowsComponentGeneratedServiceRemoval(t *testing.T) {
-	t.Parallel()
-	now := time.Date(2026, 8, 22, 23, 0, 0, 0, time.UTC)
-	environmentID := ids.NewAt(ids.KindEnvironment, now, 40)
-	generatedServiceID := ids.NewAt(ids.KindService, now, 41)
-	componentRecord := func(kind core.ComponentKind, offset int64, enabled bool, services []string) ComponentRecord {
-		record, err := NewComponentRecord(core.Component{
-			ID: ids.NewAt(ids.KindComponent, now, offset), Owner: core.ComponentOwnerEnvironment,
-			OwnerID: environmentID, Kind: kind, Enabled: enabled, GeneratedServices: services,
-		})
-		if err != nil {
-			t.Fatalf("NewComponentRecord() error = %v", err)
-		}
-		return record
-	}
-	previous := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
-		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 44),
-		RenderGeneration: 1,
-		Services:         []EnvironmentComposeIdentity{{ID: generatedServiceID, Name: "cloudflare-tunnel"}},
-		Components: []ComponentRecord{
-			componentRecord(core.ComponentKindIngressCaddy, 42, false, nil),
-			func() ComponentRecord {
-				record, err := NewComponentRecord(core.Component{
-					ID: ids.NewAt(ids.KindComponent, now, 43), Owner: core.ComponentOwnerEnvironment,
-					OwnerID: environmentID, Kind: core.ComponentKindEdgeCloudflare, Enabled: true,
-					Config: core.ComponentConfig{CloudflareTunnel: &core.CloudflareTunnelComponentConfig{
-						SecretID: ids.NewAt(ids.KindSecret, now, 47),
-					}},
-					GeneratedServices: []string{generatedServiceID},
-				})
-				if err != nil {
-					t.Fatalf("NewComponentRecord(Cloudflare) error = %v", err)
-				}
-				return record
-			}(),
-		},
-	})
-	next := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
-		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 45),
-		RenderGeneration: 2,
-		Components: []ComponentRecord{
-			componentRecord(core.ComponentKindIngressCaddy, 42, false, nil),
-			componentRecord(core.ComponentKindEdgeCloudflare, 43, false, nil),
-		},
-	})
-	if err := validateEnvironmentComposeProjectionAdvance(previous, true, next); err != nil {
-		t.Fatalf("validateEnvironmentComposeProjectionAdvance() error = %v", err)
-	}
-	previous.Services = append(previous.Services, EnvironmentComposeIdentity{
-		ID: ids.NewAt(ids.KindService, now, 46), Name: "worker",
-	})
-	sort.Slice(previous.Services, func(left int, right int) bool {
-		return previous.Services[left].Name < previous.Services[right].Name
-	})
-	previous = withTestEnvironmentComposeArtifact(previous)
-	if err := validateEnvironmentComposeProjectionAdvance(previous, true, next); !errors.Is(
-		err,
-		errs.New(errs.KindResourceInUse, ""),
-	) {
-		t.Fatalf("validateEnvironmentComposeProjectionAdvance(authored omission) error = %v", err)
 	}
 }

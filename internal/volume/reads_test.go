@@ -7,8 +7,11 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestVolumeReadServicePagesPinnedProjection(t *testing.T) {
@@ -41,6 +44,43 @@ func TestVolumeReadServicePagesPinnedProjection(t *testing.T) {
 	}
 }
 
+func TestVolumeConsumerServiceNamesUsesDesiredAndAddressedGeneratedServices(t *testing.T) {
+	t.Parallel()
+	const (
+		environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		volumeID      = "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		desiredID     = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		generatedID   = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+		unmountedID   = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAX"
+		componentID   = "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	)
+	artifact, err := proto.Marshal(&agentpb.ComposeArtifact{Services: []*agentpb.ComposeService{
+		{ServiceId: generatedID, ComposeName: "router", OwnerComponentId: componentID},
+		{ServiceId: unmountedID, ComposeName: "unused", OwnerComponentId: componentID},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projection := etcd.EnvironmentComposeProjection{
+		EnvironmentID: environmentID, ComposeArtifact: artifact,
+		DesiredServices: []etcd.EnvironmentServiceProjection{{
+			EnvironmentID: environmentID, Desired: core.Service{ID: desiredID, Name: "api"},
+		}},
+		Components: []etcd.ComponentRecord{{
+			Desired: etcd.ComponentDesiredRecord{ID: componentID},
+			Runtime: etcd.ComponentRuntimeRecord{GeneratedServices: []string{generatedID, unmountedID}},
+		}},
+		VolumeMounts: []etcd.EnvironmentServiceVolumeMount{
+			{ServiceID: desiredID, VolumeID: volumeID, Target: "/data"},
+			{ServiceID: generatedID, VolumeID: volumeID, Target: "/config"},
+		},
+	}
+	names := volumeConsumerServiceNames(projection, volumeID)
+	if len(names) != 2 || names[desiredID] != "api" || names[generatedID] != "router" {
+		t.Fatalf("Volume consumer names = %#v", names)
+	}
+}
+
 // Rationale: Volume collection reads follow the global public pagination
 // contract, so the inclusive upper bound is 200 rather than a private
 // capability-specific limit.
@@ -58,8 +98,7 @@ func TestVolumeReadServiceUsesGlobalPaginationBounds(t *testing.T) {
 	if _, err := service.ListVolumes(context.Background(), environmentID, etcd.PageRequest{Limit: 200}); err != nil {
 		t.Fatalf("ListVolumes(limit 200) error = %v", err)
 	}
-	if _, err := service.ListVolumes(context.Background(), environmentID, etcd.PageRequest{Limit: 201});
-		!errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := service.ListVolumes(context.Background(), environmentID, etcd.PageRequest{Limit: 201}); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("ListVolumes(limit 201) error = %v, want validation failure", err)
 	}
 }

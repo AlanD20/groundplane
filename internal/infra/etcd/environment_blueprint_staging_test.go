@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"reflect"
 	"strings"
@@ -191,6 +192,249 @@ func TestEnvironmentServiceMutationAuditAllowsInitialCreateWithoutBaseRevision(t
 	}
 }
 
+// Rationale: Zone and Route direct mutations must retain every accepted desired decision in a closed canonical audit.
+func TestEnvironmentZoneAndRouteMutationAuditsRoundTripCanonically(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 31, 9, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
+	baseRevisionID := ids.NewAt(ids.KindTask, now, 2)
+	zoneID := ids.NewAt(ids.KindNetwork, now, 3)
+	routeID := ids.NewAt(ids.KindRoute, now, 4)
+	serviceID := ids.NewAt(ids.KindService, now, 5)
+	tests := []struct {
+		name   string
+		family byte
+		audit  EnvironmentDesiredMutationAudit
+	}{
+		{name: "Zone create", family: 5, audit: EnvironmentDesiredMutationAudit{Zone: &EnvironmentZoneMutationAudit{
+			Action: EnvironmentZoneMutationCreate, ZoneID: zoneID,
+			Request: &EnvironmentZoneMutationRequest{
+				EnvironmentID: environmentID, Name: "private", Subnet: "10.42.0.0/24", Internal: true,
+			},
+		}}},
+		{name: "Zone remove", family: 5, audit: EnvironmentDesiredMutationAudit{Zone: &EnvironmentZoneMutationAudit{
+			Action: EnvironmentZoneMutationRemove, BaseRevisionID: baseRevisionID, ZoneID: zoneID,
+		}}},
+		{name: "Route create", family: 6, audit: EnvironmentDesiredMutationAudit{Route: &EnvironmentRouteMutationAudit{
+			Action: EnvironmentRouteMutationCreate, RouteID: routeID,
+			Request: &EnvironmentRouteMutationRequest{
+				EnvironmentID: environmentID, Host: "app.example.test", Path: "/api/*", Exposure: "public",
+				TargetServiceID: serviceID, TargetPort: 8080,
+			},
+		}}},
+		{name: "Route edit", family: 6, audit: EnvironmentDesiredMutationAudit{Route: &EnvironmentRouteMutationAudit{
+			Action: EnvironmentRouteMutationEdit, BaseRevisionID: baseRevisionID, RouteID: routeID,
+			Request: &EnvironmentRouteMutationRequest{Exposure: "internal"},
+		}}},
+		{name: "Route remove", family: 6, audit: EnvironmentDesiredMutationAudit{Route: &EnvironmentRouteMutationAudit{
+			Action: EnvironmentRouteMutationRemove, BaseRevisionID: baseRevisionID, RouteID: routeID,
+		}}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			encoded, err := encodeEnvironmentDesiredMutationAudit(test.audit)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if encoded[6] != test.family {
+				t.Fatalf("wire family = %d, want %d", encoded[6], test.family)
+			}
+			decoded, err := decodeEnvironmentDesiredMutationAudit(encoded)
+			if err != nil || !reflect.DeepEqual(decoded, test.audit) {
+				t.Fatalf("round trip = %#v, %v", decoded, err)
+			}
+			canonical, err := encodeEnvironmentDesiredMutationAudit(decoded)
+			if err != nil || !reflect.DeepEqual(canonical, encoded) {
+				t.Fatalf("canonical re-encode differs: %x, %v", canonical, err)
+			}
+		})
+	}
+}
+
+// Rationale: mutation audit decoding is an integrity boundary and must reject ambiguous, invalid, or expanded authority.
+func TestEnvironmentZoneAndRouteMutationAuditsRejectInvalidAuthority(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 31, 9, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
+	zoneID := ids.NewAt(ids.KindNetwork, now, 2)
+	routeID := ids.NewAt(ids.KindRoute, now, 3)
+	serviceID := ids.NewAt(ids.KindService, now, 4)
+	baseRevisionID := ids.NewAt(ids.KindTask, now, 5)
+	zone := &EnvironmentZoneMutationAudit{
+		Action: EnvironmentZoneMutationCreate, ZoneID: zoneID,
+		Request: &EnvironmentZoneMutationRequest{
+			EnvironmentID: environmentID, Name: "private", Subnet: "10.42.0.0/24", Internal: true,
+		},
+	}
+	route := &EnvironmentRouteMutationAudit{
+		Action: EnvironmentRouteMutationCreate, RouteID: routeID,
+		Request: &EnvironmentRouteMutationRequest{
+			EnvironmentID: environmentID, Host: "app.example.test", Path: "/", Exposure: "public",
+			TargetServiceID: serviceID, TargetPort: 8080,
+		},
+	}
+	invalid := []EnvironmentDesiredMutationAudit{
+		{Zone: zone, Route: route},
+		{Zone: &EnvironmentZoneMutationAudit{Action: 2, BaseRevisionID: baseRevisionID, ZoneID: zoneID}},
+		{Zone: &EnvironmentZoneMutationAudit{Action: EnvironmentZoneMutationRemove, ZoneID: zoneID}},
+		{Route: &EnvironmentRouteMutationAudit{Action: 99, BaseRevisionID: baseRevisionID, RouteID: routeID}},
+		{Route: &EnvironmentRouteMutationAudit{
+			Action: EnvironmentRouteMutationEdit, BaseRevisionID: baseRevisionID, RouteID: routeID,
+			Request: &EnvironmentRouteMutationRequest{Host: "immutable.example.test", Exposure: "internal"},
+		}},
+		{Route: &EnvironmentRouteMutationAudit{
+			Action: EnvironmentRouteMutationRemove, BaseRevisionID: baseRevisionID, RouteID: routeID,
+			Request: &EnvironmentRouteMutationRequest{Exposure: "internal"},
+		}},
+	}
+	for index, audit := range invalid {
+		if _, err := encodeEnvironmentDesiredMutationAudit(audit); !isKind(err, errs.KindValidationFailed) {
+			t.Fatalf("invalid audit %d error = %v", index, err)
+		}
+	}
+	encoded, err := encodeEnvironmentDesiredMutationAudit(EnvironmentDesiredMutationAudit{Zone: zone})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, corrupt := range map[string][]byte{
+		"trailing":       append(append([]byte(nil), encoded...), 0),
+		"unknown family": func() []byte { value := append([]byte(nil), encoded...); value[6] = 7; return value }(),
+		"invalid action": func() []byte { value := append([]byte(nil), encoded...); value[7] = 99; return value }(),
+	} {
+		if _, err := decodeEnvironmentDesiredMutationAudit(corrupt); !isKind(err, errs.KindInternal) {
+			t.Fatalf("%s error = %v", name, err)
+		}
+	}
+	body := blueprintRecordWriter{}
+	body.uint16(environmentBlueprintRecordSchema)
+	body.string("")
+	body.string(zoneID)
+	body.bytes([]byte(`{"environment_id":"` + environmentID +
+		`","name":"private","subnet":"10.42.0.0/24","internal":true,"observed":{"status":"ready"}}`))
+	unknown := mutationAuditWireForTest(5, uint8(EnvironmentZoneMutationCreate), body.value)
+	if _, err := decodeEnvironmentDesiredMutationAudit(unknown); !isKind(err, errs.KindInternal) {
+		t.Fatalf("observed authority error = %v", err)
+	}
+}
+
+// Rationale: staging must accept each new public mutation and seal all operator-authored request fields into its audit digest.
+func TestEnvironmentZoneAndRouteMutationAuditStageSealsEveryAuthoredField(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 31, 10, 0, 0, 0, time.UTC)
+	descriptor := validEnvironmentBlueprintStageDescriptorForTest(t)
+	claim := descriptor.Claim
+	claim.SourceKind = EnvironmentBlueprintSourceMutation
+	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+		EnvironmentID: claim.EnvironmentID, RevisionID: claim.RevisionID, RenderGeneration: claim.RenderGeneration,
+	})
+	dependencyDigest, err := EnvironmentBlueprintDependencyDigest(projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseRevisionID := ids.NewAt(ids.KindTask, now, 1)
+	zoneID := ids.NewAt(ids.KindNetwork, now, 2)
+	routeID := ids.NewAt(ids.KindRoute, now, 3)
+	serviceID := ids.NewAt(ids.KindService, now, 4)
+	audits := []EnvironmentDesiredMutationAudit{
+		{Zone: &EnvironmentZoneMutationAudit{
+			Action: EnvironmentZoneMutationCreate, ZoneID: zoneID,
+			Request: &EnvironmentZoneMutationRequest{
+				EnvironmentID: claim.EnvironmentID, Name: "private", Subnet: "10.42.0.0/24", Internal: true,
+			},
+		}},
+		{Zone: &EnvironmentZoneMutationAudit{
+			Action: EnvironmentZoneMutationRemove, BaseRevisionID: baseRevisionID, ZoneID: zoneID,
+		}},
+		{Route: &EnvironmentRouteMutationAudit{
+			Action: EnvironmentRouteMutationCreate, RouteID: routeID,
+			Request: &EnvironmentRouteMutationRequest{
+				EnvironmentID: claim.EnvironmentID, Host: "app.example.test", Path: "/api/*", Exposure: "public",
+				TargetServiceID: serviceID, TargetPort: 8080,
+			},
+		}},
+		{Route: &EnvironmentRouteMutationAudit{
+			Action: EnvironmentRouteMutationEdit, BaseRevisionID: baseRevisionID, RouteID: routeID,
+			Request: &EnvironmentRouteMutationRequest{Exposure: "internal"},
+		}},
+		{Route: &EnvironmentRouteMutationAudit{
+			Action: EnvironmentRouteMutationRemove, BaseRevisionID: baseRevisionID, RouteID: routeID,
+		}},
+	}
+	for index, audit := range audits {
+		streams, buildErr := buildEnvironmentBlueprintStreams(EnvironmentBlueprintStageRequest{
+			Claim: claim, Mutation: &audit, Projection: projection, DependencyDigest: dependencyDigest,
+		})
+		if buildErr != nil {
+			t.Fatalf("stage audit %d error = %v", index, buildErr)
+		}
+		clear(streams.Audit)
+		clear(streams.Projection)
+	}
+	zoneBase := *audits[0].Zone
+	zoneFields := []EnvironmentZoneMutationRequest{
+		{EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 5), Name: "private", Subnet: "10.42.0.0/24", Internal: true},
+		{EnvironmentID: claim.EnvironmentID, Name: "alternate", Subnet: "10.42.0.0/24", Internal: true},
+		{EnvironmentID: claim.EnvironmentID, Name: "private", Subnet: "10.43.0.0/24", Internal: true},
+		{EnvironmentID: claim.EnvironmentID, Name: "private", Subnet: "10.42.0.0/24", Internal: false},
+	}
+	zoneDigest := mutationAuditDigestForTest(t, claim, projection, dependencyDigest, audits[0])
+	for index := range zoneFields {
+		changed := zoneBase
+		changed.Request = &zoneFields[index]
+		if digest := mutationAuditDigestForTest(t, claim, projection, dependencyDigest,
+			EnvironmentDesiredMutationAudit{Zone: &changed}); digest == zoneDigest {
+			t.Fatalf("Zone authored field %d did not change audit digest", index)
+		}
+	}
+	routeBase := *audits[2].Route
+	routeFields := []EnvironmentRouteMutationRequest{
+		{EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 6), Host: "app.example.test", Path: "/api/*", Exposure: "public", TargetServiceID: serviceID, TargetPort: 8080},
+		{EnvironmentID: claim.EnvironmentID, Host: "other.example.test", Path: "/api/*", Exposure: "public", TargetServiceID: serviceID, TargetPort: 8080},
+		{EnvironmentID: claim.EnvironmentID, Host: "app.example.test", Path: "/other/*", Exposure: "public", TargetServiceID: serviceID, TargetPort: 8080},
+		{EnvironmentID: claim.EnvironmentID, Host: "app.example.test", Path: "/api/*", Exposure: "internal", TargetServiceID: serviceID, TargetPort: 8080},
+		{EnvironmentID: claim.EnvironmentID, Host: "app.example.test", Path: "/api/*", Exposure: "public", TargetServiceID: ids.NewAt(ids.KindService, now, 7), TargetPort: 8080},
+		{EnvironmentID: claim.EnvironmentID, Host: "app.example.test", Path: "/api/*", Exposure: "public", TargetServiceID: serviceID, TargetPort: 9090},
+	}
+	routeDigest := mutationAuditDigestForTest(t, claim, projection, dependencyDigest, audits[2])
+	for index := range routeFields {
+		changed := routeBase
+		changed.Request = &routeFields[index]
+		if digest := mutationAuditDigestForTest(t, claim, projection, dependencyDigest,
+			EnvironmentDesiredMutationAudit{Route: &changed}); digest == routeDigest {
+			t.Fatalf("Route authored field %d did not change audit digest", index)
+		}
+	}
+}
+
+func mutationAuditWireForTest(family uint8, action uint8, body []byte) []byte {
+	result := make([]byte, 12, 12+len(body))
+	copy(result[:4], "GPMU")
+	binary.BigEndian.PutUint16(result[4:6], environmentBlueprintRecordSchema)
+	result[6], result[7] = family, action
+	binary.BigEndian.PutUint32(result[8:12], uint32(len(body)))
+	return append(result, body...)
+}
+
+func mutationAuditDigestForTest(
+	t *testing.T,
+	claim EnvironmentBlueprintStageClaim,
+	projection EnvironmentComposeProjection,
+	dependencyDigest [sha256.Size]byte,
+	audit EnvironmentDesiredMutationAudit,
+) [sha256.Size]byte {
+	t.Helper()
+	streams, err := buildEnvironmentBlueprintStreams(EnvironmentBlueprintStageRequest{
+		Claim: claim, Mutation: &audit, Projection: projection, DependencyDigest: dependencyDigest,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(streams.Audit)
+	defer clear(streams.Projection)
+	return streams.Descriptor.AuditSHA256
+}
+
 func TestEnvironmentEntryMutationAuditIsTypedRedactedAndDeterministic(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
@@ -362,7 +606,7 @@ func validEnvironmentBlueprintStageDescriptorForTest(t *testing.T) EnvironmentBl
 		State: EnvironmentBlueprintStageOpen, Bound: true,
 		AuditChunks: 1, AuditBytes: 5, AuditSHA256: audit,
 		ProjectionChunks: 1, ProjectionBytes: 10, ProjectionSHA256: projection,
-		ProjectionResources: 1, DependencyDigest: dependency, UpdatedAt: now,
+		DependencyDigest: dependency, UpdatedAt: now,
 	}
 }
 

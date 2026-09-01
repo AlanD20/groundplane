@@ -76,11 +76,9 @@ func NormalizedEnvironmentArtifact(
 		authoredNames[name] = struct{}{}
 	}
 	services := make([]*agentpb.ComposeService, 0, len(authoredNames))
-	for _, identity := range projection.Services {
-		if _, authored := authoredNames[identity.Name]; !authored {
-			continue
-		}
-		if ids.Validate(ids.KindService, identity.ID) != nil {
+	for _, desired := range projection.DesiredServices {
+		identity := desired.Desired
+		if _, authored := authoredNames[identity.Name]; !authored || ids.Validate(ids.KindService, identity.ID) != nil {
 			return nil, errs.New(errs.KindInternal, "Environment normalized Compose Service identity is invalid")
 		}
 		services = append(services, &agentpb.ComposeService{ServiceId: identity.ID, ComposeName: identity.Name})
@@ -89,8 +87,9 @@ func NormalizedEnvironmentArtifact(
 	if len(authoredNames) != 0 {
 		return nil, errs.New(errs.KindInternal, "Environment normalized Compose Service identity is missing")
 	}
-	networks := make([]*agentpb.ComposeNetwork, len(projection.Networks))
-	for index, identity := range projection.Networks {
+	networks := make([]*agentpb.ComposeNetwork, len(projection.DesiredZones))
+	for index, desired := range projection.DesiredZones {
+		identity := desired.Desired
 		networks[index] = &agentpb.ComposeNetwork{
 			NetworkId: identity.ID, ComposeName: identity.Name, DockerName: "gp_net_" + identity.ID,
 		}
@@ -141,9 +140,9 @@ func loadNormalizedEnvironmentProject(
 		delete(service.Extensions, composeResourceExtension)
 		project.DisabledServices[name] = service
 	}
-	ownedNetworks := make(map[string]struct{}, len(projection.Networks))
-	for _, network := range projection.Networks {
-		ownedNetworks[network.Name] = struct{}{}
+	ownedNetworks := make(map[string]struct{}, len(projection.DesiredZones))
+	for _, network := range projection.DesiredZones {
+		ownedNetworks[network.Desired.Name] = struct{}{}
 	}
 	for name, network := range project.Networks {
 		if _, owned := ownedNetworks[name]; owned {

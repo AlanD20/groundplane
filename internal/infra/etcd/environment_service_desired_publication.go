@@ -1,9 +1,11 @@
 package etcd
 
 import (
-	"bytes"
 	"context"
+	"maps"
+	"slices"
 
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -63,6 +65,9 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	if err := repository.validateDirectServiceHierarchy(ctx, input, fence.readAtRevision()); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	previous, found, err := repository.getEnvironmentBlueprintProjectionAtRevision(
 		ctx, input.Environment.Record.ID, fence.readAtRevision(),
 	)
@@ -76,13 +81,9 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	if err := validateEnvironmentComposeProjectionAdvance(previous.Record, found, input.Projection); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	prepared, err := repository.prepareDirectEnvironmentServiceChangeAtRevision(
-		ctx, input.Environment, input.Projection, input.Change, fence.readAtRevision(),
-	)
-	if err != nil {
+	if err := validateDirectEnvironmentServiceChange(input); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clear(prepared.value)
 	referenceConditions, err := serviceMutationReferenceConditions(input.Change.Record, input.References)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -118,23 +119,18 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	defer clear(epochMutation.Value)
 
 	serviceID := input.Change.Record.Desired.ID
-	primary := Condition{Key: serviceKey(serviceID)}
-	name := Condition{Key: serviceNameKey(input.Environment.Record.ID, input.Change.Record.Desired.Name)}
-	owner := Condition{Key: serviceOwnerKey(input.Environment.Record.ID, serviceID)}
-	if input.Change.Current != nil {
-		primary.ModRevision = input.Change.Current.Revision
-		name.ModRevision = prepared.nameRevision
-		owner.ModRevision = prepared.ownerRevision
-	}
 	conditions := []Condition{
 		{Key: environmentBlueprintRootKey(input.Revision.EnvironmentID, input.Revision.RevisionID), ModRevision: publication.rootRevision},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 		{Key: environmentBlueprintHeadKey(input.Revision.EnvironmentID), ModRevision: input.ExpectedHeadRevision},
-		primary, name, owner, {Key: deletionTombstoneKey("service", serviceID)},
+		{Key: deletionTombstoneKey("service", serviceID)},
+	}
+	if input.Change.Current == nil {
+		conditions = append(conditions, Condition{Key: serviceRuntimeKey(serviceID)})
 	}
 	conditions = append(conditions, referenceConditions...)
-	referenceOffset := 8
+	referenceOffset := len(conditions) - len(referenceConditions)
 	scriptFenceOffset := -1
 	if scriptFence != nil {
 		scriptFenceOffset = len(conditions)
@@ -146,13 +142,14 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 		{Type: MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: MutationDelete, Key: publication.locatorKey},
 		{Type: MutationPut, Key: environmentBlueprintHeadKey(input.Revision.EnvironmentID), Value: headReference},
-		{Type: MutationPut, Key: serviceKey(serviceID), Value: prepared.value},
 	}
 	if input.Change.Current == nil {
-		mutations = append(mutations,
-			Mutation{Type: MutationPut, Key: serviceNameKey(input.Environment.Record.ID, input.Change.Record.Desired.Name), Value: []byte(serviceID)},
-			Mutation{Type: MutationPut, Key: serviceOwnerKey(input.Environment.Record.ID, serviceID), Value: []byte(serviceID)},
-		)
+		runtimeValue, runtimeErr := encodeServiceRuntimeRecord(newServiceRuntimeRecord(input.Change.Record))
+		if runtimeErr != nil {
+			return IdempotencyTransactionResult{}, runtimeErr
+		}
+		defer clear(runtimeValue)
+		mutations = append(mutations, Mutation{Type: MutationPut, Key: serviceRuntimeKey(serviceID), Value: runtimeValue})
 	}
 	mutations = append(mutations, epochMutation)
 	classifier := func(_ int64, values []*KeyValue) error {
@@ -168,17 +165,11 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 			(input.ExpectedHeadRevision > 0 && (values[3] == nil || values[3].ModRevision != input.ExpectedHeadRevision)) {
 			return errs.New(errs.KindStateConflict, "Environment desired state changed")
 		}
-		if input.Change.Current == nil {
-			if values[4] != nil || values[5] != nil || values[6] != nil {
-				return errs.New(errs.KindNameConflict, "Service identity is already in use")
-			}
-		} else if values[4] == nil || values[4].ModRevision != input.Change.Current.Revision ||
-			values[5] == nil || values[5].ModRevision != prepared.nameRevision ||
-			values[6] == nil || values[6].ModRevision != prepared.ownerRevision {
-			return errs.New(errs.KindStateConflict, "Service desired state changed")
-		}
-		if values[7] != nil {
+		if values[4] != nil {
 			return errs.New(errs.KindResourceInUse, "Service removal is in progress")
+		}
+		if input.Change.Current == nil && values[5] != nil {
+			return errs.New(errs.KindStateConflict, "Service runtime identity is already in use")
 		}
 		if err := classifyServiceMutationReferenceConflict(values[referenceOffset:fenceOffset], input.References); err != nil {
 			referenceEnd := fenceOffset
@@ -201,7 +192,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateEnvironmentDesiredPublicationBudget(plan, input.Marker); err != nil {
+	if err := plan.enforceTransactionBounds(validateEnvironmentDesiredPublicationBudget); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	idempotency, err := newIdempotencyRepository(repository.store)
@@ -211,63 +202,124 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	return idempotency.Apply(ctx, input.Marker, plan)
 }
 
-func (repository *HierarchyRepository) prepareDirectEnvironmentServiceChangeAtRevision(
+func (repository *HierarchyRepository) validateDirectServiceHierarchy(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	projection EnvironmentComposeProjection,
-	change EnvironmentBlueprintServiceChange,
+	input EnvironmentServiceDesiredPublication,
 	readRevision int64,
-) (preparedEnvironmentBlueprintService, error) {
-	if err := validateServiceRecord(change.Record); err != nil {
-		return preparedEnvironmentBlueprintService{}, err
+) error {
+	result, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{
+			environmentKey(input.Environment.Record.ID),
+			projectKey(input.Project.Record.ID),
+		},
+		Revision: readRevision,
+	})
+	if err != nil {
+		return err
 	}
-	serviceID := change.Record.Desired.ID
+	if result == nil || len(result.Values) != 2 || result.Values[0] == nil || result.Values[1] == nil {
+		return errs.New(errs.KindStateConflict, "Environment Blueprint hierarchy changed")
+	}
+	defer clearKeyValues(result.Values)
+	durableEnvironment, environmentErr := decodeEnvironment(result.Values[0].Value)
+	durableProject, projectErr := decodeProject(result.Values[1].Value)
+	if environmentErr != nil || projectErr != nil ||
+		!equalDirectEnvironmentRecord(durableEnvironment, input.Environment.Record) ||
+		!equalDirectProjectRecord(durableProject, input.Project.Record) {
+		return errs.New(errs.KindStateConflict, "Environment Blueprint hierarchy changed")
+	}
+	return nil
+}
+
+func equalDirectEnvironmentRecord(left EnvironmentRecord, right EnvironmentRecord) bool {
+	return left.ID == right.ID && left.ProjectID == right.ProjectID && left.Name == right.Name &&
+		left.NetworkPool == right.NetworkPool && left.VolumeDir == right.VolumeDir &&
+		left.ProvisioningState == right.ProvisioningState && left.CreateTaskID == right.CreateTaskID &&
+		left.CreatedAt.Equal(right.CreatedAt) && left.DeletionTaskID == right.DeletionTaskID
+}
+
+func equalDirectProjectRecord(left ProjectRecord, right ProjectRecord) bool {
+	return left.ID == right.ID && left.TenantID == right.TenantID && left.Slug == right.Slug &&
+		left.Name == right.Name && left.Description == right.Description && left.Kind == right.Kind &&
+		left.DeletionTaskID == right.DeletionTaskID
+}
+
+func validateDirectEnvironmentServiceChange(input EnvironmentServiceDesiredPublication) error {
+	change := input.Change
+	if err := validateServiceRecord(change.Record); err != nil {
+		return err
+	}
 	matched := false
-	for _, identity := range projection.Services {
-		if identity.ID == serviceID && identity.Name == change.Record.Desired.Name {
+	for _, desired := range input.Projection.DesiredServices {
+		if desired.EnvironmentID == input.Environment.Record.ID &&
+			desired.BackingNetworkID == change.Record.BackingNetworkID &&
+			equalDirectServiceDesired(desired.Desired, change.Record.Desired) {
 			matched = true
 			break
 		}
 	}
-	if !matched || change.Record.EnvironmentID != environment.Record.ID || change.Record.BackingNetworkID != "" {
-		return preparedEnvironmentBlueprintService{}, errs.New(
-			errs.KindValidationFailed, "direct Service change does not match its desired projection",
-		)
+	if !matched || change.Record.EnvironmentID != input.Environment.Record.ID || change.Record.BackingNetworkID != "" {
+		return errs.New(errs.KindValidationFailed, "direct Service change does not match its desired projection")
 	}
-	prepared := preparedEnvironmentBlueprintService{change: change}
-	if change.Current != nil {
-		if err := validateServiceVersion(*change.Current); err != nil {
-			return preparedEnvironmentBlueprintService{}, err
-		}
-		if change.Current.Record.EnvironmentID != environment.Record.ID ||
-			change.Current.Record.Desired.ID != serviceID ||
-			change.Current.Record.Desired.Name != change.Record.Desired.Name ||
-			change.Current.Record.Runtime != change.Record.Runtime {
-			return preparedEnvironmentBlueprintService{}, errs.New(
-				errs.KindValidationFailed, "direct Service replacement changed runtime or identity",
-			)
-		}
-		indexes, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
-			serviceNameKey(environment.Record.ID, change.Record.Desired.Name),
-			serviceOwnerKey(environment.Record.ID, serviceID),
-		}, Revision: readRevision})
-		if err != nil {
-			return preparedEnvironmentBlueprintService{}, err
-		}
-		if indexes == nil || len(indexes.Values) != 2 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
-			!bytes.Equal(indexes.Values[0].Value, []byte(serviceID)) ||
-			!bytes.Equal(indexes.Values[1].Value, []byte(serviceID)) {
-			return preparedEnvironmentBlueprintService{}, errs.New(errs.KindInternal, "Service indexes are missing or corrupt")
-		}
-		prepared.nameRevision = indexes.Values[0].ModRevision
-		prepared.ownerRevision = indexes.Values[1].ModRevision
+	if change.Current == nil {
+		return nil
 	}
-	value, err := encodeServiceRecord(change.Record)
-	if err != nil {
-		return preparedEnvironmentBlueprintService{}, err
+	if err := validateServiceVersion(*change.Current); err != nil {
+		return err
 	}
-	prepared.value = value
-	return prepared, nil
+	if change.Current.Revision != input.ExpectedHeadRevision ||
+		change.Current.Record.EnvironmentID != change.Record.EnvironmentID ||
+		change.Current.Record.Desired.ID != change.Record.Desired.ID ||
+		change.Current.Record.Desired.Name != change.Record.Desired.Name ||
+		change.Current.Record.Runtime != change.Record.Runtime ||
+		change.Current.Record.BackingNetworkID != change.Record.BackingNetworkID {
+		return errs.New(errs.KindValidationFailed, "direct Service replacement changed runtime or identity")
+	}
+	return nil
+}
+
+func equalDirectServiceDesired(left core.Service, right core.Service) bool {
+	if left.ID != right.ID || left.Name != right.Name || left.Image != right.Image ||
+		left.Strategy != right.Strategy || left.OnFailure != right.OnFailure ||
+		left.Healthcheck != right.Healthcheck || left.Resources != right.Resources ||
+		left.Restart != right.Restart || left.Logging != right.Logging || left.Replicas != right.Replicas ||
+		left.Adapter != right.Adapter || left.FactsPrefix != right.FactsPrefix || left.Label != right.Label ||
+		!slices.Equal(left.Zones, right.Zones) || !slices.Equal(left.Command, right.Command) ||
+		!slices.Equal(left.Mounts, right.Mounts) || !slices.Equal(left.Expose, right.Expose) ||
+		!slices.EqualFunc(left.Environment, right.Environment, equalDirectServiceEnvironmentEntry) {
+		return false
+	}
+	if !maps.EqualFunc(left.Aliases, right.Aliases, func(leftAliases []string, rightAliases []string) bool {
+		return slices.Equal(leftAliases, rightAliases)
+	}) {
+		return false
+	}
+	return maps.EqualFunc(
+		left.DependsOn,
+		right.DependsOn,
+		func(leftDependency core.ServiceDependency, rightDependency core.ServiceDependency) bool {
+			return leftDependency.Condition == rightDependency.Condition &&
+				slices.Equal(leftDependency.Phases, rightDependency.Phases)
+		},
+	)
+}
+
+func equalDirectServiceEnvironmentEntry(left core.EnvEntry, right core.EnvEntry) bool {
+	return left.ID == right.ID && left.Kind == right.Kind && left.Key == right.Key && left.Path == right.Path &&
+		equalDirectServiceUint32Pointer(left.UID, right.UID) &&
+		equalDirectServiceUint32Pointer(left.GID, right.GID) &&
+		left.Source.Kind == right.Source.Kind && left.Source.Literal == right.Source.Literal &&
+		left.Source.SecretRef == right.Source.SecretRef &&
+		equalDirectServiceFactReference(left.Source.Fact, right.Source.Fact) &&
+		slices.Equal(left.Exposure, right.Exposure) && left.Secret == right.Secret
+}
+
+func equalDirectServiceUint32Pointer(left *uint32, right *uint32) bool {
+	return (left == nil && right == nil) || (left != nil && right != nil && *left == *right)
+}
+
+func equalDirectServiceFactReference(left *core.FactRef, right *core.FactRef) bool {
+	return (left == nil && right == nil) || (left != nil && right != nil && *left == *right)
 }
 
 func (repository *HierarchyRepository) prepareEnvironmentDirectPublication(

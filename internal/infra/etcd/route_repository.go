@@ -88,15 +88,7 @@ func (repository *RouteRepository) GetRoute(ctx context.Context, id string) (Ver
 	if err := validateID(ids.KindRoute, id); err != nil {
 		return Versioned[RouteRecord]{}, err
 	}
-	return getRecord(
-		ctx,
-		repository.store,
-		routeKey(id),
-		id,
-		errs.KindRouteNotFound,
-		decodeRouteRecord,
-		func(record RouteRecord) string { return record.Desired.ID },
-	)
+	return findRouteAtRevision(ctx, repository.store, id, 0)
 }
 
 func (repository *RouteRepository) ListRoutes(
@@ -107,20 +99,7 @@ func (repository *RouteRepository) ListRoutes(
 	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
 		return Page[RouteRecord]{}, err
 	}
-	return listIndexPage(
-		ctx,
-		repository.store,
-		"routes",
-		"environment",
-		environmentID,
-		routeOwnerPrefix(environmentID),
-		routeKey,
-		ids.KindRoute,
-		request,
-		decodeRouteRecord,
-		func(record RouteRecord) string { return record.Desired.ID },
-		func(record RouteRecord) bool { return record.EnvironmentID == environmentID },
-	)
+	return listRoutesFromDesiredHead(ctx, repository.store, environmentID, request)
 }
 
 // SnapshotRevision returns one truthful MVCC view for a multi-collection
@@ -238,7 +217,7 @@ func routeWriteConditions(
 		matchCondition,
 		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: serviceKey(target.Record.Desired.ID), ModRevision: target.Revision},
+		serviceDesiredCondition(target),
 		{Key: deletionTombstoneKey("route", record.Desired.ID)},
 		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
 		{Key: deletionTombstoneKey("project", project.Record.ID)},

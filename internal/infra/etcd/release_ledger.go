@@ -179,7 +179,7 @@ func (ledger *ReleaseLedger) Publish(
 	if err != nil {
 		return ReleasePublicationResult{}, err
 	}
-	desiredKey, err := releaseDesiredRecordKey(evidence.DesiredKind, evidence.DesiredID)
+	desiredKey, err := releaseDesiredRecordKey(evidence.DesiredKind, evidence.DesiredID, evidence.EnvironmentID)
 	if err != nil {
 		return ReleasePublicationResult{}, err
 	}
@@ -330,7 +330,7 @@ func validateReleasePublicationEvidence(value ReleasePublicationEvidence) error 
 	if value.DesiredID != value.Task.Target {
 		return errs.New(errs.KindValidationFailed, "release publication desired identity is invalid")
 	}
-	if _, err := releaseDesiredRecordKey(value.DesiredKind, value.DesiredID); err != nil {
+	if _, err := releaseDesiredRecordKey(value.DesiredKind, value.DesiredID, value.EnvironmentID); err != nil {
 		return err
 	}
 	if value.Task.OperationID != manifest.OperationID || value.Task.Owner.EnvironmentID != value.EnvironmentID ||
@@ -348,11 +348,11 @@ func validateReleasePublicationEvidence(value ReleasePublicationEvidence) error 
 	return nil
 }
 
-func releaseDesiredRecordKey(kind ReleaseDesiredKind, id string) (string, error) {
+func releaseDesiredRecordKey(kind ReleaseDesiredKind, id string, environmentID string) (string, error) {
 	switch kind {
 	case ReleaseDesiredService:
-		if ids.Validate(ids.KindService, id) == nil {
-			return serviceKey(id), nil
+		if ids.Validate(ids.KindService, id) == nil && ids.Validate(ids.KindEnvironment, environmentID) == nil {
+			return environmentBlueprintHeadKey(environmentID), nil
 		}
 	case ReleaseDesiredGroup:
 		if ids.Validate(ids.KindReleaseGroup, id) == nil {

@@ -29,6 +29,7 @@ func (resolver *TaskPlanResolver) PrepareRouteMutationTask(ctx context.Context, 
 	if err != nil {
 		return etcd.RouteMutationTaskPreparation{}, err
 	}
+	candidate.RevisionID = task.ID
 	pin, err := resolver.pinRouteProvider(ctx, intent.EnvironmentID, intent.CurrentProjectionRevision, candidate, &intent.Route, "", intent.Route.DesiredGeneration)
 	if err != nil {
 		return etcd.RouteMutationTaskPreparation{}, err

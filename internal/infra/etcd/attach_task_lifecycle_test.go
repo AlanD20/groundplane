@@ -864,9 +864,10 @@ func attachDetachRaceEnvelope(
 		BlueprintRevisionID: scope.BlueprintRevision.Record.RevisionID,
 		ArtifactID:          ids.NewAt(ids.KindConfig, createdAt, 943),
 		RenderGeneration:    scope.ComposeProjection.Record.RenderGeneration,
-		Services:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Services...),
-		Networks:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Networks...),
+		Services:            attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
+		Networks:            attachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones),
 		Volumes:             append([]EnvironmentVolumeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
+		VolumeMounts:        append([]EnvironmentServiceVolumeMount(nil), scope.ComposeProjection.Record.VolumeMounts...),
 		ConsumerServiceIDs:  []string{current.Record.ServiceID},
 		GrantAttachIDs:      append([]string(nil), current.Record.GrantAttachIDs...),
 	}

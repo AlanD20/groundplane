@@ -22,8 +22,11 @@ func (repository *TaskRepository) prepareServiceTaskRetry(
 	if !isServiceLifecycleTask(source) {
 		return serviceTaskChange{}, nil
 	}
+	service, err := findServiceAtRevision(ctx, repository.store, source.Target, readRevision)
+	if err != nil {
+		return serviceTaskChange{}, err
+	}
 	values, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
-		serviceKey(source.Target),
 		serviceLifecycleActiveKey(source.Target),
 		serviceLifecycleRenderInputKey(source.ID),
 		serviceLifecycleRenderInputKey(retry.ID),
@@ -31,20 +34,16 @@ func (repository *TaskRepository) prepareServiceTaskRetry(
 	if err != nil {
 		return serviceTaskChange{}, err
 	}
-	if values == nil || len(values.Values) != 4 || values.Values[0] == nil {
-		return serviceTaskChange{}, errs.New(errs.KindServiceNotFound, "Service was not found")
+	if values == nil || len(values.Values) != 3 {
+		return serviceTaskChange{}, errs.New(errs.KindInternal, "Service retry evidence is incomplete")
 	}
-	record, err := decodeServiceRecord(values.Values[0].Value)
-	if err != nil {
-		return serviceTaskChange{}, err
-	}
-	if record.Desired.ID != source.Target || record.Runtime.RuntimeIntent != serviceLifecycleIntent(source.Type) {
+	if service.Record.Runtime.RuntimeIntent != serviceLifecycleIntent(source.Type) {
 		return serviceTaskChange{}, errs.New(errs.KindStateConflict, "Service runtime intent changed before retry")
 	}
-	if values.Values[1] != nil {
+	if values.Values[0] != nil {
 		return serviceTaskChange{}, errs.New(errs.KindResourceInUse, "Service already has an active lifecycle Task")
 	}
-	if values.Values[3] != nil {
+	if values.Values[2] != nil {
 		return serviceTaskChange{}, errs.New(errs.KindInternal, "Service retry render input already exists")
 	}
 	reference, err := encodeTaskReference(retry.ID)
@@ -54,27 +53,28 @@ func (repository *TaskRepository) prepareServiceTaskRetry(
 	change := serviceTaskChange{
 		applies: true,
 		conditions: []Condition{
-			{Key: serviceKey(source.Target), ModRevision: values.Values[0].ModRevision},
+			serviceDesiredCondition(service),
+			serviceRuntimeCondition(service),
 			{Key: serviceLifecycleActiveKey(source.Target)},
 		},
 		mutations: []Mutation{{Type: MutationPut, Key: serviceLifecycleActiveKey(source.Target), Value: reference}},
 	}
 	if source.Executor == TaskExecutorAgent {
-		if values.Values[2] == nil {
+		if values.Values[1] == nil {
 			return serviceTaskChange{}, errs.New(errs.KindInternal, "Service lifecycle render input was not found")
 		}
-		input, decodeErr := decodeServiceLifecycleRenderInput(values.Values[2].Value)
+		input, decodeErr := decodeServiceLifecycleRenderInput(values.Values[1].Value)
 		if decodeErr != nil || input.PlanID != source.PlanID || source.PlanID != retry.PlanID {
 			return serviceTaskChange{}, errs.New(errs.KindInternal, "Service lifecycle render input changed")
 		}
 		change.conditions = append(change.conditions,
-			Condition{Key: serviceLifecycleRenderInputKey(source.ID), ModRevision: values.Values[2].ModRevision},
+			Condition{Key: serviceLifecycleRenderInputKey(source.ID), ModRevision: values.Values[1].ModRevision},
 			Condition{Key: serviceLifecycleRenderInputKey(retry.ID)},
 		)
 		change.mutations = append(change.mutations, Mutation{
-			Type: MutationPut, Key: serviceLifecycleRenderInputKey(retry.ID), Value: values.Values[2].Value,
+			Type: MutationPut, Key: serviceLifecycleRenderInputKey(retry.ID), Value: values.Values[1].Value,
 		})
-	} else if values.Values[2] != nil {
+	} else if values.Values[1] != nil {
 		return serviceTaskChange{}, errs.New(errs.KindInternal, "Controller Service Task has a render input")
 	}
 	return change, nil

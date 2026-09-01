@@ -10,9 +10,12 @@ import (
 func withTestEnvironmentComposeArtifact(projection EnvironmentComposeProjection) EnvironmentComposeProjection {
 	canonicalYAML := []byte("services: {}\n")
 	digest := sha256.Sum256(canonicalYAML)
-	services := make([]*agentpb.ComposeService, len(projection.Services))
-	for index, service := range projection.Services {
-		services[index] = &agentpb.ComposeService{ServiceId: service.ID, ComposeName: service.Name}
+	services := make([]*agentpb.ComposeService, len(projection.DesiredServices))
+	for index, service := range projection.DesiredServices {
+		services[index] = &agentpb.ComposeService{
+			ServiceId:   service.Desired.ID,
+			ComposeName: service.Desired.Name,
+		}
 	}
 	volumes := make([]*agentpb.ComposeVolume, len(projection.Volumes))
 	for index, volume := range projection.Volumes {

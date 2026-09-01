@@ -26,6 +26,14 @@ func (repository *ServiceRepository) ValidateServiceRemovalReferences(
 	if current.Record.BackingNetworkID != "" || current.Record.Desired.Adapter != "" {
 		return errs.New(errs.KindResourceInUse, "Backing Services are removed through their backing lifecycle")
 	}
+	for _, service := range projection.Record.DesiredServices {
+		if service.Desired.ID == current.Record.Desired.ID {
+			continue
+		}
+		if _, referenced := service.Desired.DependsOn[current.Record.Desired.Name]; referenced {
+			return errs.New(errs.KindResourceInUse, "Service is referenced by another desired resource")
+		}
+	}
 	for _, component := range projection.Record.Components {
 		if slices.Contains(component.Runtime.GeneratedServices, current.Record.Desired.ID) {
 			return errs.New(errs.KindResourceInUse, "Component-generated Services are removed through their Component")
@@ -57,53 +65,18 @@ func (repository *ServiceRepository) scanServiceRemovalRecords(
 	revision int64,
 	current ServiceRecord,
 ) error {
-	for _, scan := range []struct {
-		prefix string
-		check  func([]byte) (bool, error)
-	}{
-		{prefix: servicePrefix, check: func(value []byte) (bool, error) {
-			record, err := decodeServiceRecord(value)
-			if err != nil {
-				return false, err
-			}
-			if record.EnvironmentID != current.EnvironmentID || record.Desired.ID == current.Desired.ID {
-				return false, nil
-			}
-			_, referenced := record.Desired.DependsOn[current.Desired.Name]
-			return referenced, nil
-		}},
-		{prefix: routePrefix, check: func(value []byte) (bool, error) {
-			record, err := decodeRouteRecord(value)
-			if err != nil {
-				return false, err
-			}
-			return record.EnvironmentID == current.EnvironmentID && record.Desired.TargetServiceID == current.Desired.ID, nil
-		}},
-	} {
-		cursor := ""
-		for {
-			page, err := repository.store.Range(ctx, RangeRequest{
-				Prefix: scan.prefix, StartExclusive: cursor, Limit: 200, Revision: revision,
-			})
-			if err != nil {
-				return err
-			}
-			if page == nil {
-				return errs.New(errs.KindInternal, "Service removal reference scan is empty")
-			}
-			for _, value := range page.Values {
-				referenced, checkErr := scan.check(value.Value)
-				if checkErr != nil {
-					return checkErr
-				}
-				if referenced {
-					return errs.New(errs.KindResourceInUse, "Service is referenced by another desired resource")
-				}
-				cursor = value.Key
-			}
-			if !page.More {
-				break
-			}
+	projection, found, err := currentEnvironmentProjectionAtRevision(
+		ctx, repository.store, current.EnvironmentID, revision,
+	)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return nil
+	}
+	for _, route := range projection.Record.DesiredRoutes {
+		if route.Desired.TargetServiceID == current.Desired.ID {
+			return errs.New(errs.KindResourceInUse, "Service is referenced by another desired resource")
 		}
 	}
 	return nil
@@ -158,7 +131,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		return existing, err
 	}
 	mutationContext, err := loadOrdinaryEnvironmentMutationContext(
-		ctx, repository.store, environment.Record.ID, serviceKey(current.Record.Desired.ID),
+		ctx, repository.store, environment.Record.ID, environmentKey(environment.Record.ID),
 		project.Record.ID, tenant.Record.ID,
 	)
 	if err != nil {
@@ -172,8 +145,6 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	indexes, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
-		serviceNameKey(environment.Record.ID, current.Record.Desired.Name),
-		serviceOwnerKey(environment.Record.ID, current.Record.Desired.ID),
 		environmentBlueprintHeadKey(environment.Record.ID),
 		environmentComposeProjectionKey(environment.Record.ID),
 		serviceLifecycleActiveKey(current.Record.Desired.ID),
@@ -182,12 +153,10 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if indexes == nil || len(indexes.Values) != 6 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
-		indexes.Values[2] == nil || indexes.Values[3] == nil || indexes.Values[4] != nil || indexes.Values[5] != nil ||
-		string(indexes.Values[0].Value) != current.Record.Desired.ID ||
-		string(indexes.Values[1].Value) != current.Record.Desired.ID ||
-		indexes.Values[2].ModRevision != intent.ExpectedHeadRevision ||
-		indexes.Values[3].ModRevision != projection.Revision {
+	if indexes == nil || len(indexes.Values) != 4 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
+		indexes.Values[2] != nil || indexes.Values[3] != nil ||
+		indexes.Values[0].ModRevision != intent.ExpectedHeadRevision ||
+		indexes.Values[1].ModRevision != projection.Revision {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Service removal baseline changed")
 	}
 	hierarchy := &HierarchyRepository{store: repository.store}
@@ -233,13 +202,11 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	conditions := []Condition{
 		{Key: taskKey(task.ID)}, {Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)}, {Key: taskQueueKey(task.Executor, task.ID)},
-		{Key: serviceKey(current.Record.Desired.ID), ModRevision: current.Revision},
-		{Key: serviceNameKey(environment.Record.ID, current.Record.Desired.Name), ModRevision: indexes.Values[0].ModRevision},
-		{Key: serviceOwnerKey(environment.Record.ID, current.Record.Desired.ID), ModRevision: indexes.Values[1].ModRevision},
+		serviceDesiredCondition(current),
+		serviceRuntimeCondition(current),
 		{Key: deletionTombstoneKey(string(DeletionTargetService), current.Record.Desired.ID)},
 		{Key: serviceRemovalIntentKey(task.ID)},
-		{Key: environmentBlueprintHeadKey(environment.Record.ID), ModRevision: indexes.Values[2].ModRevision},
-		{Key: environmentComposeProjectionKey(environment.Record.ID), ModRevision: indexes.Values[3].ModRevision},
+		{Key: environmentComposeProjectionKey(environment.Record.ID), ModRevision: indexes.Values[1].ModRevision},
 		{Key: serviceLifecycleActiveKey(current.Record.Desired.ID)},
 		{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)},
 		{Key: environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID), ModRevision: publication.rootRevision},
@@ -262,7 +229,13 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		if values[4] == nil {
 			return errs.New(errs.KindServiceNotFound, "Service was not found")
 		}
-		if values[7] != nil || values[8] != nil || values[11] != nil || values[12] != nil {
+		if values[4].ModRevision != current.Revision {
+			return stateConflict("service", current.Record.Desired.ID)
+		}
+		if !conditionMatchesRead(serviceRuntimeCondition(current), values[5]) {
+			return stateConflict("service runtime", current.Record.Desired.ID)
+		}
+		if values[6] != nil || values[7] != nil || values[9] != nil || values[10] != nil {
 			return errs.New(errs.KindResourceInUse, "Service removal or Environment mutation is already active")
 		}
 		return errs.New(errs.KindStateConflict, "Service removal state changed")
@@ -273,6 +246,12 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	}
 	defer binding.clear()
 	defer clearMutationValues(binding.mutations)
+	if err := validateBoundServiceConditions(binding, current, 4, 5); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := binding.preparedConflict(originalClassify); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	initiation, err := newEnvironmentTaskInitiation(versionedTenant, versionedProject, versionedEnvironment, TaskActorOperator)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

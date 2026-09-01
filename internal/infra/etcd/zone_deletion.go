@@ -16,38 +16,51 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 	environment Versioned[EnvironmentRecord],
 	project Versioned[ProjectRecord],
 	zone Versioned[ZoneRecord],
+	authorities EnvironmentZoneRemovalAuthorities,
 	tombstone DeletionTombstoneRecord,
+	intent ZoneRemovalIntent,
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateZoneHierarchy(ctx, environment, project, zone.Record); err != nil {
+	if err := validateDeletionTombstone(tombstone); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateZoneRemovalIntent(intent); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	selected, err := selectedZoneDeletionRecord(authorities.Desired, zone, intent.ZoneID)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	zone = selected
+	if err := validateZoneDeletionHierarchy(ctx, environment, project, zone); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	ordinary := zone.Record.Desired.OwnerKind == core.ZoneOwnerEnvironment &&
 		zone.Record.Desired.OwnerID == environment.Record.ID && project.Record.Kind == ProjectKindTenant
 	backing := zone.Record.Desired.OwnerKind == core.ZoneOwnerBackingProject &&
 		zone.Record.Desired.OwnerID == project.Record.ID && project.Record.Kind == ProjectKindBacking
-	if zone.Revision <= 0 || zone.ReadRevision < zone.Revision || (!ordinary && !backing) {
+	if !ordinary && !backing {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Zone deletion ownership is invalid",
 		)
 	}
-	if err := validateDeletionTombstone(tombstone); err != nil {
+	if err := validateZoneRemovalTaskOwner(task, intent); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	ordinaryTask := ordinary && task.Executor == TaskExecutorAgent && len(task.Params) == 1 &&
-		task.Params[TaskZoneEnvironmentParam] == environment.Record.ID
-	backingTask := backing && task.Executor == TaskExecutorController && len(task.Params) == 3 &&
-		task.Params[TaskResourceKindParam] == TaskResourceBackingZone &&
-		task.Params[TaskZoneEnvironmentParam] == environment.Record.ID &&
-		validSHA256(task.Params[TaskZoneImpactTokenParam])
+	ordinaryTask := ordinary && task.Executor == TaskExecutorAgent
+	backingTask := backing && task.Executor == TaskExecutorController
 	if tombstone.TargetKind != DeletionTargetZone || tombstone.TargetID != zone.Record.Desired.ID ||
 		tombstone.TargetRevision != zone.Revision || tombstone.TaskID != task.ID ||
 		tombstone.Phase != DeletionPhaseHostEffects || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
 		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) ||
 		task.Type != TaskRemove || task.Target != zone.Record.Desired.ID || task.Status != TaskStatusPending ||
-		(!ordinaryTask && !backingTask) {
+		(!ordinaryTask && !backingTask) || intent.ZoneRevision != zone.Revision ||
+		authorities.Desired.Revision != intent.DesiredHeadRevision ||
+		authorities.Applied.Revision != intent.AppliedProjectionRevision ||
+		!sameServiceRemovalProjection(authorities.Desired.Record, intent.DesiredProjection) ||
+		!sameServiceRemovalProjection(authorities.Applied.Record, intent.AppliedProjection) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Zone deletion Task and tombstone do not match",
@@ -58,25 +71,14 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		marker.TaskID != task.ID || marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != environment.Record.ID || marker.ReplayTarget == nil ||
 		*marker.ReplayTarget != wantReplayTarget || !marker.CreatedAt.Equal(task.CreatedAt) ||
-		!marker.UpdatedAt.Equal(marker.CreatedAt) {
+		!marker.UpdatedAt.Equal(marker.CreatedAt) || marker.Locator != intent.Claim.Locator ||
+		!sameBlueprintProtectedIntent(marker.Intent, intent.Claim.Intent) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Zone deletion marker does not match its Task",
 		)
 	}
 
-	secondary, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
-		zoneNameKey(zone.Record.EnvironmentID, zone.Record.Desired.Name),
-		zoneOwnerKey(zone.Record.EnvironmentID, zone.Record.Desired.ID),
-	}})
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if secondary == nil || len(secondary.Values) != 2 || secondary.Values[0] == nil ||
-		secondary.Values[1] == nil || string(secondary.Values[0].Value) != zone.Record.Desired.ID ||
-		string(secondary.Values[1].Value) != zone.Record.Desired.ID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Zone deletion indexes are corrupt")
-	}
 	pool, err := repository.getZonePoolRegistry(ctx, environment.Record.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -106,6 +108,21 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 	if err := validateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
+		return existing, err
+	}
+	hierarchy := &HierarchyRepository{store: repository.store}
+	publication, err := hierarchy.prepareEnvironmentDirectPublication(
+		ctx, intent.Claim,
+		EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},
+		intent.CandidateProjection,
+		IdempotencyMarker{Locator: intent.Claim.Locator, Intent: intent.Claim.Intent},
+		intent.DesiredHeadRevision,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(publication.publishedDescriptor)
 	tombstoneValue, err := encodeDeletionTombstone(tombstone)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -121,6 +138,11 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(reference)
+	intentValue, err := encodeZoneRemovalIntent(intent)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(intentValue)
 
 	tombstoneKey := deletionTombstoneKey(string(DeletionTargetZone), zone.Record.Desired.ID)
 	conditions := []Condition{
@@ -128,15 +150,6 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
-		{Key: zoneKey(zone.Record.Desired.ID), ModRevision: zone.Revision},
-		{
-			Key:         zoneNameKey(zone.Record.EnvironmentID, zone.Record.Desired.Name),
-			ModRevision: secondary.Values[0].ModRevision,
-		},
-		{
-			Key:         zoneOwnerKey(zone.Record.EnvironmentID, zone.Record.Desired.ID),
-			ModRevision: secondary.Values[1].ModRevision,
-		},
 		{Key: zonePoolRegistryKey(zone.Record.EnvironmentID), ModRevision: pool.Revision},
 		{Key: componentAddressRegistryKey(zone.Record.Desired.ID), ModRevision: addresses.Revision},
 		{Key: tombstoneKey},
@@ -144,6 +157,13 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
 		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID)},
 		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID)},
+		{Key: zoneRemovalIntentKey(intent.OperationID)},
+		{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: intent.DesiredHeadRevision},
+		{Key: environmentComposeProjectionKey(intent.EnvironmentID), ModRevision: intent.AppliedProjectionRevision},
+		{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
+		{Key: environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID), ModRevision: publication.rootRevision},
+		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
+		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 	}
 	if ordinary {
 		conditions = append(conditions, Condition{
@@ -156,6 +176,8 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: MutationPut, Key: tombstoneKey, Value: tombstoneValue},
+		{Type: MutationPut, Key: zoneRemovalIntentKey(intent.OperationID), Value: intentValue},
+		{Type: MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(task.ID)},
 	}
 	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
 	if err != nil {
@@ -171,10 +193,14 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		conditions,
 		mutations,
 		classifyZoneDeletionStartConflict(
-			environment, project, zone, pool, addresses, task.OperationID, ordinary,
+			environment, project, pool, addresses, task.OperationID,
+			intent.DesiredHeadRevision, intent.AppliedProjectionRevision, ordinary,
 		),
 	)
 	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := plan.enforceTransactionBounds(zoneRemovalTransactionBudgetValidator(zoneRemovalTransactionBegin)); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	idempotency, err := newIdempotencyRepository(repository.store)
@@ -187,14 +213,15 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 func classifyZoneDeletionStartConflict(
 	environment Versioned[EnvironmentRecord],
 	project Versioned[ProjectRecord],
-	zone Versioned[ZoneRecord],
 	pool Versioned[zonePoolRegistry],
 	addresses Versioned[componentAddressRegistry],
 	operationID string,
+	expectedHeadRevision int64,
+	projectionRevision int64,
 	hasTenantFence bool,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		expectedValues := 14
+		expectedValues := 18
 		if hasTenantFence {
 			expectedValues++
 		}
@@ -218,36 +245,36 @@ func classifyZoneDeletionStartConflict(
 				return errs.New(errs.KindInternal, "Zone deletion collided with durable Task state")
 			}
 		}
-		if values[4] == nil {
-			return errs.New(errs.KindZoneNotFound, "zone was not found")
-		}
-		if values[4].ModRevision != zone.Revision {
-			return stateConflict("zone", zone.Record.Desired.ID)
-		}
-		for _, index := range []int{5, 6} {
-			if values[index] == nil || string(values[index].Value) != zone.Record.Desired.ID {
-				return errs.New(errs.KindInternal, "Zone deletion index changed or is corrupt")
-			}
-		}
-		if values[7] == nil || values[7].ModRevision != pool.Revision {
+		if values[4] == nil || values[4].ModRevision != pool.Revision {
 			return stateConflict("Zone pool registry", environment.Record.ID)
 		}
-		if keyValueRevision(values[8]) != addresses.Revision {
+		if keyValueRevision(values[5]) != addresses.Revision {
 			return errs.New(errs.KindResourceInUse, "Zone Component address reservations changed")
 		}
-		if values[9] != nil {
+		if values[6] != nil {
 			return errs.New(errs.KindResourceInUse, "Zone deletion is already in progress")
 		}
-		if values[10] == nil || values[10].ModRevision != environment.Revision {
+		if values[7] == nil || values[7].ModRevision != environment.Revision {
 			return stateConflict("environment", environment.Record.ID)
 		}
-		if values[11] == nil || values[11].ModRevision != project.Revision {
+		if values[8] == nil || values[8].ModRevision != project.Revision {
 			return stateConflict("project", project.Record.ID)
 		}
-		for index := 12; index < expectedValues; index++ {
+		for _, index := range []int{9, 10} {
 			if values[index] != nil {
 				return errs.New(errs.KindResourceInUse, "Zone hierarchy deletion is in progress")
 			}
+		}
+		if hasTenantFence && values[18] != nil {
+			return errs.New(errs.KindResourceInUse, "Zone hierarchy deletion is in progress")
+		}
+		if values[11] != nil || values[14] != nil {
+			return errs.New(errs.KindResourceInUse, "Zone removal or Environment mutation is already active")
+		}
+		if values[12] == nil || values[12].ModRevision != expectedHeadRevision ||
+			values[13] == nil || values[13].ModRevision != projectionRevision ||
+			values[15] == nil || values[16] == nil || values[17] == nil {
+			return errs.New(errs.KindStateConflict, "Zone sealed desired state changed")
 		}
 		return errs.New(errs.KindStateConflict, "Zone deletion state changed")
 	}
@@ -260,15 +287,26 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	zone Versioned[ZoneRecord],
 	parentTaskID string,
 	tombstone Versioned[DeletionTombstoneRecord],
+	intent ZoneRemovalIntent,
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateContext(ctx); err != nil {
+	if tombstone.Revision <= 0 ||
+		validateStableID(ids.KindTask, parentTaskID) != nil {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "backing Zone handoff is invalid")
+	}
+	if err := validateZoneRemovalIntent(intent); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if zone.Revision <= 0 || tombstone.Revision <= 0 ||
-		zone.Record.Desired.OwnerKind != core.ZoneOwnerBackingProject ||
-		validateStableID(ids.KindTask, parentTaskID) != nil {
+	projection := Versioned[EnvironmentComposeProjection]{
+		Record: intent.DesiredProjection, Revision: intent.DesiredHeadRevision, ReadRevision: zone.ReadRevision,
+	}
+	selected, err := selectedZoneDeletionRecord(projection, zone, intent.ZoneID)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	zone = selected
+	if zone.Record.Desired.OwnerKind != core.ZoneOwnerBackingProject {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "backing Zone handoff is invalid")
 	}
 	currentTombstone := tombstone.Record
@@ -278,9 +316,11 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		currentTombstone.Phase != DeletionPhaseHostEffects || currentTombstone.Checkpoint != (DeletionCheckpoint{}) {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "backing Zone cascade fence changed")
 	}
+	if err := validateZoneRemovalTaskOwner(task, intent); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	if task.Executor != TaskExecutorAgent || task.Type != TaskRemove || task.Target != zone.Record.Desired.ID ||
-		task.Status != TaskStatusPending || len(task.Params) != 1 ||
-		task.Params[TaskZoneEnvironmentParam] != zone.Record.EnvironmentID ||
+		task.Status != TaskStatusPending ||
 		marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.ReplayTarget != nil ||
 		marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
@@ -291,13 +331,31 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 			"backing Zone Agent handoff Task is invalid",
 		)
 	}
+	pool, err := repository.getZonePoolRegistry(ctx, intent.EnvironmentID)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if pool.Revision <= 0 || pool.Record.Reservations[zone.Record.Desired.ID] != zone.Record.Desired.Subnet {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Zone subnet reservation is inconsistent")
+	}
+	addresses, err := getComponentAddressRegistry(ctx, repository.store, zone.Record)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if len(addresses.Record.Reservations) != 0 {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindResourceInUse, "Zone gained a Component address reservation")
+	}
 	parentResult, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
-		taskKey(parentTaskID), componentAddressRegistryKey(zone.Record.Desired.ID),
+		taskKey(parentTaskID), zoneRemovalIntentKey(intent.OperationID),
+		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
+		environmentBlueprintHeadKey(intent.EnvironmentID), environmentComposeProjectionKey(intent.EnvironmentID),
 	}, Revision: tombstone.ReadRevision})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if parentResult == nil || len(parentResult.Values) != 2 || parentResult.Values[0] == nil {
+	if parentResult == nil || len(parentResult.Values) != 5 || parentResult.Values[0] == nil ||
+		parentResult.Values[1] == nil || parentResult.Values[2] == nil || parentResult.Values[3] == nil ||
+		parentResult.Values[4] == nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "backing Zone parent Task is missing")
 	}
 	parent, err := decodeTaskRecord(parentResult.Values[0].Value)
@@ -309,18 +367,33 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 			"backing Zone parent Task is not running",
 		)
 	}
-	if parentResult.Values[1] != nil {
-		addresses, decodeErr := decodeEnvelope[componentAddressRegistry](
-			parentResult.Values[1].Value, "component_address_registry",
-		)
-		if decodeErr != nil || validateComponentAddressRegistry(zone.Record, addresses) != nil ||
-			len(addresses.Reservations) != 0 {
-			return IdempotencyTransactionResult{}, errs.New(
-				errs.KindResourceInUse,
-				"Zone gained a Component address reservation",
-			)
-		}
+	currentIntent, err := decodeZoneRemovalIntent(parentResult.Values[1].Value)
+	headID, headErr := decodeTaskReference(parentResult.Values[3].Value)
+	applied, appliedErr := decodeEnvironmentComposeProjection(parentResult.Values[4].Value)
+	if err != nil || currentIntent.OperationID != intent.OperationID || currentIntent.ActiveTaskID != parentTaskID ||
+		currentIntent.Status != TaskStatusPending || string(parentResult.Values[2].Value) != parentTaskID ||
+		headErr != nil || headID != currentIntent.DesiredProjection.RevisionID ||
+		parentResult.Values[3].ModRevision != currentIntent.DesiredHeadRevision ||
+		appliedErr != nil || parentResult.Values[4].ModRevision != currentIntent.AppliedProjectionRevision ||
+		!sameServiceRemovalProjection(applied, currentIntent.AppliedProjection) ||
+		intent.Claim.RevisionID != currentIntent.Claim.RevisionID ||
+		!sameServiceRemovalProjection(intent.DesiredProjection, currentIntent.DesiredProjection) ||
+		!sameServiceRemovalProjection(intent.AppliedProjection, currentIntent.AppliedProjection) ||
+		!sameServiceRemovalProjection(intent.CandidateProjection, currentIntent.CandidateProjection) {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "backing Zone removal intent changed")
 	}
+	hierarchy := &HierarchyRepository{store: repository.store}
+	publication, err := hierarchy.prepareEnvironmentDirectPublication(
+		ctx, intent.Claim,
+		EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},
+		intent.CandidateProjection,
+		IdempotencyMarker{Locator: intent.Claim.Locator, Intent: intent.Claim.Intent},
+		intent.DesiredHeadRevision,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(publication.publishedDescriptor)
 	task = cloneTaskRecord(task)
 	if task.IdempotencyKey == "" {
 		task.IdempotencyKey = marker.Locator.Key
@@ -349,21 +422,35 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(reference)
+	intentValue, err := encodeZoneRemovalIntent(intent)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(intentValue)
 	conditions := []Condition{
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
-		{Key: zoneKey(zone.Record.Desired.ID), ModRevision: zone.Revision},
 		{
 			Key:         deletionTombstoneKey(string(DeletionTargetZone), zone.Record.Desired.ID),
 			ModRevision: tombstone.Revision,
 		},
 		{Key: taskKey(parentTaskID), ModRevision: parentResult.Values[0].ModRevision},
+		{Key: zonePoolRegistryKey(intent.EnvironmentID), ModRevision: pool.Revision},
 		{
 			Key:         componentAddressRegistryKey(zone.Record.Desired.ID),
-			ModRevision: keyValueRevision(parentResult.Values[1]),
+			ModRevision: addresses.Revision,
 		},
+		{Key: zoneRemovalIntentKey(intent.OperationID), ModRevision: parentResult.Values[1].ModRevision},
+		{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: parentResult.Values[2].ModRevision},
+		{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: parentResult.Values[3].ModRevision},
+		{Key: environmentComposeProjectionKey(intent.EnvironmentID), ModRevision: parentResult.Values[4].ModRevision},
+		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), intent.EnvironmentID)},
+		{Key: deletionTombstoneKey(string(DeletionTargetProject), zone.Record.Desired.OwnerID)},
+		{Key: environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID), ModRevision: publication.rootRevision},
+		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
+		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 	}
 	mutations := []Mutation{
 		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
@@ -375,6 +462,8 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 			Key:   deletionTombstoneKey(string(DeletionTargetZone), zone.Record.Desired.ID),
 			Value: tombstoneValue,
 		},
+		{Type: MutationPut, Key: zoneRemovalIntentKey(intent.OperationID), Value: intentValue},
+		{Type: MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(task.ID)},
 	}
 	initiation, err := newInheritedTaskInitiation(Versioned[TaskRecord]{
 		Record: parent, Revision: parentResult.Values[0].ModRevision, ReadRevision: parentResult.ReadRevision,
@@ -405,4 +494,56 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		return IdempotencyTransactionResult{}, err
 	}
 	return idempotency.Apply(ctx, marker, plan)
+}
+
+func selectedZoneDeletionRecord(
+	projection Versioned[EnvironmentComposeProjection],
+	supplied Versioned[ZoneRecord],
+	zoneID string,
+) (Versioned[ZoneRecord], error) {
+	if projection.Revision <= 0 || projection.ReadRevision < projection.Revision ||
+		supplied.Revision != projection.Revision || supplied.ReadRevision < supplied.Revision {
+		return Versioned[ZoneRecord]{}, errs.New(errs.KindValidationFailed, "Zone deletion projection is invalid")
+	}
+	var selected *Versioned[ZoneRecord]
+	for _, desired := range projection.Record.DesiredZones {
+		if desired.Desired.ID != zoneID {
+			continue
+		}
+		if selected != nil {
+			return Versioned[ZoneRecord]{}, corruptEnvironmentComposeProjection()
+		}
+		joined, err := joinEnvironmentZone(projection, desired)
+		if err != nil {
+			return Versioned[ZoneRecord]{}, err
+		}
+		selected = &joined
+	}
+	if selected == nil || selected.Record != supplied.Record {
+		return Versioned[ZoneRecord]{}, errs.New(errs.KindValidationFailed, "Zone does not match the selected projection")
+	}
+	return *selected, nil
+}
+
+func validateZoneDeletionHierarchy(
+	ctx context.Context,
+	environment Versioned[EnvironmentRecord],
+	project Versioned[ProjectRecord],
+	zone Versioned[ZoneRecord],
+) error {
+	if err := validateContext(ctx); err != nil {
+		return err
+	}
+	if err := validateEnvironment(environment.Record); err != nil {
+		return err
+	}
+	if err := validateProject(project.Record); err != nil {
+		return err
+	}
+	if environment.Revision <= 0 || environment.ReadRevision < environment.Revision || project.Revision <= 0 ||
+		project.ReadRevision < project.Revision || zone.Record.EnvironmentID != environment.Record.ID ||
+		environment.Record.ProjectID != project.Record.ID {
+		return errs.New(errs.KindValidationFailed, "Zone hierarchy ownership or revisions are invalid")
+	}
+	return nil
 }

@@ -116,14 +116,65 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 	if err != nil {
 		return ComponentTaskPreparation{}, err
 	}
+	fixedRevision := ordered[0].Current.ReadRevision
+	if fixedRevision <= 0 {
+		return ComponentTaskPreparation{}, errs.New(
+			errs.KindValidationFailed,
+			"Component candidate Blueprint fence is invalid",
+		)
+	}
+	for _, input := range ordered[1:] {
+		if input.Current.ReadRevision != fixedRevision {
+			return ComponentTaskPreparation{}, errs.New(
+				errs.KindValidationFailed,
+				"Component candidates do not share one Blueprint fence",
+			)
+		}
+	}
+	selected, found, err := currentEnvironmentProjectionAtRevision(
+		ctx, repository.store, environmentID, fixedRevision,
+	)
+	if err != nil {
+		return ComponentTaskPreparation{}, err
+	}
+	if !found {
+		return ComponentTaskPreparation{}, errs.New(
+			errs.KindStateConflict,
+			"Component candidate Environment projection is unavailable",
+		)
+	}
+	selectedZones := make(map[string]Versioned[ZoneRecord], len(selected.Record.DesiredZones))
+	for _, desired := range selected.Record.DesiredZones {
+		zone, joinErr := joinEnvironmentZone(selected, desired)
+		if joinErr != nil {
+			return ComponentTaskPreparation{}, joinErr
+		}
+		selectedZones[zone.Record.Desired.ID] = zone
+	}
+	for zoneID, change := range preparedZones {
+		zone, selectedZone := selectedZones[zoneID]
+		if change.Current == nil {
+			if selectedZone {
+				return ComponentTaskPreparation{}, errs.New(
+					errs.KindStateConflict,
+					"new Component candidate Zone is already selected",
+				)
+			}
+			continue
+		}
+		if !selectedZone || change.Current.Revision != zone.Revision ||
+			!reflect.DeepEqual(change.Current.Record, zone.Record) {
+			return ComponentTaskPreparation{}, errs.New(
+				errs.KindStateConflict,
+				"Component candidate Zone changed in the selected projection",
+			)
+		}
+	}
 
-	keys := make([]string, 0, 1+len(ordered)+(2*len(zones)))
+	keys := make([]string, 0, 1+len(ordered)+len(zones))
 	keys = append(keys, componentTaskActiveEnvironmentKey(environmentID))
 	for _, input := range ordered {
 		keys = append(keys, componentKey(input.Current.Record.Desired.ID))
-	}
-	for _, zoneID := range zones {
-		keys = append(keys, zoneKey(zoneID))
 	}
 	for _, zoneID := range zones {
 		keys = append(keys, componentAddressRegistryKey(zoneID))
@@ -163,37 +214,12 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 
 	addresses := make([]componentTaskAddressPreparation, len(zones))
 	registries := make(map[string]componentAddressRegistry, len(zones))
-	zoneOffset := 1 + len(ordered)
-	registryOffset := zoneOffset + len(zones)
+	registryOffset := 1 + len(ordered)
 	for index, zoneID := range zones {
-		zoneValue := state.Values[zoneOffset+index]
 		zoneChange := preparedZones[zoneID]
 		zoneRevision := int64(0)
-		if zoneChange.Current == nil {
-			if zoneValue != nil {
-				return ComponentTaskPreparation{}, errs.New(
-					errs.KindStateConflict,
-					"new Component candidate Zone is already in use",
-				)
-			}
-		} else {
-			if zoneValue == nil || zoneValue.ModRevision != zoneChange.Current.Revision {
-				return ComponentTaskPreparation{}, errs.New(
-					errs.KindStateConflict,
-					"Component candidate Zone changed during preparation",
-				)
-			}
-			storedZone, decodeErr := decodeZoneRecord(zoneValue.Value)
-			if decodeErr != nil {
-				return ComponentTaskPreparation{}, decodeErr
-			}
-			if !reflect.DeepEqual(storedZone, zoneChange.Current.Record) {
-				return ComponentTaskPreparation{}, errs.New(
-					errs.KindStateConflict,
-					"Component candidate Zone snapshot changed",
-				)
-			}
-			zoneRevision = zoneValue.ModRevision
+		if zoneChange.Current != nil {
+			zoneRevision = selectedZones[zoneID].Revision
 		}
 		registryValue := state.Values[registryOffset+index]
 		currentRegistry := componentAddressRegistry{Reservations: map[string]string{}}
@@ -215,7 +241,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 		registries[zoneID] = cloneComponentAddressRegistry(currentRegistry)
 		addresses[index] = componentTaskAddressPreparation{
 			Zone: Versioned[ZoneRecord]{
-				Record: zoneChange.Record, Revision: zoneRevision, ReadRevision: state.ReadRevision,
+				Record: zoneChange.Record, Revision: zoneRevision, ReadRevision: fixedRevision,
 			},
 			Current: Versioned[componentAddressRegistry]{
 				Record:       cloneComponentAddressRegistry(currentRegistry),

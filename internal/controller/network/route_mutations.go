@@ -47,6 +47,12 @@ type routeMutationProjectionRepository interface {
 	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
 }
 
+type routeMutationDesiredProjectionRepository interface {
+	GetEnvironmentComposeProjection(
+		context.Context, string,
+	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+}
+
 type routeMutationTaskPlanner interface {
 	PrepareRouteMutationTask(
 		context.Context,
@@ -390,14 +396,21 @@ func (service *routeMutationService) prepareRouteMutationTask(
 	idempotencyKey string,
 ) (etcd.RouteMutationTaskPreparation, error) {
 	var applied *etcd.Versioned[etcd.EnvironmentComposeProjection]
-	if service.planner != nil {
-		projectionRepository, ok := service.repository.(routeMutationProjectionRepository)
-		if !ok {
+	{
+		var projection etcd.Versioned[etcd.EnvironmentComposeProjection]
+		var found bool
+		var err error
+		if projectionRepository, ok := service.repository.(routeMutationDesiredProjectionRepository); ok {
+			projection, found, err = projectionRepository.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
+		} else if service.planner != nil {
 			return etcd.RouteMutationTaskPreparation{}, errs.New(
-				errs.KindInternal, "Route applied projection repository is not configured",
+				errs.KindInternal, "Route desired projection repository is not configured",
 			)
+		} else if projectionRepository, ok := service.repository.(routeMutationProjectionRepository); ok {
+			projection, found, err = projectionRepository.GetEnvironmentAppliedComposeProjection(ctx, environment.Record.ID)
+		} else {
+			found = false
 		}
-		projection, found, err := projectionRepository.GetEnvironmentAppliedComposeProjection(ctx, environment.Record.ID)
 		if err != nil {
 			return etcd.RouteMutationTaskPreparation{}, err
 		}
@@ -428,7 +441,15 @@ func (service *routeMutationService) prepareRouteMutationTask(
 	if err != nil {
 		return etcd.RouteMutationTaskPreparation{}, err
 	}
-	if service.planner == nil || applied == nil {
+	if service.planner == nil && applied != nil {
+		candidate, applyErr := etcd.ApplyEnvironmentRoute(applied.Record, intent.Route)
+		if applyErr != nil {
+			return etcd.RouteMutationTaskPreparation{}, applyErr
+		}
+		candidate.RevisionID = task.ID
+		intent.CandidateProjection = &candidate
+	}
+	if service.planner == nil && applied == nil {
 		intent.CurrentProjection = nil
 		intent.CurrentProjectionRevision = 0
 		task, err = prepareControllerRouteMutationTask(task, intent)

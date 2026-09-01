@@ -88,14 +88,14 @@ func (resolver *TaskPlanResolver) pinRouteProvider(
 	removedRouteID string,
 	inputGeneration uint64,
 ) (*etcd.RouteProviderPin, error) {
-	if resolver == nil || resolver.routeState == nil {
+	if resolver == nil {
 		return nil, errs.New(errs.KindInternal, "Route plan state reader is unavailable")
 	}
 	registration, component, found, err := resolver.routeProviderRegistration(projection)
 	if err != nil || !found {
 		return nil, err
 	}
-	environment, inputRevision, err := resolver.routeProviderEnvironment(ctx, environmentID, projection, desired, removedRouteID)
+	environment, inputRevision, err := resolver.routeProviderEnvironment(ctx, environmentID, projectionRevision, projection, desired, removedRouteID)
 	if err != nil {
 		return nil, err
 	}
@@ -164,16 +164,13 @@ func definitionProvides(definition componentsdk.Definition, capability component
 func (resolver *TaskPlanResolver) routeProviderEnvironment(
 	ctx context.Context,
 	environmentID string,
+	projectionRevision int64,
 	projection etcd.EnvironmentComposeProjection,
 	desired *etcd.RouteRecord,
 	removedRouteID string,
 ) (core.Environment, int64, error) {
-	revision, err := resolver.routeState.SnapshotRevision(ctx)
-	if err != nil {
-		return core.Environment{}, 0, err
-	}
-	if revision <= 0 {
-		return core.Environment{}, 0, errs.New(errs.KindInternal, "Route provider snapshot revision is invalid")
+	if projection.EnvironmentID != environmentID || projectionRevision <= 0 {
+		return core.Environment{}, 0, errs.New(errs.KindStateConflict, "Route provider desired projection is invalid")
 	}
 	environment := core.Environment{ID: environmentID, Zones: map[string]core.Zone{}, Services: map[string]core.Service{}}
 	for _, record := range projection.Components {
@@ -183,73 +180,28 @@ func (resolver *TaskPlanResolver) routeProviderEnvironment(
 		}
 		environment.Components = append(environment.Components, component)
 	}
-	for cursor := ""; ; {
-		page, err := resolver.routeState.ListZones(ctx, environmentID, etcd.PageRequest{
-			Limit: 128, Cursor: cursor, Revision: revision,
-		})
-		if err != nil {
-			return core.Environment{}, 0, err
-		}
-		if page.Revision != revision {
-			return core.Environment{}, 0, errs.New(errs.KindStateConflict, "Route provider Zone snapshot changed revision")
-		}
-		for _, stored := range page.Items {
-			environment.Zones[stored.Record.Desired.Name] = stored.Record.Desired
-		}
-		if page.NextCursor == "" {
-			break
-		}
-		cursor = page.NextCursor
+	for _, stored := range projection.DesiredZones {
+		environment.Zones[stored.Desired.Name] = stored.Desired
 	}
-	for cursor := ""; ; {
-		page, err := resolver.routeState.ListServices(ctx, environmentID, etcd.PageRequest{
-			Limit: 128, Cursor: cursor, Revision: revision,
-		})
-		if err != nil {
-			return core.Environment{}, 0, err
-		}
-		if page.Revision != revision {
-			return core.Environment{}, 0, errs.New(errs.KindStateConflict, "Route provider Service snapshot changed revision")
-		}
-		for _, stored := range page.Items {
-			environment.Services[stored.Record.Desired.Name] = stored.Record.Desired
-		}
-		if page.NextCursor == "" {
-			break
-		}
-		cursor = page.NextCursor
+	for _, stored := range projection.DesiredServices {
+		environment.Services[stored.Desired.Name] = stored.Desired
 	}
 	foundDesired := false
-	for cursor := ""; ; {
-		page, err := resolver.routeState.ListRoutes(ctx, environmentID, etcd.PageRequest{
-			Limit: 128, Cursor: cursor, Revision: revision,
-		})
-		if err != nil {
-			return core.Environment{}, 0, err
+	for _, stored := range projection.DesiredRoutes {
+		if stored.Desired.ID == removedRouteID {
+			continue
 		}
-		if page.Revision != revision {
-			return core.Environment{}, 0, errs.New(errs.KindStateConflict, "Route provider Route snapshot changed revision")
+		route := stored.Desired
+		if desired != nil && route.ID == desired.Desired.ID {
+			route = desired.Desired
+			foundDesired = true
 		}
-		for _, stored := range page.Items {
-			if stored.Record.Desired.ID == removedRouteID {
-				continue
-			}
-			if desired != nil && stored.Record.Desired.ID == desired.Desired.ID {
-				environment.Routes = append(environment.Routes, desired.Desired)
-				foundDesired = true
-			} else {
-				environment.Routes = append(environment.Routes, stored.Record.Desired)
-			}
-		}
-		if page.NextCursor == "" {
-			break
-		}
-		cursor = page.NextCursor
+		environment.Routes = append(environment.Routes, route)
 	}
 	if desired != nil && !foundDesired {
 		environment.Routes = append(environment.Routes, desired.Desired)
 	}
-	return environment, revision, nil
+	return environment, projectionRevision, nil
 }
 
 func (resolver *TaskPlanResolver) renderPinnedRouteProvider(pin etcd.RouteProviderPin, projection etcd.EnvironmentComposeProjection) (componentsdk.EnvironmentPlan, core.Component, [sha256.Size]byte, [sha256.Size]byte, error) {

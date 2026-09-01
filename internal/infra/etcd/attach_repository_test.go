@@ -125,6 +125,31 @@ func TestAttachLifecycleRetryPreservesIdentity(t *testing.T) {
 	}
 }
 
+// Rationale: a missing Service runtime sidecar is the normal pre-observation state and must
+// resolve to the explicit running intent without changing the sealed desired projection.
+func TestServiceResolutionDefaultsMissingRuntimeToRunning(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := newAttachTestStore()
+	scope := seedAttachScope(t, ctx, store)
+	serviceID := scope.Services[0].Record.Desired.ID
+	if _, err := store.Delete(ctx, serviceRuntimeKey(serviceID)); err != nil {
+		t.Fatalf("Delete(Service runtime sidecar) error = %v", err)
+	}
+	services, err := NewServiceRepository(store)
+	if err != nil {
+		t.Fatalf("NewServiceRepository() error = %v", err)
+	}
+	resolved, err := services.GetService(ctx, serviceID)
+	if err != nil {
+		t.Fatalf("GetService() error = %v", err)
+	}
+	if resolved.Record.Desired.ID != serviceID || resolved.Record.Runtime.ServiceID != serviceID ||
+		resolved.Record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentRunning {
+		t.Fatalf("GetService(missing runtime) = %#v", resolved.Record)
+	}
+}
+
 // Rationale: reverse grant membership must prevent target deletion and serialize grant creation against target lifecycle.
 func TestAttachRepositoryProtectsGrantedAttach(t *testing.T) {
 	t.Parallel()
@@ -635,6 +660,75 @@ func TestAttachLifecycleReplacementRacesBackupSourceExclusion(t *testing.T) {
 
 var testAttachTime = time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
 
+// Rationale: multiple Services resolved from one Environment revision share
+// one desired-head compare without dropping the separate backing Environment fence.
+func TestAttachDesiredHeadConditionsCoalesceOneEnvironmentRevision(t *testing.T) {
+	consumerEnvironmentID := ids.NewAt(ids.KindEnvironment, testAttachTime, 700)
+	backingEnvironmentID := ids.NewAt(ids.KindEnvironment, testAttachTime, 701)
+	consumerRevision := int64(41)
+	consumerService := Versioned[ServiceRecord]{
+		Record: ServiceRecord{
+			EnvironmentID:   consumerEnvironmentID,
+			Desired:         core.Service{ID: ids.NewAt(ids.KindService, testAttachTime, 703)},
+			desiredFenceKey: environmentBlueprintHeadKey(consumerEnvironmentID),
+		},
+		Revision: consumerRevision,
+	}
+	secondConsumerService := consumerService
+	secondConsumerService.Record.Desired.ID = ids.NewAt(ids.KindService, testAttachTime, 704)
+	backingService := Versioned[ServiceRecord]{
+		Record: ServiceRecord{
+			EnvironmentID:   backingEnvironmentID,
+			desiredFenceKey: environmentBlueprintHeadKey(backingEnvironmentID),
+		},
+		Revision: 52,
+	}
+
+	conditions, err := attachDesiredHeadConditions(
+		consumerEnvironmentID,
+		consumerRevision,
+		backingService,
+		[]Versioned[ServiceRecord]{consumerService, secondConsumerService},
+	)
+	if err != nil {
+		t.Fatalf("attachDesiredHeadConditions() error = %v", err)
+	}
+	if len(conditions) != 2 {
+		t.Fatalf("attachDesiredHeadConditions() count = %d, want 2", len(conditions))
+	}
+	if conditions[0].Key != environmentBlueprintHeadKey(consumerEnvironmentID) ||
+		conditions[0].ModRevision != consumerRevision {
+		t.Fatalf("consumer desired-head condition = %#v", conditions[0])
+	}
+	if conditions[1].Key != environmentBlueprintHeadKey(backingEnvironmentID) ||
+		conditions[1].ModRevision != backingService.Revision {
+		t.Fatalf("backing desired-head condition = %#v", conditions[1])
+	}
+}
+
+// Rationale: coalescing must never hide a Service desired-head change observed
+// at a different revision of the same Environment.
+func TestAttachDesiredHeadConditionsRejectConflictingEnvironmentRevision(t *testing.T) {
+	environmentID := ids.NewAt(ids.KindEnvironment, testAttachTime, 702)
+	service := Versioned[ServiceRecord]{
+		Record: ServiceRecord{
+			EnvironmentID:   environmentID,
+			desiredFenceKey: environmentBlueprintHeadKey(environmentID),
+		},
+		Revision: 61,
+	}
+
+	_, err := attachDesiredHeadConditions(
+		environmentID,
+		service.Revision+1,
+		service,
+		[]Versioned[ServiceRecord]{service},
+	)
+	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("attachDesiredHeadConditions() error = %v, want state conflict", err)
+	}
+}
+
 type attachTestStore struct {
 	*memoryHierarchyStore
 }
@@ -774,15 +868,198 @@ func (store *attachTestStore) Close() error {
 	return nil
 }
 
+type desiredServiceFixture struct {
+	Service    Versioned[ServiceRecord]
+	Projection Versioned[EnvironmentComposeProjection]
+	Blueprint  Versioned[EnvironmentBlueprintRevision]
+	Claim      EnvironmentBlueprintStageClaim
+}
+
+func seedDesiredServiceFixture(
+	t *testing.T,
+	ctx context.Context,
+	store hierarchyStore,
+	environmentID string,
+	desired core.Service,
+	backingNetworkID string,
+	seed int64,
+	includeRuntime bool,
+	publishHead bool,
+) desiredServiceFixture {
+	t.Helper()
+	record, err := NewServiceRecord(environmentID, desired, backingNetworkID)
+	if err != nil {
+		t.Fatalf("NewServiceRecord() error = %v", err)
+	}
+	revisionID := ids.NewAt(ids.KindTask, testAttachTime, seed)
+	projection := EnvironmentComposeProjection{
+		EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
+		DesiredServices: []EnvironmentServiceProjection{{
+			EnvironmentID: environmentID, BackingNetworkID: backingNetworkID, Desired: desired,
+		}},
+	}
+	canonicalYAML := []byte("services:\n  " + desired.Name + ":\n    image: " + desired.Image + "\n")
+	projection.NormalizedCompose = append([]byte(nil), canonicalYAML...)
+	digest := sha256.Sum256(canonicalYAML)
+	projection.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
+		ArtifactId:          ids.NewAt(ids.KindConfig, testAttachTime, seed+1),
+		OwnerKind:           agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		OwnerId:             environmentID,
+		ProjectName:         "gp-" + strings.ToLower(environmentID),
+		CanonicalYaml:       canonicalYAML,
+		YamlSha256:          digest[:],
+		AuthorizedVolumeDir: "/srv/groundplane",
+		Services:            []*agentpb.ComposeService{{ServiceId: desired.ID, ComposeName: desired.Name}},
+	})
+	if err != nil {
+		t.Fatalf("marshal Environment Compose artifact: %v", err)
+	}
+	dependencyDigest, err := EnvironmentBlueprintDependencyDigest(projection)
+	if err != nil {
+		t.Fatalf("EnvironmentBlueprintDependencyDigest() error = %v", err)
+	}
+	intentCiphertext := []byte("desired-service-fixture-intent-" + desired.ID)
+	intentDigest := sha256.Sum256(intentCiphertext)
+	claim := EnvironmentBlueprintStageClaim{
+		DescriptorID:  strings.TrimPrefix(revisionID, "task_"),
+		EnvironmentID: environmentID, RevisionID: revisionID, TaskID: revisionID,
+		Locator: IdempotencyLocator{
+			ScopeKind: IdempotencyScopeEnvironment, ScopeID: environmentID,
+			Method: http.MethodPost, Route: "/blueprints", Key: "desired-service-fixture-" + desired.ID,
+		},
+		Intent: ProtectedIntentRecord{
+			EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
+			CiphertextDigest: hex.EncodeToString(intentDigest[:]), Ciphertext: intentCiphertext,
+		},
+		SourceKind: EnvironmentBlueprintSourceApply, RenderGeneration: 1,
+		ProjectionSchema: 1, CreatedAt: testAttachTime,
+	}
+	blueprint := EnvironmentBlueprintRevision{
+		EnvironmentID: environmentID, RevisionID: revisionID,
+		RootPath: "blueprint.yaml", ComposeSources: []string{"blueprint.yaml"},
+		Files: []EnvironmentBlueprintFile{{Path: "blueprint.yaml", Content: canonicalYAML}}, CreatedAt: testAttachTime,
+	}
+	streams, err := buildEnvironmentBlueprintStreams(EnvironmentBlueprintStageRequest{
+		Claim: claim, Blueprint: &blueprint, Projection: projection, DependencyDigest: dependencyDigest,
+	})
+	if err != nil {
+		t.Fatalf("buildEnvironmentBlueprintStreams() error = %v", err)
+	}
+	defer clear(streams.Audit)
+	defer clear(streams.Projection)
+	rootValue, err := encodeEnvironmentBlueprintSeal(environmentBlueprintSealFromDescriptor(streams.Descriptor))
+	if err != nil {
+		t.Fatalf("encodeEnvironmentBlueprintSeal() error = %v", err)
+	}
+	defer clear(rootValue)
+	mutations := []Mutation{{
+		Type: MutationPut, Key: environmentBlueprintRootKey(environmentID, revisionID), Value: rootValue,
+	}}
+	if publishHead {
+		headValue, encodeErr := encodeTaskReference(revisionID)
+		if encodeErr != nil {
+			t.Fatalf("encodeTaskReference() error = %v", encodeErr)
+		}
+		mutations = append(mutations, Mutation{
+			Type: MutationPut, Key: environmentBlueprintHeadKey(environmentID), Value: headValue,
+		})
+	} else {
+		descriptor := streams.Descriptor
+		descriptor.State = EnvironmentBlueprintStageSealed
+		descriptor.NextAuditChunk = descriptor.AuditChunks
+		descriptor.NextProjectionChunk = descriptor.ProjectionChunks
+		descriptorValue, encodeErr := encodeEnvironmentBlueprintStageDescriptor(descriptor)
+		if encodeErr != nil {
+			t.Fatalf("encodeEnvironmentBlueprintStageDescriptor() error = %v", encodeErr)
+		}
+		intentDigest, encodeErr := protectedBlueprintIntentDigest(claim.Intent)
+		if encodeErr != nil {
+			clear(descriptorValue)
+			t.Fatalf("protectedBlueprintIntentDigest() error = %v", encodeErr)
+		}
+		locatorValue, encodeErr := encodeEnvironmentBlueprintStageLocator(claim.DescriptorID, intentDigest)
+		if encodeErr != nil {
+			clear(descriptorValue)
+			t.Fatalf("encodeEnvironmentBlueprintStageLocator() error = %v", encodeErr)
+		}
+		locatorKey, _, encodeErr := environmentBlueprintLocatorKey(claim.Locator)
+		if encodeErr != nil {
+			clear(descriptorValue)
+			clear(locatorValue)
+			t.Fatalf("environmentBlueprintLocatorKey() error = %v", encodeErr)
+		}
+		mutations = append(mutations,
+			Mutation{Type: MutationPut, Key: environmentBlueprintDescriptorKeyByID(claim.DescriptorID), Value: descriptorValue},
+			Mutation{Type: MutationPut, Key: locatorKey, Value: locatorValue},
+		)
+	}
+	for _, family := range []struct {
+		id    uint8
+		value []byte
+	}{
+		{id: EnvironmentBlueprintChunkAudit, value: streams.Audit},
+		{id: EnvironmentBlueprintChunkProjection, value: streams.Projection},
+	} {
+		for index := uint32(0); index < chunkCount32(len(family.value)); index++ {
+			from := int(index) * EnvironmentBlueprintChunkBytes
+			to := min(from+EnvironmentBlueprintChunkBytes, len(family.value))
+			data := family.value[from:to]
+			chunkValue, encodeErr := encodeEnvironmentBlueprintChunk(EnvironmentBlueprintChunk{
+				Family: family.id, Sequence: index, LogicalOffset: uint64(from),
+				LogicalLength: uint32(len(data)), Digest: sha256.Sum256(data), Data: data,
+			})
+			if encodeErr != nil {
+				t.Fatalf("encodeEnvironmentBlueprintChunk() error = %v", encodeErr)
+			}
+			mutations = append(mutations, Mutation{
+				Type:  MutationPut,
+				Key:   environmentBlueprintChunkKeyFor(environmentID, revisionID, family.id, index),
+				Value: chunkValue,
+			})
+		}
+	}
+	defer clearMutationValues(mutations)
+	result, err := store.Transact(ctx, nil, mutations)
+	if err != nil || !result.Succeeded {
+		t.Fatalf("seed sealed desired projection = %#v, %v", result, err)
+	}
+	rootRevision := result.Revision
+	runtimeRevision := int64(0)
+	if includeRuntime {
+		runtimeValue, encodeErr := encodeServiceRuntimeRecord(newServiceRuntimeRecord(record))
+		if encodeErr != nil {
+			t.Fatalf("encodeServiceRuntimeRecord() error = %v", encodeErr)
+		}
+		runtimeResult, transactErr := store.Transact(ctx, nil, []Mutation{{
+			Type: MutationPut, Key: serviceRuntimeKey(desired.ID), Value: runtimeValue,
+		}})
+		clear(runtimeValue)
+		if transactErr != nil || !runtimeResult.Succeeded {
+			t.Fatalf("seed Service runtime sidecar = %#v, %v", runtimeResult, transactErr)
+		}
+		runtimeRevision = runtimeResult.Revision
+	}
+	record.desiredFenceKey = environmentBlueprintHeadKey(environmentID)
+	record.runtimeRevision = runtimeRevision
+	return desiredServiceFixture{
+		Service: Versioned[ServiceRecord]{
+			Record: record, Revision: rootRevision, ReadRevision: max(rootRevision, runtimeRevision),
+		},
+		Projection: Versioned[EnvironmentComposeProjection]{
+			Record: projection, Revision: rootRevision, ReadRevision: rootRevision,
+		},
+		Blueprint: Versioned[EnvironmentBlueprintRevision]{
+			Record: blueprint, Revision: rootRevision, ReadRevision: rootRevision,
+		},
+		Claim: claim,
+	}
+}
+
 func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) AttachCreateScope {
 	t.Helper()
 	hierarchy, err := NewHierarchyRepository(store)
 	if err != nil {
 		t.Fatalf("NewHierarchyRepository() error = %v", err)
-	}
-	services, err := NewServiceRepository(store)
-	if err != nil {
-		t.Fatalf("NewServiceRepository() error = %v", err)
 	}
 	tenant := TenantRecord{
 		ID: ids.NewAt(ids.KindTenant, testAttachTime, 1), Slug: "acme", Name: "Acme",
@@ -833,196 +1110,31 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 	if err != nil {
 		t.Fatalf("NewProvisioningEnvironment(backing) error = %v", err)
 	}
-	backingEnvironmentValue, err := json.Marshal(backingEnvironmentRecord)
+	backingEnvironmentValue, err := encodeEnvironment(backingEnvironmentRecord)
 	if err != nil {
-		t.Fatalf("json.Marshal(backing Environment) error = %v", err)
+		t.Fatalf("encodeEnvironment(backing Environment) error = %v", err)
 	}
 	defer clear(backingEnvironmentValue)
-	backingEnvironmentRevision, err := store.Put(
-		ctx,
-		environmentKey(backingEnvironmentRecord.ID),
-		backingEnvironmentValue,
-	)
-	if err != nil {
-		t.Fatalf("Put(backing Environment) error = %v", err)
+	backingEnvironmentResult, err := store.Transact(ctx, nil, []Mutation{{
+		Type: MutationPut, Key: environmentKey(backingEnvironmentRecord.ID), Value: backingEnvironmentValue,
+	}})
+	if err != nil || !backingEnvironmentResult.Succeeded {
+		t.Fatalf("seed backing Environment = %#v, %v", backingEnvironmentResult, err)
 	}
 	backingEnvironment := Versioned[EnvironmentRecord]{
-		Record:       backingEnvironmentRecord,
-		Revision:     backingEnvironmentRevision,
-		ReadRevision: backingEnvironmentRevision,
+		Record: backingEnvironmentRecord, Revision: backingEnvironmentResult.Revision,
+		ReadRevision: backingEnvironmentResult.Revision,
 	}
-	serviceRecord, err := NewServiceRecord(environment.Record.ID, core.Service{
-		ID: ids.NewAt(ids.KindService, testAttachTime, 8), Name: "api", Image: "example/api:1",
-	}, "")
-	if err != nil {
-		t.Fatalf("NewServiceRecord() error = %v", err)
-	}
-	service, err := services.CreateService(ctx, environment, project, serviceRecord)
-	if err != nil {
-		t.Fatalf("CreateService() error = %v", err)
-	}
-	backingServiceRecord, err := NewServiceRecord(backingEnvironment.Record.ID, core.Service{
+	serviceID := ids.NewAt(ids.KindService, testAttachTime, 8)
+	serviceFixture := seedDesiredServiceFixture(t, ctx, store, environment.Record.ID, core.Service{
+		ID: serviceID, Name: "api", Image: "example/api:1",
+	}, "", 10, true, true)
+	service := serviceFixture.Service
+	backingServiceFixture := seedDesiredServiceFixture(t, ctx, store, backingEnvironment.Record.ID, core.Service{
 		ID: ids.NewAt(ids.KindService, testAttachTime, 9), Name: "postgres", Image: "postgres:16-alpine",
 		Adapter: "postgres:16",
-	}, ids.NewAt(ids.KindNetwork, testAttachTime, 200))
-	if err != nil {
-		t.Fatalf("NewServiceRecord(backing) error = %v", err)
-	}
-	backingServiceValue, err := encodeServiceRecord(backingServiceRecord)
-	if err != nil {
-		t.Fatalf("encodeServiceRecord(backing) error = %v", err)
-	}
-	defer clear(backingServiceValue)
-	backingServiceRevision, err := store.Put(
-		ctx,
-		serviceKey(backingServiceRecord.Desired.ID),
-		backingServiceValue,
-	)
-	if err != nil {
-		t.Fatalf("Put(backing Service) error = %v", err)
-	}
-	backingService := Versioned[ServiceRecord]{
-		Record: backingServiceRecord, Revision: backingServiceRevision, ReadRevision: backingServiceRevision,
-	}
-	blueprintRevision := EnvironmentBlueprintRevision{
-		EnvironmentID: environment.Record.ID, RevisionID: ids.NewAt(ids.KindTask, testAttachTime, 10),
-		RootPath: "blueprint.yaml", ComposeSources: []string{"blueprint.yaml"},
-		Files: []EnvironmentBlueprintFile{{
-			Path: "blueprint.yaml", Content: []byte("services:\n  api:\n    image: example/api:1\n"),
-		}},
-		CreatedAt: testAttachTime,
-	}
-	manifestValue, err := encodeEnvironmentBlueprintManifest(blueprintRevision)
-	if err != nil {
-		t.Fatalf("encodeEnvironmentBlueprintManifest() error = %v", err)
-	}
-	defer clear(manifestValue)
-	_, err = store.Put(
-		ctx,
-		environmentBlueprintManifestKey(environment.Record.ID, blueprintRevision.RevisionID),
-		manifestValue,
-	)
-	if err != nil {
-		t.Fatalf("Put(Blueprint manifest) error = %v", err)
-	}
-	if _, err := store.Put(
-		ctx,
-		environmentBlueprintFileKey(environment.Record.ID, blueprintRevision.RevisionID, 0),
-		blueprintRevision.Files[0].Content,
-	); err != nil {
-		t.Fatalf("Put(Blueprint file) error = %v", err)
-	}
-	projection := EnvironmentComposeProjection{
-		EnvironmentID:    environment.Record.ID,
-		RevisionID:       blueprintRevision.RevisionID,
-		RenderGeneration: 1,
-		Services: []EnvironmentComposeIdentity{
-			{ID: service.Record.Desired.ID, Name: service.Record.Desired.Name},
-		},
-	}
-	canonicalYAML := []byte("services:\n  api:\n    image: example/api:1\n")
-	projection.NormalizedCompose = append([]byte(nil), canonicalYAML...)
-	digest := sha256.Sum256(canonicalYAML)
-	projection.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
-		ArtifactId:          ids.NewAt(ids.KindConfig, testAttachTime, 11),
-		OwnerKind:           agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
-		OwnerId:             environment.Record.ID,
-		ProjectName:         "gp-" + strings.ToLower(environment.Record.ID),
-		CanonicalYaml:       canonicalYAML,
-		YamlSha256:          digest[:],
-		AuthorizedVolumeDir: environment.Record.VolumeDir,
-		Services:            []*agentpb.ComposeService{{ServiceId: service.Record.Desired.ID, ComposeName: "api"}},
-	})
-	if err != nil {
-		t.Fatalf("marshal Environment Compose artifact: %v", err)
-	}
-	defer clear(projection.ComposeArtifact)
-	dependencyDigest, err := EnvironmentBlueprintDependencyDigest(projection)
-	if err != nil {
-		t.Fatalf("EnvironmentBlueprintDependencyDigest() error = %v", err)
-	}
-	intentCiphertext := []byte("blueprint-intent-" + environment.Record.ID)
-	intentDigest := sha256.Sum256(intentCiphertext)
-	claim := EnvironmentBlueprintStageClaim{
-		DescriptorID:  strings.TrimPrefix(ids.NewAt(ids.KindTask, testAttachTime, 12), "task_"),
-		EnvironmentID: environment.Record.ID, RevisionID: blueprintRevision.RevisionID,
-		TaskID: ids.NewAt(ids.KindTask, testAttachTime, 13),
-		Locator: IdempotencyLocator{
-			ScopeKind: IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
-			Method: http.MethodPost, Route: "/blueprints", Key: "attach-blueprint-" + environment.Record.ID,
-		},
-		Intent: ProtectedIntentRecord{
-			EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
-			CiphertextDigest: hex.EncodeToString(intentDigest[:]), Ciphertext: intentCiphertext,
-		},
-		SourceKind: EnvironmentBlueprintSourceApply, RenderGeneration: 1,
-		ProjectionSchema: 1, CreatedAt: testAttachTime,
-	}
-	streams, err := buildEnvironmentBlueprintStreams(EnvironmentBlueprintStageRequest{
-		Claim: claim, Blueprint: &blueprintRevision, Projection: projection,
-		DependencyDigest: dependencyDigest,
-	})
-	if err != nil {
-		t.Fatalf("buildEnvironmentBlueprintStreams() error = %v", err)
-	}
-	defer clear(streams.Audit)
-	defer clear(streams.Projection)
-	rootValue, err := encodeEnvironmentBlueprintSeal(environmentBlueprintSealFromDescriptor(streams.Descriptor))
-	if err != nil {
-		t.Fatalf("encodeEnvironmentBlueprintSeal() error = %v", err)
-	}
-	defer clear(rootValue)
-	rootRevision, err := store.Put(
-		ctx,
-		environmentBlueprintRootKey(environment.Record.ID, blueprintRevision.RevisionID),
-		rootValue,
-	)
-	if err != nil {
-		t.Fatalf("Put(Blueprint root) error = %v", err)
-	}
-	headValue, err := encodeTaskReference(blueprintRevision.RevisionID)
-	if err != nil {
-		t.Fatalf("encodeTaskReference(Blueprint head) error = %v", err)
-	}
-	defer clear(headValue)
-	headRevision, err := store.Put(
-		ctx,
-		environmentBlueprintHeadKey(environment.Record.ID),
-		headValue,
-	)
-	if err != nil {
-		t.Fatalf("Put(Blueprint head) error = %v", err)
-	}
-	for _, family := range []struct {
-		id    uint8
-		value []byte
-	}{
-		{id: EnvironmentBlueprintChunkAudit, value: streams.Audit},
-		{id: EnvironmentBlueprintChunkProjection, value: streams.Projection},
-	} {
-		for index := uint32(0); index < chunkCount32(len(family.value)); index++ {
-			from := int(index) * EnvironmentBlueprintChunkBytes
-			to := from + EnvironmentBlueprintChunkBytes
-			if to > len(family.value) {
-				to = len(family.value)
-			}
-			data := family.value[from:to]
-			chunkValue, encodeErr := encodeEnvironmentBlueprintChunk(EnvironmentBlueprintChunk{
-				Family: family.id, Sequence: index, LogicalOffset: uint64(from),
-				LogicalLength: uint32(len(data)), Digest: sha256.Sum256(data), Data: data,
-			})
-			if encodeErr != nil {
-				t.Fatalf("encodeEnvironmentBlueprintChunk() error = %v", encodeErr)
-			}
-			if _, putErr := store.Put(ctx, environmentBlueprintChunkKeyFor(
-				environment.Record.ID, blueprintRevision.RevisionID, family.id, index,
-			), chunkValue); putErr != nil {
-				clear(chunkValue)
-				t.Fatalf("Put(Blueprint chunk) error = %v", putErr)
-			}
-			clear(chunkValue)
-		}
-	}
+	}, ids.NewAt(ids.KindNetwork, testAttachTime, 200), 11, true, true)
+	backingService := backingServiceFixture.Service
 	environment, err = hierarchy.GetEnvironment(ctx, environment.Record.ID)
 	if err != nil {
 		t.Fatalf("GetEnvironment(after projection) error = %v", err)
@@ -1030,10 +1142,12 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 	return AttachCreateScope{
 		Tenant: tenantVersion, Project: project, Environment: environment,
 		BlueprintRevision: Versioned[EnvironmentBlueprintRevision]{
-			Record: blueprintRevision, Revision: rootRevision, ReadRevision: rootRevision,
+			Record: serviceFixture.Blueprint.Record, Revision: serviceFixture.Blueprint.Revision,
+			ReadRevision: serviceFixture.Blueprint.ReadRevision,
 		},
 		ComposeProjection: Versioned[EnvironmentComposeProjection]{
-			Record: projection, Revision: headRevision, ReadRevision: headRevision,
+			Record: serviceFixture.Projection.Record, Revision: serviceFixture.Projection.Revision,
+			ReadRevision: serviceFixture.Projection.ReadRevision,
 		},
 		Services:       []Versioned[ServiceRecord]{service},
 		BackingProject: backingProject, BackingEnvironment: backingEnvironment, BackingService: backingService,
@@ -1198,9 +1312,10 @@ func createTestAttach(
 		BlueprintRevisionID: scope.BlueprintRevision.Record.RevisionID,
 		ArtifactID:          ids.NewAt(ids.KindConfig, record.CreatedAt, seed+2000),
 		RenderGeneration:    scope.ComposeProjection.Record.RenderGeneration,
-		Services:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Services...),
-		Networks:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Networks...),
+		Services:            attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
+		Networks:            attachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones),
 		Volumes:             append([]EnvironmentVolumeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
+		VolumeMounts:        append([]EnvironmentServiceVolumeMount(nil), scope.ComposeProjection.Record.VolumeMounts...),
 		NetworkJoins: []AttachTaskNetworkJoin{{
 			NetworkID: record.BackingNetworkID, ServiceIDs: []string{record.ServiceID},
 		}},
@@ -1284,9 +1399,10 @@ func publishTestDetach(
 		BlueprintRevisionID: scope.BlueprintRevision.Record.RevisionID,
 		ArtifactID:          ids.NewAt(ids.KindConfig, createdAt, 904),
 		RenderGeneration:    scope.ComposeProjection.Record.RenderGeneration,
-		Services:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Services...),
-		Networks:            append([]EnvironmentComposeIdentity(nil), scope.ComposeProjection.Record.Networks...),
+		Services:            attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
+		Networks:            attachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones),
 		Volumes:             append([]EnvironmentVolumeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
+		VolumeMounts:        append([]EnvironmentServiceVolumeMount(nil), scope.ComposeProjection.Record.VolumeMounts...),
 		NetworkJoins:        nil,
 		ConsumerServiceIDs:  []string{current.Record.ServiceID},
 		GrantAttachIDs:      append([]string(nil), current.Record.GrantAttachIDs...),

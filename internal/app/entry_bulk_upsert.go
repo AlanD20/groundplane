@@ -262,6 +262,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	candidate = cloneEnvironmentDesiredProjection(candidate)
 	claim, _, err := controllerrevision.PreflightAndClaim(ctx, service.desired.repository, candidate, controllerrevision.ClaimInput{
 		EnvironmentID:   input.environmentID,
 		CandidateTaskID: candidateTaskID,
@@ -299,12 +300,13 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	identitySnapshot, err := composeIdentitySnapshot(candidate)
+	candidate = cloneEnvironmentDesiredProjection(candidate)
+	serviceIdentities, err := entryDesiredServiceIdentities(candidate)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	removals, err := environmentBlueprintEntryRemovals(
-		input.environmentID, candidateRecords.previous, candidateRecords.entries, identitySnapshot.Services,
+		input.environmentID, candidateRecords.previous, candidateRecords.entries, serviceIdentities,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err

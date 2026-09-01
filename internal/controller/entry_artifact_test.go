@@ -39,11 +39,20 @@ func TestProjectEnvironmentEntryMutationReplacesOnlyEntryDecorations(t *testing.
 	newEntry := oldEntry
 	newEntry.Entry.Exposure = []string{"all"}
 	newEntry.CurrentValueGenerationID = ids.NewAt(ids.KindConfig, now, 6)
-	candidate, materializations, err := ProjectEnvironmentEntryMutation(etcd.EnvironmentComposeProjection{
+	current := etcd.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 7),
-		RenderGeneration: 1, ComposeArtifact: encoded,
-		Services: []etcd.EnvironmentComposeIdentity{{ID: serviceID, Name: "api"}}, Entries: []etcd.EntryRecord{oldEntry},
-	}, EnvironmentEntryArtifactMutation{
+		RenderGeneration: 1, ComposeArtifact: encoded, NormalizedCompose: []byte("services:\n  api:\n    image: example.test/api:1\n"),
+		DesiredZones: []etcd.EnvironmentZoneProjection{{EnvironmentID: environmentID, Desired: core.Zone{ID: "zone-id", Name: "frontend"}}},
+		DesiredServices: []etcd.EnvironmentServiceProjection{{EnvironmentID: environmentID, Desired: core.Service{
+			ID: serviceID, Name: "api", Image: "example.test/api:1",
+		}}},
+		DesiredRoutes: []etcd.EnvironmentRouteProjection{{EnvironmentID: environmentID, Desired: core.Route{ID: "route-id", Host: "api.example.test", Path: "/"}}},
+		Volumes:       []etcd.EnvironmentVolumeIdentity{{ID: "volume-id", Slug: "data", Key: "data"}},
+		VolumeMounts:  []etcd.EnvironmentServiceVolumeMount{{ServiceID: serviceID, VolumeID: "volume-id", Target: "/data"}},
+		Components:    []etcd.ComponentRecord{{Desired: etcd.ComponentDesiredRecord{ID: "component-id"}}},
+		Entries:       []etcd.EntryRecord{oldEntry},
+	}
+	candidate, materializations, err := ProjectEnvironmentEntryMutation(current, EnvironmentEntryArtifactMutation{
 		RevisionID: ids.NewAt(ids.KindTask, now, 8), ArtifactID: ids.NewAt(ids.KindConfig, now, 9),
 		PlanID: ids.NewAt(ids.KindPlan, now, 10), RenderGeneration: 2, Entries: []etcd.EntryRecord{newEntry},
 	})
@@ -58,5 +67,15 @@ func TestProjectEnvironmentEntryMutationReplacesOnlyEntryDecorations(t *testing.
 	if !strings.Contains(yaml, "/operator.env") || strings.Contains(yaml, ServiceEnvFileName(environmentID, "api")) ||
 		!strings.Contains(yaml, EnvFileName(environmentID)) || len(materializations) != 1 {
 		t.Fatalf("mutated artifact:\n%s\nmaterializations=%#v", yaml, materializations)
+	}
+	if string(candidate.NormalizedCompose) != string(current.NormalizedCompose) ||
+		&candidate.DesiredZones[0] == &current.DesiredZones[0] ||
+		&candidate.DesiredServices[0] == &current.DesiredServices[0] ||
+		&candidate.DesiredRoutes[0] == &current.DesiredRoutes[0] ||
+		&candidate.Volumes[0] == &current.Volumes[0] ||
+		&candidate.VolumeMounts[0] == &current.VolumeMounts[0] ||
+		&candidate.Components[0] == &current.Components[0] ||
+		&candidate.Entries[0] == &current.Entries[0] {
+		t.Fatal("entry mutation candidate aliases current projection or changes normalized Compose")
 	}
 }

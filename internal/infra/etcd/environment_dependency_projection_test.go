@@ -11,9 +11,16 @@ import (
 func TestEnvironmentComposeProjectionOwnsAndValidatesDependencyPlans(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, time.August, 26, 12, 0, 0, 0, time.UTC)
-	services := []EnvironmentComposeIdentity{
-		{ID: ids.NewAt(ids.KindService, at, 1), Name: "api"},
-		{ID: ids.NewAt(ids.KindService, at, 2), Name: "database"},
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 3)
+	services := []EnvironmentServiceProjection{
+		{EnvironmentID: environmentID, Desired: core.Service{
+			ID: ids.NewAt(ids.KindService, at, 1), Name: "api", Image: "example/api:1",
+			Strategy: core.StrategyRecreate, OnFailure: core.OnFailureSwitchBack,
+		}},
+		{EnvironmentID: environmentID, Desired: core.Service{
+			ID: ids.NewAt(ids.KindService, at, 2), Name: "database", Image: "example/database:1",
+			Strategy: core.StrategyRecreate, OnFailure: core.OnFailureSwitchBack,
+		}},
 	}
 	deploy := core.ServiceDependencyPhasePlan{
 		Phase:           core.ServiceLifecycleDeploy,
@@ -30,10 +37,10 @@ func TestEnvironmentComposeProjectionOwnsAndValidatesDependencyPlans(t *testing.
 		}},
 	}
 	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
-		EnvironmentID:    ids.NewAt(ids.KindEnvironment, at, 3),
+		EnvironmentID:    environmentID,
 		RevisionID:       ids.NewAt(ids.KindTask, at, 4),
 		RenderGeneration: 1,
-		Services:         services,
+		DesiredServices:  services,
 		ServiceDependencyPlans: core.ServiceDependencyPlans{
 			DeployDependencyPlan: deploy, RollbackDependencyPlan: rollback,
 		},

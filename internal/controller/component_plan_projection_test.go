@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
@@ -78,7 +76,7 @@ func TestProjectPinnedEnvironmentComponentsRehydratesExactGraph(t *testing.T) {
 		routeSpecs,
 		map[string]core.ComponentSpec{string(core.ComponentCapabilityHTTPRouter): {
 			Implementation: core.ComponentKindIngressCaddy, Enabled: true,
-			Settings: core.ComponentCapabilitySettings{ZoneID: projection.Networks[0].ID},
+			Settings: core.ComponentCapabilitySettings{ZoneID: projection.DesiredZones[0].Desired.ID},
 		}},
 		nil,
 		catalog,
@@ -89,19 +87,19 @@ func TestProjectPinnedEnvironmentComponentsRehydratesExactGraph(t *testing.T) {
 	generated, exists := result.Project.Services["caddy"]
 	if !exists || generated.Networks["frontend"].Ipv4Address != "10.70.0.2" ||
 		len(result.PlainFiles) != 1 || result.PlainFiles[0].ComponentID != projection.Components[0].Desired.ID ||
-		string(result.PlainFiles[0].Content) != projection.Routes[0].ID+
+		string(result.PlainFiles[0].Content) != projection.DesiredRoutes[0].Desired.ID+
 			"\nstrategy=blue-green\ndependency=service_completed_successfully:deploy\n" {
 		t.Fatalf("Component projection = %#v", result)
 	}
 }
 
-// Rationale: dispatch must never repair a missing Route identity by allocating
-// a new id after the durable Task and its authenticated plan hash exist.
-func TestProjectPinnedEnvironmentComponentsRejectsUnpinnedRoute(t *testing.T) {
+// Rationale: the desired Route records are the sole replay authority; a
+// removed Route must not be reconstructed from the retained Blueprint extension.
+func TestProjectPinnedEnvironmentComponentsUsesDesiredRoutesDirectly(t *testing.T) {
 	project, identity, projection, routeSpecs, catalog := componentPlanProjectionInput(t)
-	projection.Routes = nil
+	projection.DesiredRoutes = nil
 
-	_, err := projectPinnedEnvironmentComponents(
+	result, err := projectPinnedEnvironmentComponents(
 		project,
 		nil,
 		identity,
@@ -109,13 +107,16 @@ func TestProjectPinnedEnvironmentComponentsRejectsUnpinnedRoute(t *testing.T) {
 		routeSpecs,
 		map[string]core.ComponentSpec{string(core.ComponentCapabilityHTTPRouter): {
 			Implementation: core.ComponentKindIngressCaddy, Enabled: true,
-			Settings: core.ComponentCapabilitySettings{ZoneID: projection.Networks[0].ID},
+			Settings: core.ComponentCapabilitySettings{ZoneID: projection.DesiredZones[0].Desired.ID},
 		}},
 		nil,
 		catalog,
 	)
-	if !errors.Is(err, errs.New(errs.KindInternal, "")) {
-		t.Fatalf("projectPinnedEnvironmentComponents() error = %v, want internal", err)
+	if err != nil {
+		t.Fatalf("projectPinnedEnvironmentComponents() error = %v", err)
+	}
+	if len(result.PlainFiles) != 1 || string(result.PlainFiles[0].Content) != "none\n" {
+		t.Fatalf("removed Route Component projection = %#v", result)
 	}
 }
 
@@ -124,10 +125,8 @@ func TestProjectPinnedEnvironmentComponentsRejectsUnpinnedRoute(t *testing.T) {
 // effective Component renderer input.
 func TestProjectPinnedEnvironmentComponentsOmitsSuppressedRoute(t *testing.T) {
 	project, identity, projection, routeSpecs, catalog := componentPlanProjectionInput(t)
-	next, changed, err := etcd.SuppressEnvironmentRoute(projection, projection.Routes[0].ID)
-	if err != nil || !changed {
-		t.Fatalf("SuppressEnvironmentRoute() = %#v, %t, %v", next, changed, err)
-	}
+	next := projection
+	next.DesiredRoutes = nil
 	result, err := projectPinnedEnvironmentComponents(
 		project,
 		nil,
@@ -136,7 +135,7 @@ func TestProjectPinnedEnvironmentComponentsOmitsSuppressedRoute(t *testing.T) {
 		routeSpecs,
 		map[string]core.ComponentSpec{string(core.ComponentCapabilityHTTPRouter): {
 			Implementation: core.ComponentKindIngressCaddy, Enabled: true,
-			Settings: core.ComponentCapabilitySettings{ZoneID: projection.Networks[0].ID},
+			Settings: core.ComponentCapabilitySettings{ZoneID: projection.DesiredZones[0].Desired.ID},
 		}},
 		nil,
 		catalog,
@@ -188,7 +187,7 @@ x-gp-components:
     implementation: caddy
     enabled: true
     settings:
-      zone_id: ` + projection.Networks[0].ID + "\n")
+      zone_id: ` + projection.DesiredZones[0].Desired.ID + "\n")
 	reader := &blueprintPlanReader{
 		tenant: etcd.TenantRecord{ID: identity.TenantID, Slug: identity.TenantSlug, Name: "Acme"},
 		project: etcd.ProjectRecord{
@@ -221,7 +220,7 @@ x-gp-components:
 	if err != nil {
 		t.Fatalf("ResolveComponentFile() error = %v", err)
 	}
-	if string(actual) != projection.Routes[0].ID+
+	if string(actual) != projection.DesiredRoutes[0].Desired.ID+
 		"\nstrategy=blue-green\ndependency=service_completed_successfully:deploy\n" {
 		t.Fatalf("ResolveComponentFile() = %q", actual)
 	}
@@ -271,14 +270,17 @@ func componentPlanProjectionInput(
 	}
 	projection := etcd.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, at, 8), RenderGeneration: 1,
-		Services: []etcd.EnvironmentComposeIdentity{
-			{ID: apiID, Name: "api"},
-			{ID: caddyServiceID, Name: "caddy"},
-		},
-		Networks: []etcd.EnvironmentComposeIdentity{{ID: ids.NewAt(ids.KindNetwork, at, 9), Name: "frontend"}},
-		Routes: []etcd.EnvironmentRouteIdentity{{
+		DesiredServices: []etcd.EnvironmentServiceProjection{{EnvironmentID: environmentID, Desired: core.Service{
+			ID: apiID, Name: "api", Image: "api:1", Zones: []string{"frontend"},
+		}}},
+		DesiredZones: []etcd.EnvironmentZoneProjection{{EnvironmentID: environmentID, Desired: core.Zone{
+			ID: ids.NewAt(ids.KindNetwork, at, 9), Name: "frontend", Subnet: "10.70.0.0/24",
+			OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
+		}}},
+		DesiredRoutes: []etcd.EnvironmentRouteProjection{{EnvironmentID: environmentID, Desired: core.Route{
 			ID: ids.NewAt(ids.KindRoute, at, 10), Host: "app.example.com", Path: "/app/*",
-		}},
+			TargetServiceID: apiID, TargetPort: 8080, Exposure: "public",
+		}}},
 		Components: []etcd.ComponentRecord{caddy, tunnel},
 	}
 	normalized, err := project.MarshalYAML()
@@ -316,7 +318,9 @@ func componentPlanProjectionInput(
 
 func appendMigrationIdentity(projection *etcd.EnvironmentComposeProjection) {
 	at := time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)
-	projection.Services = append(projection.Services, etcd.EnvironmentComposeIdentity{
-		ID: ids.NewAt(ids.KindService, at, 11), Name: "migrate",
+	migrationID := ids.NewAt(ids.KindService, at, 11)
+	projection.DesiredServices = append(projection.DesiredServices, etcd.EnvironmentServiceProjection{
+		EnvironmentID: projection.EnvironmentID,
+		Desired:       core.Service{ID: migrationID, Name: "migrate", Image: "migrate:1", Zones: []string{"frontend"}},
 	})
 }

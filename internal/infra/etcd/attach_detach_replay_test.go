@@ -267,7 +267,7 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 		{
 			name: "two consumers",
 			mutate: func(input AttachTaskRenderInput) AttachTaskRenderInput {
-				input.Services = append(input.Services, EnvironmentComposeIdentity{
+				input.Services = append(input.Services, AttachTaskServiceSnapshot{
 					ID:   ids.NewAt(ids.KindService, terminalAt.Add(100*time.Second), 999),
 					Name: input.Services[0].Name + "-second",
 				})

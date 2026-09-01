@@ -61,12 +61,12 @@ func ProjectEnvironmentEntryMutation(
 	candidate.RevisionID = mutation.RevisionID
 	candidate.RenderGeneration = mutation.RenderGeneration
 	candidate.ComposeArtifact = artifactValue
-	candidate.Services = append([]etcd.EnvironmentComposeIdentity(nil), current.Services...)
-	candidate.Networks = append([]etcd.EnvironmentComposeIdentity(nil), current.Networks...)
+	candidate.NormalizedCompose = append([]byte(nil), current.NormalizedCompose...)
+	candidate.DesiredZones = append([]etcd.EnvironmentZoneProjection(nil), current.DesiredZones...)
+	candidate.DesiredServices = append([]etcd.EnvironmentServiceProjection(nil), current.DesiredServices...)
+	candidate.DesiredRoutes = append([]etcd.EnvironmentRouteProjection(nil), current.DesiredRoutes...)
 	candidate.Volumes = append([]etcd.EnvironmentVolumeIdentity(nil), current.Volumes...)
 	candidate.VolumeMounts = append([]etcd.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...)
-	candidate.Routes = append([]etcd.EnvironmentRouteIdentity(nil), current.Routes...)
-	candidate.SuppressedRoutes = append([]etcd.EnvironmentRouteIdentity(nil), current.SuppressedRoutes...)
 	candidate.Components = append([]etcd.ComponentRecord(nil), current.Components...)
 	candidate.Entries = append([]etcd.EntryRecord(nil), mutation.Entries...)
 	sort.Slice(candidate.Entries, func(left, right int) bool {
@@ -80,17 +80,19 @@ func projectEnvironmentEntryMaterializations(
 	projection etcd.EnvironmentComposeProjection,
 	entries []etcd.EntryRecord,
 ) ([]EnvironmentEntryMaterialization, error) {
+	identities, err := ComposeIdentitySnapshotFromProjection(projection)
+	if err != nil {
+		return nil, err
+	}
 	project := &composetypes.Project{
-		Name: "entry-projection", Services: make(composetypes.Services, len(projection.Services)),
+		Name: "entry-projection", Services: make(composetypes.Services, len(identities.Services)),
 		DisabledServices: make(composetypes.Services),
 	}
-	identities := make([]ComposeResourceIdentity, len(projection.Services))
-	for index, service := range projection.Services {
+	for _, service := range identities.Services {
 		project.Services[service.Name] = composetypes.ServiceConfig{Name: service.Name}
-		identities[index] = ComposeResourceIdentity{ID: service.ID, Name: service.Name}
 	}
 	result, err := ProjectEnvironmentEntries(
-		project, projection.EnvironmentID, artifactVolumeDirectory(projection), identities, entries,
+		project, projection.EnvironmentID, artifactVolumeDirectory(projection), identities.Services, entries,
 	)
 	if err != nil {
 		return nil, err
@@ -122,12 +124,16 @@ func mutateEnvironmentEntryArtifact(
 	if err != nil {
 		return nil, err
 	}
-	runtimeTargets, err := entryArtifactRuntimeTargets(owned, projection.Services, services)
+	identities, err := ComposeIdentitySnapshotFromProjection(projection)
+	if err != nil {
+		return nil, err
+	}
+	runtimeTargets, err := entryArtifactRuntimeTargets(owned, identities.Services, services)
 	if err != nil {
 		return nil, err
 	}
 	managedEnvPaths := entryArtifactManagedEnvironmentPaths(
-		projection.EnvironmentID, owned.GetAuthorizedVolumeDir(), projection.Services,
+		projection.EnvironmentID, owned.GetAuthorizedVolumeDir(), identities.Services,
 	)
 	oldMounts := entryArtifactFileMounts(owned.GetAuthorizedVolumeDir(), projection.Entries)
 	newMounts := entryArtifactFileMounts(owned.GetAuthorizedVolumeDir(), mutation.Entries)
@@ -173,7 +179,7 @@ func mutateEnvironmentEntryArtifact(
 
 func entryArtifactRuntimeTargets(
 	artifact *agentpb.ComposeArtifact,
-	identities []etcd.EnvironmentComposeIdentity,
+	identities []ComposeResourceIdentity,
 	services *yaml.Node,
 ) (map[string][]string, error) {
 	logical := make(map[string]string, len(identities))
@@ -203,7 +209,7 @@ func entryArtifactRuntimeTargets(
 func entryArtifactManagedEnvironmentPaths(
 	environmentID string,
 	volumeDir string,
-	services []etcd.EnvironmentComposeIdentity,
+	services []ComposeResourceIdentity,
 ) map[string]struct{} {
 	result := map[string]struct{}{
 		filepath.Join(volumeDir, filepath.FromSlash(EnvFileName(environmentID))): {},

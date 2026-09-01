@@ -162,8 +162,8 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 	if !found || projection.EnvironmentID != current.Record.EnvironmentID ||
 		projection.RevisionID != renderInput.Record.BlueprintRevisionID ||
 		projection.RenderGeneration != renderInput.Record.RenderGeneration ||
-		!slices.Equal(projection.Services, renderInput.Record.Services) ||
-		!slices.Equal(projection.Networks, renderInput.Record.Networks) ||
+		!slices.Equal(attachPlanServiceSnapshots(projection.DesiredServices), renderInput.Record.Services) ||
+		!slices.Equal(attachPlanOwnedNetworkSnapshots(projection.DesiredZones), renderInput.Record.Networks) ||
 		!slices.Equal(projection.Volumes, renderInput.Record.Volumes) ||
 		!projection.ServiceDependencyPlans.Equal(renderInput.Record.ServiceDependencyPlans) {
 		return nil, errs.New(errs.KindInternal, "durable Attach Task projection does not match its render input")
@@ -219,6 +219,22 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 		return nil, err
 	}
 	return plan, nil
+}
+
+func attachPlanServiceSnapshots(values []etcd.EnvironmentServiceProjection) []etcd.AttachTaskServiceSnapshot {
+	snapshots := make([]etcd.AttachTaskServiceSnapshot, len(values))
+	for index, value := range values {
+		snapshots[index] = etcd.AttachTaskServiceSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}
+	}
+	return snapshots
+}
+
+func attachPlanOwnedNetworkSnapshots(values []etcd.EnvironmentZoneProjection) []etcd.AttachTaskOwnedNetworkSnapshot {
+	snapshots := make([]etcd.AttachTaskOwnedNetworkSnapshot, len(values))
+	for index, value := range values {
+		snapshots[index] = etcd.AttachTaskOwnedNetworkSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}
+	}
+	return snapshots
 }
 
 func attachNetworkProcedureSteps(

@@ -61,10 +61,8 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Service removal intent is not pending")
 	}
 	keys := []string{
-		serviceKey(intent.ServiceID),
+		serviceRuntimeKey(intent.ServiceID),
 		deletionTombstoneKey(string(DeletionTargetService), intent.ServiceID),
-		serviceNameKey(intent.EnvironmentID, intent.ServiceName),
-		serviceOwnerKey(intent.EnvironmentID, intent.ServiceID),
 		environmentBlueprintHeadKey(intent.EnvironmentID),
 		environmentComposeProjectionKey(intent.EnvironmentID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
@@ -73,19 +71,24 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	if state == nil || len(state.Values) != len(keys) || state.Values[0] == nil || state.Values[1] == nil ||
-		state.Values[2] == nil || state.Values[3] == nil || state.Values[4] == nil || state.Values[5] == nil ||
-		state.Values[6] == nil || state.Values[0].ModRevision != intent.ServiceRevision ||
-		state.Values[4].ModRevision != intent.ExpectedHeadRevision ||
-		state.Values[5].ModRevision != intent.CurrentProjectionRevision ||
-		string(state.Values[2].Value) != intent.ServiceID || string(state.Values[3].Value) != intent.ServiceID ||
-		string(state.Values[6].Value) != task.ID {
+	if state == nil || len(state.Values) != len(keys) || state.Values[1] == nil ||
+		state.Values[2] == nil || state.Values[3] == nil || state.Values[4] == nil ||
+		!conditionMatchesRead(Condition{Key: keys[0], ModRevision: intent.RuntimeRevision}, state.Values[0]) ||
+		state.Values[2].ModRevision != intent.ExpectedHeadRevision ||
+		state.Values[3].ModRevision != intent.CurrentProjectionRevision ||
+		string(state.Values[4].Value) != task.ID {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Service removal terminal state changed")
 	}
-	record, err := decodeServiceRecord(state.Values[0].Value)
-	if err != nil || record.Desired.ID != intent.ServiceID || record.Desired.Name != intent.ServiceName ||
-		record.EnvironmentID != intent.EnvironmentID {
-		return routeTaskChange{}, corruptRecord()
+	foundDesired := false
+	for _, desired := range intent.CurrentProjection.DesiredServices {
+		if desired.EnvironmentID == intent.EnvironmentID && desired.Desired.ID == intent.ServiceID &&
+			desired.Desired.Name == intent.ServiceName {
+			foundDesired = true
+			break
+		}
+	}
+	if !foundDesired {
+		return routeTaskChange{}, corruptServiceRemovalIntent()
 	}
 	tombstone, err := decodeDeletionTombstone(state.Values[1].Value)
 	if err != nil || tombstone.TargetKind != DeletionTargetService || tombstone.TargetID != intent.ServiceID ||
@@ -93,7 +96,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		tombstone.Phase != DeletionPhaseHostEffects {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Service removal tombstone changed")
 	}
-	projection, err := decodeEnvironmentComposeProjection(state.Values[5].Value)
+	projection, err := decodeEnvironmentComposeProjection(state.Values[3].Value)
 	if err != nil || !sameRouteRemovalProjection(projection, intent.CurrentProjection) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Service removal projection changed")
 	}
@@ -109,18 +112,16 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		applies: true,
 		conditions: []Condition{
 			{Key: serviceRemovalIntentKey(task.ID), ModRevision: intentValue.ModRevision},
-			{Key: keys[0], ModRevision: state.Values[0].ModRevision},
+			{Key: keys[0], ModRevision: intent.RuntimeRevision},
 			{Key: keys[1], ModRevision: state.Values[1].ModRevision},
 			{Key: keys[2], ModRevision: state.Values[2].ModRevision},
 			{Key: keys[3], ModRevision: state.Values[3].ModRevision},
 			{Key: keys[4], ModRevision: state.Values[4].ModRevision},
-			{Key: keys[5], ModRevision: state.Values[5].ModRevision},
-			{Key: keys[6], ModRevision: state.Values[6].ModRevision},
 		},
 		mutations: []Mutation{
 			{Type: MutationPut, Key: serviceRemovalIntentKey(task.ID), Value: terminalValue},
 			{Type: MutationDelete, Key: keys[1]},
-			{Type: MutationDelete, Key: keys[6]},
+			{Type: MutationDelete, Key: keys[4]},
 		},
 		values: [][]byte{terminalValue},
 	}
@@ -162,10 +163,8 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	change.mutations = append(change.mutations,
 		Mutation{Type: MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		Mutation{Type: MutationDelete, Key: publication.locatorKey},
-		Mutation{Type: MutationPut, Key: keys[4], Value: headReference},
-		Mutation{Type: MutationPut, Key: keys[5], Value: candidateValue},
-		Mutation{Type: MutationDelete, Key: keys[2]},
-		Mutation{Type: MutationDelete, Key: keys[3]},
+		Mutation{Type: MutationPut, Key: keys[2], Value: headReference},
+		Mutation{Type: MutationPut, Key: keys[3], Value: candidateValue},
 		Mutation{Type: MutationDelete, Key: keys[0]},
 	)
 	return change, nil
@@ -201,7 +200,7 @@ func (repository *TaskRepository) validateServiceRemovalTaskAcknowledgementRepla
 		return errs.New(errs.KindStateConflict, "Service removal intent does not match terminal Task")
 	}
 	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
-		serviceKey(intent.ServiceID), deletionTombstoneKey(string(DeletionTargetService), intent.ServiceID),
+		serviceRuntimeKey(intent.ServiceID), deletionTombstoneKey(string(DeletionTargetService), intent.ServiceID),
 		environmentBlueprintHeadKey(intent.EnvironmentID), environmentComposeProjectionKey(intent.EnvironmentID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 	}, Revision: revision})
@@ -220,7 +219,7 @@ func (repository *TaskRepository) validateServiceRemovalTaskAcknowledgementRepla
 		}
 		wantRevision = state.Values[2].ModRevision
 		wantProjection = intent.CandidateProjection
-	} else if state.Values[0] == nil || state.Values[0].ModRevision != intent.ServiceRevision {
+	} else if !conditionMatchesRead(Condition{Key: serviceRuntimeKey(intent.ServiceID), ModRevision: intent.RuntimeRevision}, state.Values[0]) {
 		return errs.New(errs.KindStateConflict, "failed Service removal lost its target")
 	}
 	projection, decodeErr := decodeEnvironmentComposeProjection(state.Values[3].Value)

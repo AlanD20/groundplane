@@ -69,6 +69,15 @@ func MutateEnvironmentServiceArtifact(
 	}
 	found := mappingIndex(services, mutation.Desired.Name)
 	metadataIndex := serviceArtifactMetadataIndex(owned, mutation.Desired.ID, mutation.Desired.Name)
+	if mutation.Action != ServiceArtifactCreate && metadataIndex >= 0 {
+		componentID, err := serviceArtifactComponentOwner(owned.Services[metadataIndex])
+		if err != nil {
+			return nil, err
+		}
+		if componentID != "" {
+			return nil, errs.New(errs.KindResourceInUse, "Service is managed by its owning Component")
+		}
+	}
 	if mutation.Action == ServiceArtifactCreate {
 		if found >= 0 || metadataIndex != -1 {
 			return nil, errs.New(errs.KindStateConflict, "Service artifact identity is already present")
@@ -166,6 +175,18 @@ func ProjectEnvironmentServiceNativeCompose(
 	if serviceIndex < 0 || services.Content[serviceIndex+1].Kind != yaml.MappingNode {
 		return "", errs.New(errs.KindInternal, "Service is absent from its current desired revision")
 	}
+	for _, metadata := range artifact.GetServices() {
+		if metadata.GetComposeName() != serviceName {
+			continue
+		}
+		componentID, err := serviceArtifactComponentOwner(metadata)
+		if err != nil {
+			return "", err
+		}
+		if componentID != "" {
+			return "", errs.New(errs.KindServiceNotFound, "Service was not found")
+		}
+	}
 	service := services.Content[serviceIndex+1]
 	removeMappingValue(service, composeResourceExtension)
 	for _, key := range []string{"labels", "annotations"} {
@@ -185,6 +206,23 @@ func ProjectEnvironmentServiceNativeCompose(
 	result := string(encoded)
 	clear(encoded)
 	return result, nil
+}
+
+func serviceArtifactComponentOwner(service *agentpb.ComposeService) (string, error) {
+	componentID := ""
+	for _, label := range service.GetExpectedLabels() {
+		if label.GetKey() != composeLabelComponentID {
+			continue
+		}
+		if componentID != "" && componentID != label.GetValue() {
+			return "", errs.New(errs.KindInternal, "Service artifact Component ownership is corrupt")
+		}
+		componentID = label.GetValue()
+	}
+	if componentID != "" && ids.Validate(ids.KindComponent, componentID) != nil {
+		return "", errs.New(errs.KindInternal, "Service artifact Component ownership is corrupt")
+	}
+	return componentID, nil
 }
 
 func removeGroundplaneServiceMetadata(service *yaml.Node, key string) error {

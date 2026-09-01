@@ -399,7 +399,7 @@ func scriptWriteConditions(
 		slugCondition,
 		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: serviceKey(target.Record.Desired.ID), ModRevision: target.Revision},
+		serviceDesiredCondition(target),
 		{Key: deletionTombstoneKey("script", record.Desired.ID)},
 		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
 		{Key: deletionTombstoneKey("project", project.Record.ID)},

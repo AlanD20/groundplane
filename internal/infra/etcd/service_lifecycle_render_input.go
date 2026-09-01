@@ -106,8 +106,8 @@ func validateServiceLifecycleRenderInput(input ServiceLifecycleRenderInput) erro
 		return errs.New(errs.KindValidationFailed, "Service lifecycle render projection is invalid")
 	}
 	found := false
-	for _, service := range input.Projection.Services {
-		if service.ID == input.ServiceID {
+	for _, service := range input.Projection.DesiredServices {
+		if service.Desired.ID == input.ServiceID {
 			found = true
 			break
 		}

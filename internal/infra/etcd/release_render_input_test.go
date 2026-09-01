@@ -91,7 +91,10 @@ func TestValidateReleaseRenderInputRejectsMismatchedDependencyAuthority(t *testi
 	}
 	input.Projection = EnvironmentComposeProjection{
 		EnvironmentID: input.EnvironmentID, RevisionID: ids.NewAt(ids.KindTask, now, 9), RenderGeneration: 1,
-		Services:               []EnvironmentComposeIdentity{{ID: apiID, Name: "api"}, {ID: workerID, Name: "worker"}},
+		DesiredServices: []EnvironmentServiceProjection{
+			{EnvironmentID: input.EnvironmentID, Desired: core.Service{ID: apiID, Name: "api", Image: "registry.example/api:latest", Strategy: core.StrategyRecreate}},
+			{EnvironmentID: input.EnvironmentID, Desired: core.Service{ID: workerID, Name: "worker", Image: "registry.example/worker:latest", Strategy: core.StrategyRecreate}},
+		},
 		ServiceDependencyPlans: projectionPlans,
 	}
 	if err := validateReleaseRenderInput(input); err == nil {
@@ -157,7 +160,10 @@ func portlessReleaseRenderInput(strategy domain.Strategy) ReleaseRenderInput {
 	}
 	input.Projection = EnvironmentComposeProjection{
 		EnvironmentID: input.EnvironmentID, RevisionID: ids.NewAt(ids.KindTask, now, 8), RenderGeneration: 1,
-		Services: []EnvironmentComposeIdentity{{ID: serviceID, Name: "worker"}},
+		DesiredServices: []EnvironmentServiceProjection{{
+			EnvironmentID: input.EnvironmentID,
+			Desired:       core.Service{ID: serviceID, Name: "worker", Image: input.Image, Strategy: core.StrategyRecreate},
+		}},
 	}
 	input.Projection = withTestEnvironmentComposeArtifact(input.Projection)
 	return input

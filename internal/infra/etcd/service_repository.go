@@ -1,17 +1,13 @@
 package etcd
 
 import (
-	"bytes"
 	"context"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// ServiceRepository owns the flat Service primary, scoped-name uniqueness,
-// Environment membership, fixed-revision pagination, and revision-fenced
-// desired/runtime updates.
+// ServiceRepository projects head-selected desired Services and joins their
+// independently mutable runtime sidecars.
 type ServiceRepository struct {
 	store hierarchyStore
 }
@@ -309,434 +305,11 @@ func newServiceRepository(store hierarchyStore) (*ServiceRepository, error) {
 	return &ServiceRepository{store: store}, nil
 }
 
-func (repository *ServiceRepository) CreateService(
-	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
-	record ServiceRecord,
-) (Versioned[ServiceRecord], error) {
-	conditions, mutations, classify, err := repository.prepareServiceCreation(
-		ctx, environment, project, record, ServiceMutationReferences{}, false,
-	)
-	if err != nil {
-		return Versioned[ServiceRecord]{}, err
-	}
-	defer clearMutationValues(mutations)
-	result, err := repository.store.Transact(ctx, conditions, mutations)
-	if err != nil {
-		return Versioned[ServiceRecord]{}, err
-	}
-	if !result.Succeeded {
-		return Versioned[ServiceRecord]{}, classify(result.Revision, result.FailureReads)
-	}
-	return Versioned[ServiceRecord]{
-		Record: record, Revision: result.Revision, ReadRevision: result.Revision,
-	}, nil
-}
-
-// ServiceMutationReferences are every live Zone and dependency Service used by
-// a direct desired mutation. Their revisions and deletion fences join the same
-// transaction as the Service and replay marker.
+// ServiceMutationReferences are the live desired resources used to construct
+// one complete candidate Environment revision.
 type ServiceMutationReferences struct {
 	Zones        []Versioned[ZoneRecord]
 	Dependencies []Versioned[ServiceRecord]
-}
-
-func (repository *ServiceRepository) CreateServiceIdempotent(
-	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
-	record ServiceRecord,
-	references ServiceMutationReferences,
-	marker IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
-	if err := validateServiceMutationMarker(marker, record.EnvironmentID); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
-		return existing, err
-	}
-	conditions, mutations, classify, err := repository.prepareServiceCreation(
-		ctx, environment, project, record, references, true,
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clearMutationValues(mutations)
-	plan, err := newIdempotencyMutationPlan(conditions, mutations, classify)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	idempotency, err := newIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return idempotency.Apply(ctx, marker, plan)
-}
-
-func (repository *ServiceRepository) prepareServiceCreation(
-	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
-	record ServiceRecord,
-	references ServiceMutationReferences,
-	enforceReferences bool,
-) ([]Condition, []Mutation, idempotencyPlanClassifier, error) {
-	if err := validateServiceHierarchy(ctx, environment, project, record); err != nil {
-		return nil, nil, nil, err
-	}
-	mutationContext, err := loadOrdinaryEnvironmentMutationContext(
-		ctx,
-		repository.store,
-		record.EnvironmentID,
-		serviceKey(record.Desired.ID),
-		project.Record.ID,
-		project.Record.TenantID,
-	)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	value, err := encodeServiceRecord(record)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	conditions := []Condition{
-		{Key: serviceKey(record.Desired.ID)},
-		{Key: serviceNameKey(record.EnvironmentID, record.Desired.Name)},
-		{Key: serviceOwnerKey(record.EnvironmentID, record.Desired.ID)},
-		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
-		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: deletionTombstoneKey("service", record.Desired.ID)},
-		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
-		{Key: deletionTombstoneKey("project", project.Record.ID)},
-	}
-	if project.Record.TenantID != "" {
-		conditions = append(conditions, Condition{Key: deletionTombstoneKey("tenant", project.Record.TenantID)})
-	}
-	baseCount := len(conditions)
-	if enforceReferences {
-		referenceConditions, referenceErr := serviceMutationReferenceConditions(record, references)
-		if referenceErr != nil {
-			clear(value)
-			return nil, nil, nil, referenceErr
-		}
-		conditions = append(conditions, referenceConditions...)
-	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: serviceKey(record.Desired.ID), Value: value},
-		{
-			Type:  MutationPut,
-			Key:   serviceNameKey(record.EnvironmentID, record.Desired.Name),
-			Value: []byte(record.Desired.ID),
-		},
-		{
-			Type:  MutationPut,
-			Key:   serviceOwnerKey(record.EnvironmentID, record.Desired.ID),
-			Value: []byte(record.Desired.ID),
-		},
-	}
-	classify := func(_ int64, values []*KeyValue) error {
-		if enforceReferences {
-			if err := classifyServiceMutationReferenceConflict(values[baseCount:], references); err != nil {
-				return err
-			}
-		}
-		return classifyServiceWriteConflict(values[:baseCount], environment, project, record, 0)
-	}
-	binding, err := mutationContext.bind(ctx, repository.store, conditions, mutations, true)
-	if err != nil {
-		clear(value)
-		return nil, nil, nil, err
-	}
-	binding.clear()
-	originalClassify := classify
-	classify = func(revision int64, values []*KeyValue) error {
-		return binding.classify(revision, values, originalClassify)
-	}
-	return binding.conditions, binding.mutations, classify, nil
-}
-
-func (repository *ServiceRepository) GetService(
-	ctx context.Context,
-	id string,
-) (Versioned[ServiceRecord], error) {
-	if err := validateContext(ctx); err != nil {
-		return Versioned[ServiceRecord]{}, err
-	}
-	if err := validateID(ids.KindService, id); err != nil {
-		return Versioned[ServiceRecord]{}, err
-	}
-	return getRecord(
-		ctx,
-		repository.store,
-		serviceKey(id),
-		id,
-		errs.KindServiceNotFound,
-		decodeServiceRecord,
-		func(record ServiceRecord) string { return record.Desired.ID },
-	)
-}
-
-func (repository *ServiceRepository) ListServices(
-	ctx context.Context,
-	environmentID string,
-	request PageRequest,
-) (Page[ServiceRecord], error) {
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
-		return Page[ServiceRecord]{}, err
-	}
-	return listIndexPage(
-		ctx,
-		repository.store,
-		"services",
-		"environment",
-		environmentID,
-		serviceOwnerPrefix(environmentID),
-		serviceKey,
-		ids.KindService,
-		request,
-		decodeServiceRecord,
-		func(record ServiceRecord) string { return record.Desired.ID },
-		func(record ServiceRecord) bool { return record.EnvironmentID == environmentID },
-	)
-}
-
-func (repository *ServiceRepository) ReplaceDesired(
-	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
-	current Versioned[ServiceRecord],
-	desired core.Service,
-) (Versioned[ServiceRecord], error) {
-	replacement, err := ReplaceServiceDesired(current.Record, desired)
-	if err != nil {
-		return Versioned[ServiceRecord]{}, err
-	}
-	return repository.updateService(ctx, environment, project, current, replacement, ServiceMutationReferences{}, false)
-}
-
-func (repository *ServiceRepository) ReplaceDesiredIdempotent(
-	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
-	current Versioned[ServiceRecord],
-	desired core.Service,
-	references ServiceMutationReferences,
-	marker IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
-	if err := validateServiceMutationMarker(marker, current.Record.EnvironmentID); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
-		return existing, err
-	}
-	replacement, err := ReplaceServiceDesired(current.Record, desired)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	conditions, mutations, classify, binding, err := repository.prepareServiceUpdate(
-		ctx, environment, project, current, replacement, references, true,
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer binding.clear()
-	defer clearMutationValues(mutations)
-	plan, err := newIdempotencyMutationPlan(conditions, mutations, classify)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	idempotency, err := newIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return idempotency.Apply(ctx, marker, plan)
-}
-
-func (repository *ServiceRepository) SetRuntimeIntent(
-	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
-	current Versioned[ServiceRecord],
-	intent core.ServiceRuntimeIntent,
-) (Versioned[ServiceRecord], error) {
-	replacement, err := SetServiceRuntimeIntent(current.Record, intent)
-	if err != nil {
-		return Versioned[ServiceRecord]{}, err
-	}
-	return repository.updateService(ctx, environment, project, current, replacement, ServiceMutationReferences{}, false)
-}
-
-func (repository *ServiceRepository) updateService(
-	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
-	current Versioned[ServiceRecord],
-	replacement ServiceRecord,
-	references ServiceMutationReferences,
-	enforceReferences bool,
-) (Versioned[ServiceRecord], error) {
-	conditions, mutations, classify, binding, err := repository.prepareServiceUpdate(
-		ctx, environment, project, current, replacement, references, enforceReferences,
-	)
-	if err != nil {
-		return Versioned[ServiceRecord]{}, err
-	}
-	defer binding.clear()
-	defer clearMutationValues(mutations)
-	if len(mutations) == 0 {
-		matches, matchErr := binding.preparedConditionsMatch()
-		if matchErr != nil {
-			return Versioned[ServiceRecord]{}, matchErr
-		}
-		if !matches {
-			return Versioned[ServiceRecord]{}, classify(binding.context.readRevision, binding.preparedReads)
-		}
-		return current, nil
-	}
-	result, err := repository.store.Transact(ctx, conditions, mutations)
-	if err != nil {
-		return Versioned[ServiceRecord]{}, err
-	}
-	if !result.Succeeded {
-		return Versioned[ServiceRecord]{}, classify(result.Revision, result.FailureReads)
-	}
-	return Versioned[ServiceRecord]{
-		Record: replacement, Revision: result.Revision, ReadRevision: result.Revision,
-	}, nil
-}
-
-func (repository *ServiceRepository) prepareServiceUpdate(
-	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
-	current Versioned[ServiceRecord],
-	replacement ServiceRecord,
-	references ServiceMutationReferences,
-	enforceReferences bool,
-) ([]Condition, []Mutation, idempotencyPlanClassifier, *ordinaryEnvironmentMutationBinding, error) {
-	if err := validateServiceHierarchy(ctx, environment, project, replacement); err != nil {
-		return nil, nil, nil, nil, err
-	}
-	if err := validateServiceVersion(current); err != nil {
-		return nil, nil, nil, nil, err
-	}
-	if current.Record.EnvironmentID != replacement.EnvironmentID ||
-		current.Record.Desired.ID != replacement.Desired.ID ||
-		current.Record.Desired.Name != replacement.Desired.Name {
-		return nil, nil, nil, nil, errs.New(
-			errs.KindValidationFailed,
-			"Service update changed immutable identity or ownership",
-		)
-	}
-	mutationContext, err := loadOrdinaryEnvironmentMutationContext(
-		ctx,
-		repository.store,
-		current.Record.EnvironmentID,
-		serviceKey(current.Record.Desired.ID),
-		project.Record.ID,
-		project.Record.TenantID,
-	)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys: []string{
-			serviceNameKey(current.Record.EnvironmentID, current.Record.Desired.Name),
-			serviceOwnerKey(current.Record.EnvironmentID, current.Record.Desired.ID),
-		},
-		Revision: mutationContext.readRevision,
-	})
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	if indexes == nil || len(indexes.Values) != 2 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
-		string(indexes.Values[0].Value) != current.Record.Desired.ID ||
-		string(indexes.Values[1].Value) != current.Record.Desired.ID {
-		return nil, nil, nil, nil, errs.New(errs.KindInternal, "Service indexes are missing or corrupt")
-	}
-	value, err := encodeServiceRecord(replacement)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	currentValue, err := encodeServiceRecord(current.Record)
-	if err != nil {
-		clear(value)
-		return nil, nil, nil, nil, err
-	}
-	noOp := bytes.Equal(currentValue, value)
-	clear(currentValue)
-	conditions := []Condition{
-		{Key: serviceKey(current.Record.Desired.ID), ModRevision: current.Revision},
-		{
-			Key:         serviceNameKey(current.Record.EnvironmentID, current.Record.Desired.Name),
-			ModRevision: indexes.Values[0].ModRevision,
-		},
-		{
-			Key:         serviceOwnerKey(current.Record.EnvironmentID, current.Record.Desired.ID),
-			ModRevision: indexes.Values[1].ModRevision,
-		},
-		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
-		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: deletionTombstoneKey("service", current.Record.Desired.ID)},
-		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
-		{Key: deletionTombstoneKey("project", project.Record.ID)},
-	}
-	if project.Record.TenantID != "" {
-		conditions = append(conditions, Condition{Key: deletionTombstoneKey("tenant", project.Record.TenantID)})
-	}
-	baseCount := len(conditions)
-	if enforceReferences {
-		referenceConditions, referenceErr := serviceMutationReferenceConditions(replacement, references)
-		if referenceErr != nil {
-			clear(value)
-			return nil, nil, nil, nil, referenceErr
-		}
-		conditions = append(conditions, referenceConditions...)
-	}
-	scriptFenceIndex := -1
-	if !noOp && current.Record.Desired.Replicas == 1 && replacement.Desired.Replicas != 1 {
-		scriptFence, fenceErr := prepareScriptScaleFence(
-			ctx, repository.store, replacement.EnvironmentID, replacement.Desired.ID, mutationContext.readRevision,
-		)
-		if fenceErr != nil {
-			clear(value)
-			return nil, nil, nil, nil, fenceErr
-		}
-		scriptFenceIndex = len(conditions)
-		conditions = append(conditions, scriptFence)
-	}
-	mutations := []Mutation(nil)
-	if !noOp {
-		mutations = []Mutation{{Type: MutationPut, Key: serviceKey(replacement.Desired.ID), Value: value}}
-	} else {
-		clear(value)
-	}
-	classify := func(_ int64, values []*KeyValue) error {
-		if scriptFenceIndex >= 0 && !conditionMatchesRead(conditions[scriptFenceIndex], values[scriptFenceIndex]) {
-			return errs.New(errs.KindStateConflict, "active Script-set generation changed")
-		}
-		if enforceReferences {
-			referenceEnd := len(values)
-			if scriptFenceIndex >= 0 {
-				referenceEnd = scriptFenceIndex
-			}
-			if err := classifyServiceMutationReferenceConflict(values[baseCount:referenceEnd], references); err != nil {
-				return err
-			}
-		}
-		return classifyServiceWriteConflict(values[:baseCount], environment, project, current.Record, current.Revision)
-	}
-	binding, err := mutationContext.bind(ctx, repository.store, conditions, mutations, !noOp)
-	if err != nil {
-		clearMutationValues(mutations)
-		return nil, nil, nil, nil, err
-	}
-	originalClassify := classify
-	classify = func(revision int64, values []*KeyValue) error {
-		return binding.classify(revision, values, originalClassify)
-	}
-	return binding.conditions, binding.mutations, classify, binding, nil
 }
 
 func serviceMutationReferenceConditions(
@@ -750,7 +323,7 @@ func serviceMutationReferenceConditions(
 	if len(wantZones) != len(references.Zones) || len(record.Desired.DependsOn) != len(references.Dependencies) {
 		return nil, errs.New(errs.KindValidationFailed, "Service mutation references are incomplete")
 	}
-	conditions := make([]Condition, 0, 2*(len(references.Zones)+len(references.Dependencies)))
+	conditions := make([]Condition, 0, len(references.Zones)+2*len(references.Dependencies))
 	for _, zone := range references.Zones {
 		if err := validateZoneRecord(zone.Record); err != nil || zone.Revision <= 0 ||
 			zone.ReadRevision < zone.Revision || zone.Record.EnvironmentID != record.EnvironmentID {
@@ -760,10 +333,7 @@ func serviceMutationReferenceConditions(
 			return nil, errs.New(errs.KindValidationFailed, "Service Zone reference is not desired")
 		}
 		delete(wantZones, zone.Record.Desired.Name)
-		conditions = append(conditions,
-			Condition{Key: zoneKey(zone.Record.Desired.ID), ModRevision: zone.Revision},
-			Condition{Key: deletionTombstoneKey("zone", zone.Record.Desired.ID)},
-		)
+		conditions = append(conditions, Condition{Key: deletionTombstoneKey("zone", zone.Record.Desired.ID)})
 	}
 	wantDependencies := make(map[string]struct{}, len(record.Desired.DependsOn))
 	for name := range record.Desired.DependsOn {
@@ -782,7 +352,7 @@ func serviceMutationReferenceConditions(
 		}
 		delete(wantDependencies, dependency.Record.Desired.Name)
 		conditions = append(conditions,
-			Condition{Key: serviceKey(dependency.Record.Desired.ID), ModRevision: dependency.Revision},
+			serviceDesiredCondition(dependency),
 			Condition{Key: deletionTombstoneKey("service", dependency.Record.Desired.ID)},
 		)
 	}
@@ -793,18 +363,15 @@ func serviceMutationReferenceConditions(
 }
 
 func classifyServiceMutationReferenceConflict(values []*KeyValue, references ServiceMutationReferences) error {
-	if len(values) != 2*(len(references.Zones)+len(references.Dependencies)) {
+	if len(values) != len(references.Zones)+2*len(references.Dependencies) {
 		return errs.New(errs.KindInternal, "Service reference compare evidence is incomplete")
 	}
 	offset := 0
-	for _, zone := range references.Zones {
-		if values[offset] == nil || values[offset].ModRevision != zone.Revision {
-			return errs.New(errs.KindStateConflict, "Service Zone reference changed")
-		}
-		if values[offset+1] != nil {
+	for range references.Zones {
+		if values[offset] != nil {
 			return errs.New(errs.KindResourceInUse, "Service Zone removal is in progress")
 		}
-		offset += 2
+		offset++
 	}
 	for _, dependency := range references.Dependencies {
 		if values[offset] == nil || values[offset].ModRevision != dependency.Revision {

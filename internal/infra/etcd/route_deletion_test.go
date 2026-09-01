@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,19 +11,19 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func TestRouteRepositoryBeginsRemovalInOneTransaction(t *testing.T) {
-	// Rationale: public Route visibility, its immutable suppression candidate,
+func TestRouteRemovalCompletionPromotesStagedCandidate(t *testing.T) {
+	// Rationale: public Route visibility, its immutable desired-state candidate,
 	// Task journal, deletion fence, and reconciliation ownership must never
 	// describe different removal attempts after a Controller crash.
 	t.Parallel()
 	ctx := context.Background()
 	repository, store, environment, project, target := routeRepositoryTestHierarchy(t)
 	record := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1100, "/api/*")
-	current, err := repository.CreateRoute(ctx, environment, project, target, record)
+	projection := routeDeletionTestProjection(t, store, environment, project, target, Versioned[RouteRecord]{Record: record})
+	current, err := repository.GetRoute(ctx, record.Desired.ID)
 	if err != nil {
-		t.Fatalf("CreateRoute() error = %v", err)
+		t.Fatalf("GetRoute() error = %v", err)
 	}
-	projection := routeDeletionTestProjection(t, store, current)
 	task, marker, tombstone, intent := routeDeletionTestRecords(t, project, environment, current, projection)
 	result, err := repository.BeginRouteDeletionWithTask(
 		ctx, environment, project, target, current, &projection, tombstone, intent, task, marker,
@@ -48,6 +49,21 @@ func TestRouteRepositoryBeginsRemovalInOneTransaction(t *testing.T) {
 		*intent.CandidateProjection,
 	) {
 		t.Fatalf("GetRouteRemovalIntent() = %#v/%v/%v", storedIntent, found, err)
+	}
+	descriptorRead, err := store.Get(
+		ctx,
+		environmentBlueprintDescriptorKeyByID(strings.TrimPrefix(task.ID, string(ids.KindTask)+"_")),
+	)
+	if err != nil || descriptorRead.Entry == nil {
+		t.Fatalf("Get(Route desired descriptor) = %#v/%v", descriptorRead, err)
+	}
+	descriptor, err := decodeEnvironmentBlueprintStageDescriptor(descriptorRead.Entry.Value)
+	if err != nil || descriptor.ProjectionResources != 1 {
+		t.Fatalf("Route desired descriptor resources = %d/%v, want 1", descriptor.ProjectionResources, err)
+	}
+	desired, found, err := hierarchy.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
+	if err != nil || !found || !sameRouteRemovalProjection(desired.Record, projection.Record) {
+		t.Fatalf("GetEnvironmentComposeProjection(pending) = %#v/%v/%v", desired, found, err)
 	}
 	storedTombstone, found, err := hierarchy.GetDeletionTombstone(ctx, DeletionTargetRoute, task.Target)
 	if err != nil || !found || storedTombstone.Record.TaskID != task.ID {
@@ -99,9 +115,7 @@ func TestRouteRepositoryBeginsRemovalInOneTransaction(t *testing.T) {
 		t.Fatalf("AcknowledgeControllerTask() = %#v/%v", terminal, err)
 	}
 	for _, key := range []string{
-		routeKey(task.Target),
-		routeOwnerKey(current.Record.EnvironmentID, task.Target),
-		routeMatchKey(current.Record.EnvironmentID, current.Record.Desired.Host, current.Record.Desired.Path),
+		routeObservationKey(task.Target),
 		deletionTombstoneKey(string(DeletionTargetRoute), task.Target),
 		componentTaskActiveEnvironmentKey(environment.Record.ID),
 	} {
@@ -110,36 +124,45 @@ func TestRouteRepositoryBeginsRemovalInOneTransaction(t *testing.T) {
 			t.Fatalf("finalized key %s = %#v/%v", key, stored, getErr)
 		}
 	}
-	projectionRead, err := store.Get(ctx, environmentComposeProjectionKey(environment.Record.ID))
-	if err != nil || projectionRead.Entry == nil {
-		t.Fatalf("Get(promoted projection) = %#v/%v", projectionRead, err)
+	desired, found, err = hierarchy.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
+	if err != nil || !found || !sameRouteRemovalProjection(desired.Record, *intent.CandidateProjection) {
+		t.Fatalf("GetEnvironmentComposeProjection(completed) = %#v/%v/%v", desired, found, err)
 	}
-	promoted, err := decodeEnvironmentComposeProjection(projectionRead.Entry.Value)
-	if err != nil || !sameRouteRemovalProjection(promoted, *intent.CandidateProjection) {
-		t.Fatalf("promoted projection = %#v/%v", promoted, err)
-	}
-	terminalIntent, found, err := hierarchy.GetRouteRemovalIntent(ctx, task.ID)
-	if err != nil || !found || terminalIntent.Record.Status != TaskStatusCompleted ||
-		terminalIntent.Record.TerminalAt == nil || !terminalIntent.Record.TerminalAt.Equal(terminalAt) {
-		t.Fatalf("GetRouteRemovalIntent(terminal) = %#v/%v/%v", terminalIntent, found, err)
+	_, found, err = hierarchy.GetRouteRemovalIntent(ctx, task.ID)
+	if err != nil || found {
+		t.Fatalf("GetRouteRemovalIntent(completed) found/error = %v/%v", found, err)
 	}
 	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, TaskStatusCompleted, terminalAt); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(replay) error = %v", err)
 	}
+	currentHead, err := encodeTaskReference(projection.Record.RevisionID)
+	if err != nil {
+		t.Fatalf("encodeTaskReference(current replay head) error = %v", err)
+	}
+	corruptReplay, err := store.Transact(ctx, nil, []Mutation{{
+		Type: MutationPut, Key: environmentBlueprintHeadKey(environment.Record.ID), Value: currentHead,
+	}})
+	clear(currentHead)
+	if err != nil || !corruptReplay.Succeeded {
+		t.Fatalf("replace completed replay head = %#v/%v", corruptReplay, err)
+	}
+	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, TaskStatusCompleted, terminalAt); !isKind(err, errs.KindStateConflict) {
+		t.Fatalf("AcknowledgeControllerTask(changed replay head) error = %v", err)
+	}
 }
 
 func TestRouteRepositoryRejectsRemovalDuringEnvironmentReconciliation(t *testing.T) {
-	// Rationale: a Route suppression candidate must never race another writer
+	// Rationale: a Route desired-state candidate must never race another writer
 	// that can replace the same applied Environment projection.
 	t.Parallel()
 	ctx := context.Background()
 	repository, store, environment, project, target := routeRepositoryTestHierarchy(t)
 	record := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1110, "/admin/*")
-	current, err := repository.CreateRoute(ctx, environment, project, target, record)
+	projection := routeDeletionTestProjection(t, store, environment, project, target, Versioned[RouteRecord]{Record: record})
+	current, err := repository.GetRoute(ctx, record.Desired.ID)
 	if err != nil {
-		t.Fatalf("CreateRoute() error = %v", err)
+		t.Fatalf("GetRoute() error = %v", err)
 	}
-	projection := routeDeletionTestProjection(t, store, current)
 	fenceResult, err := store.Transact(ctx, []Condition{{
 		Key: componentTaskActiveEnvironmentKey(environment.Record.ID),
 	}}, []Mutation{{
@@ -174,16 +197,16 @@ func TestRouteRepositoryRejectsRemovalDuringEnvironmentReconciliation(t *testing
 func TestRouteRemovalFailureRetryAndAbortPreserveAppliedState(t *testing.T) {
 	// Rationale: every non-success attempt must retain both the public Route and
 	// current applied projection, while retry atomically reacquires ownership of
-	// the exact same immutable suppression candidate.
+	// the exact same immutable desired-state candidate.
 	t.Parallel()
 	ctx := context.Background()
 	repository, store, environment, project, target := routeRepositoryTestHierarchy(t)
 	record := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1140, "/retry/*")
-	current, err := repository.CreateRoute(ctx, environment, project, target, record)
+	projection := routeDeletionTestProjection(t, store, environment, project, target, Versioned[RouteRecord]{Record: record})
+	current, err := repository.GetRoute(ctx, record.Desired.ID)
 	if err != nil {
-		t.Fatalf("CreateRoute() error = %v", err)
+		t.Fatalf("GetRoute() error = %v", err)
 	}
-	projection := routeDeletionTestProjection(t, store, current)
 	task, marker, tombstone, intent := routeDeletionTestRecords(t, project, environment, current, projection)
 	if _, err := repository.BeginRouteDeletionWithTask(
 		ctx, environment, project, target, current, &projection, tombstone, intent, task, marker,
@@ -206,6 +229,11 @@ func TestRouteRemovalFailureRetryAndAbortPreserveAppliedState(t *testing.T) {
 		t.Fatalf("AcknowledgeControllerTask(failed) = %#v/%v", failed, err)
 	}
 	assertRouteRemovalRetained(t, repository, store, current, projection)
+	if _, err := tasks.AcknowledgeControllerTask(
+		ctx, task.ID, TaskStatusFailed, task.CreatedAt.Add(2*time.Second),
+	); err != nil {
+		t.Fatalf("AcknowledgeControllerTask(failed replay) error = %v", err)
+	}
 
 	retryID := ids.NewAt(ids.KindTask, task.CreatedAt.Add(3*time.Second), 1141)
 	retryMarker := pendingRetryMarker(
@@ -252,16 +280,26 @@ func assertRouteRemovalRetained(
 	if err != nil || visible.Record != route.Record {
 		t.Fatalf("GetRoute(retained) = %#v/%v", visible, err)
 	}
-	projectionRead, err := store.Get(
-		context.Background(),
-		environmentComposeProjectionKey(route.Record.EnvironmentID),
-	)
-	if err != nil || projectionRead.Entry == nil {
-		t.Fatalf("Get(retained projection) = %#v/%v", projectionRead, err)
+	observationRead, err := store.Get(context.Background(), routeObservationKey(route.Record.Desired.ID))
+	if err != nil || observationRead.Entry == nil {
+		t.Fatalf("Get(retained Route observation) = %#v/%v", observationRead, err)
 	}
-	retained, err := decodeEnvironmentComposeProjection(projectionRead.Entry.Value)
-	if err != nil || !sameRouteRemovalProjection(retained, projection.Record) {
-		t.Fatalf("retained projection = %#v/%v", retained, err)
+	observation, err := decodeRouteObservation(observationRead.Entry.Value)
+	if err != nil || observation.EnvironmentID != route.Record.EnvironmentID ||
+		observation.RouteID != route.Record.Desired.ID ||
+		observation.DesiredGeneration != route.Record.DesiredGeneration ||
+		observation.Observation != route.Record.Observed {
+		t.Fatalf("retained Route observation = %#v/%v", observation, err)
+	}
+	hierarchy, err := newHierarchyRepository(store)
+	if err != nil {
+		t.Fatalf("newHierarchyRepository() error = %v", err)
+	}
+	desired, found, err := hierarchy.GetEnvironmentComposeProjection(
+		context.Background(), route.Record.EnvironmentID,
+	)
+	if err != nil || !found || !sameRouteRemovalProjection(desired.Record, projection.Record) {
+		t.Fatalf("GetEnvironmentComposeProjection(retained) = %#v/%v/%v", desired, found, err)
 	}
 	fence, err := store.Get(context.Background(), componentTaskActiveEnvironmentKey(route.Record.EnvironmentID))
 	if err != nil || fence.Entry != nil {
@@ -272,27 +310,76 @@ func assertRouteRemovalRetained(
 func routeDeletionTestProjection(
 	t *testing.T,
 	store *memoryHierarchyStore,
+	environment Versioned[EnvironmentRecord],
+	project Versioned[ProjectRecord],
+	target Versioned[ServiceRecord],
 	route Versioned[RouteRecord],
 ) Versioned[EnvironmentComposeProjection] {
 	t.Helper()
-	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
-		EnvironmentID:    route.Record.EnvironmentID,
-		RevisionID:       ids.NewAt(ids.KindTask, serviceRecordTestTime().Add(time.Hour), 1120),
-		RenderGeneration: 2,
-		Routes: []EnvironmentRouteIdentity{{
-			ID: route.Record.Desired.ID, Host: route.Record.Desired.Host, Path: route.Record.Desired.Path,
-		}},
-	})
-	value, err := encodeEnvironmentComposeProjection(projection)
+	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 1120)
+	selected, found, err := currentEnvironmentProjectionAtRevision(
+		context.Background(), store, environment.Record.ID, 0,
+	)
+	if err != nil || !found {
+		t.Fatalf("read current Environment projection = %#v/%v/%v", selected, found, err)
+	}
+	projection, err := ApplyEnvironmentRoute(selected.Record, route.Record)
 	if err != nil {
-		t.Fatalf("encodeEnvironmentComposeProjection() error = %v", err)
+		t.Fatalf("ApplyEnvironmentRoute() error = %v", err)
+	}
+	projection.RevisionID = task.ID
+	hierarchy, err := newHierarchyRepository(store)
+	if err != nil {
+		t.Fatalf("newHierarchyRepository() error = %v", err)
+	}
+	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
+	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
+	claim := stageEnvironmentBlueprintForPublicationTest(t, hierarchy, selected.Revision, revision, projection, marker)
+	descriptorRead, err := store.Get(context.Background(), environmentBlueprintDescriptorKeyByID(claim.DescriptorID))
+	if err != nil || descriptorRead.Entry == nil {
+		t.Fatalf("read Environment descriptor = %#v/%v", descriptorRead, err)
+	}
+	descriptor, err := decodeEnvironmentBlueprintStageDescriptor(descriptorRead.Entry.Value)
+	if err != nil {
+		t.Fatalf("decode Environment descriptor = %v", err)
+	}
+	descriptor.State = EnvironmentBlueprintStagePublished
+	descriptor.UpdatedAt = nextBlueprintProgressTime(descriptor.UpdatedAt)
+	descriptorValue, err := encodeEnvironmentBlueprintStageDescriptor(descriptor)
+	if err != nil {
+		t.Fatalf("encode Environment descriptor = %v", err)
+	}
+	headValue, err := encodeTaskReference(projection.RevisionID)
+	if err != nil {
+		t.Fatalf("encodeTaskReference() error = %v", err)
+	}
+	observation, err := NewRouteObservationRecord(
+		route.Record.EnvironmentID,
+		route.Record.Desired.ID,
+		route.Record.DesiredGeneration,
+		route.Record.Observed,
+	)
+	if err != nil {
+		t.Fatalf("NewRouteObservationRecord() error = %v", err)
+	}
+	observationValue, err := encodeRouteObservation(observation)
+	if err != nil {
+		t.Fatalf("encodeRouteObservation() error = %v", err)
 	}
 	result, err := store.Transact(context.Background(), []Condition{{
-		Key: environmentComposeProjectionKey(route.Record.EnvironmentID),
-	}}, []Mutation{{
-		Type: MutationPut, Key: environmentComposeProjectionKey(route.Record.EnvironmentID), Value: value,
-	}})
-	clear(value)
+		Key: environmentBlueprintDescriptorKeyByID(claim.DescriptorID), ModRevision: descriptorRead.Entry.ModRevision,
+	}, {
+		Key: environmentBlueprintHeadKey(route.Record.EnvironmentID), ModRevision: selected.Revision,
+	}, {
+		Key: routeObservationKey(route.Record.Desired.ID),
+	}}, []Mutation{
+		{Type: MutationPut, Key: environmentBlueprintDescriptorKeyByID(claim.DescriptorID), Value: descriptorValue},
+		{Type: MutationPut, Key: environmentBlueprintHeadKey(route.Record.EnvironmentID), Value: headValue},
+		{Type: MutationPut, Key: routeObservationKey(route.Record.Desired.ID), Value: observationValue},
+	})
+	clear(descriptorValue)
+	clear(headValue)
+	clear(observationValue)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("seed Environment projection = %#v/%v", result, err)
 	}

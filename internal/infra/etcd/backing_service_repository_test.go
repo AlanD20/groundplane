@@ -36,7 +36,7 @@ func TestBackingServiceRepositoryReadsFacadeFromOneSnapshot(t *testing.T) {
 	ctx := context.Background()
 	store := &backingReadRaceStore{memoryHierarchyStore: newMemoryHierarchyStore()}
 	want := seedBackingService(t, store, 900, "shared-postgres")
-	store.deleteKey = serviceKey(want.ServiceID)
+	store.deleteKey = serviceRuntimeKey(want.ServiceID)
 	store.armed = true
 	repository, err := newBackingServiceRepository(store)
 	if err != nil {
@@ -53,6 +53,14 @@ func TestBackingServiceRepositoryReadsFacadeFromOneSnapshot(t *testing.T) {
 			page.Revision,
 			store.revision,
 		)
+	}
+	services, err := newServiceRepository(store)
+	if err != nil {
+		t.Fatalf("newServiceRepository() error = %v", err)
+	}
+	current, err := services.GetService(ctx, want.ServiceID)
+	if err != nil || current.Record.Desired.Name != "postgres" || current.Record.Desired.Image != "postgres:16-alpine" {
+		t.Fatalf("GetService(current head) = %#v, %v", current, err)
 	}
 }
 
@@ -86,6 +94,36 @@ func TestBackingServiceRepositoryRejectsNonBackingProject(t *testing.T) {
 	}
 }
 
+// Rationale: the backing facade must continue to resolve stable identity and
+// desired state when its independently mutable runtime sidecar is absent.
+func TestBackingServiceRepositoryDefaultsMissingRuntimeToRunning(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := newMemoryHierarchyStore()
+	want := seedBackingService(t, store, 940, "missing-runtime")
+	if _, err := store.Transact(ctx, nil, []Mutation{{
+		Type: MutationDelete, Key: serviceRuntimeKey(want.ServiceID),
+	}}); err != nil {
+		t.Fatalf("Delete(Service runtime sidecar) error = %v", err)
+	}
+	repository, err := newBackingServiceRepository(store)
+	if err != nil {
+		t.Fatalf("newBackingServiceRepository() error = %v", err)
+	}
+	resolved, err := repository.GetBackingService(ctx, want.ProjectID)
+	if err != nil || resolved.Record != want {
+		t.Fatalf("GetBackingService(missing runtime) = %#v, %v", resolved, err)
+	}
+	services, err := newServiceRepository(store)
+	if err != nil {
+		t.Fatalf("newServiceRepository() error = %v", err)
+	}
+	service, err := services.GetService(ctx, want.ServiceID)
+	if err != nil || service.Record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentRunning {
+		t.Fatalf("GetService(missing runtime) = %#v, %v", service, err)
+	}
+}
+
 func seedBackingService(
 	t *testing.T,
 	store hierarchyStore,
@@ -98,16 +136,11 @@ func seedBackingService(
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	services, err := newServiceRepository(store)
-	if err != nil {
-		t.Fatalf("newServiceRepository() error = %v", err)
-	}
 	projectRecord := ProjectRecord{
 		ID: hierarchyTestID(ids.KindProject, offset), Slug: slug,
 		Name: "Shared PostgreSQL", Kind: ProjectKindBacking,
 	}
-	project, err := hierarchy.CreateProject(ctx, projectRecord)
-	if err != nil {
+	if _, err := hierarchy.CreateProject(ctx, projectRecord); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 	environmentID := hierarchyTestID(ids.KindEnvironment, offset+1)
@@ -149,23 +182,22 @@ func seedBackingService(
 	if err != nil || !result.Succeeded {
 		t.Fatalf("seed backing Environment = %#v, %v", result, err)
 	}
-	environment, err := hierarchy.GetEnvironment(ctx, environmentID)
-	if err != nil {
-		t.Fatalf("GetEnvironment() error = %v", err)
-	}
 	serviceID := hierarchyTestID(ids.KindService, offset+3)
-	serviceRecord, err := NewServiceRecord(environmentID, core.Service{
+	backingNetworkID := hierarchyTestID(ids.KindNetwork, offset+4)
+	old := seedDesiredServiceFixture(t, ctx, store, environmentID, core.Service{
+		ID: serviceID, Name: "postgres-old", Image: "postgres:15-alpine",
+		Strategy: core.StrategyRecreate, Adapter: "postgres:16", FactsPrefix: "pg16_",
+	}, backingNetworkID, offset+10, true, true)
+	current := seedDesiredServiceFixture(t, ctx, store, environmentID, core.Service{
 		ID: serviceID, Name: "postgres", Image: "postgres:16-alpine",
 		Strategy: core.StrategyRecreate, Adapter: "postgres:16", FactsPrefix: "pg16_",
-	}, hierarchyTestID(ids.KindNetwork, offset+4))
-	if err != nil {
-		t.Fatalf("NewServiceRecord() error = %v", err)
-	}
-	if _, err := services.CreateService(ctx, environment, project, serviceRecord); err != nil {
-		t.Fatalf("CreateService() error = %v", err)
+	}, backingNetworkID, offset+11, true, true)
+	if old.Service.Record.Desired.ID != current.Service.Record.Desired.ID ||
+		old.Projection.Revision >= current.Projection.Revision {
+		t.Fatalf("desired head fixture revisions = %d/%d", old.Projection.Revision, current.Projection.Revision)
 	}
 	return BackingServiceRecord{
 		ProjectID: projectRecord.ID, EnvironmentID: environmentID, ServiceID: serviceID,
-		BackingNetworkID: serviceRecord.BackingNetworkID,
+		BackingNetworkID: current.Service.Record.BackingNetworkID,
 	}
 }

@@ -500,6 +500,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	candidate = cloneEnvironmentDesiredProjection(candidate)
 	claim, _, err := controllerrevision.PreflightAndClaim(ctx, service.repository, candidate, controllerrevision.ClaimInput{
 		EnvironmentID: request.environmentID, CandidateTaskID: candidateTaskID,
 		Locator: request.locator, Intent: request.evidence.durable,
@@ -530,14 +531,15 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	candidate = cloneEnvironmentDesiredProjection(candidate)
 	if previous != nil {
-		identitySnapshot, snapshotErr := composeIdentitySnapshot(candidate)
+		serviceIdentities, snapshotErr := entryDesiredServiceIdentities(candidate)
 		if snapshotErr != nil {
 			return etcd.IdempotencyResponse{}, snapshotErr
 		}
 		removals, err := environmentBlueprintEntryRemovals(
 			request.environmentID, []etcd.EntryRecord{*previous}, entries,
-			identitySnapshot.Services,
+			serviceIdentities,
 		)
 		if err != nil {
 			return etcd.IdempotencyResponse{}, err
@@ -664,6 +666,30 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry desired mutation resolution is invalid")
 	}
 	return cloneIdempotencyResponse(response), nil
+}
+
+func entryDesiredServiceIdentities(
+	projection etcd.EnvironmentComposeProjection,
+) ([]controller.ComposeResourceIdentity, error) {
+	result := make([]controller.ComposeResourceIdentity, len(projection.DesiredServices))
+	seenIDs := make(map[string]string, len(projection.DesiredServices))
+	seenNames := make(map[string]string, len(projection.DesiredServices))
+	for index, service := range projection.DesiredServices {
+		if service.EnvironmentID != projection.EnvironmentID || ids.Validate(ids.KindService, service.Desired.ID) != nil ||
+			service.Desired.Name == "" {
+			return nil, errs.New(errs.KindInternal, "Environment desired projection has an invalid Service identity")
+		}
+		if name, duplicate := seenIDs[service.Desired.ID]; duplicate && name != service.Desired.Name {
+			return nil, errs.New(errs.KindInternal, "Environment desired projection repeats a Service id")
+		}
+		if serviceID, duplicate := seenNames[service.Desired.Name]; duplicate && serviceID != service.Desired.ID {
+			return nil, errs.New(errs.KindInternal, "Environment desired projection repeats a Service name")
+		}
+		seenIDs[service.Desired.ID] = service.Desired.Name
+		seenNames[service.Desired.Name] = service.Desired.ID
+		result[index] = controller.ComposeResourceIdentity{ID: service.Desired.ID, Name: service.Desired.Name}
+	}
+	return result, nil
 }
 
 func entryDesiredCandidateRecord(

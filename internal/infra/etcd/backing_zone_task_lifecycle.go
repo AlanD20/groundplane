@@ -2,9 +2,10 @@ package etcd
 
 import (
 	"context"
+	"maps"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -21,50 +22,104 @@ func (repository *TaskRepository) prepareBackingZoneTaskRetry(
 	retry TaskRecord,
 	revision int64,
 ) (backingZoneTaskChange, error) {
-	applies, err := taskOwnsBackingZoneCascade(source)
-	if err != nil || !applies {
-		return backingZoneTaskChange{}, err
+	if source.Params[TaskZoneRemovalOperationParam] != "" {
+		return repository.prepareZoneRemovalTaskRetry(ctx, source, retry, revision)
 	}
-	if retry.Type != source.Type || retry.Target != source.Target ||
-		retry.Params[TaskResourceKindParam] != TaskResourceBackingZone {
-		return backingZoneTaskChange{}, errs.New(errs.KindInternal, "backing Zone retry changed its durable target")
+	_, err := taskOwnsBackingZoneCascade(source)
+	return backingZoneTaskChange{}, err
+}
+
+func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
+	ctx context.Context, source TaskRecord, retry TaskRecord, revision int64,
+) (backingZoneTaskChange, error) {
+	operationID := source.Params[TaskZoneRemovalOperationParam]
+	if ids.Validate(ids.KindOperation, operationID) != nil || source.FinishedAt == nil || retry.RetryOf != source.ID ||
+		retry.Executor != source.Executor || retry.Type != source.Type || retry.Target != source.Target ||
+		retry.PlanID != source.PlanID || retry.PlanHash != source.PlanHash ||
+		retry.RenderGeneration != source.RenderGeneration || !maps.Equal(retry.Params, source.Params) {
+		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry changed its pinned Task")
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
-		zoneKey(source.Target), deletionTombstoneKey(string(DeletionTargetZone), source.Target),
-	}, Revision: revision})
+	keys := []string{
+		zoneRemovalIntentKey(operationID), deletionTombstoneKey(string(DeletionTargetZone), source.Target),
+		environmentBlueprintHeadKey(source.Params[TaskZoneEnvironmentParam]),
+		environmentComposeProjectionKey(source.Params[TaskZoneEnvironmentParam]),
+		componentTaskActiveEnvironmentKey(source.Params[TaskZoneEnvironmentParam]),
+	}
+	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return backingZoneTaskChange{}, err
 	}
-	if state == nil || len(state.Values) != 2 || state.Values[0] == nil || state.Values[1] != nil {
-		return backingZoneTaskChange{}, errs.New(
-			errs.KindStateConflict,
-			"backing Zone is not available for cascade retry",
-		)
+	if state == nil || len(state.Values) != len(keys) || state.Values[0] == nil || state.Values[1] != nil ||
+		state.Values[2] == nil || state.Values[3] == nil || state.Values[4] != nil {
+		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone is not available for removal retry")
 	}
-	zone, err := decodeZoneRecord(state.Values[0].Value)
-	if err != nil || zone.Desired.ID != source.Target ||
-		zone.EnvironmentID != source.Params[TaskZoneEnvironmentParam] ||
-		zone.Desired.OwnerKind != core.ZoneOwnerBackingProject {
-		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "backing Zone retry target changed")
+	intent, err := decodeZoneRemovalIntent(state.Values[0].Value)
+	if err != nil || validateZoneRemovalTaskOwner(source, intent) != nil || intent.Status != source.Status ||
+		intent.TerminalAt == nil || !intent.TerminalAt.Equal(*source.FinishedAt) ||
+		state.Values[2].ModRevision != intent.DesiredHeadRevision ||
+		state.Values[3].ModRevision != intent.AppliedProjectionRevision {
+		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry authority changed")
 	}
-	tombstone := DeletionTombstoneRecord{
-		TargetKind: DeletionTargetZone, TargetID: source.Target, TargetRevision: state.Values[0].ModRevision,
+	headID, err := decodeTaskReference(state.Values[2].Value)
+	if err != nil || headID != intent.DesiredProjection.RevisionID {
+		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry head changed")
+	}
+	projection, decodeErr := decodeEnvironmentComposeProjection(state.Values[3].Value)
+	if decodeErr != nil || !sameServiceRemovalProjection(projection, intent.AppliedProjection) {
+		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry projection changed")
+	}
+	if _, err := projectedZoneRemovalTarget(intent, revision); err != nil {
+		return backingZoneTaskChange{}, err
+	}
+	retryIntent, err := TransferZoneRemovalIntent(intent, retry.ID, retry.CreatedAt)
+	if err != nil {
+		return backingZoneTaskChange{}, err
+	}
+	if err := validateZoneRemovalTaskOwner(retry, retryIntent); err != nil {
+		return backingZoneTaskChange{}, err
+	}
+	hierarchy := &HierarchyRepository{store: repository.store}
+	publication, err := hierarchy.prepareEnvironmentDirectPublication(
+		ctx, retryIntent.Claim,
+		EnvironmentDesiredRevisionIdentity{EnvironmentID: retryIntent.EnvironmentID, RevisionID: retryIntent.Claim.RevisionID},
+		retryIntent.CandidateProjection,
+		IdempotencyMarker{Locator: retryIntent.Claim.Locator, Intent: retryIntent.Claim.Intent}, retryIntent.DesiredHeadRevision,
+	)
+	if err != nil {
+		return backingZoneTaskChange{}, err
+	}
+	intentValue, err := encodeZoneRemovalIntent(retryIntent)
+	if err != nil {
+		clear(publication.publishedDescriptor)
+		return backingZoneTaskChange{}, err
+	}
+	tombstoneValue, err := encodeDeletionTombstone(DeletionTombstoneRecord{
+		TargetKind: DeletionTargetZone, TargetID: retry.Target, TargetRevision: intent.ZoneRevision,
 		TaskID: retry.ID, Phase: DeletionPhaseHostEffects, CreatedAt: retry.CreatedAt, UpdatedAt: retry.CreatedAt,
-	}
-	value, err := encodeDeletionTombstone(tombstone)
+	})
 	if err != nil {
+		clear(publication.publishedDescriptor)
+		clear(intentValue)
 		return backingZoneTaskChange{}, err
 	}
 	return backingZoneTaskChange{
 		applies: true,
 		conditions: []Condition{
-			{Key: zoneKey(source.Target), ModRevision: state.Values[0].ModRevision},
-			{Key: deletionTombstoneKey(string(DeletionTargetZone), source.Target)},
+			{Key: keys[0], ModRevision: state.Values[0].ModRevision},
+			{Key: keys[1]},
+			{Key: keys[2], ModRevision: state.Values[2].ModRevision},
+			{Key: keys[3], ModRevision: state.Values[3].ModRevision},
+			{Key: keys[4]},
+			{Key: environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID), ModRevision: publication.rootRevision},
+			{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
+			{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 		},
-		mutations: []Mutation{{
-			Type: MutationPut, Key: deletionTombstoneKey(string(DeletionTargetZone), source.Target), Value: value,
-		}},
-		values: [][]byte{value},
+		mutations: []Mutation{
+			{Type: MutationPut, Key: keys[0], Value: intentValue},
+			{Type: MutationPut, Key: keys[1], Value: tombstoneValue},
+			{Type: MutationPut, Key: keys[4], Value: []byte(retry.ID)},
+		},
+		values: [][]byte{intentValue, tombstoneValue, publication.publishedDescriptor},
 	}, nil
 }
 
@@ -72,58 +127,17 @@ func (repository *TaskRepository) prepareBackingZoneTaskAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
 	terminalStatus TaskStatus,
+	terminalAt time.Time,
 	revision int64,
 ) (backingZoneTaskChange, error) {
-	applies, err := taskOwnsBackingZoneCascade(task)
-	if err != nil || !applies {
-		return backingZoneTaskChange{}, err
-	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
-		zoneKey(task.Target), deletionTombstoneKey(string(DeletionTargetZone), task.Target),
-	}, Revision: revision})
-	if err != nil {
-		return backingZoneTaskChange{}, err
-	}
-	if state == nil || len(state.Values) != 2 {
-		return backingZoneTaskChange{}, errs.New(errs.KindInternal, "backing Zone cascade state is incomplete")
-	}
-	if terminalStatus == TaskStatusCompleted {
-		if state.Values[0] != nil || state.Values[1] != nil {
-			return backingZoneTaskChange{}, errs.New(
-				errs.KindStateConflict,
-				"completed backing Zone cascade retained durable state",
-			)
-		}
-		return backingZoneTaskChange{applies: true}, nil
-	}
-	if state.Values[0] == nil {
-		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "failed backing Zone cascade lost its target")
-	}
-	zone, err := decodeZoneRecord(state.Values[0].Value)
-	if err != nil || zone.Desired.ID != task.Target || zone.Desired.OwnerKind != core.ZoneOwnerBackingProject {
-		return backingZoneTaskChange{}, errs.New(
-			errs.KindStateConflict,
-			"failed backing Zone cascade retained another target",
+	if task.Params[TaskZoneRemovalOperationParam] != "" {
+		conditions, mutations, err := repository.prepareZoneRemovalAcknowledgement(
+			ctx, task, terminalStatus, terminalAt, revision,
 		)
+		return backingZoneTaskChange{applies: true, conditions: conditions, mutations: mutations}, err
 	}
-	change := backingZoneTaskChange{applies: true}
-	if state.Values[1] == nil {
-		return change, nil
-	}
-	tombstone, err := decodeDeletionTombstone(state.Values[1].Value)
-	if err != nil || tombstone.TaskID != task.ID || tombstone.TargetID != task.Target {
-		return backingZoneTaskChange{}, errs.New(
-			errs.KindStateConflict,
-			"backing Zone cascade fence belongs to another Task",
-		)
-	}
-	change.conditions = []Condition{{
-		Key: deletionTombstoneKey(string(DeletionTargetZone), task.Target), ModRevision: state.Values[1].ModRevision,
-	}}
-	change.mutations = []Mutation{{
-		Type: MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetZone), task.Target),
-	}}
-	return change, nil
+	_, err := taskOwnsBackingZoneCascade(task)
+	return backingZoneTaskChange{}, err
 }
 
 func (repository *TaskRepository) validateBackingZoneTaskAcknowledgementReplay(
@@ -132,37 +146,21 @@ func (repository *TaskRepository) validateBackingZoneTaskAcknowledgementReplay(
 	terminalStatus TaskStatus,
 	revision int64,
 ) error {
-	applies, err := taskOwnsBackingZoneCascade(task)
-	if err != nil || !applies {
-		return err
+	if task.Params[TaskZoneRemovalOperationParam] != "" {
+		return repository.validateZoneRemovalReplay(ctx, task, terminalStatus, revision)
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
-		zoneKey(task.Target), deletionTombstoneKey(string(DeletionTargetZone), task.Target),
-	}, Revision: revision})
-	if err != nil {
-		return err
-	}
-	if state == nil || len(state.Values) != 2 || state.Values[1] != nil {
-		return errs.New(errs.KindStateConflict, "backing Zone cascade terminal state does not match its Task")
-	}
-	if terminalStatus == TaskStatusCompleted {
-		if state.Values[0] != nil {
-			return errs.New(errs.KindStateConflict, "completed backing Zone cascade retained its target")
-		}
-		return nil
-	}
-	if state.Values[0] == nil {
-		return errs.New(errs.KindStateConflict, "failed backing Zone cascade lost its target")
-	}
-	return nil
+	_, err := taskOwnsBackingZoneCascade(task)
+	return err
 }
 
 func taskOwnsBackingZoneCascade(task TaskRecord) (bool, error) {
 	if task.Executor != TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceBackingZone {
 		return false, nil
 	}
-	if task.Type != TaskRemove || ids.Validate(ids.KindNetwork, task.Target) != nil || len(task.Params) != 3 ||
+	if task.Type != TaskRemove || ids.Validate(ids.KindNetwork, task.Target) != nil || len(task.Params) != 5 ||
 		ids.Validate(ids.KindEnvironment, task.Params[TaskZoneEnvironmentParam]) != nil ||
+		ids.Validate(ids.KindOperation, task.Params[TaskZoneRemovalOperationParam]) != nil ||
+		ids.Validate(ids.KindTask, task.Params[EnvironmentDesiredRevisionParam]) != nil ||
 		!validSHA256(task.Params[TaskZoneImpactTokenParam]) {
 		return false, errs.New(errs.KindInternal, "backing Zone cascade Task has invalid durable input")
 	}

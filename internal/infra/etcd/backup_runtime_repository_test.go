@@ -10,6 +10,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -4104,20 +4105,54 @@ func seedBackupRuntimePublicationEvidence(
 	if err != nil {
 		t.Fatal(err)
 	}
-	backingService := backupRuntimeServiceRecord(
-		t,
-		backingEnvironment.ID,
-		snapshot.BackingServiceID,
-		newBackupRuntimeID(ids.KindNetwork, run.CreatedAt, 911),
-	)
+	backingServiceID := snapshot.BackingServiceID
+	backingNetworkID := newBackupRuntimeID(ids.KindNetwork, run.CreatedAt, 911)
+	backingServiceRevisionID := newBackupRuntimeID(ids.KindTask, run.CreatedAt, 914)
+	backingServiceProjection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+		EnvironmentID:    backingEnvironment.ID,
+		RevisionID:       backingServiceRevisionID,
+		RenderGeneration: 1,
+		DesiredServices: []EnvironmentServiceProjection{{
+			EnvironmentID:    backingEnvironment.ID,
+			BackingNetworkID: backingNetworkID,
+			Desired: core.Service{
+				ID: backingServiceID, Name: "postgres", Image: "postgres:16-alpine", Adapter: "postgres:16",
+			},
+		}},
+	})
+	backingServiceProjectionValue, err := encodeEnvironmentComposeProjection(backingServiceProjection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(backingServiceProjectionValue)
+	backingServiceProjectionDigest := sha256.Sum256(backingServiceProjectionValue)
+	backingServiceAudit := []byte("backup-runtime-backing-service-audit")
+	backingServiceAuditDigest := sha256.Sum256(backingServiceAudit)
+	backingServiceSeal := EnvironmentBlueprintSeal{
+		EnvironmentID: backingEnvironment.ID, RevisionID: backingServiceRevisionID,
+		SourceKind: EnvironmentBlueprintSourceApply, RenderGeneration: 1, ProjectionSchema: 1,
+		AuditChunks: 1, AuditBytes: uint64(len(backingServiceAudit)), AuditSHA256: backingServiceAuditDigest,
+		ProjectionChunks: 1, ProjectionBytes: uint64(len(backingServiceProjectionValue)),
+		ProjectionSHA256: backingServiceProjectionDigest,
+		ProjectionResources: uint32(
+			len(backingServiceProjection.DesiredZones) +
+				len(backingServiceProjection.DesiredServices) +
+				len(backingServiceProjection.DesiredRoutes) +
+				len(backingServiceProjection.Volumes) +
+				len(backingServiceProjection.VolumeMounts) +
+				len(backingServiceProjection.Components) +
+				len(backingServiceProjection.Entries),
+		),
+		DependencyDigest: backingServiceProjectionDigest,
+	}
 	attach, err := NewPendingAttachRecord(
 		source.TargetID,
 		run.EnvironmentID,
 		"database",
 		backingProject.ID,
 		backingEnvironment.ID,
-		backingService.Desired.ID,
-		backingService.BackingNetworkID,
+		backingServiceID,
+		backingNetworkID,
 		newBackupRuntimeID(ids.KindService, run.CreatedAt, 912),
 		source.TargetID,
 		nil,
@@ -4189,7 +4224,37 @@ func seedBackupRuntimePublicationEvidence(
 			environmentKey(backingEnvironment.ID),
 			func() ([]byte, error) { return encodeEnvironment(backingEnvironment) },
 		},
-		{serviceKey(backingService.Desired.ID), func() ([]byte, error) { return encodeServiceRecord(backingService) }},
+		{
+			environmentBlueprintHeadKey(backingEnvironment.ID),
+			func() ([]byte, error) { return encodeTaskReference(backingServiceRevisionID) },
+		},
+		{
+			environmentBlueprintRootKey(backingEnvironment.ID, backingServiceRevisionID),
+			func() ([]byte, error) { return encodeEnvironmentBlueprintSeal(backingServiceSeal) },
+		},
+		{
+			environmentBlueprintChunkKeyFor(
+				backingEnvironment.ID, backingServiceRevisionID, EnvironmentBlueprintChunkProjection, 0,
+			),
+			func() ([]byte, error) {
+				return encodeEnvironmentBlueprintChunk(EnvironmentBlueprintChunk{
+					Family: EnvironmentBlueprintChunkProjection, LogicalLength: uint32(len(backingServiceProjectionValue)),
+					Digest: backingServiceProjectionDigest, Data: backingServiceProjectionValue,
+				})
+			},
+		},
+		{
+			serviceRuntimeKey(backingServiceID),
+			func() ([]byte, error) {
+				return encodeServiceRuntimeRecord(ServiceRuntimeRecord{
+					EnvironmentID: backingEnvironment.ID, ServiceID: backingServiceID,
+					BackingNetworkID: backingNetworkID,
+					Runtime: core.ServiceRuntime{
+						ServiceID: backingServiceID, RuntimeIntent: core.ServiceRuntimeIntentRunning,
+					},
+				})
+			},
+		},
 		{backupKeyKey(run.EnvironmentID), func() ([]byte, error) { return encodeBackupKeyRecord(keyRecord) }},
 		{
 			backupKeyValueKey(run.EnvironmentID),
@@ -4930,34 +4995,34 @@ func TestBackupRuntimeRepositoryClassifiesPinnedVolumeEvidence(t *testing.T) {
 	if postgres == nil {
 		t.Fatal("missing Service publication fixture")
 	}
-	serviceValue := mustOptionalKey(t, store, serviceKey(postgres.BackingServiceID))
-	if serviceValue == nil {
-		t.Fatal("missing Service record fixture")
+	runtimeValue := mustOptionalKey(t, store, serviceRuntimeKey(postgres.BackingServiceID))
+	if runtimeValue == nil {
+		t.Fatal("missing Service runtime sidecar fixture")
 	}
-	service, err := decodeServiceRecord(serviceValue.Value)
+	runtime, err := decodeServiceRuntimeRecord(runtimeValue.Value)
 	if err != nil {
 		t.Fatal(err)
 	}
 	serviceSnapshot := projectionSnapshot
 	serviceSnapshot.Services = []BackupVolumeServiceSnapshot{{
-		ServiceID: service.Desired.ID, ServiceRevision: serviceValue.ModRevision,
+		ServiceID: runtime.ServiceID, ServiceRevision: runtimeValue.ModRevision,
 		ComposeKey: "database", MountPaths: []string{"/data"},
-		PriorIntent: BackupServiceRuntimeIntent(service.Runtime.RuntimeIntent),
+		PriorIntent: BackupServiceRuntimeIntent(runtime.Runtime.RuntimeIntent),
 	}}
-	corruptService := append([]*KeyValue(nil), projectionEvidence...)
-	corruptService = append(corruptService,
-		&KeyValue{Key: serviceKey(service.Desired.ID), Value: []byte(`{"invalid":`), ModRevision: serviceValue.ModRevision},
+	corruptRuntime := append([]*KeyValue(nil), projectionEvidence...)
+	corruptRuntime = append(corruptRuntime,
+		&KeyValue{Key: serviceRuntimeKey(runtime.ServiceID), Value: []byte(`{"invalid":`), ModRevision: runtimeValue.ModRevision},
 	)
 	if err := validateBackupVolumePublicationEvidence(
-		corruptService, source, serviceSnapshot,
+		corruptRuntime, source, serviceSnapshot,
 	); !errors.Is(err, errs.New(errs.KindInternal, "")) {
-		t.Fatalf("pinned Service decode corruption error = %v", err)
+		t.Fatalf("pinned Service runtime sidecar decode corruption error = %v", err)
 	}
-	corruptService[3].ModRevision++
+	corruptRuntime[3].ModRevision++
 	if err := validateBackupVolumePublicationEvidence(
-		corruptService, source, serviceSnapshot,
+		corruptRuntime, source, serviceSnapshot,
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
-		t.Fatalf("Service revision drift error = %v", err)
+		t.Fatalf("Service runtime sidecar revision drift error = %v", err)
 	}
 }
 
@@ -5192,35 +5257,6 @@ func backupRuntimeSourceRecord(
 	}
 	defer clear(value)
 	record, err := decodeBackupSourceRecord(value)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return record
-}
-
-func backupRuntimeServiceRecord(
-	t *testing.T,
-	environmentID string,
-	serviceID string,
-	backingNetworkID string,
-) ServiceRecord {
-	t.Helper()
-	value, err := encodeEnvelope("service", map[string]any{
-		"environment_id":     environmentID,
-		"backing_network_id": backingNetworkID,
-		"desired": map[string]any{
-			"id": serviceID, "name": "postgres", "image": "postgres:16-alpine",
-			"adapter": "postgres:16",
-		},
-		"runtime": map[string]any{
-			"service_id": serviceID, "runtime_intent": "running",
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer clear(value)
-	record, err := decodeServiceRecord(value)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,7 +2,6 @@ package etcd
 
 import (
 	"context"
-	"reflect"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -59,7 +58,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 		ctx,
 		repository.store,
 		current.Record.EnvironmentID,
-		serviceKey(current.Record.Desired.ID),
+		environmentKey(environment.Record.ID),
 		project.Record.ID,
 		project.Record.TenantID,
 	)
@@ -75,22 +74,6 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys: []string{
-			serviceNameKey(environment.Record.ID, current.Record.Desired.Name),
-			serviceOwnerKey(environment.Record.ID, current.Record.Desired.ID),
-		},
-		Revision: mutationContext.readRevision,
-	})
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if indexes == nil || len(indexes.Values) != 2 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
-		string(indexes.Values[0].Value) != current.Record.Desired.ID ||
-		string(indexes.Values[1].Value) != current.Record.Desired.ID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Service lifecycle indexes are corrupt")
-	}
-
 	task = cloneTaskRecord(task)
 	if task.IdempotencyKey == "" {
 		task.IdempotencyKey = marker.Locator.Key
@@ -99,7 +82,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	serviceValue, err := encodeServiceRecord(replacement)
+	serviceValue, err := encodeServiceRuntimeRecord(newServiceRuntimeRecord(replacement))
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -120,15 +103,8 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
-		{Key: serviceKey(current.Record.Desired.ID), ModRevision: current.Revision},
-		{
-			Key:         serviceNameKey(environment.Record.ID, current.Record.Desired.Name),
-			ModRevision: indexes.Values[0].ModRevision,
-		},
-		{
-			Key:         serviceOwnerKey(environment.Record.ID, current.Record.Desired.ID),
-			ModRevision: indexes.Values[1].ModRevision,
-		},
+		serviceDesiredCondition(current),
+		serviceRuntimeCondition(current),
 		{Key: serviceLifecycleActiveKey(current.Record.Desired.ID)},
 		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
@@ -143,26 +119,19 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
 		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: MutationPut, Key: serviceKey(current.Record.Desired.ID), Value: serviceValue},
+		{Type: MutationPut, Key: serviceRuntimeKey(current.Record.Desired.ID), Value: serviceValue},
 		{Type: MutationPut, Key: serviceLifecycleActiveKey(current.Record.Desired.ID), Value: reference},
 	}
-	if projection == nil {
-		conditions = append(conditions, Condition{Key: environmentComposeProjectionKey(environment.Record.ID)})
-	} else {
-		conditions = append(conditions, Condition{
-			Key: serviceLifecycleProjectionFenceKey(environment.Record.ID), ModRevision: projection.Revision,
-		})
-		if renderInput != nil {
-			inputValue, encodeErr := encodeServiceLifecycleRenderInput(*renderInput)
-			if encodeErr != nil {
-				return IdempotencyTransactionResult{}, encodeErr
-			}
-			defer clear(inputValue)
-			conditions = append(conditions, Condition{Key: serviceLifecycleRenderInputKey(task.ID)})
-			mutations = append(mutations, Mutation{
-				Type: MutationPut, Key: serviceLifecycleRenderInputKey(task.ID), Value: inputValue,
-			})
+	if renderInput != nil {
+		inputValue, encodeErr := encodeServiceLifecycleRenderInput(*renderInput)
+		if encodeErr != nil {
+			return IdempotencyTransactionResult{}, encodeErr
 		}
+		defer clear(inputValue)
+		conditions = append(conditions, Condition{Key: serviceLifecycleRenderInputKey(task.ID)})
+		mutations = append(mutations, Mutation{
+			Type: MutationPut, Key: serviceLifecycleRenderInputKey(task.ID), Value: inputValue,
+		})
 	}
 	initiation, err := newEnvironmentTaskInitiation(
 		versionedTenant,
@@ -174,7 +143,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	originalClassify := classifyServiceLifecycleStartConflict(
-		tenant, project, environment, current, projection, renderInput != nil, task.OperationID,
+		tenant, project, environment, current, renderInput != nil, task.OperationID,
 	)
 	binding, err := mutationContext.bind(ctx, repository.store, conditions, mutations, true)
 	if err != nil {
@@ -182,6 +151,12 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 	}
 	defer binding.clear()
 	defer clearMutationValues(binding.mutations)
+	if err := validateBoundServiceConditions(binding, current, 4, 5); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := binding.preparedConflict(originalClassify); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	classify := func(revision int64, values []*KeyValue) error {
 		return binding.classify(revision, values, originalClassify)
 	}
@@ -200,6 +175,25 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	return idempotency.Apply(ctx, marker, plan)
+}
+
+func validateBoundServiceConditions(
+	binding *ordinaryEnvironmentMutationBinding,
+	service Versioned[ServiceRecord],
+	desiredIndex int,
+	runtimeIndex int,
+) error {
+	if binding == nil || desiredIndex < 0 || runtimeIndex < 0 ||
+		desiredIndex >= len(binding.conditions) || runtimeIndex >= len(binding.conditions) {
+		return errs.New(errs.KindInternal, "Service compare binding is incomplete")
+	}
+	if binding.conditions[desiredIndex] != serviceDesiredCondition(service) {
+		return stateConflict("service", service.Record.Desired.ID)
+	}
+	if binding.conditions[runtimeIndex] != serviceRuntimeCondition(service) {
+		return stateConflict("service runtime", service.Record.Desired.ID)
+	}
+	return nil
 }
 
 func serviceLifecycleProjectionFenceKey(environmentID string) string {
@@ -227,7 +221,7 @@ func validateServiceLifecycleReplacement(current ServiceRecord, replacement Serv
 	if validateServiceRecord(current) != nil || validateServiceRecord(replacement) != nil ||
 		replacement.EnvironmentID != current.EnvironmentID ||
 		replacement.BackingNetworkID != current.BackingNetworkID ||
-		!reflect.DeepEqual(replacement.Desired, current.Desired) ||
+		!sameServiceRemovalDesired(replacement.Desired, current.Desired) ||
 		replacement.Runtime.ServiceID != current.Runtime.ServiceID || task.Target != current.Desired.ID ||
 		task.Status != TaskStatusPending || task.NextEventSequence != 1 || len(task.Steps) != 1 {
 		return errs.New(errs.KindValidationFailed, "Service lifecycle replacement is invalid")
@@ -254,15 +248,15 @@ func validateServiceLifecycleProjection(
 	input *ServiceLifecycleRenderInput,
 	task TaskRecord,
 ) error {
-	if input == nil {
+	if projection == nil && input == nil {
 		if task.Executor != TaskExecutorController || task.RenderGeneration != 1 ||
 			len(task.Params) != 2 || task.Params[TaskResourceKindParam] != TaskResourceService ||
 			task.Params[TaskServiceEnvironmentParam] == "" {
-			return errs.New(errs.KindValidationFailed, "never-applied Service lifecycle Task is invalid")
+			return errs.New(errs.KindValidationFailed, "unapplied Service lifecycle Task is invalid")
 		}
 		return nil
 	}
-	if projection == nil || projection.Revision <= 0 || projection.ReadRevision < projection.Revision ||
+	if projection == nil || input == nil || projection.Revision <= 0 || projection.ReadRevision < projection.Revision ||
 		task.Executor != TaskExecutorAgent || uint64(task.RenderGeneration) != projection.Record.RenderGeneration ||
 		input.PlanID != task.PlanID || input.ServiceID != task.Target ||
 		input.EnvironmentID != projection.Record.EnvironmentID ||
@@ -279,15 +273,12 @@ func classifyServiceLifecycleStartConflict(
 	project Versioned[ProjectRecord],
 	environment Versioned[EnvironmentRecord],
 	service Versioned[ServiceRecord],
-	projection *Versioned[EnvironmentComposeProjection],
 	applied bool,
 	operationID string,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		expected := 16
+		expected := 14
 		if applied {
-			expected++
-		} else {
 			expected++
 		}
 		if len(values) != expected {
@@ -316,37 +307,25 @@ func classifyServiceLifecycleStartConflict(
 		if values[4].ModRevision != service.Revision {
 			return stateConflict("service", service.Record.Desired.ID)
 		}
-		for _, index := range []int{5, 6} {
-			if values[index] == nil || string(values[index].Value) != service.Record.Desired.ID {
-				return errs.New(errs.KindInternal, "Service lifecycle index changed or is corrupt")
-			}
+		if !conditionMatchesRead(serviceRuntimeCondition(service), values[5]) {
+			return stateConflict("service runtime", service.Record.Desired.ID)
 		}
-		if values[7] != nil {
+		if values[6] != nil {
 			return errs.New(errs.KindResourceInUse, "Service already has an active lifecycle Task")
 		}
 		for index, revision := range []int64{environment.Revision, project.Revision, tenant.Revision} {
-			value := values[8+index]
+			value := values[7+index]
 			if value == nil || value.ModRevision != revision {
 				return errs.New(errs.KindStateConflict, "Service lifecycle hierarchy changed")
 			}
 		}
-		for index := 11; index < 15; index++ {
+		for index := 10; index < 14; index++ {
 			if values[index] != nil {
 				return errs.New(errs.KindResourceInUse, "Service hierarchy deletion is in progress")
 			}
 		}
-		position := 15
-		if projection == nil {
-			if values[position] != nil {
-				return stateConflict("Environment projection", environment.Record.ID)
-			}
-		} else {
-			if values[position] == nil || values[position].ModRevision != projection.Revision {
-				return stateConflict("Environment projection", environment.Record.ID)
-			}
-			if applied && values[position+1] != nil {
-				return errs.New(errs.KindInternal, "Service lifecycle render input already exists")
-			}
+		if applied && values[14] != nil {
+			return errs.New(errs.KindInternal, "Service lifecycle render input already exists")
 		}
 		return errs.New(errs.KindStateConflict, "Service lifecycle state changed")
 	}

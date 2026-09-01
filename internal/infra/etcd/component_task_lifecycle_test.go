@@ -106,6 +106,7 @@ func TestTaskAcknowledgementPromotesComponentCandidateAndMovesReservation(t *tes
 	task := validTaskRecord(now)
 	task.Type = TaskUpdate
 	task.Target = environmentID
+	pinComponentTaskDesiredRevision(&task)
 	createLifecycleTask(t, repository, task)
 	records := componentTaskLifecycleRecords(t, environmentID, now, true)
 	seedComponentTaskLifecycle(t, store, task, records)
@@ -147,6 +148,7 @@ func TestTaskTimeoutDiscardsComponentCandidateAndNewReservation(t *testing.T) {
 	task := validTaskRecord(now)
 	task.Type = TaskUpdate
 	task.Target = environmentID
+	pinComponentTaskDesiredRevision(&task)
 	createLifecycleTask(t, repository, task)
 	records := componentTaskLifecycleRecords(t, environmentID, now, false)
 	seedComponentTaskLifecycle(t, store, task, records)
@@ -177,6 +179,7 @@ func TestPendingTaskAbortDiscardsComponentCandidateAndNewReservation(t *testing.
 	task := validTaskRecord(now)
 	task.Type = TaskUpdate
 	task.Target = environmentID
+	pinComponentTaskDesiredRevision(&task)
 	createLifecycleTask(t, repository, task)
 	records := componentTaskLifecycleRecords(t, environmentID, now, true)
 	seedComponentTaskLifecycle(t, store, task, records)
@@ -207,6 +210,7 @@ func TestRetryTaskReacquiresExactComponentCandidateReservation(t *testing.T) {
 	source := validTaskRecord(now)
 	source.Type = TaskUpdate
 	source.Target = environmentID
+	pinComponentTaskDesiredRevision(&source)
 	createLifecycleTask(t, repository, source)
 	records := componentTaskLifecycleRecords(t, environmentID, now, true)
 	seedComponentTaskLifecycle(t, store, source, records)
@@ -259,6 +263,7 @@ func TestRetryTaskRejectsTakenComponentCandidateReservation(t *testing.T) {
 	source := validTaskRecord(now)
 	source.Type = TaskUpdate
 	source.Target = environmentID
+	pinComponentTaskDesiredRevision(&source)
 	createLifecycleTask(t, repository, source)
 	records := componentTaskLifecycleRecords(t, environmentID, now, true)
 	seedComponentTaskLifecycle(t, store, source, records)
@@ -311,11 +316,23 @@ func seedComponentRetryProjection(
 	sort.Slice(components, func(left int, right int) bool {
 		return components[left].Desired.Kind < components[right].Desired.Kind
 	})
+	zones := []EnvironmentZoneProjection{
+		{EnvironmentID: task.Target, Desired: records.candidateZone.Desired},
+		{EnvironmentID: task.Target, Desired: records.currentZone.Desired},
+	}
+	desiredService := serviceRecordTestDesired()
+	desiredService.ID = records.candidate.Runtime.GeneratedServices[0]
+	desiredService.Name = "caddy"
 	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
 		EnvironmentID:    task.Target,
 		RevisionID:       ids.NewAt(ids.KindTask, task.CreatedAt, 1282),
 		RenderGeneration: uint64(task.RenderGeneration),
-		Components:       components,
+		DesiredZones:     zones,
+		DesiredServices: []EnvironmentServiceProjection{{
+			EnvironmentID: task.Target,
+			Desired:       desiredService,
+		}},
+		Components: components,
 	})
 	value, err := encodeEnvironmentComposeProjection(projection)
 	if err != nil {
@@ -405,6 +422,7 @@ func seedComponentTaskLifecycle(
 		t.Fatalf("encodeEnvironment() error = %v", err)
 	}
 	seedTaskRepositoryValue(t, store, environmentKey(task.Target), environmentBytes)
+	seedComponentTaskDesiredProjection(t, store, task, records)
 	currentBytes, err := encodeComponentRecord(records.current)
 	if err != nil {
 		t.Fatalf("encodeComponentRecord() error = %v", err)
@@ -413,13 +431,6 @@ func seedComponentTaskLifecycle(
 	stored, err := store.Get(context.Background(), componentKey(records.current.Desired.ID))
 	if err != nil || stored.Entry == nil {
 		t.Fatalf("Get(Component) = %#v, %v", stored, err)
-	}
-	for _, zone := range []ZoneRecord{records.currentZone, records.candidateZone} {
-		value, encodeErr := encodeZoneRecord(zone)
-		if encodeErr != nil {
-			t.Fatalf("encodeZoneRecord() error = %v", encodeErr)
-		}
-		seedTaskRepositoryValue(t, store, zoneKey(zone.Desired.ID), value)
 	}
 	if records.current.Desired.Enabled {
 		registry := componentAddressRegistry{Reservations: map[string]string{
@@ -457,6 +468,68 @@ func seedComponentTaskLifecycle(
 	}
 	seedTaskRepositoryValue(t, store, componentTaskIntentKey(task.ID), intentBytes)
 	seedTaskRepositoryValue(t, store, componentTaskActiveEnvironmentKey(task.Target), []byte(task.ID))
+}
+
+func pinComponentTaskDesiredRevision(task *TaskRecord) {
+	if task.Params == nil {
+		task.Params = make(map[string]string)
+	}
+	task.Params[EnvironmentDesiredRevisionParam] = task.ID
+}
+
+func seedComponentTaskDesiredProjection(
+	t *testing.T,
+	store *memoryTaskStore,
+	task TaskRecord,
+	records componentTaskLifecycleFixture,
+) {
+	t.Helper()
+	hierarchy, err := newHierarchyRepository(store)
+	if err != nil {
+		t.Fatalf("newHierarchyRepository() error = %v", err)
+	}
+	zones := []EnvironmentZoneProjection{
+		{EnvironmentID: task.Target, Desired: records.candidateZone.Desired},
+		{EnvironmentID: task.Target, Desired: records.currentZone.Desired},
+	}
+	tunnel, err := NewComponentRecord(core.Component{
+		ID: ids.NewAt(ids.KindComponent, task.CreatedAt, 1281), Owner: core.ComponentOwnerEnvironment,
+		OwnerID: task.Target, Kind: core.ComponentKindEdgeCloudflare,
+	})
+	if err != nil {
+		t.Fatalf("NewComponentRecord(tunnel) error = %v", err)
+	}
+	components := []ComponentRecord{records.candidate, tunnel}
+	sort.Slice(components, func(left int, right int) bool {
+		return components[left].Desired.Kind < components[right].Desired.Kind
+	})
+	desiredService := serviceRecordTestDesired()
+	desiredService.ID = records.candidate.Runtime.GeneratedServices[0]
+	desiredService.Name = "caddy"
+	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+		EnvironmentID:    task.Target,
+		RevisionID:       task.Params[EnvironmentDesiredRevisionParam],
+		RenderGeneration: uint64(task.RenderGeneration),
+		DesiredZones:     zones,
+		DesiredServices: []EnvironmentServiceProjection{{
+			EnvironmentID: task.Target,
+			Desired:       desiredService,
+		}},
+		Components: components,
+	})
+	stageEnvironmentBlueprintForPublicationTest(
+		t,
+		hierarchy,
+		0,
+		environmentBlueprintTestRevision(task.Target, task, "services: {}\n"),
+		projection,
+		environmentBlueprintTestMarker(task, task.Target),
+	)
+	headValue, err := encodeTaskReference(task.Params[EnvironmentDesiredRevisionParam])
+	if err != nil {
+		t.Fatalf("encodeTaskReference() error = %v", err)
+	}
+	seedTaskRepositoryValue(t, store, environmentBlueprintHeadKey(task.Target), headValue)
 }
 
 func assertComponentTaskTerminalState(

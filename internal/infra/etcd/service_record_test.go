@@ -2,6 +2,8 @@ package etcd
 
 import (
 	"bytes"
+	"context"
+	"sort"
 	"testing"
 	"time"
 
@@ -9,131 +11,184 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 )
 
-func TestNewServiceRecordDefaultsRuntimeIntentToRunning(t *testing.T) {
-	// Rationale: direct create and Blueprint reconciliation must agree on the
-	// accepted initial Controller-owned runtime state.
-	record, err := NewServiceRecord(
-		ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 1),
-		serviceRecordTestDesired(),
-		"",
-	)
-	if err != nil {
-		t.Fatalf("NewServiceRecord() error = %v", err)
+func TestServiceProjectionJoinDefaultsMissingRuntimeSidecarToRunning(t *testing.T) {
+	// Rationale: a desired Service is authoritative even before its mutable
+	// runtime sidecar is first written, and the public view must default to
+	// running without inventing a durable sidecar revision.
+	t.Parallel()
+	ctx := context.Background()
+	service := serviceRecordTestDesired()
+	environmentID := ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 1)
+	projection := serviceRecordTestProjection(t, environmentID, service)
+	store := newMemoryHierarchyStore()
+	if _, err := store.Transact(ctx, nil, []Mutation{{
+		Type: MutationPut, Key: "service-record-test-revision", Value: []byte("revision"),
+	}}); err != nil {
+		t.Fatalf("seed revision: %v", err)
 	}
-	if record.Runtime.ServiceID != record.Desired.ID ||
-		record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentRunning {
-		t.Fatalf("runtime = %#v, desired id = %q", record.Runtime, record.Desired.ID)
+	read, err := store.Get(ctx, "service-record-test-revision")
+	if err != nil || read.Entry == nil {
+		t.Fatalf("read revision: %#v, %v", read, err)
+	}
+
+	joined, err := joinEnvironmentService(ctx, store, Versioned[EnvironmentComposeProjection]{
+		Record: projection, Revision: read.Entry.ModRevision, ReadRevision: read.ReadRevision,
+	}, service.ID, environmentBlueprintHeadKey(projection.EnvironmentID))
+	if err != nil {
+		t.Fatalf("joinEnvironmentService() error = %v", err)
+	}
+	if joined.Record.Desired.ID != service.ID || joined.Record.Desired.Name != service.Name ||
+		joined.Record.Runtime.ServiceID != service.ID ||
+		joined.Record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentRunning ||
+		joined.Record.runtimeRevision != 0 {
+		t.Fatalf("joined Service = %#v, runtime revision = %d", joined.Record, joined.Record.runtimeRevision)
 	}
 }
 
-func TestServiceRecordMutationsPreserveAuthorshipBoundary(t *testing.T) {
-	// Rationale: Blueprint replacement must preserve runtime intent, while a
-	// lifecycle mutation must preserve every desired field.
-	record, err := NewServiceRecord(
-		ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 2),
-		serviceRecordTestDesired(),
-		"",
-	)
+func TestServiceProjectionJoinUsesMutableRuntimeSidecar(t *testing.T) {
+	// Rationale: desired fields come only from the selected projection while
+	// runtime intent comes only from the independently mutable sidecar.
+	t.Parallel()
+	ctx := context.Background()
+	service := serviceRecordTestDesired()
+	environmentID := ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 1)
+	projection := serviceRecordTestProjection(t, environmentID, service)
+	store := newMemoryHierarchyStore()
+	runtime := ServiceRuntimeRecord{
+		EnvironmentID: projection.EnvironmentID, ServiceID: service.ID,
+		Runtime: core.ServiceRuntime{ServiceID: service.ID, RuntimeIntent: core.ServiceRuntimeIntentStopped},
+	}
+	runtimeValue, err := encodeServiceRuntimeRecord(runtime)
 	if err != nil {
-		t.Fatalf("NewServiceRecord() error = %v", err)
+		t.Fatalf("encodeServiceRuntimeRecord() error = %v", err)
 	}
-	record, err = SetServiceRuntimeIntent(record, core.ServiceRuntimeIntentStopped)
+	runtimeWrite, err := store.Transact(ctx, nil, []Mutation{{
+		Type: MutationPut, Key: serviceRuntimeKey(service.ID), Value: runtimeValue,
+	}})
+	clear(runtimeValue)
+	if err != nil || !runtimeWrite.Succeeded {
+		t.Fatalf("seed Service runtime sidecar = %#v, %v", runtimeWrite, err)
+	}
+	joined, err := joinEnvironmentService(ctx, store, Versioned[EnvironmentComposeProjection]{
+		Record: projection, Revision: runtimeWrite.Revision, ReadRevision: runtimeWrite.Revision,
+	}, service.ID, environmentBlueprintHeadKey(projection.EnvironmentID))
 	if err != nil {
-		t.Fatalf("SetServiceRuntimeIntent() error = %v", err)
+		t.Fatalf("joinEnvironmentService() error = %v", err)
 	}
-	desired := record.Desired
-	desired.Image = "app:next"
-	replacement, err := ReplaceServiceDesired(record, desired)
-	if err != nil {
-		t.Fatalf("ReplaceServiceDesired() error = %v", err)
-	}
-	if replacement.Runtime != record.Runtime || replacement.Desired.Image != "app:next" {
-		t.Fatalf("replacement = %#v", replacement)
-	}
-	if replacement.EnvironmentID != record.EnvironmentID {
-		t.Fatalf("environment id changed from %q to %q", record.EnvironmentID, replacement.EnvironmentID)
+	if joined.Record.Desired.Image != service.Image ||
+		joined.Record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentStopped ||
+		joined.Record.runtimeRevision != runtimeWrite.Revision {
+		t.Fatalf("joined Service = %#v, runtime revision = %d", joined.Record, joined.Record.runtimeRevision)
 	}
 }
 
-func TestServiceRecordEnvelopeRoundTripsStrictly(t *testing.T) {
-	// Rationale: the first durable Service schema must reject corruption rather
-	// than creating a compatibility reader that can reset operational state.
-	record, err := NewServiceRecord(
-		ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 3),
-		serviceRecordTestDesired(),
-		"",
-	)
+func TestServiceProjectionAndRuntimeEnvelopesRoundTripStrictly(t *testing.T) {
+	// Rationale: desired and runtime authorities have separate strict schemas;
+	// corruption must not be accepted as a compatibility record.
+	service := serviceRecordTestDesired()
+	environmentID := ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 1)
+	projection := serviceRecordTestProjection(t, environmentID, service)
+	encodedProjection, err := encodeEnvironmentComposeProjection(projection)
 	if err != nil {
-		t.Fatalf("NewServiceRecord() error = %v", err)
+		t.Fatalf("encodeEnvironmentComposeProjection() error = %v", err)
 	}
-	encoded, err := encodeServiceRecord(record)
-	if err != nil {
-		t.Fatalf("encodeServiceRecord() error = %v", err)
+	decodedProjection, err := decodeEnvironmentComposeProjection(encodedProjection)
+	if err != nil || decodedProjection.EnvironmentID != projection.EnvironmentID ||
+		decodedProjection.DesiredServices[0].Desired.ID != projection.DesiredServices[0].Desired.ID {
+		t.Fatalf("projection round trip = %#v, %v", decodedProjection, err)
 	}
-	decoded, err := decodeServiceRecord(encoded)
-	if err != nil {
-		t.Fatalf("decodeServiceRecord() error = %v", err)
-	}
-	if decoded.EnvironmentID != record.EnvironmentID || decoded.Desired.ID != record.Desired.ID ||
-		decoded.Runtime != record.Runtime {
-		t.Fatalf("decoded = %#v, want %#v", decoded, record)
-	}
-
 	for name, corrupt := range map[string][]byte{
-		"unknown":   bytes.Replace(encoded, []byte(`"runtime":`), []byte(`"unknown":0,"runtime":`), 1),
-		"duplicate": bytes.Replace(encoded, []byte(`"runtime":`), []byte(`"desired":{},"runtime":`), 1),
+		"unknown projection field":   bytes.Replace(encodedProjection, []byte(`"desired_services":`), []byte(`"unknown":0,"desired_services":`), 1),
+		"duplicate projection field": bytes.Replace(encodedProjection, []byte(`"desired_services":`), []byte(`"desired_services":[],"desired_services":`), 1),
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := decodeServiceRecord(corrupt); err == nil {
-				t.Fatal("decodeServiceRecord() accepted corrupt record")
+			if _, err := decodeEnvironmentComposeProjection(corrupt); err == nil {
+				t.Fatal("decodeEnvironmentComposeProjection() accepted corrupt projection")
+			}
+		})
+	}
+
+	runtime := ServiceRuntimeRecord{
+		EnvironmentID: projection.EnvironmentID, ServiceID: projection.DesiredServices[0].Desired.ID,
+		Runtime: core.ServiceRuntime{
+			ServiceID: projection.DesiredServices[0].Desired.ID, RuntimeIntent: core.ServiceRuntimeIntentStopped,
+		},
+	}
+	encodedRuntime, err := encodeServiceRuntimeRecord(runtime)
+	if err != nil {
+		t.Fatalf("encodeServiceRuntimeRecord() error = %v", err)
+	}
+	decodedRuntime, err := decodeServiceRuntimeRecord(encodedRuntime)
+	if err != nil || decodedRuntime != runtime {
+		t.Fatalf("runtime round trip = %#v, %v", decodedRuntime, err)
+	}
+	for name, corrupt := range map[string][]byte{
+		"unknown runtime field":   bytes.Replace(encodedRuntime, []byte(`"runtime":`), []byte(`"unknown":0,"runtime":`), 1),
+		"duplicate runtime field": bytes.Replace(encodedRuntime, []byte(`"runtime":`), []byte(`"runtime":{},"runtime":`), 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := decodeServiceRuntimeRecord(corrupt); err == nil {
+				t.Fatal("decodeServiceRuntimeRecord() accepted corrupt sidecar")
 			}
 		})
 	}
 }
 
-// Rationale: an adapter-backed Service is the durable authority for the owner network every future Attach copies.
-func TestBackingServiceRecordRequiresStableNetworkBinding(t *testing.T) {
+func TestBackingServiceProjectionRequiresStableNetworkBinding(t *testing.T) {
+	// Rationale: an adapter-backed desired Service carries its stable backing
+	// network in the projection, never in a flat Service primary record.
 	t.Parallel()
 	desired := serviceRecordTestDesired()
 	desired.Adapter = "postgres:16"
-	environmentID := ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 6)
-	if _, err := NewServiceRecord(environmentID, desired, ""); err == nil {
-		t.Fatal("NewServiceRecord() accepted an adapter-backed Service without a backing network")
+	environmentID := ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 1)
+	projection := serviceRecordTestProjection(t, environmentID, desired)
+	projection.DesiredServices[0].BackingNetworkID = ""
+	if err := validateEnvironmentComposeProjection(projection); err == nil {
+		t.Fatal("projection accepted adapter-backed Service without a backing network")
 	}
 	networkID := ids.NewAt(ids.KindNetwork, serviceRecordTestTime(), 7)
-	record, err := NewServiceRecord(environmentID, desired, networkID)
-	if err != nil {
-		t.Fatalf("NewServiceRecord() error = %v", err)
+	projection.DesiredServices[0].BackingNetworkID = networkID
+	projection = withTestEnvironmentComposeArtifact(projection)
+	if err := validateEnvironmentComposeProjection(projection); err != nil {
+		t.Fatalf("validateEnvironmentComposeProjection() error = %v", err)
 	}
-	if record.BackingNetworkID != networkID {
-		t.Fatalf("BackingNetworkID = %q, want %q", record.BackingNetworkID, networkID)
-	}
-	desired.Image = "postgres:16.1-alpine"
-	replacement, err := ReplaceServiceDesired(record, desired)
-	if err != nil {
-		t.Fatalf("ReplaceServiceDesired() error = %v", err)
-	}
-	if replacement.BackingNetworkID != networkID {
-		t.Fatalf("ReplaceServiceDesired() changed backing network to %q", replacement.BackingNetworkID)
+	projection.DesiredServices[0].Desired.Image = "postgres:16.1-alpine"
+	if projection.DesiredServices[0].BackingNetworkID != networkID {
+		t.Fatalf("desired projection changed backing network to %q", projection.DesiredServices[0].BackingNetworkID)
 	}
 }
 
-func TestServiceRecordKeysUseStableOwnershipAndEncodedName(t *testing.T) {
-	// Rationale: exact ADR 0013 keys are the atomic lookup and uniqueness
-	// contract shared by direct mutations and Blueprint reconciliation.
+func TestServiceProjectionKeysUseStableEnvironmentAndRuntimeAuthorities(t *testing.T) {
+	// Rationale: the desired projection and mutable runtime sidecar are the
+	// only durable Service authorities at the current head.
 	environmentID := ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 4)
 	serviceID := serviceRecordTestDesired().ID
-	if got := serviceKey(serviceID); got != "/v1/records/services/"+serviceID {
-		t.Fatalf("serviceKey() = %q", got)
+	if got := environmentComposeProjectionKey(environmentID); got != "/v1/records/environment-compose-projections/"+environmentID {
+		t.Fatalf("environmentComposeProjectionKey() = %q", got)
 	}
-	if got := serviceOwnerKey(environmentID, serviceID); got !=
-		"/v1/indexes/services/by-owner/environment/"+environmentID+"/"+serviceID {
-		t.Fatalf("serviceOwnerKey() = %q", got)
+	if got := serviceRuntimeKey(serviceID); got != "/v1/records/service-runtimes/"+serviceID {
+		t.Fatalf("serviceRuntimeKey() = %q", got)
 	}
-	if got := serviceNameKey(environmentID, "api/worker"); got !=
-		"/v1/indexes/services/by-name/environment/"+environmentID+"/~YXBpL3dvcmtlcg" {
-		t.Fatalf("serviceNameKey() = %q", got)
+}
+
+func serviceRecordTestProjection(
+	t *testing.T,
+	environmentID string,
+	services ...core.Service,
+) EnvironmentComposeProjection {
+	t.Helper()
+	projection := EnvironmentComposeProjection{
+		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, serviceRecordTestTime(), 2), RenderGeneration: 1,
 	}
+	for _, service := range services {
+		projection.DesiredServices = append(projection.DesiredServices, EnvironmentServiceProjection{
+			EnvironmentID: environmentID, Desired: service,
+		})
+	}
+	sort.Slice(projection.DesiredServices, func(left, right int) bool {
+		return projection.DesiredServices[left].Desired.Name < projection.DesiredServices[right].Desired.Name
+	})
+	return withTestEnvironmentComposeArtifact(projection)
 }
 
 func serviceRecordTestDesired() core.Service {

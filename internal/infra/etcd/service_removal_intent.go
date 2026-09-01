@@ -21,6 +21,7 @@ type ServiceRemovalIntent struct {
 	ServiceID                 string                         `json:"service_id"`
 	ServiceName               string                         `json:"service_name"`
 	ServiceRevision           int64                          `json:"service_revision"`
+	RuntimeRevision           int64                          `json:"runtime_revision"`
 	CurrentProjectionRevision int64                          `json:"current_projection_revision"`
 	ExpectedHeadRevision      int64                          `json:"expected_head_revision"`
 	Claim                     EnvironmentBlueprintStageClaim `json:"claim"`
@@ -43,8 +44,9 @@ func NewServiceRemovalIntent(
 	intent := ServiceRemovalIntent{
 		TaskID: taskID, EnvironmentID: service.Record.EnvironmentID,
 		ServiceID: service.Record.Desired.ID, ServiceName: service.Record.Desired.Name,
-		ServiceRevision: service.Revision, CurrentProjectionRevision: projection.Revision,
-		ExpectedHeadRevision: expectedHeadRevision, Claim: claim,
+		ServiceRevision: service.Revision, RuntimeRevision: serviceRuntimeRevision(service),
+		CurrentProjectionRevision: projection.Revision,
+		ExpectedHeadRevision:      expectedHeadRevision, Claim: claim,
 		CurrentProjection:   cloneEnvironmentComposeProjection(projection.Record),
 		CandidateProjection: cloneEnvironmentComposeProjection(candidate),
 		Status:              TaskStatusPending, CreatedAt: createdAt,
@@ -100,6 +102,7 @@ func terminalServiceRemovalIntent(intent ServiceRemovalIntent, status TaskStatus
 func validateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 	if ids.Validate(ids.KindTask, intent.TaskID) != nil || ids.Validate(ids.KindEnvironment, intent.EnvironmentID) != nil ||
 		ids.Validate(ids.KindService, intent.ServiceID) != nil || intent.ServiceName == "" || intent.ServiceRevision <= 0 ||
+		intent.RuntimeRevision < 0 ||
 		intent.CurrentProjectionRevision <= 0 || intent.ExpectedHeadRevision <= 0 ||
 		validateEnvironmentBlueprintStageClaim(intent.Claim) != nil ||
 		intent.Claim.EnvironmentID != intent.EnvironmentID || intent.Claim.RevisionID != intent.Claim.TaskID ||
@@ -129,14 +132,14 @@ func validateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 	expected.RenderGeneration = intent.CandidateProjection.RenderGeneration
 	expected.ComposeArtifact = append([]byte(nil), intent.CandidateProjection.ComposeArtifact...)
 	expected.NormalizedCompose = append([]byte(nil), intent.CandidateProjection.NormalizedCompose...)
-	expected.Services = expected.Services[:0]
-	removed := false
-	for _, identity := range intent.CurrentProjection.Services {
-		if identity.ID == intent.ServiceID && identity.Name == intent.ServiceName {
-			removed = true
+	expected.DesiredServices = nil
+	removedDesired := false
+	for _, desired := range intent.CurrentProjection.DesiredServices {
+		if desired.Desired.ID == intent.ServiceID && desired.Desired.Name == intent.ServiceName {
+			removedDesired = true
 			continue
 		}
-		expected.Services = append(expected.Services, identity)
+		expected.DesiredServices = append(expected.DesiredServices, desired)
 	}
 	expected.VolumeMounts = expected.VolumeMounts[:0]
 	for _, mount := range intent.CurrentProjection.VolumeMounts {
@@ -146,7 +149,7 @@ func validateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 	}
 	expected.ServiceDependencyPlans = expected.ServiceDependencyPlans.WithoutService(intent.ServiceName)
 	delete(expected.ServiceExtensions, intent.ServiceName)
-	if !removed || !sameServiceRemovalProjection(expected, intent.CandidateProjection) {
+	if !removedDesired || !sameServiceRemovalProjection(expected, intent.CandidateProjection) {
 		return errs.New(errs.KindValidationFailed, "Service removal candidate projection changed")
 	}
 	return nil
@@ -158,15 +161,111 @@ func sameServiceRemovalProjection(left, right EnvironmentComposeProjection) bool
 		sameServiceRemovalBytes(left.NormalizedCompose, right.NormalizedCompose) &&
 		sameServiceRemovalBlueprintFiles(left.RuntimeFiles, right.RuntimeFiles) &&
 		sameServiceRemovalServiceExtensions(left.ServiceExtensions, right.ServiceExtensions) &&
-		sameServiceRemovalComparableSlices(left.Services, right.Services) &&
-		sameServiceRemovalComparableSlices(left.Networks, right.Networks) &&
+		sameServiceRemovalDesiredZones(left.DesiredZones, right.DesiredZones) &&
+		sameServiceRemovalDesiredServices(left.DesiredServices, right.DesiredServices) &&
+		sameServiceRemovalDesiredRoutes(left.DesiredRoutes, right.DesiredRoutes) &&
 		sameServiceRemovalComparableSlices(left.Volumes, right.Volumes) &&
 		sameServiceRemovalComparableSlices(left.VolumeMounts, right.VolumeMounts) &&
-		sameServiceRemovalComparableSlices(left.Routes, right.Routes) &&
-		sameServiceRemovalComparableSlices(left.SuppressedRoutes, right.SuppressedRoutes) &&
 		sameServiceRemovalComponents(left.Components, right.Components) &&
 		sameServiceRemovalEntries(left.Entries, right.Entries) &&
 		sameServiceRemovalDependencyPlans(left.ServiceDependencyPlans, right.ServiceDependencyPlans)
+}
+
+func sameServiceRemovalDesiredZones(left, right []EnvironmentZoneProjection) bool {
+	if (left == nil) != (right == nil) || len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index].EnvironmentID != right[index].EnvironmentID || left[index].Desired != right[index].Desired {
+			return false
+		}
+	}
+	return true
+}
+
+func sameServiceRemovalDesiredServices(left, right []EnvironmentServiceProjection) bool {
+	if (left == nil) != (right == nil) || len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index].EnvironmentID != right[index].EnvironmentID ||
+			left[index].BackingNetworkID != right[index].BackingNetworkID ||
+			!sameServiceRemovalDesired(left[index].Desired, right[index].Desired) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameServiceRemovalDesiredRoutes(left, right []EnvironmentRouteProjection) bool {
+	if (left == nil) != (right == nil) || len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index].EnvironmentID != right[index].EnvironmentID ||
+			left[index].Desired != right[index].Desired ||
+			left[index].DesiredGeneration != right[index].DesiredGeneration {
+			return false
+		}
+	}
+	return true
+}
+
+func sameServiceRemovalDesired(left, right core.Service) bool {
+	if left.ID != right.ID || left.Name != right.Name || left.Image != right.Image ||
+		left.Strategy != right.Strategy || left.OnFailure != right.OnFailure ||
+		left.Healthcheck != right.Healthcheck || left.Resources != right.Resources ||
+		left.Restart != right.Restart || left.Logging != right.Logging || left.Replicas != right.Replicas ||
+		left.Adapter != right.Adapter || left.FactsPrefix != right.FactsPrefix || left.Label != right.Label ||
+		!sameServiceRemovalComparableSlices(left.Zones, right.Zones) ||
+		!sameServiceRemovalComparableSlices(left.Command, right.Command) ||
+		!sameServiceRemovalComparableSlices(left.Mounts, right.Mounts) ||
+		!sameServiceRemovalComparableSlices(left.Expose, right.Expose) ||
+		!sameServiceRemovalEnvEntries(left.Environment, right.Environment) ||
+		!sameServiceRemovalStringSlices(left.Aliases, right.Aliases) ||
+		!sameServiceRemovalDependencies(left.DependsOn, right.DependsOn) {
+		return false
+	}
+	return true
+}
+
+func sameServiceRemovalEnvEntries(left, right []core.EnvEntry) bool {
+	if (left == nil) != (right == nil) || len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if !sameServiceRemovalEnvEntry(left[index], right[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameServiceRemovalStringSlices(left, right map[string][]string) bool {
+	if (left == nil) != (right == nil) || len(left) != len(right) {
+		return false
+	}
+	for key, leftValues := range left {
+		rightValues, exists := right[key]
+		if !exists || !sameServiceRemovalComparableSlices(leftValues, rightValues) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameServiceRemovalDependencies(left, right map[string]core.ServiceDependency) bool {
+	if (left == nil) != (right == nil) || len(left) != len(right) {
+		return false
+	}
+	for name, leftDependency := range left {
+		rightDependency, exists := right[name]
+		if !exists || leftDependency.Condition != rightDependency.Condition ||
+			!sameServiceRemovalComparableSlices(leftDependency.Phases, rightDependency.Phases) {
+			return false
+		}
+	}
+	return true
 }
 
 func sameServiceRemovalBlueprintFiles(left, right []core.BlueprintFile) bool {

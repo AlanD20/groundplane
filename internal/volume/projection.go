@@ -6,6 +6,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -49,18 +50,10 @@ func buildVolumeMutationProjection(
 	revisionID string,
 	generation uint64,
 ) (etcd.EnvironmentComposeProjection, *agentpb.ComposeArtifact, *agentpb.ComposeArtifact, error) {
-	candidate := current
+	candidate := cloneVolumeMutationProjection(current)
 	candidate.EnvironmentID = environment.ID
 	candidate.RevisionID = revisionID
 	candidate.RenderGeneration = generation
-	candidate.Services = append([]etcd.EnvironmentComposeIdentity(nil), current.Services...)
-	candidate.Networks = append([]etcd.EnvironmentComposeIdentity(nil), current.Networks...)
-	candidate.Volumes = append([]etcd.EnvironmentVolumeIdentity(nil), current.Volumes...)
-	candidate.VolumeMounts = append([]etcd.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...)
-	candidate.Routes = append([]etcd.EnvironmentRouteIdentity(nil), current.Routes...)
-	candidate.SuppressedRoutes = append([]etcd.EnvironmentRouteIdentity(nil), current.SuppressedRoutes...)
-	candidate.Components = append([]etcd.ComponentRecord(nil), current.Components...)
-	candidate.Entries = append([]etcd.EntryRecord(nil), current.Entries...)
 	oldArtifact := &agentpb.ComposeArtifact{
 		OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
 		OwnerId:   environment.ID, ProjectName: "gp-" + strings.ToLower(environment.ID),
@@ -148,6 +141,47 @@ func buildVolumeMutationProjection(
 		}
 	}
 	return candidate, oldArtifact, newArtifact, nil
+}
+
+func cloneVolumeMutationProjection(current etcd.EnvironmentComposeProjection) etcd.EnvironmentComposeProjection {
+	runtimeFiles := make([]core.BlueprintFile, len(current.RuntimeFiles))
+	for index, file := range current.RuntimeFiles {
+		runtimeFiles[index] = core.BlueprintFile{Path: file.Path, Content: append([]byte(nil), file.Content...)}
+	}
+	serviceExtensions := make(map[string]core.ServiceExtensionSpec, len(current.ServiceExtensions))
+	for name, extension := range current.ServiceExtensions {
+		clone := extension
+		if extension.Release != nil {
+			release := *extension.Release
+			clone.Release = &release
+		}
+		if extension.DependsOn != nil {
+			clone.DependsOn = make(map[string]core.ServiceDependency, len(extension.DependsOn))
+			for dependency, decision := range extension.DependsOn {
+				decision.Phases = append([]core.ServiceDependencyPhase(nil), decision.Phases...)
+				clone.DependsOn[dependency] = decision
+			}
+		}
+		serviceExtensions[name] = clone
+	}
+	if current.ServiceExtensions == nil {
+		serviceExtensions = nil
+	}
+	return etcd.EnvironmentComposeProjection{
+		EnvironmentID: current.EnvironmentID, RevisionID: current.RevisionID,
+		RenderGeneration:  current.RenderGeneration,
+		ComposeArtifact:   append([]byte(nil), current.ComposeArtifact...),
+		NormalizedCompose: append([]byte(nil), current.NormalizedCompose...),
+		RuntimeFiles:      runtimeFiles, ServiceExtensions: serviceExtensions,
+		DesiredZones:           append([]etcd.EnvironmentZoneProjection(nil), current.DesiredZones...),
+		DesiredServices:        append([]etcd.EnvironmentServiceProjection(nil), current.DesiredServices...),
+		DesiredRoutes:          append([]etcd.EnvironmentRouteProjection(nil), current.DesiredRoutes...),
+		Volumes:                append([]etcd.EnvironmentVolumeIdentity(nil), current.Volumes...),
+		VolumeMounts:           append([]etcd.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...),
+		Components:             append([]etcd.ComponentRecord(nil), current.Components...),
+		Entries:                append([]etcd.EntryRecord(nil), current.Entries...),
+		ServiceDependencyPlans: current.ServiceDependencyPlans.Clone(),
+	}
 }
 
 func buildVolumeMutationCandidate(

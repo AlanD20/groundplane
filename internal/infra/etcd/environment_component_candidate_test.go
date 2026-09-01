@@ -31,6 +31,39 @@ func TestPrepareEnvironmentComponentTaskReservesWithoutPublishing(t *testing.T) 
 	if err != nil {
 		t.Fatalf("NewZoneRecord() error = %v", err)
 	}
+	previousTask := environmentBlueprintTestTask(t, project.Record, environment.Record, 1390)
+	previousProjection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+		EnvironmentID:    environment.Record.ID,
+		RevisionID:       previousTask.ID,
+		RenderGeneration: 1,
+		DesiredZones: []EnvironmentZoneProjection{{
+			EnvironmentID: environment.Record.ID,
+			Desired:       zone.Desired,
+		}},
+	})
+	stageEnvironmentBlueprintForPublicationTest(
+		t,
+		repository,
+		0,
+		environmentBlueprintTestRevision(environment.Record.ID, previousTask, "services: {}\n"),
+		previousProjection,
+		environmentBlueprintTestMarker(previousTask, environment.Record.ID),
+	)
+	headValue, err := encodeTaskReference(previousTask.ID)
+	if err != nil {
+		t.Fatalf("encodeTaskReference() error = %v", err)
+	}
+	seedEnvironmentComponentCandidateValue(
+		t, store, environmentBlueprintHeadKey(environment.Record.ID), headValue,
+	)
+	selected, found, err := repository.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
+	if err != nil || !found {
+		t.Fatalf("GetEnvironmentComposeProjection() = %#v, %v, %v", selected, found, err)
+	}
+	selectedZone, err := joinEnvironmentZone(selected, selected.Record.DesiredZones[0])
+	if err != nil {
+		t.Fatalf("joinEnvironmentZone() error = %v", err)
+	}
 	components, err := newComponentRepository(store)
 	if err != nil {
 		t.Fatalf("newComponentRepository() error = %v", err)
@@ -51,7 +84,7 @@ func TestPrepareEnvironmentComponentTaskReservesWithoutPublishing(t *testing.T) 
 		ctx,
 		taskID,
 		environment.Record.ID,
-		[]EnvironmentBlueprintZoneChange{{Record: zone}},
+		[]EnvironmentBlueprintZoneChange{{Current: &selectedZone, Record: zone}},
 		[]EnvironmentComponentCandidateInput{{
 			Current: current,
 			Candidate: core.Component{
@@ -99,7 +132,7 @@ func TestPrepareEnvironmentComponentTaskReservesWithoutPublishing(t *testing.T) 
 		ctx,
 		ids.NewAt(ids.KindTask, now, 1406),
 		environment.Record.ID,
-		[]EnvironmentBlueprintZoneChange{{Record: zone}},
+		[]EnvironmentBlueprintZoneChange{{Current: &selectedZone, Record: zone}},
 		[]EnvironmentComponentCandidateInput{{Current: current, Candidate: core.Component{
 			ID: current.Record.Desired.ID, Owner: core.ComponentOwnerEnvironment,
 			OwnerID: environment.Record.ID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
@@ -113,15 +146,6 @@ func TestPrepareEnvironmentComponentTaskReservesWithoutPublishing(t *testing.T) 
 	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("PrepareEnvironmentComponentTask(active) error = %v", err)
 	}
-}
-
-func mustEncodeZone(t *testing.T, zone ZoneRecord) []byte {
-	t.Helper()
-	value, err := encodeZoneRecord(zone)
-	if err != nil {
-		t.Fatalf("encodeZoneRecord() error = %v", err)
-	}
-	return value
 }
 
 func seedEnvironmentComponentCandidateValue(

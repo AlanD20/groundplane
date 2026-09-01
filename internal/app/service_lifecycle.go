@@ -394,10 +394,8 @@ func (service *serviceLifecycleService) runOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	applied := hasProjection && serviceInComposeProjection(projection.Record, serviceID)
 	var projectionInput *etcd.Versioned[etcd.EnvironmentComposeProjection]
-	if hasProjection {
-		projectionInput = &projection
-	}
 	replacement, err := etcd.SetServiceRuntimeIntent(current.Record, intent)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -411,7 +409,8 @@ func (service *serviceLifecycleService) runOnce(
 		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	var renderInput *etcd.ServiceLifecycleRenderInput
-	if hasProjection && serviceInComposeProjection(projection.Record, serviceID) {
+	if applied {
+		projectionInput = &projection
 		input := etcd.ServiceLifecycleRenderInput{
 			PlanID: task.PlanID, ServiceID: serviceID,
 			TenantID: tenant.Record.ID, TenantSlug: tenant.Record.Slug,
@@ -496,9 +495,16 @@ func serviceLifecycleContract(taskType etcd.TaskType) (string, core.ServiceRunti
 }
 
 func serviceInComposeProjection(projection etcd.EnvironmentComposeProjection, serviceID string) bool {
-	for _, identity := range projection.Services {
-		if identity.ID == serviceID {
+	for _, service := range projection.DesiredServices {
+		if service.Desired.ID == serviceID {
 			return true
+		}
+	}
+	for _, component := range projection.Components {
+		for _, generatedServiceID := range component.Runtime.GeneratedServices {
+			if generatedServiceID == serviceID {
+				return true
+			}
 		}
 	}
 	return false

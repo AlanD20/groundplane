@@ -2,12 +2,41 @@ package etcd
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 )
+
+func TestReleaseHookProjectionConditionsFenceDesiredHeadRootAndZoneTombstones(t *testing.T) {
+	at := time.Date(2026, 9, 1, 2, 30, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)
+	revisionID := ids.NewAt(ids.KindTask, at, 2)
+	zoneID := ids.NewAt(ids.KindNetwork, at, 3)
+	sources := ScriptExecutionSources{
+		Environment: Versioned[EnvironmentRecord]{Record: EnvironmentRecord{ID: environmentID}},
+		DesiredHead: Versioned[EnvironmentBlueprintHead]{Revision: 31},
+		DesiredProjection: Versioned[EnvironmentComposeProjection]{
+			Record:   EnvironmentComposeProjection{EnvironmentID: environmentID, RevisionID: revisionID},
+			Revision: 37,
+		},
+		Networks: []Versioned[ZoneRecord]{{Record: ZoneRecord{
+			EnvironmentID: environmentID,
+			Desired:       testScriptExecutionZone(zoneID, "hooks", environmentID),
+		}}},
+	}
+	conditions := scriptExecutionProjectionConditions(sources)
+	want := []Condition{
+		{Key: environmentBlueprintHeadKey(environmentID), ModRevision: 31},
+		{Key: environmentBlueprintRootKey(environmentID, revisionID), ModRevision: 37},
+		{Key: deletionTombstoneKey(string(DeletionTargetZone), zoneID)},
+	}
+	if !reflect.DeepEqual(conditions, want) {
+		t.Fatalf("release hook projection conditions = %#v, want %#v", conditions, want)
+	}
+}
 
 func TestReleaseHookFailureUsesOwningMemberOrdinal(t *testing.T) {
 	task := TaskRecord{

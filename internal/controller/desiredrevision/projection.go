@@ -20,17 +20,10 @@ func ComposeProjection(
 	normalizedCompose []byte,
 	runtimeFiles []core.BlueprintFile,
 	serviceExtensions map[string]core.ServiceExtensionSpec,
-	routes []core.Route,
+	_ []core.Route,
 	components []etcd.ComponentRecord,
 	entries []etcd.EntryRecord,
 ) etcd.EnvironmentComposeProjection {
-	convert := func(values []controller.ComposeResourceIdentity) []etcd.EnvironmentComposeIdentity {
-		result := make([]etcd.EnvironmentComposeIdentity, len(values))
-		for index, value := range values {
-			result[index] = etcd.EnvironmentComposeIdentity{ID: value.ID, Name: value.Name}
-		}
-		return result
-	}
 	convertVolumes := func(values []controller.ComposeResourceIdentity) []etcd.EnvironmentVolumeIdentity {
 		result := make([]etcd.EnvironmentVolumeIdentity, len(values))
 		for index, value := range values {
@@ -40,15 +33,6 @@ func ComposeProjection(
 		}
 		return result
 	}
-	routeIdentities := make([]etcd.EnvironmentRouteIdentity, len(routes))
-	for index, route := range routes {
-		routeIdentities[index] = etcd.EnvironmentRouteIdentity{ID: route.ID, Host: route.Host, Path: route.Path}
-	}
-	sort.Slice(routeIdentities, func(left int, right int) bool {
-		leftMatch := routeIdentities[left].Host + "\x00" + routeIdentities[left].Path
-		rightMatch := routeIdentities[right].Host + "\x00" + routeIdentities[right].Path
-		return leftMatch < rightMatch
-	})
 	files := make([]core.BlueprintFile, len(runtimeFiles))
 	for index, file := range runtimeFiles {
 		files[index] = core.BlueprintFile{Path: file.Path, Content: append([]byte(nil), file.Content...)}
@@ -59,10 +43,33 @@ func ComposeProjection(
 		NormalizedCompose: append([]byte(nil), normalizedCompose...),
 		RuntimeFiles:      files,
 		ServiceExtensions: cloneServiceExtensions(serviceExtensions),
-		Services:          convert(snapshot.Services), Networks: convert(snapshot.Networks), Volumes: convertVolumes(snapshot.Volumes),
-		VolumeMounts: append([]etcd.EnvironmentServiceVolumeMount(nil), volumeMounts...),
-		Routes:       routeIdentities, Components: components, Entries: entries,
+		Volumes:           convertVolumes(snapshot.Volumes),
+		VolumeMounts:      append([]etcd.EnvironmentServiceVolumeMount(nil), volumeMounts...),
+		Components:        components, Entries: entries,
 	}
+}
+
+func WithDesiredTopology(
+	projection etcd.EnvironmentComposeProjection,
+	zones []etcd.EnvironmentZoneProjection,
+	services []etcd.EnvironmentServiceProjection,
+	routes []etcd.EnvironmentRouteProjection,
+) etcd.EnvironmentComposeProjection {
+	projection.DesiredZones = append([]etcd.EnvironmentZoneProjection(nil), zones...)
+	sort.Slice(projection.DesiredZones, func(left int, right int) bool {
+		return projection.DesiredZones[left].Desired.Name < projection.DesiredZones[right].Desired.Name
+	})
+	projection.DesiredServices = append([]etcd.EnvironmentServiceProjection(nil), services...)
+	sort.Slice(projection.DesiredServices, func(left int, right int) bool {
+		return projection.DesiredServices[left].Desired.Name < projection.DesiredServices[right].Desired.Name
+	})
+	projection.DesiredRoutes = append([]etcd.EnvironmentRouteProjection(nil), routes...)
+	sort.Slice(projection.DesiredRoutes, func(left int, right int) bool {
+		leftRoute := projection.DesiredRoutes[left].Desired
+		rightRoute := projection.DesiredRoutes[right].Desired
+		return leftRoute.Host+"\x00"+leftRoute.Path < rightRoute.Host+"\x00"+rightRoute.Path
+	})
+	return projection
 }
 
 func cloneServiceExtensions(source map[string]core.ServiceExtensionSpec) map[string]core.ServiceExtensionSpec {

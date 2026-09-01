@@ -540,6 +540,11 @@ func (repository *TaskRepository) retryTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	if retry.Params[TaskZoneRemovalOperationParam] != "" {
+		if err := plan.enforceTransactionBounds(zoneRemovalTransactionBudgetValidator(zoneRemovalTransactionRetry)); err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+	}
 	idempotency, err := newIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -1307,7 +1312,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		environmentRemoval := executor == TaskExecutorAgent && task.Type == TaskRemove &&
 			validateStableID(ids.KindEnvironment, task.Target) == nil
 		zoneRemoval := executor == TaskExecutorAgent && task.Type == TaskRemove &&
-			validateStableID(ids.KindNetwork, task.Target) == nil
+			validateStableID(ids.KindNetwork, task.Target) == nil && task.Params[TaskZoneRemovalOperationParam] != ""
 		if environmentCreation != (environmentID != "") || (environmentCreation && task.Target != environmentID) {
 			return Versioned[TaskRecord]{}, errs.New(
 				errs.KindStateConflict,
@@ -1497,15 +1502,6 @@ func (repository *TaskRepository) acknowledgeTask(
 				continue
 			}
 		}
-		if zoneRemoval && terminalStatus == TaskStatusCompleted {
-			processed, err := repository.finalizeZoneServiceMembershipBatch(ctx, task, terminalAt)
-			if err != nil {
-				return Versioned[TaskRecord]{}, err
-			}
-			if processed {
-				continue
-			}
-		}
 		terminal, err := transitionTaskStatus(task, TaskStatusRunning, terminalStatus, terminalAt)
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
@@ -1673,7 +1669,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		}
 		if zoneRemoval {
 			zoneConditions, zoneMutations, err := repository.prepareZoneRemovalAcknowledgement(
-				ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+				ctx, task, terminalStatus, terminalAt, primaryAndAssignment.ReadRevision,
 			)
 			if err != nil {
 				clear(terminalValue)
@@ -1799,7 +1795,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			mutations = append(mutations, serviceChange.mutations...)
 		}
 		backingZoneChange, err := repository.prepareBackingZoneTaskAcknowledgement(
-			ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+			ctx, task, terminalStatus, terminalAt, primaryAndAssignment.ReadRevision,
 		)
 		if err != nil {
 			clear(terminalValue)
@@ -1974,7 +1970,11 @@ func (repository *TaskRepository) acknowledgeTask(
 			mutations = environmentBinding.mutations
 			environmentEpochValue = mutations[len(mutations)-1].Value
 		}
-		transaction, err := repository.store.Transact(ctx, conditions, mutations)
+		phase := zoneRemovalTransactionFailedAcknowledgement
+		if terminalStatus == TaskStatusCompleted {
+			phase = zoneRemovalTransactionCompletedAcknowledgement
+		}
+		transaction, err := repository.transactZoneRemovalTaskLifecycle(ctx, task, phase, conditions, mutations)
 		clear(terminalValue)
 		clear(markerValue)
 		clear(retentionValue)
@@ -2584,7 +2584,8 @@ func (repository *TaskRepository) AbortPendingTask(
 		environmentRemoval := current.Record.Executor == TaskExecutorAgent && current.Record.Type == TaskRemove &&
 			validateStableID(ids.KindEnvironment, current.Record.Target) == nil
 		zoneRemoval := current.Record.Executor == TaskExecutorAgent && current.Record.Type == TaskRemove &&
-			validateStableID(ids.KindNetwork, current.Record.Target) == nil
+			validateStableID(ids.KindNetwork, current.Record.Target) == nil &&
+			current.Record.Params[TaskZoneRemovalOperationParam] != ""
 		if current.Record.Status == TaskStatusAborted {
 			if environmentCreation {
 				if err := repository.validateEnvironmentCreationReplay(
@@ -2807,7 +2808,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		var zoneMutations []Mutation
 		if zoneRemoval {
 			zoneConditions, preparedZoneMutations, prepareErr := repository.prepareZoneRemovalAcknowledgement(
-				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+				ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
 			)
 			if prepareErr != nil {
 				clear(terminalValue)
@@ -2932,7 +2933,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			return Versioned[TaskRecord]{}, err
 		}
 		backingZoneChange, err := repository.prepareBackingZoneTaskAcknowledgement(
-			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
 		)
 		if err != nil {
 			clear(terminalValue)
@@ -3128,7 +3129,9 @@ func (repository *TaskRepository) AbortPendingTask(
 			mutations = environmentBinding.mutations
 			environmentEpochValue = mutations[len(mutations)-1].Value
 		}
-		transaction, err := repository.store.Transact(ctx, conditions, mutations)
+		transaction, err := repository.transactZoneRemovalTaskLifecycle(
+			ctx, current.Record, zoneRemovalTransactionFailedAcknowledgement, conditions, mutations,
+		)
 		clear(terminalValue)
 		clear(markerValue)
 		clear(retentionValue)
@@ -3458,6 +3461,9 @@ func ordinaryTaskEnvironmentMutationTarget(
 	}
 	if serviceChange {
 		targets = append(targets, task.Params[TaskServiceEnvironmentParam])
+	}
+	if task.Params[TaskZoneRemovalOperationParam] != "" {
+		targets = append(targets, task.Params[TaskZoneEnvironmentParam])
 	}
 	if connectorChange {
 		targets = append(targets, task.Params[TaskConnectorEnvironmentParam])

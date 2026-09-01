@@ -22,10 +22,10 @@ const (
 	ScriptExecutionIDParam = "script_execution_id"
 	ScriptGenerationParam  = "script_generation"
 
-	scriptExecutionPrefix       = "/v1/script-executions/"
-	scriptRunnerSnapshotPrefix  = "/v1/script-runner-snapshots/"
-	scriptBodyForwardRefSegment = "/references/"
-	scriptBodyReverseRefSegment = "/body-reference"
+	scriptExecutionPrefix           = "/v1/script-executions/"
+	scriptRunnerSnapshotPrefix      = "/v1/script-runner-snapshots/"
+	scriptBodyForwardRefSegment     = "/references/"
+	scriptBodyReverseRefSegment     = "/body-reference"
 	maximumReleaseHookTerminalBatch = 8
 )
 
@@ -557,15 +557,12 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		{Key: scriptSetScriptKey(execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID), ModRevision: sources.Script.Revision},
 		{Key: scriptSetBodyGenerationKey(execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID, execution.ScriptGeneration), ModRevision: sources.BodyGeneration.Revision},
 		{Key: scriptSetActiveKey(execution.EnvironmentID)},
-		{Key: serviceKey(execution.ServiceID), ModRevision: sources.Service.Revision},
+		serviceDesiredCondition(sources.Service),
 		{Key: releaseProjectionKey(execution.ServiceID), ModRevision: sources.Release.ProjectionRevision},
 		{Key: releaseIntentStagingKey("", execution.ReleaseID), ModRevision: sources.Release.IntentRevision},
 		{Key: releaseRenderInputStagingKey("", execution.ReleaseID), ModRevision: sources.RenderInput.Revision},
-		{Key: environmentComposeProjectionKey(execution.EnvironmentID), ModRevision: sources.AppliedProjection.Revision},
 	}
-	for _, network := range sources.Networks {
-		conditions = append(conditions, Condition{Key: zoneKey(network.Record.Desired.ID), ModRevision: network.Revision})
-	}
+	conditions = append(conditions, scriptExecutionProjectionConditions(sources)...)
 	conditions[10].ModRevision = sources.Environment.ReadRevision
 	active, err := readActiveScriptSet(ctx, repository.store, execution.EnvironmentID, sources.Revision)
 	if err != nil || active.Record.GenerationID != execution.ScriptSetGeneration {
@@ -764,7 +761,8 @@ func validateScriptExecutionSources(sources ScriptExecutionSources, execution Sc
 		sources.Service.ReadRevision != sources.Revision || sources.ScriptSet.ReadRevision != sources.Revision ||
 		sources.Script.ReadRevision != sources.Revision ||
 		sources.BodyGeneration.ReadRevision != sources.Revision || sources.RenderInput.ReadRevision != sources.Revision ||
-		sources.AppliedProjection.ReadRevision != sources.Revision || sources.AppliedProjection.Revision <= 0 ||
+		sources.DesiredHead.ReadRevision != sources.Revision || sources.DesiredHead.Revision <= 0 ||
+		sources.DesiredProjection.ReadRevision != sources.Revision || sources.DesiredProjection.Revision <= 0 ||
 		sources.Release.Revision != sources.Revision || sources.Script.Record.Desired.ID != execution.ScriptID ||
 		sources.ScriptSet.Revision <= 0 || sources.ScriptSet.Record.EnvironmentID != execution.EnvironmentID ||
 		sources.ScriptSet.Record.GenerationID != execution.ScriptSetGeneration ||
@@ -775,17 +773,53 @@ func validateScriptExecutionSources(sources ScriptExecutionSources, execution Sc
 		sources.Environment.Record.ID != execution.EnvironmentID || sources.Service.Record.Desired.ID != execution.ServiceID ||
 		sources.Release.Intent.ID != execution.ReleaseID || sources.RenderInput.Record.ReleaseID != execution.ReleaseID ||
 		sources.RenderInput.Record.Projection.RenderGeneration != execution.RenderGeneration ||
-		sources.AppliedProjection.Record.EnvironmentID != execution.EnvironmentID ||
-		sources.AppliedProjection.Record.RevisionID == "" || sources.AppliedProjection.Record.RenderGeneration == 0 ||
+		sources.DesiredHead.Record.EnvironmentID != execution.EnvironmentID ||
+		sources.DesiredHead.Record.RevisionID == "" ||
+		sources.DesiredProjection.Record.EnvironmentID != execution.EnvironmentID ||
+		sources.DesiredProjection.Record.RevisionID == "" ||
+		sources.DesiredProjection.Record.RenderGeneration == 0 ||
 		sources.BodyGeneration.Record.BodySHA256 != execution.BodySHA256 {
 		return errs.New(errs.KindValidationFailed, "Script execution sources do not match the execution")
 	}
+	desiredZoneNames := make(map[string]string, len(sources.DesiredProjection.Record.DesiredZones))
+	for _, desired := range sources.DesiredProjection.Record.DesiredZones {
+		if _, duplicate := desiredZoneNames[desired.Desired.ID]; duplicate {
+			return errs.New(errs.KindValidationFailed, "Script execution desired zone identity is duplicated")
+		}
+		desiredZoneNames[desired.Desired.ID] = desired.Desired.Name
+	}
+	if len(sources.Networks) != len(desiredZoneNames) {
+		return errs.New(errs.KindValidationFailed, "Script execution network sources are incomplete")
+	}
 	for _, network := range sources.Networks {
-		if network.ReadRevision != sources.Revision || network.Revision <= 0 {
+		identity, found := desiredZoneNames[network.Record.Desired.ID]
+		if network.ReadRevision != sources.Revision || network.Revision != sources.DesiredProjection.Revision ||
+			network.Record.EnvironmentID != execution.EnvironmentID || !found || network.Record.Desired.Name != identity {
 			return errs.New(errs.KindValidationFailed, "Script execution network source revision is invalid")
 		}
 	}
 	return nil
+}
+
+func scriptExecutionProjectionConditions(sources ScriptExecutionSources) []Condition {
+	conditions := []Condition{
+		{
+			Key:         environmentBlueprintHeadKey(sources.Environment.Record.ID),
+			ModRevision: sources.DesiredHead.Revision,
+		},
+		{
+			Key: environmentBlueprintRootKey(
+				sources.Environment.Record.ID, sources.DesiredProjection.Record.RevisionID,
+			),
+			ModRevision: sources.DesiredProjection.Revision,
+		},
+	}
+	for _, network := range sources.Networks {
+		conditions = append(conditions, Condition{
+			Key: deletionTombstoneKey(string(DeletionTargetZone), network.Record.Desired.ID),
+		})
+	}
+	return conditions
 }
 
 func validateScriptExecutionRecord(record ScriptExecutionRecord) error {

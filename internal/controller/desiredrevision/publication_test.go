@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -111,11 +112,47 @@ func TestPreflightAndClaimEnforcesExactNormalizedProjectionBoundary(t *testing.T
 	if exactEvidence.NormalizedBytes == 0 || exactEvidence.NormalizedBytes > limit {
 		t.Fatalf("largest accepted normalized projection = %d", exactEvidence.NormalizedBytes)
 	}
-	padding := int(limit - exactEvidence.NormalizedBytes)
-	exact.Routes[0].Path += strings.Repeat("a", padding)
-	exactEvidence, err := PreflightProjection(exact)
-	if err != nil || exactEvidence.NormalizedBytes != limit {
-		t.Fatalf("exact normalized projection = %d, %v", exactEvidence.NormalizedBytes, err)
+	artifact := &agentpb.ComposeArtifact{}
+	if err := proto.Unmarshal(exact.ComposeArtifact, artifact); err != nil {
+		t.Fatalf("unmarshal boundary projection artifact: %v", err)
+	}
+	baseYAMLBytes := len(artifact.CanonicalYaml)
+	foundExact := false
+	var exactErr error
+	var bestBytes uint64
+	bestDelta, bestPath, bestGeneration := 0, 0, uint64(1)
+	for generation := uint64(1); generation <= 128 && !foundExact; generation *= 128 {
+		for yamlDelta := 0; yamlDelta <= 32 && !foundExact; yamlDelta++ {
+			if yamlDelta > baseYAMLBytes {
+				break
+			}
+			low, high := 0, int(limit)
+			for low <= high {
+				middle := low + (high-low)/2
+				candidate := boundaryProjection(
+					t, now, environmentID, revisionID, baseYAMLBytes-yamlDelta, middle,
+				)
+				candidate.DesiredRoutes[0].DesiredGeneration = generation
+				candidateEvidence, candidateErr := PreflightProjection(candidate)
+				exactErr = candidateErr
+				if candidateErr != nil {
+					high = middle - 1
+					continue
+				}
+				if candidateEvidence.NormalizedBytes > bestBytes {
+					bestBytes, bestDelta, bestPath, bestGeneration = candidateEvidence.NormalizedBytes, yamlDelta, middle, generation
+				}
+				if candidateEvidence.NormalizedBytes == limit {
+					exact, exactEvidence, foundExact = candidate, candidateEvidence, true
+					break
+				}
+				low = middle + 1
+			}
+		}
+	}
+	if !foundExact || exactEvidence.NormalizedBytes != limit {
+		t.Fatalf("exact normalized projection = %d, %v (best=%d delta=%d path=%d generation=%d)",
+			exactEvidence.NormalizedBytes, exactErr, bestBytes, bestDelta, bestPath, bestGeneration)
 	}
 
 	claimInput := boundaryClaimInput(now, environmentID, revisionID)
@@ -130,8 +167,8 @@ func TestPreflightAndClaimEnforcesExactNormalizedProjectionBoundary(t *testing.T
 	}
 
 	over := exact
-	over.Routes = append([]etcd.EnvironmentRouteIdentity(nil), exact.Routes...)
-	over.Routes[0].Path += "a"
+	over.DesiredRoutes = append([]etcd.EnvironmentRouteProjection(nil), exact.DesiredRoutes...)
+	over.DesiredRoutes[0].Desired.Path += "a"
 	rejected := &boundaryRepository{}
 	if _, evidence, err := PreflightAndClaim(
 		context.Background(), rejected, over, claimInput,
@@ -246,6 +283,9 @@ func boundaryProjection(
 ) etcd.EnvironmentComposeProjection {
 	t.Helper()
 	canonicalYAML := []byte(strings.Repeat("x", yamlBytes))
+	serviceID := ids.NewAt(ids.KindService, now, 6)
+	networkID := ids.NewAt(ids.KindNetwork, now, 5)
+	routeID := ids.NewAt(ids.KindRoute, now, 4)
 	digest := sha256.Sum256(canonicalYAML)
 	artifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
 		ArtifactId: ids.NewAt(ids.KindConfig, now, 3),
@@ -253,6 +293,7 @@ func boundaryProjection(
 		OwnerId:    environmentID, ProjectName: "boundary",
 		CanonicalYaml: canonicalYAML, YamlSha256: digest[:],
 		AuthorizedVolumeDir: "/var/lib/groundplane/vol/boundary",
+		Services:            []*agentpb.ComposeService{{ServiceId: serviceID, ComposeName: "api"}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -260,9 +301,20 @@ func boundaryProjection(
 	return etcd.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
 		ComposeArtifact: artifact, NormalizedCompose: []byte("services: {}\n"),
-		Routes: []etcd.EnvironmentRouteIdentity{{
-			ID: ids.NewAt(ids.KindRoute, now, 4), Host: "boundary.example.test",
-			Path: "/" + strings.Repeat("a", pathPadding),
+		DesiredZones: []etcd.EnvironmentZoneProjection{{EnvironmentID: environmentID, Desired: core.Zone{
+			ID: networkID, Name: "frontend", Subnet: "10.70.0.0/24",
+			OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
+		}}},
+		DesiredServices: []etcd.EnvironmentServiceProjection{{EnvironmentID: environmentID, Desired: core.Service{
+			ID: serviceID, Name: "api", Image: "example.invalid/api:1",
+			Zones: []string{"frontend"}, Strategy: core.StrategyRecreate, Replicas: 1,
+		}}},
+		DesiredRoutes: []etcd.EnvironmentRouteProjection{{
+			EnvironmentID: environmentID, DesiredGeneration: 1, Desired: core.Route{
+				ID: routeID, Host: "boundary.example.test",
+				Path: "/" + strings.Repeat("a", pathPadding), TargetServiceID: serviceID,
+				TargetPort: 8080, Exposure: "public",
+			},
 		}},
 	}
 }

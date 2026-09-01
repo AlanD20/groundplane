@@ -86,8 +86,8 @@ func validateHierarchyDeletionAttachOwner(value []byte, id, owner string) error 
 }
 
 func validateHierarchyDeletionServiceOwner(value []byte, id, owner string) error {
-	record, err := decodeServiceRecord(value)
-	if err != nil || record.Desired.ID != id || record.EnvironmentID != owner {
+	record, err := decodeServiceRuntimeRecord(value)
+	if err != nil || record.ServiceID != id || record.EnvironmentID != owner {
 		return corruptHierarchyDeletion()
 	}
 	return nil
@@ -110,8 +110,8 @@ func validateHierarchyDeletionEntryOwner(value []byte, id, owner string) error {
 }
 
 func validateHierarchyDeletionRouteOwner(value []byte, id, owner string) error {
-	record, err := decodeRouteRecord(value)
-	if err != nil || record.Desired.ID != id || record.EnvironmentID != owner {
+	record, err := decodeRouteObservation(value)
+	if err != nil || record.RouteID != id || record.EnvironmentID != owner {
 		return corruptHierarchyDeletion()
 	}
 	return nil
@@ -137,8 +137,8 @@ func validateHierarchyDeletionScriptOwner(value []byte, id, owner string) error 
 }
 
 func validateHierarchyDeletionZoneOwner(value []byte, id, owner string) error {
-	record, err := decodeZoneRecord(value)
-	if err != nil || record.Desired.ID != id || record.EnvironmentID != owner {
+	evidence, err := decodeHierarchyDeletionZoneEvidence(value)
+	if err != nil || evidence.ZoneID != id || evidence.EnvironmentID != owner {
 		return corruptHierarchyDeletion()
 	}
 	return nil

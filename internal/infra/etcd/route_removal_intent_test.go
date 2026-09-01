@@ -6,24 +6,33 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 )
 
 // Rationale: a Route removal retry must retain the exact current/candidate
-// applied projection without persisting rendered managed configuration bytes.
-func TestRouteRemovalIntentCodecPinsSuppressionCandidate(t *testing.T) {
+// desired projection without persisting rendered managed configuration bytes.
+func TestRouteRemovalIntentCodecPinsDesiredCandidate(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 23, 2, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
 	routeID := ids.NewAt(ids.KindRoute, now, 2)
+	route, err := NewRouteRecord(environmentID, core.Route{
+		ID: routeID, Host: "app.example.com", Path: "/app/*",
+		TargetServiceID: ids.NewAt(ids.KindService, now, 5), TargetPort: 8080, Exposure: "public",
+	})
+	if err != nil {
+		t.Fatalf("NewRouteRecord() error = %v", err)
+	}
+	applied, err := ApplyEnvironmentRoute(withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 3), RenderGeneration: 3,
+	}), route)
+	if err != nil {
+		t.Fatalf("ApplyEnvironmentRoute() error = %v", err)
+	}
 	projection := Versioned[EnvironmentComposeProjection]{
-		Record: EnvironmentComposeProjection{
-			EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 3),
-			RenderGeneration: 4,
-			Routes:           []EnvironmentRouteIdentity{{ID: routeID, Host: "app.example.com", Path: "/app/*"}},
-		},
+		Record:   applied,
 		Revision: 9, ReadRevision: 10,
 	}
-	projection.Record = withTestEnvironmentComposeArtifact(projection.Record)
 	intent, err := NewRouteRemovalIntent(
 		ids.NewAt(ids.KindTask, now, 4), environmentID, routeID, 8, &projection, now,
 	)
@@ -36,7 +45,8 @@ func TestRouteRemovalIntentCodecPinsSuppressionCandidate(t *testing.T) {
 	}
 	decoded, err := decodeRouteRemovalIntent(encoded)
 	if err != nil || decoded.CurrentProjectionRevision != 9 || decoded.CandidateProjection == nil ||
-		decoded.CandidateProjection.RenderGeneration != 5 || len(decoded.CandidateProjection.SuppressedRoutes) != 1 {
+		decoded.CandidateProjection.RenderGeneration != 5 || len(decoded.CandidateProjection.DesiredRoutes) != 0 ||
+		decoded.CurrentProjection == nil || len(decoded.CurrentProjection.DesiredRoutes) != 1 {
 		t.Fatalf("decodeRouteRemovalIntent() = %#v, %v", decoded, err)
 	}
 	terminalAt := now.Add(time.Minute)

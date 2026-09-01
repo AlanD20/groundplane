@@ -51,7 +51,10 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 		EnvironmentID: environmentID, EnvironmentName: "production", AuthorizedVolumeDir: "/var/lib/groundplane/volumes",
 		Projection: EnvironmentComposeProjection{
 			EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 11), RenderGeneration: 1,
-			Services:               []EnvironmentComposeIdentity{{ID: serviceID, Name: "api"}},
+			DesiredServices: []EnvironmentServiceProjection{{
+				EnvironmentID: environmentID,
+				Desired:       core.Service{ID: serviceID, Name: "api", Image: "registry.example/api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Strategy: core.StrategyRecreate},
+			}},
 			ServiceDependencyPlans: core.ServiceDependencyPlans{},
 		},
 	}

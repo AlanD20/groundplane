@@ -55,39 +55,60 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 
-	var conditions []Condition
-	var mutations []Mutation
-	var classify idempotencyPlanClassifier
-	var err error
-	if current == nil {
-		conditions, mutations, classify, err = repository.prepareRouteCreation(
-			ctx, environment, project, target, record,
+	publicationCurrent := intent.CurrentProjection
+	publicationCandidate := intent.CandidateProjection
+	publicationRevision := intent.CurrentProjectionRevision
+	if publicationCurrent == nil && publicationCandidate == nil {
+		selected, found, readErr := currentEnvironmentProjectionAtRevision(
+			ctx, repository.store, intent.EnvironmentID, 0,
 		)
-	} else {
-		_, conditions, mutations, classify, err = repository.prepareRouteReplacement(
-			ctx, environment, project, target, *current, record.Desired,
-		)
+		if readErr != nil || !found {
+			return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Route desired head is unavailable")
+		}
+		candidate, applyErr := ApplyEnvironmentRoute(selected.Record, record)
+		if applyErr != nil {
+			return IdempotencyTransactionResult{}, applyErr
+		}
+		candidate.RevisionID = task.ID
+		publicationCurrent = &selected.Record
+		publicationCandidate = &candidate
+		publicationRevision = selected.Revision
+	} else if publicationCurrent == nil || publicationCandidate == nil {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Route desired head is unavailable")
 	}
+	action := EnvironmentRouteMutationEdit
+	request := &EnvironmentRouteMutationRequest{Exposure: record.Desired.Exposure}
+	if intent.Kind == RouteMutationCreate {
+		action = EnvironmentRouteMutationCreate
+		request = &EnvironmentRouteMutationRequest{
+			EnvironmentID: record.EnvironmentID, Host: record.Desired.Host, Path: record.Desired.Path,
+			Exposure: record.Desired.Exposure, TargetServiceID: record.Desired.TargetServiceID,
+			TargetPort: record.Desired.TargetPort,
+		}
+	}
+	audit := EnvironmentDesiredMutationAudit{Route: &EnvironmentRouteMutationAudit{
+		Action: action, BaseRevisionID: publicationCurrent.RevisionID,
+		RouteID: record.Desired.ID, Request: request,
+	}}
+	publication, err := prepareRouteHeadPublication(
+		ctx, repository.store, task, directMarker, publicationCurrent,
+		*publicationCandidate, audit, publicationRevision,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clearMutationValues(mutations)
-	routeConditionCount := len(conditions)
-
-	conditions = append(conditions, Condition{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)})
-	if intent.CurrentProjection != nil {
-		if intent.CurrentProjectionRevision <= 0 {
-			return IdempotencyTransactionResult{}, errs.New(
-				errs.KindValidationFailed, "Route mutation projection revision is invalid",
-			)
-		}
-		conditions = append(conditions,
-			Condition{
-				Key:         environmentComposeProjectionKey(environment.Record.ID),
-				ModRevision: intent.CurrentProjectionRevision,
-			},
-		)
+	defer clearRouteHeadPublication(publication)
+	conditions := []Condition{
+		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
+		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
+		serviceDesiredCondition(target),
+		{Key: deletionTombstoneKey("route", record.Desired.ID)},
+		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
+		{Key: deletionTombstoneKey("project", project.Record.ID)},
+		{Key: deletionTombstoneKey("service", target.Record.Desired.ID)},
+		{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)},
 	}
+	var mutations []Mutation
 
 	task = cloneTaskRecord(task)
 	if task.ID != intent.TaskID || task.OperationID != intent.OperationID ||
@@ -132,6 +153,8 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 		Mutation{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 		Mutation{Type: MutationPut, Key: routeMutationIntentKey(task.ID), Value: intentValue},
 	)
+	conditions = append(conditions, publication.conditions...)
+	mutations = append(mutations, publication.mutations...)
 	mutations = append(mutations, Mutation{
 		Type: MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
 	})
@@ -144,25 +167,16 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	extraConditions := append([]Condition(nil), conditions[routeConditionCount:]...)
-	routeClassify := classify
-	classify = func(revision int64, values []*KeyValue) error {
-		if len(values) < routeConditionCount+len(extraConditions) {
+	classify := func(_ int64, values []*KeyValue) error {
+		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "Route mutation compare evidence is incomplete")
 		}
-		for index, condition := range extraConditions {
-			value := values[routeConditionCount+index]
-			if condition.ModRevision == 0 {
-				if value != nil {
-					return errs.New(errs.KindStateConflict, "Route mutation state changed")
-				}
-				continue
-			}
-			if value == nil || value.ModRevision != condition.ModRevision {
-				return errs.New(errs.KindStateConflict, "Route mutation state changed")
+		for index, condition := range conditions {
+			if !conditionMatchesRead(condition, values[index]) {
+				return errs.New(errs.KindStateConflict, "Route mutation desired head changed")
 			}
 		}
-		return routeClassify(revision, values[:routeConditionCount])
+		return errs.New(errs.KindStateConflict, "Route mutation state changed")
 	}
 	plan, err := newTaskIdempotencyMutationPlan(task, initiation, conditions, mutations, classify)
 	if err != nil {

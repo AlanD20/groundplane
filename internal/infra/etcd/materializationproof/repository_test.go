@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	coreproof "github.com/AlanD20/groundplane/internal/core/materializationproof"
 	base "github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -64,7 +65,7 @@ func TestRepositoryRejectsZeroProofBeforeTransaction(t *testing.T) {
 
 // Rationale: publication decodes canonical applied and Task records and binds
 // every claimed generation, Service, destination, and source membership.
-func TestRepositoryPublishesAgainstCanonicalSemanticAuthority(t *testing.T) {
+func TestMaterializationRepositoryPublishesAgainstCanonicalSemanticAuthority(t *testing.T) {
 	t.Parallel()
 	backend := newMemoryStore()
 	repository, _ := newRepository(backend)
@@ -81,7 +82,7 @@ func TestRepositoryPublishesAgainstCanonicalSemanticAuthority(t *testing.T) {
 
 // Rationale: wrong applied generation, wrong owning Task semantics, and a
 // mismatched materialization member must never be authorized by valid MVCC revisions.
-func TestRepositoryRejectsWrongGenerationTaskAndMembership(t *testing.T) {
+func TestMaterializationRepositoryRejectsWrongGenerationTaskAndMembership(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name   string
@@ -93,6 +94,22 @@ func TestRepositoryRejectsWrongGenerationTaskAndMembership(t *testing.T) {
 		{name: "owning Task revision", mutate: func(_ *base.EnvironmentComposeProjection, task *base.TaskRecord) {
 			task.Params[base.EnvironmentDesiredRevisionParam] = testID(ids.KindTask, 90)
 		}},
+		{
+			name: "missing desired Service",
+			mutate: func(projection *base.EnvironmentComposeProjection, _ *base.TaskRecord) {
+				projection.DesiredServices = nil
+				artifact := new(agentpb.ComposeArtifact)
+				if err := proto.Unmarshal(projection.ComposeArtifact, artifact); err != nil {
+					panic(err)
+				}
+				artifact.Services = nil
+				var err error
+				projection.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+				if err != nil {
+					panic(err)
+				}
+			},
+		},
 		{
 			name: "Task membership destination",
 			mutate: func(_ *base.EnvironmentComposeProjection, task *base.TaskRecord) {
@@ -301,7 +318,13 @@ func testProjection(
 		EnvironmentID: record.EnvironmentID, RevisionID: record.AppliedRevisionID,
 		RenderGeneration: record.RenderGeneration, ComposeArtifact: artifact,
 		NormalizedCompose: canonicalYAML,
-		Services:          []base.EnvironmentComposeIdentity{{ID: member.ServiceID, Name: member.ServiceName}},
+		DesiredServices: []base.EnvironmentServiceProjection{{
+			EnvironmentID: record.EnvironmentID,
+			Desired: core.Service{
+				ID: member.ServiceID, Name: member.ServiceName, Image: "example/service:1",
+				Strategy: core.StrategyRecreate, OnFailure: core.OnFailureSwitchBack,
+			},
+		}},
 	}
 }
 

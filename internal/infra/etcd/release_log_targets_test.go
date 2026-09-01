@@ -3,11 +3,13 @@ package etcd
 import (
 	"context"
 	"io"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -17,22 +19,38 @@ import (
 func TestResolveEnvironmentLogTargetsFiltersBeforeMaximum(t *testing.T) {
 	t.Parallel()
 
-	repository, memory, environment, project := serviceRepositoryTestHierarchy(t)
+	_, memory, environment, project := serviceRepositoryTestHierarchy(t)
+	names := make([]string, 129)
 	for index := range 129 {
-		record := serviceRepositoryTestRecord(
-			t,
-			environment.Record.ID,
-			int64(1000+index),
-			"service-"+strconv.Itoa(index),
-		)
-		if _, err := repository.CreateService(context.Background(), environment, project, record); err != nil {
-			t.Fatalf("CreateService(%d) error = %v", index, err)
-		}
+		names[index] = "service-" + strconv.FormatInt(int64(index), 10)
 	}
+	stageReleaseLogDesiredProjection(t, memory, environment, project, names)
 	ledger := testReleaseLogLedger(t, &releaseLogMemoryStore{memoryHierarchyStore: memory})
 	targets, err := ledger.ResolveEnvironmentLogTargets(context.Background(), environment.Record.ID, 128)
 	if err != nil || len(targets) != 0 {
 		t.Fatalf("ResolveEnvironmentLogTargets() = %#v, %v; want empty", targets, err)
+	}
+}
+
+// Rationale: desired Services may be profile-disabled or otherwise absent
+// from effective Release state; log targets must contain only applied Services
+// with a serving Release, not every desired identity.
+func TestResolveEnvironmentLogTargetsReturnsOnlyEffectiveAppliedServices(t *testing.T) {
+	t.Parallel()
+
+	_, memory, environment, project := serviceRepositoryTestHierarchy(t)
+	fixtures := stageReleaseLogDesiredProjection(t, memory, environment, project, []string{
+		"disabled", "effective", "suppressed",
+	})
+	installServingRelease(t, memory, environment.Record.ID, project.Record, fixtures[1].ID, 2201)
+
+	ledger := testReleaseLogLedger(t, &releaseLogMemoryStore{memoryHierarchyStore: memory})
+	targets, err := ledger.ResolveEnvironmentLogTargets(context.Background(), environment.Record.ID, 128)
+	if err != nil || len(targets) != 1 {
+		t.Fatalf("ResolveEnvironmentLogTargets() = %#v, %v; want one effective target", targets, err)
+	}
+	if targets[0].ServiceID != fixtures[1].ID || targets[0].ServiceName != "effective" {
+		t.Fatalf("effective target = %#v, want %q/effective", targets[0], fixtures[1].ID)
 	}
 }
 
@@ -41,30 +59,24 @@ func TestResolveEnvironmentLogTargetsFiltersBeforeMaximum(t *testing.T) {
 func TestResolveEnvironmentLogTargetsUsesOneFixedRevisionThroughDeletion(t *testing.T) {
 	t.Parallel()
 
-	repository, memory, environment, project := serviceRepositoryTestHierarchy(t)
-	records := []ServiceRecord{
-		serviceRepositoryTestRecord(t, environment.Record.ID, 1112, "worker"),
-		serviceRepositoryTestRecord(t, environment.Record.ID, 1110, "api"),
-		serviceRepositoryTestRecord(t, environment.Record.ID, 1111, "scheduler"),
-	}
-	for index := range records {
-		if _, err := repository.CreateService(context.Background(), environment, project, records[index]); err != nil {
-			t.Fatalf("CreateService(%d) error = %v", index, err)
-		}
-		installServingRelease(t, memory, environment.Record.ID, project.Record, records[index], int64(1200+index))
+	_, memory, environment, project := serviceRepositoryTestHierarchy(t)
+	fixtures := stageReleaseLogDesiredProjection(t, memory, environment, project, []string{
+		"worker", "api", "scheduler",
+	})
+	for index, fixture := range fixtures {
+		installServingRelease(t, memory, environment.Record.ID, project.Record, fixture.ID, int64(1200+index))
 	}
 	base := &releaseLogMemoryStore{memoryHierarchyStore: memory}
 	race := &releaseLogDeletionRaceStore{releaseLogMemoryStore: base}
 	race.afterEnvironmentRead = func() {
 		mutations := []Mutation{
 			{Type: MutationDelete, Key: environmentKey(environment.Record.ID)},
-			{Type: MutationDelete, Key: serviceOwnerPrefix(environment.Record.ID), Prefix: true},
+			{Type: MutationDelete, Key: environmentBlueprintHeadKey(environment.Record.ID)},
 		}
-		for index, record := range records {
+		for index, fixture := range fixtures {
 			releaseID := ids.NewAt(ids.KindDeployment, serviceRecordTestTime(), int64(1200+index))
 			mutations = append(mutations,
-				Mutation{Type: MutationDelete, Key: serviceKey(record.Desired.ID)},
-				Mutation{Type: MutationDelete, Key: releaseProjectionKey(record.Desired.ID)},
+				Mutation{Type: MutationDelete, Key: releaseProjectionKey(fixture.ID)},
 				Mutation{Type: MutationDelete, Key: releaseIntentStagingKey("", releaseID)},
 			)
 		}
@@ -74,7 +86,7 @@ func TestResolveEnvironmentLogTargetsUsesOneFixedRevisionThroughDeletion(t *test
 	}
 	ledger := testReleaseLogLedger(t, race)
 	targets, err := ledger.ResolveEnvironmentLogTargets(context.Background(), environment.Record.ID, 128)
-	if err != nil || len(targets) != len(records) {
+	if err != nil || len(targets) != len(fixtures) {
 		t.Fatalf("ResolveEnvironmentLogTargets() = %#v, %v", targets, err)
 	}
 	for index := 1; index < len(targets); index++ {
@@ -87,19 +99,73 @@ func TestResolveEnvironmentLogTargetsUsesOneFixedRevisionThroughDeletion(t *test
 	}
 }
 
+type releaseLogServiceFixture struct {
+	ID   string
+	Name string
+}
+
+func stageReleaseLogDesiredProjection(
+	t *testing.T,
+	store *memoryHierarchyStore,
+	environment Versioned[EnvironmentRecord],
+	project Versioned[ProjectRecord],
+	names []string,
+) []releaseLogServiceFixture {
+	t.Helper()
+	now := serviceRecordTestTime()
+	sortedNames := append([]string(nil), names...)
+	sort.Strings(sortedNames)
+	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 4000)
+	projection := EnvironmentComposeProjection{
+		EnvironmentID:    environment.Record.ID,
+		RevisionID:       task.ID,
+		RenderGeneration: 1,
+		DesiredServices:  make([]EnvironmentServiceProjection, len(sortedNames)),
+	}
+	fixtures := make([]releaseLogServiceFixture, len(sortedNames))
+	for index, name := range sortedNames {
+		serviceID := ids.NewAt(ids.KindService, now, int64(300+index))
+		fixtures[index] = releaseLogServiceFixture{ID: serviceID, Name: name}
+		projection.DesiredServices[index] = EnvironmentServiceProjection{
+			EnvironmentID: environment.Record.ID,
+			Desired:       core.Service{ID: serviceID, Name: name, Image: "app:latest", Strategy: core.StrategyRecreate},
+		}
+	}
+	projection = withTestEnvironmentComposeArtifact(projection)
+	hierarchy, err := newHierarchyRepository(store)
+	if err != nil {
+		t.Fatalf("newHierarchyRepository() error = %v", err)
+	}
+	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
+	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
+	stageEnvironmentBlueprintForPublicationTest(t, hierarchy, 0, revision, projection, marker)
+	headValue, err := encodeTaskReference(task.ID)
+	if err != nil {
+		t.Fatalf("encodeTaskReference() error = %v", err)
+	}
+	if _, err := store.Transact(context.Background(), nil, []Mutation{{
+		Type:  MutationPut,
+		Key:   environmentBlueprintHeadKey(environment.Record.ID),
+		Value: headValue,
+	}}); err != nil {
+		t.Fatalf("Put(Environment blueprint head) error = %v", err)
+	}
+	return fixtures
+}
+
 func installServingRelease(
 	t *testing.T,
 	store *memoryHierarchyStore,
 	environmentID string,
 	project ProjectRecord,
-	service ServiceRecord,
+	serviceID string,
 	offset int64,
 ) {
 	t.Helper()
 	now := serviceRecordTestTime()
 	releaseID := ids.NewAt(ids.KindDeployment, now, offset)
 	intent := domain.Intent{
-		ID: releaseID, EnvironmentID: environmentID, ServiceID: service.Desired.ID,
+		ID: releaseID, EnvironmentID: environmentID, ServiceID: serviceID,
 		OperationID: ids.NewAt(ids.KindOperation, now, offset), OperationKind: domain.OperationDeploy,
 		Image: "app:latest", Tag: "stable", Strategy: domain.StrategyRecreate,
 		OnFailure:     domain.OnFailureLeaveActive,
@@ -114,7 +180,7 @@ func installServingRelease(
 		t.Fatalf("ValidateIntent() error = %v", err)
 	}
 	projection := domain.ServiceProjection{
-		EnvironmentID: environmentID, ServiceID: service.Desired.ID,
+		EnvironmentID: environmentID, ServiceID: serviceID,
 		ServingReleaseID: releaseID, CurrentSuccessfulReleaseID: releaseID, Revision: 1,
 	}
 	intentValue, err := encodeReleaseRecord("release-intent", intent)
@@ -127,7 +193,7 @@ func installServingRelease(
 	}
 	if _, err := store.Transact(context.Background(), nil, []Mutation{
 		{Type: MutationPut, Key: releaseIntentStagingKey("", releaseID), Value: intentValue},
-		{Type: MutationPut, Key: releaseProjectionKey(service.Desired.ID), Value: projectionValue},
+		{Type: MutationPut, Key: releaseProjectionKey(serviceID), Value: projectionValue},
 	}); err != nil {
 		t.Fatalf("install serving Release: %v", err)
 	}

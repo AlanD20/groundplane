@@ -158,7 +158,8 @@ func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 		page.Values[len(page.Values)-1].Key,
 	)
 	if err != nil {
-		return false, err
+		return false, errs.New(errs.KindStateConflict,
+			"environment deletion retained malformed published Blueprint revision evidence")
 	}
 	tombstone.Phase = DeletionPhaseFinalizing
 	tombstone.Checkpoint = DeletionCheckpoint{
@@ -329,38 +330,14 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 	}
 	conditions := []Condition{
 		{Key: environmentKey(environment.ID), ModRevision: environmentValue.ModRevision},
-		{
-			Key:         environmentNameKey(environment.ProjectID, environment.Name),
-			ModRevision: indexes.Values[0].ModRevision,
-		},
-		{
-			Key:         environmentOwnerKey(environment.ProjectID, environment.ID),
-			ModRevision: indexes.Values[1].ModRevision,
-		},
-		{
-			Key:         deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID),
-			ModRevision: tombstoneValue.ModRevision,
-		},
-		{
-			Key:         environmentBlueprintHeadKey(environment.ID),
-			ModRevision: keyValueRevision(stored.Values[2]),
-		},
-		{
-			Key:         environmentComposeProjectionKey(environment.ID),
-			ModRevision: keyValueRevision(stored.Values[3]),
-		},
-		{
-			Key:         environmentMutationEpochKey(environment.ID),
-			ModRevision: stored.Values[5].ModRevision,
-		},
-		{
-			Key:         environmentOperationLockKey(environment.ID),
-			ModRevision: stored.Values[6].ModRevision,
-		},
-		{
-			Key:         releaseGroupCollectionEpochKey(environment.ID),
-			ModRevision: keyValueRevision(stored.Values[7]),
-		},
+		{Key: environmentNameKey(environment.ProjectID, environment.Name), ModRevision: indexes.Values[0].ModRevision},
+		{Key: environmentOwnerKey(environment.ProjectID, environment.ID), ModRevision: indexes.Values[1].ModRevision},
+		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID), ModRevision: tombstoneValue.ModRevision},
+		{Key: environmentBlueprintHeadKey(environment.ID), ModRevision: keyValueRevision(stored.Values[2])},
+		{Key: environmentComposeProjectionKey(environment.ID), ModRevision: keyValueRevision(stored.Values[3])},
+		{Key: environmentMutationEpochKey(environment.ID), ModRevision: stored.Values[5].ModRevision},
+		{Key: environmentOperationLockKey(environment.ID), ModRevision: stored.Values[6].ModRevision},
+		{Key: releaseGroupCollectionEpochKey(environment.ID), ModRevision: keyValueRevision(stored.Values[7])},
 	}
 	conditions, err = appendEnvironmentMutationFenceConditions(conditions, ownedFence)
 	if err != nil {
@@ -368,15 +345,32 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 	}
 	conditions = append(conditions, intentConditions...)
 	if terminalStatus == TaskStatusCompleted {
+		projectedKeys := make([]string, 0)
+		if stored.Values[2] != nil || stored.Values[3] != nil {
+			if stored.Values[2] == nil || stored.Values[3] == nil {
+				return nil, nil, errs.New(errs.KindInternal, "environment deletion desired projection is incomplete")
+			}
+			revisionID, decodeErr := decodeTaskReference(stored.Values[2].Value)
+			projection, projectionErr := decodeEnvironmentComposeProjection(stored.Values[3].Value)
+			if decodeErr != nil || projectionErr != nil || projection.EnvironmentID != environment.ID ||
+				projection.RevisionID != revisionID {
+				return nil, nil, errs.New(errs.KindInternal, "environment deletion desired projection is corrupt")
+			}
+			for _, service := range projection.DesiredServices {
+				projectedKeys = append(projectedKeys, serviceRuntimeKey(service.Desired.ID))
+			}
+			for _, zone := range projection.DesiredZones {
+				projectedKeys = append(projectedKeys,
+					deletionTombstoneKey(string(DeletionTargetZone), zone.Desired.ID))
+			}
+		}
 		if err := requireEnvironmentDeletionLiveAuthorityEmpty(
-			ctx, repository.store, environment.ID, task.OperationID, readRevision,
+			ctx, repository.store, environment.ID, task.OperationID, readRevision, projectedKeys...,
 		); err != nil {
 			return nil, nil, err
 		}
-		conditions = append(
-			conditions,
-			environmentDeletionLiveAuthorityConditions(environment.ID, task.OperationID)...,
-		)
+		conditions = append(conditions,
+			environmentDeletionLiveAuthorityConditions(environment.ID, task.OperationID, projectedKeys...)...)
 	}
 	mutations := make([]Mutation, 0, len(intentMutations)+12)
 	if terminalStatus == TaskStatusCompleted {
@@ -482,15 +476,17 @@ func requireEnvironmentDeletionLiveAuthorityEmpty(
 	environmentID string,
 	operationID string,
 	revision int64,
+	projectedKeys ...string,
 ) error {
+	directKeys := append(environmentDeletionLiveAuthorityKeys(environmentID), projectedKeys...)
 	direct, err := store.GetMany(ctx, GetManyRequest{
-		Keys: environmentDeletionLiveAuthorityKeys(environmentID), Revision: revision,
+		Keys: directKeys, Revision: revision,
 	})
 	if err != nil {
 		return err
 	}
 	if direct == nil || direct.ReadRevision != revision ||
-		len(direct.Values) != len(environmentDeletionLiveAuthorityKeys(environmentID)) {
+		len(direct.Values) != len(directKeys) {
 		if direct != nil {
 			clearKeyValues(direct.Values)
 		}
@@ -539,9 +535,11 @@ func requireEnvironmentDeletionLiveAuthorityEmpty(
 	return nil
 }
 
-func environmentDeletionLiveAuthorityConditions(environmentID string, operationID string) []Condition {
-	keys := environmentDeletionLiveAuthorityKeys(environmentID)
-	conditions := make([]Condition, 0, len(keys)+19)
+func environmentDeletionLiveAuthorityConditions(
+	environmentID string, operationID string, projectedKeys ...string,
+) []Condition {
+	keys := append(environmentDeletionLiveAuthorityKeys(environmentID), projectedKeys...)
+	conditions := make([]Condition, 0, len(keys)+18)
 	for _, key := range keys {
 		conditions = append(conditions, Condition{Key: key})
 	}
@@ -565,8 +563,7 @@ func environmentDeletionLiveAuthorityKeys(environmentID string) []string {
 
 func environmentDeletionLiveAuthorityPrefixes(environmentID string, operationID string) []string {
 	return []string{
-		zoneOwnerPrefix(environmentID),
-		serviceOwnerPrefix(environmentID),
+		environmentBlueprintRevisionsPrefix(environmentID),
 		routeOwnerPrefix(environmentID),
 		entryOwnerCollectionPrefix(environmentID),
 		attachOwnerPrefix(environmentID),

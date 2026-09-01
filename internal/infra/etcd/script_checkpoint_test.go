@@ -1,13 +1,72 @@
 package etcd
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/oklog/ulid/v2"
 )
+
+func TestScriptExecutionProjectionSourcesUseImmutableDesiredZones(t *testing.T) {
+	at := time.Date(2026, 9, 1, 2, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)
+	revisionID := ids.NewAt(ids.KindTask, at, 2)
+	firstID := ids.NewAt(ids.KindNetwork, at, 3)
+	secondID := ids.NewAt(ids.KindNetwork, at, 4)
+	projection := Versioned[EnvironmentComposeProjection]{
+		Record: EnvironmentComposeProjection{
+			EnvironmentID: environmentID,
+			RevisionID:    revisionID,
+			DesiredZones: []EnvironmentZoneProjection{
+				{EnvironmentID: environmentID, Desired: testScriptExecutionZone(firstID, "app", environmentID)},
+				{EnvironmentID: environmentID, Desired: testScriptExecutionZone(secondID, "data", environmentID)},
+			},
+		},
+		Revision: 17, ReadRevision: 23,
+	}
+	networks, err := resolveScriptExecutionNetworks(projection)
+	if err != nil {
+		t.Fatalf("resolveScriptExecutionNetworks() error = %v", err)
+	}
+	if len(networks) != 2 || networks[0].Record.Desired.ID != firstID ||
+		networks[1].Record.Desired.ID != secondID || networks[0].Revision != projection.Revision ||
+		networks[1].ReadRevision != projection.ReadRevision {
+		t.Fatalf("resolved immutable Zone projections = %#v", networks)
+	}
+
+	sources := ScriptExecutionSources{
+		Environment:       Versioned[EnvironmentRecord]{Record: EnvironmentRecord{ID: environmentID}},
+		DesiredHead:       Versioned[EnvironmentBlueprintHead]{Revision: 13},
+		DesiredProjection: projection,
+		Networks:          networks,
+	}
+	conditions := scriptExecutionProjectionConditions(sources)
+	wantKeys := []string{
+		environmentBlueprintHeadKey(environmentID),
+		environmentBlueprintRootKey(environmentID, revisionID),
+		deletionTombstoneKey(string(DeletionTargetZone), firstID),
+		deletionTombstoneKey(string(DeletionTargetZone), secondID),
+	}
+	gotKeys := make([]string, len(conditions))
+	for index, condition := range conditions {
+		gotKeys[index] = condition.Key
+	}
+	if !reflect.DeepEqual(gotKeys, wantKeys) || conditions[0].ModRevision != 13 ||
+		conditions[1].ModRevision != 17 || conditions[2].ModRevision != 0 || conditions[3].ModRevision != 0 {
+		t.Fatalf("projection conditions = %#v, want keys %#v", conditions, wantKeys)
+	}
+}
+
+func testScriptExecutionZone(id string, name string, environmentID string) core.Zone {
+	return core.Zone{
+		ID: id, Name: name, Subnet: "10.40.0.0/24",
+		OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
+	}
+}
 
 func TestAdvanceScriptExecutionRecordFullCheckpointSequence(t *testing.T) {
 	at := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)

@@ -25,7 +25,14 @@ func ProjectServiceProjection(
 	if err != nil {
 		return nil, err
 	}
-	serviceIDs, err := indexComposeIdentities(ids.KindService, names, identities.Services)
+	serviceIdentities := append([]ComposeResourceIdentity(nil), identities.Services...)
+	sort.Slice(serviceIdentities, func(left, right int) bool {
+		if serviceIdentities[left].Name == serviceIdentities[right].Name {
+			return serviceIdentities[left].ID < serviceIdentities[right].ID
+		}
+		return serviceIdentities[left].Name < serviceIdentities[right].Name
+	})
+	serviceIDs, err := indexComposeIdentities(ids.KindService, names, serviceIdentities)
 	if err != nil {
 		return nil, err
 	}

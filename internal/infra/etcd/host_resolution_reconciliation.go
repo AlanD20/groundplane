@@ -1070,8 +1070,6 @@ func preserveHostResolutionDesiredRevisionIDs(
 }
 
 type scannedRoute struct {
-	key    string
-	value  KeyValue
 	record RouteRecord
 }
 
@@ -1080,7 +1078,8 @@ func (repository *TaskRepository) scanRoutesAtRevision(ctx context.Context, revi
 	start := ""
 	for {
 		page, err := repository.store.Range(ctx, RangeRequest{
-			Prefix: routePrefix, StartExclusive: start, Limit: MaximumPageLimit, Revision: revision,
+			Prefix: environmentComposeProjectionPrefix, StartExclusive: start,
+			Limit: MaximumPageLimit, Revision: revision,
 		})
 		if err != nil {
 			return nil, err
@@ -1089,16 +1088,31 @@ func (repository *TaskRepository) scanRoutesAtRevision(ctx context.Context, revi
 			return nil, errs.New(errs.KindInternal, "Route scan did not preserve its fixed revision")
 		}
 		for _, value := range page.Values {
-			if !strings.HasPrefix(value.Key, routePrefix) {
+			if !strings.HasPrefix(value.Key, environmentComposeProjectionPrefix) {
 				clearRangeKeyValues(page.Values)
-				return nil, errs.New(errs.KindInternal, "Route scan contains an invalid key")
+				return nil, errs.New(errs.KindInternal, "Applied Environment projection scan contains an invalid key")
 			}
-			record, decodeErr := decodeRouteRecord(value.Value)
-			if decodeErr != nil || routeKey(record.Desired.ID) != value.Key {
+			environmentID := strings.TrimPrefix(value.Key, environmentComposeProjectionPrefix)
+			if strings.Contains(environmentID, "/") || validateID(ids.KindEnvironment, environmentID) != nil {
 				clearRangeKeyValues(page.Values)
 				return nil, corruptRecord()
 			}
-			result = append(result, scannedRoute{key: value.Key, value: value, record: record})
+			projection, decodeErr := decodeEnvironmentComposeProjection(value.Value)
+			if decodeErr != nil || projection.EnvironmentID != environmentID {
+				clearRangeKeyValues(page.Values)
+				return nil, corruptEnvironmentComposeProjection()
+			}
+			versioned := Versioned[EnvironmentComposeProjection]{
+				Record: projection, Revision: value.ModRevision, ReadRevision: page.ReadRevision,
+			}
+			for _, desired := range projection.DesiredRoutes {
+				record, joinErr := routeRecordFromDesiredProjection(ctx, repository.store, versioned, desired)
+				if joinErr != nil {
+					clearRangeKeyValues(page.Values)
+					return nil, joinErr
+				}
+				result = append(result, scannedRoute{record: record.Record})
+			}
 		}
 		if !page.More {
 			clearRangeKeyValues(page.Values)
@@ -1315,12 +1329,14 @@ func (repository *TaskRepository) routeAtRevision(
 	routeID string,
 	revision int64,
 ) (RouteRecord, error) {
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{routeKey(routeID)}, Revision: revision})
+	routes, err := repository.scanRoutesAtRevision(ctx, revision)
 	if err != nil {
 		return RouteRecord{}, err
 	}
-	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-		return RouteRecord{}, errs.New(errs.KindStateConflict, "host-resolution Route changed during reconciliation")
+	for _, route := range routes {
+		if route.record.Desired.ID == routeID {
+			return route.record, nil
+		}
 	}
-	return decodeRouteRecord(read.Values[0].Value)
+	return RouteRecord{}, errs.New(errs.KindStateConflict, "host-resolution Route changed during reconciliation")
 }

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -36,11 +37,13 @@ type backingZoneCascadeRepository interface {
 	) ([]etcd.Versioned[etcd.AttachRecord], error)
 	GetTask(context.Context, string) (etcd.Versioned[etcd.TaskRecord], error)
 	GetSystemTaskInitiation(context.Context, string) (etcd.TaskInitiation, error)
+	GetZoneRemovalIntent(context.Context, string) (etcd.Versioned[etcd.ZoneRemovalIntent], bool, error)
 	HandoffBackingZoneDeletion(
 		context.Context,
 		etcd.Versioned[etcd.ZoneRecord],
 		string,
 		etcd.Versioned[etcd.DeletionTombstoneRecord],
+		etcd.ZoneRemovalIntent,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -262,30 +265,43 @@ func (service *backingZoneCascadeService) publishFinalRemoval(
 ) (string, error) {
 	now := service.now().UTC()
 	child := etcd.TaskRecord{
-		ID:               ids.New(ids.KindTask),
-		OperationID:      ids.New(ids.KindOperation),
-		Owner:            parent.Owner,
-		Actor:            etcd.TaskActorSystem,
-		Executor:         etcd.TaskExecutorAgent,
-		PlanID:           ids.New(ids.KindPlan),
-		RenderGeneration: 1,
-		Type:             etcd.TaskRemove,
-		Target:           parent.Target,
-		Params: map[string]string{
-			etcd.TaskZoneEnvironmentParam: zone.Record.EnvironmentID,
-		},
-		Steps:             []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}},
+		ID:                ids.New(ids.KindTask),
+		OperationID:       ids.New(ids.KindOperation),
+		Owner:             parent.Owner,
+		Actor:             etcd.TaskActorSystem,
+		Executor:          etcd.TaskExecutorAgent,
+		PlanID:            parent.PlanID,
+		Type:              etcd.TaskRemove,
+		Target:            parent.Target,
 		TimeoutSeconds:    zoneDeletionTimeoutSeconds,
 		Status:            etcd.TaskStatusPending,
 		NextEventSequence: 1,
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}
-	plan, err := service.plans.ResolveExecutionPlan(ctx, child)
+	operationID := parent.Params[etcd.TaskZoneRemovalOperationParam]
+	storedIntent, found, err := service.repository.GetZoneRemovalIntent(ctx, operationID)
 	if err != nil {
 		return "", err
 	}
-	child.PlanHash = hex.EncodeToString(plan.PlanHash)
+	if !found {
+		return "", errs.New(errs.KindStateConflict, "backing Zone removal intent is missing")
+	}
+	intent, err := etcd.TransferZoneRemovalIntent(storedIntent.Record, child.ID, now)
+	if err != nil {
+		return "", err
+	}
+	serviceSteps := make([]string, len(intent.AffectedServiceIDs))
+	for index := range serviceSteps {
+		serviceSteps[index] = ids.New(ids.KindStep)
+	}
+	child, err = service.plans.PrepareZoneRemovalTask(ctx, child, intent, controller.ZoneRemovalTaskProcedureIDs{
+		ArtifactID:     zoneStableIDFromRevision(ids.KindConfig, intent.Claim.RevisionID),
+		ServiceStepIDs: serviceSteps, NetworkStepID: ids.New(ids.KindStep),
+	})
+	if err != nil {
+		return "", err
+	}
 	key := cascadeIdempotencyKey("finalize", parent.ID, parent.Target)
 	locator := etcd.IdempotencyLocator{
 		ScopeKind: etcd.IdempotencyScopeEnvironment,
@@ -317,7 +333,7 @@ func (service *backingZoneCascadeService) publishFinalRemoval(
 		Locator: locator, Intent: evidence.durable, Response: response,
 		TaskID: child.ID, CreatedAt: now, UpdatedAt: now,
 	}
-	result, err := service.repository.HandoffBackingZoneDeletion(ctx, zone, parent.ID, tombstone, child, marker)
+	result, err := service.repository.HandoffBackingZoneDeletion(ctx, zone, parent.ID, tombstone, intent, child, marker)
 	if err != nil {
 		return "", err
 	}

@@ -1357,7 +1357,7 @@ func validateBackupVolumeSnapshot(snapshot BackupVolumeSourceSnapshot) error {
 	previousID := ""
 	for _, service := range snapshot.Services {
 		if validateStableID(ids.KindService, service.ServiceID) != nil ||
-			service.ServiceRevision <= 0 ||
+			service.ServiceRevision < 0 ||
 			!validBackupServiceRuntimeIntent(service.PriorIntent) ||
 			(previousID != "" && service.ServiceID <= previousID) {
 			return invalidBackupRuntimeRecord("volume service snapshots are invalid")

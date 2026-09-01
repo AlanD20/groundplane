@@ -123,7 +123,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 		{Key: deletionTombstoneKey(string(DeletionTargetScript), scriptID)},
 		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: serviceKey(target.Record.Desired.ID), ModRevision: target.Revision},
+		serviceDesiredCondition(target),
 		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID)},
 		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID)},
 		{Key: deletionTombstoneKey("service", target.Record.Desired.ID)},

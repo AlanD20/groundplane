@@ -458,6 +458,9 @@ func (service *serviceMutationService) removeServiceOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	if err := service.rejectComponentGeneratedServiceMutation(ctx, current.Record); err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	intentValue := serviceMutationIntent{
 		method: http.MethodDelete, route: serviceEditRoute,
 		environmentID: current.Record.EnvironmentID, serviceID: serviceID,
@@ -625,6 +628,9 @@ func (service *serviceMutationService) editServiceOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	if err := service.rejectComponentGeneratedServiceMutation(ctx, current.Record); err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	intent := serviceMutationIntent{
 		method:        http.MethodPatch,
 		route:         serviceEditRoute,
@@ -666,6 +672,20 @@ func (service *serviceMutationService) editServiceOnce(
 		serviceMutationAuditFromEdit(input), etcd.EnvironmentServiceMutationEdit,
 		http.StatusOK, locator, evidence,
 	)
+}
+
+func (service *serviceMutationService) rejectComponentGeneratedServiceMutation(
+	ctx context.Context,
+	record etcd.ServiceRecord,
+) error {
+	projection, found, err := service.repository.GetEnvironmentComposeProjection(ctx, record.EnvironmentID)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return errs.New(errs.KindStateConflict, "Service desired projection is missing")
+	}
+	return rejectComponentGeneratedServiceTarget(projection.Record, record.Desired.ID)
 }
 
 func (service *serviceMutationService) serviceHierarchy(

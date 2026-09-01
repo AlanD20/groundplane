@@ -491,7 +491,7 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 			dynamic.add(attachFactsKey(source.TargetID))
 			dynamic.add(projectKey(snapshot.BackingProjectID))
 			dynamic.add(environmentKey(snapshot.BackingEnvironmentID))
-			dynamic.add(serviceKey(snapshot.BackingServiceID))
+			dynamic.add(environmentBlueprintHeadKey(snapshot.BackingEnvironmentID))
 		case BackupRuntimeSourceVolume:
 			snapshot := source.Snapshot.Volume
 			if snapshot == nil {
@@ -500,7 +500,7 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 			dynamic.add(environmentBlueprintHeadKey(snapshot.EnvironmentID))
 			dynamic.add(environmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID))
 			for _, service := range snapshot.Services {
-				dynamic.add(serviceKey(service.ServiceID))
+				dynamic.add(serviceRuntimeKey(service.ServiceID))
 			}
 		case BackupRuntimeSourceConfig:
 			if source.Snapshot.Config == nil {
@@ -682,7 +682,7 @@ func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 			result.Values[dynamic.index[attachFactsKey(source.TargetID)]],
 			result.Values[dynamic.index[projectKey(snapshot.BackingProjectID)]],
 			result.Values[dynamic.index[environmentKey(snapshot.BackingEnvironmentID)]],
-			result.Values[dynamic.index[serviceKey(snapshot.BackingServiceID)]],
+			result.Values[dynamic.index[environmentBlueprintHeadKey(snapshot.BackingEnvironmentID)]],
 		}
 		return validateBackupPostgresPublicationEvidence(keys, source, *snapshot)
 	case BackupRuntimeSourceVolume:
@@ -697,7 +697,7 @@ func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 			result.Values[dynamic.index[environmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID)]],
 		)
 		for _, service := range snapshot.Services {
-			keys = append(keys, result.Values[dynamic.index[serviceKey(service.ServiceID)]])
+			keys = append(keys, result.Values[dynamic.index[serviceRuntimeKey(service.ServiceID)]])
 		}
 		return validateBackupVolumePublicationEvidence(keys, source, *snapshot)
 	case BackupRuntimeSourceConfig:
