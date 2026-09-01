@@ -153,7 +153,9 @@ func resetTransactionPreparation(root *os.Root, staging string) error {
 }
 
 func validPreparationEntry(name string) bool {
-	for _, target := range []string{"request.pb", "candidate", "previous", "previous.absent"} {
+	for _, target := range []string{
+		"request.pb", "candidate", "previous", "previous.absent", "previous.owner", "previous.owner.absent",
+	} {
 		if name == target {
 			return true
 		}

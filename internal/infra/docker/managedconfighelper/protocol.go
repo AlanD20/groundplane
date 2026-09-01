@@ -11,7 +11,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"syscall"
 	"unicode/utf8"
 
 	"golang.org/x/sys/unix"
@@ -152,9 +151,34 @@ func publish(
 		return nil, err
 	}
 	defer clear(previous)
+	_, ownerExists, err := readTargetOwner(root, request.RelativePath)
+	if err != nil {
+		return nil, err
+	}
 	if len(request.ExpectedPreviousSha256) == 0 {
+		if ownerExists {
+			return nil, errs.New(errs.KindStateConflict, "managed-config target ownership changed")
+		}
 		if existed {
-			return nil, errs.New(errs.KindStateConflict, "managed-config predecessor changed")
+			if !digestEqual(previous, request.Sha256) {
+				return nil, errs.New(errs.KindStateConflict, "managed-config predecessor changed")
+			}
+			if err := prepareTransaction(ctx, root, tx, request, nil, false); err != nil {
+				return nil, err
+			}
+			if err := writeTargetOwner(ctx, root, request.RelativePath, request.TransactionId); err != nil {
+				return nil, err
+			}
+			if err := writeAtomic(ctx, root, path.Join(tx, "published"), []byte("published\n"), 0o600); err != nil {
+				return nil, err
+			}
+			return responseFor(
+				root,
+				request,
+				nil,
+				false,
+				agentpb.ManagedConfigReplayDisposition_MANAGED_CONFIG_REPLAY_DISPOSITION_RECOVERED,
+			)
 		}
 	} else {
 		digest := sha256.Sum256(previous)
@@ -166,6 +190,9 @@ func publish(
 		return nil, err
 	}
 	if err := writeAtomic(ctx, root, request.RelativePath, request.Content, 0o644); err != nil {
+		return nil, err
+	}
+	if err := writeTargetOwner(ctx, root, request.RelativePath, request.TransactionId); err != nil {
 		return nil, err
 	}
 	if err := writeAtomic(ctx, root, path.Join(tx, "published"), []byte("published\n"), 0o600); err != nil {
@@ -222,6 +249,23 @@ func prepareTransaction(
 	); err != nil {
 		return err
 	}
+	previousOwner, previousOwnerExists, err := readTargetOwner(root, request.RelativePath)
+	if err != nil {
+		return err
+	}
+	if previousOwnerExists {
+		if err := writeAtomic(ctx, root, path.Join(staging, "previous.owner"), []byte(previousOwner), 0o600); err != nil {
+			return err
+		}
+	} else if err := writeAtomic(
+		ctx,
+		root,
+		path.Join(staging, "previous.owner.absent"),
+		[]byte("absent\n"),
+		0o600,
+	); err != nil {
+		return err
+	}
 	if err := syncDirectory(root, staging); err != nil {
 		return err
 	}
@@ -250,13 +294,22 @@ func replayPublish(
 		return nil, err
 	}
 	defer clear(previous)
+	previousOwner, previousOwnerExists, err := readPreviousOwner(root, tx)
+	if err != nil {
+		return nil, err
+	}
 	live, liveExists, err := readRegular(root, request.RelativePath)
 	if err != nil {
 		return nil, err
 	}
 	defer clear(live)
+	owner, ownerExists, err := readTargetOwner(root, request.RelativePath)
+	if err != nil {
+		return nil, err
+	}
 	if committed {
-		if !exists(root, path.Join(tx, "published")) || !liveExists || !digestEqual(live, request.Sha256) {
+		if !exists(root, path.Join(tx, "published")) || !liveExists || !digestEqual(live, request.Sha256) ||
+			!targetOwnerMatches(owner, ownerExists, request.TransactionId, true) {
 			return nil, errs.New(errs.KindStateConflict, "committed managed-config transaction diverged")
 		}
 		return responseFor(
@@ -265,10 +318,16 @@ func replayPublish(
 		)
 	}
 	disposition := agentpb.ManagedConfigReplayDisposition_MANAGED_CONFIG_REPLAY_DISPOSITION_EXACT_REPLAY
-	if !liveExists || !digestEqual(live, request.Sha256) {
-		if liveExists != existed || liveExists && !bytesEqual(live, previous) {
-			return nil, errs.New(errs.KindStateConflict, "managed-config live target diverged during recovery")
+	candidateLive := liveExists && digestEqual(live, request.Sha256)
+	previousLive := liveExists == existed && (!liveExists || bytesEqual(live, previous))
+	switch {
+	case candidateLive && targetOwnerMatches(owner, ownerExists, request.TransactionId, true):
+	case candidateLive && targetOwnerMatches(owner, ownerExists, previousOwner, previousOwnerExists):
+		if err := writeTargetOwner(ctx, root, request.RelativePath, request.TransactionId); err != nil {
+			return nil, err
 		}
+		disposition = agentpb.ManagedConfigReplayDisposition_MANAGED_CONFIG_REPLAY_DISPOSITION_RECOVERED
+	case previousLive && targetOwnerMatches(owner, ownerExists, previousOwner, previousOwnerExists):
 		candidate, found, readErr := readRegular(root, path.Join(tx, "candidate"))
 		if readErr != nil || !found || !digestEqual(candidate, request.Sha256) {
 			clear(candidate)
@@ -279,7 +338,15 @@ func replayPublish(
 		if err != nil {
 			return nil, err
 		}
+		if err := writeTargetOwner(ctx, root, request.RelativePath, request.TransactionId); err != nil {
+			return nil, err
+		}
 		disposition = agentpb.ManagedConfigReplayDisposition_MANAGED_CONFIG_REPLAY_DISPOSITION_RECOVERED
+	default:
+		if !candidateLive && !previousLive {
+			return nil, errs.New(errs.KindStateConflict, "managed-config live target diverged during recovery")
+		}
+		return nil, errs.New(errs.KindStateConflict, "managed-config target ownership changed during recovery")
 	}
 	if !exists(root, path.Join(tx, "published")) {
 		if err := writeAtomic(ctx, root, path.Join(tx, "published"), []byte("published\n"), 0o600); err != nil {
@@ -306,6 +373,10 @@ func finalize(
 		return nil, err
 	}
 	defer clear(previous)
+	previousOwner, previousOwnerExists, err := readPreviousOwner(root, tx)
+	if err != nil {
+		return nil, err
+	}
 	marker, opposite := "rolledback", "committed"
 	if commit {
 		marker, opposite = "committed", "rolledback"
@@ -328,20 +399,24 @@ func finalize(
 			return nil, readErr
 		}
 		defer clear(live)
-		if !found || !digestEqual(live, request.Sha256) {
+		owner, ownerExists, ownerErr := readTargetOwner(root, request.RelativePath)
+		if ownerErr != nil {
+			return nil, ownerErr
+		}
+		if !found || !digestEqual(live, request.Sha256) ||
+			!targetOwnerMatches(owner, ownerExists, request.TransactionId, true) {
 			return nil, errs.New(errs.KindStateConflict, "managed-config candidate is not live")
 		}
-	} else if existed {
-		if err := writeAtomic(ctx, root, request.RelativePath, previous, 0o644); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := root.Remove(request.RelativePath); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, errs.Wrap(errs.KindInternal, err)
-		}
-		if err := syncDirectory(root, path.Dir(request.RelativePath)); err != nil {
-			return nil, err
-		}
+	} else if err := rollback(
+		ctx,
+		root,
+		request,
+		previous,
+		existed,
+		previousOwner,
+		previousOwnerExists,
+	); err != nil {
+		return nil, err
 	}
 	if err := writeAtomic(ctx, root, path.Join(tx, marker), []byte(marker+"\n"), 0o600); err != nil {
 		return nil, err
@@ -353,79 +428,6 @@ func finalize(
 		existed,
 		agentpb.ManagedConfigReplayDisposition_MANAGED_CONFIG_REPLAY_DISPOSITION_APPLIED,
 	)
-}
-
-func responseFor(
-	root *os.Root,
-	request *agentpb.ManagedConfigHelperRequest,
-	previous []byte,
-	previousExists bool,
-	disposition agentpb.ManagedConfigReplayDisposition,
-) (*agentpb.ManagedConfigHelperResponse, error) {
-	response := &agentpb.ManagedConfigHelperResponse{
-		Schema:        SchemaVersion,
-		TransactionId: request.TransactionId,
-		Operation:     request.Operation,
-		Disposition:   disposition,
-	}
-	if previousExists {
-		digest := sha256.Sum256(previous)
-		response.PreviousSha256 = append([]byte(nil), digest[:]...)
-	}
-	live, found, err := readRegular(root, request.RelativePath)
-	if err != nil {
-		return nil, err
-	}
-	defer clear(live)
-	if found {
-		digest := sha256.Sum256(live)
-		response.LiveSha256 = append([]byte(nil), digest[:]...)
-		file, openErr := root.Open(request.RelativePath)
-		if openErr != nil {
-			return nil, errs.Wrap(errs.KindInternal, openErr)
-		}
-		info, statErr := file.Stat()
-		closeErr := file.Close()
-		if statErr != nil || closeErr != nil {
-			return nil, errs.Wrap(errs.KindInternal, errors.Join(statErr, closeErr))
-		}
-		if stat, ok := info.Sys().(*syscall.Stat_t); ok {
-			response.LiveDevice, response.LiveInode = uint64(stat.Dev), stat.Ino
-		}
-	}
-	return response, nil
-}
-
-func readManifest(root *os.Root, tx string) (*agentpb.ManagedConfigHelperRequest, error) {
-	encoded, found, err := readRegular(root, path.Join(tx, "request.pb"))
-	if err != nil || !found {
-		return nil, errs.New(errs.KindStateConflict, "managed-config transaction manifest is missing")
-	}
-	defer clear(encoded)
-	manifest := &agentpb.ManagedConfigHelperRequest{}
-	if err := proto.Unmarshal(encoded, manifest); err != nil {
-		return nil, errs.New(errs.KindStateConflict, "managed-config transaction manifest is invalid")
-	}
-	return manifest, nil
-}
-func readPrevious(root *os.Root, tx string) ([]byte, bool, error) {
-	if exists(root, path.Join(tx, "previous.absent")) {
-		return nil, false, nil
-	}
-	value, found, err := readRegular(root, path.Join(tx, "previous"))
-	if err != nil || !found {
-		return nil, false, errs.New(errs.KindStateConflict, "managed-config predecessor is missing")
-	}
-	return value, true, nil
-}
-func sameTransaction(manifest, request *agentpb.ManagedConfigHelperRequest) bool {
-	return manifest != nil && request != nil && manifest.Schema == request.Schema &&
-		manifest.ArtifactId == request.ArtifactId &&
-		manifest.RelativePath == request.RelativePath &&
-		manifest.TransactionId == request.TransactionId &&
-		manifest.Generation == request.Generation &&
-		subtle.ConstantTimeCompare(manifest.Sha256, request.Sha256) == 1 &&
-		subtle.ConstantTimeCompare(manifest.ExpectedPreviousSha256, request.ExpectedPreviousSha256) == 1
 }
 
 func validateRequest(request *agentpb.ManagedConfigHelperRequest) (*agentpb.ManagedConfigHelperRequest, error) {

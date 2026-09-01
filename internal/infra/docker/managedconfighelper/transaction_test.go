@@ -63,6 +63,112 @@ func TestPublishRejectsExistingTargetWhenExpectedPredecessorIsAbsent(t *testing.
 	}
 }
 
+// Rationale: clean first activation may recover exact candidate bytes left live
+// before transaction acknowledgement, without inventing a predecessor artifact.
+func TestPublishRecoversExactLiveCandidateWithoutPredecessor(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "coredns"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	candidate := []byte("forward . 8.8.8.8\n")
+	live := filepath.Join(root, "coredns", "Corefile")
+	if err := os.WriteFile(live, candidate, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	request := transactionRequest("mct_absentrecover", candidate)
+
+	response, err := applyAt(context.Background(), root, request)
+	if err != nil ||
+		response.GetDisposition() != agentpb.ManagedConfigReplayDisposition_MANAGED_CONFIG_REPLAY_DISPOSITION_RECOVERED ||
+		len(response.GetPreviousSha256()) != 0 {
+		t.Fatalf("recover exact candidate = %#v, %v", response, err)
+	}
+	replayed, err := applyAt(context.Background(), root, request)
+	if err != nil ||
+		replayed.GetDisposition() != agentpb.ManagedConfigReplayDisposition_MANAGED_CONFIG_REPLAY_DISPOSITION_EXACT_REPLAY ||
+		len(replayed.GetPreviousSha256()) != 0 {
+		t.Fatalf("replay recovered candidate = %#v, %v", replayed, err)
+	}
+	rollback := terminalRequest(request, agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_ROLLBACK)
+	if _, err := applyAt(context.Background(), root, rollback); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := applyAt(context.Background(), root, rollback); err != nil {
+		t.Fatalf("rollback replay = %v", err)
+	}
+	if _, err := os.Stat(live); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("rolled-back recovered target stat error = %v", err)
+	}
+}
+
+// Rationale: exact candidate bytes do not authorize a second Task attempt to
+// adopt and later remove the first transaction's committed managed file.
+func TestDistinctTransactionCannotAdoptOwnedExactCandidate(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "coredns"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	candidate := []byte("forward . 8.8.8.8\n")
+	live := filepath.Join(root, "coredns", "Corefile")
+	if err := os.WriteFile(live, candidate, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	owner := transactionRequest("mct_absentowner", candidate)
+	if _, err := applyAt(context.Background(), root, owner); err != nil {
+		t.Fatal(err)
+	}
+	challenger := transactionRequest("mct_absentchallenger", candidate)
+	if _, err := applyAt(context.Background(), root, challenger); err == nil {
+		t.Fatal("distinct transaction adopted an owned exact candidate")
+	}
+	if _, err := applyAt(context.Background(), root, terminalRequest(
+		owner,
+		agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_COMMIT,
+	)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := applyAt(context.Background(), root, terminalRequest(
+		challenger,
+		agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_ROLLBACK,
+	)); err == nil {
+		t.Fatal("unpublished challenger rollback unexpectedly succeeded")
+	}
+	if value := mustRead(t, live); string(value) != string(candidate) {
+		t.Fatalf("committed owner candidate = %q", value)
+	}
+}
+
+// Rationale: compensation may remove an absent-predecessor candidate only
+// while the exact bytes published by that transaction remain live.
+func TestRollbackRejectsChangedLiveTargetAfterExactCandidateRecovery(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "coredns"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	candidate := []byte("forward . 8.8.8.8\n")
+	live := filepath.Join(root, "coredns", "Corefile")
+	if err := os.WriteFile(live, candidate, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	request := transactionRequest("mct_changedrollback", candidate)
+	if _, err := applyAt(context.Background(), root, request); err != nil {
+		t.Fatal(err)
+	}
+	newer := []byte("forward . 9.9.9.9\n")
+	if err := os.WriteFile(live, newer, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := applyAt(context.Background(), root, terminalRequest(
+		request,
+		agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_ROLLBACK,
+	)); err == nil {
+		t.Fatal("rollback unexpectedly replaced a changed live target")
+	}
+	if value := mustRead(t, live); string(value) != string(newer) {
+		t.Fatalf("newer live target changed to %q", value)
+	}
+}
+
 // Rationale: replacement is authorized only by the exact digest of an existing regular predecessor.
 func TestPublishSucceedsWithExactExistingPredecessorDigest(t *testing.T) {
 	root := t.TempDir()
