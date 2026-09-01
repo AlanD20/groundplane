@@ -715,6 +715,7 @@ const (
 	PlanOperation_PLAN_OPERATION_BACKUP             PlanOperation = 12
 	PlanOperation_PLAN_OPERATION_BACKUP_PRUNE       PlanOperation = 13
 	PlanOperation_PLAN_OPERATION_SCRIPT             PlanOperation = 14
+	PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY    PlanOperation = 15
 )
 
 // Enum value maps for PlanOperation.
@@ -735,6 +736,7 @@ var (
 		12: "PLAN_OPERATION_BACKUP",
 		13: "PLAN_OPERATION_BACKUP_PRUNE",
 		14: "PLAN_OPERATION_SCRIPT",
+		15: "PLAN_OPERATION_BLUEPRINT_APPLY",
 	}
 	PlanOperation_value = map[string]int32{
 		"PLAN_OPERATION_UNSPECIFIED":        0,
@@ -752,6 +754,7 @@ var (
 		"PLAN_OPERATION_BACKUP":             12,
 		"PLAN_OPERATION_BACKUP_PRUNE":       13,
 		"PLAN_OPERATION_SCRIPT":             14,
+		"PLAN_OPERATION_BLUEPRINT_APPLY":    15,
 	}
 )
 
@@ -14528,7 +14531,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"$COMPONENT_LIFECYCLE_MODE_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fCOMPONENT_LIFECYCLE_MODE_UPDATE\x10\x01\x12#\n" +
 	"\x1fCOMPONENT_LIFECYCLE_MODE_ENABLE\x10\x02\x12$\n" +
-	" COMPONENT_LIFECYCLE_MODE_DISABLE\x10\x03*\xc7\x03\n" +
+	" COMPONENT_LIFECYCLE_MODE_DISABLE\x10\x03*\xeb\x03\n" +
 	"\rPlanOperation\x12\x1e\n" +
 	"\x1aPLAN_OPERATION_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18PLAN_OPERATION_RECONCILE\x10\x01\x12\x19\n" +
@@ -14545,7 +14548,8 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x15PLAN_OPERATION_DETACH\x10\v\x12\x19\n" +
 	"\x15PLAN_OPERATION_BACKUP\x10\f\x12\x1f\n" +
 	"\x1bPLAN_OPERATION_BACKUP_PRUNE\x10\r\x12\x19\n" +
-	"\x15PLAN_OPERATION_SCRIPT\x10\x0e*{\n" +
+	"\x15PLAN_OPERATION_SCRIPT\x10\x0e\x12\"\n" +
+	"\x1ePLAN_OPERATION_BLUEPRINT_APPLY\x10\x0f*{\n" +
 	"\x10ComposeOwnerKind\x12\"\n" +
 	"\x1eCOMPOSE_OWNER_KIND_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eCOMPOSE_OWNER_KIND_ENVIRONMENT\x10\x01\x12\x1f\n" +

@@ -275,10 +275,14 @@ abandon the exact staged claim with a bounded context independent of request
 cancellation; unknown publication outcomes remain unresolved until durable
 idempotency evidence identifies the winner. The closed internal Release
 operation vocabulary now includes `blueprint_apply`; it does not create a new
-operator capability or Task. Blueprint apply still publishes Script desired
-state without executing hooks; candidate Release publication and staged
-Blueprint post-deploy execution are the next C21 lane required by the private
-clean-start topology.
+operator capability or Task. Blueprint execution plans now carry a distinct
+sealed `blueprint_apply` operation across the Controller/Agent boundary;
+ordinary reconciliation cannot authorize Script execution, and every
+Blueprint post-deploy Script must follow the exact candidate Compose apply with
+matching Service, Release, and image authority. Blueprint apply still publishes
+Script desired state without creating candidate Releases or executing hooks;
+candidate Release publication and staged Blueprint post-deploy execution are
+the next C21 lane required by the private clean-start topology.
 
 The desired-topology landing candidate cleanly replaces the transitional flat
 Zone and topology projection authority. Environment revisions now carry the

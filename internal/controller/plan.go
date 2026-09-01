@@ -480,7 +480,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if stepIndex != len(task.Steps) {
 		return nil, errs.New(errs.KindInternal, "durable Blueprint Task step order is invalid")
 	}
-	operation := agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
+	operation := agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY
 	if hasHealthStep {
 		operation = agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE
 	}

@@ -1196,8 +1196,11 @@ func operationMatchesTask(operation agentpb.PlanOperation, task etcd.TaskRecord)
 	case etcd.TaskDetach:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_DETACH
 	case etcd.TaskUpdate:
+		if operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY {
+			return ids.Validate(ids.KindEnvironment, task.Target) == nil
+		}
 		if operation == agentpb.PlanOperation_PLAN_OPERATION_RECONCILE {
-			return true
+			return ids.Validate(ids.KindEnvironment, task.Target) != nil
 		}
 		if task.Params[etcd.TaskResourceKindParam] == etcd.TaskResourceComponent {
 			return operation == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY

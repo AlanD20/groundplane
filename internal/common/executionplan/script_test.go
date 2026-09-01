@@ -3,10 +3,13 @@ package executionplan
 import (
 	"bytes"
 	"crypto/sha256"
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -57,6 +60,128 @@ func TestSealManualScriptPlanRejectsOwnershipLabelOutsideClosedSet(t *testing.T)
 	if _, err := Seal(plan); err == nil {
 		t.Fatal("Seal(extra ownership label) error = nil")
 	}
+}
+
+// Rationale: one immutable Environment Blueprint candidate may run only its
+// post-deploy Script after the candidate procedure and against the candidate
+// Release already bound into the exact Compose artifact.
+func TestSealAcceptsBlueprintCandidatePostDeployScript(t *testing.T) {
+	sealed, err := Seal(validBlueprintScriptReconcilePlan(t))
+	if err != nil {
+		t.Fatalf("Seal(Blueprint candidate Script) error = %v", err)
+	}
+	if _, err := Validate(sealed); err != nil {
+		t.Fatalf("Validate(Blueprint candidate Script) error = %v", err)
+	}
+}
+
+// Rationale: permitting the typed Blueprint sequence must not grant Script
+// execution to another reconcile target or to a candidate with no Release binding.
+func TestSealRejectsNonBlueprintAndUnboundReconcileScripts(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mutate func(*agentpb.ExecutionPlan)
+	}{
+		{name: "ordinary reconcile operation", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.Operation = agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
+		}},
+		{name: "unbound candidate Release", mutate: func(plan *agentpb.ExecutionPlan) {
+			for _, label := range plan.Artifacts[0].Services[0].ExpectedLabels {
+				if label.Key == labelReleaseID {
+					label.Value = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+				}
+			}
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			plan := validBlueprintScriptReconcilePlan(t)
+			test.mutate(plan)
+			if _, err := Seal(plan); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+				t.Fatalf("Seal(invalid reconcile Script) error = %v, want validation.failed", err)
+			}
+		})
+	}
+}
+
+// Rationale: an unrelated artifact must not authorize a Script when the exact
+// predecessor ComposeApply selects a different artifact without the candidate.
+func TestSealRejectsBlueprintScriptAuthorizedByDecoyArtifact(t *testing.T) {
+	plan := validBlueprintScriptReconcilePlan(t)
+	decoy := proto.Clone(plan.Artifacts[0]).(*agentpb.ComposeArtifact)
+	decoy.ArtifactId = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	decoy.Services = nil
+	plan.Artifacts = append(plan.Artifacts, decoy)
+	plan.Steps[0].GetComposeApply().ArtifactId = decoy.ArtifactId
+
+	if _, err := Seal(plan); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("Seal(decoy Blueprint artifact) error = %v, want validation.failed", err)
+	}
+}
+
+// Rationale: a correctly rehashed forged ordinary reconcile plan must fail
+// semantic validation, not merely fail because its digest is stale.
+func TestValidateRejectsForgedOrdinaryReconcileScript(t *testing.T) {
+	sealed, err := Seal(validBlueprintScriptReconcilePlan(t))
+	if err != nil {
+		t.Fatalf("Seal(Blueprint candidate Script) error = %v", err)
+	}
+	sealed.Operation = agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
+	sealed.PlanHash = nil
+	encoded, err := marshalHashInput(sealed)
+	if err != nil {
+		t.Fatalf("marshal forged reconcile hash input: %v", err)
+	}
+	digest := sha256.Sum256(encoded)
+	sealed.PlanHash = digest[:]
+	if _, err := Validate(sealed); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("Validate(forged ordinary reconcile Script) error = %v, want validation.failed", err)
+	}
+}
+
+func validBlueprintScriptReconcilePlan(t *testing.T) *agentpb.ExecutionPlan {
+	t.Helper()
+	plan := validManualScriptPlan(t)
+	run := plan.Steps[0].GetRunScript()
+	snapshot := plan.ScriptRunnerSnapshots[0]
+	applyStepID := "step_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	yaml := []byte("services:\n  api:\n    image: registry.example/app@sha256:" + strings.Repeat("a", 64) + "\n")
+	yamlDigest := sha256.Sum256(yaml)
+	artifact := &agentpb.ComposeArtifact{
+		ArtifactId:  "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		OwnerKind:   agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		OwnerId:     run.EnvironmentId,
+		ProjectName: "gp-" + strings.ToLower(run.EnvironmentId),
+		AuthorizedVolumeDir: "/var/lib/groundplane/volumes/tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
+			"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/" + run.EnvironmentId,
+		CanonicalYaml: yaml,
+		YamlSha256:    yamlDigest[:],
+		Services: []*agentpb.ComposeService{{
+			ServiceId: run.ServiceId, ComposeName: "api", ExpectedReplicas: 1,
+			ImageReference: snapshot.ImageReference, ImageIndexDigest: append([]byte(nil), snapshot.ImageDigest...),
+			ImageChildDigest: bytes.Repeat([]byte{0xbb}, sha256.Size),
+			ExpectedLabels: []*agentpb.LabelPair{
+				{Key: labelEnvironmentID, Value: run.EnvironmentId},
+				{Key: labelKind, Value: "service"},
+				{Key: labelManaged, Value: "true"},
+				{Key: labelPlanID, Value: plan.PlanId},
+				{Key: labelReleaseID, Value: run.ReleaseId},
+				{Key: labelRenderGen, Value: "7"},
+				{Key: labelServiceID, Value: run.ServiceId},
+			},
+		}},
+	}
+	plan.Operation = agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY
+	plan.TargetId = run.EnvironmentId
+	plan.Artifacts = []*agentpb.ComposeArtifact{artifact}
+	plan.Steps[0].Policy = agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_POST_HOOK
+	plan.Steps[0].PrerequisiteStepId = applyStepID
+	plan.Steps = append([]*agentpb.ExecutionStep{{
+		StepId: applyStepID, TimeoutSeconds: 30,
+		Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
+			ArtifactId: artifact.ArtifactId, FullReconcile: true,
+		}},
+	}}, plan.Steps...)
+	return plan
 }
 
 func validManualScriptPlan(t *testing.T) *agentpb.ExecutionPlan {

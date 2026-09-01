@@ -1,15 +1,25 @@
 package executionplan
 
 import (
+	"bytes"
+	"crypto/sha256"
+
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 const maximumReleaseScriptExecutions = 16
 
-func validateReleaseScriptPlan(plan *agentpb.ExecutionPlan) error {
-	if plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_DEPLOY &&
-		plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK {
+func validateReleaseScriptPlan(
+	plan *agentpb.ExecutionPlan,
+	artifacts map[string]*agentpb.ComposeArtifact,
+) error {
+	releaseOperation := plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_DEPLOY ||
+		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK
+	blueprintApply := plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
+		ids.Validate(ids.KindEnvironment, plan.TargetId) == nil
+	if !releaseOperation && !blueprintApply {
 		return errs.New(errs.KindValidationFailed, "release Script plan operation is invalid")
 	}
 	runs := make([]*agentpb.ExecutionStep, 0, len(plan.ScriptBodyArtifacts))
@@ -55,6 +65,15 @@ func validateReleaseScriptPlan(plan *agentpb.ExecutionPlan) error {
 	if bodyBytes > 1<<20 {
 		return errs.New(errs.KindValidationFailed, "release Script bodies exceed the operation limit")
 	}
+	var candidateApply *agentpb.ComposeApply
+	var candidateArtifact *agentpb.ComposeArtifact
+	if blueprintApply {
+		var err error
+		candidateApply, candidateArtifact, err = blueprintScriptCandidateArtifact(plan, runs, artifacts)
+		if err != nil {
+			return err
+		}
+	}
 	seen := make(map[string]struct{}, len(runs))
 	for _, step := range runs {
 		run := step.GetRunScript()
@@ -67,12 +86,20 @@ func validateReleaseScriptPlan(plan *agentpb.ExecutionPlan) error {
 		if snapshot == nil || body == nil || projections[snapshot.SnapshotId] == nil {
 			return errs.New(errs.KindValidationFailed, "release Script references are incomplete")
 		}
-		switch step.Policy {
-		case agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK,
-			agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_POST_HOOK,
-			agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FAILURE_HOOK:
-		default:
-			return errs.New(errs.KindValidationFailed, "release Script phase policy is invalid")
+		if blueprintApply {
+			if step.Policy != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_POST_HOOK ||
+				run.EnvironmentId != plan.TargetId ||
+				!blueprintCandidateReleaseBound(run, snapshot, candidateApply, candidateArtifact) {
+				return errs.New(errs.KindValidationFailed, "Blueprint Script candidate authority is invalid")
+			}
+		} else {
+			switch step.Policy {
+			case agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK,
+				agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_POST_HOOK,
+				agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FAILURE_HOOK:
+			default:
+				return errs.New(errs.KindValidationFailed, "release Script phase policy is invalid")
+			}
 		}
 		if err := validateManualScriptPlan(&agentpb.ExecutionPlan{
 			Schema: plan.Schema, PlanId: plan.PlanId, RenderGeneration: plan.RenderGeneration,
@@ -86,4 +113,59 @@ func validateReleaseScriptPlan(plan *agentpb.ExecutionPlan) error {
 		}
 	}
 	return nil
+}
+
+func blueprintScriptCandidateArtifact(
+	plan *agentpb.ExecutionPlan,
+	runs []*agentpb.ExecutionStep,
+	artifacts map[string]*agentpb.ComposeArtifact,
+) (*agentpb.ComposeApply, *agentpb.ComposeArtifact, error) {
+	firstRun := len(plan.Steps) - len(runs)
+	if firstRun == 0 {
+		return nil, nil, errs.New(errs.KindValidationFailed, "Blueprint Script procedure has no candidate prerequisite")
+	}
+	for index := firstRun; index < len(plan.Steps); index++ {
+		if plan.Steps[index].GetRunScript() == nil ||
+			plan.Steps[index].PrerequisiteStepId != plan.Steps[index-1].StepId {
+			return nil, nil, errs.New(errs.KindValidationFailed, "Blueprint Script procedure is not a chained suffix")
+		}
+	}
+	apply := plan.Steps[firstRun-1].GetComposeApply()
+	artifact := artifacts[apply.GetArtifactId()]
+	if apply == nil || artifact == nil ||
+		artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
+		artifact.GetOwnerId() != plan.GetTargetId() {
+		return nil, nil, errs.New(errs.KindValidationFailed, "Blueprint Script predecessor is not its candidate apply")
+	}
+	return apply, artifact, nil
+}
+
+func blueprintCandidateReleaseBound(
+	run *agentpb.RunScript,
+	snapshot *agentpb.ResolvedRunnerSnapshot,
+	apply *agentpb.ComposeApply,
+	artifact *agentpb.ComposeArtifact,
+) bool {
+	selected := apply.GetFullReconcile()
+	if !selected {
+		for _, serviceID := range apply.GetServiceIds() {
+			if serviceID == run.GetServiceId() {
+				selected = true
+				break
+			}
+		}
+	}
+	if !selected {
+		return false
+	}
+	for _, service := range artifact.GetServices() {
+		if service.GetServiceId() == run.GetServiceId() &&
+			expectedReleaseLabel(service) == run.GetReleaseId() &&
+			service.GetImageReference() == snapshot.GetImageReference() &&
+			bytes.Equal(service.GetImageIndexDigest(), snapshot.GetImageDigest()) &&
+			len(service.GetImageChildDigest()) == sha256.Size {
+			return true
+		}
+	}
+	return false
 }

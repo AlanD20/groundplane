@@ -150,12 +150,6 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 	if !validOperation(plan.Operation) {
 		return errs.New(errs.KindValidationFailed, "execution plan operation is unsupported")
 	}
-	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_DEPLOY ||
-		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK {
-		if err := validateReleaseScriptPlan(plan); err != nil {
-			return err
-		}
-	}
 	if err := validateAnyStableID(plan.TargetId); err != nil {
 		return errs.New(errs.KindValidationFailed, "execution plan target id is invalid")
 	}
@@ -207,6 +201,13 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 		}
 		artifacts[artifact.ArtifactId] = artifact
 	}
+	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_DEPLOY ||
+		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK ||
+		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY {
+		if err := validateReleaseScriptPlan(plan, artifacts); err != nil {
+			return err
+		}
+	}
 	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
 		if err := validateComponentApplyPlan(plan, artifacts); err != nil {
 			return err
@@ -228,7 +229,9 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 			return err
 		}
 		if procedure := step.GetAdapterProcedure(); procedure != nil &&
-			plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE && procedure.AttachId != plan.TargetId {
+			plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE &&
+			plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
+			procedure.AttachId != plan.TargetId {
 			return errs.New(errs.KindValidationFailed, "adapter procedure does not identify the plan target")
 		}
 		if remove := step.GetEnvironmentDirectoryRemove(); remove != nil && remove.EnvironmentId != plan.TargetId {
@@ -866,6 +869,7 @@ func validateStep(
 		apply := payload.ComponentApply
 		if apply == nil || (operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY &&
 			operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE &&
+			operation != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
 			operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE) {
 			return errs.New(errs.KindValidationFailed, "component apply payload is invalid")
 		}
@@ -895,8 +899,9 @@ func validateStep(
 		return nil
 	case *agentpb.ExecutionStep_RunScript:
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_DEPLOY &&
-			operation != agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK {
-			return errs.New(errs.KindValidationFailed, "release Script step requires a release operation")
+			operation != agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK &&
+			operation != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY {
+			return errs.New(errs.KindValidationFailed, "Script step requires release or Blueprint reconcile authority")
 		}
 		return nil
 	case *agentpb.ExecutionStep_BackupArtifactPrune:
@@ -1365,13 +1370,15 @@ func validateAdapterProcedure(operation agentpb.PlanOperation, procedure *agentp
 	switch procedure.Phase {
 	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_PROVISION:
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_ATTACH &&
-			operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE || len(procedure.Password) == 0 ||
+			operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE &&
+			operation != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY || len(procedure.Password) == 0 ||
 			!validAdapterIdentity(procedure.Database, false) || procedure.GrantOn != "" {
 			return errs.New(errs.KindValidationFailed, "adapter provision procedure is invalid")
 		}
 	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_GRANT:
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_ATTACH &&
-			operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE || len(procedure.Password) != 0 ||
+			operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE &&
+			operation != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY || len(procedure.Password) != 0 ||
 			procedure.Database != "" || !validAdapterIdentity(procedure.GrantOn, true) {
 			return errs.New(errs.KindValidationFailed, "adapter grant procedure is invalid")
 		}
@@ -1618,6 +1625,7 @@ func validateID(kind ids.Kind, value string) error {
 func validOperation(operation agentpb.PlanOperation) bool {
 	switch operation {
 	case agentpb.PlanOperation_PLAN_OPERATION_RECONCILE,
+		agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,
 		agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
 		agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK,
 		agentpb.PlanOperation_PLAN_OPERATION_START,

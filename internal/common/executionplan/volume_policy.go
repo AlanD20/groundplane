@@ -108,6 +108,7 @@ func validManagedVolumeComposeKey(value string) bool {
 func operationCreatesManagedVolumes(operation agentpb.PlanOperation) bool {
 	switch operation {
 	case agentpb.PlanOperation_PLAN_OPERATION_RECONCILE,
+		agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,
 		agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE,
 		agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
 		agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK,

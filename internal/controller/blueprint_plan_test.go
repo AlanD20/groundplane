@@ -85,7 +85,7 @@ func TestTaskPlanResolverRebuildsBlueprintComposeProcedure(t *testing.T) {
 		t.Fatalf("ResolveExecutionPlan(replay) error = %v", err)
 	}
 	if !bytes.Equal(first.PlanHash, second.PlanHash) || len(first.Artifacts) != 1 || len(first.Steps) != 3 ||
-		first.Operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE ||
+		first.Operation != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY ||
 		first.Steps[0].GetMaterializeFile() == nil ||
 		first.Steps[1].GetManagedVolumeDirectoriesEnsure() == nil ||
 		first.Steps[2].GetComposeApply() == nil || !first.Steps[2].GetComposeApply().FullReconcile {
@@ -121,7 +121,7 @@ func TestTaskPlanResolverRebuildsProfileOnlyBlueprintAsReconcileToEmpty(t *testi
 		t.Fatalf("ResolveExecutionPlan() error = %v", err)
 	}
 	apply := plan.Steps[len(plan.Steps)-1].GetComposeApply()
-	if plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE || apply == nil ||
+	if plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY || apply == nil ||
 		!apply.FullReconcile || apply.ArtifactId != artifact.ArtifactId {
 		t.Fatalf("profile-only Blueprint plan = %#v", plan)
 	}

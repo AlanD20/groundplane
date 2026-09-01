@@ -3,10 +3,12 @@ package controller
 import (
 	"bytes"
 	"crypto/sha256"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -36,6 +38,19 @@ func TestBuildPlanRejectsIncompleteTypedInput(t *testing.T) {
 	input.Operation = agentpb.PlanOperation_PLAN_OPERATION_UNSPECIFIED
 	if _, err := BuildPlan(input); err == nil {
 		t.Fatal("BuildPlan() error = nil, want invalid operation rejection")
+	}
+}
+
+// Rationale: a generic reconcile builder must not gain arbitrary Script
+// execution merely because its target happens to be a valid Environment.
+func TestBuildPlanRejectsOrdinaryReconcileRunScript(t *testing.T) {
+	input := validPlanBuildInput()
+	input.Operation = agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
+	input.TargetID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	input.Steps[0].Payload = &agentpb.ExecutionStep_RunScript{RunScript: &agentpb.RunScript{}}
+
+	if _, err := BuildPlan(input); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("BuildPlan(ordinary reconcile RunScript) error = %v, want validation.failed", err)
 	}
 }
 
