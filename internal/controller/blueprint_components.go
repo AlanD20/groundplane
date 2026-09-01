@@ -138,26 +138,10 @@ func ReconcileBlueprintComponents(
 		})
 		result.Effective = append(result.Effective, cloneBlueprintComponent(candidate))
 	}
-	if componentEnabled(result.Effective, core.ComponentKindEdgeCloudflare) &&
-		!componentEnabled(result.Effective, core.ComponentKindIngressCaddy) {
-		return BlueprintComponentChanges{}, errs.New(
-			errs.KindValidationFailed,
-			"Cloudflare Tunnel requires the Caddy Component to be enabled",
-		)
-	}
 	sort.Slice(result.Candidates, func(left int, right int) bool {
 		return result.Candidates[left].Current.ID < result.Candidates[right].Current.ID
 	})
 	return result, nil
-}
-
-func componentEnabled(components []core.Component, kind core.ComponentKind) bool {
-	for _, component := range components {
-		if component.Kind == kind {
-			return component.Enabled
-		}
-	}
-	return false
 }
 
 func validateBlueprintComponentSpec(
@@ -174,13 +158,13 @@ func validateBlueprintComponentSpec(
 			)
 		}
 		return core.ComponentKindIngressCaddy, nil
-	case core.ComponentCapabilityHTTPEdgeTransport:
+	case core.ComponentCapabilityEdgeTunnel:
 		if spec.Implementation != core.ComponentKindEdgeCloudflare || spec.Settings.ZoneID != "" ||
 			spec.ImplementationConfig.CaddyfileTemplate != "" ||
 			(spec.Enabled && spec.Settings.SecretID == "") {
 			return "", errs.New(
 				errs.KindValidationFailed,
-				"http-edge-transport must select Cloudflare Tunnel and provide secret_id while enabled",
+				"edge-tunnel must select Cloudflare Tunnel and provide secret_id while enabled",
 			)
 		}
 		return core.ComponentKindEdgeCloudflare, nil
@@ -199,7 +183,7 @@ func blueprintComponentConfig(kind core.ComponentKind, spec core.ComponentSpec) 
 			return core.ComponentConfig{}
 		}
 		return core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-			ZoneID: spec.Settings.ZoneID,
+			ZoneID:            spec.Settings.ZoneID,
 			CaddyfileTemplate: spec.ImplementationConfig.CaddyfileTemplate,
 		}}
 	case core.ComponentKindEdgeCloudflare:

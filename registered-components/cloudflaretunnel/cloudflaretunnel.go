@@ -7,10 +7,8 @@ import (
 )
 
 const (
-	ServiceName       = "cloudflare-tunnel"
-	RouterServiceName = "caddy"
-	OriginURL         = "http://caddy:80"
-	tokenName         = "TUNNEL_TOKEN"
+	ServiceName = "cloudflare-tunnel"
+	tokenName   = "TUNNEL_TOKEN"
 )
 
 var image = component.OCIImage{
@@ -33,25 +31,15 @@ var image = component.OCIImage{
 
 type Input struct {
 	GeneratedServiceID string
-	RouterOrigin       component.HTTPRouterOrigin
-	RouterNetworkName  string
 	SecretID           string
 }
 
 func Definition() (component.Definition, error) {
-	router, err := component.NewGrant(component.CapabilityHTTPRouter, component.OperationRead)
-	if err != nil {
-		return component.Definition{}, err
-	}
 	services, err := component.NewGrant(
 		component.CapabilityServices,
 		component.OperationRead,
 		component.OperationCreate,
 	)
-	if err != nil {
-		return component.Definition{}, err
-	}
-	networks, err := component.NewGrant(component.CapabilityNetworks, component.OperationRead, component.OperationBind)
 	if err != nil {
 		return component.Definition{}, err
 	}
@@ -65,34 +53,25 @@ func Definition() (component.Definition, error) {
 	}
 	return component.NewDefinition(component.DefinitionInput{
 		Implementation: "cloudflare-tunnel", ConfigVariant: "cloudflare-tunnel-v1",
-		Provides:    []component.Capability{component.CapabilityHTTPEdgeTransport},
-		Grants:      []component.Grant{router, services, networks, secrets},
+		Provides:    []component.Capability{component.CapabilityEdgeTunnel},
+		Grants:      []component.Grant{services, secrets},
 		OwnerScopes: []component.OwnerScope{component.OwnerScopeEnvironment},
 	})
 }
 
 func Plan(input Input) (component.EnvironmentPlan, error) {
-	if input.GeneratedServiceID == "" ||
-		input.RouterOrigin.ServiceName != RouterServiceName || input.RouterOrigin.URL != OriginURL ||
-		component.ValidateHTTPRouterOrigin(input.RouterOrigin) != nil ||
-		input.RouterNetworkName == "" || input.SecretID == "" {
+	if input.GeneratedServiceID == "" || input.SecretID == "" {
 		return component.EnvironmentPlan{}, fmt.Errorf("cloudflare tunnel: planner input is incomplete")
 	}
 	return component.EnvironmentPlan{Services: []component.ManagedService{
 		{
-			ID:          input.GeneratedServiceID,
-			Name:        ServiceName,
-			Image:       image,
-			NetworkMode: component.ManagedNetworkModeZones,
-			Command:     []string{"tunnel", "--no-autoupdate", "--url", input.RouterOrigin.URL, "run"},
-			Networks: []component.ManagedNetworkAttachment{
-				{Name: input.RouterNetworkName, Aliases: []string{ServiceName}},
-			},
-			Restart:  "unless-stopped",
-			Replicas: 1,
-			Dependencies: []component.ManagedDependency{
-				{ServiceName: input.RouterOrigin.ServiceName, Condition: "service_started"},
-			},
+			ID:                input.GeneratedServiceID,
+			Name:              ServiceName,
+			Image:             image,
+			NetworkMode:       component.ManagedNetworkModeDefault,
+			Command:           []string{"tunnel", "--no-autoupdate", "run"},
+			Restart:           "unless-stopped",
+			Replicas:          1,
 			SecretEnvironment: []component.ManagedSecretEnvironment{{Name: tokenName, SecretID: input.SecretID}},
 		},
 	}}, nil

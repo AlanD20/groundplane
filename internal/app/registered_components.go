@@ -203,10 +203,7 @@ func registeredEnvironmentComponentCatalog() ([]controller.EnvironmentComponentR
 	if err != nil {
 		return nil, err
 	}
-	cloudflareTunnel, err := registeredCloudflareTunnelEnvironmentComponent(
-		actionCatalog.Digest(),
-		[]controller.EnvironmentComponentRegistration{caddy},
-	)
+	cloudflareTunnel, err := registeredCloudflareTunnelEnvironmentComponent(actionCatalog.Digest())
 	if err != nil {
 		return nil, err
 	}

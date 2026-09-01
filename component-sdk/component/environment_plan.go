@@ -29,7 +29,7 @@ type HTTPRoute struct {
 }
 
 // HTTPRouterOrigin is the exact managed Service endpoint exposed by one HTTP
-// router provider to granted edge transports.
+// router provider to granted capability consumers.
 type HTTPRouterOrigin struct {
 	ServiceName string
 	URL         string
@@ -188,12 +188,13 @@ type ManagedService struct {
 type ManagedNetworkMode string
 
 const (
-	ManagedNetworkModeZones ManagedNetworkMode = "zones"
-	ManagedNetworkModeHost  ManagedNetworkMode = "host"
+	ManagedNetworkModeDefault ManagedNetworkMode = "default"
+	ManagedNetworkModeZones   ManagedNetworkMode = "zones"
+	ManagedNetworkModeHost    ManagedNetworkMode = "host"
 )
 
 func (mode ManagedNetworkMode) Valid() bool {
-	return mode == ManagedNetworkModeZones || mode == ManagedNetworkModeHost
+	return mode == ManagedNetworkModeDefault || mode == ManagedNetworkModeZones || mode == ManagedNetworkModeHost
 }
 
 type ManagedFile struct {

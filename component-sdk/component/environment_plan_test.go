@@ -37,8 +37,8 @@ func environmentPlanTestImage(repository string) OCIImage {
 	}
 }
 
-// Rationale: an edge transport must receive one canonical managed-Service
-// origin rather than infer an implementation name or accept an ambiguous URL.
+// Rationale: an HTTP-router planning input must carry one canonical managed
+// Service origin rather than accept an ambiguous URL.
 func TestValidateHTTPRouterInputRequiresCanonicalManagedOrigin(t *testing.T) {
 	t.Parallel()
 	valid := HTTPRouterInput{

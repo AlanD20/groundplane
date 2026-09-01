@@ -1,13 +1,11 @@
 package controller
 
 import (
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func TestReconcileBlueprintComponentsPreservesOmissionAndExplicitlyDisables(t *testing.T) {
@@ -74,9 +72,9 @@ func TestReconcileBlueprintComponentsPlansUnhealthyEnabledRepair(t *testing.T) {
 	}
 }
 
-func TestReconcileBlueprintComponentsAllocatesEnableIdentityAndRequiresCaddy(t *testing.T) {
-	// Rationale: enabling a previously disabled singleton needs one stable
-	// generated Service id, and Tunnel may never form a graph without Caddy.
+func TestReconcileBlueprintComponentsAllocatesIndependentEnableIdentities(t *testing.T) {
+	// Rationale: each independently enabled singleton needs one stable generated
+	// Service id; Tunnel lifecycle must not depend on an HTTP router.
 	t.Parallel()
 	now := time.Date(2026, 8, 22, 21, 10, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
@@ -109,9 +107,9 @@ func TestReconcileBlueprintComponentsAllocatesEnableIdentityAndRequiresCaddy(t *
 		result.Candidates[0].Candidate.GeneratedServices[0] != allocated {
 		t.Fatalf("ReconcileBlueprintComponents(enable) = %#v, %v", result, err)
 	}
-	_, err = ReconcileBlueprintComponents(
+	tunnelResult, err := ReconcileBlueprintComponents(
 		map[string]core.ComponentSpec{
-			"http-edge-transport": {
+			"edge-tunnel": {
 				Implementation: core.ComponentKindEdgeCloudflare, Enabled: true,
 				Settings: core.ComponentCapabilitySettings{SecretID: ids.NewAt(ids.KindSecret, now, 6)},
 			},
@@ -119,7 +117,9 @@ func TestReconcileBlueprintComponentsAllocatesEnableIdentityAndRequiresCaddy(t *
 		[]core.Component{caddy, tunnel},
 		ids.New,
 	)
-	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
-		t.Fatalf("ReconcileBlueprintComponents(Tunnel without Caddy) error = %v", err)
+	if err != nil || len(tunnelResult.Candidates) != 1 ||
+		tunnelResult.Candidates[0].Candidate.Kind != core.ComponentKindEdgeCloudflare ||
+		len(tunnelResult.Candidates[0].Candidate.GeneratedServices) != 1 {
+		t.Fatalf("ReconcileBlueprintComponents(independent Tunnel) = %#v, %v", tunnelResult, err)
 	}
 }

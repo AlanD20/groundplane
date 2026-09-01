@@ -1,45 +1,25 @@
 package app
 
 import (
-	"crypto/sha256"
 	"slices"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/controller"
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+
 	"github.com/AlanD20/groundplane/internal/core"
 )
 
-// Rationale: production composition must project the selected router's typed
-// managed-Service origin into cloudflared without Cloudflare knowing Caddy.
-func TestPlanRegisteredCloudflareTunnelUsesProjectedCaddyOrigin(t *testing.T) {
+// Rationale: production composition must start the remotely managed connector
+// from its Secret without acquiring HTTP-router configuration authority.
+func TestPlanRegisteredCloudflareTunnelIsRouterIndependent(t *testing.T) {
 	t.Parallel()
 	const (
 		environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-		zoneID        = "net_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-		caddyID       = "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-		caddyService  = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		tunnelID      = "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 		tunnelService = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 		secretID      = "sec_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	)
-	digest := sha256.Sum256([]byte("registered catalog"))
-	registeredRouter, err := registeredCaddyEnvironmentComponent(digest)
-	if err != nil {
-		t.Fatalf("registeredCaddyEnvironmentComponent() error = %v", err)
-	}
-	caddy := core.Component{
-		ID: caddyID, Owner: core.ComponentOwnerEnvironment, OwnerID: environmentID,
-		Kind: core.ComponentKindIngressCaddy, Enabled: true,
-		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{ZoneID: zoneID}},
-		GeneratedServices: []string{caddyService}, PinnedIPv4: "10.40.0.2",
-	}
-	environment := core.Environment{
-		ID: environmentID,
-		Zones: map[string]core.Zone{
-			"frontend": {ID: zoneID, Name: "frontend", Subnet: "10.40.0.0/24"},
-		},
-		Components: []core.Component{caddy},
-	}
+	environment := core.Environment{ID: environmentID}
 	tunnel := core.Component{
 		ID: tunnelID, Owner: core.ComponentOwnerEnvironment, OwnerID: environmentID,
 		Kind: core.ComponentKindEdgeCloudflare, Enabled: true,
@@ -48,17 +28,14 @@ func TestPlanRegisteredCloudflareTunnelUsesProjectedCaddyOrigin(t *testing.T) {
 		},
 		GeneratedServices: []string{tunnelService},
 	}
-	plan, err := planRegisteredCloudflareTunnel(
-		environment,
-		tunnel,
-		[]controller.EnvironmentComponentRegistration{registeredRouter},
-	)
+	plan, err := planRegisteredCloudflareTunnel(environment, tunnel)
 	if err != nil {
 		t.Fatalf("planRegisteredCloudflareTunnel() error = %v", err)
 	}
 	service := plan.Services[0]
-	if !slices.Equal(service.Command, []string{"tunnel", "--no-autoupdate", "--url", "http://caddy:80", "run"}) ||
-		len(service.Dependencies) != 1 || service.Dependencies[0].ServiceName != "caddy" {
+	if service.NetworkMode != componentsdk.ManagedNetworkModeDefault || len(service.Networks) != 0 ||
+		!slices.Equal(service.Command, []string{"tunnel", "--no-autoupdate", "run"}) ||
+		len(service.Dependencies) != 0 {
 		t.Fatalf("Cloudflare managed Service = %#v", service)
 	}
 }

@@ -11,21 +11,21 @@ import (
 type Capability string
 
 const (
-	CapabilityServices          Capability = "services"
-	CapabilityRoutes            Capability = "routes"
-	CapabilityVolumes           Capability = "volumes"
-	CapabilitySecrets           Capability = "secrets"
-	CapabilityScripts           Capability = "scripts"
-	CapabilityBackups           Capability = "backups"
-	CapabilityNetworks          Capability = "networks"
-	CapabilityEntries           Capability = "entries"
-	CapabilityTasks             Capability = "tasks"
-	CapabilityHTTPRouter        Capability = "http-router"
-	CapabilityHTTPEdgeTransport Capability = "http-edge-transport"
-	CapabilityDNSResolver       Capability = "dns-resolver"
-	CapabilityManagedConfig     Capability = "managed-config"
-	CapabilityHostResolution    Capability = "host-resolution"
-	CapabilityHostTrust         Capability = "host-trust"
+	CapabilityServices       Capability = "services"
+	CapabilityRoutes         Capability = "routes"
+	CapabilityVolumes        Capability = "volumes"
+	CapabilitySecrets        Capability = "secrets"
+	CapabilityScripts        Capability = "scripts"
+	CapabilityBackups        Capability = "backups"
+	CapabilityNetworks       Capability = "networks"
+	CapabilityEntries        Capability = "entries"
+	CapabilityTasks          Capability = "tasks"
+	CapabilityHTTPRouter     Capability = "http-router"
+	CapabilityEdgeTunnel     Capability = "edge-tunnel"
+	CapabilityDNSResolver    Capability = "dns-resolver"
+	CapabilityManagedConfig  Capability = "managed-config"
+	CapabilityHostResolution Capability = "host-resolution"
+	CapabilityHostTrust      Capability = "host-trust"
 )
 
 type Operation string
@@ -90,21 +90,21 @@ func (g Grant) Operations() []Operation {
 
 type DefinitionInput struct {
 	Implementation ImplementationKey
-	ConfigVariant   ConfigVariant
-	Provides        []Capability
-	Grants          []Grant
-	OwnerScopes     []OwnerScope
-	Actions         []ActionDefinition
+	ConfigVariant  ConfigVariant
+	Provides       []Capability
+	Grants         []Grant
+	OwnerScopes    []OwnerScope
+	Actions        []ActionDefinition
 }
 
 type Definition struct {
 	implementation ImplementationKey
-	configVariant   ConfigVariant
-	provides        []Capability
-	grants          []Grant
-	ownerScopes     []OwnerScope
-	actions         []ActionDefinition
-	digest          [sha256.Size]byte
+	configVariant  ConfigVariant
+	provides       []Capability
+	grants         []Grant
+	ownerScopes    []OwnerScope
+	actions        []ActionDefinition
+	digest         [sha256.Size]byte
 }
 
 func NewDefinition(input DefinitionInput) (Definition, error) {
@@ -123,11 +123,11 @@ func NewDefinition(input DefinitionInput) (Definition, error) {
 
 	definition := Definition{
 		implementation: input.Implementation,
-		configVariant:   input.ConfigVariant,
-		provides:        append([]Capability(nil), input.Provides...),
-		grants:          cloneGrants(input.Grants),
-		ownerScopes:     append([]OwnerScope(nil), input.OwnerScopes...),
-		actions:         append([]ActionDefinition(nil), input.Actions...),
+		configVariant:  input.ConfigVariant,
+		provides:       append([]Capability(nil), input.Provides...),
+		grants:         cloneGrants(input.Grants),
+		ownerScopes:    append([]OwnerScope(nil), input.OwnerScopes...),
+		actions:        append([]ActionDefinition(nil), input.Actions...),
 	}
 	if err := canonicalizeDefinition(&definition); err != nil {
 		return Definition{}, err
@@ -139,11 +139,11 @@ func NewDefinition(input DefinitionInput) (Definition, error) {
 func (d Definition) Validate() error {
 	rebuilt, err := NewDefinition(DefinitionInput{
 		Implementation: d.implementation,
-		ConfigVariant:   d.configVariant,
-		Provides:        d.provides,
-		Grants:          d.grants,
-		OwnerScopes:     d.ownerScopes,
-		Actions:         d.actions,
+		ConfigVariant:  d.configVariant,
+		Provides:       d.provides,
+		Grants:         d.grants,
+		OwnerScopes:    d.ownerScopes,
+		Actions:        d.actions,
 	})
 	if err != nil {
 		return err
@@ -196,7 +196,7 @@ func (c Capability) Valid() bool {
 	switch c {
 	case CapabilityServices, CapabilityRoutes, CapabilityVolumes, CapabilitySecrets,
 		CapabilityScripts, CapabilityBackups, CapabilityNetworks, CapabilityEntries,
-		CapabilityTasks, CapabilityHTTPRouter, CapabilityHTTPEdgeTransport,
+		CapabilityTasks, CapabilityHTTPRouter, CapabilityEdgeTunnel,
 		CapabilityDNSResolver, CapabilityManagedConfig, CapabilityHostResolution,
 		CapabilityHostTrust:
 		return true

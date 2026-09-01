@@ -324,9 +324,9 @@ const (
 type ComponentCapability string
 
 const (
-	ComponentCapabilityHTTPRouter        ComponentCapability = "http-router"
-	ComponentCapabilityHTTPEdgeTransport ComponentCapability = "http-edge-transport"
-	ComponentCapabilityDNSResolver       ComponentCapability = "dns-resolver"
+	ComponentCapabilityHTTPRouter  ComponentCapability = "http-router"
+	ComponentCapabilityEdgeTunnel  ComponentCapability = "edge-tunnel"
+	ComponentCapabilityDNSResolver ComponentCapability = "dns-resolver"
 )
 
 type CaddyComponentConfig struct {

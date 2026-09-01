@@ -348,7 +348,8 @@ func validateGeneratedEnvironmentService(
 ) error {
 	_, imageSelected := environmentComponentImageReference(service.Image)
 	if ids.Validate(ids.KindService, service.ID) != nil || service.Name == "" || !imageSelected ||
-		service.Replicas == 0 || service.NetworkMode != componentsdk.ManagedNetworkModeZones {
+		service.Replicas == 0 || !service.NetworkMode.Valid() ||
+		service.NetworkMode == componentsdk.ManagedNetworkModeHost {
 		return errs.New(errs.KindInternal, "Component planner emitted an invalid Service")
 	}
 	networks := make(map[string]struct{}, len(service.Networks))
@@ -395,8 +396,9 @@ func validateGeneratedEnvironmentService(
 			return errs.New(errs.KindValidationFailed, "Component planner emitted an invalid Service dependency")
 		}
 	}
-	if instance.Enabled && len(service.Networks) == 0 {
-		return errs.New(errs.KindValidationFailed, "enabled Environment Component Service must join a Zone")
+	if (service.NetworkMode == componentsdk.ManagedNetworkModeZones && len(service.Networks) == 0) ||
+		(service.NetworkMode == componentsdk.ManagedNetworkModeDefault && len(service.Networks) != 0) {
+		return errs.New(errs.KindValidationFailed, "Environment Component Service network mode is invalid")
 	}
 	return nil
 }

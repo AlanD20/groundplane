@@ -334,7 +334,7 @@ func environmentComponentCapability(kind core.ComponentKind) (core.ComponentCapa
 	case core.ComponentKindIngressCaddy:
 		return core.ComponentCapabilityHTTPRouter, nil
 	case core.ComponentKindEdgeCloudflare:
-		return core.ComponentCapabilityHTTPEdgeTransport, nil
+		return core.ComponentCapabilityEdgeTunnel, nil
 	default:
 		return "", errs.New(errs.KindStateConflict, "Component action is unsupported for this kind")
 	}
