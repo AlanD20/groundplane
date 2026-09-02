@@ -36,6 +36,9 @@ func validateManualScriptPlan(plan *agentpb.ExecutionPlan) error {
 	if err := validateResolvedRunnerSnapshot(snapshot); err != nil {
 		return err
 	}
+	if err := validateManualScriptSourceAuthorities(snapshot); err != nil {
+		return err
+	}
 	if err := validateScriptRunnerProjection(projection); err != nil {
 		return err
 	}
@@ -137,15 +140,28 @@ func validateResolvedRunnerSnapshot(snapshot *agentpb.ResolvedRunnerSnapshot) er
 		validateID(ids.KindTenant, snapshot.TenantId) != nil || snapshot.TenantModRevision == 0 ||
 		validateID(ids.KindProject, snapshot.ProjectId) != nil || snapshot.ProjectModRevision == 0 ||
 		validateID(ids.KindEnvironment, snapshot.EnvironmentId) != nil || snapshot.EnvironmentModRevision == 0 ||
-		validateID(ids.KindService, snapshot.ServiceId) != nil || snapshot.ServiceModRevision == 0 ||
+		validateID(ids.KindService, snapshot.ServiceId) != nil ||
 		len(snapshot.ServiceDefinitionSha256) != sha256.Size ||
 		validateID(ids.KindDeployment, snapshot.ReleaseId) != nil || snapshot.ReleaseModRevision == 0 ||
 		!imageref.IsDigestPinned(snapshot.ImageReference) || len(snapshot.ImageDigest) != sha256.Size ||
 		validateID(ids.KindTask, snapshot.BlueprintBundleGeneration) != nil || snapshot.RenderGeneration == 0 ||
-		snapshot.NetworkTopologyRevision == 0 || len(snapshot.RunnerProjectionSha256) != sha256.Size ||
+		len(snapshot.RunnerProjectionSha256) != sha256.Size ||
 		validateID(ids.KindTask, snapshot.AppliedEnvironmentRevisionId) != nil ||
-		snapshot.AppliedEnvironmentRenderGeneration == 0 || snapshot.AppliedEnvironmentModRevision == 0 {
+		snapshot.AppliedEnvironmentRenderGeneration == 0 {
 		return errs.New(errs.KindValidationFailed, "resolved Script runner snapshot identity is invalid")
+	}
+	var stagedClaim *agentpb.ScriptStagedSourceAuthority
+	if err := validateScriptSourceAuthority(snapshot.ServiceSource, snapshot.EnvironmentId,
+		snapshot.AppliedEnvironmentRevisionId, snapshot.AppliedEnvironmentRenderGeneration, &stagedClaim); err != nil {
+		return err
+	}
+	if err := validateScriptSourceAuthority(snapshot.NetworkTopologySource, snapshot.EnvironmentId,
+		snapshot.AppliedEnvironmentRevisionId, snapshot.AppliedEnvironmentRenderGeneration, &stagedClaim); err != nil {
+		return err
+	}
+	if err := validateScriptSourceAuthority(snapshot.AppliedEnvironmentSource, snapshot.EnvironmentId,
+		snapshot.AppliedEnvironmentRevisionId, snapshot.AppliedEnvironmentRenderGeneration, &stagedClaim); err != nil {
+		return err
 	}
 	separator := strings.LastIndex(snapshot.ImageReference, "@sha256:")
 	if separator < 0 {
@@ -155,10 +171,12 @@ func validateResolvedRunnerSnapshot(snapshot *agentpb.ResolvedRunnerSnapshot) er
 	if err != nil || !bytes.Equal(imageDigest, snapshot.ImageDigest) {
 		return errs.New(errs.KindValidationFailed, "resolved Script runner image digest does not match")
 	}
-	if err := validateScriptNetworks(snapshot.Networks); err != nil {
+	if err := validateScriptNetworks(snapshot.Networks, snapshot.EnvironmentId,
+		snapshot.AppliedEnvironmentRevisionId, snapshot.AppliedEnvironmentRenderGeneration, &stagedClaim); err != nil {
 		return err
 	}
-	if err := validateScriptMounts(snapshot.Mounts); err != nil {
+	if err := validateScriptMounts(snapshot.Mounts, snapshot.EnvironmentId,
+		snapshot.AppliedEnvironmentRevisionId, snapshot.AppliedEnvironmentRenderGeneration, &stagedClaim); err != nil {
 		return err
 	}
 	if err := validateScriptEntryBindings(snapshot.EntryBindings); err != nil {
@@ -206,13 +224,13 @@ func validateScriptRunnerProjection(projection *agentpb.ScriptRunnerProjection) 
 	if err := validateScriptResource(projection.Reservations); err != nil {
 		return err
 	}
-	if err := validateScriptMounts(projection.Mounts); err != nil {
+	if err := validateScriptMounts(projection.Mounts, "", "", 0, nil); err != nil {
 		return err
 	}
 	if err := validateScriptEntryBindings(projection.EntryBindings); err != nil {
 		return err
 	}
-	return validateScriptNetworks(projection.Networks)
+	return validateScriptNetworks(projection.Networks, "", "", 0, nil)
 }
 
 func validateScriptBodyArtifact(body *agentpb.ScriptBodyArtifactMetadata) error {
@@ -223,14 +241,23 @@ func validateScriptBodyArtifact(body *agentpb.ScriptBodyArtifactMetadata) error 
 	return nil
 }
 
-func validateScriptNetworks(networks []*agentpb.ScriptRunnerNetwork) error {
+func validateScriptNetworks(
+	networks []*agentpb.ScriptRunnerNetwork,
+	environmentID string,
+	revisionID string,
+	renderGeneration uint64,
+	stagedClaim **agentpb.ScriptStagedSourceAuthority,
+) error {
 	previous := ""
 	for _, network := range networks {
 		if network == nil || validateID(ids.KindNetwork, network.NetworkId) != nil ||
-			network.NetworkModRevision == 0 || network.NetworkId <= previous || network.RenderedAttachment == nil ||
+			network.NetworkId <= previous || network.RenderedAttachment == nil ||
 			network.RenderedAttachment.DockerNetworkName != "gp_net_"+strings.ToLower(network.NetworkId) ||
 			!validScriptString(network.RenderedAttachment.InterfaceName) {
 			return errs.New(errs.KindValidationFailed, "Script runner network is invalid or unsorted")
+		}
+		if err := validateScriptSourceAuthority(network.Source, environmentID, revisionID, renderGeneration, stagedClaim); err != nil {
+			return err
 		}
 		if err := validateScriptPairs(network.RenderedAttachment.DriverOptions, false); err != nil {
 			return err
@@ -240,19 +267,84 @@ func validateScriptNetworks(networks []*agentpb.ScriptRunnerNetwork) error {
 	return nil
 }
 
-func validateScriptMounts(mounts []*agentpb.ScriptRunnerMount) error {
+func validateScriptMounts(
+	mounts []*agentpb.ScriptRunnerMount,
+	environmentID string,
+	revisionID string,
+	renderGeneration uint64,
+	stagedClaim **agentpb.ScriptStagedSourceAuthority,
+) error {
 	previous := ""
 	for _, mount := range mounts {
 		key := ""
 		if mount != nil && mount.RenderedMount != nil {
 			key = mount.SourceId + "\x00" + mount.RenderedMount.Target
 		}
-		if mount == nil || validateAnyStableID(mount.SourceId) != nil || mount.SourceModRevision == 0 ||
+		if mount == nil || validateAnyStableID(mount.SourceId) != nil ||
 			key <= previous || mount.RenderedMount == nil ||
 			!validScriptMount(mount.RenderedMount) {
 			return errs.New(errs.KindValidationFailed, "Script runner mount is invalid or unsorted")
 		}
+		if err := validateScriptSourceAuthority(mount.Source, environmentID, revisionID, renderGeneration, stagedClaim); err != nil {
+			return err
+		}
 		previous = key
+	}
+	return nil
+}
+
+func validateScriptSourceAuthority(
+	authority *agentpb.ScriptSourceAuthority,
+	environmentID string,
+	revisionID string,
+	renderGeneration uint64,
+	stagedClaim **agentpb.ScriptStagedSourceAuthority,
+) error {
+	if authority == nil || (authority.Existing == nil) == (authority.Staged == nil) {
+		return errs.New(errs.KindValidationFailed, "Script source authority must contain exactly one evidence kind")
+	}
+	if authority.Existing != nil {
+		if authority.Existing.ModRevision == 0 {
+			return errs.New(errs.KindValidationFailed, "existing Script source authority is invalid")
+		}
+		return nil
+	}
+	staged := authority.Staged
+	if validateID(ids.KindEnvironment, staged.EnvironmentId) != nil ||
+		validateID(ids.KindTask, staged.RevisionId) != nil || staged.RenderGeneration == 0 ||
+		staged.FixedReadRevision == 0 || len(staged.CanonicalValueSha256) != sha256.Size ||
+		(environmentID != "" && staged.EnvironmentId != environmentID) ||
+		(revisionID != "" && staged.RevisionId != revisionID) ||
+		(renderGeneration != 0 && staged.RenderGeneration != renderGeneration) {
+		return errs.New(errs.KindValidationFailed, "staged Script source authority is invalid")
+	}
+	if stagedClaim != nil {
+		if *stagedClaim == nil {
+			*stagedClaim = staged
+		} else if (*stagedClaim).EnvironmentId != staged.EnvironmentId ||
+			(*stagedClaim).RevisionId != staged.RevisionId ||
+			(*stagedClaim).RenderGeneration != staged.RenderGeneration ||
+			(*stagedClaim).FixedReadRevision != staged.FixedReadRevision {
+			return errs.New(errs.KindValidationFailed, "staged Script sources do not share one candidate Environment stage")
+		}
+	}
+	return nil
+}
+
+func validateManualScriptSourceAuthorities(snapshot *agentpb.ResolvedRunnerSnapshot) error {
+	authorities := []*agentpb.ScriptSourceAuthority{
+		snapshot.ServiceSource, snapshot.NetworkTopologySource, snapshot.AppliedEnvironmentSource,
+	}
+	for _, network := range snapshot.Networks {
+		authorities = append(authorities, network.Source)
+	}
+	for _, mount := range snapshot.Mounts {
+		authorities = append(authorities, mount.Source)
+	}
+	for _, authority := range authorities {
+		if authority == nil || authority.Existing == nil || authority.Staged != nil {
+			return errs.New(errs.KindValidationFailed, "manual Script source authority must be existing")
+		}
 	}
 	return nil
 }

@@ -134,6 +134,16 @@ used during reservation. `source_digest` is the immutable source digest when
 that source has one and is empty only for a closed kind whose retained authority
 has no digest.
 
+Preparation evidence is one closed `existing | staged` union. Existing
+evidence uses exactly the positive source `ModRevision`. Staged evidence is
+limited to Blueprint-publishable runner snapshots, Services, Releases,
+Networks, Volumes, and Entry values and carries the exact candidate
+Environment id, desired revision id, render generation, positive fixed read
+revision, and SHA-256 of the canonical source value. All staged members of one
+preparation name the same candidate. Activation validates the candidate
+identity and requires one byte-identical final put for every staged source.
+Reusable Secret values and materialization proofs cannot use staged evidence.
+
 `ScriptSourceCount` is:
 
 ```text

@@ -305,6 +305,16 @@ secret_values[]: owning resource id, immutable value generation id, digest
 runner_projection_sha256
 ```
 
+The Service, network-topology, applied-Environment, per-Network, and per-mount
+revision members above are represented on schema 1 by one closed
+`ScriptSourceAuthority` union. `existing` contains exactly one positive etcd
+`ModRevision`. `staged` contains the candidate Environment id, desired
+revision id, render generation, positive fixed read revision, and SHA-256 of
+the exact canonical value required in final atomic publication. Empty or mixed
+authority is invalid; a staged authority must match the snapshot's candidate
+Environment revision and generation. Removed revision-only field numbers and
+names are reserved and are not reused.
+
 Each `entry_bindings[]` member records the immutable Entry generation's
 plaintext digest, storage classification, and exactly one typed destination:
 an Environment key, or an absolute container file target with numeric uid,

@@ -1,6 +1,7 @@
 package scriptsourcereference
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
@@ -71,7 +72,16 @@ type Member struct {
 	Reference   Reference
 	SourceKey   string
 	Mode        EvidenceMode
+	Stage       StageIdentity
 	StagedValue []byte
+}
+
+type StageIdentity struct {
+	EnvironmentID        string `json:"environment_id"`
+	RevisionID           string `json:"revision_id"`
+	RenderGeneration     uint64 `json:"render_generation"`
+	FixedReadRevision    int64  `json:"fixed_read_revision"`
+	CanonicalValueSHA256 string `json:"canonical_value_sha256"`
 }
 
 type Count struct {
@@ -110,6 +120,7 @@ type StagedRequirement struct {
 	SourceKey     string
 	SourceOwnerID string
 	SourceDigest  string
+	Stage         StageIdentity
 	Value         []byte
 }
 
@@ -234,11 +245,21 @@ func canonicalMembers(operationID string, input []Member) ([]Member, string, []S
 		_, _ = hash.Write(value)
 		clear(value)
 		if member.Mode == EvidenceStaged {
-			stagedByKey[member.SourceKey] = StagedRequirement{
+			requirement := StagedRequirement{
 				Source: member.Reference.Source, SourceKey: member.SourceKey,
 				SourceOwnerID: member.Reference.SourceOwnerID, SourceDigest: member.Reference.SourceDigest,
+				Stage: member.Stage,
 				Value: append([]byte(nil), member.StagedValue...),
 			}
+			if prior, exists := stagedByKey[member.SourceKey]; exists {
+				if SourceSuffix(prior.Source) != SourceSuffix(requirement.Source) ||
+					prior.SourceOwnerID != requirement.SourceOwnerID || prior.SourceDigest != requirement.SourceDigest ||
+					prior.Stage != requirement.Stage || !bytes.Equal(prior.Value, requirement.Value) {
+					return nil, "", nil, validation("staged source key has conflicting canonical authority")
+				}
+				continue
+			}
+			stagedByKey[member.SourceKey] = requirement
 		}
 	}
 	stagedKeys := make([]string, 0, len(stagedByKey))
@@ -261,11 +282,14 @@ func validateMember(operationID string, member Member) error {
 	}
 	switch member.Mode {
 	case EvidenceExisting:
-		if reference.SourceModRevision <= 0 || len(member.StagedValue) != 0 {
+		if reference.SourceModRevision <= 0 || len(member.StagedValue) != 0 || member.Stage != (StageIdentity{}) {
 			return validation("existing source evidence is invalid")
 		}
 	case EvidenceStaged:
-		if reference.SourceModRevision != 0 || len(member.StagedValue) == 0 {
+		digest := sha256.Sum256(member.StagedValue)
+		if reference.SourceModRevision != 0 || len(member.StagedValue) == 0 || member.Stage.EnvironmentID == "" ||
+			member.Stage.RevisionID == "" || member.Stage.RenderGeneration == 0 || member.Stage.FixedReadRevision <= 0 ||
+			member.Stage.CanonicalValueSHA256 != hex.EncodeToString(digest[:]) {
 			return validation("staged source evidence is invalid")
 		}
 	default:
@@ -276,6 +300,7 @@ func validateMember(operationID string, member Member) error {
 
 func sameSourceEvidence(left, right Member) bool {
 	return left.SourceKey == right.SourceKey && left.Mode == right.Mode &&
+		left.Stage == right.Stage &&
 		left.Reference.SourceOwnerID == right.Reference.SourceOwnerID &&
 		left.Reference.SourceModRevision == right.Reference.SourceModRevision &&
 		left.Reference.SourceDigest == right.Reference.SourceDigest && bytesEqual(left.StagedValue, right.StagedValue)
@@ -295,8 +320,9 @@ func encodeCanonicalMember(member Member) ([]byte, error) {
 		Reference   Reference    `json:"reference"`
 		SourceKey   string       `json:"source_key"`
 		Mode        EvidenceMode `json:"mode"`
-		ValueSHA256 string       `json:"staged_value_sha256,omitempty"`
-	}{member.Reference, member.SourceKey, member.Mode, valueDigest})
+		Stage       StageIdentity `json:"stage,omitempty"`
+		ValueSHA256 string        `json:"staged_value_sha256,omitempty"`
+	}{member.Reference, member.SourceKey, member.Mode, member.Stage, valueDigest})
 }
 
 type envelope[T any] struct {

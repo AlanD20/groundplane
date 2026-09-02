@@ -279,6 +279,7 @@ func cloneRequirements(input []StagedRequirement) []StagedRequirement {
 	result := make([]StagedRequirement, len(input))
 	for index, requirement := range input {
 		result[index] = requirement
+		result[index].Stage = requirement.Stage
 		result[index].Value = append([]byte(nil), requirement.Value...)
 	}
 	return result

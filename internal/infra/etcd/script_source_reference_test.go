@@ -258,9 +258,12 @@ func TestScriptSourceReferenceAuthorityStagesSnapshotAndReleaseRequirements(t *t
 		Workspace: domain.Workspace{Kind: domain.WorkspaceTenant, TenantID: ids.NewAt(ids.KindTenant, at, 79), ProjectID: ids.NewAt(ids.KindProject, at, 80), EnvironmentID: environmentID},
 	})
 	releaseDigest := scriptSourceReferenceBytesDigest(releaseValue)
+	stage := scriptSourceReferenceStage(environmentID, ids.NewAt(ids.KindTask, at, 81), 9, 1, snapshotValue)
+	releaseStage := stage
+	releaseStage.CanonicalValueSHA256 = sha256.Sum256(releaseValue)
 	members := []ScriptSourcePreparationMember{
-		{Reference: ScriptSourceReference{OperationID: operationID, ScriptExecutionID: executionID, Source: ScriptSourceIdentity{Kind: ScriptSourceRunnerSnapshot, SnapshotID: snapshotID}, SourceOwnerID: environmentID, SourceDigest: snapshotDigest}, Evidence: ScriptSourceEvidence{Staged: &ScriptStagedSourceEvidence{SourceKey: scriptRunnerSnapshotKey(snapshotID), Value: snapshotValue}}},
-		{Reference: ScriptSourceReference{OperationID: operationID, ScriptExecutionID: executionID, Source: ScriptSourceIdentity{Kind: ScriptSourceRelease, ReleaseID: releaseID}, SourceOwnerID: environmentID, SourceDigest: releaseDigest}, Evidence: ScriptSourceEvidence{Staged: &ScriptStagedSourceEvidence{SourceKey: releaseIntentStagingKey("", releaseID), Value: releaseValue}}},
+		{Reference: ScriptSourceReference{OperationID: operationID, ScriptExecutionID: executionID, Source: ScriptSourceIdentity{Kind: ScriptSourceRunnerSnapshot, SnapshotID: snapshotID}, SourceOwnerID: environmentID, SourceDigest: snapshotDigest}, Evidence: ScriptSourceEvidence{Staged: &ScriptStagedSourceEvidence{SourceKey: scriptRunnerSnapshotKey(snapshotID), Stage: stage, Value: snapshotValue}}},
+		{Reference: ScriptSourceReference{OperationID: operationID, ScriptExecutionID: executionID, Source: ScriptSourceIdentity{Kind: ScriptSourceRelease, ReleaseID: releaseID}, SourceOwnerID: environmentID, SourceDigest: releaseDigest}, Evidence: ScriptSourceEvidence{Staged: &ScriptStagedSourceEvidence{SourceKey: releaseIntentStagingKey("", releaseID), Stage: releaseStage, Value: releaseValue}}},
 	}
 	prepared, err := authority.Prepare(context.Background(), operationID, members)
 	if err != nil {
@@ -275,16 +278,111 @@ func TestScriptSourceReferenceAuthorityStagesSnapshotAndReleaseRequirements(t *t
 		t.Fatalf("staged fragment = %#v / %#v", fragment.conditions, fragment.StagedRequirements())
 	}
 	stagedMutations := []Mutation{{Type: MutationPut, Key: scriptRunnerSnapshotKey(snapshotID), Value: snapshotValue}, {Type: MutationPut, Key: releaseIntentStagingKey("", releaseID), Value: releaseValue}}
-	if err = fragment.ValidateStagedMutations(stagedMutations); err != nil {
+	claim := EnvironmentBlueprintStageClaim{EnvironmentID: stage.EnvironmentID, RevisionID: stage.RevisionID, RenderGeneration: stage.RenderGeneration}
+	if err = fragment.ValidateStagedMutations(claim, stagedMutations); err != nil {
 		t.Fatalf("ValidateStagedMutations(exact) error = %v", err)
 	}
 	stagedMutations[0].Value = []byte("changed")
-	if err = fragment.ValidateStagedMutations(stagedMutations); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if err = fragment.ValidateStagedMutations(claim, stagedMutations); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("ValidateStagedMutations(changed) error = %v", err)
 	}
-	service := ScriptSourcePreparationMember{Reference: ScriptSourceReference{OperationID: ids.NewAt(ids.KindOperation, at, 76), ScriptExecutionID: executionID, Source: ScriptSourceIdentity{Kind: ScriptSourceService, ServiceID: serviceID}, SourceOwnerID: environmentID}, Evidence: ScriptSourceEvidence{Staged: &ScriptStagedSourceEvidence{SourceKey: serviceRuntimeKey(serviceID), Value: []byte("absent")}}}
-	if _, err = authority.Prepare(context.Background(), service.Reference.OperationID, []ScriptSourcePreparationMember{service}); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
-		t.Fatalf("Prepare(arbitrary staged kind) error = %v", err)
+	stagedMutations[0].Value = releaseValue
+	if err = fragment.ValidateStagedMutations(claim, stagedMutations); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("ValidateStagedMutations(substituted canonical value) error = %v", err)
+	}
+	secretID := ids.NewAt(ids.KindSecret, at, 82)
+	secret := ScriptSourcePreparationMember{Reference: ScriptSourceReference{OperationID: ids.NewAt(ids.KindOperation, at, 76), ScriptExecutionID: executionID, Source: ScriptSourceIdentity{Kind: ScriptSourceSecretValue, SecretID: secretID, ValueGenerationID: secretID}, SourceOwnerID: scriptSourcePlatformOwner, SourceDigest: scriptSourceReferenceDigest("absent")}, Evidence: ScriptSourceEvidence{Staged: &ScriptStagedSourceEvidence{SourceKey: secretValueKey(secretID), Stage: stage, Value: []byte("absent")}}}
+	if _, err = authority.Prepare(context.Background(), secret.Reference.OperationID, []ScriptSourcePreparationMember{secret}); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("Prepare(non-Blueprint staged kind) error = %v", err)
+	}
+}
+
+func TestScriptSourceReferenceAuthorityRejectsMixedOrInvalidStagedEvidence(t *testing.T) {
+	_, authority, operationID, members := scriptSourceReferenceFixture(t)
+	mixed := members[0]
+	mixed.Evidence.Staged = &ScriptStagedSourceEvidence{}
+	if _, err := authority.Prepare(context.Background(), operationID, []ScriptSourcePreparationMember{mixed}); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("Prepare(mixed evidence) error = %v", err)
+	}
+	empty := members[0]
+	empty.Evidence = ScriptSourceEvidence{}
+	if _, err := authority.Prepare(context.Background(), operationID, []ScriptSourcePreparationMember{empty}); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("Prepare(empty evidence) error = %v", err)
+	}
+	staged := members[0]
+	staged.Reference.SourceModRevision = 0
+	value := []byte("candidate")
+	staged.Evidence = ScriptSourceEvidence{Staged: &ScriptStagedSourceEvidence{
+		SourceKey: staged.Evidence.Existing.SourceKey,
+		Stage: scriptSourceReferenceStage(staged.Reference.SourceOwnerID,
+			ids.NewAt(ids.KindTask, scriptSourceReferenceTestTime(), 83), 1, 0, value),
+		Value: value,
+	}}
+	if _, err := authority.Prepare(context.Background(), operationID, []ScriptSourcePreparationMember{staged}); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("Prepare(zero fixed read revision) error = %v", err)
+	}
+	stagedBody := members[0]
+	stagedBody.Reference.SourceModRevision = 0
+	stagedBody.Evidence = ScriptSourceEvidence{Staged: &ScriptStagedSourceEvidence{
+		SourceKey: stagedBody.Evidence.Existing.SourceKey,
+		Stage: scriptSourceReferenceStage(stagedBody.Reference.SourceOwnerID,
+			ids.NewAt(ids.KindTask, scriptSourceReferenceTestTime(), 84), 1, 1, value),
+		Value: value,
+	}}
+	if _, err := authority.Prepare(context.Background(), operationID, []ScriptSourcePreparationMember{stagedBody}); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("Prepare(staged Script body) error = %v", err)
+	}
+}
+
+func TestScriptSourcePublicationRejectsCandidateOrMutationMismatch(t *testing.T) {
+	store := newMemoryHierarchyStore()
+	authority, _ := newScriptSourceReferenceAuthority(store)
+	at := scriptSourceReferenceTestTime()
+	operationID := ids.NewAt(ids.KindOperation, at, 90)
+	executionID := scriptSourceReferenceExecutionID(at, 91)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 92)
+	serviceID := ids.NewAt(ids.KindService, at, 93)
+	revisionID := ids.NewAt(ids.KindTask, at, 94)
+	value := scriptSourceServiceValue(t, environmentID, serviceID)
+	stage := scriptSourceReferenceStage(environmentID, revisionID, 2, 1, value)
+	member := ScriptSourcePreparationMember{Reference: ScriptSourceReference{OperationID: operationID,
+		ScriptExecutionID: executionID, Source: ScriptSourceIdentity{Kind: ScriptSourceService, ServiceID: serviceID},
+		SourceOwnerID: environmentID}, Evidence: ScriptSourceEvidence{Staged: &ScriptStagedSourceEvidence{
+		SourceKey: serviceRuntimeKey(serviceID), Stage: stage, Value: value,
+	}}}
+	prepared, err := authority.Prepare(context.Background(), operationID, []ScriptSourcePreparationMember{member})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fragment, err := authority.FinalPublicationFragment(context.Background(), prepared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fragment.Clear()
+	wrongClaim := EnvironmentBlueprintStageClaim{EnvironmentID: environmentID,
+		RevisionID: ids.NewAt(ids.KindTask, at, 95), RenderGeneration: 2}
+	mutation := []Mutation{{Type: MutationPut, Key: serviceRuntimeKey(serviceID), Value: value}}
+	if err = fragment.ValidateStagedMutations(wrongClaim, mutation); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("ValidateStagedMutations(wrong candidate) error = %v", err)
+	}
+	claim := EnvironmentBlueprintStageClaim{EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 2}
+	mutation[0].Key = environmentComposeProjectionKey(environmentID)
+	if err = fragment.ValidateStagedMutations(claim, mutation); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("ValidateStagedMutations(wrong source mutation) error = %v", err)
+	}
+}
+
+func scriptSourceReferenceStage(
+	environmentID string,
+	revisionID string,
+	renderGeneration uint64,
+	readRevision int64,
+	value []byte,
+) ScriptCandidateSourceStage {
+	return ScriptCandidateSourceStage{
+		EnvironmentID: environmentID, RevisionID: revisionID,
+		RenderGeneration: renderGeneration, FixedReadRevision: readRevision,
+		CanonicalValueSHA256: sha256.Sum256(value),
 	}
 }
 

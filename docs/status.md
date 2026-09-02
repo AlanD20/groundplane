@@ -424,3 +424,7 @@ serializer excludes runtime identities and observations and emits multiline
 Script bodies as literal YAML blocks. Generated API artifacts and focused
 execution evidence remain required before this source slice changes C21 from
 `Scaffolded`.
+
+## Blueprint Script staged source authority (2026-09-02)
+
+Schema-1 Script runner sources now use one strict existing-or-staged authority. Existing sources carry a positive MVCC revision; same-Blueprint candidate sources carry the exact Environment revision/render stage, fixed read revision, and canonical value digest. Shared validation rejects empty, dual, cross-stage, or tampered authority; manual Script plans remain existing-only. Candidate Release and Script publication with complete ADR 0062 membership remains the next C21 lane before the private topology can be accepted.

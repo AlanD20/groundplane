@@ -118,6 +118,7 @@ func TestProjectScriptNetworksOmitsServiceEndpointIdentity(t *testing.T) {
 		t.Fatalf("projectScriptNetworks() error = %v", err)
 	}
 	if len(projected) != 1 || projected[0].NetworkId != networkID ||
+		projected[0].Source.GetExisting().ModRevision != 7 || projected[0].Source.GetStaged() != nil ||
 		projected[0].RenderedAttachment.InterfaceName != "eth9" ||
 		projected[0].RenderedAttachment.Priority != 25 ||
 		len(projected[0].RenderedAttachment.DriverOptions) != 1 {
@@ -127,6 +128,17 @@ func TestProjectScriptNetworksOmitsServiceEndpointIdentity(t *testing.T) {
 	config.Extensions = composetypes.Extensions{"x-unsafe": map[string]any{}}
 	if _, err := projectScriptNetworks(service, sources); err == nil {
 		t.Fatal("projectScriptNetworks() accepted unknown endpoint extension")
+	}
+}
+
+func TestExistingScriptSourceAuthorityEmitsOnlyPositiveExistingEvidence(t *testing.T) {
+	authority := existingScriptSourceAuthority(19)
+	if authority == nil || authority.GetExisting() == nil || authority.GetExisting().ModRevision != 19 ||
+		authority.GetStaged() != nil {
+		t.Fatalf("existing Script source authority = %#v", authority)
+	}
+	if existingScriptSourceAuthority(0) != nil {
+		t.Fatal("zero revision produced Script source authority")
 	}
 }
 

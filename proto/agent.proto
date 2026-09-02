@@ -661,6 +661,9 @@ message RunScript {
 }
 
 message ResolvedRunnerSnapshot {
+  reserved 10, 18, 26;
+  reserved "service_mod_revision", "network_topology_revision", "applied_environment_mod_revision";
+
   string snapshot_id = 1;
   string script_execution_id = 2;
   string tenant_id = 3;
@@ -670,7 +673,6 @@ message ResolvedRunnerSnapshot {
   string environment_id = 7;
   uint64 environment_mod_revision = 8;
   string service_id = 9;
-  uint64 service_mod_revision = 10;
   bytes service_definition_sha256 = 11;
   string release_id = 12;
   uint64 release_mod_revision = 13;
@@ -678,7 +680,6 @@ message ResolvedRunnerSnapshot {
   bytes image_digest = 15;
   string blueprint_bundle_generation = 16;
   uint64 render_generation = 17;
-  uint64 network_topology_revision = 18;
   repeated ScriptRunnerNetwork networks = 19;
   repeated ScriptRunnerMount mounts = 20;
   repeated ScriptRunnerEntryBinding entry_bindings = 21;
@@ -686,13 +687,18 @@ message ResolvedRunnerSnapshot {
   bytes runner_projection_sha256 = 23;
   string applied_environment_revision_id = 24;
   uint64 applied_environment_render_generation = 25;
-  uint64 applied_environment_mod_revision = 26;
+  ScriptSourceAuthority service_source = 27;
+  ScriptSourceAuthority network_topology_source = 28;
+  ScriptSourceAuthority applied_environment_source = 29;
 }
 
 message ScriptRunnerNetwork {
+  reserved 2;
+  reserved "network_mod_revision";
+
   string network_id = 1;
-  uint64 network_mod_revision = 2;
   ScriptNetworkAttachment rendered_attachment = 3;
+  ScriptSourceAuthority source = 4;
 }
 
 message ScriptNetworkAttachment {
@@ -703,9 +709,29 @@ message ScriptNetworkAttachment {
 }
 
 message ScriptRunnerMount {
+  reserved 2;
+  reserved "source_mod_revision";
+
   string source_id = 1;
-  uint64 source_mod_revision = 2;
   ScriptMount rendered_mount = 3;
+  ScriptSourceAuthority source = 4;
+}
+
+message ScriptSourceAuthority {
+  ScriptExistingSourceAuthority existing = 1;
+  ScriptStagedSourceAuthority staged = 2;
+}
+
+message ScriptExistingSourceAuthority {
+  uint64 mod_revision = 1;
+}
+
+message ScriptStagedSourceAuthority {
+  string environment_id = 1;
+  string revision_id = 2;
+  uint64 render_generation = 3;
+  uint64 fixed_read_revision = 4;
+  bytes canonical_value_sha256 = 5;
 }
 
 message ScriptMount {

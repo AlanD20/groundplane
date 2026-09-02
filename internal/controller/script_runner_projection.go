@@ -106,17 +106,17 @@ func BuildManualScriptPlan(
 		TenantId: sources.Tenant.Record.ID, TenantModRevision: uint64(sources.Tenant.Revision),
 		ProjectId: sources.Project.Record.ID, ProjectModRevision: uint64(sources.Project.Revision),
 		EnvironmentId: sources.Environment.Record.ID, EnvironmentModRevision: uint64(sources.Environment.Revision),
-		ServiceId: sources.Service.Record.Desired.ID, ServiceModRevision: uint64(sources.Service.Revision),
+		ServiceId: sources.Service.Record.Desired.ID, ServiceSource: existingScriptSourceAuthority(sources.Service.Revision),
 		ServiceDefinitionSha256: serviceDigest[:],
 		ReleaseId:               sources.Release.Intent.ID, ReleaseModRevision: uint64(sources.Release.IntentRevision),
 		ImageReference: service.Image, ImageDigest: imageDigest,
 		BlueprintBundleGeneration: sources.RenderInput.Record.Projection.RevisionID,
 		RenderGeneration:          sources.RenderInput.Record.Projection.RenderGeneration,
-		NetworkTopologyRevision:   uint64(sources.DesiredProjection.Revision),
+		NetworkTopologySource:     existingScriptSourceAuthority(sources.DesiredProjection.Revision),
 		Networks:                  cloneScriptNetworks(networks), Mounts: cloneScriptMounts(mounts),
 		AppliedEnvironmentRevisionId:       sources.DesiredProjection.Record.RevisionID,
 		AppliedEnvironmentRenderGeneration: sources.DesiredProjection.Record.RenderGeneration,
-		AppliedEnvironmentModRevision:      uint64(sources.DesiredProjection.Revision),
+		AppliedEnvironmentSource:           existingScriptSourceAuthority(sources.DesiredProjection.Revision),
 		EntryBindings:                      cloneScriptEntryBindings(input.EntryBindings),
 		RunnerProjectionSha256:             projectionDigest,
 	}
@@ -348,7 +348,7 @@ func projectScriptNetworks(
 			return nil, errs.New(errs.KindValidationFailed, "Script runner network contains unsupported extensions")
 		}
 		result = append(result, &agentpb.ScriptRunnerNetwork{
-			NetworkId: networkID, NetworkModRevision: uint64(revisionByID[networkID]),
+			NetworkId: networkID, Source: existingScriptSourceAuthority(revisionByID[networkID]),
 			RenderedAttachment: &agentpb.ScriptNetworkAttachment{
 				DockerNetworkName: "gp_net_" + strings.ToLower(networkID),
 				DriverOptions:     scriptPairs(config.DriverOpts), InterfaceName: config.InterfaceName,
@@ -381,7 +381,7 @@ func projectScriptMounts(
 			return nil, err
 		}
 		result = append(result, &agentpb.ScriptRunnerMount{
-			SourceId: volumeID, SourceModRevision: uint64(sources.DesiredProjection.Revision), RenderedMount: projected,
+			SourceId: volumeID, Source: existingScriptSourceAuthority(sources.DesiredProjection.Revision), RenderedMount: projected,
 		})
 	}
 	sort.Slice(result, func(left, right int) bool {
@@ -390,6 +390,15 @@ func projectScriptMounts(
 		return leftKey < rightKey
 	})
 	return result, nil
+}
+
+func existingScriptSourceAuthority(revision int64) *agentpb.ScriptSourceAuthority {
+	if revision <= 0 {
+		return nil
+	}
+	return &agentpb.ScriptSourceAuthority{
+		Existing: &agentpb.ScriptExistingSourceAuthority{ModRevision: uint64(revision)},
+	}
 }
 
 func projectScriptMount(mount composetypes.ServiceVolumeConfig, volumeID string) (*agentpb.ScriptMount, error) {

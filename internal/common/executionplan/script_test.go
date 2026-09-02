@@ -45,9 +45,124 @@ func TestSealManualScriptPlanRejectsCrossExecutionArtifact(t *testing.T) {
 
 func TestSealManualScriptPlanRejectsSnapshotTampering(t *testing.T) {
 	plan := validManualScriptPlan(t)
-	plan.ScriptRunnerSnapshots[0].ServiceModRevision++
+	plan.ScriptRunnerSnapshots[0].ServiceSource.GetExisting().ModRevision++
 	if _, err := Seal(plan); err == nil {
 		t.Fatal("Seal(tampered snapshot) error = nil")
+	}
+}
+
+func TestValidateResolvedRunnerSnapshotAcceptsExistingAndStagedSourceAuthorities(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		plan func(*testing.T) *agentpb.ExecutionPlan
+	}{
+		{name: "existing", plan: validManualScriptPlan},
+		{name: "staged", plan: validStagedScriptPlan},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if err := validateResolvedRunnerSnapshot(test.plan(t).ScriptRunnerSnapshots[0]); err != nil {
+				t.Fatalf("validateResolvedRunnerSnapshot() error = %v", err)
+			}
+		})
+	}
+}
+
+func TestSealManualScriptPlanRejectsStagedSourceAuthorityAnywhere(t *testing.T) {
+	plan := validManualScriptPlan(t)
+	snapshot := plan.ScriptRunnerSnapshots[0]
+	snapshot.ServiceSource = stagedScriptSourceAuthorityForTest(snapshot, 1)
+	if _, err := Seal(plan); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("Seal(staged manual source) error = %v", err)
+	}
+
+	snapshot = validManualScriptPlan(t).ScriptRunnerSnapshots[0]
+	snapshot.Networks = []*agentpb.ScriptRunnerNetwork{{Source: existingScriptSourceAuthorityForTest(10)}}
+	snapshot.Mounts = []*agentpb.ScriptRunnerMount{{Source: existingScriptSourceAuthorityForTest(11)}}
+	locations := []struct {
+		name string
+		get  func(*agentpb.ResolvedRunnerSnapshot) **agentpb.ScriptSourceAuthority
+	}{
+		{name: "service", get: func(value *agentpb.ResolvedRunnerSnapshot) **agentpb.ScriptSourceAuthority { return &value.ServiceSource }},
+		{name: "topology", get: func(value *agentpb.ResolvedRunnerSnapshot) **agentpb.ScriptSourceAuthority { return &value.NetworkTopologySource }},
+		{name: "applied Environment", get: func(value *agentpb.ResolvedRunnerSnapshot) **agentpb.ScriptSourceAuthority { return &value.AppliedEnvironmentSource }},
+		{name: "network", get: func(value *agentpb.ResolvedRunnerSnapshot) **agentpb.ScriptSourceAuthority { return &value.Networks[0].Source }},
+		{name: "mount", get: func(value *agentpb.ResolvedRunnerSnapshot) **agentpb.ScriptSourceAuthority { return &value.Mounts[0].Source }},
+	}
+	for index, location := range locations {
+		t.Run(location.name, func(t *testing.T) {
+			candidate := proto.Clone(snapshot).(*agentpb.ResolvedRunnerSnapshot)
+			*location.get(candidate) = stagedScriptSourceAuthorityForTest(candidate, byte(index+2))
+			if err := validateManualScriptSourceAuthorities(candidate); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+				t.Fatalf("validateManualScriptSourceAuthorities(staged %s) error = %v", location.name, err)
+			}
+		})
+	}
+}
+
+func TestSealManualScriptPlanRejectsInvalidSourceAuthority(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mutate func(*agentpb.ScriptSourceAuthority)
+	}{
+		{name: "empty authority", mutate: func(authority *agentpb.ScriptSourceAuthority) { authority.Staged = nil }},
+		{name: "dual authority", mutate: func(authority *agentpb.ScriptSourceAuthority) { authority.Existing = &agentpb.ScriptExistingSourceAuthority{ModRevision: 9} }},
+		{name: "invalid stage identity", mutate: func(authority *agentpb.ScriptSourceAuthority) { authority.GetStaged().RevisionId = "task-invalid" }},
+		{name: "zero fixed read revision", mutate: func(authority *agentpb.ScriptSourceAuthority) { authority.GetStaged().FixedReadRevision = 0 }},
+		{name: "invalid canonical digest", mutate: func(authority *agentpb.ScriptSourceAuthority) { authority.GetStaged().CanonicalValueSha256 = []byte("short") }},
+		{name: "conflicting fixed read revision", mutate: func(authority *agentpb.ScriptSourceAuthority) { authority.GetStaged().FixedReadRevision++ }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			plan := validStagedScriptPlan(t)
+			test.mutate(plan.ScriptRunnerSnapshots[0].ServiceSource)
+			if _, err := Seal(plan); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+				t.Fatalf("Seal() error = %v, want validation.failed", err)
+			}
+		})
+	}
+}
+
+func TestValidateScriptSourceAuthorityRejectsRawDualFieldEncoding(t *testing.T) {
+	existing, err := proto.Marshal(existingScriptSourceAuthorityForTest(7))
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := validManualScriptPlan(t).ScriptRunnerSnapshots[0]
+	staged, err := proto.Marshal(stagedScriptSourceAuthorityForTest(snapshot, 0x41))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var authority agentpb.ScriptSourceAuthority
+	if err = proto.Unmarshal(append(existing, staged...), &authority); err != nil {
+		t.Fatal(err)
+	}
+	if authority.Existing == nil || authority.Staged == nil {
+		t.Fatalf("raw dual authority was not preserved: %#v", &authority)
+	}
+	var claim *agentpb.ScriptStagedSourceAuthority
+	if err = validateScriptSourceAuthority(&authority, snapshot.EnvironmentId,
+		snapshot.AppliedEnvironmentRevisionId, snapshot.AppliedEnvironmentRenderGeneration, &claim);
+		!errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("validateScriptSourceAuthority(raw dual) error = %v", err)
+	}
+}
+
+func TestValidateRejectsStagedSourceDigestTampering(t *testing.T) {
+	sealed, err := Seal(validStagedScriptPlan(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := append([]byte(nil), sealed.PlanHash...)
+	sealed.ScriptRunnerSnapshots[0].ServiceSource.GetStaged().CanonicalValueSha256[0] ^= 0xff
+	if _, err = Validate(sealed); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("Validate(tampered stage digest) error = %v", err)
+	}
+	sealed.PlanHash = nil
+	resealed, err := Seal(sealed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(before, resealed.PlanHash) {
+		t.Fatal("staged source digest tampering did not change the plan hash")
 	}
 }
 
@@ -221,16 +336,16 @@ func validManualScriptPlan(t *testing.T) *agentpb.ExecutionPlan {
 		TenantId: "tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV", TenantModRevision: 1,
 		ProjectId: "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV", ProjectModRevision: 2,
 		EnvironmentId: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", EnvironmentModRevision: 3,
-		ServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", ServiceModRevision: 4,
+		ServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", ServiceSource: existingScriptSourceAuthorityForTest(4),
 		ServiceDefinitionSha256: serviceDigest[:],
 		ReleaseId:               "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", ReleaseModRevision: 5,
 		ImageReference:            "registry.example/app@sha256:" + strings.Repeat("a", 64),
 		ImageDigest:               imageDigest,
 		BlueprintBundleGeneration: "task_01ARZ3NDEKTSV4RRFFQ69G5FAX",
-		RenderGeneration:          7, NetworkTopologyRevision: 6,
+		RenderGeneration:          7, NetworkTopologySource: existingScriptSourceAuthorityForTest(6),
 		AppliedEnvironmentRevisionId:       "task_01ARZ3NDEKTSV4RRFFQ69G5FAY",
 		AppliedEnvironmentRenderGeneration: 8,
-		AppliedEnvironmentModRevision:      9,
+		AppliedEnvironmentSource:           existingScriptSourceAuthorityForTest(9),
 		RunnerProjectionSha256:             projectionDigest,
 	}
 	snapshotDigest, err := scriptMessageDigest(snapshot)
@@ -258,4 +373,43 @@ func validManualScriptPlan(t *testing.T) *agentpb.ExecutionPlan {
 			}},
 		}},
 	}
+}
+
+func existingScriptSourceAuthorityForTest(revision uint64) *agentpb.ScriptSourceAuthority {
+	return &agentpb.ScriptSourceAuthority{
+		Existing: &agentpb.ScriptExistingSourceAuthority{ModRevision: revision},
+	}
+}
+
+func validStagedScriptPlan(t *testing.T) *agentpb.ExecutionPlan {
+	t.Helper()
+	plan := validBlueprintScriptReconcilePlan(t)
+	snapshot := plan.ScriptRunnerSnapshots[0]
+	snapshot.ServiceSource = stagedScriptSourceAuthorityForTest(snapshot, 0x11)
+	snapshot.NetworkTopologySource = stagedScriptSourceAuthorityForTest(snapshot, 0x12)
+	snapshot.AppliedEnvironmentSource = stagedScriptSourceAuthorityForTest(snapshot, 0x13)
+	for index, network := range snapshot.Networks {
+		network.Source = stagedScriptSourceAuthorityForTest(snapshot, byte(0x20+index))
+	}
+	for index, mount := range snapshot.Mounts {
+		mount.Source = stagedScriptSourceAuthorityForTest(snapshot, byte(0x30+index))
+	}
+	snapshotDigest, err := scriptMessageDigest(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range plan.Steps {
+		if run := step.GetRunScript(); run != nil {
+			run.RunnerSnapshotSha256 = snapshotDigest
+		}
+	}
+	return plan
+}
+
+func stagedScriptSourceAuthorityForTest(snapshot *agentpb.ResolvedRunnerSnapshot, seed byte) *agentpb.ScriptSourceAuthority {
+	return &agentpb.ScriptSourceAuthority{Staged: &agentpb.ScriptStagedSourceAuthority{
+		EnvironmentId: snapshot.EnvironmentId, RevisionId: snapshot.AppliedEnvironmentRevisionId,
+		RenderGeneration: snapshot.AppliedEnvironmentRenderGeneration, FixedReadRevision: 42,
+		CanonicalValueSha256: bytes.Repeat([]byte{seed}, sha256.Size),
+	}}
 }
