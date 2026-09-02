@@ -587,3 +587,7 @@ and Script acceptance rerun remains pending.
 ## Blueprint prerequisite authoring round-trip (2026-09-02)
 
 Canonical Environment Blueprint authoring now preserves the persisted authored `x-gp-requires` graph, and validate/apply accept the already-closed registered prerequisite grammar instead of rejecting every nonempty requirement. Fixed-revision Attach resolution and durable execution-gate authority remain unchanged. Focused application and Controller proofs pass; generated-artifact and reference-host Blueprint acceptance remain pending.
+
+## Blueprint predecessor Compose identity (2026-09-02)
+
+Blueprint candidate Release planning now carries the already-sealed predecessor serving Release, target, and proxy generation into the generic Compose render identity. Strict render validation remains unchanged and rejects incomplete authority. The focused Blueprint Release-plan proof passes; exact reference-host apply remains pending.

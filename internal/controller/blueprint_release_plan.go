@@ -43,7 +43,9 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 		images[member.Render.ServiceName] = member.Render.Image
 		labels[member.Render.ServiceID] = ComposeReleaseIdentity{
 			ReleaseID: member.Intent.ID, Target: member.Render.CandidateTarget,
-			Image: member.Render.Image, Strategy: member.Render.Strategy,
+			Image: member.Render.Image, ServingReleaseID: priorReleaseLabel(member.Intent.PriorServingReleaseID),
+			ServingTarget: member.Render.PriorTarget, ServingProxyGeneration: member.Render.PriorProxyGeneration,
+			Strategy: member.Render.Strategy,
 		}
 		serviceIDs[index] = member.Render.ServiceID
 	}
