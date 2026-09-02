@@ -29,7 +29,8 @@ prove the exact generated tree.
 
 Independent feature lanes now run continuously in parallel. Each lane has one
 durable repository-local worktree and branch, one writer, and disjoint owned
-files; `/tmp` is reserved for ephemeral artifacts. A lane freezes only after
+files; all repository-managed temporary state uses ignored repo-local `.tmp/`
+or `.tmp-*`; system `/tmp` is forbidden. A lane freezes only after
 implementation and its named focused proof, receives one aggregate
 blocker-only review, and gets at most one bounded correction batch followed by
 one delta-only verification. Corrections rerun only the exact tests covering
