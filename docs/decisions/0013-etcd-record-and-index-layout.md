@@ -63,9 +63,11 @@ were written. That approval resolves only the following choices:
 - persistence conflicts and expired cursors are HTTP 409, malformed requests
   are HTTP 400, decoded validation is HTTP 422, and the closed internal Kind
   catalog is the accepted target error interface;
-- atomic mutations are limited to 96 aggregate transaction operations, a
-  1 MiB serialized request, and 256 KiB per record; bounded deletion may
-  checkpoint stable-id batches under its tombstone; and
+- ordinary non-Blueprint atomic mutations are limited to 96 selected
+  transaction operations, a 1 MiB serialized request, and 256 KiB per record;
+  final Environment Blueprint publication delegates to ADR 0051's dedicated
+  per-arm envelope; bounded deletion may checkpoint stable-id batches under its
+  tombstone; and
 - mutating HTTP intents use the approved Idempotency-Key grammar,
   same-transaction marker, replay/mismatch behavior, and 90-day terminal
   retention; ADR 0019 accepts the exact canonical intent encoding and
@@ -749,12 +751,20 @@ owner approval or an exact key/interface needed for implementation.
 
     **Approved decision:** do not add a general multi-transaction
     desired-state commit protocol in the MVP and do not raise etcd's defaults.
-    Preflight every atomic mutation at no more than 96 aggregate compares plus
-    mutations in its selected success branch, a 1 MiB physical serialized
-    `TxnRequest` including compare-failure reads, and 256 KiB per
-    record. Reject a desired mutation or Blueprint apply that cannot fit before
-    any write as `validation.failed` with HTTP 422, including the exceeded
-    limits in safe details; partial desired state is never visible. A deletion Task may remove
+    Preflight every ordinary non-Blueprint atomic mutation at no more than 96
+    aggregate comparisons plus mutations in its selected branch, a 1 MiB
+    physical serialized `TxnRequest` including compare-failure reads, and 256
+    KiB per record. Reject an ordinary non-Blueprint desired mutation that
+    cannot fit before any write as `validation.failed` with HTTP 422, including
+    the exceeded limits in safe details; partial desired state is never visible.
+
+    The earlier requirement to reject a Blueprint apply merely because it
+    exceeds the ordinary 96-selected-operation protection is superseded by ADR
+    0051. Every final Environment Blueprint publication uses ADR 0051's
+    dedicated executor and one atomic envelope: each comparison, success, and
+    failure arm may contain at most 256 operations and the actual protobuf
+    request may contain at most 1 MiB. Its derived 512 selected-arm and 768 full
+    logical counts are diagnostic only, not rejection limits. A deletion Task may remove
     contained descendants in stable-id order using transactions within those
     limits because its tombstone blocks concurrent mutation. Persist its
     checkpoint after each successful batch and delete the parent last. ADR 0012

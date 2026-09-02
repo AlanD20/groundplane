@@ -415,14 +415,18 @@ at most 797,580 encoded bytes. Sealing reads every chunk at one fixed MVCC
 revision and creates a compact integrity root. The seal uses at most 57
 operations and 132,800 encoded bytes.
 
-Publication compares the sealed root, descriptor, current Environment head,
-dependency evidence, hierarchy, operation, Task, and idempotency fences. Its
-three partitions each allow at most 32 operations: comparisons, success
-mutations, and fixed-revision failure reads. The complete encoded request is at
-most 606,208 bytes. Publication changes the Environment desired head, creates
-the Task and replay records, removes the private locator, and marks the
-descriptor published. It never copies file or projection chunks. There is no
-singleton current projection or flat desired-resource mutation path.
+Final Environment Blueprint publication compares the sealed root, descriptor,
+current Environment head, dependency evidence, hierarchy, operation, Task, and
+idempotency fences through ADR 0051's dedicated executor. Its comparison,
+success, and failure arms each allow at most the configured etcd maximum of 256
+operations, and its actual protobuf-encoded request allows at most 1 MiB. The
+derived 512 selected-arm and 768 full logical counts are diagnostics only, not
+rejection limits. Ordinary non-Blueprint `Store.Transact` retains its
+96-selected-operation protection. Staging, sealing, and other
+non-final-publication limits are unchanged. Publication changes the Environment
+desired head, creates the Task and replay records, removes the private locator,
+and marks the descriptor published. It never copies file or projection chunks.
+There is no singleton current projection or flat desired-resource mutation path.
 
 Every desired Add, Edit, Remove, and Blueprint Apply derives and publishes a
 complete new revision through this seam. Tasks pin the final desired schema,
@@ -458,14 +462,18 @@ at most 797,580 encoded bytes. Sealing reads every chunk at one fixed MVCC
 revision and creates a compact integrity root. The seal uses at most 57
 operations and 132,800 encoded bytes.
 
-Publication compares the sealed root, descriptor, current Environment head,
-dependency evidence, hierarchy, operation, Task, and idempotency fences. Its
-three partitions each allow at most 32 operations: comparisons, success
-mutations, and fixed-revision failure reads. The complete encoded request is at
-most 606,208 bytes. Publication changes the Environment desired head, creates
-the Task and replay records, removes the private locator, and marks the
-descriptor published. It never copies file or projection chunks. There is no
-singleton current projection or flat desired-resource mutation path.
+Final Environment Blueprint publication compares the sealed root, descriptor,
+current Environment head, dependency evidence, hierarchy, operation, Task, and
+idempotency fences through ADR 0051's dedicated executor. Its comparison,
+success, and failure arms each allow at most the configured etcd maximum of 256
+operations, and its actual protobuf-encoded request allows at most 1 MiB. The
+derived 512 selected-arm and 768 full logical counts are diagnostics only, not
+rejection limits. Ordinary non-Blueprint `Store.Transact` retains its
+96-selected-operation protection. Staging, sealing, and other
+non-final-publication limits are unchanged. Publication changes the Environment
+desired head, creates the Task and replay records, removes the private locator,
+and marks the descriptor published. It never copies file or projection chunks.
+There is no singleton current projection or flat desired-resource mutation path.
 
 Every desired Add, Edit, Remove, and Blueprint Apply derives and publishes a
 complete new revision through this seam. Tasks pin the final desired schema,

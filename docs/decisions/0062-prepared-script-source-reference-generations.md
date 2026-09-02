@@ -209,6 +209,39 @@ operation, executions, snapshots, and sealed plan authority; writes the active
 reverse root; and deletes the preparation descriptor atomically. It does not
 rewrite every source membership or count.
 
+For final Environment Blueprint publication, those operations participate in
+ADR 0051's one dedicated final-publication envelope. They do not use an
+ordinary `Store.Transact` budget and do not gain a Script-specific exception.
+The exact Script accounting is:
+
+| Blueprint shape | Comparisons | Success | Failure |
+| --- | ---: | ---: | ---: |
+| QA: eleven Release candidates, two hooks, three staged physical sources | 31 | 43 | 31 |
+| maximum non-Backup Script | 45 | 99 | 45 |
+| maximum non-Backup Script plus two candidate Attaches | 86 | 132 | 86 |
+| combined maximum Backup plus Script | 143 | 160 | 143 |
+
+The QA shape has 74 operations on its selected success path, 62 on its
+selected failure path, and 105 in the full logical request. The combined
+maximum has 303, 286, and 446 respectively. ADR 0051's previously documented
+Backup-only maximum remains `120/74/120`; it is an accounting scenario, not a
+separate envelope.
+
+Every comparison, success mutation, and failure read is distinct. Removing or
+coalescing any of them breaks desired-head, Task, marker, Release, Script,
+physical-source, Attach, or Backup authority. The final builder therefore
+accepts each arm through 256 operations, rejects 257, and rejects a
+protobuf-encoded request above 1 MiB before etcd with the existing
+`validation.failed`/HTTP 422 response. The 512 selected-arm and 768 full logical
+maxima are diagnostic sums only, never rejection limits. A fitting compare
+failure remains one atomic conflict at its transaction revision.
+
+Required focused proof covers the exact `31/43/31`, `45/99/45`, `86/132/86`,
+and `143/160/143` shapes, 256-arm acceptance, 257-arm rejection, over-1-MiB
+rejection, and the unchanged 96-selected-operation protection for ordinary
+non-Blueprint `Store.Transact`. Preparation, sealing, release, abandonment, and
+other non-final-publication limits in this ADR remain unchanged.
+
 No assignment or `start_authorized` transition is legal without the active
 reverse root matching the execution plan's membership digest. A failed or
 abandoned preparation creates no Task. Its descriptor moves to `abandoning`

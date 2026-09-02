@@ -179,16 +179,24 @@ values that compare unequal produce `idempotency.mismatch`.
 ### 4. Compose the marker inside the typed mutation transaction
 
 There is no separately callable `Claim` followed by a resource mutation. Each
-Controller-facing typed repository mutation accepts one validated idempotency
-claim and delegates to one shared etcd mutation coordinator.
+Controller-facing non-Blueprint typed repository mutation accepts one validated
+idempotency claim and delegates to one shared etcd mutation coordinator.
 
 Inside `internal/infra/etcd`, the typed repository builds an opaque, single-use
 mutation plan containing its primary/index compares and success operations.
 The plan exposes neither raw keys nor Store operations outside that package.
 The coordinator validates the plan and marker, adds the marker-absent compare
-and marker writes, enforces the 96-operation and 1 MiB transaction ceilings,
-and calls `Store.Transact` exactly once. A consumed plan cannot be submitted
-again.
+and marker writes, enforces the ordinary non-Blueprint 96-selected-operation
+protection and 1 MiB transaction ceiling, and calls `Store.Transact` exactly
+once. A consumed plan cannot be submitted again.
+
+Final Environment Blueprint publication still uses this ADR's marker schema,
+protected intent, replay, mismatch, and unknown-outcome evidence, but delegates
+its complete transaction to ADR 0051's dedicated final-publication executor and
+envelope. It never passes through the ordinary `Store.Transact` coordinator's
+96-selected-operation protection. ADR 0051 instead enforces at most 256
+comparisons, 256 success operations, 256 failure operations, and 1 MiB of
+actual protobuf-encoded request bytes before etcd.
 
 The Controller-facing result is a closed union:
 
@@ -347,7 +355,9 @@ Implementation requires focused and race-enabled tests proving:
 2. strict canonical marker and retention-index codecs with no compatibility
    readers;
 3. one winner under concurrent identical and mismatched claims;
-4. claim plus direct mutation or Task creation in one Store transaction;
+4. claim plus non-Blueprint direct mutation or Task creation in one ordinary
+   Store transaction, and final Environment Blueprint claim plus publication in
+   ADR 0051's one dedicated transaction;
 5. pending in-progress, terminal exact replay, and valid mismatch outcomes;
 6. protected-envelope comparison compatibility, constant-time comparison, and
    complete plaintext clearing;
@@ -363,8 +373,10 @@ Implementation requires focused and race-enabled tests proving:
 12. caller cancellation versus backend deadline/Unavailable classification;
 13. no key, digest, ciphertext, response, or plaintext leakage through errors,
     logs, formatting, JSON diagnostics, metrics, or traces; and
-14. transaction preflight rejecting a plan over 96 operations or 1 MiB before
-    any write.
+14. ordinary non-Blueprint transaction preflight rejecting a selected plan
+    above 96 operations or a request above 1 MiB before any write, while final
+    Environment Blueprint publication follows ADR 0051's independent per-arm
+    and encoded-byte preflight.
 
 The repository-wide integration test must crash or cancel at every boundary
 between validation, protection, transaction submission, unknown-outcome read,

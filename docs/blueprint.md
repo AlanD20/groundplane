@@ -1142,24 +1142,54 @@ authored connector label must resolve to an already-existing Connector owned by
 this Environment at the fixed validation revision, and final publication
 fences its exact primary, owner index, and deletion state.
 
-`x-gp-backup` publication is all-or-nothing with the Environment desired head,
-Environment update Task and queue/index authority, ADR 0021 marker, policy,
-enabled-only Connector reference, every missing three-record source tuple,
-required candidate Attach and Volume identities, and the lazy age key. Direct
+Every final Environment Blueprint publication is all-or-nothing. One dedicated
+envelope contains the Environment desired head, Environment update Task and
+queue/index authority, ADR 0021 marker, every candidate Release and Script
+execution, every required staged physical Script source and candidate Attach or
+Volume identity, and, when present, the Backup Policy, enabled-only Connector
+reference, every missing three-record source tuple, and lazy age key. Direct
 Backup Policy replacement retains ADR 0046's source pre-ensure behavior;
-Blueprint creates no source record before its final publication transaction. A
-failed comparison, validation, encoding limit, or commit leaves all public
-state at the prior head.
+Blueprint creates no source record before its final publication transaction.
 
-The exact maximum legal atomic shape is 120 comparisons, 74 success mutations,
-and 120 fixed-revision failure reads: 194 operations on the successful selected
-path and 314 across the complete encoded request. The Backup-specific envelope
-permits at most 128 operations in each arm, at most 256 selected
-compare-plus-branch operations, at most 384 operations in the full request, and
-at most 1 MiB after protobuf encoding. Ordinary Blueprint publication and
-ordinary `Store.Transact` retain their existing 32/32/32 and 96-selected-
-operation limits; etcd remains configured for at most 256 operations in a
-transaction arm.
+The exact legal operation shapes are:
+
+| Blueprint shape | Comparisons | Success | Failure | Selected success | Selected failure | Full request |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| QA: eleven Release candidates, two hooks, three staged physical sources | 31 | 43 | 31 | 74 | 62 | 105 |
+| maximum non-Backup Script | 45 | 99 | 45 | 144 | 90 | 189 |
+| maximum non-Backup Script plus two candidate Attaches | 86 | 132 | 86 | 218 | 172 | 304 |
+| previously documented Backup-only maximum | 120 | 74 | 120 | 194 | 240 | 314 |
+| combined Backup plus Script maximum | 143 | 160 | 143 | 303 | 286 | 446 |
+
+All counted operations are distinct and atomic. Removing or coalescing one
+would discard desired-head, Task, marker, Release, Script, source, Attach, or
+Backup authority. The Backup-only shape remains accounting evidence, not a
+separate publication envelope.
+
+Each comparison, success, and failure arm may contain at most 256 operations,
+matching configured etcd semantics. The Controller also measures the actual
+protobuf request and permits at most 1 MiB (1,048,576 bytes). A byte-fitting arm
+of 256 is valid; 257 in any arm is invalid. The theoretical 512 selected-arm
+and 768 full-logical-request counts are diagnostics only and are never
+rejection limits.
+
+Arm or byte overflow is rejected locally before etcd as
+`validation.failed`/HTTP 422 and publishes no public state. A fitting
+comparison that loses at etcd remains an atomic conflict: its fixed-revision
+failure arm is selected and no success mutation commits. Staging, sealing,
+Script source preparation/release, and every other non-final-publication limit
+remain unchanged. Ordinary non-Blueprint `Store.Transact` retains its
+96-selected-operation protection.
+
+Focused proof must cover exact `31/43/31`, `45/99/45`, `86/132/86`, and
+`143/160/143` construction; the retained Backup-only `120/74/120` accounting;
+256-arm acceptance and 257-arm rejection; rejection above the 1 MiB protobuf
+ceiling; and the unchanged ordinary non-Blueprint 96-operation protection.
+Known local validation or encoding failure and a confirmed comparison failure
+publish nothing. A retryable or deadline result whose commit status is unknown
+remains unresolved until ADR 0021's durable evidence identifies the one atomic
+result as wholly old or wholly new; marker absence alone never proves the prior
+head won.
 
 `encryption` is `age` or `none`. Because the config source includes secret
 Entry values, any policy selecting config must use `encryption: age`.
@@ -1407,6 +1437,8 @@ conditions apply:
 - the encoded lossless normalized projection exceeds exactly 2 MiB, including
   its durable schema and framing;
 - a backup source, connector, encryption key, or restore identity is invalid;
+- a final Environment Blueprint publication exceeds an arm or encoded-request
+  limit;
 - a requested release strategy is deferred (`rolling` in the MVP);
 - a release-group map key is empty, a group contains fewer than two services,
   or its `on_failure` policy is outside the closed enum;

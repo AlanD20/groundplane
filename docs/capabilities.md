@@ -347,15 +347,26 @@ Stable ownership, direct-credential redaction, normalized S3-compatible input,
 task-backed removal, and typed terminal absence are recorded in
 `docs/acceptance/c15-connectors.md`. Live R2 and backup/restore remain C16.
 
-## Blueprint Backup atomic-publication contract (2026-09-02)
+## Unified Blueprint final-publication contract correction (2026-09-02)
 
-ADRs 0046 and 0051 now close the atomic `x-gp-backup` publication contract,
-including 12 selected sources, three durable catalog records per tuple, at most
-two new candidate Attaches, same-publication candidate Attach and Volume target
-validation, pre-existing Connector authority, lazy age-key identity, and the
-exact bounded transaction envelope. Direct Backup Policy replacement retains
-its separate pre-ensure behavior.
+ADRs 0051 and 0062 plus the Blueprint grammar now require one final Environment
+Blueprint publication envelope for every legal extension combination. Each
+comparison, success, and failure arm is bounded by the configured etcd maximum
+of 256 operations, and the actual protobuf request is bounded by 1 MiB. The
+derived 512 selected-arm and 768 full-request counts are diagnostics, not
+rejection limits. Ordinary non-Blueprint `Store.Transact` retains its
+96-selected-operation protection; staging, sealing, and non-final-publication
+limits are unchanged.
 
-This is contract evidence only. No Blueprint Backup builder, persistence path,
-failure-injection proof, generated artifact, or real-host journey has landed.
-C16 and C21 remain **Scaffolded**.
+Required implementation evidence is exact construction of `31/43/31` for the
+eleven-Release/two-hook/three-physical-source QA Blueprint, `45/99/45` for the
+maximum non-Backup Script shape, `86/132/86` with two candidate Attaches, the
+retained Backup-only `120/74/120` accounting, and `143/160/143` for the combined
+maximum, plus 256-arm acceptance, 257-arm rejection, over-1-MiB rejection, and
+proof that the non-Blueprint 96-operation protection is unchanged. Every
+operation is distinct and required for atomic desired-head, Task, marker,
+Release, Script, source, Attach, and Backup authority.
+
+This is a contract correction only. No unified final-publication builder,
+persistence change, failure-injection proof, generated artifact, acceptance
+result, or real-host journey has landed. C16 and C21 remain **Scaffolded**.

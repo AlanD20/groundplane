@@ -32,7 +32,9 @@ the same time:
   resources;
 - raw multipart input must be streamed and independent of transport framing;
 - desired state, the reconcile Task, and the idempotency marker must become
-  visible in one etcd transaction of at most 96 operations and 1 MiB.
+  visible in one etcd transaction whose comparison, success, and failure arms
+  each fit the configured 256-operation etcd ceiling and whose encoded request
+  is at most 1 MiB.
 
 The scaffold stores every submitted file and every normalized resource in the
 publication transaction. A maximum-size bundle therefore exceeds the etcd
@@ -370,30 +372,6 @@ limits above. They do not add a second desired mutation.
 The desired-state mutation is the head change. No file chunk and no normalized
 resource record is copied in this transaction.
 
-An ordinary publication without `x-gp-backup` contains at most 32 comparisons,
-a success arm of at most 32 mutations, and an ADR 0021 failure arm of at most
-32 fixed-revision reads. All arms are encoded in the one etcd transaction
-request, so its maximum is exactly 96 operations. The ordinary builder rejects
-an internal plan that exceeds any one of those three 32-operation partitions.
-
-The maximum ADR 0049 Volume-removal compare partition is exact:
-
-| Compare family | Count |
-| --- | ---: |
-| final desired-schema marker and Controller leadership/writer fence | 2 |
-| Environment, Project, Tenant, their three deletion tombstones, and Environment mutation epoch | 7 |
-| current Environment head, sealed root, sealed staging descriptor, and matching locator | 4 |
-| absent idempotency marker, Task, queue, active operation, operation history, and three Task-owner indexes | 8 |
-| Volume runtime revision, absent removal lock, absent materialization writer, absent replay target, sealed removal evidence, impact digest, slug reservation, immutable-key reservation, and absent desired checkpoint | 9 |
-| Backup policy/source aggregate and historical-consequence aggregate | 2 |
-| **Total** | **32** |
-
-The failure arm contains the corresponding 32 point reads. A failed compare is
-therefore classified from the exact schema, ancestry, head, Volume runtime,
-lock, replay, impact, Backup, Task, and idempotency evidence at the transaction
-revision. There is no additional post-transaction read needed to decide the
-compare failure.
-
 Publication values have these maximum encoded sizes:
 
 | Record | Maximum |
@@ -412,54 +390,18 @@ The Task record contains revision and sealed-root references, plan identity,
 status, and compact step metadata. Large render inputs and materializations
 belong to the immutable revision projection, not the Task record.
 
-The success-arm envelope assigns values to all 32 mutations. It charges the
-head, Task, marker, descriptor, Volume runtime projection, removal lock, replay
-target, and desired checkpoint at their individual maxima, and charges all 24
-remaining mutation values at 1 KiB even when an operation is a delete:
+Every final Environment Blueprint publication uses the dedicated bounded
+envelope below. There is no smaller ordinary-Blueprint envelope and no
+Backup-only envelope. Backup source identity, Script source authority, Release
+authority, and same-candidate targets cannot be split into pre-public public
+state without violating desired-head atomicity. The transaction includes every
+applicable desired head, Environment update Task and index, ADR 0021 marker,
+Release, Script execution, prepared physical source, candidate Attach and
+Volume identity, Backup Policy and enabled-only Connector reference, missing
+source-catalog record, and lazily created current age key. The prior head and
+every public record remain authoritative until this one transaction commits.
 
-```text
-head                                             1,024
-Task                                            65,536
-idempotency marker                             262,144
-descriptor                                       4,096
-Volume runtime projection                         8,192
-Environment removal lock                          4,096
-ADR 0021 replay target                            4,096
-desired_published checkpoint                      4,096
-24 remaining mutation values       24 * 1,024 = 24,576
-64 encoded keys                    64 * 2,048 = 131,072
-per-operation protobuf framing     64 *    64 =   4,096
-transaction framing                               128
-success-arm envelope                            513,152 bytes
-```
-
-Deletes consume no value but are conservatively charged as 1 KiB remaining
-values. The failure arm adds 32 range-read keys and their request framing but no
-request values:
-
-```text
-success-arm envelope                            513,152
-32 failure-read keys               32 * 2,048 =  65,536
-failure-operation protobuf framing  32 *    64 =   2,048
-full transaction request                         580,736 bytes
-```
-
-The builder measures the actual encoded etcd transaction and rejects it above
-592 KiB, or 606,208 bytes. That exact local ceiling is 25,472 bytes above the
-calculated worst case and 442,368 bytes below the store's 1 MiB ceiling. The
-ordinary `Store.Transact` path remains capped at 96 selected operations and
-1 MiB. `x-gp-backup` does not widen that general-purpose path.
-
-### Backup Blueprint publication has one bounded atomic envelope
-
-An Environment Blueprint containing `x-gp-backup` uses one dedicated bounded
-publication envelope because Backup source identity and same-candidate targets
-cannot be pre-published without violating desired-head atomicity. The envelope
-includes the desired head, Environment update Task and indexes, ADR 0021
-marker, Backup Policy and enabled-only Connector reference, every missing
-source-catalog record, a lazily created current age key when required, and the
-candidate Attach and Volume identities selected by the policy. The prior head
-and every public record remain authoritative until this one transaction commits.
+### Every Environment Blueprint publication has one bounded atomic envelope
 
 `MaximumBackupPolicySources` remains 12. Each stable source tuple has exactly
 three records: source primary, Environment ownership index, and
@@ -477,28 +419,42 @@ Direct Backup Policy replacement retains ADR 0046's idempotent source
 pre-ensure behavior. Blueprint does not use it: all missing three-record source
 tuples are created only in the final publication transaction.
 
-The exact worst legal Backup Blueprint plan has this operation shape:
+The exact legal publication shapes are:
 
-| Family | Operations |
-| --- | ---: |
-| comparisons | 120 |
-| success mutations | 74 |
-| fixed-revision failure reads | 120 |
-| selected successful path (compare plus success) | 194 |
-| complete encoded request (compare plus both arms) | 314 |
+| Blueprint shape | Comparisons | Success | Failure | Selected success | Selected failure | Full request |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| QA: eleven Release candidates, two hooks, three staged physical sources | 31 | 43 | 31 | 74 | 62 | 105 |
+| maximum non-Backup Script | 45 | 99 | 45 | 144 | 90 | 189 |
+| maximum non-Backup Script plus two candidate Attaches | 86 | 132 | 86 | 218 | 172 | 304 |
+| previously documented Backup-only maximum | 120 | 74 | 120 | 194 | 240 | 314 |
+| combined Backup plus Script maximum | 143 | 160 | 143 | 303 | 286 | 446 |
 
-A compare failure selects 120 comparisons plus 120 failure reads, or 240
-operations. Both the 194-operation successful path and 240-operation failure
-path fit the 256 selected-operation ceiling.
+Every counted operation is distinct and participates in the one atomic
+publication. Removing or coalescing one would discard desired-head, Task,
+marker, Release, Script, source, Attach, or Backup authority. The Backup-only
+`120/74/120` shape remains useful accounting evidence, but it no longer defines
+a separate envelope.
 
-The dedicated builder enforces independent maxima of 128 comparisons, 128
-success operations, and 128 failure operations. It rejects a plan above 256
-selected compare-plus-branch operations, above 384 operations across the full
-encoded request, or above 1 MiB (1,048,576 bytes) after protobuf encoding. The
-backing etcd deployment keeps its configured 256-operation transaction-arm
-ceiling; the builder's per-family 128-operation limits are stricter. These are
-Backup Blueprint envelope limits only. Staging, sealing, ordinary Blueprint
-publication, and ordinary `Store.Transact` retain their existing limits.
+The final-publication builder enforces the configured etcd semantics directly:
+at most 256 comparisons, at most 256 success operations, at most 256 failure
+operations, and at most 1 MiB (1,048,576 bytes) in the protobuf-encoded request.
+It measures the actual encoded request. A plan with 256 operations in an arm is
+accepted when the other arms and encoded bytes also fit; 257 operations in any
+arm are rejected. The theoretical 512 operations in a selected
+compare-plus-branch path and 768 operations across all three encoded families
+are diagnostic derived counts only. Neither is a rejection limit.
+
+Arm or byte overflow is rejected locally as the existing
+`validation.failed`/HTTP 422 response before etcd is called, and it publishes no
+public state. A comparison that fits the envelope but loses at etcd remains one
+atomic conflict: the failure arm observes the exact transaction revision and
+no success mutation commits.
+
+Staging, sealing, private source preparation/release, and every other
+non-final-publication transaction retain their existing limits. Ordinary
+non-Blueprint `Store.Transact` retains its 96-selected-operation protection and
+1 MiB encoded-request ceiling; the dedicated final-publication builder does not
+widen that general-purpose path.
 
 The failure arm reads the exact same head, root, descriptor, policy, source,
 candidate target, Connector, key, Task, marker, queue, index, lock, and
@@ -509,10 +465,18 @@ cannot allocate a second age identity on replay.
 
 Required focused proofs are:
 
-- the maximum legal candidate with 12 selected sources, two new Attach
-  candidates, candidate Volume targets, and an absent age key produces exactly
-  `120/74/120`, a 194-operation successful path, a 314-operation full request,
-  and an encoded protobuf request no larger than 1 MiB;
+- the legal QA candidate with eleven Release candidates, two hooks, and three
+  staged physical sources produces exactly `31/43/31`, a 74-operation selected
+  success path, a 62-operation selected failure path, and 105 full operations;
+- the maximum legal non-Backup Script candidate produces exactly `45/99/45`,
+  and adding the maximum two candidate Attaches produces exactly `86/132/86`;
+- the previously documented maximum Backup-only candidate still produces
+  exactly `120/74/120`, while the combined maximum Backup plus Script candidate
+  produces exactly `143/160/143`, a 303-operation selected success path, a
+  286-operation selected failure path, and 446 full operations;
+- a byte-fitting synthetic boundary plan accepts 256 operations in each arm,
+  257 operations in any arm rejects locally, and a protobuf request exceeding
+  1 MiB rejects locally before etcd;
 - source 13 and new candidate Attach 3 fail before publication, while retained
   and pre-existing Attaches do not consume the two-candidate limit;
 - same-candidate Attach and Volume source targets validate, while missing,
@@ -528,8 +492,8 @@ Required focused proofs are:
 - injected failure and compare loss at every final-publication boundary leave
   the old head, policy, Task, marker, candidate identities, source catalog, and
   key either wholly old or wholly new; and
-- ordinary 32/32/32 publication and the 96-selected-operation
-  `Store.Transact` ceiling remain unchanged.
+- ordinary non-Blueprint `Store.Transact` still rejects a selected path above
+  its unchanged 96-operation protection.
 
 If a comparison fails, the same transaction's ADR 0021 failure arm reads the
 idempotency marker, Task, active operation, queue, environment head,
@@ -867,9 +831,10 @@ superseded contracts.
 - Bounded Volume runtime, removal-lock, Task, checkpoint, and replay-target
   records may be committed beside a desired head, but the head and normalized
   revision remain the sole desired authority.
-- The Controller must enforce three separate local transaction budgets for
-  staging, sealing, and ordinary publication, plus the dedicated Backup
-  Blueprint publication envelope, in addition to the store's final ceiling.
+- The Controller must enforce the existing local budgets for staging, sealing,
+  and other non-final-publication work, one dedicated final Environment
+  Blueprint publication envelope, and the ordinary non-Blueprint
+  `Store.Transact` protection.
 - First final-schema startup requires empty relevant authority namespaces or an
   explicit operator clean-store reinitialization.
 - There is no in-place migration or compatibility reader; already-final-schema
