@@ -124,7 +124,10 @@ func createOptions(image string, operation Operation) client.ContainerCreateOpti
 		HostConfig: &container.HostConfig{
 			NetworkMode: container.NetworkMode("none"),
 			RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyDisabled},
-			ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges"},
+			ReadonlyRootfs: true,
+			CapDrop:        []string{"ALL"},
+			CapAdd:         []string{"DAC_OVERRIDE"},
+			SecurityOpt:    []string{"no-new-privileges"},
 			Mounts: []mount.Mount{
 				{Type: mount.TypeBind, Source: hostresolutionhelper.ResolverSourcePath, Target: hostresolutionhelper.ResolverMountPath},
 				{Type: mount.TypeBind, Source: agentprotocol.StatePath, Target: agentprotocol.StatePath},

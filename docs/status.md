@@ -498,3 +498,12 @@ exact durable identity through Task detail and events; OpenAPI and both
 generated clients expose the same closed contract. Focused race proofs, the
 complete internal compile graph, and deterministic API regeneration pass.
 Reference-host Blueprint acceptance remains pending.
+
+## Host-resolution helper clean-start correction (2026-09-02)
+
+Reference-host clean bootstrap proved that the isolated host-resolution helper
+could not replace the root-owned resolver target after dropping every Linux
+capability. The helper now restores only `DAC_OVERRIDE` while retaining a
+read-only root filesystem, network isolation, `no-new-privileges`, and all
+other capabilities dropped. Focused isolation proof passes; exact-host
+Blueprint acceptance remains pending.
