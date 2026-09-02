@@ -436,3 +436,7 @@ Blueprint apply now builds eligible changed singleton Services from the sealed c
 ## Blueprint candidate terminal and retry runtime (2026-09-02)
 
 Successful Blueprint Environment update Tasks now promote the exact candidate Releases, applied Compose projection, Component candidates, and Route observations in one aggregate-budgeted terminal transaction without rewriting the desired head. Failure terminalization requires strategy-specific proof of exact predecessor restoration or first-candidate absence; reconciliation-required outcomes remain nonterminal. Retry preserves the sealed predecessor, Release, attempt, source, and image epoch and transfers only while every Script execution is durably not_started; missing, corrupt, started, stale, or unknown lineage fails with script.retry_unsafe and publishes no successor. Terminal replay validates the retained manifest, evidence, image, summary, and attempt postconditions before accepting success.
+
+## Blueprint Script namespace registration (2026-09-02)
+
+The exact-main private topology run exposed that the canonical root `x-gp-scripts` extension was omitted from namespace validation, rejecting valid Blueprint input before parsing. This lane registers the missing canonical key and adds focused acceptance and unknown-extension rejection coverage; the reference-host rerun remains pending.

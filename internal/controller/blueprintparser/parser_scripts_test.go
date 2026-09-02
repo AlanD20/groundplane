@@ -79,6 +79,12 @@ services:
   api:
     image: example/api:1
 `,
+		"unknown namespace extension": `x-gp-unknown:
+  value: true
+services:
+  api:
+    image: example/api:1
+`,
 		"blank body": `x-gp-scripts:
   migration-hook:
     slug: migrate

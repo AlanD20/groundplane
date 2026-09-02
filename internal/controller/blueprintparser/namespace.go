@@ -54,7 +54,7 @@ var knownGroundplaneExtensions = map[string]struct{}{
 	"x-gp-resource": {}, "x-gp-release": {}, "x-gp-release-groups": {}, "x-gp-adapter": {},
 	"x-gp-network": {}, "x-gp-attach": {}, "x-gp-attachments": {}, "x-gp-fact": {},
 	"x-gp-entry": {}, "x-gp-exposure": {}, "x-gp-depends_on": {}, "x-gp-requires": {},
-	"x-gp-route": {}, "x-gp-routes": {}, "x-gp-components": {}, "x-gp-backup": {}, "x-gp-network-pool": {},
+	"x-gp-route": {}, "x-gp-routes": {}, "x-gp-components": {}, "x-gp-backup": {}, "x-gp-scripts": {}, "x-gp-network-pool": {},
 	"x-gp-execution": {}, "x-gp-managed": {},
 }
 
