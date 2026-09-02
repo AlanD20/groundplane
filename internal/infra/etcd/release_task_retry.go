@@ -29,6 +29,9 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(ctx context.Context, s
 	if publicationID == "" {
 		return releaseTaskRetryChange{}, nil
 	}
+	if source.Type == TaskUpdate {
+		return repository.prepareBlueprintCandidateRetry(ctx, source, retry, revision)
+	}
 	if validatePublicationID(publicationID) != nil || source.Executor != TaskExecutorAgent ||
 		(source.Type != TaskDeploy && source.Type != TaskRollback) || retry.Type != source.Type ||
 		retry.OperationID != source.OperationID || retry.Params[TaskReleasePublicationParam] != publicationID ||

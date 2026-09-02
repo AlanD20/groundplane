@@ -9,8 +9,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const maximumBlueprintReleaseTerminalBatchMembers = 9
-
 type blueprintReleaseResolvedRecord struct {
 	record   ExecutionStepResultRecord
 	key      string
@@ -41,13 +39,32 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 		return false, corruptReleaseRecord()
 	}
 	marker, err := decodeReleaseRecord[ReleasePublicationMarker](base.Values[0].Value, "release-publication")
-	if err != nil || marker.PublicationID != publicationID || marker.OperationID != task.OperationID {
+	if err != nil {
 		return false, corruptReleaseRecord()
 	}
 	manifest, err := decodeReleaseRecord[ReleaseStagedManifest](base.Values[1].Value, "release-staged-manifest")
-	if err != nil || manifest.PublicationID != publicationID || manifest.OperationID != task.OperationID ||
-		manifest.Digest != marker.ManifestDigest || len(manifest.Members) == 0 {
+	if err != nil || validateBlueprintCandidateManifest(task, marker, manifest) != nil {
 		return false, corruptReleaseRecord()
+	}
+	rootRead, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{environmentBlueprintRootKey(
+			task.Owner.EnvironmentID, task.Params[EnvironmentDesiredRevisionParam],
+		)},
+		Revision: readRevision,
+	})
+	if err != nil || rootRead == nil || len(rootRead.Values) != 1 || rootRead.Values[0] == nil {
+		if err != nil {
+			return false, err
+		}
+		return false, corruptReleaseRecord()
+	}
+	seal, err := decodeEnvironmentBlueprintSeal(rootRead.Values[0].Value)
+	if err != nil {
+		return false, err
+	}
+	attempts, _, err := repository.blueprintCandidateAttempts(ctx, task, seal, readRevision)
+	if err != nil {
+		return false, err
 	}
 	terminalKeys := make([]string, len(manifest.Members))
 	for index, member := range manifest.Members {
@@ -60,9 +77,9 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 	if terminals == nil || terminals.ReadRevision != readRevision || len(terminals.Values) != len(terminalKeys) {
 		return false, corruptReleaseRecord()
 	}
-	pending := make([]int, 0, maximumBlueprintReleaseTerminalBatchMembers)
+	pending := make([]int, 0, len(manifest.Members))
 	for index, value := range terminals.Values {
-		if value == nil && len(pending) < maximumBlueprintReleaseTerminalBatchMembers {
+		if value == nil {
 			pending = append(pending, index)
 		}
 	}
@@ -107,11 +124,6 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 	}
 	mutations := make([]Mutation, 0, len(pending)*4)
 	defer clearMutations(mutations)
-	attemptStartedAt := terminalAt
-	if task.StartedAt != nil {
-		attemptStartedAt = *task.StartedAt
-	}
-	attempts := []domain.Attempt{{ID: task.ID, TaskID: task.ID, StartedAt: attemptStartedAt}}
 	for offset, index := range pending {
 		values := details.Values[offset*5 : offset*5+5]
 		if values[0] == nil || values[1] == nil || values[3] != nil || values[4] != nil {
@@ -123,7 +135,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 		if decodeErr != nil || domain.ValidateIntent(intent) != nil || intentDigest != member.IntentDigest ||
 			intent.OperationKind != domain.OperationBlueprintApply || intent.ID != member.ReleaseID ||
 			intent.ServiceID != member.ServiceID || intent.EnvironmentID != task.Owner.EnvironmentID ||
-			intent.OperationID != task.OperationID || intent.OriginatingTaskID != task.ID {
+			intent.OperationID != task.OperationID {
 			return false, corruptReleaseRecord()
 		}
 		checkpoint, decodeErr := decodeReleaseRecord[domain.Checkpoint](values[1].Value, "release-checkpoint")
@@ -246,9 +258,6 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 			}
 			mutations = append(mutations, Mutation{Type: MutationPut, Key: detailKeys[offset*5+2], Value: projectionValue})
 		}
-	}
-	if len(conditions)+len(mutations) > maximumTransactionOperations {
-		return false, errs.New(errs.KindInternal, "Blueprint release terminal batch exceeds the transaction ceiling")
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {

@@ -84,6 +84,21 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	if err != nil {
 		return componentTaskChange{}, err
 	}
+	blueprintRetry := source.Type == TaskUpdate && source.Params[TaskReleasePublicationParam] != ""
+	var blueprintProjection EnvironmentComposeProjection
+	if blueprintRetry {
+		hierarchy := &HierarchyRepository{store: repository.store}
+		desiredProjection, found, projectionErr := hierarchy.GetEnvironmentComposeProjectionRevision(
+			ctx, intent.EnvironmentID, desiredRevisionID,
+		)
+		if projectionErr != nil {
+			return componentTaskChange{}, projectionErr
+		}
+		if !found {
+			return componentTaskChange{}, errs.New(errs.KindStateConflict, "Blueprint retry desired projection is unavailable")
+		}
+		blueprintProjection = desiredProjection.Record
+	}
 
 	keys := make([]string, 0, 4+len(intent.Candidates)+(2*len(zones)))
 	keys = append(
@@ -106,8 +121,9 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	if err != nil {
 		return componentTaskChange{}, err
 	}
-	if state == nil || len(state.Values) != len(keys) || state.Values[1] == nil ||
-		state.Values[2] == nil || state.Values[3] == nil {
+	if state == nil || len(state.Values) != len(keys) ||
+		state.Values[2] == nil || state.Values[3] == nil ||
+		(!blueprintRetry && state.Values[1] == nil) {
 		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component retry state is incomplete")
 	}
 	if state.Values[0] != nil && ids.Validate(ids.KindTask, string(state.Values[0].Value)) != nil {
@@ -117,17 +133,40 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	if err != nil || headRevisionID != desiredRevisionID {
 		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component retry Environment head changed")
 	}
-	projection, err := decodeEnvironmentComposeProjection(state.Values[1].Value)
-	if err != nil {
-		return componentTaskChange{}, err
-	}
-	if projection.EnvironmentID != intent.EnvironmentID ||
-		projection.RenderGeneration != uint64(source.RenderGeneration) ||
-		!componentRetryProjectionMatches(intent, projection) {
-		return componentTaskChange{}, errs.New(
-			errs.KindStateConflict,
-			"Component retry no longer matches the pinned Environment projection",
-		)
+	if blueprintRetry {
+		if blueprintProjection.EnvironmentID != intent.EnvironmentID ||
+			blueprintProjection.RevisionID != desiredRevisionID ||
+			blueprintProjection.RenderGeneration != uint64(source.RenderGeneration) ||
+			!componentRetryProjectionMatches(intent, blueprintProjection) {
+			return componentTaskChange{}, errs.New(
+				errs.KindStateConflict,
+				"Component retry no longer matches the immutable Blueprint projection",
+			)
+		}
+		if state.Values[1] != nil {
+			applied, decodeErr := decodeEnvironmentComposeProjection(state.Values[1].Value)
+			if decodeErr != nil || applied.EnvironmentID != intent.EnvironmentID ||
+				applied.RevisionID == desiredRevisionID ||
+				applied.RenderGeneration >= uint64(source.RenderGeneration) {
+				return componentTaskChange{}, errs.New(
+					errs.KindStateConflict,
+					"Blueprint retry predecessor projection changed",
+				)
+			}
+		}
+	} else {
+		projection, decodeErr := decodeEnvironmentComposeProjection(state.Values[1].Value)
+		if decodeErr != nil {
+			return componentTaskChange{}, decodeErr
+		}
+		if projection.EnvironmentID != intent.EnvironmentID ||
+			projection.RenderGeneration != uint64(source.RenderGeneration) ||
+			!componentRetryProjectionMatches(intent, projection) {
+			return componentTaskChange{}, errs.New(
+				errs.KindStateConflict,
+				"Component retry no longer matches the pinned Environment projection",
+			)
+		}
 	}
 
 	change := componentTaskChange{
@@ -136,7 +175,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 			{Key: componentTaskIntentKey(source.ID), ModRevision: intentValue.ModRevision},
 			{Key: componentTaskIntentKey(retry.ID)},
 			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
-			{Key: environmentComposeProjectionKey(intent.EnvironmentID), ModRevision: state.Values[1].ModRevision},
+			{Key: environmentComposeProjectionKey(intent.EnvironmentID), ModRevision: keyValueRevision(state.Values[1])},
 			{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[2].ModRevision},
 			{Key: environmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID), ModRevision: state.Values[3].ModRevision},
 		},
@@ -524,16 +563,18 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		}
 		change.mutations = append(change.mutations, componentWriteFenceMutation(task.ID))
 	}
-	routeObservationChange, err := repository.prepareComponentTaskRouteObservationAcknowledgement(
-		ctx, intent, terminalStatus, revision,
-	)
-	if err != nil {
-		clearComponentTaskChange(change)
-		return componentTaskChange{}, err
+	if terminalStatus == TaskStatusCompleted || task.Params[TaskReleasePublicationParam] == "" {
+		routeObservationChange, routeErr := repository.prepareComponentTaskRouteObservationAcknowledgement(
+			ctx, intent, terminalStatus, revision,
+		)
+		if routeErr != nil {
+			clearComponentTaskChange(change)
+			return componentTaskChange{}, routeErr
+		}
+		change.conditions = append(change.conditions, routeObservationChange.conditions...)
+		change.mutations = append(change.mutations, routeObservationChange.mutations...)
+		change.values = append(change.values, routeObservationChange.values...)
 	}
-	change.conditions = append(change.conditions, routeObservationChange.conditions...)
-	change.mutations = append(change.mutations, routeObservationChange.mutations...)
-	change.values = append(change.values, routeObservationChange.values...)
 	secretMutations, err := componentTaskTerminalSecretMutations(intent, task.ID, terminalStatus)
 	if err != nil {
 		clearComponentTaskChange(change)

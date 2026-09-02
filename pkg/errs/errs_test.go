@@ -45,6 +45,7 @@ func TestKindCatalogIsCompleteAndExact(t *testing.T) {
 		KindVolumeNotFound:              {CodeVolumeNotFound, ClassNotFound, 404},
 		KindEntryNotFound:               {CodeEntryNotFound, ClassNotFound, 404},
 		KindScriptNotFound:              {CodeScriptNotFound, ClassNotFound, 404},
+		KindScriptRetryUnsafe:           {CodeScriptRetryUnsafe, ClassConflict, 409},
 		KindReleaseNotFound:             {CodeReleaseNotFound, ClassNotFound, 404},
 		KindReleaseRecoveryRequired:     {CodeReleaseRecoveryRequired, ClassConflict, 409},
 		KindReleaseDeadlineTooShort:     {CodeReleaseDeadlineTooShort, ClassValidation, 422},

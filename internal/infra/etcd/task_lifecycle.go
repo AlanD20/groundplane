@@ -1398,7 +1398,13 @@ func (repository *TaskRepository) acknowledgeTask(
 				); err != nil {
 					return Versioned[TaskRecord]{}, err
 				}
-				if task.Params[TaskReleasePublicationParam] != "" {
+				if task.Params[TaskReleasePublicationParam] != "" && task.Type == TaskUpdate {
+					if err := repository.validateBlueprintCandidateTerminalReplay(
+						ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+					); err != nil {
+						return Versioned[TaskRecord]{}, err
+					}
+				} else if task.Params[TaskReleasePublicationParam] != "" {
 					headRead, err := repository.store.GetMany(ctx, GetManyRequest{
 						Keys: []string{
 							releaseOperationKey(task.OperationID),
@@ -1481,7 +1487,8 @@ func (repository *TaskRepository) acknowledgeTask(
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
-		if executor == TaskExecutorAgent && task.Params[TaskReleasePublicationParam] != "" {
+		if executor == TaskExecutorAgent && task.Params[TaskReleasePublicationParam] != "" &&
+			task.Type != TaskUpdate {
 			processed, err := repository.finalizeReleaseTaskBatch(
 				ctx, task, assignment, terminalStatus, *result, agentID, terminalAt,
 				primaryAndAssignment.ReadRevision,
@@ -1617,6 +1624,21 @@ func (repository *TaskRepository) acknowledgeTask(
 			conditions = append(conditions, Condition{Key: writerKey, ModRevision: companions.Values[5].ModRevision})
 			mutations = append(mutations, Mutation{Type: MutationDelete, Key: writerKey})
 		}
+		blueprintCandidateChange := blueprintCandidateTerminalChange{}
+		if result != nil {
+			blueprintCandidateChange, err = repository.prepareBlueprintCandidateTerminalAcknowledgement(
+				ctx, task, assignment, terminalStatus, *result, agentID, terminalAt,
+				primaryAndAssignment.ReadRevision,
+			)
+			if err != nil {
+				clear(terminalValue)
+				clear(markerValue)
+				clear(retentionValue)
+				clear(taskRetentionValue)
+				return Versioned[TaskRecord]{}, err
+			}
+		}
+		defer blueprintCandidateChange.clear()
 		materializationProjectionChange, err := repository.prepareTaskMaterializationProjectionAcknowledgement(
 			ctx,
 			task,
@@ -1935,6 +1957,26 @@ func (repository *TaskRepository) acknowledgeTask(
 		defer rotationChange.clear()
 		conditions = append(conditions, rotationChange.conditions...)
 		mutations = append(mutations, rotationChange.mutations...)
+		conditions, mutations, err = mergeBlueprintCandidateTerminalChange(
+			conditions, mutations, blueprintCandidateChange,
+		)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(taskRetentionValue)
+			clear(environmentValue)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			clearRouteTaskChange(routeChange)
+			clearServiceTaskChange(serviceChange)
+			clearBackingZoneTaskChange(backingZoneChange)
+			clearComponentTaskChange(componentChange)
+			clearPlatformComponentTaskChange(platformComponentChange)
+			clearConnectorTaskChange(connectorChange)
+			clearRunnerTaskChange(runnerChange)
+			return Versioned[TaskRecord]{}, err
+		}
 		environmentBinding, err := repository.bindOrdinaryTaskEnvironmentMutation(
 			ctx,
 			task,

@@ -12,6 +12,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/oklog/ulid/v2"
@@ -245,16 +246,19 @@ func (repository *TaskRepository) prepareReleaseHookExecutionRetryTransfer(
 	revision int64,
 ) (releaseHookExecutionRetryTransfer, error) {
 	steps, err := releaseHookExecutionSteps(source)
-	if err != nil || len(steps) == 0 {
-		return releaseHookExecutionRetryTransfer{}, err
+	if err != nil {
+		return releaseHookExecutionRetryTransfer{}, scriptRetryUnsafe("Script retry barrier Task authority is invalid")
+	}
+	if len(steps) == 0 {
+		return releaseHookExecutionRetryTransfer{}, nil
 	}
 	if retry.PlanID != source.PlanID || retry.PlanHash != source.PlanHash || len(retry.Steps) != len(source.Steps) {
-		return releaseHookExecutionRetryTransfer{}, corruptReleaseRecord()
+		return releaseHookExecutionRetryTransfer{}, scriptRetryUnsafe("Script retry barrier plan lineage changed")
 	}
 	for index, step := range source.Steps {
 		if retry.Steps[index].ID != step.ID ||
 			retry.Params[ReleaseHookStepExecutionParam(step.ID)] != source.Params[ReleaseHookStepExecutionParam(step.ID)] {
-			return releaseHookExecutionRetryTransfer{}, corruptReleaseRecord()
+			return releaseHookExecutionRetryTransfer{}, scriptRetryUnsafe("Script retry barrier step lineage changed")
 		}
 	}
 	keys := make([]string, len(steps))
@@ -266,7 +270,7 @@ func (repository *TaskRepository) prepareReleaseHookExecutionRetryTransfer(
 		return releaseHookExecutionRetryTransfer{}, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(steps) {
-		return releaseHookExecutionRetryTransfer{}, corruptReleaseRecord()
+		return releaseHookExecutionRetryTransfer{}, scriptRetryUnsafe("Script retry barrier read is incomplete")
 	}
 	transfer := releaseHookExecutionRetryTransfer{
 		conditions: make([]Condition, 0, len(steps)), mutations: make([]Mutation, 0, len(steps)),
@@ -276,19 +280,27 @@ func (repository *TaskRepository) prepareReleaseHookExecutionRetryTransfer(
 		value := read.Values[index]
 		if value == nil {
 			transfer.clear()
-			return releaseHookExecutionRetryTransfer{}, corruptReleaseRecord()
+			return releaseHookExecutionRetryTransfer{}, scriptRetryUnsafe("Script execution state is unknown")
 		}
 		record, decodeErr := decodeEnvelope[ScriptExecutionRecord](value.Value, "script-execution")
-		if decodeErr != nil || validateScriptExecutionRecord(record) != nil || record.ID != step.executionID ||
+		if decodeErr != nil || validateScriptExecutionRecord(record) != nil {
+			transfer.clear()
+			return releaseHookExecutionRetryTransfer{}, scriptRetryUnsafe("Script execution state is unknown")
+		}
+		if record.ID != step.executionID ||
 			record.CurrentTaskID != source.ID || record.OperationID != source.OperationID ||
 			record.StepID != step.stepID || record.PlanHash != source.PlanHash || !record.ActiveReference ||
 			!retry.CreatedAt.After(record.UpdatedAt) {
 			transfer.clear()
-			return releaseHookExecutionRetryTransfer{}, corruptReleaseRecord()
+			return releaseHookExecutionRetryTransfer{}, scriptRetryUnsafe("Script retry barrier lineage changed")
+		}
+		if record.State != ScriptExecutionNotStarted || record.StartAuthorized {
+			transfer.clear()
+			return releaseHookExecutionRetryTransfer{}, scriptRetryUnsafe("Script execution may already have started")
 		}
 		if _, duplicate := seenExecutions[record.ID]; duplicate {
 			transfer.clear()
-			return releaseHookExecutionRetryTransfer{}, corruptReleaseRecord()
+			return releaseHookExecutionRetryTransfer{}, scriptRetryUnsafe("Script retry barrier lineage changed")
 		}
 		seenExecutions[record.ID] = struct{}{}
 		next := record
@@ -307,7 +319,8 @@ func (repository *TaskRepository) prepareReleaseHookExecutionRetryTransfer(
 }
 
 func releaseHookExecutionSteps(task TaskRecord) ([]releaseHookExecutionStep, error) {
-	if task.Type != TaskDeploy && task.Type != TaskRollback && task.Type != TaskUpdate {
+	if task.Type != TaskDeploy && task.Type != TaskRollback &&
+		(task.Type != TaskUpdate || !blueprintScriptTaskShape(task)) {
 		return nil, errs.New(errs.KindValidationFailed, "release hook execution Task is invalid")
 	}
 	steps := make([]releaseHookExecutionStep, 0)
@@ -327,6 +340,95 @@ func releaseHookExecutionSteps(task TaskRecord) ([]releaseHookExecutionStep, err
 		steps = append(steps, releaseHookExecutionStep{stepID: step.ID, executionID: executionID})
 	}
 	return steps, nil
+}
+
+func scriptRetryUnsafe(detail string) error {
+	return errs.New(errs.KindScriptRetryUnsafe, detail)
+}
+
+func blueprintScriptTaskShape(task TaskRecord) bool {
+	return task.Type == TaskUpdate && task.Executor == TaskExecutorAgent &&
+		validatePublicationID(task.Params[TaskReleasePublicationParam]) == nil &&
+		task.Owner.EnvironmentID != "" && task.Target == task.Owner.EnvironmentID &&
+		task.Params[TaskMaterializationEnvironmentParam] == task.Owner.EnvironmentID &&
+		ids.Validate(ids.KindTask, task.Params[EnvironmentDesiredRevisionParam]) == nil
+}
+
+func (repository *ScriptRepository) validateBlueprintScriptExecutionAuthority(
+	ctx context.Context,
+	task TaskRecord,
+	execution ScriptExecutionRecord,
+	revision int64,
+) error {
+	_, err := repository.blueprintScriptExecutionAuthority(ctx, task, execution, revision)
+	return err
+}
+
+func (repository *ScriptRepository) blueprintScriptExecutionAuthority(
+	ctx context.Context,
+	task TaskRecord,
+	execution ScriptExecutionRecord,
+	revision int64,
+) ([]Condition, error) {
+	if repository == nil || repository.store == nil || !blueprintScriptTaskShape(task) ||
+		execution.CurrentTaskID != task.ID || execution.OperationID != task.OperationID ||
+		execution.EnvironmentID != task.Owner.EnvironmentID ||
+		execution.PlanHash != task.PlanHash ||
+		task.Params[ReleaseHookStepExecutionParam(execution.StepID)] != execution.ID {
+		return nil, errs.New(errs.KindStateConflict, "Blueprint Script execution does not match its Task")
+	}
+	publicationID := task.Params[TaskReleasePublicationParam]
+	keys := []string{releasePublicationKey(publicationID), releaseManifestStagingKey(publicationID)}
+	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	if err != nil {
+		return nil, err
+	}
+	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) ||
+		read.Values[0] == nil || read.Values[1] == nil {
+		return nil, errs.New(errs.KindStateConflict, "Blueprint Script publication authority is unavailable")
+	}
+	marker, err := decodeReleaseRecord[ReleasePublicationMarker](read.Values[0].Value, "release-publication")
+	if err != nil {
+		return nil, errs.New(errs.KindStateConflict, "Blueprint Script publication authority is corrupt")
+	}
+	manifest, err := decodeReleaseRecord[ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
+	if err != nil || validateBlueprintCandidateManifest(task, marker, manifest) != nil {
+		return nil, errs.New(errs.KindStateConflict, "Blueprint Script manifest authority is corrupt")
+	}
+	var selected ReleaseStagedMemberRef
+	memberBound := false
+	for _, member := range manifest.Members {
+		if member.ReleaseID == execution.ReleaseID && member.ServiceID == execution.ServiceID {
+			selected = member
+			memberBound = true
+			break
+		}
+	}
+	if !memberBound {
+		return nil, errs.New(errs.KindStateConflict, "Blueprint Script execution is outside the candidate manifest")
+	}
+	intentKey := releaseIntentStagingKey(publicationID, selected.ReleaseID)
+	intentRead, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{intentKey}, Revision: revision})
+	if err != nil {
+		return nil, err
+	}
+	if intentRead == nil || intentRead.ReadRevision != revision ||
+		len(intentRead.Values) != 1 || intentRead.Values[0] == nil {
+		return nil, errs.New(errs.KindStateConflict, "Blueprint Script candidate Intent is unavailable")
+	}
+	intent, err := decodeReleaseRecord[domain.Intent](intentRead.Values[0].Value, "release-intent")
+	intentDigest, _ := domain.Digest(intent)
+	if err != nil || domain.ValidateIntent(intent) != nil || intentDigest != selected.IntentDigest ||
+		intent.ID != execution.ReleaseID || intent.ServiceID != execution.ServiceID ||
+		intent.EnvironmentID != execution.EnvironmentID ||
+		intent.OperationID != task.OperationID || intent.OperationKind != domain.OperationBlueprintApply {
+		return nil, errs.New(errs.KindStateConflict, "Blueprint Script candidate Intent changed")
+	}
+	return []Condition{
+		{Key: keys[0], ModRevision: read.Values[0].ModRevision},
+		{Key: keys[1], ModRevision: read.Values[1].ModRevision},
+		{Key: intentKey, ModRevision: intentRead.Values[0].ModRevision},
+	}, nil
 }
 
 func validateScriptBodyReference(value []byte, execution ScriptExecutionRecord) error {
@@ -389,7 +491,9 @@ func NewScriptExecutionRecords(
 		return nil, err
 	}
 	releaseTask := task.Type == TaskDeploy || task.Type == TaskRollback ||
-		(task.Type == TaskUpdate && task.Params[TaskReleasePublicationParam] != "")
+		(task.Type == TaskUpdate && blueprintScriptTaskShape(task) &&
+			validated.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
+			validated.TargetId == task.Target)
 	if task.Executor != TaskExecutorAgent || task.Status != TaskStatusPending ||
 		(!releaseTask && task.Type != TaskScript) || len(validated.ScriptRunnerSnapshots) == 0 ||
 		len(validated.ScriptRunnerSnapshots) != len(validated.ScriptBodyArtifacts) ||
@@ -670,6 +774,13 @@ func (repository *ScriptRepository) GetReleaseScriptExecutionPlan(
 			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID || record.StepID != stepID ||
 			record.PlanHash != task.PlanHash {
 			return nil, false, errs.New(errs.KindInternal, "release Script execution record is corrupt")
+		}
+		if task.Type == TaskUpdate {
+			if authorityErr := repository.validateBlueprintScriptExecutionAuthority(
+				ctx, task, record, read.ReadRevision,
+			); authorityErr != nil {
+				return nil, false, authorityErr
+			}
 		}
 		if sealed == nil {
 			sealed = &agentpb.ExecutionPlan{}

@@ -47,6 +47,7 @@ const (
 	CodeVolumeNotFound            Code = "volume.not_found"
 	CodeEntryNotFound             Code = "entry.not_found"
 	CodeScriptNotFound            Code = "script.not_found"
+	CodeScriptRetryUnsafe         Code = "script.retry_unsafe"
 	CodeReleaseNotFound           Code = "release.not_found"
 	CodeReleaseRecoveryRequired   Code = "release.recovery_required"
 	CodeReleaseDeadlineTooShort   Code = "release.deadline_too_short"
@@ -121,6 +122,7 @@ const (
 	KindVolumeNotFound
 	KindEntryNotFound
 	KindScriptNotFound
+	KindScriptRetryUnsafe
 	KindReleaseNotFound
 	KindReleaseRecoveryRequired
 	KindReleaseDeadlineTooShort
@@ -188,6 +190,7 @@ var kindDescriptors = [kindLimit]descriptor{
 	KindVolumeNotFound:              {CodeVolumeNotFound, ClassNotFound, 404},
 	KindEntryNotFound:               {CodeEntryNotFound, ClassNotFound, 404},
 	KindScriptNotFound:              {CodeScriptNotFound, ClassNotFound, 404},
+	KindScriptRetryUnsafe:           {CodeScriptRetryUnsafe, ClassConflict, 409},
 	KindReleaseNotFound:             {CodeReleaseNotFound, ClassNotFound, 404},
 	KindReleaseRecoveryRequired:     {CodeReleaseRecoveryRequired, ClassConflict, 409},
 	KindReleaseDeadlineTooShort:     {CodeReleaseDeadlineTooShort, ClassValidation, 422},

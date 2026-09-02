@@ -213,6 +213,15 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 		assignment.AgentID != input.AgentID || assignment.AgentGeneration != input.AgentGeneration {
 		return scriptCheckpointAnchor{}, errs.New(errs.KindStateConflict, "Script checkpoint does not own the running assignment")
 	}
+	var blueprintConditions []Condition
+	if task.Type == TaskUpdate {
+		blueprintConditions, err = repository.blueprintScriptExecutionAuthority(
+			ctx, task, execution, primary.ReadRevision,
+		)
+		if err != nil {
+			return scriptCheckpointAnchor{}, err
+		}
+	}
 	claimKey := taskExecutionClaimKey(TaskExecutorAgent, input.AgentID, input.TaskID)
 	timeoutKey := taskTimeoutIndexKey(input.TaskID, assignment.Deadline)
 	claim, err := repository.store.GetMany(ctx, GetManyRequest{
@@ -232,15 +241,17 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 		!bytes.Equal(primary.Values[2].Value, claim.Values[1].Value) {
 		return scriptCheckpointAnchor{}, errs.New(errs.KindInternal, "Script checkpoint assignment copies diverged")
 	}
+	conditions := []Condition{
+		{Key: scriptExecutionKey(input.ExecutionID), ModRevision: primary.Values[0].ModRevision},
+		{Key: taskKey(input.TaskID), ModRevision: primary.Values[1].ModRevision},
+		{Key: taskAssignmentIndexKey(input.TaskID), ModRevision: primary.Values[2].ModRevision},
+		{Key: claimKey, ModRevision: claim.Values[0].ModRevision},
+		{Key: timeoutKey, ModRevision: claim.Values[1].ModRevision},
+	}
+	conditions = append(conditions, blueprintConditions...)
 	return scriptCheckpointAnchor{
 		record: execution, revision: primary.Values[0].ModRevision, read: primary.ReadRevision,
-		conditions: []Condition{
-			{Key: scriptExecutionKey(input.ExecutionID), ModRevision: primary.Values[0].ModRevision},
-			{Key: taskKey(input.TaskID), ModRevision: primary.Values[1].ModRevision},
-			{Key: taskAssignmentIndexKey(input.TaskID), ModRevision: primary.Values[2].ModRevision},
-			{Key: claimKey, ModRevision: claim.Values[0].ModRevision},
-			{Key: timeoutKey, ModRevision: claim.Values[1].ModRevision},
-		},
+		conditions: conditions,
 	}, nil
 }
 
@@ -260,6 +271,10 @@ func taskOwnsScriptExecution(task TaskRecord, execution ScriptExecutionRecord) b
 				return true
 			}
 		}
+	case TaskUpdate:
+		return blueprintScriptTaskShape(task) &&
+			task.Owner.EnvironmentID == execution.EnvironmentID &&
+			task.Params[ReleaseHookStepExecutionParam(execution.StepID)] == execution.ID
 	}
 	return false
 }
