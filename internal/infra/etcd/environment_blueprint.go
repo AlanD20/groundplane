@@ -302,7 +302,8 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 		ctx, netip.Prefix{}, environment.Record.NetworkPool,
 		project, environment, expectedHeadRevision, claim, revision, projection,
 		zoneChanges, serviceChanges, routeChanges, releaseGroupPreparation,
-		componentPreparation, attachPreparation, BlueprintScriptPublication{}, BlueprintReleasePublication{}, task, marker,
+		componentPreparation, attachPreparation, BlueprintScriptPublication{}, BlueprintReleasePublication{},
+		BlueprintRequirementGate{}, task, marker,
 	)
 }
 
@@ -326,6 +327,7 @@ func (repository *HierarchyRepository) PublishEnvironmentBlueprintDesiredRevisio
 	attachPreparation BlueprintAttachTaskPreparation,
 	scriptPublication BlueprintScriptPublication,
 	releasePublication BlueprintReleasePublication,
+	requirementGate BlueprintRequirementGate,
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -333,7 +335,8 @@ func (repository *HierarchyRepository) PublishEnvironmentBlueprintDesiredRevisio
 		ctx, environmentPool, desiredNetworkPool,
 		project, environment, expectedHeadRevision, claim, revision, projection,
 		zoneChanges, serviceChanges, routeChanges, releaseGroupPreparation,
-		componentPreparation, attachPreparation, scriptPublication, releasePublication, task, marker,
+		componentPreparation, attachPreparation, scriptPublication, releasePublication,
+		requirementGate, task, marker,
 	)
 }
 
@@ -355,6 +358,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	attachPreparation BlueprintAttachTaskPreparation,
 	scriptPublication BlueprintScriptPublication,
 	releasePublication BlueprintReleasePublication,
+	requirementGate BlueprintRequirementGate,
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -461,6 +465,16 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	}
 	defer clear(zonePool.value)
 	publishDomain := claim.SourceKind == EnvironmentBlueprintSourceApply
+	requirementPublication, err := prepareBlueprintRequirementGatePublication(
+		requirementGate,
+		task,
+		projection,
+		publishDomain && len(projection.BlueprintRequirements.Resolved) != 0,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer requirementPublication.clear()
 	var componentPublication preparedComponentTaskPublication
 	var attachPublication preparedBlueprintAttachTaskPublication
 	if publishDomain {
@@ -592,17 +606,30 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	conditions = append(conditions, fence.transactionConditions()...)
 	mutations = append(mutations, epochMutation)
 	classified := baseClassifier
+	baseConditionCount := len(conditions)
+	conditions = append(conditions, requirementPublication.conditions...)
+	mutations = append(mutations, requirementPublication.mutations...)
+	requirementBaseClassifier := classified
+	classified = func(revision int64, values []*KeyValue) error {
+		if len(values) != baseConditionCount+len(requirementPublication.conditions) {
+			return errs.New(errs.KindInternal, "Blueprint requirement publication compare evidence is incomplete")
+		}
+		if err := requirementBaseClassifier(revision, values[:baseConditionCount]); err != nil {
+			return err
+		}
+		return requirementPublication.classify(values[baseConditionCount:])
+	}
 	if publishDomain {
 		conditions = append(conditions, componentPublication.conditions...)
 		mutations = append(mutations, componentPublication.mutations...)
 		classified = classifyEnvironmentBlueprintComponentPublication(
-			baseClassifier,
+			classified,
 			componentPublication,
 		)
 		conditions = append(conditions, attachPublication.conditions...)
 		mutations = append(mutations, attachPublication.mutations...)
 		classified = classifyEnvironmentBlueprintAttachPublication(classified, attachPublication)
-		baseConditionCount := len(conditions)
+		baseConditionCount = len(conditions)
 		conditions = append(conditions, releaseGroupPreparation.conditions...)
 		mutations = append(mutations, releaseGroupPreparation.mutations...)
 		previousClassifier := classified

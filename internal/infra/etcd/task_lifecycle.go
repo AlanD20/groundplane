@@ -357,6 +357,17 @@ func (repository *TaskRepository) retryTask(
 		mutations = append(mutations, releaseChange.mutations...)
 	}
 	defer releaseChange.clear()
+	requirementGateChange, err := repository.prepareBlueprintRequirementGateRetry(
+		ctx, source.Record, retry, source.ReadRevision,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if requirementGateChange.applies {
+		conditions = append(conditions, requirementGateChange.conditions...)
+		mutations = append(mutations, requirementGateChange.mutations...)
+	}
+	defer requirementGateChange.clear()
 	attachChange, err := repository.prepareAttachTaskRetry(ctx, source.Record, retry, source.ReadRevision)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -503,6 +514,7 @@ func (repository *TaskRepository) retryTask(
 		len(connectorChange.conditions),
 		len(runnerChange.conditions),
 		len(releaseChange.conditions),
+		len(requirementGateChange.conditions),
 		len(resolverChange.conditions),
 	)
 	environmentBinding, err := repository.bindOrdinaryTaskEnvironmentMutation(
@@ -568,12 +580,13 @@ func classifyTaskRetryConflict(
 	connectorConditions int,
 	runnerConditions int,
 	releaseConditions int,
+	requirementGateConditions int,
 	resolverConditions int,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
 		expectedValues := 5 + attachConditions + environmentConditions + secretConditions +
 			scriptConditions + routeConditions + serviceConditions + backingZoneConditions + componentConditions +
-			connectorConditions + runnerConditions + releaseConditions + resolverConditions
+			connectorConditions + runnerConditions + releaseConditions + requirementGateConditions + resolverConditions
 		if len(values) != expectedValues {
 			return errs.New(errs.KindInternal, "task retry compare evidence is incomplete")
 		}
@@ -771,6 +784,27 @@ func (repository *TaskRepository) claimNextTask(
 		if blueprintAttachChange.applies {
 			conditions = append(conditions, blueprintAttachChange.conditions...)
 			mutations = append(mutations, blueprintAttachChange.mutations...)
+		}
+		requirementEvidence, requirementApplies, requirementReady, err :=
+			repository.observeBlueprintRequirementGateForClaim(ctx, task, candidate.readRevision)
+		if err != nil {
+			clear(runningValue)
+			clear(assignmentValue)
+			clear(writerValue)
+			clearAttachTaskChange(attachChange)
+			clearBlueprintAttachTaskChange(blueprintAttachChange)
+			return TaskAssignment{}, false, err
+		}
+		if requirementApplies && !requirementReady {
+			clear(runningValue)
+			clear(assignmentValue)
+			clear(writerValue)
+			clearAttachTaskChange(attachChange)
+			clearBlueprintAttachTaskChange(blueprintAttachChange)
+			return TaskAssignment{}, false, nil
+		}
+		if requirementApplies {
+			conditions = append(conditions, requirementEvidence.conditions...)
 		}
 		transaction, err := repository.store.Transact(ctx, conditions, mutations)
 		clear(runningValue)

@@ -117,6 +117,7 @@ func (repository *boundaryRepository) PublishEnvironmentBlueprintDesiredRevision
 	_ etcd.BlueprintAttachTaskPreparation,
 	_ etcd.BlueprintScriptPublication,
 	_ etcd.BlueprintReleasePublication,
+	_ etcd.BlueprintRequirementGate,
 	task etcd.TaskRecord,
 	_ etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
@@ -330,6 +331,7 @@ func TestBlueprintClaimCrashReplayResumesWithStableTaskAndReleaseGroupIDs(t *tes
 		etcd.BlueprintAttachTaskPreparation{},
 		etcd.BlueprintScriptPublication{},
 		etcd.BlueprintReleasePublication{},
+		etcd.BlueprintRequirementGate{},
 		etcd.TaskRecord{ID: recovered.TaskID},
 		etcd.IdempotencyMarker{},
 	); err != nil {

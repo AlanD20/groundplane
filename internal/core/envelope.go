@@ -99,18 +99,18 @@ func (r CredentialRef) Validate() error {
 
 // Requirement is x-gp-requires' authored shape — a Controller-level
 // prerequisite, possibly crossing Compose project boundaries.
-// `condition` is one of exists|ready|healthy|completed_successfully;
-// `phases` is start|deploy|rollback|always. See blueprint.md,
+// `condition` is exactly exists|ready|completed_successfully; `phases` is a
+// nonempty subset of start|deploy|rollback|always. See blueprint.md,
 // "x-gp-requires".
 type Requirement struct {
-	Target    RequirementTarget `yaml:"target"`
-	Condition string            `yaml:"condition"`
-	Phases    []string          `yaml:"phases,omitempty"`
+	Target    RequirementTarget    `yaml:"target"`
+	Condition RequirementCondition `yaml:"condition" json:"condition"`
+	Phases    []RequirementPhase   `yaml:"phases,omitempty" json:"phases"`
 }
 
 type RequirementTarget struct {
-	Kind string `yaml:"kind"` // e.g. "backing-attach"
-	Name string `yaml:"name"`
+	Kind RequirementTargetKind `yaml:"kind" json:"kind"`
+	Name string                `yaml:"name" json:"name"`
 }
 
 // ServiceExtensionSpec is the typed authored Groundplane input attached to one

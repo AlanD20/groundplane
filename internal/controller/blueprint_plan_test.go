@@ -120,6 +120,57 @@ func TestTaskPlanResolverRebuildsNoOpBlueprintPrefixWithoutComposeApply(t *testi
 	}
 }
 
+// Rationale: restart shape validation must not infer a prerequisite gate from
+// either Task parameters or projection state alone; both sealed authorities
+// must agree before an Environment update can be assigned.
+func TestTaskPlanResolverRejectsBlueprintRequirementMarkerProjectionMismatch(t *testing.T) {
+	requirements := core.BlueprintRequirements{
+		Authored: []core.Requirement{{
+			Target: core.RequirementTarget{
+				Kind: core.RequirementTargetBackingAttach,
+				Name: "database",
+			},
+			Condition: core.RequirementReady,
+			Phases:    []core.RequirementPhase{core.RequirementPhaseDeploy},
+		}},
+		Resolved: []core.ResolvedRequirement{{
+			Target: core.ResolvedRequirementTarget{
+				Kind:     core.RequirementTargetBackingAttach,
+				Name:     "database",
+				ID:       "att_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+				TaskID:   "task_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+				Revision: 1,
+			},
+			Condition: core.RequirementReady,
+			Phases:    []core.RequirementPhase{core.RequirementPhaseDeploy},
+		}},
+		ResolutionRevision: 1,
+	}
+	if err := requirements.Validate(); err != nil {
+		t.Fatalf("Blueprint requirement fixture is invalid: %v", err)
+	}
+	for name, mutate := range map[string]func(*blueprintPlanReader, *etcd.TaskRecord){
+		"marker without projection": func(_ *blueprintPlanReader, task *etcd.TaskRecord) {
+			task.Params[etcd.TaskBlueprintRequirementGateSHA256Param] = "gate-digest"
+		},
+		"projection without marker": func(reader *blueprintPlanReader, _ *etcd.TaskRecord) {
+			reader.projection.BlueprintRequirements = requirements
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			reader, task := blueprintPlanTestState(t)
+			mutate(reader, &task)
+			resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, nil)
+			if err != nil {
+				t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
+			}
+			if _, err := resolver.ResolveExecutionPlan(context.Background(), task); err == nil {
+				t.Fatal("ResolveExecutionPlan() error = nil")
+			}
+		})
+	}
+}
+
 func TestTaskPlanResolverRebuildsProfileOnlyBlueprintAsReconcileToEmpty(t *testing.T) {
 	reader, task := blueprintPlanTestState(t)
 	artifact := &agentpb.ComposeArtifact{}

@@ -1939,7 +1939,17 @@ The extension families are:
 compile to Compose health conditions such as `service_healthy` or
 `service_completed_successfully`. `x-gp-requires` is Controller-level and
 can cross Compose files and projects. It is never incorrectly represented as
-cross-project Compose `depends_on`.
+cross-project Compose `depends_on`. Its MVP grammar is closed: the root value
+is a list whose items require a `backing-attach` target kind and label,
+`exists`, `ready`, or `completed_successfully`, plus a non-empty subset of
+`start`, `deploy`, `rollback`, and `always`. The Controller resolves the
+label once at a fixed pre-stage revision, seals both the authored label and
+stable Attach id in the desired projection, and reconstructs retries from that
+sealed id without re-resolution. Requirements are edges in the same Environment
+Blueprint Task DAG; missing, unsupported, duplicate, self, and cyclic
+requirements fail before staging, and deterministic order is stable target ids
+then stable step ids. Condition observation and gating remain Controller-owned;
+the Agent never resolves labels.
 
 The Controller translates the documents into these state categories:
 

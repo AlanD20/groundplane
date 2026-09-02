@@ -99,6 +99,7 @@ type environmentBlueprintRepository interface {
 		etcd.BlueprintAttachTaskPreparation,
 		etcd.BlueprintScriptPublication,
 		etcd.BlueprintReleasePublication,
+		etcd.BlueprintRequirementGate,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -332,6 +333,7 @@ func (repository *durableEnvironmentBlueprintRepository) PublishEnvironmentBluep
 	attachPreparation etcd.BlueprintAttachTaskPreparation,
 	scriptPublication etcd.BlueprintScriptPublication,
 	releasePublication etcd.BlueprintReleasePublication,
+	requirementGate etcd.BlueprintRequirementGate,
 	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
@@ -339,7 +341,7 @@ func (repository *durableEnvironmentBlueprintRepository) PublishEnvironmentBluep
 		ctx, environmentPool, desiredNetworkPool, project, environment, expectedHeadRevision,
 		claim, revision, projection, zoneChanges, serviceChanges, routeChanges,
 		releaseGroupPreparation, componentPreparation, attachPreparation,
-		scriptPublication, releasePublication, task, marker,
+		scriptPublication, releasePublication, requirementGate, task, marker,
 	)
 }
 
@@ -527,6 +529,19 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if err := controller.ValidateEnvironmentBlueprintAvailability(parsed); err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	currentAttaches, attachReadRevision, err := service.listBlueprintAttaches(ctx, environmentID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	requirements, err := environmentBlueprintRequirements(
+		parsed.Extensions.Requires,
+		parsed.Extensions.Attachments,
+		currentAttaches,
+		attachReadRevision,
+	)
+	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	submittedServiceNames := environmentBlueprintServiceNames(parsed.Project)
@@ -756,10 +771,6 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	currentAttaches, err := service.listBlueprintAttaches(ctx, environmentID)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
 	componentPreparation, pinnedComponents, effectiveComponents, err := service.prepareBlueprintComponents(
 		ctx,
 		environmentID,
@@ -961,6 +972,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	)
 	projection = desiredrevision.WithDesiredTopology(projection, topologyZones, topologyServices, topologyRoutes)
 	projection.ServiceDependencyPlans = dependencyPlans.Clone()
+	projection.BlueprintRequirements = requirements.Clone()
 	stagedPublication, err := desiredrevision.Stage(ctx, service.repository, desiredrevision.StageInput{
 		Claim: claim, Blueprint: revision, Projection: projection,
 	})
@@ -1005,6 +1017,30 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		return desiredrevision.AbandonBlueprint(
 			ctx, service.repository, stagedPublication, preparedRelease.Publication, cause,
 		)
+	}
+	requirementGate := etcd.BlueprintRequirementGate{}
+	if len(requirements.Resolved) != 0 {
+		inherited, gateErr := environmentBlueprintRequirementTaskEdges(
+			ctx, service.repository, task.ID, requirements, requirements.ResolutionRevision,
+		)
+		if gateErr != nil {
+			return etcd.IdempotencyResponse{}, abandonPrepared(gateErr)
+		}
+		stepIDs := make([]string, len(task.Steps))
+		for index, step := range task.Steps {
+			stepIDs[index] = step.ID
+		}
+		dag, gateErr := core.BuildBlueprintRequirementDAG(task.ID, requirements, stepIDs, inherited)
+		if gateErr != nil {
+			return etcd.IdempotencyResponse{}, abandonPrepared(gateErr)
+		}
+		requirementGate, gateErr = etcd.NewBlueprintRequirementGate(
+			task, requirements.ResolutionRevision, dag,
+		)
+		if gateErr != nil {
+			return etcd.IdempotencyResponse{}, abandonPrepared(gateErr)
+		}
+		task.Params[etcd.TaskBlueprintRequirementGateSHA256Param] = requirementGate.DAGDigest
 	}
 	routeProvider, routeProjection, err := controller.ResolveComponentTaskRouteProvider(
 		service.componentCatalog,
@@ -1059,6 +1095,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		AttachPreparation:       preparedAttaches.publication,
 		ScriptPublication:       scriptPublication,
 		ReleasePublication:      preparedRelease.Publication,
+		RequirementGate:         requirementGate,
 		Task:                    task,
 	})
 }
@@ -1284,7 +1321,7 @@ func (service *environmentBlueprintService) listBlueprintEntries(
 func (service *environmentBlueprintService) listBlueprintAttaches(
 	ctx context.Context,
 	environmentID string,
-) ([]etcd.Versioned[etcd.AttachRecord], error) {
+) ([]etcd.Versioned[etcd.AttachRecord], int64, error) {
 	attaches := []etcd.Versioned[etcd.AttachRecord](nil)
 	cursor := ""
 	revision := int64(0)
@@ -1295,15 +1332,15 @@ func (service *environmentBlueprintService) listBlueprintAttaches(
 			etcd.PageRequest{Limit: etcd.MaximumPageLimit, Cursor: cursor},
 		)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		if page.Revision <= 0 || revision != 0 && page.Revision != revision {
-			return nil, errs.New(errs.KindInternal, "Blueprint Attach topology pages changed revision")
+			return nil, 0, errs.New(errs.KindInternal, "Blueprint Attach topology pages changed revision")
 		}
 		revision = page.Revision
 		attaches = append(attaches, page.Items...)
 		if page.NextCursor == "" {
-			return attaches, nil
+			return attaches, revision, nil
 		}
 		cursor = page.NextCursor
 	}

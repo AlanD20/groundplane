@@ -41,6 +41,7 @@ type PublicationRepository interface {
 		etcd.BlueprintAttachTaskPreparation,
 		etcd.BlueprintScriptPublication,
 		etcd.BlueprintReleasePublication,
+		etcd.BlueprintRequirementGate,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -163,6 +164,7 @@ type PublishInput struct {
 	AttachPreparation       etcd.BlueprintAttachTaskPreparation
 	ScriptPublication       etcd.BlueprintScriptPublication
 	ReleasePublication      etcd.BlueprintReleasePublication
+	RequirementGate         etcd.BlueprintRequirementGate
 	Task                    etcd.TaskRecord
 }
 
@@ -419,7 +421,7 @@ func Publish(
 		ctx, input.EnvironmentPool, input.NetworkPool, input.Project, input.Environment, input.ExpectedHeadRevision,
 		claim, identity, projection, input.ZoneChanges, input.ServiceChanges, input.RouteChanges,
 		input.ReleaseGroupPreparation, input.ComponentPreparation, input.AttachPreparation,
-		input.ScriptPublication, input.ReleasePublication, input.Task, marker,
+		input.ScriptPublication, input.ReleasePublication, input.RequirementGate, input.Task, marker,
 	)
 	var resolution idempotentintent.Resolution
 	if publicationErr != nil {

@@ -244,6 +244,10 @@ func parseRoot(content []byte) (core.Envelope, Extensions, []byte, error) {
 	if err != nil {
 		return core.Envelope{}, Extensions{}, nil, err
 	}
+	authored.Requires, err = core.NormalizeRequirements(authored.Requires)
+	if err != nil {
+		return core.Envelope{}, Extensions{}, nil, err
+	}
 	authored.Attachments, err = normalizeAttachments(authored.Attachments)
 	if err != nil {
 		return core.Envelope{}, Extensions{}, nil, err

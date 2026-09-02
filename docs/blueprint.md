@@ -980,9 +980,23 @@ x-gp-requires:
     phases: [deploy]
 ```
 
-`condition` accepts `exists`, `ready`, `healthy`, or
-`completed_successfully`. The Controller turns each requirement into a task
-graph edge. It never emits an invalid cross-project Compose `depends_on`.
+`x-gp-requires` is a root list. Every item requires `target.kind`,
+`target.name`, `condition`, and a non-empty `phases` list. In the MVP,
+`target.kind` is exactly `backing-attach`; `condition` is exactly
+`exists`, `ready`, or `completed_successfully`; and every phase is exactly
+`start`, `deploy`, `rollback`, or `always`. There are no legacy aliases:
+`healthy`, unknown values, duplicate requirements, duplicate phases, missing
+targets, requirements on an Attach created by the same Blueprint Task, and
+cyclic requirement graphs are rejected before staging.
+
+The Controller resolves each authored Attach label to its stable Attach id at
+one fixed pre-stage revision. The authored label remains in the normalized
+projection for Blueprint GET, while the stable id is sealed for Task planning,
+retry, and replay. The requirement is an edge in the same Environment Blueprint
+Task DAG, ordered by stable target id and then stable step id; it never creates a
+child Task or a second operation and never becomes cross-project Compose
+`depends_on`. Only the Controller observes and gates conditions. The Agent
+receives resolved ids and never resolves labels.
 
 `x-gp-route` keeps hostnames and paths distinct:
 

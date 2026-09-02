@@ -383,6 +383,10 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		return nil, err
 	}
 	expectedParams := 4
+	_, hasRequirementGate := task.Params[etcd.TaskBlueprintRequirementGateSHA256Param]
+	if hasRequirementGate {
+		expectedParams++
+	}
 	if hasBlueprintReleases {
 		expectedParams += 1 + releaseHookCount*2
 	}
@@ -410,6 +414,9 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	pinned, err := resolver.renderPinnedEnvironmentBlueprintArtifact(ctx, task, revisionID, artifactID)
 	if err != nil {
 		return nil, err
+	}
+	if hasRequirementGate != (len(pinned.requirements.Resolved) != 0) {
+		return nil, errs.New(errs.KindInternal, "durable Blueprint requirement marker is inconsistent")
 	}
 	managedConfigApply, hasManagedConfigApply, err := ResolveEnvironmentManagedConfigApply(
 		EnvironmentManagedConfigApplyInput{
@@ -741,8 +748,9 @@ func (resolver *TaskPlanResolver) resolveEnvironmentRemovalPlan(
 }
 
 type pinnedEnvironmentBlueprintArtifact struct {
-	artifact   *agentpb.ComposeArtifact
-	components []etcd.ComponentRecord
+	artifact     *agentpb.ComposeArtifact
+	components   []etcd.ComponentRecord
+	requirements core.BlueprintRequirements
 }
 
 func (resolver *TaskPlanResolver) renderPinnedEnvironmentBlueprintArtifact(
@@ -797,8 +805,9 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentBlueprintArtifact(
 		)
 	}
 	return pinnedEnvironmentBlueprintArtifact{
-		artifact:   proto.Clone(artifact).(*agentpb.ComposeArtifact),
-		components: projection.Record.Components,
+		artifact:     proto.Clone(artifact).(*agentpb.ComposeArtifact),
+		components:   projection.Record.Components,
+		requirements: projection.Record.BlueprintRequirements.Clone(),
 	}, nil
 }
 

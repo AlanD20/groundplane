@@ -78,6 +78,7 @@ func (repository *candidatePublicationRepository) PublishEnvironmentBlueprintDes
 	_ etcd.BlueprintAttachTaskPreparation,
 	_ etcd.BlueprintScriptPublication,
 	_ etcd.BlueprintReleasePublication,
+	_ etcd.BlueprintRequirementGate,
 	task etcd.TaskRecord,
 	_ etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
@@ -151,7 +152,7 @@ func TestEnvironmentBlueprintApplyStagesCandidateProjectionBeforeReleaseHooksAnd
 		projection, nil, nil, nil, etcd.ReleaseGroupBlueprintPreparedMutation{},
 		etcd.ComponentTaskPreparation{}, etcd.BlueprintAttachTaskPreparation{},
 		etcd.BlueprintScriptPublication{}, etcd.BlueprintReleasePublication{},
-		etcd.TaskRecord{ID: taskID}, etcd.IdempotencyMarker{},
+		etcd.BlueprintRequirementGate{}, etcd.TaskRecord{ID: taskID}, etcd.IdempotencyMarker{},
 	); err != nil {
 		t.Fatalf("PublishEnvironmentBlueprintDesiredRevision() error = %v", err)
 	}

@@ -209,7 +209,7 @@ func (service *environmentBlueprintService) environmentBlueprintAuthoringDocumen
 	if err != nil {
 		return blueprintparser.AuthoringDocument{}, err
 	}
-	attaches, err := service.listBlueprintAttaches(ctx, snapshot.environment.Record.ID)
+	attaches, _, err := service.listBlueprintAttaches(ctx, snapshot.environment.Record.ID)
 	if err != nil {
 		return blueprintparser.AuthoringDocument{}, err
 	}

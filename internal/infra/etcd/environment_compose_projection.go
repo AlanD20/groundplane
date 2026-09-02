@@ -63,6 +63,7 @@ type EnvironmentComposeProjection struct {
 	Components        []ComponentRecord                    `json:"components,omitempty"`
 	Entries           []EntryRecord                        `json:"entries,omitempty"`
 	core.ServiceDependencyPlans
+	core.BlueprintRequirements
 }
 
 const environmentComposeProjectionPrefix = "/v1/records/environment-compose-projections/"
@@ -415,6 +416,9 @@ func validateEnvironmentComposeProjection(projection EnvironmentComposeProjectio
 	if err := projection.ServiceDependencyPlans.Validate(names); err != nil {
 		return err
 	}
+	if err := projection.BlueprintRequirements.Validate(); err != nil {
+		return err
+	}
 	if err := validateEnvironmentServiceExtensions(names, projection.ServiceExtensions); err != nil {
 		return err
 	}
@@ -629,6 +633,7 @@ func validateEnvironmentComponentProjection(environmentID string, values []Compo
 func cloneEnvironmentComposeProjection(source EnvironmentComposeProjection) EnvironmentComposeProjection {
 	clone := source
 	clone.ServiceDependencyPlans = source.ServiceDependencyPlans.Clone()
+	clone.BlueprintRequirements = source.BlueprintRequirements.Clone()
 	clone.ComposeArtifact = append([]byte(nil), source.ComposeArtifact...)
 	clone.NormalizedCompose = append([]byte(nil), source.NormalizedCompose...)
 	if source.RuntimeFiles != nil {

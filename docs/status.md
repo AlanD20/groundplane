@@ -475,3 +475,7 @@ its materialization, managed-Volume, Attach, and Component work without an
 invented full reconcile; ordinary Entry reconciliation and backing creation
 retain their explicit full-reconcile procedure. Focused producer and restart
 regressions cover both shapes; reference-host rerun remains pending.
+
+## Blueprint prerequisite gate authority (2026-09-02)
+
+The root `x-gp-requires` grammar is now closed to registered `backing-attach` targets, `exists|ready|completed_successfully` conditions, and nonempty `start|deploy|rollback|always` phase sets. Blueprint apply resolves each authored Attach label once at a fixed pre-stage revision, seals its stable Attach id, producer Task id, MVCC revision, exact Task DAG, phase plans, and final step ids, then publishes that gate atomically with the Environment desired head and sole Task. Agent claim fails closed on missing, mismatched, corrupt, unmet, or raced gate evidence; retry and exact replay retain the original DAG root and digest. Same-Task Attach dependencies, missing targets, duplicate requirements/phases, and cycles are rejected before execution. Registered Component capability availability remains validated by the existing closed catalog before staging. Focused source proof is required before landing; reference-host acceptance remains pending.
