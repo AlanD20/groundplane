@@ -1122,8 +1122,52 @@ requires a valid frequency, in-range `keep`, at least one source, and an existin
 Connector owned by the same Environment. A disabled policy may remain
 unconfigured and owns no active Connector reference fence.
 
+`MaximumBackupPolicySources` is 12. Each stable source tuple owns exactly three
+durable records: the source primary, its Environment ownership index, and its
+`(environment_id, kind, target_id)` identity index. A maximum Blueprint may
+therefore create 36 source-catalog records in its final publication; this is
+not a three-source limit. The policy's ordered source ids remain the only
+active-membership authority.
+
+`MaximumEnvironmentBlueprintAttachCandidates` is 2. Only Attaches newly
+introduced by the candidate count; retained and pre-existing Attaches do not.
+An Attach or Volume source may target an identity introduced by the same
+Blueprint. The Controller validates that target against the sealed candidate
+projection and publishes its identity in the same transaction as the Backup
+Policy. It never pre-creates a candidate target. An Attach source still selects
+only a credential-owning Attach, never an existing-credential dependent.
+
+Connector creation remains outside the Environment Blueprint grammar. The
+authored connector label must resolve to an already-existing Connector owned by
+this Environment at the fixed validation revision, and final publication
+fences its exact primary, owner index, and deletion state.
+
+`x-gp-backup` publication is all-or-nothing with the Environment desired head,
+Environment update Task and queue/index authority, ADR 0021 marker, policy,
+enabled-only Connector reference, every missing three-record source tuple,
+required candidate Attach and Volume identities, and the lazy age key. Direct
+Backup Policy replacement retains ADR 0046's source pre-ensure behavior;
+Blueprint creates no source record before its final publication transaction. A
+failed comparison, validation, encoding limit, or commit leaves all public
+state at the prior head.
+
+The exact maximum legal atomic shape is 120 comparisons, 74 success mutations,
+and 120 fixed-revision failure reads: 194 operations on the successful selected
+path and 314 across the complete encoded request. The Backup-specific envelope
+permits at most 128 operations in each arm, at most 256 selected
+compare-plus-branch operations, at most 384 operations in the full request, and
+at most 1 MiB after protobuf encoding. Ordinary Blueprint publication and
+ordinary `Store.Transact` retain their existing 32/32/32 and 96-selected-
+operation limits; etcd remains configured for at most 256 operations in a
+transaction arm.
+
 `encryption` is `age` or `none`. Because the config source includes secret
 Entry values, any policy selecting config must use `encryption: age`.
+
+The age key remains lazy. A first successful enabled `age` Blueprint creates
+era 1 in that same final transaction, and exact replay reuses it. Disabled or
+`none` candidates create no key. Disabling Backup or changing to `none` retains
+existing current and historical key identities required by Recovery Points.
 
 A successful source run commits one immutable recovery point only after the
 typed dump/archive, transient staging, optional encryption, immutable upload,

@@ -1,6 +1,6 @@
 # Implementation checkpoint
 
-Status: live handoff for implementation work, dated 2026-09-01. This document
+Status: live handoff for implementation work, dated 2026-09-02. This document
 is implementation evidence only; it is not product authority. Product behavior
 and vocabulary remain authoritative in `docs/mvp.md`, with the source-of-truth
 order in `docs/agents.md` resolving conflicts.
@@ -611,3 +611,32 @@ without permitting a concurrent replacement. Known prepublication abandonment
 removes the prepared memberships and counts without deleting the applied
 predecessor. Focused Script-source and Blueprint publication race proofs pass;
 exact reference-host Blueprint and Script acceptance remains pending.
+
+## Blueprint Backup atomic-publication contract (2026-09-02)
+
+ADRs 0046 and 0051 plus the Blueprint grammar now require `x-gp-backup` to
+publish atomically with the Environment desired head, Environment update Task,
+ADR 0021 marker, candidate Attach and Volume identities, every missing
+three-record stable source tuple, the enabled-only Connector reference, and the
+lazy age key. `MaximumBackupPolicySources` remains 12;
+`MaximumEnvironmentBlueprintAttachCandidates` is 2 and counts only new Attach
+candidates. Connector creation remains outside Blueprint, while candidate
+Attach and Volume source targets are validated from the same sealed candidate.
+
+The exact worst legal transaction is `120/74/120` compare/success/failure, 194
+operations on the successful selected path, and 314 operations in the complete
+request. The Backup envelope is bounded to `128/128/128`, at most 256 selected
+operations, 384 complete-request operations, and a 1 MiB protobuf request.
+Ordinary `Store.Transact` remains capped at 96 selected operations, and etcd
+retains its configured 256-operation arm ceiling.
+
+This is contract publication only. The authored `x-gp-backup` model,
+parser/validation, namespace registration, canonical parser authoring, and
+focused parser grammar tests already exist. The atomic-publication builder and
+persistence path and their atomic-publication proof have not landed, and C16
+and C21 remain **Scaffolded**. Required next evidence is the exact
+maximum-envelope proof, source/Attach limit rejection,
+same-candidate Attach/Volume validation, lazy-key replay and retention, direct
+policy pre-ensure separation, Connector race rejection, and failure-injection
+proof that the head, Task, marker, policy, candidate identities, catalog, and
+key are wholly old or wholly new.

@@ -346,3 +346,16 @@ Environment Connector CRUD is accepted on the Ubuntu 24.04 reference host.
 Stable ownership, direct-credential redaction, normalized S3-compatible input,
 task-backed removal, and typed terminal absence are recorded in
 `docs/acceptance/c15-connectors.md`. Live R2 and backup/restore remain C16.
+
+## Blueprint Backup atomic-publication contract (2026-09-02)
+
+ADRs 0046 and 0051 now close the atomic `x-gp-backup` publication contract,
+including 12 selected sources, three durable catalog records per tuple, at most
+two new candidate Attaches, same-publication candidate Attach and Volume target
+validation, pre-existing Connector authority, lazy age-key identity, and the
+exact bounded transaction envelope. Direct Backup Policy replacement retains
+its separate pre-ensure behavior.
+
+This is contract evidence only. No Blueprint Backup builder, persistence path,
+failure-injection proof, generated artifact, or real-host journey has landed.
+C16 and C21 remain **Scaffolded**.

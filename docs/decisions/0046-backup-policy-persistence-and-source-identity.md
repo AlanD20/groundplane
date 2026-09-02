@@ -151,19 +151,53 @@ An enabled policy owns exactly one reverse-reference index at:
 The value identifies the Environment policy. A disabled policy owns no such
 index even when it retains a configured `connector_id`.
 
-Source catalog records are idempotently ensured before replacement. This may
-leave an unreferenced immutable record after an abandoned request, which is
-safe and later garbage-collectable. Policy replacement atomically compares the
-Environment, Connector primary, Connector owner index, every selected source
-and target, and all relevant deletion tombstones; then it replaces the policy
-and old/new Connector reference indexes in one transaction. Connector deletion
-compares absence of this prefix in the same
-transaction that publishes its tombstone and finalizer Task. Therefore an
-enabled reference and Connector deletion cannot both commit.
+Direct policy replacement through `PUT /environments/{id}/backup-policy`
+idempotently ensures source catalog records before the replacement transaction.
+This may leave an unreferenced immutable record after an abandoned request,
+which is safe and later garbage-collectable. Direct replacement atomically
+compares the Environment, Connector primary, Connector owner index, every
+selected source and target, and all relevant deletion tombstones; then it
+replaces the policy and old/new Connector reference indexes in one transaction.
+Connector deletion compares absence of this prefix in the same transaction
+that publishes its tombstone and finalizer Task. Therefore an enabled reference
+and Connector deletion cannot both commit.
 
 Deleting a Connector referenced only by disabled policies is allowed. Those
 policies retain the now-missing id and fail validation if an operator later
 tries to enable them without selecting an existing same-Environment Connector.
+
+### Blueprint-owned policy publication
+
+`x-gp-backup` is part of the Environment desired revision and uses ADR 0051's
+single final publication transaction. It does not use direct replacement's
+pre-ensure allowance. The Blueprint transaction atomically publishes the
+desired head, Environment update Task, ADR 0021 marker, Backup Policy,
+enabled-only Connector reference, every missing stable source-catalog tuple,
+the lazy current age key when required, and every candidate Attach or Volume
+identity needed by a selected source. A failed comparison or transaction
+publishes none of them. There is no partial source catalog, orphan candidate
+identity, policy-only head, or compatibility publication path.
+
+`MaximumBackupPolicySources` remains 12. Each stable source tuple owns exactly
+three durable records: its source primary, Environment ownership index, and
+`(environment_id, kind, target_id)` identity index. A maximum policy may
+therefore add 36 source-catalog mutations in the final Blueprint transaction;
+this is not a three-source limit. Active membership remains only the ordered
+`source_ids` in the singleton policy.
+
+`MaximumEnvironmentBlueprintAttachCandidates` is 2. It counts only Attach
+identities newly introduced by this Blueprint candidate. Retained Attaches and
+pre-existing Attaches selected as sources do not consume the candidate limit.
+Every candidate Attach or Volume source target is resolved and validated from
+the same sealed candidate publication rather than required to exist before it.
+An Attach source must still resolve to the credential-owning Attach; an
+existing-credential dependent is never a second Backup source.
+
+Connector creation remains outside Blueprint. `x-gp-backup.connector` must
+resolve to a pre-existing Connector owned by the Environment at the fixed
+validation revision, and the final transaction fences that exact Connector and
+owner index. A missing, concurrently replaced, or deleting Connector rejects
+the complete publication.
 
 ### Per-Environment age key
 
@@ -178,6 +212,12 @@ in the same transaction as the policy. `encryption: none` does not create a
 key. Disabling backups or selecting `none` retains an existing key because old
 Recovery Points may still need it. Rotation creates the next era for new
 points and does not delete older exported-key requirements.
+
+The same lazy and retention rules apply to `x-gp-backup`: an enabled age policy
+creates the absent era-1 key in the final Blueprint publication, exact replay
+reuses that identity, and disabled or `none` publication creates no key. Any
+existing current or historical key identity remains retained for Recovery
+Points even when the candidate disables Backup or selects `none`.
 
 ## Consequences
 
