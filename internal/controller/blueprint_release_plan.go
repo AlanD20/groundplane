@@ -149,6 +149,7 @@ func bindBlueprintCandidateServiceImages(
 		return errs.New(errs.KindInternal, op+": compose artifact is required")
 	}
 	byService := make(map[string]etcd.ReleaseTaskRenderMember, len(members))
+	candidateRoles := make(map[string]agentpb.ComposeServiceRole, len(members))
 	for _, member := range members {
 		if member.Render.ServiceID == "" || member.Intent.ID == "" || member.Render.Image == "" {
 			return errs.New(errs.KindInternal, op+": release member is incomplete")
@@ -157,6 +158,11 @@ func bindBlueprintCandidateServiceImages(
 			return errs.New(errs.KindInternal, op+": release service is duplicated")
 		}
 		byService[member.Render.ServiceID] = member
+		candidateRole := agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT
+		if member.Render.Strategy == domain.StrategyRecreate {
+			candidateRole = agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON
+		}
+		candidateRoles[member.Render.ServiceID] = candidateRole
 	}
 	seen := make(map[string]struct{}, len(byService))
 	for _, service := range artifact.GetServices() {
@@ -167,15 +173,27 @@ func bindBlueprintCandidateServiceImages(
 		if !selected {
 			continue
 		}
-		releaseOwned := false
+		if service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+			continue
+		}
+		if service.GetRole() != candidateRoles[service.GetServiceId()] {
+			return errs.New(errs.KindInternal, op+": compose service release ownership does not match")
+		}
+		releaseID := ""
 		for _, label := range service.GetExpectedLabels() {
-			if label.GetKey() == composeLabelReleaseID && label.GetValue() == member.Intent.ID {
-				releaseOwned = true
+			if label.GetKey() == composeLabelReleaseID {
+				releaseID = label.GetValue()
 				break
 			}
 		}
-		if !releaseOwned {
+		if releaseID == "" {
+			continue
+		}
+		if releaseID != member.Intent.ID {
 			return errs.New(errs.KindInternal, op+": compose service release ownership does not match")
+		}
+		if _, duplicate := seen[service.GetServiceId()]; duplicate {
+			return errs.New(errs.KindInternal, op+": candidate compose service is duplicated")
 		}
 		service.ImageReference = member.Render.Image
 		seen[service.GetServiceId()] = struct{}{}

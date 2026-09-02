@@ -591,3 +591,7 @@ Canonical Environment Blueprint authoring now preserves the persisted authored `
 ## Blueprint predecessor Compose identity (2026-09-02)
 
 Blueprint candidate Release planning now carries the already-sealed predecessor serving Release, target, and proxy generation into the generic Compose render identity. Strict render validation remains unchanged and rejects incomplete authority. The focused Blueprint Release-plan proof passes; exact reference-host apply remains pending.
+
+## Blueprint candidate workload image binding (2026-09-02)
+
+Blueprint Release image binding now selects exactly one matching candidate workload role for each stable Service identity while ignoring its legitimate same-id stable proxy. Missing, mismatched, or duplicate candidate workloads still fail closed. Focused Controller regressions pass; exact reference-host apply remains pending.
