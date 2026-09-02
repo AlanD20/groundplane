@@ -16,6 +16,7 @@ import (
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -594,6 +595,9 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 			etcd.EnvironmentDesiredRevisionParam:         claim.RevisionID,
 			etcd.TaskMaterializationEnvironmentParam:     request.environmentID,
 			controller.EnvironmentBlueprintArtifactParam: artifactID,
+			taskcontract.EnvironmentBlueprintProcedureParam: string(
+				taskcontract.BlueprintComposeProcedureFullReconcile,
+			),
 		},
 		Steps: stepRecords, Materializations: materializationRecords,
 		TimeoutSeconds: environmentBlueprintTimeoutSeconds, Status: etcd.TaskStatusPending,

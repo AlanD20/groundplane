@@ -334,8 +334,18 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
+	procedure, validProcedure := taskcontract.ParseBlueprintComposeProcedure(
+		task.Params[taskcontract.EnvironmentBlueprintProcedureParam],
+	)
+	if !validProcedure {
+		return nil, errs.New(errs.KindInternal, "durable Blueprint Compose procedure is invalid")
+	}
 	var blueprintReleases etcd.ReleaseTaskRenderInput
-	hasBlueprintReleases := task.Params[etcd.TaskReleasePublicationParam] != ""
+	hasBlueprintReleases := procedure == taskcontract.BlueprintComposeProcedureCandidateReleases
+	hasReleasePublication := task.Params[etcd.TaskReleasePublicationParam] != ""
+	if hasBlueprintReleases != hasReleasePublication {
+		return nil, errs.New(errs.KindInternal, "durable Blueprint Release procedure is inconsistent")
+	}
 	if hasBlueprintReleases {
 		if resolver.releases == nil {
 			return nil, errs.New(errs.KindInternal, "Blueprint Release plan resolver is not configured")
@@ -372,7 +382,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if err != nil {
 		return nil, err
 	}
-	expectedParams := 3
+	expectedParams := 4
 	if hasBlueprintReleases {
 		expectedParams += 1 + releaseHookCount*2
 	}
@@ -386,6 +396,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	}
 	if resolver.blueprints == nil || task.Executor != etcd.TaskExecutorAgent ||
 		ids.Validate(ids.KindEnvironment, task.Target) != nil || len(task.Params) != expectedParams ||
+		hasHealthStep && procedure != taskcontract.BlueprintComposeProcedureFullReconcile ||
 		hasHealthStep && (ids.Validate(ids.KindService, healthServiceID) != nil || backingVolumeDirectory == "") ||
 		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 {
 		return nil, errs.New(errs.KindInternal, "durable Blueprint Task shape is invalid")
@@ -417,7 +428,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	expectedSteps := len(task.Materializations)
 	if hasBlueprintReleases {
 		expectedSteps += releaseProcedureStepCount
-	} else {
+	} else if procedure == taskcontract.BlueprintComposeProcedureFullReconcile {
 		expectedSteps++
 	}
 	if len(managedVolumeIDs) != 0 {
@@ -523,13 +534,15 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		})
 		return plan, prepareErr
 	}
-	steps = append(steps, &agentpb.ExecutionStep{
-		StepId: task.Steps[stepIndex].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
-		Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
-			ArtifactId: artifactID, FullReconcile: true,
-		}},
-	})
-	stepIndex++
+	if procedure == taskcontract.BlueprintComposeProcedureFullReconcile {
+		steps = append(steps, &agentpb.ExecutionStep{
+			StepId: task.Steps[stepIndex].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
+			Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
+				ArtifactId: artifactID, FullReconcile: true,
+			}},
+		})
+		stepIndex++
+	}
 	if hasManagedConfigApply {
 		managedConfigStep, stepErr := managedConfigApply.ExecutionStep(
 			task.Steps[stepIndex].ID,
@@ -554,6 +567,9 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		return nil, errs.New(errs.KindInternal, "durable Blueprint Task step order is invalid")
 	}
 	operation := agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY
+	if procedure == taskcontract.BlueprintComposeProcedureFullReconcile {
+		operation = agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
+	}
 	if hasHealthStep {
 		operation = agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE
 	}

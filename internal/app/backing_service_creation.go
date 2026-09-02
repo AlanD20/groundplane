@@ -24,6 +24,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -309,6 +310,9 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 			controller.EnvironmentBlueprintArtifactParam:       artifactID,
 			controller.EnvironmentBlueprintManagedVolumesParam: volumeID,
 			controller.VolumeTaskIntentSHA256Param:             hex.EncodeToString(intentDigest),
+			taskcontract.EnvironmentBlueprintProcedureParam: string(
+				taskcontract.BlueprintComposeProcedureFullReconcile,
+			),
 		},
 		Steps:            []etcd.TaskStepRecord{{ID: environmentStepID}, {ID: volumeStepID}, {ID: materializeStep.StepId}, {ID: applyStepID}, {ID: healthStepID}},
 		Materializations: []etcd.TaskMaterializationRecord{materialization},

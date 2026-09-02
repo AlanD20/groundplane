@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -372,6 +373,9 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 			etcd.EnvironmentDesiredRevisionParam:         claim.RevisionID,
 			etcd.TaskMaterializationEnvironmentParam:     input.environmentID,
 			controller.EnvironmentBlueprintArtifactParam: artifactID,
+			taskcontract.EnvironmentBlueprintProcedureParam: string(
+				taskcontract.BlueprintComposeProcedureFullReconcile,
+			),
 		},
 		Steps:             stepRecords,
 		Materializations:  materializationRecords,

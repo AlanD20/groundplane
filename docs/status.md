@@ -463,3 +463,15 @@ The next exact-main private topology run exposed that the documented top-level V
 ## Blueprint Release task restart shape (2026-09-02)
 
 The exact-main private topology run created the valid 18-step Blueprint Environment update Task but restart assignment quarantined it because the resolver counted an extra full-reconcile step and omitted sealed post-deploy hook steps. Candidate Release restart validation now derives the shared bounded procedure shape, reproduces each apply, hook, and health step in durable order, and validates the hook member and Script execution bindings before Agent assignment. Focused Controller and Blueprint Release regressions pass; reference-host rerun remains pending.
+
+## Blueprint Compose procedure restart shape (2026-09-02)
+
+Environment Tasks now persist one closed Compose procedure kind: no Compose
+mutation, full reconcile, or candidate Releases. Blueprint apply, Entry
+mutation, and backing-service producers write that authority explicitly, and
+restart validation rejects mismatched Release or health parameters before
+reproducing the exact step count and operation. A no-candidate Blueprint keeps
+its materialization, managed-Volume, Attach, and Component work without an
+invented full reconcile; ordinary Entry reconciliation and backing creation
+retain their explicit full-reconcile procedure. Focused producer and restart
+regressions cover both shapes; reference-host rerun remains pending.

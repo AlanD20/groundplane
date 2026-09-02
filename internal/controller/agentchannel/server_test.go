@@ -13,6 +13,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -71,7 +72,6 @@ func TestOperationMatchesTaskAcceptsClosedPairingsAndRejectsCrossPairs(t *testin
 		{taskType: etcd.TaskCreate, operation: agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE},
 		{taskType: etcd.TaskAttach, operation: agentpb.PlanOperation_PLAN_OPERATION_ATTACH},
 		{taskType: etcd.TaskDetach, operation: agentpb.PlanOperation_PLAN_OPERATION_DETACH},
-		{taskType: etcd.TaskUpdate, operation: agentpb.PlanOperation_PLAN_OPERATION_RECONCILE},
 		{taskType: etcd.TaskBackup, operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP},
 		{taskType: etcd.TaskBackupPrune, operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE},
 	}
@@ -130,6 +130,59 @@ func TestOperationMatchesTaskAcceptsClosedPairingsAndRejectsCrossPairs(t *testin
 	}
 	if operationMatchesTask(agentpb.PlanOperation_PLAN_OPERATION_RECONCILE, etcd.TaskRecord{Type: etcd.TaskCreate}) {
 		t.Error("ordinary TaskCreate accepted a reconciliation plan")
+	}
+}
+
+// Rationale: an Environment TaskUpdate's durable Compose procedure is the
+// assignment authority. An absent or different marker must not let a plan
+// cross between Blueprint apply and ordinary reconciliation semantics.
+func TestOperationMatchesTaskRequiresClosedEnvironmentComposeProcedure(t *testing.T) {
+	environmentID := "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	tests := []struct {
+		name      string
+		operation agentpb.PlanOperation
+		marker    string
+		want      bool
+	}{
+		{
+			name: "marked full reconcile", operation: agentpb.PlanOperation_PLAN_OPERATION_RECONCILE,
+			marker: string(taskcontract.BlueprintComposeProcedureFullReconcile), want: true,
+		},
+		{
+			name: "unmarked reconcile", operation: agentpb.PlanOperation_PLAN_OPERATION_RECONCILE,
+		},
+		{
+			name: "wrong reconcile marker", operation: agentpb.PlanOperation_PLAN_OPERATION_RECONCILE,
+			marker: string(taskcontract.BlueprintComposeProcedureNone),
+		},
+		{
+			name: "malformed reconcile marker", operation: agentpb.PlanOperation_PLAN_OPERATION_RECONCILE,
+			marker: "legacy",
+		},
+		{
+			name: "Blueprint none", operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,
+			marker: string(taskcontract.BlueprintComposeProcedureNone), want: true,
+		},
+		{
+			name: "Blueprint candidate Releases", operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,
+			marker: string(taskcontract.BlueprintComposeProcedureCandidateReleases), want: true,
+		},
+		{
+			name: "full reconcile cannot masquerade as Blueprint", operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,
+			marker: string(taskcontract.BlueprintComposeProcedureFullReconcile),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			params := map[string]string{}
+			if test.marker != "" {
+				params[taskcontract.EnvironmentBlueprintProcedureParam] = test.marker
+			}
+			task := etcd.TaskRecord{Type: etcd.TaskUpdate, Target: environmentID, Params: params}
+			if got := operationMatchesTask(test.operation, task); got != test.want {
+				t.Fatalf("operationMatchesTask(%s, marker %q) = %t, want %t", test.operation, test.marker, got, test.want)
+			}
+		})
 	}
 }
 

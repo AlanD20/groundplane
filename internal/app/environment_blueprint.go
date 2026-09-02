@@ -22,6 +22,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
@@ -970,6 +971,9 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		etcd.EnvironmentDesiredRevisionParam:         taskID,
 		etcd.TaskMaterializationEnvironmentParam:     environmentID,
 		controller.EnvironmentBlueprintArtifactParam: artifactID,
+		taskcontract.EnvironmentBlueprintProcedureParam: string(
+			taskcontract.BlueprintComposeProcedureNone,
+		),
 	}
 	if len(managedVolumeIDs) != 0 {
 		params[controller.EnvironmentBlueprintManagedVolumesParam] = strings.Join(managedVolumeIDs, ",")

@@ -92,6 +92,12 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 	if task.Params == nil {
 		task.Params = make(map[string]string)
 	}
+	procedure, validProcedure := taskcontract.ParseBlueprintComposeProcedure(
+		task.Params[taskcontract.EnvironmentBlueprintProcedureParam],
+	)
+	if !validProcedure || procedure != taskcontract.BlueprintComposeProcedureNone {
+		return Prepared{}, errs.New(errs.KindValidationFailed, "Blueprint Release Task procedure is invalid")
+	}
 	if len(candidates) == 0 {
 		plan, buildErr := controller.BuildPlan(controller.PlanBuildInput{
 			VolumeRoot: input.VolumeRoot, PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
@@ -106,6 +112,9 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 		task.Steps = taskStepRecords(plan.Steps)
 		return Prepared{Task: task, Plan: plan}, nil
 	}
+	task.Params[taskcontract.EnvironmentBlueprintProcedureParam] = string(
+		taskcontract.BlueprintComposeProcedureCandidateReleases,
+	)
 	publicationID := strings.TrimPrefix(input.AllocateNamed(ids.KindDeployment, "blueprint-release-publication"), string(ids.KindDeployment)+"_")
 	if len(publicationID) != 26 {
 		return Prepared{}, errs.New(errs.KindInternal, "Blueprint Release publication allocator is invalid")

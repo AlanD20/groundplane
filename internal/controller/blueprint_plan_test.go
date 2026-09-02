@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -85,11 +86,37 @@ func TestTaskPlanResolverRebuildsBlueprintComposeProcedure(t *testing.T) {
 		t.Fatalf("ResolveExecutionPlan(replay) error = %v", err)
 	}
 	if !bytes.Equal(first.PlanHash, second.PlanHash) || len(first.Artifacts) != 1 || len(first.Steps) != 3 ||
-		first.Operation != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY ||
+		first.Operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE ||
 		first.Steps[0].GetMaterializeFile() == nil ||
 		first.Steps[1].GetManagedVolumeDirectoriesEnsure() == nil ||
 		first.Steps[2].GetComposeApply() == nil || !first.Steps[2].GetComposeApply().FullReconcile {
 		t.Fatalf("resolved Blueprint plans = %#v / %#v", first, second)
+	}
+}
+
+// Rationale: a Blueprint with no candidate Release has no Compose procedure;
+// restart must retain its materialization and Volume prefix without inventing
+// a full reconcile step from the absence of Release publication state.
+func TestTaskPlanResolverRebuildsNoOpBlueprintPrefixWithoutComposeApply(t *testing.T) {
+	reader, task := blueprintPlanTestState(t)
+	task.Params[taskcontract.EnvironmentBlueprintProcedureParam] = string(
+		taskcontract.BlueprintComposeProcedureNone,
+	)
+	task.Steps = append([]etcd.TaskStepRecord(nil), task.Steps[:2]...)
+
+	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, nil)
+	if err != nil {
+		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
+	}
+	plan, err := resolver.ResolveExecutionPlan(context.Background(), task)
+	if err != nil {
+		t.Fatalf("ResolveExecutionPlan() error = %v", err)
+	}
+	if plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY || len(plan.Steps) != 2 ||
+		plan.Steps[0].GetMaterializeFile() == nil ||
+		plan.Steps[1].GetManagedVolumeDirectoriesEnsure() == nil ||
+		plan.Steps[0].GetComposeApply() != nil || plan.Steps[1].GetComposeApply() != nil {
+		t.Fatalf("no-op Blueprint plan = %#v", plan)
 	}
 }
 
@@ -121,7 +148,7 @@ func TestTaskPlanResolverRebuildsProfileOnlyBlueprintAsReconcileToEmpty(t *testi
 		t.Fatalf("ResolveExecutionPlan() error = %v", err)
 	}
 	apply := plan.Steps[len(plan.Steps)-1].GetComposeApply()
-	if plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY || apply == nil ||
+	if plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_RECONCILE || apply == nil ||
 		!apply.FullReconcile || apply.ArtifactId != artifact.ArtifactId {
 		t.Fatalf("profile-only Blueprint plan = %#v", plan)
 	}
@@ -223,6 +250,9 @@ volumes:
 			EnvironmentBlueprintArtifactParam:        artifactID,
 			EnvironmentBlueprintManagedVolumesParam:  "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 			VolumeTaskIntentSHA256Param:              hex.EncodeToString(intentDigest[:]),
+			taskcontract.EnvironmentBlueprintProcedureParam: string(
+				taskcontract.BlueprintComposeProcedureFullReconcile,
+			),
 		},
 		Steps: []etcd.TaskStepRecord{
 			{ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"},

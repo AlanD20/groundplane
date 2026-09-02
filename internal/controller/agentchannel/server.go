@@ -21,6 +21,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
 	"github.com/AlanD20/groundplane/internal/common/managedconfig"
+	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -1218,11 +1219,17 @@ func operationMatchesTask(operation agentpb.PlanOperation, task etcd.TaskRecord)
 	case etcd.TaskDetach:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_DETACH
 	case etcd.TaskUpdate:
+		procedure, validProcedure := taskcontract.ParseBlueprintComposeProcedure(
+			task.Params[taskcontract.EnvironmentBlueprintProcedureParam],
+		)
 		if operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY {
-			return ids.Validate(ids.KindEnvironment, task.Target) == nil
+			return ids.Validate(ids.KindEnvironment, task.Target) == nil && validProcedure &&
+				(procedure == taskcontract.BlueprintComposeProcedureNone ||
+					procedure == taskcontract.BlueprintComposeProcedureCandidateReleases)
 		}
 		if operation == agentpb.PlanOperation_PLAN_OPERATION_RECONCILE {
-			return ids.Validate(ids.KindEnvironment, task.Target) != nil
+			return ids.Validate(ids.KindEnvironment, task.Target) == nil && validProcedure &&
+				procedure == taskcontract.BlueprintComposeProcedureFullReconcile
 		}
 		if task.Params[etcd.TaskResourceKindParam] == etcd.TaskResourceComponent {
 			return operation == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY
