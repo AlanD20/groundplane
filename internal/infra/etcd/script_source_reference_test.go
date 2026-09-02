@@ -274,7 +274,8 @@ func TestScriptSourceReferenceAuthorityStagesSnapshotAndReleaseRequirements(t *t
 		t.Fatal(err)
 	}
 	defer fragment.Clear()
-	if len(fragment.conditions) != 4 || len(fragment.StagedRequirements()) != 2 {
+	if len(fragment.conditions) != 4 || len(fragment.mutations) != 4 ||
+		len(fragment.StagedRequirements()) != 2 {
 		t.Fatalf("staged fragment = %#v / %#v", fragment.conditions, fragment.StagedRequirements())
 	}
 	stagedMutations := []Mutation{{Type: MutationPut, Key: scriptRunnerSnapshotKey(snapshotID), Value: snapshotValue}, {Type: MutationPut, Key: releaseIntentStagingKey("", releaseID), Value: releaseValue}}
@@ -514,4 +515,154 @@ func TestScriptSourceReferenceAuthorityAbandonRestoresScriptActiveReferencesExac
 	if err != nil || restored.ActiveReferences != 0 {
 		t.Fatalf("restored Script primary = %#v, %v", restored, err)
 	}
+}
+
+// Rationale: one Blueprint hook can retain several logical Networks and Volumes
+// that all derive from the same candidate Environment compose projection.
+func TestScriptSourceReferenceAuthorityAcceptsSharedStagedProjectionOverAppliedPredecessor(t *testing.T) {
+	store, operationID, members, stage, _, _ := scriptSharedProjectionSourceFixture(t)
+	authority, err := newScriptSourceReferenceAuthority(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := authority.Prepare(context.Background(), operationID, members)
+	if err != nil {
+		t.Fatalf("Prepare(shared staged projection) error = %v", err)
+	}
+	if prepared.membershipCount != 3 {
+		t.Fatalf("prepared membership count = %d, want 3", prepared.membershipCount)
+	}
+	for _, member := range members {
+		countValue := store.valueAt(scriptSourceCountKey(member.Reference.Source), store.revision)
+		count, decodeErr := decodeScriptSourceCount(countValue.Value)
+		if decodeErr != nil || count.ReferencedExecutionCount != 1 || count.Source != member.Reference.Source {
+			t.Fatalf("logical source count = %#v, %v", count, decodeErr)
+		}
+	}
+	fragment, err := authority.FinalPublicationFragment(context.Background(), prepared)
+	if err != nil {
+		t.Fatalf("FinalPublicationFragment() error = %v", err)
+	}
+	defer fragment.Clear()
+	if len(fragment.StagedRequirements()) != 1 ||
+		len(fragment.conditions) != 3 || len(fragment.mutations) != 3 {
+		t.Fatalf("shared staged fragment = %#v / %#v", fragment.conditions, fragment.StagedRequirements())
+	}
+	claim := EnvironmentBlueprintStageClaim{
+		EnvironmentID: stage.EnvironmentID, RevisionID: stage.RevisionID,
+		RenderGeneration: stage.RenderGeneration,
+	}
+	if err = fragment.ValidateStagedMutations(claim, fragment.mutations); err != nil {
+		t.Fatalf("ValidateStagedMutations(exact shared put) error = %v", err)
+	}
+	if err = authority.Abandon(context.Background(), operationID, members); err != nil {
+		t.Fatalf("Abandon(shared staged projection) error = %v", err)
+	}
+	if store.valueAt(scriptSourcePreparationKey(operationID), store.revision) != nil {
+		t.Fatal("abandonment retained the shared source descriptor")
+	}
+}
+
+// Rationale: a known failure after the shared logical memberships commit must
+// leave neither preparation authority nor any membership/count removal fence.
+func TestScriptSourceReferenceAuthorityAbandonsSharedProjectionAfterKnownPrepublicationFailure(t *testing.T) {
+	store, operationID, members, _, _, _ := scriptSharedProjectionSourceFixture(t)
+	failing := &scriptSourceReferenceFailureStore{memoryHierarchyStore: store, failAt: 3}
+	authority, err := newScriptSourceReferenceAuthority(failing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = authority.Prepare(context.Background(), operationID, members); err == nil {
+		t.Fatal("Prepare(shared staged projection) error = nil, want injected seal failure")
+	}
+	descriptorValue := store.valueAt(scriptSourcePreparationKey(operationID), store.revision)
+	if descriptorValue == nil {
+		t.Fatal("known failure did not retain the resumable source preparation")
+	}
+	descriptor, err := decodeScriptSourcePreparation(descriptorValue.Value)
+	if err != nil || descriptor.PreparationCursor != 3 || descriptor.MembershipCount != 3 {
+		t.Fatalf("failed preparation descriptor = %#v, %v", descriptor, err)
+	}
+	if err = authority.Abandon(context.Background(), operationID, members); err != nil {
+		t.Fatalf("Abandon(known prepublication failure) error = %v", err)
+	}
+	if store.valueAt(scriptSourcePreparationKey(operationID), store.revision) != nil {
+		t.Fatal("known-failure cleanup retained the preparation descriptor")
+	}
+	for _, member := range members {
+		if store.valueAt(scriptSourceForwardReferenceKey(member.Reference), store.revision) != nil ||
+			store.valueAt(scriptSourceReverseReferenceKey(member.Reference), store.revision) != nil ||
+			store.valueAt(scriptSourceCountKey(member.Reference.Source), store.revision) != nil {
+			t.Fatalf("known-failure cleanup retained %s authority", scriptSourceSuffix(member.Reference.Source))
+		}
+	}
+}
+
+func scriptSharedProjectionSourceFixture(
+	t *testing.T,
+) (*memoryHierarchyStore, string, []ScriptSourcePreparationMember, ScriptCandidateSourceStage, string, []byte) {
+	t.Helper()
+	store := newMemoryHierarchyStore()
+	at := scriptSourceReferenceTestTime()
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 160)
+	operationID := ids.NewAt(ids.KindOperation, at, 161)
+	executionID := scriptSourceReferenceExecutionID(at, 162)
+	revisionID := ids.NewAt(ids.KindTask, at, 163)
+	firstNetworkID := ids.NewAt(ids.KindNetwork, at, 164)
+	secondNetworkID := ids.NewAt(ids.KindNetwork, at, 165)
+	volumeID := ids.NewAt(ids.KindVolume, at, 166)
+	projectionKey := environmentComposeProjectionKey(environmentID)
+	predecessorValue, err := encodeEnvironmentComposeProjection(withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+		EnvironmentID:    environmentID,
+		RevisionID:       ids.NewAt(ids.KindTask, at, 167),
+		RenderGeneration: 1,
+	}))
+	if err != nil {
+		t.Fatalf("encode predecessor projection: %v", err)
+	}
+	seed, err := store.Transact(context.Background(), nil, []Mutation{{
+		Type: MutationPut, Key: projectionKey, Value: predecessorValue,
+	}})
+	clear(predecessorValue)
+	if err != nil || !seed.Succeeded {
+		t.Fatalf("seed applied predecessor = %#v, %v", seed, err)
+	}
+	candidateValue, err := encodeEnvironmentComposeProjection(withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+		EnvironmentID:    environmentID,
+		RevisionID:       revisionID,
+		RenderGeneration: 2,
+		DesiredZones: []EnvironmentZoneProjection{
+			{EnvironmentID: environmentID, Desired: core.Zone{
+				ID: firstNetworkID, Name: "app", Subnet: "10.40.0.0/24",
+				OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
+			}},
+			{EnvironmentID: environmentID, Desired: core.Zone{
+				ID: secondNetworkID, Name: "data", Subnet: "10.41.0.0/24",
+				OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
+			}},
+		},
+		Volumes: []EnvironmentVolumeIdentity{{ID: volumeID, Slug: "state", Key: "state"}},
+	}))
+	if err != nil {
+		t.Fatalf("encode candidate projection: %v", err)
+	}
+	stage := scriptSourceReferenceStage(environmentID, revisionID, 2, seed.Revision, candidateValue)
+	sources := []ScriptSourceIdentity{
+		{Kind: ScriptSourceNetwork, NetworkID: firstNetworkID},
+		{Kind: ScriptSourceNetwork, NetworkID: secondNetworkID},
+		{Kind: ScriptSourceVolume, VolumeID: volumeID},
+	}
+	members := make([]ScriptSourcePreparationMember, len(sources))
+	for index, source := range sources {
+		members[index] = ScriptSourcePreparationMember{
+			Reference: ScriptSourceReference{
+				OperationID: operationID, ScriptExecutionID: executionID,
+				Source: source, SourceOwnerID: environmentID,
+			},
+			Evidence: ScriptSourceEvidence{Staged: &ScriptStagedSourceEvidence{
+				SourceKey: projectionKey, Stage: stage, Value: append([]byte(nil), candidateValue...),
+			}},
+		}
+	}
+	return store, operationID, members, stage, projectionKey, candidateValue
 }

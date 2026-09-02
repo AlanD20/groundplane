@@ -168,17 +168,16 @@ func (repository *Repository) prepareBatch(
 	defer clearMutations(mutations)
 	sourceConditions := make(map[string]int64)
 	for _, member := range members {
-		revision := member.Reference.SourceModRevision
-		if member.Mode == EvidenceStaged {
-			revision = 0
-		}
-		if prior, exists := sourceConditions[member.SourceKey]; exists {
-			if prior != revision {
-				return Preparation{}, 0, validation("source revision evidence conflicts")
+		if member.Mode == EvidenceExisting {
+			revision := member.Reference.SourceModRevision
+			if prior, exists := sourceConditions[member.SourceKey]; exists {
+				if prior != revision {
+					return Preparation{}, 0, validation("source revision evidence conflicts")
+				}
+			} else {
+				sourceConditions[member.SourceKey] = revision
+				conditions = append(conditions, Condition{Key: member.SourceKey, ModRevision: revision})
 			}
-		} else {
-			sourceConditions[member.SourceKey] = revision
-			conditions = append(conditions, Condition{Key: member.SourceKey, ModRevision: revision})
 		}
 		conditions = append(conditions,
 			Condition{Key: ForwardKey(member.Reference)}, Condition{Key: ReverseKey(member.Reference)},

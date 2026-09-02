@@ -599,3 +599,15 @@ Blueprint Release image binding now selects exactly one matching candidate workl
 ## Blueprint non-Entry omission authority (2026-09-02)
 
 Environment Blueprint and direct Route create/edit publication now reject silent Service, Zone, or Route identity loss with `resource.in_use`; a pending Remove-shaped Task cannot authorize omission. Existing canonical authoring continues to carry omitted resources forward, sealed Route removal remains separate, and exact completed Volume removal remains accepted. Focused persistence, Route transaction, and application carry-forward proofs pass; reference-host Blueprint acceptance remains pending.
+
+## Shared staged Script source publication (2026-09-02)
+
+Blueprint post-deploy Script preparation now preserves distinct logical Service,
+Network, and Volume memberships while deduplicating their byte-identical staged
+physical records. The owning Blueprint transaction publishes each exact staged
+candidate under the predecessor-or-absence revision selected at the fixed read,
+so an existing applied Environment projection is valid predecessor authority
+without permitting a concurrent replacement. Known prepublication abandonment
+removes the prepared memberships and counts without deleting the applied
+predecessor. Focused Script-source and Blueprint publication race proofs pass;
+exact reference-host Blueprint and Script acceptance remains pending.

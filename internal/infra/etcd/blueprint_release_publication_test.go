@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -100,5 +101,110 @@ func TestBlueprintStagedSourceEvidenceRejectsChangedCandidateBytes(t *testing.T)
 		environmentID,
 	); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("blueprintStagedSourceEvidence(changed bytes) error = %v", err)
+	}
+}
+
+// Rationale: the owning Blueprint transaction must publish each deduplicated
+// candidate source under the exact predecessor-or-absence state selected at its fixed read.
+func TestBlueprintReleasePublicationPutsSharedStagedSourcesWithPredecessorFences(t *testing.T) {
+	t.Parallel()
+	for _, raceKey := range []string{"", "projection", "service"} {
+		raceKey := raceKey
+		t.Run(raceKey, func(t *testing.T) {
+			t.Parallel()
+			store, operationID, members, stage, projectionKey, projectionValue :=
+				scriptSharedProjectionSourceFixture(t)
+			serviceID := ids.NewAt(ids.KindService, time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC), 168)
+			serviceKey := serviceRuntimeKey(serviceID)
+			serviceValue := scriptSourceServiceValue(t, stage.EnvironmentID, serviceID)
+			serviceStage := stage
+			serviceStage.CanonicalValueSHA256 = sha256.Sum256(serviceValue)
+			members = append(members, ScriptSourcePreparationMember{
+				Reference: ScriptSourceReference{
+					OperationID: operationID, ScriptExecutionID: members[0].Reference.ScriptExecutionID,
+					Source:        ScriptSourceIdentity{Kind: ScriptSourceService, ServiceID: serviceID},
+					SourceOwnerID: stage.EnvironmentID,
+				},
+				Evidence: ScriptSourceEvidence{Staged: &ScriptStagedSourceEvidence{
+					SourceKey: serviceKey, Stage: serviceStage, Value: serviceValue,
+				}},
+			})
+			authority, err := newScriptSourceReferenceAuthority(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			prepared, err := authority.Prepare(context.Background(), operationID, members)
+			if err != nil {
+				t.Fatalf("Prepare() error = %v", err)
+			}
+			sourceFragment, err := authority.FinalPublicationFragment(context.Background(), prepared)
+			if err != nil {
+				t.Fatalf("FinalPublicationFragment() error = %v", err)
+			}
+			publication, err := newBlueprintReleasePublication(blueprintReleasePublicationInput{
+				EnvironmentID: stage.EnvironmentID, OperationID: operationID,
+				SourceFragment: sourceFragment, SourceAuthority: authority, SourceMembers: members,
+			})
+			if err != nil {
+				t.Fatalf("newBlueprintReleasePublication() error = %v", err)
+			}
+			defer publication.Clear()
+			if len(publication.sources.StagedRequirements()) != 2 ||
+				len(publication.conditions) != 4 || len(publication.mutations) != 4 {
+				t.Fatalf(
+					"publication staged shape = %d requirements, %d conditions, %d mutations",
+					len(publication.sources.StagedRequirements()), len(publication.conditions), len(publication.mutations),
+				)
+			}
+			selected := map[string]int64{}
+			for _, condition := range publication.conditions {
+				if condition.Key == projectionKey || condition.Key == serviceKey {
+					selected[condition.Key] = condition.ModRevision
+				}
+			}
+			if selected[projectionKey] != stage.FixedReadRevision || selected[serviceKey] != 0 {
+				t.Fatalf("selected staged predecessors = %#v", selected)
+			}
+			claim := EnvironmentBlueprintStageClaim{
+				EnvironmentID: stage.EnvironmentID, RevisionID: stage.RevisionID,
+				RenderGeneration: stage.RenderGeneration,
+			}
+			if err = publication.sources.ValidateStagedMutations(claim, publication.mutations); err != nil {
+				t.Fatalf("ValidateStagedMutations(production fragment) error = %v", err)
+			}
+			if raceKey != "" {
+				key := projectionKey
+				if raceKey == "service" {
+					key = serviceKey
+				}
+				raced, raceErr := store.Transact(context.Background(), nil, []Mutation{{
+					Type: MutationPut, Key: key, Value: []byte("concurrent"),
+				}})
+				if raceErr != nil || !raced.Succeeded {
+					t.Fatalf("publish concurrent change = %#v, %v", raced, raceErr)
+				}
+			}
+			result, err := store.Transact(context.Background(), publication.conditions, publication.mutations)
+			if err != nil {
+				t.Fatalf("publish Blueprint fragment error = %v", err)
+			}
+			if raceKey != "" {
+				if result.Succeeded || store.valueAt(scriptSourceRootKey(operationID), store.revision) != nil {
+					t.Fatalf("raced Blueprint publication = %#v; source root became active", result)
+				}
+				return
+			}
+			if !result.Succeeded {
+				t.Fatal("exact Blueprint publication did not commit")
+			}
+			if stored := store.valueAt(projectionKey, store.revision); stored == nil ||
+				!bytes.Equal(stored.Value, projectionValue) {
+				t.Fatal("Blueprint publication omitted the candidate projection")
+			}
+			if stored := store.valueAt(serviceKey, store.revision); stored == nil ||
+				!bytes.Equal(stored.Value, serviceValue) {
+				t.Fatal("Blueprint publication omitted the candidate Service")
+			}
+		})
 	}
 }

@@ -257,6 +257,7 @@ func (authority *ScriptSourceReferenceAuthority) validateMembers(
 	}
 	converted := make([]ref.Member, len(members))
 	var candidateStage *ScriptCandidateSourceStage
+	stagedPredecessors := make(map[string]int64)
 	for index, member := range members {
 		if member.Reference.OperationID != operationID || validateScriptSourceReference(member.Reference) != nil {
 			return nil, errs.New(errs.KindValidationFailed, "Script source preparation member is invalid")
@@ -297,16 +298,24 @@ func (authority *ScriptSourceReferenceAuthority) validateMembers(
 			return nil, err
 		}
 		if readRecords {
-			read, readErr := authority.store.GetMany(ctx, GetManyRequest{
-				Keys: []string{staged.SourceKey}, Revision: staged.Stage.FixedReadRevision,
-			})
-			if readErr != nil {
-				return nil, readErr
+			predecessorRevision, exists := stagedPredecessors[staged.SourceKey]
+			if !exists {
+				read, readErr := authority.store.GetMany(ctx, GetManyRequest{
+					Keys: []string{staged.SourceKey}, Revision: staged.Stage.FixedReadRevision,
+				})
+				if readErr != nil {
+					return nil, readErr
+				}
+				if read == nil || read.ReadRevision != staged.Stage.FixedReadRevision ||
+					len(read.Values) != 1 {
+					return nil, errs.New(errs.KindInternal, "staged Script source predecessor evidence is incomplete")
+				}
+				if read.Values[0] != nil {
+					predecessorRevision = read.Values[0].ModRevision
+				}
+				stagedPredecessors[staged.SourceKey] = predecessorRevision
 			}
-			if read == nil || read.ReadRevision != staged.Stage.FixedReadRevision ||
-				len(read.Values) != 1 || read.Values[0] != nil {
-				return nil, errs.New(errs.KindStateConflict, "staged Script source key is already occupied")
-			}
+			converted[index].StagedPredecessorModRevision = predecessorRevision
 		}
 	}
 	return converted, nil

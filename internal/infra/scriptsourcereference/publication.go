@@ -40,15 +40,22 @@ func (repository *Repository) FinalPublicationFragment(
 		{Key: PreparationKey(prepared.operationID), ModRevision: prepared.descriptorRevision},
 		{Key: RootKey(prepared.operationID)},
 	}
+	mutations := []Mutation{
+		{Type: MutationPut, Key: RootKey(prepared.operationID), Value: value},
+		{Type: MutationDelete, Key: PreparationKey(prepared.operationID)},
+	}
 	for _, requirement := range prepared.staged {
-		conditions = append(conditions, Condition{Key: requirement.SourceKey})
+		conditions = append(conditions, Condition{
+			Key: requirement.SourceKey, ModRevision: requirement.PredecessorModRevision,
+		})
+		mutations = append(mutations, Mutation{
+			Type: MutationPut, Key: requirement.SourceKey,
+			Value: append([]byte(nil), requirement.Value...),
+		})
 	}
 	return PublicationFragment{
-		Conditions: conditions,
-		Mutations: []Mutation{
-			{Type: MutationPut, Key: RootKey(prepared.operationID), Value: value},
-			{Type: MutationDelete, Key: PreparationKey(prepared.operationID)},
-		},
+		Conditions:         conditions,
+		Mutations:          mutations,
 		StagedRequirements: cloneRequirements(prepared.staged),
 	}, nil
 }
