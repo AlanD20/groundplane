@@ -151,19 +151,19 @@ func publish(
 		return nil, err
 	}
 	defer clear(previous)
-	_, ownerExists, err := readTargetOwner(root, request.RelativePath)
+	owner, ownerExists, err := readTargetOwner(root, request.RelativePath)
 	if err != nil {
 		return nil, err
 	}
 	if len(request.ExpectedPreviousSha256) == 0 {
-		if ownerExists {
-			return nil, errs.New(errs.KindStateConflict, "managed-config target ownership changed")
-		}
 		if existed {
+			if ownerExists {
+				return nil, errs.New(errs.KindStateConflict, "managed-config target ownership changed")
+			}
 			if !digestEqual(previous, request.Sha256) {
 				return nil, errs.New(errs.KindStateConflict, "managed-config predecessor changed")
 			}
-			if err := prepareTransaction(ctx, root, tx, request, nil, false); err != nil {
+			if err := prepareTransaction(ctx, root, tx, request, nil, false, "", false); err != nil {
 				return nil, err
 			}
 			if err := writeTargetOwner(ctx, root, request.RelativePath, request.TransactionId); err != nil {
@@ -186,7 +186,7 @@ func publish(
 			return nil, errs.New(errs.KindStateConflict, "managed-config predecessor changed")
 		}
 	}
-	if err := prepareTransaction(ctx, root, tx, request, previous, existed); err != nil {
+	if err := prepareTransaction(ctx, root, tx, request, previous, existed, owner, ownerExists); err != nil {
 		return nil, err
 	}
 	if err := writeAtomic(ctx, root, request.RelativePath, request.Content, 0o644); err != nil {
@@ -214,6 +214,8 @@ func prepareTransaction(
 	request *agentpb.ManagedConfigHelperRequest,
 	previous []byte,
 	previousExists bool,
+	observedOwner string,
+	observedOwnerExists bool,
 ) error {
 	staging := tx + preparationSuffix
 	if err := resetTransactionPreparation(root, staging); err != nil {
@@ -249,12 +251,8 @@ func prepareTransaction(
 	); err != nil {
 		return err
 	}
-	previousOwner, previousOwnerExists, err := readTargetOwner(root, request.RelativePath)
-	if err != nil {
-		return err
-	}
-	if previousOwnerExists {
-		if err := writeAtomic(ctx, root, path.Join(staging, "previous.owner"), []byte(previousOwner), 0o600); err != nil {
+	if previousExists && observedOwnerExists {
+		if err := writeAtomic(ctx, root, path.Join(staging, "previous.owner"), []byte(observedOwner), 0o600); err != nil {
 			return err
 		}
 	} else if err := writeAtomic(
@@ -265,6 +263,11 @@ func prepareTransaction(
 		0o600,
 	); err != nil {
 		return err
+	}
+	if !previousExists && observedOwnerExists {
+		if err := writeAtomic(ctx, root, path.Join(staging, "orphan.owner"), []byte(observedOwner), 0o600); err != nil {
+			return err
+		}
 	}
 	if err := syncDirectory(root, staging); err != nil {
 		return err
@@ -298,6 +301,10 @@ func replayPublish(
 	if err != nil {
 		return nil, err
 	}
+	orphanOwner, orphanOwnerExists, err := readOrphanOwner(root, tx)
+	if err != nil {
+		return nil, err
+	}
 	live, liveExists, err := readRegular(root, request.RelativePath)
 	if err != nil {
 		return nil, err
@@ -320,14 +327,18 @@ func replayPublish(
 	disposition := agentpb.ManagedConfigReplayDisposition_MANAGED_CONFIG_REPLAY_DISPOSITION_EXACT_REPLAY
 	candidateLive := liveExists && digestEqual(live, request.Sha256)
 	previousLive := liveExists == existed && (!liveExists || bytesEqual(live, previous))
+	recoveryOwnershipMatches := targetOwnerMatches(owner, ownerExists, previousOwner, previousOwnerExists)
+	if !existed {
+		recoveryOwnershipMatches = targetOwnerMatches(owner, ownerExists, orphanOwner, orphanOwnerExists)
+	}
 	switch {
 	case candidateLive && targetOwnerMatches(owner, ownerExists, request.TransactionId, true):
-	case candidateLive && targetOwnerMatches(owner, ownerExists, previousOwner, previousOwnerExists):
+	case candidateLive && recoveryOwnershipMatches:
 		if err := writeTargetOwner(ctx, root, request.RelativePath, request.TransactionId); err != nil {
 			return nil, err
 		}
 		disposition = agentpb.ManagedConfigReplayDisposition_MANAGED_CONFIG_REPLAY_DISPOSITION_RECOVERED
-	case previousLive && targetOwnerMatches(owner, ownerExists, previousOwner, previousOwnerExists):
+	case previousLive && recoveryOwnershipMatches:
 		candidate, found, readErr := readRegular(root, path.Join(tx, "candidate"))
 		if readErr != nil || !found || !digestEqual(candidate, request.Sha256) {
 			clear(candidate)

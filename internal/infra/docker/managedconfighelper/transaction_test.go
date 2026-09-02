@@ -38,6 +38,39 @@ func TestPublishSucceedsWhenExpectedPredecessorIsAbsent(t *testing.T) {
 	}
 }
 
+// Rationale: ownership metadata cannot own an absent target, so a clean first
+// activation must replace an orphan marker and remain safely reversible.
+func TestPublishClaimsAbsentTargetDespiteOrphanedOwnershipMarker(t *testing.T) {
+	root := t.TempDir()
+	request := transactionRequest("mct_cleanstart", []byte("forward . 8.8.8.8\n"))
+	if err := os.Mkdir(filepath.Join(root, lockRoot), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ownerPath := filepath.Join(root, filepath.FromSlash(targetOwnerPath(request.RelativePath)))
+	if err := os.WriteFile(ownerPath, []byte("mct_orphaned"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := applyAt(context.Background(), root, request)
+	if err != nil ||
+		response.GetDisposition() != agentpb.ManagedConfigReplayDisposition_MANAGED_CONFIG_REPLAY_DISPOSITION_APPLIED ||
+		len(response.GetPreviousSha256()) != 0 ||
+		string(mustRead(t, filepath.Join(root, "coredns", "Corefile"))) != string(request.Content) ||
+		string(mustRead(t, ownerPath)) != request.TransactionId {
+		t.Fatalf("publish over orphan owner = %#v, %v", response, err)
+	}
+
+	rollback := terminalRequest(request, agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_ROLLBACK)
+	if _, err := applyAt(context.Background(), root, rollback); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{filepath.Join(root, "coredns", "Corefile"), ownerPath} {
+		if _, err := os.Stat(name); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("rolled-back initially absent state %q stat error = %v", name, err)
+		}
+	}
+}
+
 // Rationale: initial publication must not overwrite or begin a transaction over unexpected physical state.
 func TestPublishRejectsExistingTargetWhenExpectedPredecessorIsAbsent(t *testing.T) {
 	root := t.TempDir()
@@ -319,6 +352,8 @@ func TestPublishRecoversAfterPreparedTransactionBecomesVisible(t *testing.T) {
 		request,
 		previous,
 		true,
+		"",
+		false,
 	); err != nil {
 		root.Close()
 		t.Fatal(err)
@@ -337,6 +372,66 @@ func TestPublishRecoversAfterPreparedTransactionBecomesVisible(t *testing.T) {
 	}
 	if value := mustRead(t, live); string(value) != string(request.Content) {
 		t.Fatalf("recovered live candidate = %q", value)
+	}
+}
+
+// Rationale: an older transaction prepared against an absent target must not
+// adopt or remove a later transaction's committed same-byte candidate.
+func TestPreparedAbsentTransactionRejectsCommittedSuccessorOwnership(t *testing.T) {
+	rootPath := t.TempDir()
+	older := transactionRequest("mct_olderabsent", []byte("forward . 8.8.8.8\n"))
+	successor := transactionRequest("mct_successor", older.Content)
+	root, err := os.OpenRoot(rootPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureTrustedDirectory(root, transactionRoot); err != nil {
+		root.Close()
+		t.Fatal(err)
+	}
+	if err := prepareTransaction(
+		context.Background(),
+		root,
+		filepath.ToSlash(filepath.Join(transactionRoot, older.TransactionId)),
+		older,
+		nil,
+		false,
+		"",
+		false,
+	); err != nil {
+		root.Close()
+		t.Fatal(err)
+	}
+	if err := root.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := applyAt(context.Background(), rootPath, successor); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := applyAt(context.Background(), rootPath, terminalRequest(
+		successor,
+		agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_COMMIT,
+	)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := applyAt(context.Background(), rootPath, older); err == nil {
+		t.Error("older transaction adopted its committed successor")
+	}
+	if _, err := applyAt(context.Background(), rootPath, terminalRequest(
+		older,
+		agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_ROLLBACK,
+	)); err == nil {
+		t.Error("older transaction removed its committed successor")
+	}
+	live := filepath.Join(rootPath, "coredns", "Corefile")
+	if value := mustRead(t, live); string(value) != string(successor.Content) {
+		t.Fatalf("successor candidate = %q", value)
+	}
+	ownerPath := filepath.Join(rootPath, filepath.FromSlash(targetOwnerPath(successor.RelativePath)))
+	if owner := mustRead(t, ownerPath); string(owner) != successor.TransactionId {
+		t.Fatalf("successor owner = %q", owner)
 	}
 }
 

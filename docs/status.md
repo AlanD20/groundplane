@@ -562,3 +562,11 @@ deployment but is never silently activated or hooked by Environment Blueprint
 apply. Existing stopped, absent, replicated, and Release Group exclusions stay
 unchanged. Focused candidate-selection race proof passes; reference-host
 Blueprint acceptance remains pending.
+
+## Managed-config clean-start ownership recovery (2026-09-02)
+
+An absent managed-config target now journals the exact orphan owner observed
+during preparation. Replay accepts only that recorded ownership state or the
+transaction's own owner, so a stale transaction cannot adopt or remove a
+same-byte successor published by another transaction. Focused helper race proof
+passes; clean-host CoreDNS activation and Blueprint acceptance remain pending.

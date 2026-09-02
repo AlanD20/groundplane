@@ -80,6 +80,19 @@ func readPreviousOwner(root *os.Root, tx string) (string, bool, error) {
 	return owner, true, nil
 }
 
+func readOrphanOwner(root *os.Root, tx string) (string, bool, error) {
+	value, found, err := readRegular(root, path.Join(tx, "orphan.owner"))
+	if err != nil || !found {
+		return "", false, err
+	}
+	defer clear(value)
+	owner := string(value)
+	if !validTransactionID(owner) {
+		return "", false, errs.New(errs.KindStateConflict, "managed-config orphan owner is invalid")
+	}
+	return owner, true, nil
+}
+
 func readTargetOwner(root *os.Root, relativePath string) (string, bool, error) {
 	value, found, err := readRegular(root, targetOwnerPath(relativePath))
 	if err != nil || !found {
