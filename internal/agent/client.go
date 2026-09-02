@@ -337,6 +337,13 @@ func (c *Client) runSession(
 				}
 				continue
 			}
+			if acknowledgement := result.message.GetExecutionStepResultAck(); acknowledgement != nil {
+				if err := c.pool.AcceptExecutionStepResultAck(acknowledgement); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
 			if acknowledgement := result.message.GetBackupCheckpointAck(); acknowledgement != nil {
 				if err := c.pool.AcceptBackupCheckpointAck(acknowledgement); err != nil {
 					return false, err
@@ -360,8 +367,19 @@ func (c *Client) runSession(
 			}
 			receiveNext(streamCtx, stream, received)
 		case output := <-c.pool.Outputs():
+			if output.ExecutionStepResult != nil {
+				if output.ScriptCheckpoint != nil || output.BackupCheckpoint != nil ||
+					output.Progress != nil || output.Result != nil {
+					return false, errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
+				}
+				if err := c.sendExecutionStepResult(stream, output.ExecutionStepResult); err != nil {
+					return agentChannelTransportResult(ctx, err, "agent: send execution step result", false)
+				}
+				continue
+			}
 			if output.ScriptCheckpoint != nil {
-				if output.BackupCheckpoint != nil || output.Progress != nil || output.Result != nil {
+				if output.BackupCheckpoint != nil || output.ExecutionStepResult != nil ||
+					output.Progress != nil || output.Result != nil {
 					return false, errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
 				}
 				if err := c.sendScriptCheckpoint(stream, output.ScriptCheckpoint); err != nil {
@@ -370,7 +388,8 @@ func (c *Client) runSession(
 				continue
 			}
 			if output.BackupCheckpoint != nil {
-				if output.Progress != nil || output.Result != nil || output.ScriptCheckpoint != nil {
+				if output.Progress != nil || output.Result != nil || output.ScriptCheckpoint != nil ||
+					output.ExecutionStepResult != nil {
 					return false, errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
 				}
 				if err := c.sendBackupCheckpoint(stream, output.BackupCheckpoint); err != nil {
@@ -402,6 +421,15 @@ func (c *Client) runSession(
 			}
 		}
 	}
+}
+
+func (c *Client) sendExecutionStepResult(
+	stream agentStream,
+	request *agentpb.ExecutionStepResultRequest,
+) error {
+	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_ExecutionStepResultRequest{
+		ExecutionStepResultRequest: proto.Clone(request).(*agentpb.ExecutionStepResultRequest),
+	}})
 }
 
 func (c *Client) sendBackupCheckpoint(
@@ -540,9 +568,10 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 			AssignmentID: assignment.AssignmentId,
 			TaskID:       assignment.TaskId, OperationID: assignment.OperationId,
 			RetryOf: assignment.RetryOf, Plan: assignment.Plan, ScriptArtifacts: assignment.ScriptArtifacts,
-			ScriptCheckpoints:  assignment.ScriptCheckpoints,
-			AutomaticReconcile: assignment.GetAutomaticReconcile(),
-			Deadline:           assignment.Deadline.AsTime(),
+			ScriptCheckpoints:       assignment.ScriptCheckpoints,
+			AcknowledgedStepResults: assignment.AcknowledgedStepResults,
+			AutomaticReconcile:      assignment.GetAutomaticReconcile(),
+			Deadline:                assignment.Deadline.AsTime(),
 		})
 	}
 	if abort := message.GetTaskAbort(); abort != nil {

@@ -54,6 +54,12 @@ func encodeServiceRuntimeRecord(record ServiceRuntimeRecord) ([]byte, error) {
 	return encodeEnvelope("service_runtime", record)
 }
 
+// EncodeServiceRuntimeRecordStorage returns the exact value used by Blueprint
+// final publication for a Service runtime source.
+func EncodeServiceRuntimeRecordStorage(record ServiceRecord) ([]byte, error) {
+	return encodeServiceRuntimeRecord(newServiceRuntimeRecord(record))
+}
+
 func decodeServiceRuntimeRecord(value []byte) (ServiceRuntimeRecord, error) {
 	record, err := decodeEnvelope[ServiceRuntimeRecord](value, "service_runtime")
 	if err != nil || validateServiceRuntimeRecord(record) != nil {

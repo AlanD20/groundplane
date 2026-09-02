@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	coreproof "github.com/AlanD20/groundplane/internal/core/materializationproof"
@@ -111,7 +112,10 @@ func validateScriptSourceRecord(key string, value []byte, reference ScriptSource
 	case ScriptSourceRelease:
 		record, err := decodeReleaseRecord[domain.Intent](value, "release-intent")
 		digest := sha256.Sum256(value)
-		if err != nil || domain.ValidateIntent(record) != nil || key != releaseIntentStagingKey("", source.ReleaseID) || record.ID != source.ReleaseID ||
+		if err != nil || domain.ValidateIntent(record) != nil ||
+			(key != releaseIntentStagingKey("", source.ReleaseID) &&
+				!(strings.HasPrefix(key, releaseStagingPrefix) && strings.HasSuffix(key, "/"+source.ReleaseID))) ||
+			record.ID != source.ReleaseID ||
 			record.EnvironmentID != reference.SourceOwnerID || hex.EncodeToString(digest[:]) != reference.SourceDigest {
 			return errs.New(errs.KindValidationFailed, "Script Release source evidence is invalid")
 		}

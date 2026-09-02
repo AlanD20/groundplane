@@ -307,7 +307,7 @@ func (repository *TaskRepository) prepareReleaseHookExecutionRetryTransfer(
 }
 
 func releaseHookExecutionSteps(task TaskRecord) ([]releaseHookExecutionStep, error) {
-	if task.Type != TaskDeploy && task.Type != TaskRollback {
+	if task.Type != TaskDeploy && task.Type != TaskRollback && task.Type != TaskUpdate {
 		return nil, errs.New(errs.KindValidationFailed, "release hook execution Task is invalid")
 	}
 	steps := make([]releaseHookExecutionStep, 0)
@@ -388,7 +388,8 @@ func NewScriptExecutionRecords(
 	if err != nil {
 		return nil, err
 	}
-	releaseTask := task.Type == TaskDeploy || task.Type == TaskRollback
+	releaseTask := task.Type == TaskDeploy || task.Type == TaskRollback ||
+		(task.Type == TaskUpdate && task.Params[TaskReleasePublicationParam] != "")
 	if task.Executor != TaskExecutorAgent || task.Status != TaskStatusPending ||
 		(!releaseTask && task.Type != TaskScript) || len(validated.ScriptRunnerSnapshots) == 0 ||
 		len(validated.ScriptRunnerSnapshots) != len(validated.ScriptBodyArtifacts) ||
@@ -638,7 +639,8 @@ func (repository *ScriptRepository) GetReleaseScriptExecutionPlan(
 	task TaskRecord,
 ) (*agentpb.ExecutionPlan, bool, error) {
 	if ctx == nil || repository == nil || repository.store == nil ||
-		(task.Type != TaskDeploy && task.Type != TaskRollback) {
+		(task.Type != TaskDeploy && task.Type != TaskRollback &&
+			(task.Type != TaskUpdate || task.Params[TaskReleasePublicationParam] == "")) {
 		return nil, false, errs.New(errs.KindValidationFailed, "release Script execution plan request is invalid")
 	}
 	executionIDs := make(map[string]string)
@@ -692,6 +694,14 @@ func (repository *ScriptRepository) GetReleaseScriptExecutionPlan(
 	return sealed, true, nil
 }
 
+func scriptAssignmentTaskOwnsPlan(task TaskRecord, plan *agentpb.ExecutionPlan) bool {
+	if task.Type == TaskScript || task.Type == TaskDeploy || task.Type == TaskRollback {
+		return true
+	}
+	return task.Type == TaskUpdate && task.Params[TaskReleasePublicationParam] != "" &&
+		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY && plan.TargetId == task.Target
+}
+
 // ResolveScriptAssignmentArtifacts returns the private body bytes only after
 // the durable execution, sealed plan, and immutable generation agree.
 func (repository *ScriptRepository) ResolveScriptAssignmentArtifacts(
@@ -704,7 +714,7 @@ func (repository *ScriptRepository) ResolveScriptAssignmentArtifacts(
 		return nil, err
 	}
 	if repository == nil || repository.store == nil || len(validated.ScriptBodyArtifacts) == 0 ||
-		(task.Type != TaskScript && task.Type != TaskDeploy && task.Type != TaskRollback) ||
+		!scriptAssignmentTaskOwnsPlan(task, validated) ||
 		hex.EncodeToString(validated.PlanHash) != task.PlanHash {
 		return nil, errs.New(errs.KindValidationFailed, "Script assignment artifact request is invalid")
 	}

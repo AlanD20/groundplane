@@ -22,15 +22,16 @@ import (
 type PlanHash [sha256.Size]byte
 
 type Assignment struct {
-	AssignmentID       string
-	TaskID             string
-	OperationID        string
-	RetryOf            string
-	Plan               *agentpb.ExecutionPlan
-	ScriptArtifacts    *agentpb.ScriptAssignmentArtifacts
-	ScriptCheckpoints  []*agentpb.ScriptExecutionCheckpoint
-	AutomaticReconcile bool
-	Deadline           time.Time
+	AssignmentID            string
+	TaskID                  string
+	OperationID             string
+	RetryOf                 string
+	Plan                    *agentpb.ExecutionPlan
+	ScriptArtifacts         *agentpb.ScriptAssignmentArtifacts
+	ScriptCheckpoints       []*agentpb.ScriptExecutionCheckpoint
+	AcknowledgedStepResults []*agentpb.ExecutionStepResult
+	AutomaticReconcile      bool
+	Deadline                time.Time
 }
 
 type TaskTerminal uint8
@@ -76,10 +77,11 @@ type TaskProgress struct {
 // WorkerOutput is a closed ordered union. Exactly one member is non-nil, and
 // each Task's terminal step progress is emitted before its final result.
 type WorkerOutput struct {
-	Progress         *TaskProgress
-	Result           *TaskResult
-	BackupCheckpoint *agentpb.BackupCheckpointRequest
-	ScriptCheckpoint *agentpb.ScriptCheckpointRequest
+	Progress            *TaskProgress
+	Result              *TaskResult
+	BackupCheckpoint    *agentpb.BackupCheckpointRequest
+	ScriptCheckpoint    *agentpb.ScriptCheckpointRequest
+	ExecutionStepResult *agentpb.ExecutionStepResultRequest
 }
 
 type taskReservation struct {
@@ -125,6 +127,7 @@ type WorkerPool struct {
 	backupSecrets          *backupSecretSlotInbox
 	backupCheckpoints      *backupCheckpointInbox
 	scriptCheckpoints      *scriptCheckpointInbox
+	executionStepResults   *executionStepResultInbox
 
 	mu           sync.Mutex
 	reservations map[string]*taskReservation
@@ -134,19 +137,20 @@ type WorkerPool struct {
 
 func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger *slog.Logger) *WorkerPool {
 	pool := &WorkerPool{
-		size:              size,
-		volumeRoot:        volumeRoot,
-		runner:            taskRunner,
-		logger:            logger,
-		work:              make(chan *taskReservation, size),
-		outputs:           make(chan WorkerOutput, size),
-		reservations:      make(map[string]*taskReservation, size),
-		materializations:  newMaterializationInbox(),
-		managedConfigs:    newManagedConfigInbox(),
-		backupSecrets:     newBackupSecretSlotInbox(),
-		backupCheckpoints: newBackupCheckpointInbox(),
-		scriptCheckpoints: newScriptCheckpointInbox(),
-		adapter:           NewAdapterRuntime(taskRunner),
+		size:                 size,
+		volumeRoot:           volumeRoot,
+		runner:               taskRunner,
+		logger:               logger,
+		work:                 make(chan *taskReservation, size),
+		outputs:              make(chan WorkerOutput, size),
+		reservations:         make(map[string]*taskReservation, size),
+		materializations:     newMaterializationInbox(),
+		managedConfigs:       newManagedConfigInbox(),
+		backupSecrets:        newBackupSecretSlotInbox(),
+		backupCheckpoints:    newBackupCheckpointInbox(),
+		scriptCheckpoints:    newScriptCheckpointInbox(),
+		executionStepResults: newExecutionStepResultInbox(),
+		adapter:              NewAdapterRuntime(taskRunner),
 	}
 	pool.executeStep = pool.runStep
 	return pool
@@ -366,6 +370,9 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			}
 			reconciliationRequired = reconciliationRequired || stepResult.ReconciliationRequired
 			mutationAttempted = mutationAttempted || stepResult.MutationAttempted
+			if err == nil && stepResult.ExecutionStepResult != nil {
+				err = p.CheckpointExecutionStepResult(stepCtx, &reservation.assignment, stepResult.ExecutionStepResult)
+			}
 		}
 		cancel()
 		if err != nil {
@@ -1206,6 +1213,13 @@ func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assign
 	if err != nil {
 		return Assignment{}, err
 	}
+	acknowledgedStepResults, err := executionplan.ValidateExecutionStepResults(
+		plan, assignment.AcknowledgedStepResults,
+	)
+	if err != nil {
+		clearScriptArtifacts(scriptArtifacts)
+		return Assignment{}, errs.Wrap(errs.KindInternal, err)
+	}
 	scriptCheckpoints := make([]*agentpb.ScriptExecutionCheckpoint, len(assignment.ScriptCheckpoints))
 	if len(assignment.ScriptCheckpoints) != len(plan.ScriptBodyArtifacts) {
 		clearScriptArtifacts(scriptArtifacts)
@@ -1240,8 +1254,8 @@ func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assign
 		AssignmentID: assignment.AssignmentID,
 		TaskID:       assignment.TaskID, OperationID: assignment.OperationID,
 		RetryOf: assignment.RetryOf, Plan: plan, ScriptArtifacts: scriptArtifacts,
-		ScriptCheckpoints: scriptCheckpoints, Deadline: assignment.Deadline,
-		AutomaticReconcile: assignment.AutomaticReconcile,
+		ScriptCheckpoints: scriptCheckpoints, AcknowledgedStepResults: acknowledgedStepResults,
+		Deadline: assignment.Deadline, AutomaticReconcile: assignment.AutomaticReconcile,
 	}, nil
 }
 

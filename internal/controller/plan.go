@@ -333,13 +333,34 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
+	var blueprintReleases etcd.ReleaseTaskRenderInput
+	hasBlueprintReleases := task.Params[etcd.TaskReleasePublicationParam] != ""
+	if hasBlueprintReleases {
+		if resolver.releases == nil {
+			return nil, errs.New(errs.KindInternal, "Blueprint Release plan resolver is not configured")
+		}
+		if resolver.scriptPlans != nil {
+			sealed, found, err := resolver.scriptPlans.GetReleaseScriptExecutionPlan(ctx, task)
+			if err != nil || found {
+				return sealed, err
+			}
+		}
+		var err error
+		blueprintReleases, err = resolver.releases.GetBlueprintTaskRenderInput(ctx, task)
+		if err != nil {
+			return nil, err
+		}
+	}
 	managedVolumeIDs, volumeIntentDigest, err := blueprintManagedVolumeProcedure(task.Params)
 	if err != nil {
 		return nil, err
 	}
 	expectedParams := 3
+	if hasBlueprintReleases {
+		expectedParams++
+	}
 	if len(managedVolumeIDs) != 0 {
-		expectedParams = 5
+		expectedParams += 2
 	}
 	healthServiceID, hasHealthStep := task.Params[etcd.TaskBackingServiceHealthParam]
 	backingVolumeDirectory := task.Params[etcd.TaskBackingServiceVolumeDirectoryParam]
@@ -377,6 +398,9 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		return nil, err
 	}
 	expectedSteps := len(task.Materializations) + 1
+	if hasBlueprintReleases {
+		expectedSteps += len(blueprintReleases.Members) * 2
+	}
 	if len(managedVolumeIDs) != 0 {
 		expectedSteps++
 	}
@@ -450,6 +474,31 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	defer clearAdapterProcedurePasswords(attachSteps)
 	steps = append(steps, attachSteps...)
 	stepIndex = nextStepIndex
+	if hasBlueprintReleases {
+		applyStepIDs := make([]string, len(blueprintReleases.Members))
+		healthStepIDs := make([]string, len(blueprintReleases.Members))
+		postStepIDs := make([][]string, len(blueprintReleases.Members))
+		for index := range blueprintReleases.Members {
+			applyStepIDs[index] = task.Steps[stepIndex+index*2].ID
+			healthStepIDs[index] = task.Steps[stepIndex+index*2+1].ID
+		}
+		componentSteps := []*agentpb.ExecutionStep(nil)
+		if hasManagedConfigApply {
+			managedConfigStep, stepErr := managedConfigApply.ExecutionStep(
+				task.Steps[stepIndex+len(blueprintReleases.Members)*2].ID,
+				uint32(task.TimeoutSeconds),
+			)
+			if stepErr != nil {
+				return nil, stepErr
+			}
+			componentSteps = append(componentSteps, managedConfigStep)
+		}
+		_, plan, prepareErr := resolver.PrepareBlueprintReleaseTask(ctx, task, BlueprintReleasePlanInput{
+			Members: blueprintReleases.Members, PrefixSteps: steps, ComponentSteps: componentSteps,
+			ApplyStepIDs: applyStepIDs, HealthStepIDs: healthStepIDs, PostStepIDs: postStepIDs,
+		})
+		return plan, prepareErr
+	}
 	steps = append(steps, &agentpb.ExecutionStep{
 		StepId: task.Steps[stepIndex].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
 		Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{

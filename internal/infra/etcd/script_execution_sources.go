@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -26,6 +27,147 @@ type ScriptExecutionSources struct {
 	DesiredHead       Versioned[EnvironmentBlueprintHead]
 	DesiredProjection Versioned[EnvironmentComposeProjection]
 	Networks          []Versioned[ZoneRecord]
+}
+
+// LoadBlueprintReleaseHookExecutionSources loads exact prepublished Script/body
+// and candidate Release records while the same-Blueprint Service and projection
+// remain visible only through their sealed candidate.
+func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
+	ctx context.Context,
+	publicationID string,
+	script ScriptRecord,
+	service ServiceRecord,
+	member ReleaseTaskRenderMember,
+	tenant Versioned[TenantRecord],
+	project Versioned[ProjectRecord],
+	environment Versioned[EnvironmentRecord],
+	projection EnvironmentComposeProjection,
+	revision int64,
+) (ScriptExecutionSources, error) {
+	if ctx == nil || repository == nil || repository.store == nil ||
+		validatePublicationID(publicationID) != nil || revision <= 0 ||
+		projection.EnvironmentID != environment.Record.ID ||
+		projection.RevisionID == "" || projection.RenderGeneration == 0 ||
+		service.EnvironmentID != environment.Record.ID ||
+		script.EnvironmentID != environment.Record.ID ||
+		service.Desired.ID != member.Intent.ServiceID ||
+		script.ServiceID != service.Desired.ID {
+		return ScriptExecutionSources{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint Script candidate source request is invalid",
+		)
+	}
+	script.ScriptSetGeneration = projection.RevisionID
+	keys := []string{
+		scriptSetScriptKey(script.EnvironmentID, script.ScriptSetGeneration, script.Desired.ID),
+		scriptSetBodyGenerationKey(
+			script.EnvironmentID,
+			script.ScriptSetGeneration,
+			script.Desired.ID,
+			script.ActiveGeneration,
+		),
+		releaseIntentStagingKey(publicationID, member.Intent.ID),
+		releaseRenderInputStagingKey(publicationID, member.Intent.ID),
+	}
+	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	if err != nil {
+		return ScriptExecutionSources{}, err
+	}
+	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
+		return ScriptExecutionSources{}, errs.New(
+			errs.KindInternal,
+			"Blueprint Script candidate source read is incomplete",
+		)
+	}
+	for _, value := range read.Values {
+		if value == nil {
+			return ScriptExecutionSources{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Script candidate source is missing",
+			)
+		}
+	}
+	storedScript, err := decodeScriptRecord(read.Values[0].Value)
+	if err != nil || storedScript.Desired.ID != script.Desired.ID ||
+		storedScript.ScriptSetGeneration != projection.RevisionID ||
+		storedScript.ActiveGeneration != script.ActiveGeneration {
+		return ScriptExecutionSources{}, corruptRecord()
+	}
+	body, err := decodeScriptBodyGeneration(read.Values[1].Value)
+	if err != nil || body.ScriptID != script.Desired.ID ||
+		body.Generation != script.ActiveGeneration {
+		return ScriptExecutionSources{}, corruptRecord()
+	}
+	intent, err := decodeReleaseRecord[domain.Intent](
+		read.Values[2].Value,
+		"release-intent",
+	)
+	if err != nil || intent.ID != member.Intent.ID ||
+		intent.OperationID != member.Intent.OperationID ||
+		intent.ServiceID != member.Intent.ServiceID {
+		return ScriptExecutionSources{}, corruptReleaseRecord()
+	}
+	raw, err := decodeReleaseRecord[json.RawMessage](
+		read.Values[3].Value,
+		"release-render-input",
+	)
+	if err != nil {
+		return ScriptExecutionSources{}, err
+	}
+	render, err := decodeReleaseRenderInput(raw)
+	if err != nil || render.ReleaseID != member.Render.ReleaseID ||
+		render.ServiceID != member.Render.ServiceID ||
+		render.Projection.RevisionID != projection.RevisionID {
+		return ScriptExecutionSources{}, corruptReleaseRecord()
+	}
+	return ScriptExecutionSources{
+		Revision:    revision,
+		Tenant:      tenant,
+		Project:     project,
+		Environment: environment,
+		Service: Versioned[ServiceRecord]{
+			Record:       service,
+			ReadRevision: revision,
+		},
+		ScriptSet: Versioned[ScriptSetGenerationRecord]{
+			Record: ScriptSetGenerationRecord{
+				EnvironmentID: environment.Record.ID,
+				GenerationID:  projection.RevisionID,
+			},
+			ReadRevision: revision,
+		},
+		Script: Versioned[ScriptRecord]{
+			Record:       storedScript,
+			Revision:     read.Values[0].ModRevision,
+			ReadRevision: revision,
+		},
+		BodyGeneration: Versioned[ScriptBodyGenerationRecord]{
+			Record:       body,
+			Revision:     read.Values[1].ModRevision,
+			ReadRevision: revision,
+		},
+		Release: CurrentSuccessfulRelease{
+			Intent:         intent,
+			IntentRevision: read.Values[2].ModRevision,
+			Revision:       revision,
+		},
+		RenderInput: Versioned[ReleaseRenderInput]{
+			Record:       render,
+			Revision:     read.Values[3].ModRevision,
+			ReadRevision: revision,
+		},
+		DesiredHead: Versioned[EnvironmentBlueprintHead]{
+			Record: EnvironmentBlueprintHead{
+				EnvironmentID: environment.Record.ID,
+				RevisionID:    projection.RevisionID,
+			},
+			ReadRevision: revision,
+		},
+		DesiredProjection: Versioned[EnvironmentComposeProjection]{
+			Record:       projection,
+			ReadRevision: revision,
+		},
+	}, nil
 }
 
 // LoadExecutionSources captures one Script execution from one fixed MVCC
@@ -145,8 +287,12 @@ func (repository *ScriptRepository) loadExecutionSources(
 			intent.EnvironmentID != environment.ID || intent.ServiceID != target.Desired.ID {
 			return ScriptExecutionSources{}, corruptReleaseRecord()
 		}
+		resolved, resolveErr := ledger.resolveSuccessfulReleaseImage(ctx, environment.ID, target.Desired.ID, intent, revision)
+		if resolveErr != nil {
+			return ScriptExecutionSources{}, resolveErr
+		}
 		release = CurrentSuccessfulRelease{
-			Intent: intent, IntentRevision: intentValue.ModRevision, Revision: revision,
+			Intent: intent, IntentRevision: intentValue.ModRevision, ResolvedImage: resolved, Revision: revision,
 		}
 	}
 	renderInput, err := ledger.GetReleaseRenderInputAt(ctx, release.Intent.ID, revision)

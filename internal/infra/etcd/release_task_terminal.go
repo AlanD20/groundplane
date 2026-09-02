@@ -30,12 +30,24 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 	if publicationID == "" {
 		return false, nil
 	}
-	if task.Executor != TaskExecutorAgent || (task.Type != TaskDeploy && task.Type != TaskRollback) ||
+	if task.Executor != TaskExecutorAgent ||
+		(task.Type != TaskDeploy && task.Type != TaskRollback && task.Type != TaskUpdate) ||
 		validatePublicationID(publicationID) != nil || task.OperationID == "" || task.RenderGeneration <= 0 {
 		return false, corruptReleaseRecord()
 	}
 	if terminalStatus != TaskStatusCompleted && result.FailedStepID == "" {
 		return false, errs.New(errs.KindStateConflict, "release failure is missing its failed step identity")
+	}
+	if task.Type == TaskUpdate {
+		if !result.ReconciliationRequired {
+			processed, terminalErr := repository.finalizeReleaseHookExecutionBatch(ctx, task, terminalAt, readRevision)
+			if terminalErr != nil || processed {
+				return processed, terminalErr
+			}
+		}
+		return repository.finalizeBlueprintReleaseTaskBatch(
+			ctx, task, assignment, terminalStatus, result, agentID, terminalAt, readRevision,
+		)
 	}
 
 	baseKeys := []string{

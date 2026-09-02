@@ -19,6 +19,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/slug"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
+	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -79,7 +80,7 @@ type environmentBlueprintRepository interface {
 		etcd.EnvironmentBlueprintStageRequest,
 	) (etcd.EnvironmentBlueprintSeal, error)
 	AbandonEnvironmentBlueprintStage(context.Context, etcd.EnvironmentBlueprintStageClaim) error
-	PublishEnvironmentBlueprintDesiredRevisionWithTask(
+	PublishEnvironmentBlueprintDesiredRevision(
 		context.Context,
 		netip.Prefix,
 		string,
@@ -95,12 +96,11 @@ type environmentBlueprintRepository interface {
 		etcd.ReleaseGroupBlueprintPreparedMutation,
 		etcd.ComponentTaskPreparation,
 		etcd.BlueprintAttachTaskPreparation,
+		etcd.BlueprintScriptPublication,
+		etcd.BlueprintReleasePublication,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
-}
-
-type environmentBlueprintScriptRepository interface {
 	ListScripts(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ScriptRecord], error)
 	PrepareBlueprintScriptPublication(
 		context.Context,
@@ -114,17 +114,18 @@ type environmentBlueprintScriptRepository interface {
 }
 
 type environmentBlueprintService struct {
-	volumeRoot       string
-	environmentPool  netip.Prefix
-	repository       environmentBlueprintRepository
-	idempotency      *desiredrevision.Idempotency
-	materials        environmentBlueprintMaterializationResolver
-	releaseGroups    *controller.ReleaseGroupBlueprintPlanner
-	entryGeneration  *EntryGenerationService
-	attachFacts      *AttachFactService
-	componentCatalog []controller.EnvironmentComponentRegistration
-	random           io.Reader
-	now              func() time.Time
+	volumeRoot        string
+	environmentPool   netip.Prefix
+	repository        environmentBlueprintRepository
+	idempotency       *desiredrevision.Idempotency
+	materials         environmentBlueprintMaterializationResolver
+	releaseGroups     *controller.ReleaseGroupBlueprintPlanner
+	blueprintReleases *blueprintrelease.Service
+	entryGeneration   *EntryGenerationService
+	attachFacts       *AttachFactService
+	componentCatalog  []controller.EnvironmentComponentRegistration
+	random            io.Reader
+	now               func() time.Time
 }
 
 type environmentBlueprintMaterializationResolver interface {
@@ -312,7 +313,7 @@ func (repository *durableEnvironmentBlueprintRepository) PrepareBlueprintScriptP
 	)
 }
 
-func (repository *durableEnvironmentBlueprintRepository) PublishEnvironmentBlueprintDesiredRevisionWithScripts(
+func (repository *durableEnvironmentBlueprintRepository) PublishEnvironmentBlueprintDesiredRevision(
 	ctx context.Context,
 	environmentPool netip.Prefix,
 	desiredNetworkPool string,
@@ -329,13 +330,15 @@ func (repository *durableEnvironmentBlueprintRepository) PublishEnvironmentBluep
 	componentPreparation etcd.ComponentTaskPreparation,
 	attachPreparation etcd.BlueprintAttachTaskPreparation,
 	scriptPublication etcd.BlueprintScriptPublication,
+	releasePublication etcd.BlueprintReleasePublication,
 	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
-	return repository.HierarchyRepository.PublishEnvironmentBlueprintDesiredRevisionWithScripts(
+	return repository.HierarchyRepository.PublishEnvironmentBlueprintDesiredRevision(
 		ctx, environmentPool, desiredNetworkPool, project, environment, expectedHeadRevision,
 		claim, revision, projection, zoneChanges, serviceChanges, routeChanges,
-		releaseGroupPreparation, componentPreparation, attachPreparation, scriptPublication, task, marker,
+		releaseGroupPreparation, componentPreparation, attachPreparation,
+		scriptPublication, releasePublication, task, marker,
 	)
 }
 
@@ -346,6 +349,7 @@ func newEnvironmentBlueprintService(
 	idempotency *desiredrevision.Idempotency,
 	materials environmentBlueprintMaterializationResolver,
 	releaseGroups *controller.ReleaseGroupBlueprintPlanner,
+	blueprintReleases *blueprintrelease.Service,
 	entryGeneration *EntryGenerationService,
 	attachFacts *AttachFactService,
 	componentCatalog []controller.EnvironmentComponentRegistration,
@@ -353,7 +357,7 @@ func newEnvironmentBlueprintService(
 	parsedEnvironmentPool, poolErr := netip.ParsePrefix(environmentPool)
 	if poolErr != nil || !parsedEnvironmentPool.Addr().Is4() || parsedEnvironmentPool != parsedEnvironmentPool.Masked() ||
 		repository == nil || idempotency == nil || materials == nil || releaseGroups == nil || entryGeneration == nil ||
-		attachFacts == nil {
+		attachFacts == nil || blueprintReleases == nil {
 		return nil, errs.New(errs.KindInternal, "Environment Blueprint service is not configured")
 	}
 	if _, err := controller.NewTaskPlanResolver(volumeRoot, componentCatalog); err != nil {
@@ -361,7 +365,8 @@ func newEnvironmentBlueprintService(
 	}
 	return &environmentBlueprintService{
 		volumeRoot: volumeRoot, environmentPool: parsedEnvironmentPool, repository: repository, idempotency: idempotency,
-		materials: materials, releaseGroups: releaseGroups, entryGeneration: entryGeneration,
+		materials: materials, releaseGroups: releaseGroups, blueprintReleases: blueprintReleases,
+		entryGeneration:  entryGeneration,
 		attachFacts:      attachFacts,
 		componentCatalog: controller.CloneEnvironmentComponentCatalog(componentCatalog),
 		random:           rand.Reader, now: time.Now,
@@ -638,10 +643,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	scriptRepository, scriptsConfigured := service.repository.(environmentBlueprintScriptRepository)
-	if !scriptsConfigured {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment Blueprint Script repository is not configured")
-	}
+	scriptRepository := service.repository
 	currentScripts, scriptsReadRevision, err := service.listBlueprintScripts(ctx, environmentID, scriptRepository)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -677,10 +679,21 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	defer scriptPublication.Clear()
+	serviceNames := make(map[string]string, len(desiredServices))
+	for _, desired := range desiredServices {
+		serviceNames[desired.ID] = desired.Name
+	}
+	effectiveReleaseGroups, err := service.releaseGroups.AuthoringSpecs(ctx, environmentID, serviceNames)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	for name, spec := range parsed.Extensions.ReleaseGroups {
+		effectiveReleaseGroups[name] = spec
+	}
 	releaseGroupPreparation, err := service.releaseGroups.Prepare(
 		ctx,
 		environmentID,
-		parsed.Extensions.ReleaseGroups,
+		effectiveReleaseGroups,
 		desiredServices,
 		func() string { return allocator.New(ids.KindReleaseGroup) },
 	)
@@ -872,7 +885,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	componentSteps, componentStepRecords, err := controller.BuildEnvironmentComponentTaskContribution(
+	componentSteps, _, err := controller.BuildEnvironmentComponentTaskContribution(
 		controller.EnvironmentComponentTaskContributionInput{
 			Apply: controller.EnvironmentManagedConfigApplyInput{
 				RevisionID: taskID, RenderGeneration: generation, Components: pinnedComponents,
@@ -922,23 +935,6 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	defer clearBlueprintAttachProcedureSteps(attachSteps)
 	steps = append(steps, attachSteps...)
 	stepRecords = append(stepRecords, attachStepRecords...)
-	applyStepID := allocator.Named(ids.KindStep, "compose-apply")
-	steps = append(steps, &agentpb.ExecutionStep{
-		StepId: applyStepID, TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds),
-		Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
-			ArtifactId: artifactID, FullReconcile: true,
-		}},
-	})
-	stepRecords = append(stepRecords, etcd.TaskStepRecord{ID: applyStepID})
-	steps, stepRecords, err = controller.AppendEnvironmentComponentTaskContribution(
-		steps,
-		stepRecords,
-		componentSteps,
-		componentStepRecords,
-	)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
 	dependencyPlans, err := buildEnvironmentDependencyPlans(renderIdentities.Services, serviceExtensions)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -970,13 +966,41 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	plan, err := controller.BuildPlan(controller.PlanBuildInput{
-		VolumeRoot: service.volumeRoot, PlanID: planID, RenderGeneration: generation,
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_RECONCILE, TargetID: environmentID,
-		Artifacts: []*agentpb.ComposeArtifact{artifact}, Steps: steps,
+	params := map[string]string{
+		etcd.EnvironmentDesiredRevisionParam:         taskID,
+		etcd.TaskMaterializationEnvironmentParam:     environmentID,
+		controller.EnvironmentBlueprintArtifactParam: artifactID,
+	}
+	if len(managedVolumeIDs) != 0 {
+		params[controller.EnvironmentBlueprintManagedVolumesParam] = strings.Join(managedVolumeIDs, ",")
+		params[controller.VolumeTaskIntentSHA256Param] = hex.EncodeToString(volumeIntentDigest)
+	}
+	task := etcd.TaskRecord{
+		ID: taskID, OperationID: allocator.Named(ids.KindOperation, "operation"), IdempotencyKey: idempotencyKey,
+		Owner: taskOwner, Actor: etcd.TaskActorOperator,
+		Executor: etcd.TaskExecutorAgent, PlanID: planID,
+		RenderGeneration: int32(generation), Type: etcd.TaskUpdate, Target: taskTarget,
+		Params: params, Steps: stepRecords, TimeoutSeconds: environmentBlueprintTimeoutSeconds,
+		Materializations: materializations,
+		Status:           etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+	}
+	preparedRelease, err := service.blueprintReleases.Prepare(ctx, blueprintrelease.PrepareInput{
+		VolumeRoot: service.volumeRoot,
+		Tenant:     tenant, Project: project, Environment: environment,
+		Projection: projection, ServiceChanges: serviceChanges,
+		Scripts:       reconciledScripts.Current,
+		ReleaseGroups: effectiveReleaseGroups, Task: task,
+		PrefixSteps: steps, ComponentSteps: componentSteps, Artifact: artifact,
+		AllocateNamed: allocator.Named, CreatedAt: now,
 	})
 	if err != nil {
 		return etcd.IdempotencyResponse{}, desiredrevision.Abandon(ctx, service.repository, stagedPublication, err)
+	}
+	task = preparedRelease.Task
+	abandonPrepared := func(cause error) error {
+		return desiredrevision.AbandonBlueprint(
+			ctx, service.repository, stagedPublication, preparedRelease.Publication, cause,
+		)
 	}
 	routeProvider, routeProjection, err := controller.ResolveComponentTaskRouteProvider(
 		service.componentCatalog,
@@ -987,7 +1011,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		generation,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, desiredrevision.Abandon(ctx, service.repository, stagedPublication, err)
+		return etcd.IdempotencyResponse{}, abandonPrepared(err)
 	}
 	if routeProjection {
 		if routeProvider != nil {
@@ -1005,9 +1029,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 					Provider:          provider,
 				})
 				if err != nil {
-					return etcd.IdempotencyResponse{}, desiredrevision.Abandon(
-						ctx, service.repository, stagedPublication, err,
-					)
+					return etcd.IdempotencyResponse{}, abandonPrepared(err)
 				}
 				routeChanges[index] = change
 			}
@@ -1020,29 +1042,8 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 			componentPreparation, routeRecords, routeProvider,
 		)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, desiredrevision.Abandon(
-				ctx, service.repository, stagedPublication, err,
-			)
+			return etcd.IdempotencyResponse{}, abandonPrepared(err)
 		}
-	}
-	params := map[string]string{
-		etcd.EnvironmentDesiredRevisionParam:         taskID,
-		etcd.TaskMaterializationEnvironmentParam:     environmentID,
-		controller.EnvironmentBlueprintArtifactParam: artifactID,
-	}
-	if len(managedVolumeIDs) != 0 {
-		params[controller.EnvironmentBlueprintManagedVolumesParam] = strings.Join(managedVolumeIDs, ",")
-		params[controller.VolumeTaskIntentSHA256Param] = hex.EncodeToString(volumeIntentDigest)
-	}
-	task := etcd.TaskRecord{
-		ID: taskID, OperationID: allocator.Named(ids.KindOperation, "operation"), IdempotencyKey: idempotencyKey,
-		Owner: taskOwner, Actor: etcd.TaskActorOperator,
-		Executor: etcd.TaskExecutorAgent, PlanID: planID, PlanHash: hex.EncodeToString(plan.PlanHash),
-		RenderGeneration: int32(generation), Type: etcd.TaskUpdate, Target: taskTarget,
-		Params: params,
-		Steps:  stepRecords, TimeoutSeconds: environmentBlueprintTimeoutSeconds,
-		Materializations: materializations,
-		Status:           etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	return desiredrevision.Publish(ctx, service.repository, service.idempotency, desiredrevision.PublishInput{
 		Project: project, Environment: environment, EnvironmentPool: service.environmentPool,
@@ -1053,6 +1054,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		ComponentPreparation:    componentPreparation,
 		AttachPreparation:       preparedAttaches.publication,
 		ScriptPublication:       scriptPublication,
+		ReleasePublication:      preparedRelease.Publication,
 		Task:                    task,
 	})
 }
@@ -1157,7 +1159,7 @@ func (service *environmentBlueprintService) listBlueprintServices(
 func (service *environmentBlueprintService) listBlueprintScripts(
 	ctx context.Context,
 	environmentID string,
-	repository environmentBlueprintScriptRepository,
+	repository environmentBlueprintRepository,
 ) ([]etcd.Versioned[etcd.ScriptRecord], int64, error) {
 	scripts := []etcd.Versioned[etcd.ScriptRecord](nil)
 	cursor := ""

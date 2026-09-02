@@ -60,7 +60,7 @@ func (repository *candidatePublicationRepository) AbandonEnvironmentBlueprintSta
 	return nil
 }
 
-func (repository *candidatePublicationRepository) PublishEnvironmentBlueprintDesiredRevisionWithTask(
+func (repository *candidatePublicationRepository) PublishEnvironmentBlueprintDesiredRevision(
 	_ context.Context,
 	_ netip.Prefix,
 	_ string,
@@ -76,6 +76,8 @@ func (repository *candidatePublicationRepository) PublishEnvironmentBlueprintDes
 	_ etcd.ReleaseGroupBlueprintPreparedMutation,
 	_ etcd.ComponentTaskPreparation,
 	_ etcd.BlueprintAttachTaskPreparation,
+	_ etcd.BlueprintScriptPublication,
+	_ etcd.BlueprintReleasePublication,
 	task etcd.TaskRecord,
 	_ etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
@@ -142,15 +144,16 @@ func TestEnvironmentBlueprintApplyStagesCandidateProjectionBeforeReleaseHooksAnd
 		t.Fatalf("staged Task = %q, publications = %d", staged.TaskID(), repository.taskPublications)
 	}
 	repository.events = append(repository.events, "release-hooks")
-	if _, err := repository.PublishEnvironmentBlueprintDesiredRevisionWithTask(
+	if _, err := repository.PublishEnvironmentBlueprintDesiredRevision(
 		ctx, netip.Prefix{}, "", etcd.Versioned[etcd.ProjectRecord]{},
 		etcd.Versioned[etcd.EnvironmentRecord]{}, 0, claim,
 		etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: environmentID, RevisionID: taskID},
 		projection, nil, nil, nil, etcd.ReleaseGroupBlueprintPreparedMutation{},
 		etcd.ComponentTaskPreparation{}, etcd.BlueprintAttachTaskPreparation{},
+		etcd.BlueprintScriptPublication{}, etcd.BlueprintReleasePublication{},
 		etcd.TaskRecord{ID: taskID}, etcd.IdempotencyMarker{},
 	); err != nil {
-		t.Fatalf("PublishEnvironmentBlueprintDesiredRevisionWithTask() error = %v", err)
+		t.Fatalf("PublishEnvironmentBlueprintDesiredRevision() error = %v", err)
 	}
 	wantEvents := []string{"stage", "release-hooks", "publish:" + taskID}
 	if !reflect.DeepEqual(repository.events, wantEvents) || repository.taskPublications != 1 {

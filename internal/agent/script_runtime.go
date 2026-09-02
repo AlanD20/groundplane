@@ -193,9 +193,16 @@ func scriptExecutionRequest(
 	}
 	run := step.GetRunScript()
 	var projection *agentpb.ScriptRunnerProjection
+	var snapshot *agentpb.ResolvedRunnerSnapshot
 	for _, candidate := range assignment.Plan.ScriptRunnerProjections {
 		if candidate != nil && candidate.SnapshotId == run.RunnerSnapshotId {
 			projection = candidate
+			break
+		}
+	}
+	for _, candidate := range assignment.Plan.ScriptRunnerSnapshots {
+		if candidate != nil && candidate.SnapshotId == run.RunnerSnapshotId {
+			snapshot = candidate
 			break
 		}
 	}
@@ -207,7 +214,8 @@ func scriptExecutionRequest(
 			break
 		}
 	}
-	if projection == nil || body == nil || body.Metadata == nil || projection.SnapshotId != run.RunnerSnapshotId ||
+	if projection == nil || snapshot == nil || body == nil || body.Metadata == nil ||
+		projection.SnapshotId != run.RunnerSnapshotId ||
 		body.Metadata.ScriptExecutionId != run.ScriptExecutionId || body.Metadata.ScriptId != run.ScriptId ||
 		body.Metadata.Generation != run.ScriptGeneration {
 		return scriptexecution.Request{}, nil, errs.New(errs.KindInternal, "agent: Script execution artifacts do not match RunScript")
@@ -223,11 +231,15 @@ func scriptExecutionRequest(
 	if err != nil {
 		return scriptexecution.Request{}, nil, errs.Wrap(errs.KindInternal, err)
 	}
+	projection, err = acknowledgedScriptRunnerProjection(assignment, snapshot, projection)
+	if err != nil {
+		return scriptexecution.Request{}, nil, err
+	}
 	return scriptexecution.Request{
 		TaskID: assignment.TaskID, OperationID: assignment.OperationID, AssignmentID: assignment.AssignmentID,
 		StepID: step.StepId, ExecutionID: run.ScriptExecutionId,
 		PlanHash:     append([]byte(nil), assignment.Plan.PlanHash...),
-		Projection:   proto.Clone(projection).(*agentpb.ScriptRunnerProjection),
+		Projection:   projection,
 		BodyMetadata: proto.Clone(body.Metadata).(*agentpb.ScriptBodyArtifactMetadata),
 		Body:         append([]byte(nil), body.Body...),
 		Entries:      cloneScriptEntriesForSnapshot(assignment.ScriptArtifacts.Entries, assignment.Plan, run.RunnerSnapshotId),
@@ -508,4 +520,31 @@ func (runtime *DockerScriptRuntime) Close() error {
 		return nil
 	}
 	return runtime.engine.Close()
+}
+
+func acknowledgedScriptRunnerProjection(
+	assignment Assignment,
+	snapshot *agentpb.ResolvedRunnerSnapshot,
+	projection *agentpb.ScriptRunnerProjection,
+) (*agentpb.ScriptRunnerProjection, error) {
+	owned := proto.Clone(projection).(*agentpb.ScriptRunnerProjection)
+	authority := snapshot.GetProcedureServiceImage()
+	if authority == nil {
+		return owned, nil
+	}
+	for _, result := range assignment.AcknowledgedStepResults {
+		if result.GetStepId() != authority.GetComposeApplyStepId() {
+			continue
+		}
+		evidence := result.GetProcedureServiceImage()
+		if evidence == nil ||
+			evidence.GetServiceId() != authority.GetServiceId() ||
+			evidence.GetReleaseId() != authority.GetReleaseId() ||
+			evidence.GetRequestedReference() != authority.GetRequestedReference() {
+			return nil, errs.New(errs.KindStateConflict, "agent: acknowledged procedure image authority conflicts")
+		}
+		owned.Image = evidence.GetImmutableReference()
+		return owned, nil
+	}
+	return nil, errs.New(errs.KindStateConflict, "agent: procedure image result is not durably acknowledged")
 }

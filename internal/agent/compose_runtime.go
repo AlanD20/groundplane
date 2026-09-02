@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -25,6 +26,23 @@ type ComposeObserver interface {
 	Observe(context.Context, *agentpb.ExecutionPlan, string) (*agentpb.ObservedProject, error)
 }
 
+type ComposeServiceImageObserver interface {
+	ObserveServiceImage(
+		context.Context,
+		*agentpb.ExecutionPlan,
+		string,
+		string,
+		string,
+		string,
+	) (*agentpb.ProcedureServiceImageResult, error)
+	VerifyServiceImage(
+		context.Context,
+		*agentpb.ExecutionPlan,
+		string,
+		*agentpb.ProcedureServiceImageResult,
+	) error
+}
+
 type ComposeRuntime struct {
 	helper   ComposeHelper
 	observer ComposeObserver
@@ -38,6 +56,7 @@ type composeStepResult struct {
 	ReconciliationRequired bool
 	ProxyEvidence          *agentpb.ServiceProxyEvidence
 	RecreateEvidence       *agentpb.ServiceRecreateEvidence
+	ExecutionStepResult    *agentpb.ExecutionStepResult
 }
 
 func NewComposeRuntime(helper ComposeHelper, observer ComposeObserver) (*ComposeRuntime, error) {
@@ -61,7 +80,40 @@ func (runtime *ComposeRuntime) executeStep(
 
 	switch payload := step.GetPayload().(type) {
 	case *agentpb.ExecutionStep_ComposeApply:
-		return runtime.mutate(ctx, assignment, step, payload.ComposeApply.GetArtifactId(), nil)
+		authority, required, err := executionplan.FindProcedureServiceImageAuthority(
+			assignment.Plan, step.GetStepId(),
+		)
+		if err != nil {
+			return composeStepResult{}, err
+		}
+		if !required {
+			return runtime.mutate(ctx, assignment, step, payload.ComposeApply.GetArtifactId(), nil)
+		}
+		acknowledged, found, err := executionplan.FindProcedureServiceImageResult(
+			assignment.AcknowledgedStepResults, authority,
+		)
+		if err != nil {
+			return composeStepResult{}, err
+		}
+		if found {
+			observer, ok := runtime.observer.(ComposeServiceImageObserver)
+			if !ok {
+				return composeStepResult{}, errs.New(errs.KindInternal, "agent: Compose service image observer is not configured")
+			}
+			if err := observer.VerifyServiceImage(
+				ctx, assignment.Plan, authority.GetArtifactId(), acknowledged,
+			); err != nil {
+				return composeStepResult{ReconciliationRequired: true}, err
+			}
+			return composeStepResult{}, nil
+		}
+		result, err := runtime.mutate(ctx, assignment, step, payload.ComposeApply.GetArtifactId(), nil)
+		if err == nil {
+			result.ExecutionStepResult, err = runtime.composeApplyExecutionStepResult(
+				ctx, assignment, step, authority,
+			)
+		}
+		return result, err
 	case *agentpb.ExecutionStep_ComposeStop:
 		return runtime.mutate(
 			ctx,
@@ -554,4 +606,32 @@ func remainingSeconds(ctx context.Context, maximum uint32) uint32 {
 		return maximum
 	}
 	return seconds
+}
+
+func (runtime *ComposeRuntime) composeApplyExecutionStepResult(
+	ctx context.Context,
+	assignment Assignment,
+	step *agentpb.ExecutionStep,
+	authority *agentpb.ProcedureServiceImageAuthority,
+) (*agentpb.ExecutionStepResult, error) {
+	if authority == nil {
+		return nil, errs.New(errs.KindInternal, "agent: ComposeApply procedure image authority is missing")
+	}
+	observer, ok := runtime.observer.(ComposeServiceImageObserver)
+	if !ok {
+		return nil, errs.New(errs.KindInternal, "agent: Compose service image observer is not configured")
+	}
+	evidence, err := observer.ObserveServiceImage(
+		ctx, assignment.Plan, authority.GetArtifactId(), authority.GetServiceId(),
+		authority.GetReleaseId(), authority.GetRequestedReference(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return executionplan.SealExecutionStepResult(&agentpb.ExecutionStepResult{
+		OperationId: assignment.OperationID,
+		PlanHash:    append([]byte(nil), assignment.Plan.GetPlanHash()...),
+		StepId:      step.GetStepId(),
+		Result:      &agentpb.ExecutionStepResult_ProcedureServiceImage{ProcedureServiceImage: evidence},
+	})
 }

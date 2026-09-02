@@ -164,11 +164,11 @@ func (service *environmentBlueprintService) environmentBlueprintAuthoringDocumen
 ) (blueprintparser.AuthoringDocument, error) {
 	input := blueprintparser.AuthoringDocument{
 		Envelope: core.Envelope{
-			Kind: core.KindDocEnvironment,
+			Kind:   core.KindDocEnvironment,
 			Schema: core.EnvelopeSchema,
 			Metadata: core.EnvelopeMetadata{
-				Tenant: snapshot.tenant.Record.Slug,
-				Project: snapshot.project.Record.Slug,
+				Tenant:      snapshot.tenant.Record.Slug,
+				Project:     snapshot.project.Record.Slug,
 				Environment: snapshot.environment.Record.Name,
 			},
 		},
@@ -201,14 +201,7 @@ func (service *environmentBlueprintService) environmentBlueprintAuthoringDocumen
 			return blueprintparser.AuthoringDocument{}, err
 		}
 	}
-	scriptRepository, ok := service.repository.(environmentBlueprintScriptRepository)
-	if !ok {
-		return blueprintparser.AuthoringDocument{}, errs.New(
-			errs.KindInternal,
-			"Environment Blueprint Script repository is not configured",
-		)
-	}
-	scripts, _, err := service.listBlueprintScripts(ctx, snapshot.environment.Record.ID, scriptRepository)
+	scripts, _, err := service.listBlueprintScripts(ctx, snapshot.environment.Record.ID, service.repository)
 	if err != nil {
 		return blueprintparser.AuthoringDocument{}, err
 	}
@@ -246,11 +239,11 @@ func environmentBlueprintAuthoringRoutes(
 			return nil, errs.New(errs.KindInternal, "Environment Blueprint Route target is missing")
 		}
 		result[index] = core.RouteSpec{
-			Hostname: projected.Desired.Host,
-			Path: projected.Desired.Path,
-			Target: name,
+			Hostname:   projected.Desired.Host,
+			Path:       projected.Desired.Path,
+			Target:     name,
 			TargetPort: projected.Desired.TargetPort,
-			Exposure: projected.Desired.Exposure,
+			Exposure:   projected.Desired.Exposure,
 		}
 	}
 	return result, nil
@@ -269,9 +262,9 @@ func environmentBlueprintAuthoringEntries(
 		}
 		entry := record.Entry
 		source := core.EntrySourceSpec{
-			Literal: entry.Source.Literal,
+			Literal:   entry.Source.Literal,
 			SecretRef: entry.Source.SecretRef,
-			Fact: entry.Source.Fact,
+			Fact:      entry.Source.Fact,
 		}
 		result[record.BlueprintKey] = core.EntrySpec{
 			Kind: entry.Kind, Path: entry.Path, UID: entry.UID, GID: entry.GID,
@@ -294,10 +287,10 @@ func environmentBlueprintAuthoringScripts(
 			return nil, errs.New(errs.KindInternal, "Environment Blueprint Script key is duplicated")
 		}
 		result[record.ReconciliationKey] = core.ScriptSpec{
-			Slug: record.Desired.Slug,
+			Slug:    record.Desired.Slug,
 			Service: record.Desired.ServiceName,
-			When: record.Desired.When,
-			Script: record.Desired.Body,
+			When:    record.Desired.When,
+			Script:  record.Desired.Body,
 		}
 	}
 	return result, nil
@@ -385,9 +378,9 @@ func (service *environmentBlueprintService) environmentBlueprintAuthoringAttachm
 		result[record.Name] = core.AttachmentSpec{
 			BackingProject: backingProject.Record.Slug,
 			BackingService: backingService.Record.Desired.Name,
-			Service: serviceName,
-			Credential: credential,
-			Grants: grants,
+			Service:        serviceName,
+			Credential:     credential,
+			Grants:         grants,
 		}
 	}
 	return result, nil

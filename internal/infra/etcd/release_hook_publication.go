@@ -7,8 +7,9 @@ import (
 )
 
 type ReleaseHookExecutionPublication struct {
-	Sources   ScriptExecutionSources
-	Execution ScriptExecutionRecord
+	Sources          ScriptExecutionSources
+	Execution        ScriptExecutionRecord
+	SnapshotRevision int64
 }
 
 type releaseHookPublicationFragment struct {

@@ -43,6 +43,7 @@ type CurrentSuccessfulRelease struct {
 	ProjectionRevision int64
 	Intent             domain.Intent
 	IntentRevision     int64
+	ResolvedImage      *domain.ResolvedImageEvidence
 	Revision           int64
 }
 
@@ -73,12 +74,16 @@ func (ledger *ReleaseLedger) ResolveCurrentSuccessful(ctx context.Context, envir
 		return CurrentSuccessfulRelease{}, corruptReleaseRecord()
 	}
 	intentRead, err := ledger.store.GetMany(ctx, GetManyRequest{
-		Keys: []string{releaseIntentStagingKey("", projection.CurrentSuccessfulReleaseID)}, Revision: projectionRead.ReadRevision,
+		Keys: []string{
+			releaseIntentStagingKey("", projection.CurrentSuccessfulReleaseID),
+			releaseTerminalKey(projection.CurrentSuccessfulReleaseID),
+		},
+		Revision: projectionRead.ReadRevision,
 	})
 	if err != nil {
 		return CurrentSuccessfulRelease{}, err
 	}
-	if intentRead == nil || intentRead.ReadRevision != projectionRead.ReadRevision || len(intentRead.Values) != 1 || intentRead.Values[0] == nil {
+	if intentRead == nil || intentRead.ReadRevision != projectionRead.ReadRevision || len(intentRead.Values) != 2 || intentRead.Values[0] == nil || intentRead.Values[1] == nil {
 		return CurrentSuccessfulRelease{}, corruptReleaseRecord()
 	}
 	intent, err := decodeReleaseRecord[domain.Intent](intentRead.Values[0].Value, "release-intent")
@@ -86,10 +91,17 @@ func (ledger *ReleaseLedger) ResolveCurrentSuccessful(ctx context.Context, envir
 		intent.EnvironmentID != environmentID || intent.ServiceID != serviceID {
 		return CurrentSuccessfulRelease{}, corruptReleaseRecord()
 	}
+	terminal, err := decodeReleaseRecord[domain.TerminalSummary](intentRead.Values[1].Value, "release-terminal-summary")
+	if err != nil || terminal.ReleaseID != intent.ID || terminal.FinalServingReleaseID != intent.ID {
+		return CurrentSuccessfulRelease{}, corruptReleaseRecord()
+	}
+	if terminal.ResolvedImage != nil && domain.ValidateResolvedImageEvidence(*terminal.ResolvedImage, intent) != nil {
+		return CurrentSuccessfulRelease{}, corruptReleaseRecord()
+	}
 	return CurrentSuccessfulRelease{
 		Projection: projection, ProjectionRevision: projectionRead.Values[0].ModRevision,
 		Intent: intent, IntentRevision: intentRead.Values[0].ModRevision,
-		Revision: projectionRead.ReadRevision,
+		ResolvedImage: terminal.ResolvedImage, Revision: projectionRead.ReadRevision,
 	}, nil
 }
 
@@ -165,7 +177,25 @@ func (ledger *ReleaseLedger) Get(ctx context.Context, releaseID string) (Release
 		return ReleaseView{}, err
 	}
 	if headRead == nil || len(headRead.Values) != 1 || headRead.Values[0] == nil {
-		return ReleaseView{}, errs.New(errs.KindReleaseNotFound, "release was not published")
+		if intent.OperationKind != domain.OperationBlueprintApply {
+			return ReleaseView{}, errs.New(errs.KindReleaseNotFound, "release was not published")
+		}
+		indexRead, indexErr := ledger.store.GetMany(ctx, GetManyRequest{
+			Keys:     []string{releaseServiceIndexKey(intent.EnvironmentID, intent.ServiceID, releaseID)},
+			Revision: intentRead.ReadRevision,
+		})
+		if indexErr != nil {
+			return ReleaseView{}, indexErr
+		}
+		if indexRead == nil || indexRead.ReadRevision != intentRead.ReadRevision ||
+			len(indexRead.Values) != 1 || indexRead.Values[0] == nil {
+			return ReleaseView{}, errs.New(errs.KindReleaseNotFound, "release was not published")
+		}
+		publicationID, decodeErr := decodeReleaseIndex(indexRead.Values[0].Value, intent.ServiceID)
+		if decodeErr != nil {
+			return ReleaseView{}, decodeErr
+		}
+		return ledger.readViewAt(ctx, publicationID, releaseID, intentRead.ReadRevision)
 	}
 	head, err := decodeReleaseRecord[ReleaseOperationHead](headRead.Values[0].Value, "release-operation")
 	if err != nil || head.OperationID != intent.OperationID {
@@ -291,7 +321,7 @@ func (ledger *ReleaseLedger) readViewAt(
 	if err != nil {
 		return ReleaseView{}, err
 	}
-	if projectionRead == nil || len(projectionRead.Values) != 2 || projectionRead.Values[1] == nil {
+	if projectionRead == nil || len(projectionRead.Values) != 2 {
 		return ReleaseView{}, corruptReleaseRecord()
 	}
 	if projectionRead.Values[0] != nil {
@@ -299,6 +329,12 @@ func (ledger *ReleaseLedger) readViewAt(
 		if err != nil || view.Projection.ServiceID != intent.ServiceID {
 			return ReleaseView{}, corruptReleaseRecord()
 		}
+	}
+	if projectionRead.Values[1] == nil {
+		if intent.OperationKind != domain.OperationBlueprintApply {
+			return ReleaseView{}, corruptReleaseRecord()
+		}
+		return view, nil
 	}
 	head, err := decodeReleaseRecord[ReleaseOperationHead](projectionRead.Values[1].Value, "release-operation")
 	if err != nil {

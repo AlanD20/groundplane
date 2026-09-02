@@ -23,37 +23,7 @@ type ClaimRepository interface {
 type PublicationRepository interface {
 	StageEnvironmentBlueprintRevision(context.Context, etcd.EnvironmentBlueprintStageRequest) (etcd.EnvironmentBlueprintSeal, error)
 	AbandonEnvironmentBlueprintStage(context.Context, etcd.EnvironmentBlueprintStageClaim) error
-	PublishEnvironmentBlueprintDesiredRevisionWithTask(
-		context.Context,
-		netip.Prefix,
-		string,
-		etcd.Versioned[etcd.ProjectRecord],
-		etcd.Versioned[etcd.EnvironmentRecord],
-		int64,
-		etcd.EnvironmentBlueprintStageClaim,
-		etcd.EnvironmentDesiredRevisionIdentity,
-		etcd.EnvironmentComposeProjection,
-		[]etcd.EnvironmentBlueprintZoneChange,
-		[]etcd.EnvironmentBlueprintServiceChange,
-		[]etcd.EnvironmentBlueprintRouteChange,
-		etcd.ReleaseGroupBlueprintPreparedMutation,
-		etcd.ComponentTaskPreparation,
-		etcd.BlueprintAttachTaskPreparation,
-		etcd.TaskRecord,
-		etcd.IdempotencyMarker,
-	) (etcd.IdempotencyTransactionResult, error)
-}
-
-type PublicationIdempotency interface {
-	ResolveKnown(context.Context, Evidence, etcd.IdempotencyTransactionResult) (idempotentintent.Resolution, error)
-	ResolveUnknown(context.Context, etcd.IdempotencyLocator, Evidence, error) (idempotentintent.Resolution, error)
-}
-
-// ScriptPublicationRepository is the optional Blueprint-only publication seam
-// used to append the prepared Script CAS fragment without changing direct
-// desired mutation repositories.
-type ScriptPublicationRepository interface {
-	PublishEnvironmentBlueprintDesiredRevisionWithScripts(
+	PublishEnvironmentBlueprintDesiredRevision(
 		context.Context,
 		netip.Prefix,
 		string,
@@ -70,9 +40,15 @@ type ScriptPublicationRepository interface {
 		etcd.ComponentTaskPreparation,
 		etcd.BlueprintAttachTaskPreparation,
 		etcd.BlueprintScriptPublication,
+		etcd.BlueprintReleasePublication,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
+}
+
+type PublicationIdempotency interface {
+	ResolveKnown(context.Context, Evidence, etcd.IdempotencyTransactionResult) (idempotentintent.Resolution, error)
+	ResolveUnknown(context.Context, etcd.IdempotencyLocator, Evidence, error) (idempotentintent.Resolution, error)
 }
 
 // Repository is the aggregate used by mutation services that both stage and
@@ -186,6 +162,7 @@ type PublishInput struct {
 	ComponentPreparation    etcd.ComponentTaskPreparation
 	AttachPreparation       etcd.BlueprintAttachTaskPreparation
 	ScriptPublication       etcd.BlueprintScriptPublication
+	ReleasePublication      etcd.BlueprintReleasePublication
 	Task                    etcd.TaskRecord
 }
 
@@ -437,33 +414,19 @@ func Publish(
 		Locator: input.Locator, Intent: claim.Intent, Response: response,
 		TaskID: input.Task.ID, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
-	var result etcd.IdempotencyTransactionResult
-	var publicationErr error
 	identity := etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: input.Environment.Record.ID, RevisionID: input.Task.ID}
-	if input.ScriptPublication.IsZero() {
-		result, publicationErr = repository.PublishEnvironmentBlueprintDesiredRevisionWithTask(
-			ctx, input.EnvironmentPool, input.NetworkPool, input.Project, input.Environment, input.ExpectedHeadRevision,
-			claim, identity, projection, input.ZoneChanges, input.ServiceChanges, input.RouteChanges,
-			input.ReleaseGroupPreparation, input.ComponentPreparation, input.AttachPreparation, input.Task, marker,
-		)
-	} else {
-		withScripts, ok := repository.(ScriptPublicationRepository)
-		if !ok {
-			return etcd.IdempotencyResponse{}, abandonKnownFailure(ctx, repository, claim, errs.New(
-				errs.KindInternal, "Blueprint Script publication repository is not configured",
-			))
-		}
-		result, publicationErr = withScripts.PublishEnvironmentBlueprintDesiredRevisionWithScripts(
-			ctx, input.EnvironmentPool, input.NetworkPool, input.Project, input.Environment, input.ExpectedHeadRevision,
-			claim, identity, projection, input.ZoneChanges, input.ServiceChanges, input.RouteChanges,
-			input.ReleaseGroupPreparation, input.ComponentPreparation, input.AttachPreparation,
-			input.ScriptPublication, input.Task, marker,
-		)
-	}
+	result, publicationErr := repository.PublishEnvironmentBlueprintDesiredRevision(
+		ctx, input.EnvironmentPool, input.NetworkPool, input.Project, input.Environment, input.ExpectedHeadRevision,
+		claim, identity, projection, input.ZoneChanges, input.ServiceChanges, input.RouteChanges,
+		input.ReleaseGroupPreparation, input.ComponentPreparation, input.AttachPreparation,
+		input.ScriptPublication, input.ReleasePublication, input.Task, marker,
+	)
 	var resolution idempotentintent.Resolution
 	if publicationErr != nil {
 		if !unknownOutcome(publicationErr) {
-			return etcd.IdempotencyResponse{}, abandonKnownFailure(ctx, repository, claim, publicationErr)
+			return etcd.IdempotencyResponse{}, abandonBlueprintKnownFailure(
+				ctx, repository, claim, input.ReleasePublication, publicationErr,
+			)
 		}
 		resolution, err = idempotency.ResolveUnknown(ctx, input.Locator, input.Evidence, publicationErr)
 	} else {
@@ -480,6 +443,36 @@ func Publish(
 	default:
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment Blueprint resolution is invalid")
 	}
+}
+
+func abandonBlueprintKnownFailure(
+	ctx context.Context,
+	repository PublicationRepository,
+	claim etcd.EnvironmentBlueprintStageClaim,
+	release etcd.BlueprintReleasePublication,
+	cause error,
+) error {
+	releaseErr := release.Abandon(ctx)
+	desiredErr := abandonKnownFailure(ctx, repository, claim, cause)
+	if releaseErr != nil {
+		return errors.Join(desiredErr, releaseErr)
+	}
+	return desiredErr
+}
+
+// AbandonBlueprint abandons both exact prepublication authorities after a
+// known failure. It is never used for an unknown final transaction outcome.
+func AbandonBlueprint(
+	ctx context.Context,
+	repository PublicationRepository,
+	staged StagedPublication,
+	release etcd.BlueprintReleasePublication,
+	cause error,
+) error {
+	if err := release.Abandon(ctx); err != nil {
+		cause = errors.Join(cause, err)
+	}
+	return Abandon(ctx, repository, staged, cause)
 }
 
 func unknownOutcome(err error) bool {

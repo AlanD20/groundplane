@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/core"
+	release "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
@@ -24,7 +25,7 @@ func TestValidateScriptRunnerReleaseSourceAllowsStagedPinnedCandidate(t *testing
 	}
 	sources.Release.Intent.Image = image
 
-	if err := validateScriptRunnerReleaseSource(sources); err != nil {
+	if err := validateScriptRunnerReleaseSource(sources, false); err != nil {
 		t.Fatalf("validateScriptRunnerReleaseSource() error = %v", err)
 	}
 }
@@ -60,7 +61,7 @@ func TestStripControllerServiceExtensionsConsumesRecognizedMetadataOnly(t *testi
 	// every unknown extension must remain visible to closed-runner validation.
 	service := composetypes.ServiceConfig{Extensions: composetypes.Extensions{
 		composeResourceExtension: map[string]any{"id": "svc_exact"},
-		"x-gp-release":          map[string]any{"default_strategy": "recreate"},
+		"x-gp-release":           map[string]any{"default_strategy": "recreate"},
 	}}
 	service.Extensions = stripControllerServiceExtensions(service.Extensions)
 	if service.Extensions != nil {
@@ -94,7 +95,7 @@ func TestProjectScriptNetworksOmitsServiceEndpointIdentity(t *testing.T) {
 			}}},
 		},
 		Networks: []etcd.Versioned[etcd.ZoneRecord]{{
-			Record: etcd.ZoneRecord{Desired: core.Zone{ID: networkID, Name: "backend"}},
+			Record:   etcd.ZoneRecord{Desired: core.Zone{ID: networkID, Name: "backend"}},
 			Revision: 7,
 		}},
 	}
@@ -113,7 +114,7 @@ func TestProjectScriptNetworksOmitsServiceEndpointIdentity(t *testing.T) {
 		"backend": config,
 	}}
 
-	projected, err := projectScriptNetworks(service, sources)
+	projected, err := projectScriptNetworks(service, sources, nil)
 	if err != nil {
 		t.Fatalf("projectScriptNetworks() error = %v", err)
 	}
@@ -126,7 +127,7 @@ func TestProjectScriptNetworksOmitsServiceEndpointIdentity(t *testing.T) {
 	}
 
 	config.Extensions = composetypes.Extensions{"x-unsafe": map[string]any{}}
-	if _, err := projectScriptNetworks(service, sources); err == nil {
+	if _, err := projectScriptNetworks(service, sources, nil); err == nil {
 		t.Fatal("projectScriptNetworks() accepted unknown endpoint extension")
 	}
 }
@@ -231,5 +232,32 @@ func TestScriptDeployResourcesRejectsPresentEmptyFields(t *testing.T) {
 				t.Fatal("scriptDeployResources() succeeded for present empty unsupported field")
 			}
 		})
+	}
+}
+
+func TestScriptRunnerReleaseImageUsesDurableResolvedEvidence(t *testing.T) {
+	requested := "registry.example.invalid/app:stable"
+	immutable := "registry.example.invalid/app@sha256:" + strings.Repeat("b", 64)
+	sources := etcd.ScriptExecutionSources{
+		Release: etcd.CurrentSuccessfulRelease{
+			Intent: release.Intent{Image: requested},
+			ResolvedImage: &release.ResolvedImageEvidence{
+				RequestedReference: requested, ImmutableReference: immutable,
+				Digest: strings.Repeat("b", 64), LocalImageID: "sha256:" + strings.Repeat("c", 64),
+				ComposeApplyStepID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV", ControlPayloadDigest: strings.Repeat("d", 64),
+			},
+		},
+		RenderInput: etcd.Versioned[etcd.ReleaseRenderInput]{Record: etcd.ReleaseRenderInput{
+			Image: requested, Projection: etcd.EnvironmentComposeProjection{
+				RevisionID: "tsk_01ARZ3NDEKTSV4RRFFQ69G5FAV", RenderGeneration: 1,
+			},
+		}},
+	}
+	if err := validateScriptRunnerReleaseSource(sources, false); err != nil {
+		t.Fatalf("validateScriptRunnerReleaseSource() error = %v", err)
+	}
+	image, err := scriptRunnerReleaseImage(sources, false)
+	if err != nil || image != immutable {
+		t.Fatalf("script runner Release image = %q, %v", image, err)
 	}
 }

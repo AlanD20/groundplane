@@ -13,10 +13,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
+	release "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
+	"github.com/distribution/reference"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -29,6 +31,18 @@ type ManualScriptPlanInput struct {
 	SnapshotID    string
 	Sources       etcd.ScriptExecutionSources
 	EntryBindings []*agentpb.ScriptRunnerEntryBinding
+	Candidate     *BlueprintScriptCandidateSources
+}
+
+// BlueprintScriptCandidateSources is the exact same-Blueprint source stage.
+// Manual Script plans never accept this authority.
+type BlueprintScriptCandidateSources struct {
+	EnvironmentID     string
+	RevisionID        string
+	RenderGeneration  uint64
+	FixedReadRevision int64
+	ServiceSHA256     [sha256.Size]byte
+	ProjectionSHA256  [sha256.Size]byte
 }
 
 // BuildManualScriptPlan projects one frozen successful Release into a closed
@@ -38,13 +52,27 @@ func BuildManualScriptPlan(
 	ctx context.Context,
 	input ManualScriptPlanInput,
 ) (*agentpb.ExecutionPlan, error) {
+	if input.Candidate != nil {
+		return nil, errs.New(errs.KindValidationFailed, "manual Script source authority must be existing")
+	}
+	plan, err := buildScriptRunnerPlan(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	return executionplan.Seal(plan)
+}
+
+func buildScriptRunnerPlan(
+	ctx context.Context,
+	input ManualScriptPlanInput,
+) (*agentpb.ExecutionPlan, error) {
 	if ctx == nil || ids.Validate(ids.KindTask, input.TaskID) != nil ||
 		ids.Validate(ids.KindOperation, input.OperationID) != nil ||
 		ids.Validate(ids.KindPlan, input.PlanID) != nil || ids.Validate(ids.KindStep, input.StepID) != nil {
 		return nil, errs.New(errs.KindValidationFailed, "manual Script plan identity is invalid")
 	}
 	sources := input.Sources
-	if err := validateScriptRunnerReleaseSource(sources); err != nil {
+	if err := validateScriptRunnerReleaseSource(sources, input.Candidate != nil); err != nil {
 		return nil, err
 	}
 	project, err := loadNormalizedEnvironmentProject(ctx, sources.RenderInput.Record.Projection)
@@ -65,7 +93,10 @@ func BuildManualScriptPlan(
 	if err != nil || desiredService.Name != sources.Service.Record.Desired.Name {
 		return nil, errs.New(errs.KindStateConflict, "desired Environment service topology is missing")
 	}
-	service.Image = sources.Release.Intent.Image
+	service.Image, err = scriptRunnerReleaseImage(sources, input.Candidate != nil)
+	if err != nil {
+		return nil, err
+	}
 	service.Networks = desiredService.Networks
 	if err := validateScriptServiceDisposition(service); err != nil {
 		return nil, err
@@ -81,11 +112,11 @@ func BuildManualScriptPlan(
 	if err != nil {
 		return nil, err
 	}
-	networks, err := projectScriptNetworks(service, sources)
+	networks, err := projectScriptNetworks(service, sources, input.Candidate)
 	if err != nil {
 		return nil, err
 	}
-	mounts, err := projectScriptMounts(desiredService, sources)
+	mounts, err := projectScriptMounts(desiredService, sources, input.Candidate)
 	if err != nil {
 		return nil, err
 	}
@@ -97,26 +128,33 @@ func BuildManualScriptPlan(
 	if err != nil {
 		return nil, err
 	}
-	imageDigest, err := digestPinnedImageBytes(service.Image)
+	imageReference, imageDigest, procedureImage, err := scriptRunnerImageAuthority(sources, service.Image, input.Candidate != nil)
 	if err != nil {
 		return nil, err
+	}
+	serviceSource := existingScriptSourceAuthority(sources.Service.Revision)
+	projectionSource := existingScriptSourceAuthority(sources.DesiredProjection.Revision)
+	if input.Candidate != nil {
+		serviceSource = blueprintScriptStagedSourceAuthority(input.Candidate, input.Candidate.ServiceSHA256)
+		projectionSource = blueprintScriptStagedSourceAuthority(input.Candidate, input.Candidate.ProjectionSHA256)
 	}
 	snapshot := &agentpb.ResolvedRunnerSnapshot{
 		SnapshotId: input.SnapshotID, ScriptExecutionId: input.ExecutionID,
 		TenantId: sources.Tenant.Record.ID, TenantModRevision: uint64(sources.Tenant.Revision),
 		ProjectId: sources.Project.Record.ID, ProjectModRevision: uint64(sources.Project.Revision),
 		EnvironmentId: sources.Environment.Record.ID, EnvironmentModRevision: uint64(sources.Environment.Revision),
-		ServiceId: sources.Service.Record.Desired.ID, ServiceSource: existingScriptSourceAuthority(sources.Service.Revision),
+		ServiceId: sources.Service.Record.Desired.ID, ServiceSource: serviceSource,
 		ServiceDefinitionSha256: serviceDigest[:],
 		ReleaseId:               sources.Release.Intent.ID, ReleaseModRevision: uint64(sources.Release.IntentRevision),
-		ImageReference: service.Image, ImageDigest: imageDigest,
+		ImageReference: imageReference, ImageDigest: imageDigest,
+		ProcedureServiceImage:     procedureImage,
 		BlueprintBundleGeneration: sources.RenderInput.Record.Projection.RevisionID,
 		RenderGeneration:          sources.RenderInput.Record.Projection.RenderGeneration,
-		NetworkTopologySource:     existingScriptSourceAuthority(sources.DesiredProjection.Revision),
+		NetworkTopologySource:     projectionSource,
 		Networks:                  cloneScriptNetworks(networks), Mounts: cloneScriptMounts(mounts),
 		AppliedEnvironmentRevisionId:       sources.DesiredProjection.Record.RevisionID,
 		AppliedEnvironmentRenderGeneration: sources.DesiredProjection.Record.RenderGeneration,
-		AppliedEnvironmentSource:           existingScriptSourceAuthority(sources.DesiredProjection.Revision),
+		AppliedEnvironmentSource:           projectionSource,
 		EntryBindings:                      cloneScriptEntryBindings(input.EntryBindings),
 		RunnerProjectionSha256:             projectionDigest,
 	}
@@ -153,17 +191,72 @@ func BuildManualScriptPlan(
 			}},
 		}},
 	}
-	return executionplan.Seal(plan)
+	return plan, nil
 }
 
-func validateScriptRunnerReleaseSource(sources etcd.ScriptExecutionSources) error {
+func blueprintScriptStagedSourceAuthority(
+	stage *BlueprintScriptCandidateSources,
+	digest [sha256.Size]byte,
+) *agentpb.ScriptSourceAuthority {
+	return &agentpb.ScriptSourceAuthority{Staged: &agentpb.ScriptStagedSourceAuthority{
+		EnvironmentId: stage.EnvironmentID, RevisionId: stage.RevisionID,
+		RenderGeneration: stage.RenderGeneration, FixedReadRevision: uint64(stage.FixedReadRevision),
+		CanonicalValueSha256: append([]byte(nil), digest[:]...),
+	}}
+}
+
+func validateScriptRunnerReleaseSource(sources etcd.ScriptExecutionSources, candidate bool) error {
 	if sources.RenderInput.Record.Image != sources.Release.Intent.Image ||
-		!imageref.IsDigestPinned(sources.Release.Intent.Image) ||
 		sources.RenderInput.Record.Projection.RevisionID == "" ||
 		sources.RenderInput.Record.Projection.RenderGeneration == 0 {
 		return errs.New(errs.KindStateConflict, "Release cannot authorize a Script runner")
 	}
-	return nil
+	if candidate {
+		named, err := reference.ParseNormalizedNamed(sources.Release.Intent.Image)
+		if err != nil || named.String() != sources.Release.Intent.Image {
+			return errs.New(errs.KindStateConflict, "Blueprint candidate image reference is not canonical")
+		}
+		return nil
+	}
+	_, err := scriptRunnerReleaseImage(sources, false)
+	return err
+}
+
+func scriptRunnerReleaseImage(sources etcd.ScriptExecutionSources, candidate bool) (string, error) {
+	if candidate {
+		return sources.Release.Intent.Image, nil
+	}
+	if sources.Release.ResolvedImage != nil {
+		if err := release.ValidateResolvedImageEvidence(*sources.Release.ResolvedImage, sources.Release.Intent); err != nil ||
+			!imageref.IsDigestPinned(sources.Release.ResolvedImage.ImmutableReference) {
+			return "", errs.New(errs.KindStateConflict, "Release cannot authorize a Script runner")
+		}
+		return sources.Release.ResolvedImage.ImmutableReference, nil
+	}
+	if !imageref.IsDigestPinned(sources.Release.Intent.Image) {
+		return "", errs.New(errs.KindStateConflict, "Release cannot authorize a Script runner")
+	}
+	return sources.Release.Intent.Image, nil
+}
+
+func scriptRunnerImageAuthority(
+	sources etcd.ScriptExecutionSources,
+	requestedReference string,
+	candidate bool,
+) (string, []byte, *agentpb.ProcedureServiceImageAuthority, error) {
+	if candidate {
+		return "", nil, &agentpb.ProcedureServiceImageAuthority{
+			ArtifactId:         sources.Release.Intent.RenderInputID,
+			ServiceId:          sources.Service.Record.Desired.ID,
+			ReleaseId:          sources.Release.Intent.ID,
+			RequestedReference: requestedReference,
+		}, nil
+	}
+	digest, err := digestPinnedImageBytes(requestedReference)
+	if err != nil {
+		return "", nil, nil, err
+	}
+	return requestedReference, digest, nil, nil
 }
 
 func projectScriptRunner(
@@ -326,6 +419,7 @@ func scriptServiceUnsupportedField(service composetypes.ServiceConfig) string {
 func projectScriptNetworks(
 	service composetypes.ServiceConfig,
 	sources etcd.ScriptExecutionSources,
+	candidate *BlueprintScriptCandidateSources,
 ) ([]*agentpb.ScriptRunnerNetwork, error) {
 	identityByName := make(map[string]string, len(sources.DesiredProjection.Record.DesiredZones))
 	for _, desired := range sources.DesiredProjection.Record.DesiredZones {
@@ -338,7 +432,7 @@ func projectScriptNetworks(
 	result := make([]*agentpb.ScriptRunnerNetwork, 0, len(service.Networks))
 	for name, config := range service.Networks {
 		networkID := identityByName[name]
-		if networkID == "" || revisionByID[networkID] <= 0 {
+		if networkID == "" || candidate == nil && revisionByID[networkID] <= 0 {
 			return nil, errs.New(errs.KindStateConflict, "Script runner network is not part of the frozen topology")
 		}
 		if config == nil {
@@ -347,8 +441,12 @@ func projectScriptNetworks(
 		if len(config.Extensions) != 0 {
 			return nil, errs.New(errs.KindValidationFailed, "Script runner network contains unsupported extensions")
 		}
+		source := existingScriptSourceAuthority(revisionByID[networkID])
+		if candidate != nil {
+			source = blueprintScriptStagedSourceAuthority(candidate, candidate.ProjectionSHA256)
+		}
 		result = append(result, &agentpb.ScriptRunnerNetwork{
-			NetworkId: networkID, Source: existingScriptSourceAuthority(revisionByID[networkID]),
+			NetworkId: networkID, Source: source,
 			RenderedAttachment: &agentpb.ScriptNetworkAttachment{
 				DockerNetworkName: "gp_net_" + strings.ToLower(networkID),
 				DriverOptions:     scriptPairs(config.DriverOpts), InterfaceName: config.InterfaceName,
@@ -363,6 +461,7 @@ func projectScriptNetworks(
 func projectScriptMounts(
 	service composetypes.ServiceConfig,
 	sources etcd.ScriptExecutionSources,
+	candidate *BlueprintScriptCandidateSources,
 ) ([]*agentpb.ScriptRunnerMount, error) {
 	volumeIDByTarget := make(map[string]string)
 	for _, mount := range sources.DesiredProjection.Record.VolumeMounts {
@@ -380,8 +479,12 @@ func projectScriptMounts(
 		if err != nil {
 			return nil, err
 		}
+		source := existingScriptSourceAuthority(sources.DesiredProjection.Revision)
+		if candidate != nil {
+			source = blueprintScriptStagedSourceAuthority(candidate, candidate.ProjectionSHA256)
+		}
 		result = append(result, &agentpb.ScriptRunnerMount{
-			SourceId: volumeID, Source: existingScriptSourceAuthority(sources.DesiredProjection.Revision), RenderedMount: projected,
+			SourceId: volumeID, Source: source, RenderedMount: projected,
 		})
 	}
 	sort.Slice(result, func(left, right int) bool {

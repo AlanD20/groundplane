@@ -149,6 +149,10 @@ func (s *Server) rollbackService(ctx context.Context, input *releaseServiceRollb
 
 func releaseSummary(view etcd.ReleaseView) apiTypes.ReleaseSummary {
 	completedAt := (*string)(nil)
+	digest := view.Intent.Digest
+	if view.Terminal != nil && view.Terminal.ResolvedImage != nil {
+		digest = view.Terminal.ResolvedImage.Digest
+	}
 	if view.Terminal != nil {
 		formatted := view.Terminal.CompletedAt.Format(time.RFC3339Nano)
 		completedAt = &formatted
@@ -157,7 +161,7 @@ func releaseSummary(view etcd.ReleaseView) apiTypes.ReleaseSummary {
 		ID: view.Intent.ID, EnvironmentID: view.Intent.EnvironmentID, ServiceID: view.Intent.ServiceID,
 		OperationID: view.Intent.OperationID, OperationKind: string(view.Intent.OperationKind),
 		GroupOperationID: view.Intent.GroupOperationID, GroupMemberOrdinal: view.Intent.GroupMemberOrdinal,
-		Image: view.Intent.Image, Tag: view.Intent.Tag, Digest: view.Intent.Digest,
+		Image: view.Intent.Image, Tag: view.Intent.Tag, Digest: digest,
 		Strategy: string(view.Intent.Strategy), Slot: string(view.Intent.Slot),
 		OnFailure: apiTypes.OnFailure(view.Intent.OnFailure), State: apiTypes.ReleaseState(view.Checkpoint.State),
 		CreatedAt: view.Intent.CreatedAt.Format(time.RFC3339Nano), CompletedAt: completedAt,

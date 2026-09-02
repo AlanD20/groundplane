@@ -23,6 +23,10 @@ const (
 )
 
 func validateManualScriptPlan(plan *agentpb.ExecutionPlan) error {
+	return validateSingleScriptPlan(plan, true)
+}
+
+func validateSingleScriptPlan(plan *agentpb.ExecutionPlan, manual bool) error {
 	if validateID(ids.KindScript, plan.TargetId) != nil || len(plan.Artifacts) != 0 ||
 		len(plan.ScriptRunnerSnapshots) != 1 || len(plan.ScriptRunnerProjections) != 1 ||
 		len(plan.ScriptBodyArtifacts) != 1 || len(plan.Steps) != 1 {
@@ -36,8 +40,13 @@ func validateManualScriptPlan(plan *agentpb.ExecutionPlan) error {
 	if err := validateResolvedRunnerSnapshot(snapshot); err != nil {
 		return err
 	}
-	if err := validateManualScriptSourceAuthorities(snapshot); err != nil {
-		return err
+	if manual {
+		if snapshot.GetProcedureServiceImage() != nil {
+			return errs.New(errs.KindValidationFailed, "manual and non-post-deploy Script image authority must be pinned")
+		}
+		if err := validateManualScriptSourceAuthorities(snapshot); err != nil {
+			return err
+		}
 	}
 	if err := validateScriptRunnerProjection(projection); err != nil {
 		return err
@@ -68,7 +77,7 @@ func validateManualScriptPlan(plan *agentpb.ExecutionPlan) error {
 		!bytes.Equal(body.Sha256, run.BodySha256) || body.Uid != projection.Uid || body.Gid != projection.Gid {
 		return errs.New(errs.KindValidationFailed, "Script execution plan references do not form one closed execution")
 	}
-	if snapshot.ImageReference != projection.Image ||
+	if !scriptSnapshotImageMatchesProjection(snapshot, projection) ||
 		!equalScriptNetworks(snapshot.Networks, projection.Networks) ||
 		!equalScriptMounts(snapshot.Mounts, projection.Mounts) ||
 		!equalScriptEntryBindings(snapshot.EntryBindings, projection.EntryBindings) {
@@ -93,6 +102,17 @@ func validateManualScriptPlan(plan *agentpb.ExecutionPlan) error {
 		return errs.New(errs.KindValidationFailed, "Script runner snapshot digest does not match RunScript")
 	}
 	return nil
+}
+
+func scriptSnapshotImageMatchesProjection(
+	snapshot *agentpb.ResolvedRunnerSnapshot,
+	projection *agentpb.ScriptRunnerProjection,
+) bool {
+	if authority := snapshot.GetProcedureServiceImage(); authority != nil {
+		return snapshot.GetImageReference() == "" && len(snapshot.GetImageDigest()) == 0 &&
+			projection.GetImage() == authority.GetRequestedReference()
+	}
+	return snapshot.GetImageReference() == projection.GetImage()
 }
 
 func validateScriptOwnershipLabels(
@@ -143,12 +163,14 @@ func validateResolvedRunnerSnapshot(snapshot *agentpb.ResolvedRunnerSnapshot) er
 		validateID(ids.KindService, snapshot.ServiceId) != nil ||
 		len(snapshot.ServiceDefinitionSha256) != sha256.Size ||
 		validateID(ids.KindDeployment, snapshot.ReleaseId) != nil || snapshot.ReleaseModRevision == 0 ||
-		!imageref.IsDigestPinned(snapshot.ImageReference) || len(snapshot.ImageDigest) != sha256.Size ||
 		validateID(ids.KindTask, snapshot.BlueprintBundleGeneration) != nil || snapshot.RenderGeneration == 0 ||
 		len(snapshot.RunnerProjectionSha256) != sha256.Size ||
 		validateID(ids.KindTask, snapshot.AppliedEnvironmentRevisionId) != nil ||
 		snapshot.AppliedEnvironmentRenderGeneration == 0 {
 		return errs.New(errs.KindValidationFailed, "resolved Script runner snapshot identity is invalid")
+	}
+	if err := validateScriptImageAuthority(snapshot); err != nil {
+		return err
 	}
 	var stagedClaim *agentpb.ScriptStagedSourceAuthority
 	if err := validateScriptSourceAuthority(snapshot.ServiceSource, snapshot.EnvironmentId,
@@ -163,13 +185,15 @@ func validateResolvedRunnerSnapshot(snapshot *agentpb.ResolvedRunnerSnapshot) er
 		snapshot.AppliedEnvironmentRevisionId, snapshot.AppliedEnvironmentRenderGeneration, &stagedClaim); err != nil {
 		return err
 	}
-	separator := strings.LastIndex(snapshot.ImageReference, "@sha256:")
-	if separator < 0 {
-		return errs.New(errs.KindValidationFailed, "resolved Script runner image is not digest pinned")
-	}
-	imageDigest, err := hex.DecodeString(snapshot.ImageReference[separator+8:])
-	if err != nil || !bytes.Equal(imageDigest, snapshot.ImageDigest) {
-		return errs.New(errs.KindValidationFailed, "resolved Script runner image digest does not match")
+	if snapshot.GetProcedureServiceImage() == nil {
+		separator := strings.LastIndex(snapshot.ImageReference, "@sha256:")
+		if separator < 0 {
+			return errs.New(errs.KindValidationFailed, "resolved Script runner image is not digest pinned")
+		}
+		imageDigest, err := hex.DecodeString(snapshot.ImageReference[separator+8:])
+		if err != nil || !bytes.Equal(imageDigest, snapshot.ImageDigest) {
+			return errs.New(errs.KindValidationFailed, "resolved Script runner image digest does not match")
+		}
 	}
 	if err := validateScriptNetworks(snapshot.Networks, snapshot.EnvironmentId,
 		snapshot.AppliedEnvironmentRevisionId, snapshot.AppliedEnvironmentRenderGeneration, &stagedClaim); err != nil {
@@ -185,9 +209,30 @@ func validateResolvedRunnerSnapshot(snapshot *agentpb.ResolvedRunnerSnapshot) er
 	return validateScriptSecretValues(snapshot.SecretValues)
 }
 
+func validateScriptImageAuthority(snapshot *agentpb.ResolvedRunnerSnapshot) error {
+	pinned := snapshot.GetImageReference() != "" || len(snapshot.GetImageDigest()) != 0
+	procedure := snapshot.GetProcedureServiceImage()
+	if pinned == (procedure != nil) {
+		return errs.New(errs.KindValidationFailed, "resolved Script runner image authority is not an exact alternative")
+	}
+	if pinned {
+		if !imageref.IsDigestPinned(snapshot.GetImageReference()) || len(snapshot.GetImageDigest()) != sha256.Size {
+			return errs.New(errs.KindValidationFailed, "resolved Script runner pinned image authority is invalid")
+		}
+		return nil
+	}
+	if validateID(ids.KindStep, procedure.GetComposeApplyStepId()) != nil ||
+		validateID(ids.KindConfig, procedure.GetArtifactId()) != nil ||
+		procedure.GetServiceId() != snapshot.GetServiceId() || procedure.GetReleaseId() != snapshot.GetReleaseId() ||
+		!validRequestedImageReference(procedure.GetRequestedReference()) {
+		return errs.New(errs.KindValidationFailed, "resolved Script runner procedure-service image authority is invalid")
+	}
+	return nil
+}
+
 func validateScriptRunnerProjection(projection *agentpb.ScriptRunnerProjection) error {
 	if projection == nil || !validRawULID(projection.SnapshotId) || !validScriptString(projection.Name) ||
-		!imageref.IsDigestPinned(projection.Image) || projection.StopGraceSeconds != 10 ||
+		!validRequestedImageReference(projection.Image) || projection.StopGraceSeconds != 10 ||
 		len(projection.Entrypoint) != 1 || projection.Entrypoint[0] != "/bin/sh" ||
 		len(projection.Command) != 1 || projection.Command[0] != "/groundplane-script-body" {
 		return errs.New(errs.KindValidationFailed, "Script runner projection identity or forced process is invalid")

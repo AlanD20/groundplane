@@ -178,6 +178,13 @@ func newScriptSourceReferenceAuthority(store hierarchyStore) (*ScriptSourceRefer
 	return &ScriptSourceReferenceAuthority{store: store, repository: repository}, nil
 }
 
+// NewScriptSourceReferenceAuthority constructs the Controller-composed source
+// authority. The concrete type remains the only writer of prepared source
+// memberships and active roots.
+func NewScriptSourceReferenceAuthority(store Store) (*ScriptSourceReferenceAuthority, error) {
+	return newScriptSourceReferenceAuthority(store)
+}
+
 func (authority *ScriptSourceReferenceAuthority) Prepare(
 	ctx context.Context,
 	operationID string,

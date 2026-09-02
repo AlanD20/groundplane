@@ -19,6 +19,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/backupkey"
+	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	componentcapability "github.com/AlanD20/groundplane/internal/controller/component"
 	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	desiredrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
@@ -481,6 +482,22 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script artifact service: %w", err)
+	}
+	scriptSourceReferences, err := etcd.NewScriptSourceReferenceAuthority(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Script source-reference authority: %w", err)
+	}
+	blueprintReleases, err := blueprintrelease.NewService(
+		releaseLedger,
+		scriptRecords,
+		planResolver,
+		scriptArtifacts,
+		scriptSourceReferences,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Blueprint candidate-release service: %w", err)
 	}
 	backupSecretEvidence, err := etcd.NewBackupSecretResolutionReader(store)
 	if err != nil {
@@ -991,6 +1008,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		environmentBlueprintIdempotency,
 		materializationResolver,
 		releaseGroupBlueprints,
+		blueprintReleases,
 		entryGeneration,
 		attachFactValues,
 		componentCatalog,

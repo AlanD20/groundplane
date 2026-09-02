@@ -46,6 +46,7 @@ message AgentMessage {
     LogEnd log_end = 8;
     LogReady log_ready = 9;
     ScriptCheckpointRequest script_checkpoint_request = 10;
+    ExecutionStepResultRequest execution_step_result_request = 19;
   }
 }
 
@@ -256,6 +257,7 @@ message ControllerMessage {
     LogCancel log_cancel = 9;
     ManagedConfigTransfer managed_config_transfer = 10;
     ScriptCheckpointAck script_checkpoint_ack = 11;
+    ExecutionStepResultAck execution_step_result_ack = 21;
   }
 }
 
@@ -405,6 +407,7 @@ message TaskAssignment {
   ScriptAssignmentArtifacts script_artifacts = 8;
   repeated ScriptExecutionCheckpoint script_checkpoints = 9;
   bool automatic_reconcile = 10;
+  repeated ExecutionStepResult acknowledged_step_results = 15;
 }
 
 enum ScriptExecutionState {
@@ -501,6 +504,48 @@ message ScriptCheckpointAck {
   string script_execution_id = 5;
   ScriptExecutionState state = 6;
   bytes control_payload_sha256 = 7;
+}
+
+message ProcedureServiceImageAuthority {
+  string compose_apply_step_id = 1;
+  string artifact_id = 2;
+  string service_id = 3;
+  string release_id = 4;
+  string requested_reference = 5;
+}
+
+message ProcedureServiceImageResult {
+  string service_id = 1;
+  string release_id = 2;
+  string requested_reference = 3;
+  string immutable_reference = 4;
+  bytes image_digest = 5;
+  string local_image_id = 6;
+}
+
+message ExecutionStepResult {
+  string operation_id = 1;
+  bytes plan_hash = 2;
+  string step_id = 3;
+  bytes control_payload_sha256 = 4;
+  oneof result {
+    ProcedureServiceImageResult procedure_service_image = 5;
+  }
+}
+
+message ExecutionStepResultRequest {
+  string task_id = 1;
+  string assignment_id = 2;
+  ExecutionStepResult result = 3;
+}
+
+message ExecutionStepResultAck {
+  string task_id = 1;
+  string assignment_id = 2;
+  string operation_id = 3;
+  bytes plan_hash = 4;
+  string step_id = 5;
+  bytes control_payload_sha256 = 6;
 }
 
 message ExecutionPlan {
@@ -690,6 +735,7 @@ message ResolvedRunnerSnapshot {
   ScriptSourceAuthority service_source = 27;
   ScriptSourceAuthority network_topology_source = 28;
   ScriptSourceAuthority applied_environment_source = 29;
+  ProcedureServiceImageAuthority procedure_service_image = 30;
 }
 
 message ScriptRunnerNetwork {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/distribution/reference"
 )
 
 const (
@@ -156,14 +157,24 @@ type Checkpoint struct {
 	UpdatedAt time.Time        `json:"updated_at"`
 }
 
+type ResolvedImageEvidence struct {
+	RequestedReference   string `json:"requested_reference"`
+	ImmutableReference   string `json:"immutable_reference"`
+	Digest               string `json:"digest"`
+	LocalImageID         string `json:"local_image_id"`
+	ComposeApplyStepID   string `json:"compose_apply_step_id"`
+	ControlPayloadDigest string `json:"control_payload_digest"`
+}
+
 type TerminalSummary struct {
-	ReleaseID              string    `json:"release_id"`
-	Outcome                State     `json:"outcome"`
-	FinalServingReleaseID  string    `json:"final_serving_release_id,omitempty"`
-	EffectDigests          []string  `json:"effect_digests"`
-	AttemptIDs             []string  `json:"attempt_ids"`
-	RollbackMaterialDigest string    `json:"rollback_material_digest"`
-	CompletedAt            time.Time `json:"completed_at"`
+	ReleaseID              string                 `json:"release_id"`
+	Outcome                State                  `json:"outcome"`
+	FinalServingReleaseID  string                 `json:"final_serving_release_id,omitempty"`
+	EffectDigests          []string               `json:"effect_digests"`
+	AttemptIDs             []string               `json:"attempt_ids"`
+	RollbackMaterialDigest string                 `json:"rollback_material_digest"`
+	ResolvedImage          *ResolvedImageEvidence `json:"resolved_image,omitempty"`
+	CompletedAt            time.Time              `json:"completed_at"`
 }
 
 type RetentionStatus string
@@ -288,6 +299,28 @@ func ValidateEvidence(value EffectEvidence, releaseID string) error {
 	}
 	if value.RouterConfigurationDigest != "" && !validSHA256(value.RouterConfigurationDigest) {
 		return invalid("release router evidence digest is invalid")
+	}
+	return nil
+}
+
+func ValidateResolvedImageEvidence(value ResolvedImageEvidence, intent Intent) error {
+	if value.RequestedReference != intent.Image ||
+		ids.Validate(ids.KindStep, value.ComposeApplyStepID) != nil ||
+		!validSHA256(value.Digest) || !validSHA256(value.ControlPayloadDigest) ||
+		!strings.HasPrefix(value.LocalImageID, "sha256:") ||
+		!validSHA256(strings.TrimPrefix(value.LocalImageID, "sha256:")) {
+		return invalid("release resolved image evidence is invalid")
+	}
+	requested, requestErr := reference.ParseNormalizedNamed(value.RequestedReference)
+	immutable, immutableErr := reference.ParseNormalizedNamed(value.ImmutableReference)
+	digested, digestOK := immutable.(reference.Digested)
+	if requestErr != nil || immutableErr != nil || !digestOK ||
+		requested.String() != value.RequestedReference ||
+		immutable.String() != value.ImmutableReference ||
+		reference.TrimNamed(requested).Name() != reference.TrimNamed(immutable).Name() ||
+		digested.Digest().Algorithm().String() != "sha256" ||
+		digested.Digest().Encoded() != value.Digest {
+		return invalid("release resolved image reference is invalid")
 	}
 	return nil
 }

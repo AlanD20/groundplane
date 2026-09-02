@@ -22,7 +22,7 @@ func BuildReleaseHookRenderInput(
 	ctx context.Context,
 	input ManualScriptPlanInput,
 ) (etcd.ReleaseHookRenderInput, error) {
-	plan, err := BuildManualScriptPlan(ctx, input)
+	plan, err := buildScriptRunnerPlan(ctx, input)
 	if err != nil {
 		return etcd.ReleaseHookRenderInput{}, err
 	}

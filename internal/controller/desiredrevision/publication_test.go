@@ -99,7 +99,7 @@ func (repository *boundaryRepository) StageEnvironmentBlueprintRevision(
 	}, nil
 }
 
-func (repository *boundaryRepository) PublishEnvironmentBlueprintDesiredRevisionWithTask(
+func (repository *boundaryRepository) PublishEnvironmentBlueprintDesiredRevision(
 	_ context.Context,
 	_ netip.Prefix,
 	_ string,
@@ -115,6 +115,8 @@ func (repository *boundaryRepository) PublishEnvironmentBlueprintDesiredRevision
 	_ etcd.ReleaseGroupBlueprintPreparedMutation,
 	_ etcd.ComponentTaskPreparation,
 	_ etcd.BlueprintAttachTaskPreparation,
+	_ etcd.BlueprintScriptPublication,
+	_ etcd.BlueprintReleasePublication,
 	task etcd.TaskRecord,
 	_ etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
@@ -310,7 +312,7 @@ func TestBlueprintClaimCrashReplayResumesWithStableTaskAndReleaseGroupIDs(t *tes
 	if staged.TaskID() != recovered.TaskID || staged.state.seal.DependencyDigest != recoveredProjectionEvidence.DependencyDigest {
 		t.Fatalf("staged authority = %q/%x", staged.TaskID(), staged.state.seal.DependencyDigest)
 	}
-	if _, err := repository.PublishEnvironmentBlueprintDesiredRevisionWithTask(
+	if _, err := repository.PublishEnvironmentBlueprintDesiredRevision(
 		ctx,
 		netip.Prefix{},
 		"",
@@ -326,10 +328,12 @@ func TestBlueprintClaimCrashReplayResumesWithStableTaskAndReleaseGroupIDs(t *tes
 		etcd.ReleaseGroupBlueprintPreparedMutation{},
 		etcd.ComponentTaskPreparation{},
 		etcd.BlueprintAttachTaskPreparation{},
+		etcd.BlueprintScriptPublication{},
+		etcd.BlueprintReleasePublication{},
 		etcd.TaskRecord{ID: recovered.TaskID},
 		etcd.IdempotencyMarker{},
 	); err != nil {
-		t.Fatalf("PublishEnvironmentBlueprintDesiredRevisionWithTask(recovered) error = %v", err)
+		t.Fatalf("PublishEnvironmentBlueprintDesiredRevision(recovered) error = %v", err)
 	}
 	if repository.claims != 2 || repository.stages != 1 || repository.publications != 1 ||
 		repository.stagedTaskID != first.TaskID ||

@@ -82,11 +82,21 @@ func TestSealManualScriptPlanRejectsStagedSourceAuthorityAnywhere(t *testing.T) 
 		name string
 		get  func(*agentpb.ResolvedRunnerSnapshot) **agentpb.ScriptSourceAuthority
 	}{
-		{name: "service", get: func(value *agentpb.ResolvedRunnerSnapshot) **agentpb.ScriptSourceAuthority { return &value.ServiceSource }},
-		{name: "topology", get: func(value *agentpb.ResolvedRunnerSnapshot) **agentpb.ScriptSourceAuthority { return &value.NetworkTopologySource }},
-		{name: "applied Environment", get: func(value *agentpb.ResolvedRunnerSnapshot) **agentpb.ScriptSourceAuthority { return &value.AppliedEnvironmentSource }},
-		{name: "network", get: func(value *agentpb.ResolvedRunnerSnapshot) **agentpb.ScriptSourceAuthority { return &value.Networks[0].Source }},
-		{name: "mount", get: func(value *agentpb.ResolvedRunnerSnapshot) **agentpb.ScriptSourceAuthority { return &value.Mounts[0].Source }},
+		{name: "service", get: func(value *agentpb.ResolvedRunnerSnapshot) **agentpb.ScriptSourceAuthority {
+			return &value.ServiceSource
+		}},
+		{name: "topology", get: func(value *agentpb.ResolvedRunnerSnapshot) **agentpb.ScriptSourceAuthority {
+			return &value.NetworkTopologySource
+		}},
+		{name: "applied Environment", get: func(value *agentpb.ResolvedRunnerSnapshot) **agentpb.ScriptSourceAuthority {
+			return &value.AppliedEnvironmentSource
+		}},
+		{name: "network", get: func(value *agentpb.ResolvedRunnerSnapshot) **agentpb.ScriptSourceAuthority {
+			return &value.Networks[0].Source
+		}},
+		{name: "mount", get: func(value *agentpb.ResolvedRunnerSnapshot) **agentpb.ScriptSourceAuthority {
+			return &value.Mounts[0].Source
+		}},
 	}
 	for index, location := range locations {
 		t.Run(location.name, func(t *testing.T) {
@@ -105,10 +115,14 @@ func TestSealManualScriptPlanRejectsInvalidSourceAuthority(t *testing.T) {
 		mutate func(*agentpb.ScriptSourceAuthority)
 	}{
 		{name: "empty authority", mutate: func(authority *agentpb.ScriptSourceAuthority) { authority.Staged = nil }},
-		{name: "dual authority", mutate: func(authority *agentpb.ScriptSourceAuthority) { authority.Existing = &agentpb.ScriptExistingSourceAuthority{ModRevision: 9} }},
+		{name: "dual authority", mutate: func(authority *agentpb.ScriptSourceAuthority) {
+			authority.Existing = &agentpb.ScriptExistingSourceAuthority{ModRevision: 9}
+		}},
 		{name: "invalid stage identity", mutate: func(authority *agentpb.ScriptSourceAuthority) { authority.GetStaged().RevisionId = "task-invalid" }},
 		{name: "zero fixed read revision", mutate: func(authority *agentpb.ScriptSourceAuthority) { authority.GetStaged().FixedReadRevision = 0 }},
-		{name: "invalid canonical digest", mutate: func(authority *agentpb.ScriptSourceAuthority) { authority.GetStaged().CanonicalValueSha256 = []byte("short") }},
+		{name: "invalid canonical digest", mutate: func(authority *agentpb.ScriptSourceAuthority) {
+			authority.GetStaged().CanonicalValueSha256 = []byte("short")
+		}},
 		{name: "conflicting fixed read revision", mutate: func(authority *agentpb.ScriptSourceAuthority) { authority.GetStaged().FixedReadRevision++ }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -140,14 +154,33 @@ func TestValidateScriptSourceAuthorityRejectsRawDualFieldEncoding(t *testing.T) 
 	}
 	var claim *agentpb.ScriptStagedSourceAuthority
 	if err = validateScriptSourceAuthority(&authority, snapshot.EnvironmentId,
-		snapshot.AppliedEnvironmentRevisionId, snapshot.AppliedEnvironmentRenderGeneration, &claim);
-		!errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		snapshot.AppliedEnvironmentRevisionId, snapshot.AppliedEnvironmentRenderGeneration, &claim); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("validateScriptSourceAuthority(raw dual) error = %v", err)
 	}
 }
 
 func TestValidateRejectsStagedSourceDigestTampering(t *testing.T) {
-	sealed, err := Seal(validStagedScriptPlan(t))
+	plan := validBlueprintScriptReconcilePlan(t)
+	snapshot := plan.ScriptRunnerSnapshots[0]
+	snapshot.ServiceSource = stagedScriptSourceAuthorityForTest(snapshot, 0x11)
+	snapshot.NetworkTopologySource = stagedScriptSourceAuthorityForTest(snapshot, 0x12)
+	snapshot.AppliedEnvironmentSource = stagedScriptSourceAuthorityForTest(snapshot, 0x13)
+	for index, network := range snapshot.Networks {
+		network.Source = stagedScriptSourceAuthorityForTest(snapshot, byte(0x20+index))
+	}
+	for index, mount := range snapshot.Mounts {
+		mount.Source = stagedScriptSourceAuthorityForTest(snapshot, byte(0x30+index))
+	}
+	snapshotDigest, digestErr := scriptMessageDigest(snapshot)
+	if digestErr != nil {
+		t.Fatal(digestErr)
+	}
+	for _, step := range plan.Steps {
+		if run := step.GetRunScript(); run != nil {
+			run.RunnerSnapshotSha256 = snapshotDigest
+		}
+	}
+	sealed, err := Seal(plan)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,6 +188,15 @@ func TestValidateRejectsStagedSourceDigestTampering(t *testing.T) {
 	sealed.ScriptRunnerSnapshots[0].ServiceSource.GetStaged().CanonicalValueSha256[0] ^= 0xff
 	if _, err = Validate(sealed); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("Validate(tampered stage digest) error = %v", err)
+	}
+	updatedSnapshotDigest, digestErr := scriptMessageDigest(sealed.ScriptRunnerSnapshots[0])
+	if digestErr != nil {
+		t.Fatal(digestErr)
+	}
+	for _, step := range sealed.Steps {
+		if run := step.GetRunScript(); run != nil {
+			run.RunnerSnapshotSha256 = updatedSnapshotDigest
+		}
 	}
 	sealed.PlanHash = nil
 	resealed, err := Seal(sealed)
@@ -192,6 +234,94 @@ func TestSealAcceptsBlueprintCandidatePostDeployScript(t *testing.T) {
 
 // Rationale: permitting the typed Blueprint sequence must not grant Script
 // execution to another reconcile target or to a candidate with no Release binding.
+// Rationale: a Blueprint Compose tag remains desired Release intent, while the
+// post-deploy runner is authorized only by the exact Controller-acknowledged
+// image selected by its earlier candidate ComposeApply step.
+func TestSealAcceptsBlueprintTaggedCandidatePostDeployScriptResultAuthority(t *testing.T) {
+	plan := validBlueprintScriptReconcilePlan(t)
+	applyStep := plan.Steps[0]
+	runStep := plan.Steps[1]
+	run := runStep.GetRunScript()
+	snapshot := plan.ScriptRunnerSnapshots[0]
+	projection := plan.ScriptRunnerProjections[0]
+	service := plan.Artifacts[0].Services[0]
+	requested := "registry.example/app:candidate"
+
+	snapshot.ImageReference = ""
+	snapshot.ImageDigest = nil
+	snapshot.ProcedureServiceImage = &agentpb.ProcedureServiceImageAuthority{
+		ComposeApplyStepId: applyStep.GetStepId(),
+		ArtifactId:         applyStep.GetComposeApply().GetArtifactId(),
+		ServiceId:          run.GetServiceId(),
+		ReleaseId:          run.GetReleaseId(),
+		RequestedReference: requested,
+	}
+	projection.Image = requested
+	projectionDigest, err := scriptMessageDigest(projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot.RunnerProjectionSha256 = projectionDigest
+	snapshotDigest, err := scriptMessageDigest(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.RunnerSnapshotSha256 = snapshotDigest
+	service.ImageReference = requested
+	service.ImageIndexDigest = nil
+	service.ImageChildDigest = nil
+	plan.Artifacts[0].CanonicalYaml = []byte("services:\n  api:\n    image: " + requested + "\n")
+	yamlDigest := sha256.Sum256(plan.Artifacts[0].CanonicalYaml)
+	plan.Artifacts[0].YamlSha256 = yamlDigest[:]
+
+	sealed, err := Seal(plan)
+	if err != nil {
+		t.Fatalf("Seal(Blueprint tagged candidate authority) error = %v", err)
+	}
+	if _, err := Validate(sealed); err != nil {
+		t.Fatalf("Validate(Blueprint tagged candidate authority) error = %v", err)
+	}
+}
+
+func TestSealRejectsBlueprintProcedureImageAuthorityMismatch(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mutate func(*agentpb.ExecutionPlan)
+	}{
+		{name: "forward step", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.ScriptRunnerSnapshots[0].ProcedureServiceImage.ComposeApplyStepId = plan.Steps[1].StepId
+		}},
+		{name: "wrong step", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.ScriptRunnerSnapshots[0].ProcedureServiceImage.ComposeApplyStepId = "step_01ARZ3NDEKTSV4RRFFQ69G5FAZ"
+		}},
+		{name: "wrong artifact", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.ScriptRunnerSnapshots[0].ProcedureServiceImage.ArtifactId = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAZ"
+		}},
+		{name: "wrong service", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.ScriptRunnerSnapshots[0].ProcedureServiceImage.ServiceId = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAZ"
+		}},
+		{name: "wrong Release", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.ScriptRunnerSnapshots[0].ProcedureServiceImage.ReleaseId = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAZ"
+		}},
+		{name: "dual authority", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.ScriptRunnerSnapshots[0].ImageReference = "registry.example/app@sha256:" + strings.Repeat("a", 64)
+			plan.ScriptRunnerSnapshots[0].ImageDigest = bytes.Repeat([]byte{0xaa}, sha256.Size)
+		}},
+		{name: "prefilled pinned field", mutate: func(plan *agentpb.ExecutionPlan) {
+			plan.ScriptRunnerSnapshots[0].ImageReference = "registry.example/app@sha256:" + strings.Repeat("a", 64)
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			plan := validBlueprintScriptReconcilePlan(t)
+			test.mutate(plan)
+			refreshBlueprintSnapshotDigestForTest(t, plan)
+			if _, err := Seal(plan); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+				t.Fatalf("Seal(invalid procedure image authority) error = %v, want validation.failed", err)
+			}
+		})
+	}
+}
+
 func TestSealRejectsNonBlueprintAndUnboundReconcileScripts(t *testing.T) {
 	for _, test := range []struct {
 		name   string
@@ -293,10 +423,80 @@ func validBlueprintScriptReconcilePlan(t *testing.T) *agentpb.ExecutionPlan {
 	plan.Steps = append([]*agentpb.ExecutionStep{{
 		StepId: applyStepID, TimeoutSeconds: 30,
 		Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
-			ArtifactId: artifact.ArtifactId, FullReconcile: true,
+			ArtifactId: artifact.ArtifactId, ServiceIds: []string{run.ServiceId},
+			ForceRecreate: true, NoDependencies: true,
 		}},
 	}}, plan.Steps...)
+	bindBlueprintProcedureAuthorityForTest(t, plan)
 	return plan
+}
+
+func bindBlueprintProcedureAuthorityForTest(t *testing.T, plan *agentpb.ExecutionPlan) {
+	t.Helper()
+	applyStep := plan.Steps[0]
+	run := plan.Steps[1].GetRunScript()
+	snapshot := plan.ScriptRunnerSnapshots[0]
+	projection := plan.ScriptRunnerProjections[0]
+	service := plan.Artifacts[0].Services[0]
+	requested := "registry.example/app:candidate"
+	snapshot.ImageReference = ""
+	snapshot.ImageDigest = nil
+	snapshot.ProcedureServiceImage = &agentpb.ProcedureServiceImageAuthority{
+		ComposeApplyStepId: applyStep.GetStepId(), ArtifactId: applyStep.GetComposeApply().GetArtifactId(),
+		ServiceId: run.GetServiceId(), ReleaseId: run.GetReleaseId(), RequestedReference: requested,
+	}
+	projection.Image = requested
+	projectionDigest, err := scriptMessageDigest(projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot.RunnerProjectionSha256 = projectionDigest
+	service.ImageReference = requested
+	service.ImageIndexDigest = nil
+	service.ImageChildDigest = nil
+	plan.Artifacts[0].CanonicalYaml = []byte("services:\n  api:\n    image: " + requested + "\n")
+	yamlDigest := sha256.Sum256(plan.Artifacts[0].CanonicalYaml)
+	plan.Artifacts[0].YamlSha256 = yamlDigest[:]
+	refreshBlueprintSnapshotDigestForTest(t, plan)
+}
+
+func refreshBlueprintSnapshotDigestForTest(t *testing.T, plan *agentpb.ExecutionPlan) {
+	t.Helper()
+	digest, err := scriptMessageDigest(plan.ScriptRunnerSnapshots[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range plan.Steps {
+		if run := step.GetRunScript(); run != nil {
+			run.RunnerSnapshotSha256 = digest
+		}
+	}
+}
+
+func TestSealBlueprintCandidatePostDeployScriptBeforeReadiness(t *testing.T) {
+	t.Parallel()
+	plan := validBlueprintScriptReconcilePlan(t)
+	run := plan.Steps[len(plan.Steps)-1]
+	wait := &agentpb.ExecutionStep{
+		StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAY", PrerequisiteStepId: run.StepId,
+		TimeoutSeconds: 30,
+		Payload: &agentpb.ExecutionStep_WaitHealthy{WaitHealthy: &agentpb.WaitHealthy{
+			ArtifactId: plan.Artifacts[0].ArtifactId,
+			ServiceIds: []string{run.GetRunScript().ServiceId},
+		}},
+	}
+	plan.Steps = append(plan.Steps, wait)
+	sealed, err := Seal(plan)
+	if err != nil {
+		t.Fatalf("Seal(Blueprint post-deploy chain) error = %v", err)
+	}
+	if sealed.Operation != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY ||
+		len(sealed.Steps) != 3 || sealed.Steps[0].GetComposeApply() == nil ||
+		sealed.Steps[1].GetRunScript() == nil || sealed.Steps[2].GetWaitHealthy() == nil ||
+		sealed.Steps[1].PrerequisiteStepId != sealed.Steps[0].StepId ||
+		sealed.Steps[2].PrerequisiteStepId != sealed.Steps[1].StepId {
+		t.Fatalf("sealed Blueprint post-deploy chain = %#v", sealed.Steps)
+	}
 }
 
 func validManualScriptPlan(t *testing.T) *agentpb.ExecutionPlan {

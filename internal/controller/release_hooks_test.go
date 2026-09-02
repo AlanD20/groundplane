@@ -19,6 +19,7 @@ func TestBuildReleaseHookPlanKeepsClosedPhasesAndSlugOrder(t *testing.T) {
 		releaseHookInput(t, releaseID, "z-post", core.ScriptPostDeploy, "01ARZ3NDEKTSV4RRFFQ69G5FAA", "01ARZ3NDEKTSV4RRFFQ69G5FAB"),
 		releaseHookInput(t, releaseID, "a-pre", core.ScriptPreDeploy, "01ARZ3NDEKTSV4RRFFQ69G5FAC", "01ARZ3NDEKTSV4RRFFQ69G5FAD"),
 		releaseHookInput(t, priorReleaseID, "b-failure", core.ScriptOnFailure, "01ARZ3NDEKTSV4RRFFQ69G5FAE", "01ARZ3NDEKTSV4RRFFQ69G5FAF"),
+		releaseHookInput(t, releaseID, "manual", core.ScriptManual, "01ARZ3NDEKTSV4RRFFQ69G5FAS", "01ARZ3NDEKTSV4RRFFQ69G5FAT"),
 	}
 	plan, err := BuildReleaseHookPlan(ReleaseHookPlanInput{
 		Operation: domain.OperationDeploy, CandidateReleaseID: releaseID, FailureReleaseID: priorReleaseID,

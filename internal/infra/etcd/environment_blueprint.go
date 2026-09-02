@@ -302,43 +302,13 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 		ctx, netip.Prefix{}, environment.Record.NetworkPool,
 		project, environment, expectedHeadRevision, claim, revision, projection,
 		zoneChanges, serviceChanges, routeChanges, releaseGroupPreparation,
-		componentPreparation, attachPreparation, BlueprintScriptPublication{}, task, marker,
+		componentPreparation, attachPreparation, BlueprintScriptPublication{}, BlueprintReleasePublication{}, task, marker,
 	)
 }
 
-// PublishEnvironmentBlueprintDesiredRevisionWithTask publishes an authored
-// Blueprint and atomically replaces its Environment pool reservation when the
-// authored pool changed.
-func (repository *HierarchyRepository) PublishEnvironmentBlueprintDesiredRevisionWithTask(
-	ctx context.Context,
-	environmentPool netip.Prefix,
-	desiredNetworkPool string,
-	project Versioned[ProjectRecord],
-	environment Versioned[EnvironmentRecord],
-	expectedHeadRevision int64,
-	claim EnvironmentBlueprintStageClaim,
-	revision EnvironmentDesiredRevisionIdentity,
-	projection EnvironmentComposeProjection,
-	zoneChanges []EnvironmentBlueprintZoneChange,
-	serviceChanges []EnvironmentBlueprintServiceChange,
-	routeChanges []EnvironmentBlueprintRouteChange,
-	releaseGroupPreparation ReleaseGroupBlueprintPreparedMutation,
-	componentPreparation ComponentTaskPreparation,
-	attachPreparation BlueprintAttachTaskPreparation,
-	task TaskRecord,
-	marker IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
-	return repository.publishEnvironmentDesiredRevisionWithTask(
-		ctx, environmentPool, desiredNetworkPool,
-		project, environment, expectedHeadRevision, claim, revision, projection,
-		zoneChanges, serviceChanges, routeChanges, releaseGroupPreparation,
-		componentPreparation, attachPreparation, BlueprintScriptPublication{}, task, marker,
-	)
-}
-
-// PublishEnvironmentBlueprintDesiredRevisionWithScripts publishes an authored
-// Blueprint and its prepared Script projection in the same transaction.
-func (repository *HierarchyRepository) PublishEnvironmentBlueprintDesiredRevisionWithScripts(
+// PublishEnvironmentBlueprintDesiredRevision publishes the one authored
+// Blueprint Task with its prepared Script and candidate Release fragments.
+func (repository *HierarchyRepository) PublishEnvironmentBlueprintDesiredRevision(
 	ctx context.Context,
 	environmentPool netip.Prefix,
 	desiredNetworkPool string,
@@ -355,6 +325,7 @@ func (repository *HierarchyRepository) PublishEnvironmentBlueprintDesiredRevisio
 	componentPreparation ComponentTaskPreparation,
 	attachPreparation BlueprintAttachTaskPreparation,
 	scriptPublication BlueprintScriptPublication,
+	releasePublication BlueprintReleasePublication,
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -362,7 +333,7 @@ func (repository *HierarchyRepository) PublishEnvironmentBlueprintDesiredRevisio
 		ctx, environmentPool, desiredNetworkPool,
 		project, environment, expectedHeadRevision, claim, revision, projection,
 		zoneChanges, serviceChanges, routeChanges, releaseGroupPreparation,
-		componentPreparation, attachPreparation, scriptPublication, task, marker,
+		componentPreparation, attachPreparation, scriptPublication, releasePublication, task, marker,
 	)
 }
 
@@ -383,6 +354,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	componentPreparation ComponentTaskPreparation,
 	attachPreparation BlueprintAttachTaskPreparation,
 	scriptPublication BlueprintScriptPublication,
+	releasePublication BlueprintReleasePublication,
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -430,6 +402,9 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := scriptPublication.validate(environment.Record.ID, claim.SourceKind); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := releasePublication.validate(environment.Record.ID, task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	task = cloneTaskRecord(task)
@@ -507,7 +482,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		!releaseGroupPreparation.isZero() ||
 		!componentTaskPreparationIsZero(componentPreparation) ||
 		!blueprintAttachTaskPreparationIsZero(attachPreparation) ||
-		!scriptPublication.IsZero() {
+		!scriptPublication.IsZero() || !releasePublication.IsZero() {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Environment desired mutation cannot publish Blueprint domain changes",
@@ -649,6 +624,22 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 				return err
 			}
 			return scriptPublication.classify(values[baseConditionCount:])
+		}
+		baseConditionCount = len(conditions)
+		conditions = append(conditions, releasePublication.conditions...)
+		mutations = append(mutations, releasePublication.mutations...)
+		if err := releasePublication.sources.ValidateStagedMutations(claim, mutations); err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		releaseBaseClassifier := classified
+		classified = func(revision int64, values []*KeyValue) error {
+			if len(values) != baseConditionCount+len(releasePublication.conditions) {
+				return errs.New(errs.KindInternal, "Blueprint Release compare evidence is incomplete")
+			}
+			if err := releaseBaseClassifier(revision, values[:baseConditionCount]); err != nil {
+				return err
+			}
+			return releasePublication.classify(values[baseConditionCount:])
 		}
 	}
 	classifier := func(revision int64, values []*KeyValue) error {

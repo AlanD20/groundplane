@@ -27,7 +27,11 @@ func (helper *fakeComposeHelper) Execute(
 type fakeComposeObserver struct {
 	projects    []*agentpb.ObservedProject
 	err         error
+	image       *agentpb.ProcedureServiceImageResult
+	verifyErr   error
 	calls       int
+	imageCalls  int
+	verifyCalls int
 	liveContext bool
 }
 
@@ -48,6 +52,28 @@ func (observer *fakeComposeObserver) Observe(
 	return observer.projects[index], nil
 }
 
+func (observer *fakeComposeObserver) ObserveServiceImage(
+	_ context.Context,
+	_ *agentpb.ExecutionPlan,
+	_, _, _, _ string,
+) (*agentpb.ProcedureServiceImageResult, error) {
+	observer.imageCalls++
+	if observer.err != nil {
+		return nil, observer.err
+	}
+	return observer.image, nil
+}
+
+func (observer *fakeComposeObserver) VerifyServiceImage(
+	_ context.Context,
+	_ *agentpb.ExecutionPlan,
+	_ string,
+	_ *agentpb.ProcedureServiceImageResult,
+) error {
+	observer.verifyCalls++
+	return observer.verifyErr
+}
+
 func TestComposeRuntimeMutatesThenObserves(t *testing.T) {
 	helper := completedComposeHelper()
 	observer := &fakeComposeObserver{projects: []*agentpb.ObservedProject{{ProjectName: "gp-platform"}}}
@@ -61,7 +87,7 @@ func TestComposeRuntimeMutatesThenObserves(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executeStep() error = %v", err)
 	}
-	if result.ExitCode != 0 || result.Observed == nil || observer.calls != 1 {
+	if result.ExitCode != 0 || result.Observed == nil || observer.calls != 1 || result.ExecutionStepResult != nil {
 		t.Fatalf("executeStep() result = %#v, observations = %d", result, observer.calls)
 	}
 	if helper.request.GetTaskId() != assignment.TaskID || helper.request.GetPlan() != assignment.Plan ||
@@ -167,4 +193,40 @@ func composeRuntimeAssignment() (Assignment, *agentpb.ExecutionStep) {
 		TaskID:       "tsk_01J00000000000000000000000", OperationID: "op_01J00000000000000000000000",
 		Plan: plan, Deadline: time.Now().Add(time.Minute),
 	}, step
+}
+
+func TestComposeRuntimeComponentApplyDoesNotProduceProcedureImageResult(t *testing.T) {
+	helper := completedComposeHelper()
+	observer := &fakeComposeObserver{projects: []*agentpb.ObservedProject{{ProjectName: "gp-platform"}}}
+	runtime, err := NewComposeRuntime(helper, observer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assignment, step := composeRuntimeAssignment()
+	assignment.Plan.Operation = agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY
+	result, err := runtime.executeStep(context.Background(), assignment, step)
+	if err != nil || result.ExecutionStepResult != nil {
+		t.Fatalf("Component ComposeApply result = %#v, %v", result, err)
+	}
+}
+
+func TestComposeRuntimeReconnectVerifiesAcknowledgedCandidateWithoutMutation(t *testing.T) {
+	assignment, step, evidence := procedureComposeAssignment(t)
+	assignment.AcknowledgedStepResults = []*agentpb.ExecutionStepResult{evidence}
+	helper := completedComposeHelper()
+	observer := &fakeComposeObserver{}
+	runtime, err := NewComposeRuntime(helper, observer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := runtime.executeStep(context.Background(), assignment, step)
+	if err != nil || helper.request != nil || observer.verifyCalls != 1 || result.MutationAttempted || result.ExecutionStepResult != nil {
+		t.Fatalf("reconnect result = %#v, helper = %#v, verifies = %d, error = %v", result, helper.request, observer.verifyCalls, err)
+	}
+
+	observer.verifyErr = errs.New(errs.KindStateConflict, "candidate container differs")
+	result, err = runtime.executeStep(context.Background(), assignment, step)
+	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || !result.ReconciliationRequired || helper.request != nil {
+		t.Fatalf("mismatch result = %#v, helper = %#v, error = %v", result, helper.request, err)
+	}
 }

@@ -305,6 +305,10 @@ secret_values[]: owning resource id, immutable value generation id, digest
 runner_projection_sha256
 ```
 
+Image authority is a closed union. Manual, pre-deploy, and failure runners carry the already verified digest-pinned Release image. A Blueprint post-deploy runner for a tag-authored candidate instead carries only a `procedure_service` authority naming the earlier sealed `ComposeApply` step, artifact, Service, candidate Release, and requested image reference. It never contains a fabricated digest. After that step, the Agent proves the selected owned candidate container through ContainerInspect and ImageInspect, submits one typed immutable execution-step result, and waits for Controller acknowledgement before `RunScript` can receive `start_authorized`.
+
+The Controller persists that result create-only by operation, plan hash, and step. Exact replay receives the same acknowledgement; different evidence is a state conflict and never replaces the first result. Reconnect and permitted retry reuse the acknowledged immutable reference, digest, and local image id instead of resolving the tag again. The resolved image becomes Release aggregate evidence without mutating the immutable Release intent.
+
 The Service, network-topology, applied-Environment, per-Network, and per-mount
 revision members above are represented on schema 1 by one closed
 `ScriptSourceAuthority` union. `existing` contains exactly one positive etcd
