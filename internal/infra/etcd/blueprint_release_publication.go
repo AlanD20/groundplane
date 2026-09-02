@@ -488,6 +488,7 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 				binding.EntryId,
 				binding.ValueGenerationId,
 			)
+			sourceDigest := ""
 			if binding.Secret {
 				key = secretEntryValueGenerationKey(
 					binding.EntryId,
@@ -503,6 +504,21 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 			if readErr != nil {
 				return nil, readErr
 			}
+			if binding.Secret {
+				generation, decodeErr := decodeSecretEntryValueGeneration(value.Value)
+				if decodeErr != nil {
+					return nil, decodeErr
+				}
+				sourceDigest = generation.CiphertextSHA256
+				clear(generation.Ciphertext)
+			} else {
+				generation, decodeErr := decodePlainEntryValueGeneration(value.Value)
+				if decodeErr != nil {
+					return nil, decodeErr
+				}
+				sourceDigest = generation.PlaintextSHA256
+				clear(generation.Content)
+			}
 			reference := base
 			reference.Source = ScriptSourceIdentity{
 				Kind:              ScriptSourceEntryValue,
@@ -510,7 +526,7 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 				ValueGenerationID: binding.ValueGenerationId,
 			}
 			reference.SourceModRevision = value.ModRevision
-			reference.SourceDigest = hex.EncodeToString(binding.Sha256)
+			reference.SourceDigest = sourceDigest
 			members = append(members, ScriptSourcePreparationMember{
 				Reference: reference,
 				Evidence: ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{

@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"time"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestBlueprintReleasePublicationCarriesPreparedSourceRootAndAbandonsExactly(t *testing.T) {
@@ -75,6 +78,122 @@ func TestBlueprintReleaseHookPublicationStoresExecutionAndSnapshot(t *testing.T)
 	snapshot, err := decodeEnvelope[storedScriptRunnerSnapshot](fragment.mutations[1].Value, "script-runner-snapshot")
 	if err != nil || snapshot.ExecutionID != record.ID || snapshot.SnapshotID != record.SnapshotID {
 		t.Fatalf("stored Blueprint runner snapshot = %#v, error = %v", snapshot, err)
+	}
+}
+
+func TestBlueprintReleaseSourceMembersUsesStoredSecretEntryCiphertextDigest(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	at := time.Date(2026, 9, 2, 13, 30, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)
+	serviceID := ids.NewAt(ids.KindService, at, 2)
+	releaseID := ids.NewAt(ids.KindDeployment, at, 3)
+	entryID := ids.NewAt(ids.KindEnvEntry, at, 4)
+	generationID := ids.NewAt(ids.KindConfig, at, 5)
+	revisionID := ids.NewAt(ids.KindTask, at, 6)
+	scriptID := ids.NewAt(ids.KindScript, at, 7)
+	operationID := ids.NewAt(ids.KindOperation, at, 8)
+	executionID := scriptSourceReferenceExecutionID(at, 9)
+	snapshotID := scriptSourceReferenceExecutionID(at, 10)
+	publicationID := scriptSourceReferenceExecutionID(at, 11)
+	plaintextDigest := sha256.Sum256([]byte("resolved secret plaintext"))
+	ciphertext := []byte("stored age ciphertext")
+	ciphertextDigest := sha256.Sum256(ciphertext)
+
+	generationValue, err := encodeSecretEntryValueGeneration(SecretEntryValueGeneration{
+		EnvironmentID: environmentID, EntryID: entryID, GenerationID: generationID,
+		EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
+		CiphertextSHA256: hex.EncodeToString(ciphertextDigest[:]), Ciphertext: ciphertext, CreatedAt: at,
+	})
+	if err != nil {
+		t.Fatalf("encodeSecretEntryValueGeneration() error = %v", err)
+	}
+	store := &releasePlanningTestStore{memoryHierarchyStore: newMemoryHierarchyStore()}
+	seed, err := store.Transact(ctx, nil, []Mutation{
+		{Type: MutationPut, Key: secretEntryValueGenerationKey(entryID, generationID), Value: generationValue},
+		{Type: MutationPut, Key: releaseIntentStagingKey(publicationID, releaseID), Value: []byte("release intent")},
+	})
+	if err != nil || !seed.Succeeded {
+		t.Fatalf("seed secret Entry generation = %#v, %v", seed, err)
+	}
+
+	service := ServiceRecord{
+		EnvironmentID: environmentID,
+		Desired:       core.Service{ID: serviceID},
+		Runtime: core.ServiceRuntime{
+			ServiceID: serviceID, RuntimeIntent: core.ServiceRuntimeIntentRunning,
+		},
+	}
+	serviceValue, err := EncodeServiceRuntimeRecordStorage(service)
+	if err != nil {
+		t.Fatalf("EncodeServiceRuntimeRecordStorage() error = %v", err)
+	}
+	serviceDigest := sha256.Sum256(serviceValue)
+	snapshot := &agentpb.ResolvedRunnerSnapshot{
+		SnapshotId: snapshotID, ScriptExecutionId: executionID,
+		EnvironmentId: environmentID, ServiceId: serviceID, ReleaseId: releaseID,
+		ServiceSource: &agentpb.ScriptSourceAuthority{Staged: &agentpb.ScriptStagedSourceAuthority{
+			EnvironmentId: environmentID, RevisionId: revisionID, RenderGeneration: 1,
+			FixedReadRevision: uint64(seed.Revision), CanonicalValueSha256: serviceDigest[:],
+		}},
+		EntryBindings: []*agentpb.ScriptRunnerEntryBinding{{
+			EntryId: entryID, ValueGenerationId: generationID,
+			Sha256: plaintextDigest[:], Secret: true,
+		}},
+	}
+	snapshotValue, err := proto.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("proto.Marshal(runner snapshot) error = %v", err)
+	}
+	execution := ScriptExecutionRecord{
+		ID: executionID, SnapshotID: snapshotID, OperationID: operationID,
+		ScriptID: scriptID, ScriptGeneration: 1, EnvironmentID: environmentID,
+		ServiceID: serviceID, ReleaseID: releaseID, Snapshot: snapshotValue,
+		BodySHA256: hex.EncodeToString(sha256.New().Sum(nil)),
+	}
+	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+		EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
+	})
+	members, err := (&ReleaseLedger{store: store}).BlueprintReleaseSourceMembers(
+		ctx,
+		VersionedReleaseManifest{
+			Record: ReleaseStagedManifest{PublicationID: publicationID, OperationID: operationID},
+			ReadRevision: seed.Revision,
+		},
+		[]ReleaseHookExecutionPublication{{
+			Sources: ScriptExecutionSources{
+				Revision: seed.Revision,
+				Service: Versioned[ServiceRecord]{Record: service},
+				Script: Versioned[ScriptRecord]{Record: ScriptRecord{
+					ScriptSetGeneration: revisionID,
+				}},
+				DesiredProjection: Versioned[EnvironmentComposeProjection]{Record: projection},
+			},
+			Execution: execution, SnapshotRevision: seed.Revision,
+		}},
+	)
+	if err != nil {
+		t.Fatalf("BlueprintReleaseSourceMembers() error = %v", err)
+	}
+	var entryMember ScriptSourcePreparationMember
+	for _, member := range members {
+		if member.Reference.Source.Kind == ScriptSourceEntryValue {
+			entryMember = member
+			break
+		}
+	}
+	if entryMember.Reference.SourceDigest != hex.EncodeToString(ciphertextDigest[:]) {
+		t.Fatalf("secret Entry source digest = %q, want ciphertext digest", entryMember.Reference.SourceDigest)
+	}
+	authority, err := newScriptSourceReferenceAuthority(store)
+	if err != nil {
+		t.Fatalf("newScriptSourceReferenceAuthority() error = %v", err)
+	}
+	if _, err = authority.Prepare(ctx, operationID, []ScriptSourcePreparationMember{entryMember}); err != nil {
+		t.Fatalf("Prepare(secret Entry source) error = %v", err)
+	}
+	if !bytes.Equal(snapshot.EntryBindings[0].Sha256, plaintextDigest[:]) {
+		t.Fatalf("runner binding digest = %x, want plaintext digest", snapshot.EntryBindings[0].Sha256)
 	}
 }
 
