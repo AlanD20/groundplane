@@ -87,6 +87,7 @@ type Server struct {
 	taskMutations           TaskRetrier
 	taskAborts              TaskAborter
 	controllerTaskWake      func()
+	agentTaskWake           func()
 	console                 fs.FS
 	tasks                   taskQueries
 	taskEventStreams        taskEventStreamOpener
@@ -151,6 +152,7 @@ type Options struct {
 	TaskMutations           TaskRetrier
 	TaskAborts              TaskAborter
 	ControllerTaskWake      func()
+	AgentTaskWake           func()
 	Console                 fs.FS
 	Tasks                   *etcd.TaskRepository
 	Logs                    *LogService
@@ -228,6 +230,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		taskMutations:           options.TaskMutations,
 		taskAborts:              options.TaskAborts,
 		controllerTaskWake:      options.ControllerTaskWake,
+		agentTaskWake:           options.AgentTaskWake,
 		console:                 options.Console,
 		tasks:                   options.Tasks,
 		logs:                    options.Logs,

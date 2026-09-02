@@ -6,11 +6,15 @@ import (
 	"testing"
 )
 
-func TestAcceptedMutationWakesControllerTaskRunner(t *testing.T) {
-	wakes := 0
+// Rationale: a public mutation that durably accepts Task work must immediately
+// hint both local and Agent executors without changing the response contract.
+func TestAcceptedMutationWakesControllerAndAgentTaskRunners(t *testing.T) {
+	controllerWakes := 0
+	agentWakes := 0
 	server := &Server{
 		Mux:                http.NewServeMux(),
-		controllerTaskWake: func() { wakes++ },
+		controllerTaskWake: func() { controllerWakes++ },
+		agentTaskWake:      func() { agentWakes++ },
 		routePolicies:      make(map[string]routePolicy),
 	}
 	server.Mux.HandleFunc("POST /api/v1/actions", func(w http.ResponseWriter, _ *http.Request) {
@@ -20,16 +24,23 @@ func TestAcceptedMutationWakesControllerTaskRunner(t *testing.T) {
 	request.Header.Set(idempotencyKeyHeader, "task-wake-test-0001")
 	response := httptest.NewRecorder()
 	server.serveAPIRequest(response, request)
-	if response.Code != http.StatusAccepted || wakes != 1 {
-		t.Fatalf("accepted response/wakes = %d/%d, want %d/1", response.Code, wakes, http.StatusAccepted)
+	if response.Code != http.StatusAccepted || controllerWakes != 1 || agentWakes != 1 {
+		t.Fatalf(
+			"accepted response/wakes = %d/%d/%d, want %d/1/1",
+			response.Code, controllerWakes, agentWakes, http.StatusAccepted,
+		)
 	}
 }
 
-func TestNonAcceptedMutationDoesNotWakeControllerTaskRunner(t *testing.T) {
-	wakes := 0
+// Rationale: executor wakeups are reserved for accepted Task publications and
+// must not run for synchronous mutations without queued work.
+func TestNonAcceptedMutationDoesNotWakeTaskRunners(t *testing.T) {
+	controllerWakes := 0
+	agentWakes := 0
 	server := &Server{
 		Mux:                http.NewServeMux(),
-		controllerTaskWake: func() { wakes++ },
+		controllerTaskWake: func() { controllerWakes++ },
+		agentTaskWake:      func() { agentWakes++ },
 		routePolicies:      make(map[string]routePolicy),
 	}
 	server.Mux.HandleFunc("POST /api/v1/actions", func(w http.ResponseWriter, _ *http.Request) {
@@ -39,7 +50,10 @@ func TestNonAcceptedMutationDoesNotWakeControllerTaskRunner(t *testing.T) {
 	request.Header.Set(idempotencyKeyHeader, "task-wake-test-0002")
 	response := httptest.NewRecorder()
 	server.serveAPIRequest(response, request)
-	if response.Code != http.StatusNoContent || wakes != 0 {
-		t.Fatalf("non-accepted response/wakes = %d/%d, want %d/0", response.Code, wakes, http.StatusNoContent)
+	if response.Code != http.StatusNoContent || controllerWakes != 0 || agentWakes != 0 {
+		t.Fatalf(
+			"non-accepted response/wakes = %d/%d/%d, want %d/0/0",
+			response.Code, controllerWakes, agentWakes, http.StatusNoContent,
+		)
 	}
 }

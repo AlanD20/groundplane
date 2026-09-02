@@ -27,14 +27,19 @@ func (s *Server) serveAPIRequest(w http.ResponseWriter, r *http.Request) {
 	) {
 		return
 	}
-	if s.controllerTaskWake == nil || !mayAcceptTask(r.Method) {
+	if (s.controllerTaskWake == nil && s.agentTaskWake == nil) || !mayAcceptTask(r.Method) {
 		s.Mux.ServeHTTP(w, r)
 		return
 	}
 	response := &acceptedTaskResponseWriter{ResponseWriter: w}
 	s.Mux.ServeHTTP(response, r)
 	if response.status == http.StatusAccepted {
-		s.controllerTaskWake()
+		if s.controllerTaskWake != nil {
+			s.controllerTaskWake()
+		}
+		if s.agentTaskWake != nil {
+			s.agentTaskWake()
+		}
 	}
 }
 

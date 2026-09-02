@@ -541,3 +541,14 @@ identified by the closed Compose-procedure marker and reacquires its exact
 candidate address; ordinary Component retries continue to require an applied
 projection. Focused persistence regressions pass; reference-host Blueprint
 acceptance remains pending.
+
+## Immediate Agent Task wakeup (2026-09-02)
+
+Accepted Controller mutations now send a coalescing wake to connected Agents
+after durable acceptance, allowing queued Tasks to use the last valid Ready
+capacity without waiting for another poll. A pending Agent configuration change
+invalidates old Ready capacity before drain completes. Assignment lifecycle
+fencing closes new admission, waits outside the global Registry lock, and is
+bounded by the caller context even when an admitted send is uncooperative.
+Transient Script, Secret, and Entry bytes are cleared even when fenced
+admission rejects the resolved assignment. Focused race proof passes.

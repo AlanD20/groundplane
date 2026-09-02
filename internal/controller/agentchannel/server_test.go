@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -51,9 +52,81 @@ type fakeTaskStore struct {
 	events          []etcd.TaskEventInput
 }
 
+type wakeTaskStore struct {
+	fakeTaskStore
+	mu    sync.Mutex
+	claim *etcd.TaskAssignment
+	calls int
+}
+
+func (store *wakeTaskStore) ListAgentAssignments(
+	context.Context,
+	string,
+	uint64,
+	int32,
+) ([]etcd.TaskAssignment, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	return append([]etcd.TaskAssignment(nil), store.assignments...), nil
+}
+
+func (store *wakeTaskStore) ClaimNextTask(
+	context.Context,
+	string,
+	uint64,
+	time.Time,
+) (etcd.TaskAssignment, bool, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.claim == nil {
+		return etcd.TaskAssignment{}, false, nil
+	}
+	store.calls++
+	claim := *store.claim
+	store.claim = nil
+	return claim, true, nil
+}
+
+func (store *wakeTaskStore) enqueue(claim etcd.TaskAssignment) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.claim = &claim
+}
+
+func (store *wakeTaskStore) setAssignments(assignments []etcd.TaskAssignment) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.assignments = append([]etcd.TaskAssignment(nil), assignments...)
+}
+
+func (store *wakeTaskStore) claimCalls() int {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	return store.calls
+}
+
 type fakePlanResolver struct {
 	plan *agentpb.ExecutionPlan
 	err  error
+}
+
+type blockingPlanResolver struct {
+	plan    *agentpb.ExecutionPlan
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (resolver *blockingPlanResolver) ResolveExecutionPlan(
+	ctx context.Context,
+	_ etcd.TaskRecord,
+) (*agentpb.ExecutionPlan, error) {
+	close(resolver.entered)
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-resolver.release:
+		return resolver.plan, nil
+	}
 }
 
 // Rationale: the Agent channel must preserve every closed Task/plan operation
@@ -840,6 +913,344 @@ func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
 		tasks.events[0].State != etcd.TaskEventStateCompleted ||
 		!bytes.Equal(tasks.events[0].Payload, []byte(`{}`)) {
 		t.Fatalf("persisted Task events = %#v", tasks.events)
+	}
+}
+
+// Rationale: task publication must wake an already-ready Agent session rather
+// than waiting for the client's next pull tick. This uses a one-minute pull
+// interval and sends exactly one Ready, so assignment delivery is bounded by
+// the Registry wake path.
+func TestConnectWakeDispatchesPublishedTaskWithoutAnotherReady(t *testing.T) {
+	now := testTime()
+	startedAt := now
+	taskID := ids.NewAt(ids.KindTask, now, 270)
+	task := etcd.TaskRecord{
+		ID: taskID, OperationID: ids.NewAt(ids.KindOperation, now, 271),
+		PlanID:           ids.NewAt(ids.KindPlan, now, 272),
+		RenderGeneration: 7, Type: etcd.TaskDeploy,
+		Target:         ids.NewAt(ids.KindService, now, 273),
+		Steps:          []etcd.TaskStepRecord{{ID: ids.NewAt(ids.KindStep, now, 274)}},
+		TimeoutSeconds: 120, Status: etcd.TaskStatusRunning,
+		NextEventSequence: 1, CreatedAt: now, StartedAt: &startedAt,
+	}
+	plan := testExecutionPlan(t, task)
+	task.PlanHash = hex.EncodeToString(plan.PlanHash)
+	assignmentID := ids.NewAt(ids.KindAssignment, now, 275)
+	claim := etcd.TaskAssignment{
+		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
+			AssignmentID: assignmentID, TaskID: taskID, Executor: etcd.TaskExecutorAgent,
+			AgentID: testAgentID, AgentGeneration: 1, AssignedAt: now,
+		}},
+		Task: etcd.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5},
+	}
+	authenticator := authorizedAuthenticator()
+	authenticator.authorization.Config.PullIntervalSeconds = 60
+	registry := NewRegistry()
+	tasks := &wakeTaskStore{fakeTaskStore: fakeTaskStore{
+		tasks: map[string]etcd.Versioned[etcd.TaskRecord]{taskID: claim.Task},
+	}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stream := newLiveStream(ctx)
+	stream.received <- authenticateMessage(testAgentID, testToken(10))
+	server := New(authenticator, registry, tasks, &fakePlanResolver{plan: plan})
+	server.now = func() time.Time { return now }
+	connectResult := make(chan error, 1)
+	go func() { connectResult <- server.Connect(stream) }()
+
+	select {
+	case message := <-stream.sent:
+		if message.GetConfigUpdate() == nil {
+			t.Fatalf("first Controller message = %#v, want ConfigUpdate", message)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Controller did not send initial config")
+	}
+	stream.received <- readyMessage(1)
+	readyDeadline := time.NewTimer(time.Second)
+	defer readyDeadline.Stop()
+	for {
+		snapshot, ok := registry.Snapshot(testAgentID)
+		if ok && snapshot.Capacity == 1 && !snapshot.LastReady.IsZero() {
+			break
+		}
+		select {
+		case <-readyDeadline.C:
+			t.Fatal("Controller did not record initial Ready")
+		case <-time.After(time.Millisecond):
+		}
+	}
+
+	publicationAt := time.Now()
+	tasks.enqueue(claim)
+	registry.WakeTaskDispatch()
+	select {
+	case message := <-stream.sent:
+		assignment := message.GetTaskAssignment()
+		if assignment == nil || assignment.TaskId != taskID || assignment.AssignmentId != assignmentID {
+			t.Fatalf("TaskAssignment = %#v", assignment)
+		}
+		if elapsed := time.Since(publicationAt); elapsed >= time.Second {
+			t.Fatalf("wake dispatch latency = %s, want < 1s", elapsed)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("published task was not dispatched before pull interval")
+	}
+
+	secondClaim := claim
+	secondClaim.Assignment.Record.AssignmentID = ids.NewAt(ids.KindAssignment, now, 276)
+	tasks.setAssignments([]etcd.TaskAssignment{claim})
+	tasks.enqueue(secondClaim)
+	registry.WakeTaskDispatch()
+	select {
+	case message := <-stream.sent:
+		t.Fatalf("repeated wake delivered beyond capacity: %#v", message)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if calls := tasks.claimCalls(); calls != 1 {
+		t.Fatalf("ClaimNextTask calls after repeated wake = %d, want 1", calls)
+	}
+
+	cancel()
+	if err := <-connectResult; err != nil {
+		t.Fatalf("Connect() cancellation error = %v", err)
+	}
+}
+
+// Rationale: a ConfigUpdate replaces the worker contract. A queued task wake
+// must not reuse capacity reported under the old contract before a fresh Ready.
+func TestConnectWakeRequiresFreshReadyAfterConfigUpdate(t *testing.T) {
+	now := testTime()
+	startedAt := now
+	taskID := ids.NewAt(ids.KindTask, now, 280)
+	task := etcd.TaskRecord{
+		ID: taskID, OperationID: ids.NewAt(ids.KindOperation, now, 281),
+		PlanID: ids.NewAt(ids.KindPlan, now, 282), RenderGeneration: 7,
+		Type: etcd.TaskDeploy, Target: ids.NewAt(ids.KindService, now, 283),
+		Steps:          []etcd.TaskStepRecord{{ID: ids.NewAt(ids.KindStep, now, 284)}},
+		TimeoutSeconds: 120, Status: etcd.TaskStatusRunning,
+		NextEventSequence: 1, CreatedAt: now, StartedAt: &startedAt,
+	}
+	plan := testExecutionPlan(t, task)
+	task.PlanHash = hex.EncodeToString(plan.PlanHash)
+	claim := etcd.TaskAssignment{
+		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
+			AssignmentID: ids.NewAt(ids.KindAssignment, now, 285), TaskID: taskID,
+			Executor: etcd.TaskExecutorAgent, AgentID: testAgentID, AgentGeneration: 1,
+			AssignedAt: now,
+		}},
+		Task: etcd.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5},
+	}
+	authenticator := authorizedAuthenticator()
+	authenticator.authorization.Config.MaxConcurrentTasks = 2
+	registry := NewRegistry()
+	tasks := &wakeTaskStore{fakeTaskStore: fakeTaskStore{
+		tasks: map[string]etcd.Versioned[etcd.TaskRecord]{taskID: claim.Task},
+	}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stream := newLiveStream(ctx)
+	stream.received <- authenticateMessage(testAgentID, testToken(11))
+	server := New(authenticator, registry, tasks, &fakePlanResolver{plan: plan})
+	server.now = func() time.Time { return now }
+	connectResult := make(chan error, 1)
+	go func() { connectResult <- server.Connect(stream) }()
+	select {
+	case message := <-stream.sent:
+		if message.GetConfigUpdate() == nil {
+			t.Fatalf("first Controller message = %#v, want ConfigUpdate", message)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Controller did not send initial config")
+	}
+	stream.received <- readyMessage(1)
+	readyDeadline := time.NewTimer(time.Second)
+	for {
+		snapshot, ok := registry.Snapshot(testAgentID)
+		if ok && snapshot.Capacity == 1 && !snapshot.LastReady.IsZero() {
+			break
+		}
+		select {
+		case <-readyDeadline.C:
+			t.Fatal("Controller did not record initial Ready")
+		case <-time.After(time.Millisecond):
+		}
+	}
+	readyDeadline.Stop()
+
+	nextConfig := proto.Clone(authenticator.authorization.Config).(*agentpb.AgentConfig)
+	nextConfig.PullIntervalSeconds++
+	authenticator.configuration = nextConfig
+	stream.received <- readyMessage(1)
+	pendingDeadline := time.NewTimer(time.Second)
+	for {
+		snapshot, ok := registry.Snapshot(testAgentID)
+		if ok && snapshot.LastReady.IsZero() && snapshot.Capacity == 0 {
+			break
+		}
+		select {
+		case <-pendingDeadline.C:
+			t.Fatalf("partial-capacity config mismatch retained readiness: %+v", snapshot)
+		case <-time.After(time.Millisecond):
+		}
+	}
+	pendingDeadline.Stop()
+
+	tasks.enqueue(claim)
+	registry.WakeTaskDispatch()
+	select {
+	case message := <-stream.sent:
+		t.Fatalf("config-pending wake delivered assignment: %#v", message)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if calls := tasks.claimCalls(); calls != 0 {
+		t.Fatalf("ClaimNextTask calls while config replacement pending = %d, want 0", calls)
+	}
+
+	stream.received <- readyMessage(authenticator.authorization.Config.MaxConcurrentTasks)
+	select {
+	case message := <-stream.sent:
+		if message.GetConfigUpdate() == nil {
+			t.Fatalf("replacement Controller message = %#v, want ConfigUpdate", message)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Controller did not send replacement config")
+	}
+	snapshot, ok := registry.Snapshot(testAgentID)
+	if !ok || !snapshot.LastReady.IsZero() || snapshot.Capacity != 0 {
+		t.Fatalf("post-config readiness snapshot = %+v, found = %v", snapshot, ok)
+	}
+
+	registry.WakeTaskDispatch()
+	select {
+	case message := <-stream.sent:
+		t.Fatalf("stale wake delivered assignment: %#v", message)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if calls := tasks.claimCalls(); calls != 0 {
+		t.Fatalf("ClaimNextTask calls before fresh Ready = %d, want 0", calls)
+	}
+
+	stream.received <- readyMessage(1)
+	select {
+	case message := <-stream.sent:
+		if assignment := message.GetTaskAssignment(); assignment == nil || assignment.TaskId != taskID {
+			t.Fatalf("fresh Ready assignment = %#v", assignment)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("fresh Ready did not dispatch queued task")
+	}
+	cancel()
+	if err := <-connectResult; err != nil {
+		t.Fatalf("Connect() cancellation error = %v", err)
+	}
+}
+
+// Rationale: assignment resolution owns transient Script, Secret, and Entry
+// plaintext even when a lifecycle fence rejects send admission.
+func TestConnectDispatchRejectedAssignmentClearsScriptArtifacts(t *testing.T) {
+	registry := NewRegistry()
+	session, err := registry.Open(context.Background(), testAgentID, 1)
+	if err != nil {
+		t.Fatalf("open session: %v", err)
+	}
+	defer session.Close()
+	if err := registry.StopAssignments(context.Background(), testAgentID, 1); err != nil {
+		t.Fatalf("stop assignments: %v", err)
+	}
+
+	body := []byte("transient script")
+	secret := []byte("transient secret")
+	entry := []byte("transient entry")
+	artifacts := &agentpb.ScriptAssignmentArtifacts{
+		Bodies:  []*agentpb.ScriptBodyArtifact{{Body: body}},
+		Secrets: []*agentpb.ScriptSecretArtifact{{Value: secret}},
+		Entries: []*agentpb.ScriptEntryArtifact{{Value: entry}},
+	}
+	assignment := &agentpb.TaskAssignment{ScriptArtifacts: artifacts}
+	var stream agentpb.AgentChannel_ConnectServer
+	sent, err := (&Server{}).dispatchResolvedTaskAssignment(
+		session,
+		stream,
+		etcd.TaskAssignment{},
+		assignment,
+	)
+	if err != nil || sent {
+		t.Fatalf("rejected dispatch = (%v, %v), want (false, nil)", sent, err)
+	}
+	for name, value := range map[string][]byte{"body": body, "secret": secret, "entry": entry} {
+		if !bytes.Equal(value, make([]byte, len(value))) {
+			t.Fatalf("%s plaintext was not cleared: %q", name, value)
+		}
+	}
+	if artifacts.Bodies[0].Body != nil || artifacts.Secrets[0].Value != nil ||
+		artifacts.Entries[0].Value != nil {
+		t.Fatal("cleared assignment retained plaintext slices")
+	}
+}
+
+// Rationale: revocation may race expensive plan resolution. The old
+// generation must be fenced before the resolved assignment can enter Send.
+func TestConnectRevocationRacingPlanResolutionDoesNotSendAssignment(t *testing.T) {
+	now := testTime()
+	startedAt := now
+	taskID := ids.NewAt(ids.KindTask, now, 290)
+	task := etcd.TaskRecord{
+		ID: taskID, OperationID: ids.NewAt(ids.KindOperation, now, 291),
+		PlanID: ids.NewAt(ids.KindPlan, now, 292), RenderGeneration: 7,
+		Type: etcd.TaskDeploy, Target: ids.NewAt(ids.KindService, now, 293),
+		Steps:          []etcd.TaskStepRecord{{ID: ids.NewAt(ids.KindStep, now, 294)}},
+		TimeoutSeconds: 120, Status: etcd.TaskStatusRunning,
+		NextEventSequence: 1, CreatedAt: now, StartedAt: &startedAt,
+	}
+	plan := testExecutionPlan(t, task)
+	task.PlanHash = hex.EncodeToString(plan.PlanHash)
+	claim := etcd.TaskAssignment{
+		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
+			AssignmentID: ids.NewAt(ids.KindAssignment, now, 295), TaskID: taskID,
+			Executor: etcd.TaskExecutorAgent, AgentID: testAgentID, AgentGeneration: 1,
+			AssignedAt: now,
+		}},
+		Task: etcd.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5},
+	}
+	tasks := &fakeTaskStore{claims: []etcd.TaskAssignment{claim}}
+	resolver := &blockingPlanResolver{
+		plan: plan, entered: make(chan struct{}), release: make(chan struct{}),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	registry := NewRegistry()
+	stream := newLiveStream(ctx)
+	stream.received <- authenticateMessage(testAgentID, testToken(12))
+	connectResult := make(chan error, 1)
+	go func() {
+		connectResult <- New(authorizedAuthenticator(), registry, tasks, resolver).Connect(stream)
+	}()
+	select {
+	case message := <-stream.sent:
+		if message.GetConfigUpdate() == nil {
+			t.Fatalf("first Controller message = %#v, want ConfigUpdate", message)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Controller did not send initial config")
+	}
+	stream.received <- readyMessage(1)
+	select {
+	case <-resolver.entered:
+	case <-time.After(time.Second):
+		t.Fatal("plan resolution did not begin")
+	}
+	if err := registry.Revoke(context.Background(), testAgentID, 1); err != nil {
+		t.Fatalf("Revoke() error = %v", err)
+	}
+	close(resolver.release)
+	if err := <-connectResult; err != nil {
+		t.Fatalf("Connect() after revocation = %v", err)
+	}
+	select {
+	case message := <-stream.sent:
+		t.Fatalf("revoked session delivered assignment: %#v", message)
+	default:
 	}
 }
 

@@ -380,6 +380,25 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				return err
 			}
 			command.result <- nil
+		case <-session.taskDispatchWake():
+			capacity, ready := session.dispatchCapacity()
+			if !ready || capacity == 0 {
+				continue
+			}
+			if s.tasks == nil {
+				return status.Error(codes.Internal, "agent task store is not configured")
+			}
+			if err := s.dispatchReady(
+				stream,
+				session,
+				authenticate.AgentId,
+				authorization,
+				capacity,
+				delivered,
+				quarantined,
+			); err != nil {
+				return taskStoreStatus(err)
+			}
 		case result := <-received:
 			if result.err != nil {
 				if errors.Is(result.err, io.EOF) || errors.Is(result.err, context.Canceled) {
@@ -452,6 +471,9 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					// A config replacement drains under the old worker limit. The
 					// Agent applies it only when every reservation has completed,
 					// then advertises fresh capacity before dispatch resumes.
+					if !session.invalidateReady() {
+						return status.Error(codes.FailedPrecondition, "agent session is not current")
+					}
 					if ready.Capacity != authorization.Config.MaxConcurrentTasks {
 						continue
 					}
@@ -690,23 +712,23 @@ func (s *Server) dispatchReady(
 		if delivered[assignment.Task.Record.ID] == assignment.Assignment.Record.AssignmentID {
 			continue
 		}
-		if remaining == 0 {
-			return nil
-		}
 		if quarantined[assignment.Task.Record.ID] == assignment.Assignment.Record.AssignmentID {
-			remaining--
 			continue
 		}
-		sent, err := s.dispatchTaskAssignment(stream, assignment)
+		if remaining == 0 {
+			break
+		}
+		sent, err := s.dispatchTaskAssignment(session, stream, assignment)
 		if err != nil {
 			return err
 		}
 		if sent {
+			remaining--
+			session.recordDispatchCapacity(remaining)
 			delivered[assignment.Task.Record.ID] = assignment.Assignment.Record.AssignmentID
 		} else {
 			quarantined[assignment.Task.Record.ID] = assignment.Assignment.Record.AssignmentID
 		}
-		remaining--
 	}
 	for remaining > 0 {
 		if !session.AssignmentsAllowed() {
@@ -734,17 +756,22 @@ func (s *Server) dispatchReady(
 		if !session.AssignmentsAllowed() {
 			return nil
 		}
-		sent, err := s.dispatchTaskAssignment(stream, assignment)
+		sent, err := s.dispatchTaskAssignment(session, stream, assignment)
 		if err != nil {
 			return err
 		}
+		if !session.AssignmentsAllowed() {
+			return nil
+		}
 		if sent {
+			remaining--
+			session.recordDispatchCapacity(remaining)
 			delivered[assignment.Task.Record.ID] = assignment.Assignment.Record.AssignmentID
 		} else {
 			quarantined[assignment.Task.Record.ID] = assignment.Assignment.Record.AssignmentID
 		}
-		remaining--
 	}
+	session.recordDispatchCapacity(remaining)
 	return nil
 }
 
@@ -773,10 +800,12 @@ func (s *Server) sendTaskAssignment(
 	if err != nil {
 		return err
 	}
+	defer clearScriptAssignmentArtifacts(assignment.GetScriptArtifacts())
 	return s.sendResolvedTaskAssignment(stream, claim, assignment)
 }
 
 func (s *Server) dispatchTaskAssignment(
+	session *Session,
 	stream agentpb.AgentChannel_ConnectServer,
 	claim etcd.TaskAssignment,
 ) (bool, error) {
@@ -790,10 +819,19 @@ func (s *Server) dispatchTaskAssignment(
 		)
 		return false, nil
 	}
-	if err := s.sendResolvedTaskAssignment(stream, claim, assignment); err != nil {
-		return false, err
-	}
-	return true, nil
+	return s.dispatchResolvedTaskAssignment(session, stream, claim, assignment)
+}
+
+func (s *Server) dispatchResolvedTaskAssignment(
+	session *Session,
+	stream agentpb.AgentChannel_ConnectServer,
+	claim etcd.TaskAssignment,
+	assignment *agentpb.TaskAssignment,
+) (bool, error) {
+	defer clearScriptAssignmentArtifacts(assignment.GetScriptArtifacts())
+	return session.sendAssignment(func() error {
+		return s.sendResolvedTaskAssignment(stream, claim, assignment)
+	})
 }
 
 func (s *Server) sendResolvedTaskAssignment(
@@ -801,7 +839,6 @@ func (s *Server) sendResolvedTaskAssignment(
 	claim etcd.TaskAssignment,
 	assignment *agentpb.TaskAssignment,
 ) error {
-	defer clearScriptAssignmentArtifacts(assignment.GetScriptArtifacts())
 	if err := stream.Send(&agentpb.ControllerMessage{
 		Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: assignment},
 	}); err != nil {

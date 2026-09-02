@@ -55,6 +55,10 @@ type sessionState struct {
 	capacity           int32
 	version            string
 	cancel             context.CancelFunc
+	dispatchWake       chan struct{}
+	sendPermit         chan struct{}
+	sendFence          chan struct{}
+	sendFenced         bool
 	done               <-chan struct{}
 	aborts             chan taskAbortCommand
 	logCommands        chan logCommand
@@ -116,6 +120,44 @@ func NewRegistry() *Registry {
 	}
 }
 
+// fenceAssignmentSendsLocked closes assignment admission for one session.
+// The caller holds Registry.mu.
+func (state *sessionState) fenceAssignmentSendsLocked() {
+	if state.sendFenced {
+		return
+	}
+	state.sendFenced = true
+	close(state.sendFence)
+}
+
+func drainAssignmentSend(ctx context.Context, state *sessionState) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-state.sendPermit:
+	}
+	state.sendPermit <- struct{}{}
+	return ctx.Err()
+}
+
+// WakeTaskDispatch notifies every connected Agent that new work may be
+// available. The signal is coalescing; the queue and the last Ready capacity
+// remain authoritative when the session handles it.
+func (r *Registry) WakeTaskDispatch() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, state := range r.agents {
+		if !state.online || state.revoked {
+			continue
+		}
+		select {
+		case state.dispatchWake <- struct{}{}:
+		default:
+		}
+	}
+}
+
 // Open registers an authenticated session. An equal or newer generation
 // replaces and fences the previous connection; an older generation is rejected.
 func (r *Registry) Open(parent context.Context, agentID string, generation uint64) (*Session, error) {
@@ -132,55 +174,164 @@ func (r *Registry) Open(parent context.Context, agentID string, generation uint6
 		return nil, errs.New(errs.KindValidationFailed, "agent generation is required")
 	}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if err := parent.Err(); err != nil {
-		return nil, err
-	}
-
-	lifecycle := r.lifecycle[agentID]
-	if lifecycle != nil && generation <= lifecycle.revokedThrough {
-		return nil, errs.New(errs.KindStateConflict, "agent session generation is revoked")
-	}
-	current := r.agents[agentID]
-	if current != nil {
-		if generation < current.generation {
-			return nil, errs.New(errs.KindStateConflict, "agent session generation is stale")
+	for {
+		r.mu.Lock()
+		if err := parent.Err(); err != nil {
+			r.mu.Unlock()
+			return nil, err
 		}
-		if generation == current.generation && current.revoked {
+		lifecycle := r.lifecycle[agentID]
+		if lifecycle != nil && generation <= lifecycle.revokedThrough {
+			r.mu.Unlock()
 			return nil, errs.New(errs.KindStateConflict, "agent session generation is revoked")
 		}
-		if current.online {
-			current.cancel()
+		current := r.agents[agentID]
+		if current != nil {
+			if generation < current.generation {
+				r.mu.Unlock()
+				return nil, errs.New(errs.KindStateConflict, "agent session generation is stale")
+			}
+			if generation == current.generation && current.revoked {
+				r.mu.Unlock()
+				return nil, errs.New(errs.KindStateConflict, "agent session generation is revoked")
+			}
+			current.assignmentsStopped = true
+			current.fenceAssignmentSendsLocked()
+			if current.online {
+				current.cancel()
+			}
 		}
-	}
+		r.mu.Unlock()
 
-	r.nextFence++
-	ctx, cancel := context.WithCancel(parent)
-	state := &sessionState{
-		generation:         generation,
-		fence:              r.nextFence,
-		online:             true,
-		assignmentsStopped: lifecycle != nil && generation <= lifecycle.quiescedThrough,
-		cancel:             cancel,
-		done:               ctx.Done(),
-		aborts:             make(chan taskAbortCommand),
-		logCommands:        make(chan logCommand),
-		offline:            make(chan struct{}),
-	}
-	r.agents[agentID] = state
+		if current != nil {
+			if err := drainAssignmentSend(parent, current); err != nil {
+				return nil, err
+			}
+		}
 
-	return &Session{
-		registry: r,
-		agentID:  agentID,
-		state:    state,
-		ctx:      ctx,
-	}, nil
+		r.mu.Lock()
+		if err := parent.Err(); err != nil {
+			r.mu.Unlock()
+			return nil, err
+		}
+		if r.agents[agentID] != current {
+			r.mu.Unlock()
+			continue
+		}
+		lifecycle = r.lifecycle[agentID]
+		if lifecycle != nil && generation <= lifecycle.revokedThrough {
+			r.mu.Unlock()
+			return nil, errs.New(errs.KindStateConflict, "agent session generation is revoked")
+		}
+
+		r.nextFence++
+		ctx, cancel := context.WithCancel(parent)
+		sendPermit := make(chan struct{}, 1)
+		sendPermit <- struct{}{}
+		state := &sessionState{
+			generation:         generation,
+			fence:              r.nextFence,
+			online:             true,
+			assignmentsStopped: lifecycle != nil && generation <= lifecycle.quiescedThrough,
+			cancel:             cancel,
+			dispatchWake:       make(chan struct{}, 1),
+			sendPermit:         sendPermit,
+			sendFence:          make(chan struct{}),
+			done:               ctx.Done(),
+			aborts:             make(chan taskAbortCommand),
+			logCommands:        make(chan logCommand),
+			offline:            make(chan struct{}),
+		}
+		if state.assignmentsStopped {
+			state.fenceAssignmentSendsLocked()
+		}
+		r.agents[agentID] = state
+		r.mu.Unlock()
+
+		return &Session{
+			registry: r,
+			agentID:  agentID,
+			state:    state,
+			ctx:      ctx,
+		}, nil
+	}
 }
 
 // Done closes when the session is replaced, revoked, or its parent is canceled.
 func (s *Session) Done() <-chan struct{} {
 	return s.ctx.Done()
+}
+
+func (s *Session) taskDispatchWake() <-chan struct{} {
+	return s.state.dispatchWake
+}
+
+func (s *Session) dispatchCapacity() (int32, bool) {
+	s.registry.mu.Lock()
+	defer s.registry.mu.Unlock()
+
+	current := s.registry.agents[s.agentID]
+	if current != s.state || current.fence != s.state.fence || !current.online || current.revoked ||
+		!current.readyReported {
+		return 0, false
+	}
+	return current.capacity, true
+}
+
+func (s *Session) recordDispatchCapacity(capacity int32) bool {
+	if capacity < 0 {
+		return false
+	}
+	s.registry.mu.Lock()
+	defer s.registry.mu.Unlock()
+
+	current := s.registry.agents[s.agentID]
+	if current != s.state || current.fence != s.state.fence || !current.online || current.revoked ||
+		!current.readyReported {
+		return false
+	}
+	current.capacity = capacity
+	return true
+}
+
+func (s *Session) invalidateReady() bool {
+	s.registry.mu.Lock()
+	defer s.registry.mu.Unlock()
+
+	current := s.registry.agents[s.agentID]
+	if current != s.state || current.fence != s.state.fence || !current.online || current.revoked {
+		return false
+	}
+	current.readyReported = false
+	current.lastReady = time.Time{}
+	current.capacity = 0
+	current.version = ""
+	return true
+}
+
+// sendAssignment admits one complete assignment payload only while the
+// session owns its current generation. Fencing takes the registry lock before
+// this gate, so once fencing completes no new assignment send can begin.
+func (s *Session) sendAssignment(send func() error) (bool, error) {
+	select {
+	case <-s.ctx.Done():
+		return false, nil
+	case <-s.state.sendFence:
+		return false, nil
+	case <-s.state.sendPermit:
+	}
+	defer func() { s.state.sendPermit <- struct{}{} }()
+
+	s.registry.mu.Lock()
+	current := s.registry.agents[s.agentID]
+	if current != s.state || current.fence != s.state.fence || !current.online ||
+		current.assignmentsStopped || current.revoked {
+		s.registry.mu.Unlock()
+		return false, nil
+	}
+	s.registry.mu.Unlock()
+
+	return true, send()
 }
 
 // RecordReady records the most recent reported free capacity and binary
@@ -374,14 +525,23 @@ func (s *Session) Close() {
 
 		s.registry.mu.Lock()
 		if s.registry.agents[s.agentID] == s.state {
+			s.state.assignmentsStopped = true
+			s.state.fenceAssignmentSendsLocked()
 			s.state.online = false
+			s.registry.failTaskTerminalsLocked(
+				s.agentID,
+				s.state.generation,
+				errs.New(errs.KindStateConflict, "Agent session ended before Task terminal acknowledgement"),
+			)
+			s.registry.failLogsLocked(s.state, errs.New(errs.KindStorageUnavailable, "Agent log session ended"))
+		} else {
+			s.registry.failTaskTerminalsLocked(
+				s.agentID,
+				s.state.generation,
+				errs.New(errs.KindStateConflict, "Agent session ended before Task terminal acknowledgement"),
+			)
+			s.registry.failLogsLocked(s.state, errs.New(errs.KindStorageUnavailable, "Agent log session ended"))
 		}
-		s.registry.failTaskTerminalsLocked(
-			s.agentID,
-			s.state.generation,
-			errs.New(errs.KindStateConflict, "Agent session ended before Task terminal acknowledgement"),
-		)
-		s.registry.failLogsLocked(s.state, errs.New(errs.KindStorageUnavailable, "Agent log session ended"))
 		s.registry.mu.Unlock()
 
 		s.state.offlineOnce.Do(func() { close(s.state.offline) })
@@ -424,21 +584,23 @@ func (r *Registry) StopAssignments(ctx context.Context, agentID string, generati
 		return err
 	}
 	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	lifecycle := r.lifecycleFenceLocked(agentID)
 	if generation > lifecycle.quiescedThrough {
 		lifecycle.quiescedThrough = generation
 	}
 	state, ok := r.agents[agentID]
 	if !ok {
+		r.mu.Unlock()
 		return nil
 	}
 	if state.generation > generation {
+		r.mu.Unlock()
 		return generationConflict()
 	}
 	state.assignmentsStopped = true
-	return nil
+	state.fenceAssignmentSendsLocked()
+	r.mu.Unlock()
+	return drainAssignmentSend(ctx, state)
 }
 
 // FenceThrough removes all assignment and channel authority at or below one
@@ -463,16 +625,20 @@ func (r *Registry) FenceThrough(ctx context.Context, agentID string, generation 
 		return nil
 	}
 	state.assignmentsStopped = true
+	state.fenceAssignmentSendsLocked()
 	if !state.revoked {
 		state.revoked = true
 		state.cancel()
 	}
-	if !state.online {
-		r.mu.Unlock()
-		return nil
-	}
+	online := state.online
 	offline := state.offline
 	r.mu.Unlock()
+	if err := drainAssignmentSend(ctx, state); err != nil {
+		return err
+	}
+	if !online {
+		return nil
+	}
 
 	select {
 	case <-ctx.Done():
@@ -490,8 +656,6 @@ func (r *Registry) Revoke(ctx context.Context, agentID string, generation uint64
 	}
 
 	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	lifecycle := r.lifecycleFenceLocked(agentID)
 	if generation > lifecycle.quiescedThrough {
 		lifecycle.quiescedThrough = generation
@@ -501,18 +665,19 @@ func (r *Registry) Revoke(ctx context.Context, agentID string, generation uint64
 	}
 	state, ok := r.agents[agentID]
 	if !ok {
+		r.mu.Unlock()
 		return nil
 	}
 	if state.generation > generation {
+		r.mu.Unlock()
 		return generationConflict()
 	}
-	if state.revoked {
-		return nil
-	}
 	state.assignmentsStopped = true
+	state.fenceAssignmentSendsLocked()
 	state.revoked = true
 	state.cancel()
-	return nil
+	r.mu.Unlock()
+	return drainAssignmentSend(ctx, state)
 }
 
 // WaitOffline waits until one exact registered generation has closed.

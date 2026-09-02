@@ -15,6 +15,267 @@ const (
 	testOtherAgentID = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 )
 
+// Rationale: repeated publication hints must wake every current session while
+// retaining at most one pending signal per Agent.
+func TestRegistryWakeTaskDispatchBroadcastsAndCoalesces(t *testing.T) {
+	registry := NewRegistry()
+	first, err := registry.Open(context.Background(), testAgentID, 1)
+	if err != nil {
+		t.Fatalf("open first session: %v", err)
+	}
+	defer first.Close()
+	second, err := registry.Open(context.Background(), testOtherAgentID, 1)
+	if err != nil {
+		t.Fatalf("open second session: %v", err)
+	}
+	defer second.Close()
+
+	registry.WakeTaskDispatch()
+	registry.WakeTaskDispatch()
+
+	select {
+	case <-first.taskDispatchWake():
+	default:
+		t.Fatal("first session did not receive task dispatch wake")
+	}
+	select {
+	case <-second.taskDispatchWake():
+	default:
+		t.Fatal("second session did not receive task dispatch wake")
+	}
+	select {
+	case <-first.taskDispatchWake():
+		t.Fatal("first session received duplicate non-coalesced wake")
+	default:
+	}
+	select {
+	case <-second.taskDispatchWake():
+		t.Fatal("second session received duplicate non-coalesced wake")
+	default:
+	}
+}
+
+type assignmentSendOutcome struct {
+	sent bool
+	err  error
+}
+
+type sessionOpenOutcome struct {
+	session *Session
+	err     error
+}
+
+// Rationale: every lifecycle fence must close assignment admission atomically
+// without holding the global Registry lock while an admitted send ignores
+// session cancellation.
+func TestRegistryLifecycleFencesRemainResponsiveDuringUncooperativeSend(t *testing.T) {
+	t.Run("stop assignments honors caller context", func(t *testing.T) {
+		registry := NewRegistry()
+		session, err := registry.Open(context.Background(), testAgentID, 1)
+		if err != nil {
+			t.Fatalf("open session: %v", err)
+		}
+		defer session.Close()
+		release, sendResult := startUncooperativeAssignmentSend(t, session)
+		released := false
+		defer func() {
+			if !released {
+				close(release)
+			}
+		}()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		stopResult := make(chan error, 1)
+		go func() { stopResult <- registry.StopAssignments(ctx, testAgentID, 1) }()
+		waitForAssignmentFence(t, session)
+		assertUnrelatedRegistryOpen(t, registry)
+		select {
+		case err := <-stopResult:
+			t.Fatalf("StopAssignments() returned before send drain: %v", err)
+		default:
+		}
+		cancel()
+		if err := waitForLifecycleResult(t, stopResult); !errors.Is(err, context.Canceled) {
+			t.Fatalf("StopAssignments() error = %v, want context.Canceled", err)
+		}
+		close(release)
+		released = true
+		assertAdmittedSendCompleted(t, sendResult)
+		assertAssignmentSendRejected(t, session)
+	})
+
+	t.Run("revoke fences before bounded drain", func(t *testing.T) {
+		registry := NewRegistry()
+		session, err := registry.Open(context.Background(), testAgentID, 1)
+		if err != nil {
+			t.Fatalf("open session: %v", err)
+		}
+		defer session.Close()
+		release, sendResult := startUncooperativeAssignmentSend(t, session)
+		released := false
+		defer func() {
+			if !released {
+				close(release)
+			}
+		}()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		revokeResult := make(chan error, 1)
+		go func() { revokeResult <- registry.Revoke(ctx, testAgentID, 1) }()
+		waitForAssignmentFence(t, session)
+		assertUnrelatedRegistryOpen(t, registry)
+		select {
+		case <-session.Done():
+		default:
+			t.Fatal("Revoke() did not cancel the fenced session")
+		}
+		cancel()
+		if err := waitForLifecycleResult(t, revokeResult); !errors.Is(err, context.Canceled) {
+			t.Fatalf("Revoke() error = %v, want context.Canceled", err)
+		}
+		close(release)
+		released = true
+		assertAdmittedSendCompleted(t, sendResult)
+		assertAssignmentSendRejected(t, session)
+	})
+
+	t.Run("replacement preserves the later generation", func(t *testing.T) {
+		registry := NewRegistry()
+		first, err := registry.Open(context.Background(), testAgentID, 1)
+		if err != nil {
+			t.Fatalf("open first session: %v", err)
+		}
+		defer first.Close()
+		release, sendResult := startUncooperativeAssignmentSend(t, first)
+		released := false
+		defer func() {
+			if !released {
+				close(release)
+			}
+		}()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		openResult := make(chan sessionOpenOutcome, 1)
+		go func() {
+			session, openErr := registry.Open(ctx, testAgentID, 2)
+			openResult <- sessionOpenOutcome{session: session, err: openErr}
+		}()
+		waitForAssignmentFence(t, first)
+		assertUnrelatedRegistryOpen(t, registry)
+		cancel()
+		select {
+		case outcome := <-openResult:
+			if outcome.session != nil || !errors.Is(outcome.err, context.Canceled) {
+				t.Fatalf("canceled replacement = %+v, want nil/context.Canceled", outcome)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("replacement did not honor caller cancellation")
+		}
+		close(release)
+		released = true
+		assertAdmittedSendCompleted(t, sendResult)
+
+		replacement, err := registry.Open(context.Background(), testAgentID, 2)
+		if err != nil {
+			t.Fatalf("retry replacement: %v", err)
+		}
+		defer replacement.Close()
+		first.Close()
+		snapshot, ok := registry.Snapshot(testAgentID)
+		if !ok || !snapshot.Online || snapshot.Generation != 2 {
+			t.Fatalf("replacement snapshot = %+v, found = %v", snapshot, ok)
+		}
+	})
+}
+
+func startUncooperativeAssignmentSend(
+	t *testing.T,
+	session *Session,
+) (chan struct{}, <-chan assignmentSendOutcome) {
+	t.Helper()
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	result := make(chan assignmentSendOutcome, 1)
+	go func() {
+		sent, err := session.sendAssignment(func() error {
+			close(entered)
+			<-release
+			return nil
+		})
+		result <- assignmentSendOutcome{sent: sent, err: err}
+	}()
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("assignment send did not enter serialized boundary")
+	}
+	return release, result
+}
+
+func waitForAssignmentFence(t *testing.T, session *Session) {
+	t.Helper()
+	select {
+	case <-session.state.sendFence:
+	case <-time.After(time.Second):
+		t.Fatal("lifecycle operation did not fence assignment admission")
+	}
+}
+
+func assertUnrelatedRegistryOpen(t *testing.T, registry *Registry) {
+	t.Helper()
+	result := make(chan error, 1)
+	go func() {
+		session, err := registry.Open(context.Background(), testOtherAgentID, 1)
+		if err == nil {
+			session.Close()
+		}
+		result <- err
+	}()
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatalf("unrelated Open() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("unrelated Registry operation blocked behind assignment send")
+	}
+}
+
+func waitForLifecycleResult(t *testing.T, result <-chan error) error {
+	t.Helper()
+	select {
+	case err := <-result:
+		return err
+	case <-time.After(time.Second):
+		t.Fatal("lifecycle operation did not honor caller context")
+		return nil
+	}
+}
+
+func assertAdmittedSendCompleted(t *testing.T, result <-chan assignmentSendOutcome) {
+	t.Helper()
+	select {
+	case outcome := <-result:
+		if !outcome.sent || outcome.err != nil {
+			t.Fatalf("admitted send outcome = %+v, want sent without error", outcome)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("released assignment send did not complete")
+	}
+}
+
+func assertAssignmentSendRejected(t *testing.T, session *Session) {
+	t.Helper()
+	called := false
+	sent, err := session.sendAssignment(func() error {
+		called = true
+		return nil
+	})
+	if err != nil || sent || called {
+		t.Fatalf("fenced send = (%v, %v, %v), want (false, nil, false)", sent, err, called)
+	}
+}
+
 // Rationale: a replaced connection must lose authority without being able to
 // mark its replacement offline or mutate its readiness state.
 func TestRegistryFencesReplacementSessions(t *testing.T) {
