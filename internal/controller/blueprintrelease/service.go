@@ -83,8 +83,12 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 		!input.CreatedAt.Equal(input.CreatedAt.UTC()) {
 		return Prepared{}, errs.New(errs.KindValidationFailed, "Blueprint Release preparation is invalid")
 	}
+	serviceMemberships, err := blueprintServiceMemberships(ctx, input.Projection)
+	if err != nil {
+		return Prepared{}, err
+	}
 	groupMembers := releaseGroupMembers(input.ReleaseGroups, input.ServiceChanges)
-	candidates, err := selectCandidates(input.Projection, input.ServiceChanges, groupMembers)
+	candidates, err := selectCandidates(input.Projection, input.ServiceChanges, groupMembers, serviceMemberships)
 	if err != nil {
 		return Prepared{}, err
 	}
@@ -392,14 +396,50 @@ func validatePostDeployHookBounds(executions int, bodyBytes uint64) error {
 	return nil
 }
 
+type blueprintServiceMembership uint8
+
+const (
+	blueprintServiceActive blueprintServiceMembership = iota + 1
+	blueprintServiceProfileDisabled
+)
+
+func blueprintServiceMemberships(
+	ctx context.Context,
+	projection etcd.EnvironmentComposeProjection,
+) (map[string]blueprintServiceMembership, error) {
+	project, err := controller.LoadNormalizedEnvironmentProject(ctx, projection)
+	if err != nil {
+		return nil, err
+	}
+	memberships := make(map[string]blueprintServiceMembership, len(project.Services)+len(project.DisabledServices))
+	for name := range project.Services {
+		memberships[name] = blueprintServiceActive
+	}
+	for name := range project.DisabledServices {
+		if _, duplicate := memberships[name]; duplicate {
+			return nil, errs.New(errs.KindInternal, "Blueprint candidate Service is absent from its sealed projection")
+		}
+		memberships[name] = blueprintServiceProfileDisabled
+	}
+	return memberships, nil
+}
+
 func selectCandidates(
 	projection etcd.EnvironmentComposeProjection,
 	changes []etcd.EnvironmentBlueprintServiceChange,
 	groupMembers map[string]struct{},
+	serviceMemberships map[string]blueprintServiceMembership,
 ) ([]etcd.EnvironmentBlueprintServiceChange, error) {
 	selected := make(map[string]etcd.EnvironmentBlueprintServiceChange)
 	for _, change := range changes {
 		service := change.Record.Desired
+		membership, exists := serviceMemberships[service.Name]
+		if !exists || (membership != blueprintServiceActive && membership != blueprintServiceProfileDisabled) {
+			return nil, errs.New(errs.KindInternal, "Blueprint candidate Service is absent from its sealed projection")
+		}
+		if membership == blueprintServiceProfileDisabled {
+			continue
+		}
 		if service.Replicas > 1 {
 			continue
 		}

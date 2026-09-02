@@ -552,3 +552,13 @@ fencing closes new admission, waits outside the global Registry lock, and is
 bounded by the caller context even when an admitted send is uncooperative.
 Transient Script, Secret, and Entry bytes are cleared even when fenced
 admission rejects the resolved assignment. Focused race proof passes.
+
+## Blueprint profile-disabled Service selection (2026-09-02)
+
+Implicit Blueprint candidate Releases and post-deploy Scripts now select only
+active authored Services from the sealed normalized Compose projection. A
+profile-disabled Service retains its desired change for a later explicit
+deployment but is never silently activated or hooked by Environment Blueprint
+apply. Existing stopped, absent, replicated, and Release Group exclusions stay
+unchanged. Focused candidate-selection race proof passes; reference-host
+Blueprint acceptance remains pending.

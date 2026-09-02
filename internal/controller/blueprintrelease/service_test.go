@@ -78,7 +78,12 @@ func TestPrepareWithoutCandidatesPreservesMaterializationAndVolumePrefix(t *test
 		TimeoutSeconds: 120,
 	}
 	prepared, err := service.Prepare(context.Background(), PrepareInput{
-		VolumeRoot: "/var/lib/groundplane/vol", Projection: etcd.EnvironmentComposeProjection{RevisionID: task.ID},
+		VolumeRoot: "/var/lib/groundplane/vol",
+		Projection: etcd.EnvironmentComposeProjection{
+			EnvironmentID:     environmentID,
+			RevisionID:        task.ID,
+			NormalizedCompose: []byte("services: {}\n"),
+		},
 		Task: task, PrefixSteps: []*agentpb.ExecutionStep{materializeStep, volumeStep}, Artifact: artifact,
 		AllocateNamed: func(kind ids.Kind, name string) string { return ids.NewAt(kind, at, int64(len(name)+300)) },
 		CreatedAt:     at,
@@ -153,12 +158,165 @@ func TestSealedCandidateSelectsRunningChangedSingletonsInDependencyOrder(t *test
 		},
 	}
 
-	selected, err := selectCandidates(projection, changes, map[string]struct{}{workerID: {}})
+	selected, err := selectCandidates(
+		projection,
+		changes,
+		map[string]struct{}{workerID: {}},
+		map[string]blueprintServiceMembership{
+			"api":      blueprintServiceActive,
+			"database": blueprintServiceActive,
+			"stopped":  blueprintServiceActive,
+			"worker":   blueprintServiceActive,
+		},
+	)
 	if err != nil {
 		t.Fatalf("selectCandidates() error = %v", err)
 	}
 	if len(selected) != 2 || selected[0].Record.Desired.ID != databaseID || selected[1].Record.Desired.ID != apiID {
 		t.Fatalf("selected candidates = %#v", selected)
+	}
+}
+
+// Rationale: native Compose profiles are operator decisions, so implicit
+// Blueprint Releases and post-deploy hooks must never activate profiled Services.
+func TestSelectCandidatesExcludesNewAndChangedProfileDisabledServices(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 9, 2, 18, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 401)
+	enabledNewID := ids.NewAt(ids.KindService, at, 402)
+	enabledChangedID := ids.NewAt(ids.KindService, at, 403)
+	disabledNewID := ids.NewAt(ids.KindService, at, 404)
+	disabledChangedID := ids.NewAt(ids.KindService, at, 405)
+	newService := func(id, name, image string) etcd.EnvironmentBlueprintServiceChange {
+		record, err := etcd.NewServiceRecord(environmentID, core.Service{
+			ID: id, Name: name, Image: image, Strategy: core.StrategyRecreate, Replicas: 1,
+		}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		record.Runtime.RuntimeIntent = core.ServiceRuntimeIntentRunning
+		return etcd.EnvironmentBlueprintServiceChange{Record: record}
+	}
+	changedService := func(id, name string) etcd.EnvironmentBlueprintServiceChange {
+		current := newService(id, name, "registry.example/"+name+":v1").Record
+		currentVersion := &etcd.Versioned[etcd.ServiceRecord]{Record: current, Revision: 7, ReadRevision: 9}
+		desired := current.Desired
+		desired.Image = "registry.example/" + name + ":v2"
+		record, err := etcd.ReplaceServiceDesired(current, desired)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return etcd.EnvironmentBlueprintServiceChange{Current: currentVersion, Record: record}
+	}
+	changes := []etcd.EnvironmentBlueprintServiceChange{
+		newService(enabledNewID, "frontend", "registry.example/frontend:v1"),
+		changedService(enabledChangedID, "api"),
+		newService(disabledNewID, "migrate", "registry.example/migrate:v1"),
+		changedService(disabledChangedID, "worker"),
+	}
+	projection := etcd.EnvironmentComposeProjection{
+		EnvironmentID: environmentID,
+		NormalizedCompose: []byte(
+			"services:\n" +
+				"  frontend:\n    image: registry.example/frontend:v1\n" +
+				"  api:\n    image: registry.example/api:v2\n" +
+				"  migrate:\n    image: registry.example/migrate:v1\n    profiles: [jobs]\n" +
+				"  worker:\n    image: registry.example/worker:v2\n    profiles: [jobs]\n",
+		),
+		ServiceDependencyPlans: core.ServiceDependencyPlans{
+			DeployDependencyPlan: core.ServiceDependencyPhasePlan{
+				Phase:           core.ServiceLifecycleDeploy,
+				OrderedServices: []string{"migrate", "frontend", "worker", "api"},
+			},
+		},
+	}
+	memberships, err := blueprintServiceMemberships(context.Background(), projection)
+	if err != nil {
+		t.Fatalf("blueprintServiceMemberships() error = %v", err)
+	}
+	if len(memberships) != 4 {
+		t.Fatalf("Blueprint Service memberships = %#v", memberships)
+	}
+	if memberships["frontend"] != blueprintServiceActive || memberships["api"] != blueprintServiceActive {
+		t.Fatalf("enabled Blueprint Service memberships = %#v", memberships)
+	}
+	if memberships["migrate"] != blueprintServiceProfileDisabled ||
+		memberships["worker"] != blueprintServiceProfileDisabled {
+		t.Fatalf("profile-disabled Blueprint Service memberships = %#v", memberships)
+	}
+	selected, err := selectCandidates(projection, changes, nil, memberships)
+	if err != nil {
+		t.Fatalf("selectCandidates() error = %v", err)
+	}
+	if len(selected) != 2 || selected[0].Record.Desired.ID != enabledNewID ||
+		selected[1].Record.Desired.ID != enabledChangedID {
+		t.Fatalf("selected Blueprint candidates = %#v", selected)
+	}
+}
+
+// Rationale: omission from the sealed normalized Compose project is corruption,
+// not profile disablement, and must fail before the no-candidate path is built.
+func TestPrepareRejectsChangedOrNewServiceMissingFromSealedProjection(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 9, 2, 19, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 501)
+	serviceID := ids.NewAt(ids.KindService, at, 502)
+	record, err := etcd.NewServiceRecord(environmentID, core.Service{
+		ID: serviceID, Name: "worker", Image: "registry.example/worker:v2",
+		Strategy: core.StrategyRecreate, Replicas: 1,
+	}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	record.Runtime.RuntimeIntent = core.ServiceRuntimeIntentRunning
+	current := record
+	current.Desired.Image = "registry.example/worker:v1"
+	currentVersion := &etcd.Versioned[etcd.ServiceRecord]{Record: current, Revision: 7, ReadRevision: 9}
+	resolver, err := controller.NewTaskPlanResolver("/var/lib/groundplane/vol", nil)
+	if err != nil {
+		t.Fatalf("NewTaskPlanResolver() error = %v", err)
+	}
+	releaseService := &Service{ledger: &etcd.ReleaseLedger{}, plans: resolver}
+	for name, change := range map[string]etcd.EnvironmentBlueprintServiceChange{
+		"new":     {Record: record},
+		"changed": {Current: currentVersion, Record: record},
+	} {
+		t.Run(name, func(t *testing.T) {
+			task := etcd.TaskRecord{
+				ID:               ids.NewAt(ids.KindTask, at, int64(510+len(name))),
+				OperationID:      ids.NewAt(ids.KindOperation, at, int64(520+len(name))),
+				Executor:         etcd.TaskExecutorAgent,
+				PlanID:           ids.NewAt(ids.KindPlan, at, int64(530+len(name))),
+				RenderGeneration: 1,
+				Type:             etcd.TaskUpdate,
+				Target:           environmentID,
+				Params: map[string]string{
+					taskcontract.EnvironmentBlueprintProcedureParam: string(taskcontract.BlueprintComposeProcedureNone),
+				},
+				TimeoutSeconds: 120,
+			}
+			prepared, prepareErr := releaseService.Prepare(context.Background(), PrepareInput{
+				VolumeRoot: "/var/lib/groundplane/vol",
+				Projection: etcd.EnvironmentComposeProjection{
+					EnvironmentID:     environmentID,
+					RevisionID:        task.ID,
+					NormalizedCompose: []byte("services: {}\n"),
+				},
+				ServiceChanges: []etcd.EnvironmentBlueprintServiceChange{change},
+				Task:           task,
+				Artifact:       &agentpb.ComposeArtifact{},
+				AllocateNamed: func(kind ids.Kind, label string) string {
+					return ids.NewAt(kind, at, int64(540+len(label)))
+				},
+				CreatedAt: at,
+			})
+			if !errors.Is(prepareErr, errs.New(errs.KindInternal, "")) {
+				t.Fatalf("Prepare() error = %v, want internal", prepareErr)
+			}
+			if prepared.Plan != nil || prepared.Task.ID != "" {
+				t.Fatalf("missing Service produced prepared state = %#v", prepared)
+			}
+		})
 	}
 }
 
