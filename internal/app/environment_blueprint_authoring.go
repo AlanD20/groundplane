@@ -178,6 +178,7 @@ func (service *environmentBlueprintService) environmentBlueprintAuthoringDocumen
 	serviceNames := make(map[string]string)
 	if snapshot.hasHead {
 		input.Compose = append([]byte(nil), snapshot.projection.Record.NormalizedCompose...)
+		input.Requires = environmentBlueprintAuthoringRequirements(snapshot.projection.Record)
 		for _, projected := range snapshot.projection.Record.DesiredServices {
 			if projected.EnvironmentID != snapshot.environment.Record.ID || projected.Desired.Name == "" {
 				return blueprintparser.AuthoringDocument{}, errs.New(
@@ -226,6 +227,12 @@ func (service *environmentBlueprintService) environmentBlueprintAuthoringDocumen
 		return blueprintparser.AuthoringDocument{}, err
 	}
 	return input, nil
+}
+
+func environmentBlueprintAuthoringRequirements(
+	projection etcd.EnvironmentComposeProjection,
+) []core.Requirement {
+	return projection.BlueprintRequirements.Clone().Authored
 }
 
 func environmentBlueprintAuthoringRoutes(

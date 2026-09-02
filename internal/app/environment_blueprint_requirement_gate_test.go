@@ -1,6 +1,7 @@
 package app
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -8,6 +9,25 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
+
+func TestEnvironmentBlueprintAuthoringRequirementsCopiesAuthoredProjection(t *testing.T) {
+	t.Parallel()
+	original := []core.Requirement{{
+		Target:    core.RequirementTarget{Kind: core.RequirementTargetBackingAttach, Name: "api-db"},
+		Condition: core.RequirementReady,
+		Phases:    []core.RequirementPhase{core.RequirementPhaseDeploy, core.RequirementPhaseAlways},
+	}}
+	got := environmentBlueprintAuthoringRequirements(etcd.EnvironmentComposeProjection{
+		BlueprintRequirements: core.BlueprintRequirements{Authored: original},
+	})
+	if !reflect.DeepEqual(got, original) {
+		t.Fatalf("authored requirements = %#v, want %#v", got, original)
+	}
+	got[0].Phases[0] = core.RequirementPhaseRollback
+	if original[0].Phases[0] != core.RequirementPhaseDeploy {
+		t.Fatal("authored requirements alias persisted projection")
+	}
+}
 
 func TestEnvironmentBlueprintRequirementsUsesFixedSnapshot(t *testing.T) {
 	// Rationale: apply binds the label before staging and retains its fixed revision.

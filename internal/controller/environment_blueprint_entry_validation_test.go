@@ -22,3 +22,18 @@ func TestValidateEnvironmentBlueprintAvailabilityAllowsEntries(t *testing.T) {
 		t.Fatalf("ValidateEnvironmentBlueprintAvailability() error = %v", err)
 	}
 }
+
+func TestValidateEnvironmentBlueprintAvailabilityAllowsRequires(t *testing.T) {
+	t.Parallel()
+	parsed := blueprintparser.Result{
+		Project: &composetypes.Project{},
+		Extensions: blueprintparser.Extensions{Requires: []core.Requirement{{
+			Target:    core.RequirementTarget{Kind: core.RequirementTargetBackingAttach, Name: "api-db"},
+			Condition: core.RequirementReady,
+			Phases:    []core.RequirementPhase{core.RequirementPhaseDeploy},
+		}}},
+	}
+	if err := ValidateEnvironmentBlueprintAvailability(parsed); err != nil {
+		t.Fatalf("ValidateEnvironmentBlueprintAvailability() error = %v", err)
+	}
+}

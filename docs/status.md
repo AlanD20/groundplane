@@ -583,3 +583,7 @@ flattened Service record is unchanged; active to profile-disabled remains
 desired-only; and absent or ambiguous membership fails closed. Focused
 Controller and application race proofs pass. The exact reference-host Blueprint
 and Script acceptance rerun remains pending.
+
+## Blueprint prerequisite authoring round-trip (2026-09-02)
+
+Canonical Environment Blueprint authoring now preserves the persisted authored `x-gp-requires` graph, and validate/apply accept the already-closed registered prerequisite grammar instead of rejecting every nonempty requirement. Fixed-revision Attach resolution and durable execution-gate authority remain unchanged. Focused application and Controller proofs pass; generated-artifact and reference-host Blueprint acceptance remain pending.
