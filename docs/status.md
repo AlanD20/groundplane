@@ -520,3 +520,12 @@ responses instead of emitting empty or partial fields.
 The deployment workflow no longer stages archives in system `/tmp`. Local build
 scratch is confined to the ignored repository `.tmp/` hierarchy, and the remote
 bundle uses the root-owned `/root/.groundplane/.tmp/` hierarchy with exact-path guards.
+
+## CLI Component closed-union response decoding (2026-09-02)
+
+Component list and detail now read generated raw HTTP responses once under the
+existing response-size bound and pass successful bodies through the strict
+public Component decoder. Valid CoreDNS responses no longer fail in the
+generated eager one-of parser, while malformed closed-union variants still
+fail. Focused CLI adapter proof passes; reference-host Component list and
+detail remain pending.

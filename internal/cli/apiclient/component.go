@@ -40,20 +40,35 @@ func (c *Client) ListComponents(
 	if cursor != "" {
 		params.Cursor = &cursor
 	}
-	response, err := client.ComponentListWithResponse(ctx, params)
+	response, err := client.ComponentList(ctx, params)
 	if err != nil {
 		return apiTypes.Page[apiTypes.Component]{}, generatedCallError(
 			ctx, http.MethodGet, "/api/v1/components", err,
 		)
 	}
+	if response == nil {
+		return apiTypes.Page[apiTypes.Component]{}, generatedResponseError(
+			http.MethodGet, "/api/v1/components", nil, nil, http.StatusOK,
+		)
+	}
+	defer response.Body.Close()
+	body, err := readBoundedRawResponseInto(
+		response.Body,
+		make([]byte, maximumRawResponseByteSize+1),
+		http.MethodGet,
+		"/api/v1/components",
+	)
+	if err != nil {
+		return apiTypes.Page[apiTypes.Component]{}, err
+	}
 	if err := generatedResponseError(
-		http.MethodGet, "/api/v1/components", response.HTTPResponse, response.Body, http.StatusOK,
+		http.MethodGet, "/api/v1/components", response, body, http.StatusOK,
 	); err != nil {
 		return apiTypes.Page[apiTypes.Component]{}, err
 	}
 	var page apiTypes.Page[apiTypes.Component]
 	if err := decodeSingleJSON(
-		http.MethodGet, "/api/v1/components", bytes.NewReader(response.Body), &page,
+		http.MethodGet, "/api/v1/components", bytes.NewReader(body), &page,
 	); err != nil {
 		return apiTypes.Page[apiTypes.Component]{}, err
 	}
@@ -66,17 +81,30 @@ func (c *Client) ShowComponent(ctx context.Context, id string) (apiTypes.Compone
 		return apiTypes.Component{}, err
 	}
 	path := "/api/v1/components/" + id
-	response, err := client.ComponentShowWithResponse(ctx, id)
+	response, err := client.ComponentShow(ctx, id)
 	if err != nil {
 		return apiTypes.Component{}, generatedCallError(ctx, http.MethodGet, path, err)
 	}
+	if response == nil {
+		return apiTypes.Component{}, generatedResponseError(http.MethodGet, path, nil, nil, http.StatusOK)
+	}
+	defer response.Body.Close()
+	body, err := readBoundedRawResponseInto(
+		response.Body,
+		make([]byte, maximumRawResponseByteSize+1),
+		http.MethodGet,
+		path,
+	)
+	if err != nil {
+		return apiTypes.Component{}, err
+	}
 	if err := generatedResponseError(
-		http.MethodGet, path, response.HTTPResponse, response.Body, http.StatusOK,
+		http.MethodGet, path, response, body, http.StatusOK,
 	); err != nil {
 		return apiTypes.Component{}, err
 	}
 	var component apiTypes.Component
-	if err := decodeSingleJSON(http.MethodGet, path, bytes.NewReader(response.Body), &component); err != nil {
+	if err := decodeSingleJSON(http.MethodGet, path, bytes.NewReader(body), &component); err != nil {
 		return apiTypes.Component{}, err
 	}
 	return component, nil
