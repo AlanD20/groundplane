@@ -20,6 +20,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"github.com/distribution/reference"
 )
 
@@ -51,6 +52,7 @@ type PrepareInput struct {
 	Environment    etcd.Versioned[etcd.EnvironmentRecord]
 	Projection     etcd.EnvironmentComposeProjection
 	ServiceChanges []etcd.EnvironmentBlueprintServiceChange
+	Memberships    NormalizedServiceMemberships
 	Scripts        []etcd.ScriptRecord
 	ReleaseGroups  map[string]core.ReleaseGroupSpec
 	Task           etcd.TaskRecord
@@ -83,12 +85,8 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 		!input.CreatedAt.Equal(input.CreatedAt.UTC()) {
 		return Prepared{}, errs.New(errs.KindValidationFailed, "Blueprint Release preparation is invalid")
 	}
-	serviceMemberships, err := blueprintServiceMemberships(ctx, input.Projection)
-	if err != nil {
-		return Prepared{}, err
-	}
 	groupMembers := releaseGroupMembers(input.ReleaseGroups, input.ServiceChanges)
-	candidates, err := selectCandidates(input.Projection, input.ServiceChanges, groupMembers, serviceMemberships)
+	candidates, err := selectCandidates(input.Projection, input.ServiceChanges, groupMembers, input.Memberships)
 	if err != nil {
 		return Prepared{}, err
 	}
@@ -403,21 +401,49 @@ const (
 	blueprintServiceProfileDisabled
 )
 
-func blueprintServiceMemberships(
-	ctx context.Context,
-	projection etcd.EnvironmentComposeProjection,
-) (map[string]blueprintServiceMembership, error) {
-	project, err := controller.LoadNormalizedEnvironmentProject(ctx, projection)
-	if err != nil {
-		return nil, err
+type NormalizedServiceMemberships struct {
+	previous    map[string]blueprintServiceMembership
+	candidate   map[string]blueprintServiceMembership
+	initialized bool
+}
+
+func BuildNormalizedServiceMemberships(
+	previous *composetypes.Project,
+	candidate *composetypes.Project,
+) (NormalizedServiceMemberships, error) {
+	if candidate == nil {
+		return NormalizedServiceMemberships{}, errs.New(
+			errs.KindInternal,
+			"Blueprint candidate normalized Service membership is absent",
+		)
 	}
+	previousMemberships := make(map[string]blueprintServiceMembership)
+	if previous != nil {
+		var err error
+		previousMemberships, err = normalizedProjectServiceMemberships(previous)
+		if err != nil {
+			return NormalizedServiceMemberships{}, err
+		}
+	}
+	candidateMemberships, err := normalizedProjectServiceMemberships(candidate)
+	if err != nil {
+		return NormalizedServiceMemberships{}, err
+	}
+	return NormalizedServiceMemberships{
+		previous: previousMemberships, candidate: candidateMemberships, initialized: true,
+	}, nil
+}
+
+func normalizedProjectServiceMemberships(
+	project *composetypes.Project,
+) (map[string]blueprintServiceMembership, error) {
 	memberships := make(map[string]blueprintServiceMembership, len(project.Services)+len(project.DisabledServices))
 	for name := range project.Services {
 		memberships[name] = blueprintServiceActive
 	}
 	for name := range project.DisabledServices {
 		if _, duplicate := memberships[name]; duplicate {
-			return nil, errs.New(errs.KindInternal, "Blueprint candidate Service is absent from its sealed projection")
+			return nil, errs.New(errs.KindInternal, "Blueprint normalized Service membership is ambiguous")
 		}
 		memberships[name] = blueprintServiceProfileDisabled
 	}
@@ -428,16 +454,28 @@ func selectCandidates(
 	projection etcd.EnvironmentComposeProjection,
 	changes []etcd.EnvironmentBlueprintServiceChange,
 	groupMembers map[string]struct{},
-	serviceMemberships map[string]blueprintServiceMembership,
+	memberships NormalizedServiceMemberships,
 ) ([]etcd.EnvironmentBlueprintServiceChange, error) {
+	if !memberships.initialized {
+		return nil, errs.New(errs.KindInternal, "Blueprint normalized Service memberships are absent")
+	}
 	selected := make(map[string]etcd.EnvironmentBlueprintServiceChange)
 	for _, change := range changes {
 		service := change.Record.Desired
-		membership, exists := serviceMemberships[service.Name]
-		if !exists || (membership != blueprintServiceActive && membership != blueprintServiceProfileDisabled) {
+		candidateMembership, candidateExists := memberships.candidate[service.Name]
+		if !candidateExists ||
+			(candidateMembership != blueprintServiceActive && candidateMembership != blueprintServiceProfileDisabled) {
 			return nil, errs.New(errs.KindInternal, "Blueprint candidate Service is absent from its sealed projection")
 		}
-		if membership == blueprintServiceProfileDisabled {
+		previousMembership, previousExists := memberships.previous[service.Name]
+		if change.Current == nil && previousExists {
+			return nil, errs.New(errs.KindInternal, "Blueprint new Service exists in its predecessor projection")
+		}
+		if change.Current != nil && (!previousExists ||
+			(previousMembership != blueprintServiceActive && previousMembership != blueprintServiceProfileDisabled)) {
+			return nil, errs.New(errs.KindInternal, "Blueprint existing Service is absent from its predecessor projection")
+		}
+		if candidateMembership == blueprintServiceProfileDisabled {
 			continue
 		}
 		if service.Replicas > 1 {
@@ -456,7 +494,7 @@ func selectCandidates(
 			if beforeErr != nil || afterErr != nil {
 				return nil, errs.New(errs.KindInternal, "Blueprint Service material comparison failed")
 			}
-			material = !bytes.Equal(before, after)
+			material = previousMembership != candidateMembership || !bytes.Equal(before, after)
 		}
 		if material {
 			selected[service.Name] = change

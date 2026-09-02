@@ -578,6 +578,10 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	releaseMemberships, err := blueprintrelease.BuildNormalizedServiceMemberships(priorProject, parsed.Project)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	normalizedCompose, err := controller.MarshalNormalizedEnvironmentProject(parsed.Project)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -1003,7 +1007,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	preparedRelease, err := service.blueprintReleases.Prepare(ctx, blueprintrelease.PrepareInput{
 		VolumeRoot: service.volumeRoot,
 		Tenant:     tenant, Project: project, Environment: environment,
-		Projection: projection, ServiceChanges: serviceChanges,
+		Projection: projection, ServiceChanges: serviceChanges, Memberships: releaseMemberships,
 		Scripts:       reconciledScripts.Current,
 		ReleaseGroups: effectiveReleaseGroups, Task: task,
 		PrefixSteps: steps, ComponentSteps: componentSteps, Artifact: artifact,

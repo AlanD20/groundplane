@@ -570,3 +570,16 @@ during preparation. Replay accepts only that recorded ownership state or the
 transaction's own owner, so a stale transaction cannot adopt or remove a
 same-byte successor published by another transaction. Focused helper race proof
 passes; clean-host CoreDNS activation and Blueprint acceptance remain pending.
+
+## Blueprint profile-activation candidate selection (2026-09-02)
+
+Clean-host execution proved Agent enrollment, automatic CoreDNS activation,
+backing-service publication, and Attach readiness before exposing that an
+Environment Blueprint transition from profile-disabled to active Services
+could complete without candidate Releases or post-deploy Script steps. Candidate
+selection now carries the exact predecessor and candidate normalized Compose
+membership: profile-disabled to active is a material transition even when the
+flattened Service record is unchanged; active to profile-disabled remains
+desired-only; and absent or ambiguous membership fails closed. Focused
+Controller and application race proofs pass. The exact reference-host Blueprint
+and Script acceptance rerun remains pending.

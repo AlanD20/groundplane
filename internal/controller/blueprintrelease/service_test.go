@@ -16,6 +16,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
 
 // Rationale: no candidate Release means the producer seals exactly its typed
@@ -68,6 +69,10 @@ func TestPrepareWithoutCandidatesPreservesMaterializationAndVolumePrefix(t *test
 		t.Fatalf("NewTaskPlanResolver() error = %v", err)
 	}
 	service := &Service{ledger: &etcd.ReleaseLedger{}, plans: resolver}
+	memberships, err := BuildNormalizedServiceMemberships(nil, &composetypes.Project{})
+	if err != nil {
+		t.Fatalf("BuildNormalizedServiceMemberships() error = %v", err)
+	}
 	task := etcd.TaskRecord{
 		ID: ids.NewAt(ids.KindTask, at, 207), OperationID: ids.NewAt(ids.KindOperation, at, 208),
 		Executor: etcd.TaskExecutorAgent, PlanID: planID,
@@ -84,7 +89,8 @@ func TestPrepareWithoutCandidatesPreservesMaterializationAndVolumePrefix(t *test
 			RevisionID:        task.ID,
 			NormalizedCompose: []byte("services: {}\n"),
 		},
-		Task: task, PrefixSteps: []*agentpb.ExecutionStep{materializeStep, volumeStep}, Artifact: artifact,
+		Memberships: memberships,
+		Task:        task, PrefixSteps: []*agentpb.ExecutionStep{materializeStep, volumeStep}, Artifact: artifact,
 		AllocateNamed: func(kind ids.Kind, name string) string { return ids.NewAt(kind, at, int64(len(name)+300)) },
 		CreatedAt:     at,
 	})
@@ -158,16 +164,22 @@ func TestSealedCandidateSelectsRunningChangedSingletonsInDependencyOrder(t *test
 		},
 	}
 
+	memberships, err := BuildNormalizedServiceMemberships(
+		&composetypes.Project{Services: composetypes.Services{
+			"api": {}, "worker": {}, "stopped": {},
+		}},
+		&composetypes.Project{Services: composetypes.Services{
+			"database": {}, "api": {}, "worker": {}, "stopped": {},
+		}},
+	)
+	if err != nil {
+		t.Fatalf("BuildNormalizedServiceMemberships() error = %v", err)
+	}
 	selected, err := selectCandidates(
 		projection,
 		changes,
 		map[string]struct{}{workerID: {}},
-		map[string]blueprintServiceMembership{
-			"api":      blueprintServiceActive,
-			"database": blueprintServiceActive,
-			"stopped":  blueprintServiceActive,
-			"worker":   blueprintServiceActive,
-		},
+		memberships,
 	)
 	if err != nil {
 		t.Fatalf("selectCandidates() error = %v", err)
@@ -230,19 +242,17 @@ func TestSelectCandidatesExcludesNewAndChangedProfileDisabledServices(t *testing
 			},
 		},
 	}
-	memberships, err := blueprintServiceMemberships(context.Background(), projection)
+	memberships, err := BuildNormalizedServiceMemberships(
+		&composetypes.Project{Services: composetypes.Services{
+			"api": {}, "worker": {},
+		}},
+		&composetypes.Project{
+			Services:         composetypes.Services{"frontend": {}, "api": {}},
+			DisabledServices: composetypes.Services{"migrate": {}, "worker": {}},
+		},
+	)
 	if err != nil {
-		t.Fatalf("blueprintServiceMemberships() error = %v", err)
-	}
-	if len(memberships) != 4 {
-		t.Fatalf("Blueprint Service memberships = %#v", memberships)
-	}
-	if memberships["frontend"] != blueprintServiceActive || memberships["api"] != blueprintServiceActive {
-		t.Fatalf("enabled Blueprint Service memberships = %#v", memberships)
-	}
-	if memberships["migrate"] != blueprintServiceProfileDisabled ||
-		memberships["worker"] != blueprintServiceProfileDisabled {
-		t.Fatalf("profile-disabled Blueprint Service memberships = %#v", memberships)
+		t.Fatalf("BuildNormalizedServiceMemberships() error = %v", err)
 	}
 	selected, err := selectCandidates(projection, changes, nil, memberships)
 	if err != nil {
@@ -250,6 +260,64 @@ func TestSelectCandidatesExcludesNewAndChangedProfileDisabledServices(t *testing
 	}
 	if len(selected) != 2 || selected[0].Record.Desired.ID != enabledNewID ||
 		selected[1].Record.Desired.ID != enabledChangedID {
+		t.Fatalf("selected Blueprint candidates = %#v", selected)
+	}
+}
+
+// Rationale: enabling a previously profile-disabled singleton is an effective
+// desired-state transition even when its flattened Service fields are equal.
+func TestSelectCandidatesIncludesProfileDisabledToActiveTransition(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 9, 2, 18, 30, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 451)
+	serviceID := ids.NewAt(ids.KindService, at, 452)
+	equalActiveID := ids.NewAt(ids.KindService, at, 453)
+	record, err := etcd.NewServiceRecord(environmentID, core.Service{
+		ID: serviceID, Name: "worker", Image: "registry.example/worker:v1",
+		Strategy: core.StrategyRecreate, Replicas: 1,
+	}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	record.Runtime.RuntimeIntent = core.ServiceRuntimeIntentRunning
+	current := &etcd.Versioned[etcd.ServiceRecord]{Record: record, Revision: 7, ReadRevision: 9}
+	equalActive, err := etcd.NewServiceRecord(environmentID, core.Service{
+		ID: equalActiveID, Name: "api", Image: "registry.example/api:v1",
+		Strategy: core.StrategyRecreate, Replicas: 1,
+	}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	equalActive.Runtime.RuntimeIntent = core.ServiceRuntimeIntentRunning
+	equalActiveCurrent := &etcd.Versioned[etcd.ServiceRecord]{Record: equalActive, Revision: 8, ReadRevision: 9}
+	memberships, err := BuildNormalizedServiceMemberships(
+		&composetypes.Project{
+			Services: composetypes.Services{"api": {Name: "api", Image: "registry.example/api:v1"}},
+			DisabledServices: composetypes.Services{
+				"worker": {Name: "worker", Image: "registry.example/worker:v1"},
+			},
+		},
+		&composetypes.Project{Services: composetypes.Services{
+			"worker": {Name: "worker", Image: "registry.example/worker:v1"},
+			"api":    {Name: "api", Image: "registry.example/api:v1"},
+		}},
+	)
+	if err != nil {
+		t.Fatalf("BuildNormalizedServiceMemberships() error = %v", err)
+	}
+	selected, err := selectCandidates(
+		etcd.EnvironmentComposeProjection{EnvironmentID: environmentID},
+		[]etcd.EnvironmentBlueprintServiceChange{
+			{Current: current, Record: record},
+			{Current: equalActiveCurrent, Record: equalActive},
+		},
+		nil,
+		memberships,
+	)
+	if err != nil {
+		t.Fatalf("selectCandidates() error = %v", err)
+	}
+	if len(selected) != 1 || selected[0].Record.Desired.ID != serviceID {
 		t.Fatalf("selected Blueprint candidates = %#v", selected)
 	}
 }
@@ -282,6 +350,17 @@ func TestPrepareRejectsChangedOrNewServiceMissingFromSealedProjection(t *testing
 		"changed": {Current: currentVersion, Record: record},
 	} {
 		t.Run(name, func(t *testing.T) {
+			var previousProject *composetypes.Project
+			if change.Current != nil {
+				previousProject = &composetypes.Project{Services: composetypes.Services{"worker": {}}}
+			}
+			memberships, membershipErr := BuildNormalizedServiceMemberships(
+				previousProject,
+				&composetypes.Project{},
+			)
+			if membershipErr != nil {
+				t.Fatalf("BuildNormalizedServiceMemberships() error = %v", membershipErr)
+			}
 			task := etcd.TaskRecord{
 				ID:               ids.NewAt(ids.KindTask, at, int64(510+len(name))),
 				OperationID:      ids.NewAt(ids.KindOperation, at, int64(520+len(name))),
@@ -303,6 +382,7 @@ func TestPrepareRejectsChangedOrNewServiceMissingFromSealedProjection(t *testing
 					NormalizedCompose: []byte("services: {}\n"),
 				},
 				ServiceChanges: []etcd.EnvironmentBlueprintServiceChange{change},
+				Memberships:    memberships,
 				Task:           task,
 				Artifact:       &agentpb.ComposeArtifact{},
 				AllocateNamed: func(kind ids.Kind, label string) string {
