@@ -22,6 +22,14 @@ deploy = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = deploy
 SPEC.loader.exec_module(deploy)
 
+TEST_TEMPORARY_ROOT = SCRIPT.parents[1] / ".tmp" / "test-deploy"
+
+
+def temporary_directory() -> tempfile.TemporaryDirectory:
+    deploy.ensure_private_directory(deploy.LOCAL_DEPLOY_ROOT)
+    deploy.ensure_private_directory(TEST_TEMPORARY_ROOT)
+    return tempfile.TemporaryDirectory(dir=TEST_TEMPORARY_ROOT)
+
 
 def shell_function(name: str) -> str:
     match = re.search(
@@ -65,6 +73,186 @@ class DeployConnectionArgumentsTest(unittest.TestCase):
                 self.assertIn(option, command)
 
 
+class DeployStagingPathTest(unittest.TestCase):
+    @staticmethod
+    def receive_script(root: Path) -> str:
+        private_root = root / "groundplane"
+        private_parent = private_root / ".tmp"
+        script = deploy.REMOTE_RECEIVE
+        script = script.replace(
+            "/root/.groundplane/.tmp",
+            str(private_parent),
+        )
+        script = script.replace("/root/.groundplane", str(private_root))
+        script = script.replace(" -o root -g root", "")
+        script = script.replace(
+            "if test \"$(stat -c '%u:%a' \"$private_parent\")\" != \"0:700\"; then",
+            "if test \"$(stat -c '%a' \"$private_parent\")\" != \"700\"; then",
+        )
+        return script.replace(
+            "/run/lock/groundplane-deploy.lock",
+            str(root / "deployment.lock"),
+        )
+
+    def run_receive(
+        self,
+        root: Path,
+        deploy_dir: Path,
+        bundle: bytes = b"",
+    ) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.run(
+            [
+                "sh",
+                "-c",
+                self.receive_script(root),
+                "--",
+                "0",
+                str(deploy_dir),
+                "dev",
+                "agent",
+                "runner",
+                "127.0.0.1",
+            ],
+            input=bundle,
+            capture_output=True,
+            check=False,
+        )
+
+    def test_staging_paths_are_repo_local_and_remote_private(self) -> None:
+        self.assertEqual(deploy.LOCAL_DEPLOY_ROOT, deploy.REPOSITORY_ROOT / ".tmp")
+        self.assertEqual(
+            deploy.REMOTE_DEPLOY_PREFIX_PATH,
+            "/root/.groundplane/.tmp/groundplane-deploy-",
+        )
+        for script in (
+            deploy.REMOTE_DEPLOY_PREFIX,
+            deploy.REMOTE_RECEIVE,
+            deploy.REMOTE_INSTALL,
+        ):
+            self.assertNotIn("/tmp/groundplane-deploy-", script)
+            self.assertIn(deploy.REMOTE_DEPLOY_GUARD, script)
+
+    def test_remote_guard_rejects_old_system_tmp_path(self) -> None:
+        command = "set -eu\ndeploy_dir=$1\n" + deploy.REMOTE_DEPLOY_GUARD
+        valid = subprocess.run(
+            [
+                "sh",
+                "-c",
+                command,
+                "--",
+                "/root/.groundplane/.tmp/groundplane-deploy-0123456789abcdef0123456789abcdef",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        old = subprocess.run(
+            [
+                "sh",
+                "-c",
+                command,
+                "--",
+                "/tmp/groundplane-deploy-0123456789abcdef0123456789abcdef",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(valid.returncode, 0, valid.stderr)
+        self.assertNotEqual(old.returncode, 0, old.stderr)
+
+    def test_existing_deployment_directory_and_sentinel_survive_rejection(self) -> None:
+        with temporary_directory() as temporary:
+            root = Path(temporary)
+            private_parent = root / "groundplane" / ".tmp"
+            private_parent.mkdir(parents=True)
+            deploy_dir = private_parent / (
+                "groundplane-deploy-0123456789abcdef0123456789abcdef"
+            )
+            deploy_dir.mkdir()
+            sentinel = deploy_dir / "sentinel"
+            sentinel.write_text("keep\n", encoding="utf-8")
+
+            result = self.run_receive(root, deploy_dir)
+
+            self.assertNotEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(deploy_dir.is_dir())
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep\n")
+
+    def test_dangling_deployment_symlink_survives_rejection(self) -> None:
+        with temporary_directory() as temporary:
+            root = Path(temporary)
+            private_parent = root / "groundplane" / ".tmp"
+            private_parent.mkdir(parents=True)
+            deploy_dir = private_parent / (
+                "groundplane-deploy-0123456789abcdef0123456789abcdef"
+            )
+            deploy_dir.symlink_to(root / "missing")
+
+            result = self.run_receive(root, deploy_dir)
+
+            self.assertNotEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(deploy_dir.is_symlink())
+
+    def test_symlinked_private_root_rejects_without_touching_target(self) -> None:
+        with temporary_directory() as temporary:
+            root = Path(temporary)
+            private_root = root / "groundplane"
+            target = root / "private-target"
+            target.mkdir()
+            sentinel = target / "sentinel"
+            sentinel.write_text("keep\n", encoding="utf-8")
+            private_root.symlink_to(target, target_is_directory=True)
+            deploy_dir = private_root / ".tmp" / (
+                "groundplane-deploy-0123456789abcdef0123456789abcdef"
+            )
+
+            result = self.run_receive(root, deploy_dir)
+
+            self.assertNotEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(private_root.is_symlink())
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep\n")
+
+    def test_symlinked_private_tmp_parent_rejects_without_touching_target(self) -> None:
+        with temporary_directory() as temporary:
+            root = Path(temporary)
+            private_root = root / "groundplane"
+            private_root.mkdir()
+            private_parent = private_root / ".tmp"
+            target = root / "tmp-target"
+            target.mkdir()
+            sentinel = target / "sentinel"
+            sentinel.write_text("keep\n", encoding="utf-8")
+            private_parent.symlink_to(target, target_is_directory=True)
+            deploy_dir = private_parent / (
+                "groundplane-deploy-0123456789abcdef0123456789abcdef"
+            )
+
+            result = self.run_receive(root, deploy_dir)
+
+            self.assertNotEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(private_parent.is_symlink())
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep\n")
+
+    def test_created_deployment_directory_is_cleaned_after_receive_failure(self) -> None:
+        with temporary_directory() as temporary:
+            root = Path(temporary)
+            private_parent = root / "groundplane" / ".tmp"
+            private_parent.mkdir(parents=True)
+            deploy_dir = private_parent / (
+                "groundplane-deploy-0123456789abcdef0123456789abcdef"
+            )
+
+            result = self.run_receive(
+                root,
+                deploy_dir,
+                b"not a tar archive\n",
+            )
+
+            self.assertNotEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(deploy_dir.exists())
+
+
 class DeployRollbackTest(unittest.TestCase):
     def test_backup_rejects_directory_installation_path(self) -> None:
         self.assert_backup_rejected("directory")
@@ -76,7 +264,7 @@ class DeployRollbackTest(unittest.TestCase):
         self.assert_backup_rejected("dangling-symlink")
 
     def test_restore_atomically_replaces_an_executing_binary(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
+        with temporary_directory() as temporary:
             root = Path(temporary)
             deploy_dir = root / "groundplane-deploy-0123456789abcdef0123456789abcdef"
             deploy_dir.mkdir()
@@ -165,7 +353,7 @@ class DeployRollbackTest(unittest.TestCase):
         )
 
     def assert_backup_rejected(self, kind: str) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
+        with temporary_directory() as temporary:
             root = Path(temporary)
             deploy_dir = root / "groundplane-deploy-0123456789abcdef0123456789abcdef"
             deploy_dir.mkdir()
@@ -212,7 +400,7 @@ class DeployRollbackTest(unittest.TestCase):
         service_was_enabled: bool = True,
         missing_unit_after_reload: bool = False,
     ) -> tuple[subprocess.CompletedProcess[str], Path, Path, dict[str, Path]]:
-        temporary = tempfile.TemporaryDirectory()
+        temporary = temporary_directory()
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
         deploy_dir = root / "groundplane-deploy-0123456789abcdef0123456789abcdef"

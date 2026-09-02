@@ -514,3 +514,9 @@ Blueprint acceptance remains pending.
 The generated-client adapter now preserves the mandatory `operation|script` Task-step
 kind and the paired Script identity in CLI Task detail, rejecting invalid closed-union
 responses instead of emitting empty or partial fields.
+
+## Repository-local deployment staging (2026-09-02)
+
+The deployment workflow no longer stages archives in system `/tmp`. Local build
+scratch is confined to the ignored repository `.tmp/` hierarchy, and the remote
+bundle uses the root-owned `/root/.groundplane/.tmp/` hierarchy with exact-path guards.

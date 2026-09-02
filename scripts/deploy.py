@@ -22,6 +22,9 @@ from pathlib import Path
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+LOCAL_DEPLOY_ROOT = REPOSITORY_ROOT / ".tmp"
+REMOTE_DEPLOY_ROOT = "/root/.groundplane/.tmp"
+REMOTE_DEPLOY_PREFIX_PATH = f"{REMOTE_DEPLOY_ROOT}/groundplane-deploy-"
 CONTROLLER = REPOSITORY_ROOT / "bin" / "controller"
 CLI = REPOSITORY_ROOT / "bin" / "groundplane"
 CONTROLLER_UNIT = REPOSITORY_ROOT / "release" / "systemd" / "groundplane-controller.service"
@@ -142,16 +145,10 @@ printf 'Compose: '
 docker compose version
 """
 
-REMOTE_DEPLOY_PREFIX = r"""
-set -eu
-
-setup=$1
-deploy_dir=$2
-shift
-
-deploy_id=${deploy_dir#/tmp/groundplane-deploy-}
-if test "$deploy_dir" != "/tmp/groundplane-deploy-$deploy_id" ||
-    test "${#deploy_id}" -ne 32; then
+REMOTE_DEPLOY_GUARD = f"""
+deploy_id=${{deploy_dir#{REMOTE_DEPLOY_PREFIX_PATH}}}
+if test "$deploy_dir" != "{REMOTE_DEPLOY_PREFIX_PATH}$deploy_id" ||
+    test "${{#deploy_id}}" -ne 32; then
     echo "refusing unsafe deployment directory: $deploy_dir" >&2
     exit 1
 fi
@@ -161,6 +158,16 @@ case "$deploy_id" in
         exit 1
         ;;
 esac
+"""
+
+REMOTE_DEPLOY_PREFIX = r"""
+set -eu
+
+setup=$1
+deploy_dir=$2
+shift
+
+""" + REMOTE_DEPLOY_GUARD + r"""
 
 preinstall_finish() {
     status=$?
@@ -191,18 +198,7 @@ source_agent_image=$4
 source_runner_image=$5
 listen_ip=$6
 
-deploy_id=${deploy_dir#/tmp/groundplane-deploy-}
-if test "$deploy_dir" != "/tmp/groundplane-deploy-$deploy_id" ||
-    test "${#deploy_id}" -ne 32; then
-    echo "refusing unsafe deployment directory: $deploy_dir" >&2
-    exit 1
-fi
-case "$deploy_id" in
-    *[!0-9a-f]*)
-        echo "refusing unsafe deployment directory: $deploy_dir" >&2
-        exit 1
-        ;;
-esac
+""" + REMOTE_DEPLOY_GUARD + r"""
 
 command -v flock >/dev/null
 command -v tar >/dev/null
@@ -218,14 +214,41 @@ receive_finish() {
     rm -rf -- "$deploy_dir"
     exit "$status"
 }
-trap receive_finish EXIT HUP INT TERM
 
 umask 077
+private_root=/root/.groundplane
+private_parent=$private_root/.tmp
+if test -L "$private_root"; then
+    echo "refusing unsafe private deployment parent" >&2
+    exit 1
+fi
+if test -e "$private_root" && ! test -d "$private_root"; then
+    echo "refusing unsafe private deployment parent" >&2
+    exit 1
+fi
+if test -L "$private_parent"; then
+    echo "refusing unsafe private deployment parent" >&2
+    exit 1
+fi
+if test -e "$private_parent" && ! test -d "$private_parent"; then
+    echo "refusing unsafe private deployment parent" >&2
+    exit 1
+fi
+install -d -m 0700 -o root -g root "$private_root" "$private_parent"
+if test "$(stat -c '%u:%a' "$private_parent")" != "0:700"; then
+    echo "private deployment parent must be root-only" >&2
+    exit 1
+fi
 if test -e "$deploy_dir"; then
     echo "refusing to reuse deployment directory: $deploy_dir" >&2
     exit 1
 fi
+if test -L "$deploy_dir"; then
+    echo "refusing to reuse deployment directory: $deploy_dir" >&2
+    exit 1
+fi
 mkdir -- "$deploy_dir"
+trap receive_finish EXIT HUP INT TERM
 tar -xf - -C "$deploy_dir"
 trap - EXIT HUP INT TERM
 exec sh "$deploy_dir/remote-deploy.sh" \
@@ -242,18 +265,7 @@ source_agent_image=$3
 source_runner_image=$4
 listen_ip=$5
 
-deploy_id=${deploy_dir#/tmp/groundplane-deploy-}
-if test "$deploy_dir" != "/tmp/groundplane-deploy-$deploy_id" ||
-    test "${#deploy_id}" -ne 32; then
-    echo "refusing unsafe deployment directory: $deploy_dir" >&2
-    exit 1
-fi
-case "$deploy_id" in
-    *[!0-9a-f]*)
-        echo "refusing unsafe deployment directory: $deploy_dir" >&2
-        exit 1
-        ;;
-esac
+""" + REMOTE_DEPLOY_GUARD + r"""
 
 rollback=0
 service_was_active=0
@@ -1010,6 +1022,28 @@ def command_text(command: list[str]) -> str:
     return shlex.join(command)
 
 
+def ensure_private_directory(path: Path) -> None:
+    try:
+        path.mkdir(mode=0o700)
+    except FileExistsError:
+        pass
+
+    try:
+        metadata = path.lstat()
+    except OSError as error:
+        raise RuntimeError(f"could not inspect private temporary directory: {path}") from error
+    if not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
+        raise RuntimeError(f"private temporary path must be a directory: {path}")
+
+    try:
+        os.chmod(path, 0o700, follow_symlinks=False)
+        metadata = path.lstat()
+    except OSError as error:
+        raise RuntimeError(f"could not secure private temporary directory: {path}") from error
+    if stat.S_IMODE(metadata.st_mode) != 0o700:
+        raise RuntimeError(f"private temporary directory is not mode 0700: {path}")
+
+
 def run(
     command: list[str],
     *,
@@ -1322,13 +1356,17 @@ def deploy(deployment: Deployment) -> None:
     prepare_target(deployment)
 
     invocation_id = secrets.token_hex(16)
-    remote_directory = f"/tmp/groundplane-deploy-{invocation_id}"
+    remote_directory = f"{REMOTE_DEPLOY_PREFIX_PATH}{invocation_id}"
     source_images = (
         f"groundplane-agent:deploy-{invocation_id}",
         f"groundplane-runner:deploy-{invocation_id}",
     )
     try:
-        with tempfile.TemporaryDirectory(prefix="groundplane-deploy-") as temporary_directory:
+        ensure_private_directory(LOCAL_DEPLOY_ROOT)
+        with tempfile.TemporaryDirectory(
+            prefix="groundplane-deploy-",
+            dir=LOCAL_DEPLOY_ROOT,
+        ) as temporary_directory:
             transfer_archive = Path(temporary_directory) / "deployment.tar"
             source_agent_image, source_runner_image = build_artifacts(
                 deployment,
