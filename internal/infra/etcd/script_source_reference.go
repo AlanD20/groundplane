@@ -329,7 +329,7 @@ func sameScriptCandidateStage(left, right ScriptCandidateSourceStage) bool {
 func scriptSourceKindMayBeBlueprintStaged(kind ScriptSourceKind) bool {
 	switch kind {
 	case ScriptSourceRunnerSnapshot, ScriptSourceService, ScriptSourceRelease,
-		ScriptSourceNetwork, ScriptSourceVolume, ScriptSourceEntryValue:
+		ScriptSourceEntryValue:
 		return true
 	default:
 		return false

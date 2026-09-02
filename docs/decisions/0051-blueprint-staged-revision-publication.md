@@ -210,6 +210,11 @@ revision is already current. Runtime finalization may update or delete these
 adjacent projections and release the lock, but it never switches the desired
 head or creates a desired revision.
 
+The Environment applied Compose projection is runtime-acknowledged state, not
+publication-adjacent desired state. Final Blueprint publication must leave its
+exact predecessor or absence unchanged. Only successful terminal acknowledgement
+of the owning Task may promote the sealed candidate to that applied key.
+
 ### Revision data is privately staged in immutable chunks
 
 Validated revision data is written under a private staging namespace. Public
@@ -423,11 +428,11 @@ The exact legal publication shapes are:
 
 | Blueprint shape | Comparisons | Success | Failure | Selected success | Selected failure | Full request |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| QA: eleven Release candidates, two hooks, three staged physical sources | 31 | 43 | 31 | 74 | 62 | 105 |
-| maximum non-Backup Script | 45 | 99 | 45 | 144 | 90 | 189 |
-| maximum non-Backup Script plus two candidate Attaches | 86 | 132 | 86 | 218 | 172 | 304 |
+| QA: eleven Release candidates, two hooks, two staged physical sources | 30 | 42 | 30 | 72 | 60 | 102 |
+| maximum non-Backup Script | 44 | 98 | 44 | 142 | 88 | 186 |
+| maximum non-Backup Script plus two candidate Attaches | 85 | 131 | 85 | 216 | 170 | 301 |
 | previously documented Backup-only maximum | 120 | 74 | 120 | 194 | 240 | 314 |
-| combined Backup plus Script maximum | 143 | 160 | 143 | 303 | 286 | 446 |
+| combined Backup plus Script maximum | 142 | 159 | 142 | 301 | 284 | 443 |
 
 Every counted operation is distinct and participates in the one atomic
 publication. Removing or coalescing one would discard desired-head, Task,
@@ -465,15 +470,15 @@ cannot allocate a second age identity on replay.
 
 Required focused proofs are:
 
-- the legal QA candidate with eleven Release candidates, two hooks, and three
-  staged physical sources produces exactly `31/43/31`, a 74-operation selected
-  success path, a 62-operation selected failure path, and 105 full operations;
-- the maximum legal non-Backup Script candidate produces exactly `45/99/45`,
-  and adding the maximum two candidate Attaches produces exactly `86/132/86`;
+- the legal QA candidate with eleven Release candidates, two hooks, and two
+  staged physical sources produces exactly `30/42/30`, a 72-operation selected
+  success path, a 60-operation selected failure path, and 102 full operations;
+- the maximum legal non-Backup Script candidate produces exactly `44/98/44`,
+  and adding the maximum two candidate Attaches produces exactly `85/131/85`;
 - the previously documented maximum Backup-only candidate still produces
   exactly `120/74/120`, while the combined maximum Backup plus Script candidate
-  produces exactly `143/160/143`, a 303-operation selected success path, a
-  286-operation selected failure path, and 446 full operations;
+  produces exactly `142/159/142`, a 301-operation selected success path, a
+  284-operation selected failure path, and 443 full operations;
 - a byte-fitting synthetic boundary plan accepts 256 operations in each arm,
   257 operations in any arm rejects locally, and a protobuf request exceeding
   1 MiB rejects locally before etcd;

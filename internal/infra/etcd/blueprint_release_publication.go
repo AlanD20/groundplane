@@ -415,16 +415,10 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 		}
 		members = append(members, ScriptSourcePreparationMember{Reference: snapshotReference, Evidence: ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{SourceKey: scriptRunnerSnapshotKey(execution.SnapshotID)}}})
 
-		projectionValue, err := encodeEnvironmentComposeProjection(
-			sources.DesiredProjection.Record,
-		)
-		if err != nil {
-			return nil, err
-		}
+		snapshotKey := scriptRunnerSnapshotKey(execution.SnapshotID)
 		seenNetworks := make(map[string]struct{}, len(snapshot.Networks))
 		for _, network := range snapshot.Networks {
 			if network == nil {
-				clear(projectionValue)
 				return nil, errs.New(
 					errs.KindValidationFailed,
 					"Blueprint Script Network source is invalid",
@@ -439,22 +433,18 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 				Kind:      ScriptSourceNetwork,
 				NetworkID: network.NetworkId,
 			}
-			evidence, evidenceErr := blueprintStagedSourceEvidence(
-				network.Source,
-				environmentComposeProjectionKey(execution.EnvironmentID),
-				projectionValue,
-				execution.EnvironmentID,
-			)
-			if evidenceErr != nil {
-				clear(projectionValue)
-				return nil, evidenceErr
-			}
-			members = append(members, evidence.withReference(reference))
+			reference.SourceModRevision = hook.SnapshotRevision
+			reference.SourceDigest = execution.SnapshotSHA256
+			members = append(members, ScriptSourcePreparationMember{
+				Reference: reference,
+				Evidence: ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{
+					SourceKey: snapshotKey,
+				}},
+			})
 		}
 		seenVolumes := make(map[string]struct{}, len(snapshot.Mounts))
 		for _, mount := range snapshot.Mounts {
 			if mount == nil {
-				clear(projectionValue)
 				return nil, errs.New(
 					errs.KindValidationFailed,
 					"Blueprint Script Volume source is invalid",
@@ -469,19 +459,15 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 				Kind:     ScriptSourceVolume,
 				VolumeID: mount.SourceId,
 			}
-			evidence, evidenceErr := blueprintStagedSourceEvidence(
-				mount.Source,
-				environmentComposeProjectionKey(execution.EnvironmentID),
-				projectionValue,
-				execution.EnvironmentID,
-			)
-			if evidenceErr != nil {
-				clear(projectionValue)
-				return nil, evidenceErr
-			}
-			members = append(members, evidence.withReference(reference))
+			reference.SourceModRevision = hook.SnapshotRevision
+			reference.SourceDigest = execution.SnapshotSHA256
+			members = append(members, ScriptSourcePreparationMember{
+				Reference: reference,
+				Evidence: ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{
+					SourceKey: snapshotKey,
+				}},
+			})
 		}
-		clear(projectionValue)
 
 		for _, binding := range snapshot.EntryBindings {
 			key := plainEntryValueGenerationKey(

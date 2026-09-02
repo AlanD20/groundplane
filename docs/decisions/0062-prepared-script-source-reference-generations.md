@@ -136,13 +136,21 @@ has no digest.
 
 Preparation evidence is one closed `existing | staged` union. Existing
 evidence uses exactly the positive source `ModRevision`. Staged evidence is
-limited to Blueprint-publishable runner snapshots, Services, Releases,
-Networks, Volumes, and Entry values and carries the exact candidate
+limited to Blueprint-publishable runner snapshots, Services, Releases, and
+Entry values and carries the exact candidate
 Environment id, desired revision id, render generation, positive fixed read
 revision, and SHA-256 of the canonical source value. All staged members of one
 preparation name the same candidate. Activation validates the candidate
 identity and requires one byte-identical final put for every staged source.
 Reusable Secret values and materialization proofs cannot use staged evidence.
+
+Candidate post-deploy Network and Volume memberships use existing evidence over
+the already-prepared immutable runner snapshot. Each names that snapshot's exact
+key, positive prepared `ModRevision`, and canonical payload SHA-256. Validation
+decodes the stored snapshot, proves its execution, snapshot, and Environment
+identity, and requires exact Network id or Volume source id membership. The
+Environment applied Compose projection is never their source and is never a
+Blueprint final-publication mutation.
 
 `ScriptSourceCount` is:
 
@@ -216,14 +224,14 @@ The exact Script accounting is:
 
 | Blueprint shape | Comparisons | Success | Failure |
 | --- | ---: | ---: | ---: |
-| QA: eleven Release candidates, two hooks, three staged physical sources | 31 | 43 | 31 |
-| maximum non-Backup Script | 45 | 99 | 45 |
-| maximum non-Backup Script plus two candidate Attaches | 86 | 132 | 86 |
-| combined maximum Backup plus Script | 143 | 160 | 143 |
+| QA: eleven Release candidates, two hooks, two staged physical sources | 30 | 42 | 30 |
+| maximum non-Backup Script | 44 | 98 | 44 |
+| maximum non-Backup Script plus two candidate Attaches | 85 | 131 | 85 |
+| combined maximum Backup plus Script | 142 | 159 | 142 |
 
-The QA shape has 74 operations on its selected success path, 62 on its
-selected failure path, and 105 in the full logical request. The combined
-maximum has 303, 286, and 446 respectively. ADR 0051's previously documented
+The QA shape has 72 operations on its selected success path, 60 on its
+selected failure path, and 102 in the full logical request. The combined
+maximum has 301, 284, and 443 respectively. ADR 0051's previously documented
 Backup-only maximum remains `120/74/120`; it is an accounting scenario, not a
 separate envelope.
 
@@ -236,8 +244,8 @@ protobuf-encoded request above 1 MiB before etcd with the existing
 maxima are diagnostic sums only, never rejection limits. A fitting compare
 failure remains one atomic conflict at its transaction revision.
 
-Required focused proof covers the exact `31/43/31`, `45/99/45`, `86/132/86`,
-and `143/160/143` shapes, 256-arm acceptance, 257-arm rejection, over-1-MiB
+Required focused proof covers the exact `30/42/30`, `44/98/44`, `85/131/85`,
+and `142/159/142` shapes, 256-arm acceptance, 257-arm rejection, over-1-MiB
 rejection, and the unchanged 96-selected-operation protection for ordinary
 non-Blueprint `Store.Transact`. Preparation, sealing, release, abandonment, and
 other non-final-publication limits in this ADR remain unchanged.

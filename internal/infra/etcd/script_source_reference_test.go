@@ -246,7 +246,9 @@ func TestScriptSourceReferenceAuthorityStagesSnapshotAndReleaseRequirements(t *t
 	serviceID := ids.NewAt(ids.KindService, at, 73)
 	snapshotID := scriptSourceReferenceExecutionID(at, 74)
 	releaseID := ids.NewAt(ids.KindDeployment, at, 75)
-	payload, _ := proto.Marshal(&agentpb.ResolvedRunnerSnapshot{SnapshotId: snapshotID, EnvironmentId: environmentID})
+	payload, _ := proto.Marshal(&agentpb.ResolvedRunnerSnapshot{
+		SnapshotId: snapshotID, ScriptExecutionId: executionID, EnvironmentId: environmentID,
+	})
 	snapshotDigest := scriptSourceReferenceBytesDigest(payload)
 	snapshotValue, _ := encodeEnvelope("script-runner-snapshot", storedScriptRunnerSnapshot{ExecutionID: executionID, SnapshotID: snapshotID, SHA256: snapshotDigest, Payload: payload})
 	releaseValue, _ := encodeEnvelope("release-intent", domain.Intent{
@@ -517,17 +519,17 @@ func TestScriptSourceReferenceAuthorityAbandonRestoresScriptActiveReferencesExac
 	}
 }
 
-// Rationale: one Blueprint hook can retain several logical Networks and Volumes
-// that all derive from the same candidate Environment compose projection.
-func TestScriptSourceReferenceAuthorityAcceptsSharedStagedProjectionOverAppliedPredecessor(t *testing.T) {
-	store, operationID, members, stage, _, _ := scriptSharedProjectionSourceFixture(t)
+// Rationale: one immutable runner snapshot is the exact physical source for
+// every logical Network and Volume membership retained by its Script execution.
+func TestScriptSourceReferenceAuthorityValidatesRunnerSnapshotNetworkAndVolumeMembership(t *testing.T) {
+	store, operationID, members, _, snapshotKey, snapshotValue := scriptRunnerSnapshotSourceFixture(t)
 	authority, err := newScriptSourceReferenceAuthority(store)
 	if err != nil {
 		t.Fatal(err)
 	}
 	prepared, err := authority.Prepare(context.Background(), operationID, members)
 	if err != nil {
-		t.Fatalf("Prepare(shared staged projection) error = %v", err)
+		t.Fatalf("Prepare(runner snapshot memberships) error = %v", err)
 	}
 	if prepared.membershipCount != 3 {
 		t.Fatalf("prepared membership count = %d, want 3", prepared.membershipCount)
@@ -544,19 +546,25 @@ func TestScriptSourceReferenceAuthorityAcceptsSharedStagedProjectionOverAppliedP
 		t.Fatalf("FinalPublicationFragment() error = %v", err)
 	}
 	defer fragment.Clear()
-	if len(fragment.StagedRequirements()) != 1 ||
-		len(fragment.conditions) != 3 || len(fragment.mutations) != 3 {
-		t.Fatalf("shared staged fragment = %#v / %#v", fragment.conditions, fragment.StagedRequirements())
+	if len(fragment.StagedRequirements()) != 0 ||
+		len(fragment.conditions) != 2 || len(fragment.mutations) != 2 {
+		t.Fatalf("runner snapshot fragment = %#v / %#v", fragment.conditions, fragment.StagedRequirements())
 	}
-	claim := EnvironmentBlueprintStageClaim{
-		EnvironmentID: stage.EnvironmentID, RevisionID: stage.RevisionID,
-		RenderGeneration: stage.RenderGeneration,
+	tampered := append([]byte(nil), snapshotValue...)
+	tampered[len(tampered)-1] ^= 1
+	if err = validateScriptSourceRecord(snapshotKey, tampered, members[0].Reference); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("validateScriptSourceRecord(tampered snapshot) error = %v", err)
 	}
-	if err = fragment.ValidateStagedMutations(claim, fragment.mutations); err != nil {
-		t.Fatalf("ValidateStagedMutations(exact shared put) error = %v", err)
+	missing := members[0].Reference
+	missing.Source = ScriptSourceIdentity{
+		Kind:      ScriptSourceNetwork,
+		NetworkID: ids.NewAt(ids.KindNetwork, scriptSourceReferenceTestTime(), 170),
+	}
+	if err = validateScriptSourceRecord(snapshotKey, snapshotValue, missing); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("validateScriptSourceRecord(missing Network) error = %v", err)
 	}
 	if err = authority.Abandon(context.Background(), operationID, members); err != nil {
-		t.Fatalf("Abandon(shared staged projection) error = %v", err)
+		t.Fatalf("Abandon(runner snapshot memberships) error = %v", err)
 	}
 	if store.valueAt(scriptSourcePreparationKey(operationID), store.revision) != nil {
 		t.Fatal("abandonment retained the shared source descriptor")
@@ -566,7 +574,7 @@ func TestScriptSourceReferenceAuthorityAcceptsSharedStagedProjectionOverAppliedP
 // Rationale: a known failure after the shared logical memberships commit must
 // leave neither preparation authority nor any membership/count removal fence.
 func TestScriptSourceReferenceAuthorityAbandonsSharedProjectionAfterKnownPrepublicationFailure(t *testing.T) {
-	store, operationID, members, _, _, _ := scriptSharedProjectionSourceFixture(t)
+	store, operationID, members, _, _, _ := scriptRunnerSnapshotSourceFixture(t)
 	failing := &scriptSourceReferenceFailureStore{memoryHierarchyStore: store, failAt: 3}
 	authority, err := newScriptSourceReferenceAuthority(failing)
 	if err != nil {
@@ -598,7 +606,7 @@ func TestScriptSourceReferenceAuthorityAbandonsSharedProjectionAfterKnownPrepubl
 	}
 }
 
-func scriptSharedProjectionSourceFixture(
+func scriptRunnerSnapshotSourceFixture(
 	t *testing.T,
 ) (*memoryHierarchyStore, string, []ScriptSourcePreparationMember, ScriptCandidateSourceStage, string, []byte) {
 	t.Helper()
@@ -611,6 +619,7 @@ func scriptSharedProjectionSourceFixture(
 	firstNetworkID := ids.NewAt(ids.KindNetwork, at, 164)
 	secondNetworkID := ids.NewAt(ids.KindNetwork, at, 165)
 	volumeID := ids.NewAt(ids.KindVolume, at, 166)
+	snapshotID := scriptSourceReferenceExecutionID(at, 169)
 	projectionKey := environmentComposeProjectionKey(environmentID)
 	predecessorValue, err := encodeEnvironmentComposeProjection(withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
 		EnvironmentID:    environmentID,
@@ -620,33 +629,34 @@ func scriptSharedProjectionSourceFixture(
 	if err != nil {
 		t.Fatalf("encode predecessor projection: %v", err)
 	}
-	seed, err := store.Transact(context.Background(), nil, []Mutation{{
-		Type: MutationPut, Key: projectionKey, Value: predecessorValue,
-	}})
-	clear(predecessorValue)
-	if err != nil || !seed.Succeeded {
-		t.Fatalf("seed applied predecessor = %#v, %v", seed, err)
-	}
-	candidateValue, err := encodeEnvironmentComposeProjection(withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
-		EnvironmentID:    environmentID,
-		RevisionID:       revisionID,
-		RenderGeneration: 2,
-		DesiredZones: []EnvironmentZoneProjection{
-			{EnvironmentID: environmentID, Desired: core.Zone{
-				ID: firstNetworkID, Name: "app", Subnet: "10.40.0.0/24",
-				OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
-			}},
-			{EnvironmentID: environmentID, Desired: core.Zone{
-				ID: secondNetworkID, Name: "data", Subnet: "10.41.0.0/24",
-				OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
-			}},
+	snapshotPayload, err := proto.MarshalOptions{Deterministic: true}.Marshal(&agentpb.ResolvedRunnerSnapshot{
+		SnapshotId: snapshotID, ScriptExecutionId: executionID, EnvironmentId: environmentID,
+		Networks: []*agentpb.ScriptRunnerNetwork{
+			{NetworkId: firstNetworkID},
+			{NetworkId: secondNetworkID},
 		},
-		Volumes: []EnvironmentVolumeIdentity{{ID: volumeID, Slug: "state", Key: "state"}},
-	}))
+		Mounts: []*agentpb.ScriptRunnerMount{{SourceId: volumeID}},
+	})
 	if err != nil {
-		t.Fatalf("encode candidate projection: %v", err)
+		t.Fatalf("marshal runner snapshot: %v", err)
 	}
-	stage := scriptSourceReferenceStage(environmentID, revisionID, 2, seed.Revision, candidateValue)
+	snapshotDigest := scriptSourceReferenceBytesDigest(snapshotPayload)
+	snapshotValue, err := encodeEnvelope("script-runner-snapshot", storedScriptRunnerSnapshot{
+		ExecutionID: executionID, SnapshotID: snapshotID,
+		SHA256: snapshotDigest, Payload: snapshotPayload,
+	})
+	clear(snapshotPayload)
+	if err != nil {
+		t.Fatalf("encode runner snapshot: %v", err)
+	}
+	seed, err := store.Transact(context.Background(), nil, []Mutation{
+		{Type: MutationPut, Key: projectionKey, Value: predecessorValue},
+		{Type: MutationPut, Key: scriptRunnerSnapshotKey(snapshotID), Value: snapshotValue},
+	})
+	if err != nil || !seed.Succeeded {
+		t.Fatalf("seed applied predecessor and runner snapshot = %#v, %v", seed, err)
+	}
+	stage := scriptSourceReferenceStage(environmentID, revisionID, 2, seed.Revision, snapshotValue)
 	sources := []ScriptSourceIdentity{
 		{Kind: ScriptSourceNetwork, NetworkID: firstNetworkID},
 		{Kind: ScriptSourceNetwork, NetworkID: secondNetworkID},
@@ -658,11 +668,12 @@ func scriptSharedProjectionSourceFixture(
 			Reference: ScriptSourceReference{
 				OperationID: operationID, ScriptExecutionID: executionID,
 				Source: source, SourceOwnerID: environmentID,
+				SourceModRevision: seed.Revision, SourceDigest: snapshotDigest,
 			},
-			Evidence: ScriptSourceEvidence{Staged: &ScriptStagedSourceEvidence{
-				SourceKey: projectionKey, Stage: stage, Value: append([]byte(nil), candidateValue...),
+			Evidence: ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{
+				SourceKey: scriptRunnerSnapshotKey(snapshotID),
 			}},
 		}
 	}
-	return store, operationID, members, stage, projectionKey, candidateValue
+	return store, operationID, members, stage, scriptRunnerSnapshotKey(snapshotID), snapshotValue
 }

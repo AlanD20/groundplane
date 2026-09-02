@@ -366,16 +366,14 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 	keys := []string{
 		releasePublicationKey(publicationID),
 		releaseManifestStagingKey(publicationID),
-		environmentBlueprintHeadKey(task.Owner.EnvironmentID),
 		environmentBlueprintRootKey(task.Owner.EnvironmentID, desiredRevisionID),
-		environmentComposeProjectionKey(task.Owner.EnvironmentID),
 	}
 	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) ||
-		read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil || read.Values[3] == nil {
+		read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil {
 		return corruptReleaseRecord()
 	}
 	marker, err := decodeReleaseRecord[ReleasePublicationMarker](read.Values[0].Value, "release-publication")
@@ -386,31 +384,11 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 	if err != nil || validateBlueprintCandidateManifest(task, marker, manifest) != nil {
 		return corruptReleaseRecord()
 	}
-	headRevisionID, err := decodeTaskReference(read.Values[2].Value)
-	if err != nil || headRevisionID != desiredRevisionID {
-		return errs.New(errs.KindStateConflict, "Blueprint desired head changed after terminal acknowledgement")
-	}
-	seal, err := decodeEnvironmentBlueprintSeal(read.Values[3].Value)
+	seal, err := decodeEnvironmentBlueprintSeal(read.Values[2].Value)
 	if err != nil || seal.EnvironmentID != task.Owner.EnvironmentID ||
 		seal.RevisionID != desiredRevisionID || seal.SourceKind != EnvironmentBlueprintSourceApply ||
 		seal.RenderGeneration != uint64(task.RenderGeneration) {
 		return corruptReleaseRecord()
-	}
-	if terminalStatus == TaskStatusCompleted {
-		if read.Values[4] == nil {
-			return corruptReleaseRecord()
-		}
-		applied, decodeErr := decodeEnvironmentComposeProjection(read.Values[4].Value)
-		if decodeErr != nil || applied.RevisionID != desiredRevisionID ||
-			applied.RenderGeneration != uint64(task.RenderGeneration) {
-			return errs.New(errs.KindStateConflict, "Blueprint applied projection does not match terminal Task")
-		}
-	} else if seal.BaselineHeadRevision == 0 {
-		if read.Values[4] != nil {
-			return errs.New(errs.KindStateConflict, "failed Blueprint changed first-candidate applied absence")
-		}
-	} else if read.Values[4] == nil || read.Values[4].ModRevision != seal.BaselineHeadRevision {
-		return errs.New(errs.KindStateConflict, "failed Blueprint changed the sealed predecessor projection")
 	}
 	attempts, _, err := repository.blueprintCandidateAttempts(ctx, task, seal, revision)
 	if err != nil {
@@ -424,16 +402,23 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 			return err
 		}
 	}
-	detailKeys := make([]string, 0, len(manifest.Members)*6)
+	detailWidth := 2
+	if terminalStatus == TaskStatusCompleted {
+		detailWidth = 5
+	}
+	detailKeys := make([]string, 0, len(manifest.Members)*detailWidth)
 	for _, member := range manifest.Members {
 		detailKeys = append(detailKeys,
 			releaseIntentStagingKey(publicationID, member.ReleaseID),
 			releaseRenderInputStagingKey(publicationID, member.ReleaseID),
-			releaseCheckpointStagingKey(publicationID, member.ReleaseID),
-			releaseTerminalKey(member.ReleaseID),
-			releaseRetentionKey(member.ReleaseID),
-			releaseProjectionKey(member.ServiceID),
 		)
+		if terminalStatus == TaskStatusCompleted {
+			detailKeys = append(detailKeys,
+				releaseCheckpointStagingKey(publicationID, member.ReleaseID),
+				releaseTerminalKey(member.ReleaseID),
+				releaseRetentionKey(member.ReleaseID),
+			)
+		}
 	}
 	details, err := repository.store.GetMany(ctx, GetManyRequest{Keys: detailKeys, Revision: revision})
 	if err != nil {
@@ -445,8 +430,8 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 	memberReleaseIDs := make(map[string]struct{}, len(manifest.Members))
 	for index, member := range manifest.Members {
 		memberReleaseIDs[member.ReleaseID] = struct{}{}
-		values := details.Values[index*6 : index*6+6]
-		if values[0] == nil || values[1] == nil || values[2] == nil {
+		values := details.Values[index*detailWidth : index*detailWidth+detailWidth]
+		if values[0] == nil || values[1] == nil {
 			return corruptReleaseRecord()
 		}
 		intent, decodeErr := decodeReleaseRecord[domain.Intent](values[0].Value, "release-intent")
@@ -466,21 +451,9 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 			render.EnvironmentID != task.Owner.EnvironmentID || render.Strategy != intent.Strategy {
 			return corruptReleaseRecord()
 		}
-		checkpoint, decodeErr := decodeReleaseRecord[domain.Checkpoint](values[2].Value, "release-checkpoint")
-		if decodeErr != nil || domain.ValidateCheckpoint(checkpoint) != nil || checkpoint.ReleaseID != intent.ID {
-			return corruptReleaseRecord()
-		}
-		projection, decodeErr := decodeReleaseProjection(values[5], task.Owner.EnvironmentID, member.ServiceID)
-		if decodeErr != nil {
-			return decodeErr
-		}
 		if terminalStatus != TaskStatusCompleted {
-			checkpointDigest, _ := domain.Digest(checkpoint)
 			if task.Result == nil || task.Result.ReconciliationRequired ||
-				checkpoint.State != domain.StatePending || checkpointDigest != member.CheckpointDigest ||
-				values[3] != nil || values[4] != nil ||
-				projection.ServingReleaseID != intent.PriorServingReleaseID ||
-				projection.CurrentSuccessfulReleaseID != intent.PriorSuccessfulReleaseID {
+				task.Result.Kind != TaskResultCompose {
 				return corruptReleaseRecord()
 			}
 			if proofErr := validateBlueprintCandidateCompensation(intent, render, *task.Result); proofErr != nil {
@@ -488,10 +461,15 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 			}
 			continue
 		}
+		if values[2] == nil || values[3] == nil || values[4] == nil {
+			return corruptReleaseRecord()
+		}
+		checkpoint, decodeErr := decodeReleaseRecord[domain.Checkpoint](values[2].Value, "release-checkpoint")
+		if decodeErr != nil || domain.ValidateCheckpoint(checkpoint) != nil || checkpoint.ReleaseID != intent.ID {
+			return corruptReleaseRecord()
+		}
 		if task.FinishedAt == nil || checkpoint.State != domain.StateCompleted ||
-			values[3] == nil || values[4] == nil ||
-			projection.ServingReleaseID != intent.ID ||
-			projection.CurrentSuccessfulReleaseID != intent.ID {
+			task.Result == nil || task.Result.Kind != TaskResultCompose || task.Result.ReconciliationRequired {
 			return corruptReleaseRecord()
 		}
 		terminal, decodeErr := decodeReleaseRecord[domain.TerminalSummary](

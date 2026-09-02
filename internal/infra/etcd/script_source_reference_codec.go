@@ -36,7 +36,8 @@ func validateScriptSourceReference(reference ScriptSourceReference) error {
 		return errs.New(errs.KindValidationFailed, "Script body source owner is invalid")
 	}
 	requiresDigest := reference.Source.Kind == ScriptSourceBody || reference.Source.Kind == ScriptSourceRunnerSnapshot ||
-		reference.Source.Kind == ScriptSourceRelease || reference.Source.Kind == ScriptSourceEntryValue ||
+		reference.Source.Kind == ScriptSourceRelease || reference.Source.Kind == ScriptSourceNetwork ||
+		reference.Source.Kind == ScriptSourceVolume || reference.Source.Kind == ScriptSourceEntryValue ||
 		reference.Source.Kind == ScriptSourceSecretValue || reference.Source.Kind == ScriptSourceMaterialization
 	if (requiresDigest && !validLowerSHA256(reference.SourceDigest)) || (!requiresDigest && reference.SourceDigest != "") {
 		return errs.New(errs.KindValidationFailed, "Script source digest is invalid")
@@ -96,12 +97,8 @@ func validateScriptSourceRecord(key string, value []byte, reference ScriptSource
 			return errs.New(errs.KindValidationFailed, "Script body source evidence is invalid")
 		}
 	case ScriptSourceRunnerSnapshot:
-		snapshot, err := decodeEnvelope[storedScriptRunnerSnapshot](value, "script-runner-snapshot")
-		digest := sha256.Sum256(snapshot.Payload)
-		var payload agentpb.ResolvedRunnerSnapshot
-		if err != nil || key != scriptRunnerSnapshotKey(source.SnapshotID) || snapshot.ExecutionID != reference.ScriptExecutionID || snapshot.SnapshotID != source.SnapshotID ||
-			snapshot.SHA256 != reference.SourceDigest || hex.EncodeToString(digest[:]) != reference.SourceDigest ||
-			proto.Unmarshal(snapshot.Payload, &payload) != nil || payload.EnvironmentId != reference.SourceOwnerID {
+		payload, snapshotID, err := decodeScriptRunnerSnapshotSource(key, value, reference)
+		if err != nil || snapshotID != source.SnapshotID || payload.SnapshotId != source.SnapshotID {
 			return errs.New(errs.KindValidationFailed, "Script runner snapshot source evidence is invalid")
 		}
 	case ScriptSourceService:
@@ -120,10 +117,9 @@ func validateScriptSourceRecord(key string, value []byte, reference ScriptSource
 			return errs.New(errs.KindValidationFailed, "Script Release source evidence is invalid")
 		}
 	case ScriptSourceNetwork, ScriptSourceVolume:
-		projection, err := decodeEnvironmentComposeProjection(value)
-		if err != nil || key != environmentComposeProjectionKey(projection.EnvironmentID) ||
-			!projectionContainsScriptSource(projection, reference) {
-			return errs.New(errs.KindValidationFailed, "Script projection source evidence is invalid")
+		payload, _, err := decodeScriptRunnerSnapshotSource(key, value, reference)
+		if err != nil || !runnerSnapshotContainsScriptSource(payload, source) {
+			return errs.New(errs.KindValidationFailed, "Script runner snapshot membership evidence is invalid")
 		}
 	case ScriptSourceEntryValue:
 		if key == plainEntryValueGenerationKey(source.EntryID, source.ValueGenerationID) {
@@ -167,6 +163,47 @@ func validateScriptSourceRecord(key string, value []byte, reference ScriptSource
 	return nil
 }
 
+func decodeScriptRunnerSnapshotSource(
+	key string,
+	value []byte,
+	reference ScriptSourceReference,
+) (agentpb.ResolvedRunnerSnapshot, string, error) {
+	snapshot, err := decodeEnvelope[storedScriptRunnerSnapshot](value, "script-runner-snapshot")
+	digest := sha256.Sum256(snapshot.Payload)
+	var payload agentpb.ResolvedRunnerSnapshot
+	if err != nil || snapshot.SnapshotID == "" || key != scriptRunnerSnapshotKey(snapshot.SnapshotID) ||
+		snapshot.ExecutionID != reference.ScriptExecutionID || snapshot.SHA256 != reference.SourceDigest ||
+		hex.EncodeToString(digest[:]) != reference.SourceDigest || proto.Unmarshal(snapshot.Payload, &payload) != nil ||
+		payload.SnapshotId != snapshot.SnapshotID || payload.ScriptExecutionId != snapshot.ExecutionID ||
+		payload.EnvironmentId != reference.SourceOwnerID {
+		return agentpb.ResolvedRunnerSnapshot{}, "", errs.New(
+			errs.KindValidationFailed,
+			"Script runner snapshot source evidence is invalid",
+		)
+	}
+	return payload, snapshot.SnapshotID, nil
+}
+
+func runnerSnapshotContainsScriptSource(
+	snapshot agentpb.ResolvedRunnerSnapshot,
+	source ScriptSourceIdentity,
+) bool {
+	if source.Kind == ScriptSourceNetwork {
+		for _, network := range snapshot.Networks {
+			if network != nil && network.NetworkId == source.NetworkID {
+				return true
+			}
+		}
+		return false
+	}
+	for _, mount := range snapshot.Mounts {
+		if mount != nil && mount.SourceId == source.VolumeID {
+			return true
+		}
+	}
+	return false
+}
+
 func decodeScriptMaterializationProof(encoded []byte) (coreproof.Proof, error) {
 	const magic = "GPM1"
 	const header = len(magic) + 4 + sha256.Size
@@ -201,27 +238,6 @@ func decodeScriptMaterializationProof(encoded []byte) (coreproof.Proof, error) {
 		return coreproof.Proof{}, errs.New(errs.KindValidationFailed, "Script materialization source evidence is invalid")
 	}
 	return proof, nil
-}
-
-func projectionContainsScriptSource(projection EnvironmentComposeProjection, reference ScriptSourceReference) bool {
-	source := reference.Source
-	if source.Kind == ScriptSourceNetwork {
-		for _, zone := range projection.DesiredZones {
-			if zone.Desired.ID == source.NetworkID && zone.EnvironmentID == reference.SourceOwnerID {
-				return true
-			}
-		}
-		return false
-	}
-	if projection.EnvironmentID != reference.SourceOwnerID {
-		return false
-	}
-	for _, volume := range projection.Volumes {
-		if volume.ID == source.VolumeID {
-			return true
-		}
-	}
-	return false
 }
 
 func scriptSourcePreparationKey(operationID string) string { return ref.PreparationKey(operationID) }

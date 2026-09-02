@@ -96,6 +96,8 @@ func TestBlueprintReleaseSourceMembersUsesStoredSecretEntryCiphertextDigest(t *t
 	executionID := scriptSourceReferenceExecutionID(at, 9)
 	snapshotID := scriptSourceReferenceExecutionID(at, 10)
 	publicationID := scriptSourceReferenceExecutionID(at, 11)
+	networkID := ids.NewAt(ids.KindNetwork, at, 12)
+	volumeID := ids.NewAt(ids.KindVolume, at, 13)
 	plaintextDigest := sha256.Sum256([]byte("resolved secret plaintext"))
 	ciphertext := []byte("stored age ciphertext")
 	ciphertextDigest := sha256.Sum256(ciphertext)
@@ -136,6 +138,8 @@ func TestBlueprintReleaseSourceMembersUsesStoredSecretEntryCiphertextDigest(t *t
 			EnvironmentId: environmentID, RevisionId: revisionID, RenderGeneration: 1,
 			FixedReadRevision: uint64(seed.Revision), CanonicalValueSha256: serviceDigest[:],
 		}},
+		Networks: []*agentpb.ScriptRunnerNetwork{{NetworkId: networkID}},
+		Mounts:   []*agentpb.ScriptRunnerMount{{SourceId: volumeID}},
 		EntryBindings: []*agentpb.ScriptRunnerEntryBinding{{
 			EntryId: entryID, ValueGenerationId: generationID,
 			Sha256: plaintextDigest[:], Secret: true,
@@ -151,46 +155,72 @@ func TestBlueprintReleaseSourceMembersUsesStoredSecretEntryCiphertextDigest(t *t
 		ServiceID: serviceID, ReleaseID: releaseID, Snapshot: snapshotValue,
 		BodySHA256: hex.EncodeToString(sha256.New().Sum(nil)),
 	}
+	snapshotDigest := sha256.Sum256(snapshotValue)
+	execution.SnapshotSHA256 = hex.EncodeToString(snapshotDigest[:])
+	storedSnapshotValue, err := encodeBlueprintReleaseHookSnapshot(execution)
+	if err != nil {
+		t.Fatalf("encodeBlueprintReleaseHookSnapshot() error = %v", err)
+	}
+	snapshotSeed, err := store.Transact(ctx, nil, []Mutation{{
+		Type: MutationPut, Key: scriptRunnerSnapshotKey(snapshotID), Value: storedSnapshotValue,
+	}})
+	if err != nil || !snapshotSeed.Succeeded {
+		t.Fatalf("seed runner snapshot = %#v, %v", snapshotSeed, err)
+	}
 	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
 	})
 	members, err := (&ReleaseLedger{store: store}).BlueprintReleaseSourceMembers(
 		ctx,
 		VersionedReleaseManifest{
-			Record: ReleaseStagedManifest{PublicationID: publicationID, OperationID: operationID},
+			Record:       ReleaseStagedManifest{PublicationID: publicationID, OperationID: operationID},
 			ReadRevision: seed.Revision,
 		},
 		[]ReleaseHookExecutionPublication{{
 			Sources: ScriptExecutionSources{
 				Revision: seed.Revision,
-				Service: Versioned[ServiceRecord]{Record: service},
+				Service:  Versioned[ServiceRecord]{Record: service},
 				Script: Versioned[ScriptRecord]{Record: ScriptRecord{
 					ScriptSetGeneration: revisionID,
 				}},
 				DesiredProjection: Versioned[EnvironmentComposeProjection]{Record: projection},
 			},
-			Execution: execution, SnapshotRevision: seed.Revision,
+			Execution: execution, SnapshotRevision: snapshotSeed.Revision,
 		}},
 	)
 	if err != nil {
 		t.Fatalf("BlueprintReleaseSourceMembers() error = %v", err)
 	}
-	var entryMember ScriptSourcePreparationMember
+	var entryMember, networkMember, volumeMember ScriptSourcePreparationMember
 	for _, member := range members {
-		if member.Reference.Source.Kind == ScriptSourceEntryValue {
+		switch member.Reference.Source.Kind {
+		case ScriptSourceEntryValue:
 			entryMember = member
-			break
+		case ScriptSourceNetwork:
+			networkMember = member
+		case ScriptSourceVolume:
+			volumeMember = member
 		}
 	}
 	if entryMember.Reference.SourceDigest != hex.EncodeToString(ciphertextDigest[:]) {
 		t.Fatalf("secret Entry source digest = %q, want ciphertext digest", entryMember.Reference.SourceDigest)
 	}
+	for _, member := range []ScriptSourcePreparationMember{networkMember, volumeMember} {
+		if member.Evidence.Existing == nil || member.Evidence.Staged != nil ||
+			member.Evidence.Existing.SourceKey != scriptRunnerSnapshotKey(snapshotID) ||
+			member.Reference.SourceModRevision != snapshotSeed.Revision ||
+			member.Reference.SourceDigest != execution.SnapshotSHA256 {
+			t.Fatalf("runner snapshot source member = %#v", member)
+		}
+	}
 	authority, err := newScriptSourceReferenceAuthority(store)
 	if err != nil {
 		t.Fatalf("newScriptSourceReferenceAuthority() error = %v", err)
 	}
-	if _, err = authority.Prepare(ctx, operationID, []ScriptSourcePreparationMember{entryMember}); err != nil {
-		t.Fatalf("Prepare(secret Entry source) error = %v", err)
+	if _, err = authority.Prepare(ctx, operationID, []ScriptSourcePreparationMember{
+		entryMember, networkMember, volumeMember,
+	}); err != nil {
+		t.Fatalf("Prepare(secret Entry and runner snapshot sources) error = %v", err)
 	}
 	if !bytes.Equal(snapshot.EntryBindings[0].Sha256, plaintextDigest[:]) {
 		t.Fatalf("runner binding digest = %x, want plaintext digest", snapshot.EntryBindings[0].Sha256)
@@ -223,16 +253,25 @@ func TestBlueprintStagedSourceEvidenceRejectsChangedCandidateBytes(t *testing.T)
 	}
 }
 
-// Rationale: the owning Blueprint transaction must publish each deduplicated
-// candidate source under the exact predecessor-or-absence state selected at its fixed read.
-func TestBlueprintReleasePublicationPutsSharedStagedSourcesWithPredecessorFences(t *testing.T) {
+// Rationale: final Blueprint publication owns desired state only; neither an
+// applied predecessor nor applied absence may advance before terminal Task acknowledgement.
+func TestBlueprintReleasePublicationLeavesAppliedProjectionUntilAcknowledgement(t *testing.T) {
 	t.Parallel()
-	for _, raceKey := range []string{"", "projection", "service"} {
-		raceKey := raceKey
-		t.Run(raceKey, func(t *testing.T) {
+	for _, appliedPresent := range []bool{false, true} {
+		appliedPresent := appliedPresent
+		t.Run(map[bool]string{false: "absence", true: "predecessor"}[appliedPresent], func(t *testing.T) {
 			t.Parallel()
-			store, operationID, members, stage, projectionKey, projectionValue :=
-				scriptSharedProjectionSourceFixture(t)
+			store, operationID, members, stage, _, _ := scriptRunnerSnapshotSourceFixture(t)
+			projectionKey := environmentComposeProjectionKey(stage.EnvironmentID)
+			appliedBefore := store.valueAt(projectionKey, store.revision)
+			if !appliedPresent {
+				removed, removeErr := store.Transact(context.Background(), nil, []Mutation{{
+					Type: MutationDelete, Key: projectionKey,
+				}})
+				if removeErr != nil || !removed.Succeeded {
+					t.Fatalf("remove applied predecessor = %#v, %v", removed, removeErr)
+				}
+			}
 			serviceID := ids.NewAt(ids.KindService, time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC), 168)
 			serviceKey := serviceRuntimeKey(serviceID)
 			serviceValue := scriptSourceServiceValue(t, stage.EnvironmentID, serviceID)
@@ -268,8 +307,8 @@ func TestBlueprintReleasePublicationPutsSharedStagedSourcesWithPredecessorFences
 				t.Fatalf("newBlueprintReleasePublication() error = %v", err)
 			}
 			defer publication.Clear()
-			if len(publication.sources.StagedRequirements()) != 2 ||
-				len(publication.conditions) != 4 || len(publication.mutations) != 4 {
+			if len(publication.sources.StagedRequirements()) != 1 ||
+				len(publication.conditions) != 3 || len(publication.mutations) != 3 {
 				t.Fatalf(
 					"publication staged shape = %d requirements, %d conditions, %d mutations",
 					len(publication.sources.StagedRequirements()), len(publication.conditions), len(publication.mutations),
@@ -281,7 +320,7 @@ func TestBlueprintReleasePublicationPutsSharedStagedSourcesWithPredecessorFences
 					selected[condition.Key] = condition.ModRevision
 				}
 			}
-			if selected[projectionKey] != stage.FixedReadRevision || selected[serviceKey] != 0 {
+			if _, found := selected[projectionKey]; found || selected[serviceKey] != 0 {
 				t.Fatalf("selected staged predecessors = %#v", selected)
 			}
 			claim := EnvironmentBlueprintStageClaim{
@@ -291,34 +330,21 @@ func TestBlueprintReleasePublicationPutsSharedStagedSourcesWithPredecessorFences
 			if err = publication.sources.ValidateStagedMutations(claim, publication.mutations); err != nil {
 				t.Fatalf("ValidateStagedMutations(production fragment) error = %v", err)
 			}
-			if raceKey != "" {
-				key := projectionKey
-				if raceKey == "service" {
-					key = serviceKey
-				}
-				raced, raceErr := store.Transact(context.Background(), nil, []Mutation{{
-					Type: MutationPut, Key: key, Value: []byte("concurrent"),
-				}})
-				if raceErr != nil || !raced.Succeeded {
-					t.Fatalf("publish concurrent change = %#v, %v", raced, raceErr)
-				}
-			}
 			result, err := store.Transact(context.Background(), publication.conditions, publication.mutations)
 			if err != nil {
 				t.Fatalf("publish Blueprint fragment error = %v", err)
 			}
-			if raceKey != "" {
-				if result.Succeeded || store.valueAt(scriptSourceRootKey(operationID), store.revision) != nil {
-					t.Fatalf("raced Blueprint publication = %#v; source root became active", result)
-				}
-				return
-			}
 			if !result.Succeeded {
 				t.Fatal("exact Blueprint publication did not commit")
 			}
-			if stored := store.valueAt(projectionKey, store.revision); stored == nil ||
-				!bytes.Equal(stored.Value, projectionValue) {
-				t.Fatal("Blueprint publication omitted the candidate projection")
+			storedApplied := store.valueAt(projectionKey, store.revision)
+			if appliedPresent {
+				if storedApplied == nil || !bytes.Equal(storedApplied.Value, appliedBefore.Value) ||
+					storedApplied.ModRevision != appliedBefore.ModRevision {
+					t.Fatalf("Blueprint publication changed applied predecessor = %#v", storedApplied)
+				}
+			} else if storedApplied != nil {
+				t.Fatalf("Blueprint publication advanced applied absence = %#v", storedApplied)
 			}
 			if stored := store.valueAt(serviceKey, store.revision); stored == nil ||
 				!bytes.Equal(stored.Value, serviceValue) {

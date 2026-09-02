@@ -358,10 +358,10 @@ rejection limits. Ordinary non-Blueprint `Store.Transact` retains its
 96-selected-operation protection; staging, sealing, and non-final-publication
 limits are unchanged.
 
-Required implementation evidence is exact construction of `31/43/31` for the
-eleven-Release/two-hook/three-physical-source QA Blueprint, `45/99/45` for the
-maximum non-Backup Script shape, `86/132/86` with two candidate Attaches, the
-retained Backup-only `120/74/120` accounting, and `143/160/143` for the combined
+Required implementation evidence is exact construction of `30/42/30` for the
+eleven-Release/two-hook/two-physical-source QA Blueprint, `44/98/44` for the
+maximum non-Backup Script shape, `85/131/85` with two candidate Attaches, the
+retained Backup-only `120/74/120` accounting, and `142/159/142` for the combined
 maximum, plus 256-arm acceptance, 257-arm rejection, over-1-MiB rejection, and
 proof that the non-Blueprint 96-operation protection is unchanged. Every
 operation is distinct and required for atomic desired-head, Task, marker,

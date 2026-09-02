@@ -600,17 +600,17 @@ Blueprint Release image binding now selects exactly one matching candidate workl
 
 Environment Blueprint and direct Route create/edit publication now reject silent Service, Zone, or Route identity loss with `resource.in_use`; a pending Remove-shaped Task cannot authorize omission. Existing canonical authoring continues to carry omitted resources forward, sealed Route removal remains separate, and exact completed Volume removal remains accepted. Focused persistence, Route transaction, and application carry-forward proofs pass; reference-host Blueprint acceptance remains pending.
 
-## Shared staged Script source publication (2026-09-02)
+## Runner-snapshot Network and Volume Script source authority (2026-09-03)
 
-Blueprint post-deploy Script preparation now preserves distinct logical Service,
-Network, and Volume memberships while deduplicating their byte-identical staged
-physical records. The owning Blueprint transaction publishes each exact staged
-candidate under the predecessor-or-absence revision selected at the fixed read,
-so an existing applied Environment projection is valid predecessor authority
-without permitting a concurrent replacement. Known prepublication abandonment
-removes the prepared memberships and counts without deleting the applied
-predecessor. Focused Script-source and Blueprint publication race proofs pass;
-exact reference-host Blueprint and Script acceptance remains pending.
+Blueprint post-deploy Script preparation preserves distinct logical Network and
+Volume memberships against the already-prepared immutable runner snapshot. Each
+membership retains the snapshot's exact key, positive prepared revision, and
+canonical digest, and validation proves the requested Network or Volume source
+id is present. Final Blueprint publication no longer writes or fences the
+Environment applied Compose projection; its exact predecessor or absence stays
+authoritative until successful terminal Task acknowledgement promotes the
+sealed candidate. Focused source and publication proofs pass; exact
+reference-host Blueprint and Script acceptance remains pending.
 
 ## Unified Blueprint final-publication contract correction (2026-09-02)
 
@@ -625,12 +625,12 @@ non-Blueprint `Store.Transact` keeps its existing 96-selected-operation
 protection; staging, sealing, and other non-final-publication limits do not
 change.
 
-The required implementation proof is `31/43/31` for the legal QA Blueprint
-with eleven Release candidates, two hooks, and three staged physical sources;
-`45/99/45` for maximum non-Backup Script; `86/132/86` with two candidate
-Attaches; the retained Backup-only `120/74/120` accounting; and `143/160/143`
+The required implementation proof is `30/42/30` for the legal QA Blueprint
+with eleven Release candidates, two hooks, and two staged physical sources;
+`44/98/44` for maximum non-Backup Script; `85/131/85` with two candidate
+Attaches; the retained Backup-only `120/74/120` accounting; and `142/159/142`
 for combined Backup plus Script, whose selected success, selected failure, and
-full counts are 303, 286, and 446. Boundary proof must accept a byte-fitting
+full counts are 301, 284, and 443. Boundary proof must accept a byte-fitting
 256-operation arm, reject 257, reject an encoded request over 1 MiB, and retain
 the non-Blueprint 96-operation rejection. Every operation remains distinct and
 atomic because it carries desired-head, Task, marker, Release, Script, source,

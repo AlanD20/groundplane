@@ -404,6 +404,85 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 	); err != nil {
 		t.Fatalf("restored Blueprint terminal replay error = %v", err)
 	}
+	stateKeys := []string{
+		environmentBlueprintHeadKey(environmentID),
+		environmentComposeProjectionKey(environmentID),
+		releaseProjectionKey(serviceID),
+	}
+	assertReadOnlyReplay := func(replayTask TaskRecord, status TaskStatus, revision int64) {
+		t.Helper()
+		before, getErr := store.GetMany(ctx, GetManyRequest{Keys: stateKeys, Revision: revision})
+		if getErr != nil || before == nil || len(before.Values) != len(stateKeys) {
+			t.Fatalf("read successor state before replay = %#v, %v", before, getErr)
+		}
+		if replayErr := repository.validateBlueprintCandidateTerminalReplay(
+			ctx, replayTask, status, revision,
+		); replayErr != nil {
+			t.Fatalf("delayed exact Blueprint terminal replay error = %v", replayErr)
+		}
+		after, getErr := store.GetMany(ctx, GetManyRequest{Keys: stateKeys})
+		if getErr != nil || after == nil || len(after.Values) != len(stateKeys) {
+			t.Fatalf("read successor state after replay = %#v, %v", after, getErr)
+		}
+		for index := range stateKeys {
+			if before.Values[index] == nil || after.Values[index] == nil ||
+				before.Values[index].ModRevision != after.Values[index].ModRevision ||
+				string(before.Values[index].Value) != string(after.Values[index].Value) {
+				t.Fatalf("delayed replay mutated %q: before=%#v after=%#v", stateKeys[index], before.Values[index], after.Values[index])
+			}
+		}
+	}
+
+	successorTaskID := ids.NewAt(ids.KindTask, now.Add(5*time.Second), 15)
+	successorHeadValue, err := encodeTaskReference(successorTaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	successorSealValue, err := encodeEnvironmentBlueprintSeal(EnvironmentBlueprintSeal{
+		EnvironmentID: environmentID, RevisionID: successorTaskID,
+		SourceKind: EnvironmentBlueprintSourceApply, RenderGeneration: 2,
+		ProjectionSchema: 1,
+		AuditChunks:      1, AuditBytes: 1, AuditSHA256: sha256.Sum256([]byte("successor-audit")),
+		ProjectionChunks: 1, ProjectionBytes: 1,
+		ProjectionSHA256:    sha256.Sum256([]byte("successor-projection")),
+		ProjectionResources: 1, BaselineHeadRevision: manifestRestored.Revision,
+		DependencyDigest: sha256.Sum256([]byte("successor-dependencies")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	successorHead, err := store.Transact(ctx, nil, []Mutation{
+		{Type: MutationPut, Key: environmentBlueprintRootKey(environmentID, successorTaskID), Value: successorSealValue},
+		{Type: MutationPut, Key: environmentBlueprintHeadKey(environmentID), Value: successorHeadValue},
+	})
+	if err != nil || !successorHead.Succeeded {
+		t.Fatalf("publish successor Blueprint head = %#v, %v", successorHead, err)
+	}
+	assertReadOnlyReplay(task, TaskStatusCompleted, successorHead.Revision)
+
+	successorProjection := projection
+	successorProjection.RevisionID = successorTaskID
+	successorProjection.RenderGeneration = 2
+	successorProjectionValue, err := encodeEnvironmentComposeProjection(successorProjection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	successorApplied, err := store.Transact(ctx, nil, []Mutation{{
+		Type: MutationPut, Key: environmentComposeProjectionKey(environmentID), Value: successorProjectionValue,
+	}})
+	if err != nil || !successorApplied.Succeeded {
+		t.Fatalf("advance successor applied projection = %#v, %v", successorApplied, err)
+	}
+	assertReadOnlyReplay(task, TaskStatusCompleted, successorApplied.Revision)
+	assertReadOnlyReplay(failed, TaskStatusFailed, successorApplied.Revision)
+	mismatchedFailure := cloneTaskRecord(failed)
+	mismatchedFailure.Result.RecreateEvidence[0].ArtifactID = artifactID
+	if err := repository.validateBlueprintCandidateTerminalReplay(
+		ctx, mismatchedFailure, TaskStatusFailed, successorApplied.Revision,
+	); err == nil {
+		t.Fatal("delayed failed Blueprint replay accepted mismatched compensation evidence")
+	}
+
 	terminalRead, err := store.GetMany(ctx, GetManyRequest{Keys: []string{releaseTerminalKey(releaseID)}})
 	if err != nil {
 		t.Fatal(err)
