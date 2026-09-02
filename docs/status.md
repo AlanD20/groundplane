@@ -595,3 +595,7 @@ Blueprint candidate Release planning now carries the already-sealed predecessor 
 ## Blueprint candidate workload image binding (2026-09-02)
 
 Blueprint Release image binding now selects exactly one matching candidate workload role for each stable Service identity while ignoring its legitimate same-id stable proxy. Missing, mismatched, or duplicate candidate workloads still fail closed. Focused Controller regressions pass; exact reference-host apply remains pending.
+
+## Blueprint non-Entry omission authority (2026-09-02)
+
+Environment Blueprint and direct Route create/edit publication now reject silent Service, Zone, or Route identity loss with `resource.in_use`; a pending Remove-shaped Task cannot authorize omission. Existing canonical authoring continues to carry omitted resources forward, sealed Route removal remains separate, and exact completed Volume removal remains accepted. Focused persistence, Route transaction, and application carry-forward proofs pass; reference-host Blueprint acceptance remains pending.

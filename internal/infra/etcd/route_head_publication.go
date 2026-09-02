@@ -76,6 +76,15 @@ func prepareRouteHeadPublication(
 	descriptor := streams.Descriptor
 	publishHead := audit.Route.Action != EnvironmentRouteMutationRemove
 	if publishHead {
+		previous := EnvironmentComposeProjection{}
+		if current != nil {
+			previous = *current
+		}
+		if err := validateEnvironmentComposeProjectionAdvance(previous, current != nil, candidate); err != nil {
+			return routeHeadPublication{}, err
+		}
+	}
+	if publishHead {
 		descriptor.State = EnvironmentBlueprintStagePublished
 	} else {
 		descriptor.State = EnvironmentBlueprintStageSealed

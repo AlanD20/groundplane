@@ -839,9 +839,12 @@ func validateEnvironmentComposeProjectionAdvance(
 	hasPrevious bool,
 	next EnvironmentComposeProjection,
 ) error {
-	return validateEnvironmentComposeProjectionAdvanceAllowingVolumeRemoval(
+	if err := validateEnvironmentComposeProjectionAdvanceAllowingVolumeRemoval(
 		previous, hasPrevious, next, "",
-	)
+	); err != nil {
+		return err
+	}
+	return preserveEnvironmentNonEntryDesiredResources(previous, hasPrevious, next)
 }
 
 func validateEnvironmentComposeProjectionPublicationAdvance(
@@ -857,7 +860,63 @@ func validateEnvironmentComposeProjectionPublicationAdvance(
 			return errs.New(errs.KindValidationFailed, "Volume removal Task target is invalid")
 		}
 	}
-	return validateEnvironmentComposeProjectionAdvanceAllowingVolumeRemoval(
+	if err := validateEnvironmentComposeProjectionAdvanceAllowingVolumeRemoval(
 		previous, hasPrevious, next, removedVolumeID,
+	); err != nil {
+		return err
+	}
+	return preserveEnvironmentNonEntryDesiredResources(previous, hasPrevious, next)
+}
+
+// preserveEnvironmentNonEntryDesiredResources prevents a publication from
+// treating omission as deletion. Service, Zone, and Route removals publish
+// their candidate head only from their resource-specific successful terminal
+// transaction, so a pending Remove-shaped publication is not an exception.
+func preserveEnvironmentNonEntryDesiredResources(
+	previous EnvironmentComposeProjection,
+	hasPrevious bool,
+	next EnvironmentComposeProjection,
+) error {
+	if !hasPrevious {
+		return nil
+	}
+	nextIDs := make(map[string]struct{},
+		len(next.DesiredServices)+len(next.DesiredZones)+len(next.DesiredRoutes),
 	)
+	for _, service := range next.DesiredServices {
+		nextIDs[service.Desired.ID] = struct{}{}
+	}
+	for _, zone := range next.DesiredZones {
+		nextIDs[zone.Desired.ID] = struct{}{}
+	}
+	for _, route := range next.DesiredRoutes {
+		nextIDs[route.Desired.ID] = struct{}{}
+	}
+	for _, service := range previous.DesiredServices {
+		if _, retained := nextIDs[service.Desired.ID]; !retained {
+			return errs.Newf(
+				errs.KindResourceInUse,
+				"Blueprint omits existing Service %s; remove it explicitly before apply",
+				service.Desired.Name,
+			)
+		}
+	}
+	for _, zone := range previous.DesiredZones {
+		if _, retained := nextIDs[zone.Desired.ID]; !retained {
+			return errs.Newf(
+				errs.KindResourceInUse,
+				"Blueprint omits existing Zone %s; remove it explicitly before apply",
+				zone.Desired.Name,
+			)
+		}
+	}
+	for _, route := range previous.DesiredRoutes {
+		if _, retained := nextIDs[route.Desired.ID]; !retained {
+			return errs.New(
+				errs.KindResourceInUse,
+				"Blueprint omits an existing Route; remove it explicitly before apply",
+			)
+		}
+	}
+	return nil
 }

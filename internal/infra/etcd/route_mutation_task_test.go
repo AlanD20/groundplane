@@ -12,6 +12,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // Rationale: a durable provider pin must retain the provider-neutral origin
@@ -47,6 +48,107 @@ func TestRouteProviderPinClonePreservesCanonicalOrigin(t *testing.T) {
 	changed.Input.Origin.URL = "http://another-router:8080"
 	if err := validateRouteProviderPin(&changed); err == nil {
 		t.Fatal("validateRouteProviderPin() accepted a changed origin host")
+	}
+}
+
+func TestRouteRepositoryRejectsPublicationOmittingDesiredService(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	repository, store, environment, project, target := routeRepositoryTestHierarchy(t)
+	fenceKey := "/v1/test/route-service-fences/" + target.Record.Desired.ID
+	fence, err := store.Transact(ctx, nil, []Mutation{{
+		Type: MutationPut, Key: fenceKey, Value: []byte(target.Record.Desired.ID),
+	}})
+	if err != nil || !fence.Succeeded {
+		t.Fatalf("seed Route service fence = %#v, %v", fence, err)
+	}
+	target.Record.desiredFenceKey = fenceKey
+	target.Revision = fence.Revision
+	target.ReadRevision = fence.Revision
+
+	currentProjection, found, err := currentEnvironmentProjectionAtRevision(
+		ctx, store, environment.Record.ID, fence.Revision,
+	)
+	if err != nil || !found {
+		t.Fatalf("currentEnvironmentProjectionAtRevision() = %#v/%v/%v", currentProjection, found, err)
+	}
+	headBefore, err := store.Get(ctx, environmentBlueprintHeadKey(environment.Record.ID))
+	if err != nil || headBefore.Entry == nil {
+		t.Fatalf("Get(desired head before) = %#v/%v", headBefore, err)
+	}
+
+	createdAt := serviceRecordTestTime().Add(4 * time.Hour)
+	record := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1300, "/unsafe/*")
+	task := validTaskRecord(createdAt)
+	task.ID = ids.NewAt(ids.KindTask, createdAt, 1301)
+	task.OperationID = ids.NewAt(ids.KindOperation, createdAt, 1302)
+	task.PlanID = ids.NewAt(ids.KindPlan, createdAt, 1303)
+	task.Owner = mustEnvironmentTaskOwner(t, project.Record, environment.Record)
+	task.Executor = TaskExecutorController
+	task.Type = TaskCreate
+	task.Target = record.Desired.ID
+	task.Status = TaskStatusPending
+	task.Params = map[string]string{
+		TaskResourceKindParam: TaskResourceRoute, TaskRouteEnvironmentParam: environment.Record.ID,
+	}
+	task.Steps = []TaskStepRecord{{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, createdAt, 1304)}}
+	task.TimeoutSeconds = 30
+	task.RenderGeneration = int32(currentProjection.Record.RenderGeneration + 1)
+	task.PlanHash = strings.Repeat("c", 64)
+	task.IdempotencyKey = "route-omission-task-key-0001"
+
+	intent, err := NewRouteMutationIntent(
+		task.ID, task.OperationID, environment.Record.ID, record, nil, &currentProjection, createdAt,
+	)
+	if err != nil {
+		t.Fatalf("NewRouteMutationIntent() error = %v", err)
+	}
+	candidate, err := ApplyEnvironmentRoute(currentProjection.Record, record)
+	if err != nil {
+		t.Fatalf("ApplyEnvironmentRoute() error = %v", err)
+	}
+	candidate.RevisionID = task.ID
+	candidate.DesiredServices = nil
+	candidate = withTestEnvironmentComposeArtifact(candidate)
+	intent.CandidateProjection = &candidate
+	intent.Provider = routeRepositoryTestProviderPin(target.Record.Desired.ID)
+
+	body, err := json.Marshal(struct {
+		Route struct {
+			ID string `json:"id"`
+		} `json:"route"`
+		TaskID string `json:"task_id"`
+	}{Route: struct {
+		ID string `json:"id"`
+	}{record.Desired.ID}, TaskID: task.ID})
+	if err != nil {
+		t.Fatalf("marshal acceptance: %v", err)
+	}
+	marker, err := NewCompletedDirectIdempotencyMarker(
+		IdempotencyLocator{
+			ScopeKind: IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
+			Method: http.MethodPost, Route: "/routes", Key: task.IdempotencyKey,
+		},
+		testDirectMarker().Intent,
+		IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body},
+		createdAt,
+	)
+	if err != nil {
+		t.Fatalf("NewCompletedDirectIdempotencyMarker() error = %v", err)
+	}
+
+	_, mutationErr := repository.BeginRouteMutationWithTask(
+		ctx, environment, project, target, nil, record, intent, task, marker,
+	)
+	if kind, ok := errs.KindOf(mutationErr); !ok || kind != errs.KindResourceInUse {
+		t.Errorf("BeginRouteMutationWithTask() error kind = %v/%v, want %v (error %v)", kind, ok, errs.KindResourceInUse, mutationErr)
+	}
+	headAfter, err := store.Get(ctx, environmentBlueprintHeadKey(environment.Record.ID))
+	if err != nil || headAfter.Entry == nil {
+		t.Fatalf("Get(desired head after) = %#v/%v", headAfter, err)
+	}
+	if headAfter.Entry.ModRevision != headBefore.Entry.ModRevision || string(headAfter.Entry.Value) != string(headBefore.Entry.Value) {
+		t.Errorf("desired head changed: before=%#v after=%#v", headBefore.Entry, headAfter.Entry)
 	}
 }
 

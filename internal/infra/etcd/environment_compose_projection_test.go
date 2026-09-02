@@ -403,3 +403,99 @@ func TestRemoveEnvironmentEntryDropsPinnedGeneration(t *testing.T) {
 		t.Fatalf("RemoveEnvironmentEntry(replay) = %#v, %t, %v", replayed, changed, err)
 	}
 }
+
+// Rationale: a Blueprint publication cannot turn omission into deletion. Only
+// the resource-specific terminal Remove path may first publish a desired head
+// without a Service, Zone, or Route; a pending Remove Task is not that proof.
+func TestEnvironmentComposeProjectionPublicationRejectsNonEntryOmission(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 2, 18, 0, 0, 0, time.UTC)
+	previous := desiredTopologyProjectionFixture(t)
+	previous.Volumes = []EnvironmentVolumeIdentity{{
+		ID: ids.NewAt(ids.KindVolume, now, 1), Slug: "data", Key: "data",
+	}}
+	previous = withTestEnvironmentComposeArtifact(previous)
+
+	tests := []struct {
+		name         string
+		resourceKind string
+		target       string
+		omit         func(*EnvironmentComposeProjection)
+	}{
+		{
+			name: "Service", resourceKind: TaskResourceService,
+			target: previous.DesiredServices[0].Desired.ID,
+			omit: func(value *EnvironmentComposeProjection) {
+				value.DesiredServices = value.DesiredServices[1:]
+			},
+		},
+		{
+			name: "Zone", resourceKind: TaskResourceBackingZone,
+			target: previous.DesiredZones[0].Desired.ID,
+			omit: func(value *EnvironmentComposeProjection) {
+				value.DesiredZones = value.DesiredZones[1:]
+			},
+		},
+		{
+			name: "Route", resourceKind: TaskResourceRoute,
+			target: previous.DesiredRoutes[0].Desired.ID,
+			omit: func(value *EnvironmentComposeProjection) {
+				value.DesiredRoutes = value.DesiredRoutes[1:]
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			next := cloneEnvironmentComposeProjection(previous)
+			next.RevisionID = ids.NewAt(ids.KindTask, now, 10)
+			next.RenderGeneration++
+			test.omit(&next)
+			next = withTestEnvironmentComposeArtifact(next)
+
+			for _, task := range []TaskRecord{
+				{Type: TaskUpdate},
+				{
+					Type: TaskRemove, Target: test.target, Status: TaskStatusPending,
+					Params: map[string]string{TaskResourceKindParam: test.resourceKind},
+				},
+			} {
+				if err := validateEnvironmentComposeProjectionPublicationAdvance(
+					previous, true, next, task,
+				); !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
+					t.Fatalf("validateEnvironmentComposeProjectionPublicationAdvance(%s) error = %v", task.Type, err)
+				}
+			}
+		})
+	}
+}
+
+// Rationale: ADR 0049 publishes Volume absence before runtime cleanup under
+// one exact typed Remove Task; no other pending Task may authorize that loss.
+func TestEnvironmentComposeProjectionPublicationAllowsExactVolumeRemoval(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 2, 18, 30, 0, 0, time.UTC)
+	volumeID := ids.NewAt(ids.KindVolume, now, 1)
+	previous := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+		EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 2),
+		RevisionID:    ids.NewAt(ids.KindTask, now, 3), RenderGeneration: 1,
+		Volumes: []EnvironmentVolumeIdentity{{ID: volumeID, Slug: "data", Key: "data"}},
+	})
+	next := cloneEnvironmentComposeProjection(previous)
+	next.RevisionID = ids.NewAt(ids.KindTask, now, 4)
+	next.RenderGeneration++
+	next.Volumes = nil
+	next = withTestEnvironmentComposeArtifact(next)
+
+	if err := validateEnvironmentComposeProjectionPublicationAdvance(
+		previous, true, next, TaskRecord{Type: TaskUpdate},
+	); !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
+		t.Fatalf("validateEnvironmentComposeProjectionPublicationAdvance(update) error = %v", err)
+	}
+	if err := validateEnvironmentComposeProjectionPublicationAdvance(previous, true, next, TaskRecord{
+		Type: TaskRemove, Target: volumeID, Status: TaskStatusPending,
+		Params: map[string]string{TaskResourceKindParam: TaskResourceVolume},
+	}); err != nil {
+		t.Fatalf("validateEnvironmentComposeProjectionPublicationAdvance(Volume Remove) error = %v", err)
+	}
+}
