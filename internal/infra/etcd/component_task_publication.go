@@ -55,6 +55,11 @@ func (repository *HierarchyRepository) prepareComponentTaskPublication(
 	publication.conditions = append(publication.conditions, Condition{
 		Key: componentTaskIntentKey(task.ID),
 	})
+	appliedProjectionCondition := Condition{Key: environmentComposeProjectionKey(environment.Record.ID)}
+	if preparation.appliedProjectionPresent {
+		appliedProjectionCondition.ModRevision = preparation.appliedProjectionRevision
+	}
+	publication.conditions = append(publication.conditions, appliedProjectionCondition)
 	for _, candidate := range preparation.Intent.Candidates {
 		publication.conditions = append(publication.conditions, Condition{
 			Key:         componentKey(candidate.Current.Desired.ID),
@@ -121,6 +126,7 @@ func componentTaskPreparationIsZero(preparation ComponentTaskPreparation) bool {
 		preparation.Intent.Status == "" && len(preparation.Intent.Candidates) == 0 &&
 		preparation.Intent.RouteProjection == nil &&
 		preparation.Intent.CreatedAt.IsZero() && preparation.Intent.TerminalAt == nil &&
+		!preparation.appliedProjectionPresent && preparation.appliedProjectionRevision == 0 &&
 		len(preparation.addresses) == 0
 }
 
@@ -154,7 +160,16 @@ func (publication preparedComponentTaskPublication) classify(values []*KeyValue)
 	if values[1] != nil {
 		return errs.New(errs.KindStateConflict, "Component candidate Task identity is already in use")
 	}
-	offset := 2
+	appliedProjectionValue := values[2]
+	if publication.preparation.appliedProjectionPresent {
+		if appliedProjectionValue == nil ||
+			appliedProjectionValue.ModRevision != publication.preparation.appliedProjectionRevision {
+			return errs.New(errs.KindStateConflict, "Component candidate applied projection changed")
+		}
+	} else if appliedProjectionValue != nil {
+		return errs.New(errs.KindStateConflict, "Component candidate applied projection was published")
+	}
+	offset := 3
 	for index, candidate := range publication.preparation.Intent.Candidates {
 		value := values[offset+index]
 		if value == nil {

@@ -24,8 +24,10 @@ type EnvironmentComponentCandidateInput struct {
 // ApplyEnvironmentBlueprintWithTask consumes its private CAS evidence in the
 // same transaction that publishes its Intent and Task.
 type ComponentTaskPreparation struct {
-	Intent    ComponentTaskIntent
-	addresses []componentTaskAddressPreparation
+	Intent                    ComponentTaskIntent
+	appliedProjectionPresent  bool
+	appliedProjectionRevision int64
+	addresses                 []componentTaskAddressPreparation
 }
 
 type componentTaskAddressPreparation struct {
@@ -131,25 +133,45 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 			)
 		}
 	}
-	selected, found, err := currentEnvironmentProjectionAtRevision(
-		ctx, repository.store, environmentID, fixedRevision,
-	)
+	appliedState, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{environmentComposeProjectionKey(environmentID)}, Revision: fixedRevision,
+	})
 	if err != nil {
 		return ComponentTaskPreparation{}, err
 	}
-	if !found {
+	if appliedState == nil || appliedState.ReadRevision != fixedRevision || len(appliedState.Values) != 1 {
 		return ComponentTaskPreparation{}, errs.New(
-			errs.KindStateConflict,
-			"Component candidate Environment projection is unavailable",
+			errs.KindInternal,
+			"Component candidate applied projection read is incomplete",
 		)
 	}
-	selectedZones := make(map[string]Versioned[ZoneRecord], len(selected.Record.DesiredZones))
-	for _, desired := range selected.Record.DesiredZones {
-		zone, joinErr := joinEnvironmentZone(selected, desired)
-		if joinErr != nil {
-			return ComponentTaskPreparation{}, joinErr
+	appliedValue := appliedState.Values[0]
+	found := appliedValue != nil
+	selected := Versioned[EnvironmentComposeProjection]{ReadRevision: fixedRevision}
+	if found {
+		projection, decodeErr := decodeEnvironmentComposeProjection(appliedValue.Value)
+		if decodeErr != nil {
+			return ComponentTaskPreparation{}, decodeErr
 		}
-		selectedZones[zone.Record.Desired.ID] = zone
+		if projection.EnvironmentID != environmentID {
+			return ComponentTaskPreparation{}, errs.New(
+				errs.KindStateConflict,
+				"Component candidate applied Environment projection changed",
+			)
+		}
+		selected.Record = projection
+		selected.Revision = appliedValue.ModRevision
+	}
+	selectedZones := make(map[string]Versioned[ZoneRecord])
+	if found {
+		selectedZones = make(map[string]Versioned[ZoneRecord], len(selected.Record.DesiredZones))
+		for _, desired := range selected.Record.DesiredZones {
+			zone, joinErr := joinEnvironmentZone(selected, desired)
+			if joinErr != nil {
+				return ComponentTaskPreparation{}, joinErr
+			}
+			selectedZones[zone.Record.Desired.ID] = zone
+		}
 	}
 	for zoneID, change := range preparedZones {
 		zone, selectedZone := selectedZones[zoneID]
@@ -161,6 +183,12 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 				)
 			}
 			continue
+		}
+		if !found {
+			return ComponentTaskPreparation{}, errs.New(
+				errs.KindStateConflict,
+				"Component candidate Environment projection is unavailable",
+			)
 		}
 		if !selectedZone || change.Current.Revision != zone.Revision ||
 			!reflect.DeepEqual(change.Current.Record, zone.Record) {
@@ -292,7 +320,12 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 	if err != nil {
 		return ComponentTaskPreparation{}, err
 	}
-	preparation := ComponentTaskPreparation{Intent: intent, addresses: addresses}
+	preparation := ComponentTaskPreparation{
+		Intent:                    intent,
+		appliedProjectionPresent:  found,
+		appliedProjectionRevision: keyValueRevision(appliedValue),
+		addresses:                 addresses,
+	}
 	if err := validateComponentTaskPreparation(preparation); err != nil {
 		return ComponentTaskPreparation{}, err
 	}
@@ -364,6 +397,10 @@ func validateComponentTaskPreparation(preparation ComponentTaskPreparation) erro
 	if err := validateComponentTaskIntent(preparation.Intent); err != nil {
 		return err
 	}
+	if preparation.appliedProjectionRevision < 0 ||
+		preparation.appliedProjectionPresent != (preparation.appliedProjectionRevision > 0) {
+		return errs.New(errs.KindValidationFailed, "Component candidate applied projection evidence is invalid")
+	}
 	wantZones := make(map[string]struct{})
 	for _, candidate := range preparation.Intent.Candidates {
 		for _, record := range []ComponentRecord{candidate.Current, candidate.Candidate} {
@@ -403,8 +440,10 @@ func validateComponentTaskPreparation(preparation ComponentTaskPreparation) erro
 
 func cloneComponentTaskPreparation(preparation ComponentTaskPreparation) ComponentTaskPreparation {
 	clone := ComponentTaskPreparation{
-		Intent:    cloneComponentTaskIntent(preparation.Intent),
-		addresses: make([]componentTaskAddressPreparation, len(preparation.addresses)),
+		Intent:                    cloneComponentTaskIntent(preparation.Intent),
+		appliedProjectionPresent:  preparation.appliedProjectionPresent,
+		appliedProjectionRevision: preparation.appliedProjectionRevision,
+		addresses:                 make([]componentTaskAddressPreparation, len(preparation.addresses)),
 	}
 	for index, address := range preparation.addresses {
 		clone.addresses[index] = address

@@ -529,3 +529,15 @@ public Component decoder. Valid CoreDNS responses no longer fail in the
 generated eager one-of parser, while malformed closed-union variants still
 fail. Focused CLI adapter proof passes; reference-host Component list and
 detail remain pending.
+
+## Initial Blueprint Component candidate projection (2026-09-02)
+
+The first desired publication may prepare an enabled Environment Component
+against newly staged Zones while no runtime-applied Environment projection
+exists. Any existing Zone must match the exact record and revision selected
+from the runtime-applied projection, and atomic publication CAS-fences that
+projection's presence or exact revision. A no-Release Blueprint retry is
+identified by the closed Compose-procedure marker and reacquires its exact
+candidate address; ordinary Component retries continue to require an applied
+projection. Focused persistence regressions pass; reference-host Blueprint
+acceptance remains pending.

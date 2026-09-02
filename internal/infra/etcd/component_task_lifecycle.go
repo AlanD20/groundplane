@@ -18,6 +18,13 @@ type componentTaskChange struct {
 	values     [][]byte
 }
 
+const (
+	componentTaskBlueprintProcedureParam             = "blueprint_compose_procedure"
+	componentTaskBlueprintProcedureNone              = "none"
+	componentTaskBlueprintProcedureFullReconcile     = "full-reconcile"
+	componentTaskBlueprintProcedureCandidateReleases = "candidate-releases"
+)
+
 func (repository *TaskRepository) prepareComponentTaskRetry(
 	ctx context.Context,
 	source TaskRecord,
@@ -84,7 +91,10 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	if err != nil {
 		return componentTaskChange{}, err
 	}
-	blueprintRetry := source.Type == TaskUpdate && source.Params[TaskReleasePublicationParam] != ""
+	blueprintRetry, err := componentTaskRetryIsBlueprint(source)
+	if err != nil {
+		return componentTaskChange{}, err
+	}
 	var blueprintProjection EnvironmentComposeProjection
 	if blueprintRetry {
 		hierarchy := &HierarchyRepository{store: repository.store}
@@ -329,6 +339,36 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	change.mutations = append(change.mutations, routeRetryChange.mutations...)
 	change.values = append(change.values, routeRetryChange.values...)
 	return change, nil
+}
+
+func componentTaskRetryIsBlueprint(source TaskRecord) (bool, error) {
+	procedure, present := source.Params[componentTaskBlueprintProcedureParam]
+	publicationPresent := source.Params[TaskReleasePublicationParam] != ""
+	if !present {
+		if publicationPresent {
+			return false, errs.New(errs.KindStateConflict, "Blueprint Component retry procedure is unavailable")
+		}
+		return false, nil
+	}
+	switch procedure {
+	case componentTaskBlueprintProcedureNone:
+		if publicationPresent {
+			return false, errs.New(errs.KindStateConflict, "Blueprint Component retry procedure is inconsistent")
+		}
+		return true, nil
+	case componentTaskBlueprintProcedureCandidateReleases:
+		if !publicationPresent {
+			return false, errs.New(errs.KindStateConflict, "Blueprint Component retry publication is unavailable")
+		}
+		return true, nil
+	case componentTaskBlueprintProcedureFullReconcile:
+		if publicationPresent {
+			return false, errs.New(errs.KindStateConflict, "Component retry procedure is inconsistent")
+		}
+		return false, nil
+	default:
+		return false, errs.New(errs.KindStateConflict, "Component retry procedure is invalid")
+	}
 }
 
 func componentRetryProjectionMatches(
