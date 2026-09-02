@@ -4770,8 +4770,63 @@
       },
       "TaskStep": {
         "additionalProperties": false,
+        "dependentRequired": {
+          "script_id": [
+            "script_slug"
+          ],
+          "script_slug": [
+            "script_id"
+          ]
+        },
+        "oneOf": [
+          {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "script_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "script_slug"
+                  ]
+                }
+              ]
+            },
+            "properties": {
+              "kind": {
+                "const": "operation"
+              }
+            }
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "script"
+              }
+            },
+            "required": [
+              "script_id",
+              "script_slug"
+            ]
+          }
+        ],
         "properties": {
+          "kind": {
+            "enum": [
+              "operation",
+              "script"
+            ],
+            "type": "string"
+          },
           "name": {
+            "type": "string"
+          },
+          "script_id": {
+            "type": "string"
+          },
+          "script_slug": {
             "type": "string"
           },
           "status": {
@@ -4780,7 +4835,8 @@
         },
         "required": [
           "name",
-          "status"
+          "status",
+          "kind"
         ],
         "type": "object"
       },

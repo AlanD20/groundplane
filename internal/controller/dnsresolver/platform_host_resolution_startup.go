@@ -118,13 +118,13 @@ func finalizePlatformComponentTask(
 
 func startupResolverTask(componentID string, createdAt time.Time, ensureService bool) etcd.TaskRecord {
 	steps := []etcd.TaskStepRecord{
-		{ID: ids.New(ids.KindStep)},
-		{ID: ids.New(ids.KindStep)},
+		{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)},
+		{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)},
 	}
 	if ensureService {
 		steps = append(steps,
-			etcd.TaskStepRecord{ID: ids.New(ids.KindStep)},
-			etcd.TaskStepRecord{ID: ids.New(ids.KindStep)},
+			etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)},
+			etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)},
 		)
 	}
 	return etcd.TaskRecord{

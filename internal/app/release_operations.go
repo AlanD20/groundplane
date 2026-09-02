@@ -447,7 +447,7 @@ func (service *releaseOperationService) publish(
 		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	for index := range task.Steps {
-		task.Steps[index] = etcd.TaskStepRecord{ID: ids.New(ids.KindStep)}
+		task.Steps[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}
 	}
 	stage := etcd.ReleaseStage{
 		PublicationID: publicationID, OperationID: operationID,

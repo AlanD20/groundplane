@@ -386,7 +386,7 @@ func releaseGroupRemovalTaskAndMarker(
 		Type:              TaskRemove,
 		Target:            groupID,
 		Params:            map[string]string{TaskResourceKindParam: TaskResourceReleaseGroup},
-		Steps:             []TaskStepRecord{{ID: ids.NewAt(ids.KindStep, now, 904)}},
+		Steps:             []TaskStepRecord{{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 904)}},
 		TimeoutSeconds:    30,
 		Status:            TaskStatusPending,
 		NextEventSequence: 1,

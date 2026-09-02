@@ -535,6 +535,24 @@ func (e TaskEventState) Valid() bool {
 	}
 }
 
+// Defines values for TaskStepKind.
+const (
+	TaskStepKindOperation TaskStepKind = "operation"
+	TaskStepKindScript    TaskStepKind = "script"
+)
+
+// Valid indicates whether the value is a known member of the TaskStepKind enum.
+func (e TaskStepKind) Valid() bool {
+	switch e {
+	case TaskStepKindOperation:
+		return true
+	case TaskStepKindScript:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ZoneOwnerKind.
 const (
 	ZoneOwnerKindBackingProject ZoneOwnerKind = "backing_project"
@@ -2141,8 +2159,25 @@ type TaskEventState string
 
 // TaskStep defines model for TaskStep.
 type TaskStep struct {
-	Name   string `json:"name"`
-	Status string `json:"status"`
+	Kind       TaskStepKind `json:"kind"`
+	Name       string       `json:"name"`
+	ScriptId   *string      `json:"script_id,omitempty"`
+	ScriptSlug *string      `json:"script_slug,omitempty"`
+	Status     string       `json:"status"`
+	union      json.RawMessage
+}
+
+// TaskStepKind defines model for TaskStep.Kind.
+type TaskStepKind string
+
+// TaskStep0 defines model for TaskStep.0.
+type TaskStep0 struct {
+	Kind interface{} `json:"kind,omitempty"`
+}
+
+// TaskStep1 defines model for TaskStep.1.
+type TaskStep1 struct {
+	Kind interface{} `json:"kind,omitempty"`
 }
 
 // Tenant defines model for Tenant.
@@ -3356,6 +3391,153 @@ func (t *ConnectorCredentialInput) UnmarshalJSON(b []byte) error {
 		err = json.Unmarshal(raw, &t.Value)
 		if err != nil {
 			return fmt.Errorf("error reading 'value': %w", err)
+		}
+	}
+
+	return err
+}
+
+// AsTaskStep0 returns the union data inside the TaskStep as a TaskStep0
+func (t TaskStep) AsTaskStep0() (TaskStep0, error) {
+	var body TaskStep0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromTaskStep0 overwrites any union data inside the TaskStep as the provided TaskStep0
+func (t *TaskStep) FromTaskStep0(v TaskStep0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeTaskStep0 performs a merge with any union data inside the TaskStep, using the provided TaskStep0
+func (t *TaskStep) MergeTaskStep0(v TaskStep0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsTaskStep1 returns the union data inside the TaskStep as a TaskStep1
+func (t TaskStep) AsTaskStep1() (TaskStep1, error) {
+	var body TaskStep1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromTaskStep1 overwrites any union data inside the TaskStep as the provided TaskStep1
+func (t *TaskStep) FromTaskStep1(v TaskStep1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeTaskStep1 performs a merge with any union data inside the TaskStep, using the provided TaskStep1
+func (t *TaskStep) MergeTaskStep1(v TaskStep1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t TaskStep) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	object["kind"], err = json.Marshal(t.Kind)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'kind': %w", err)
+	}
+
+	object["name"], err = json.Marshal(t.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	if t.ScriptId != nil {
+		object["script_id"], err = json.Marshal(t.ScriptId)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'script_id': %w", err)
+		}
+	}
+
+	if t.ScriptSlug != nil {
+		object["script_slug"], err = json.Marshal(t.ScriptSlug)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'script_slug': %w", err)
+		}
+	}
+
+	object["status"], err = json.Marshal(t.Status)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'status': %w", err)
+	}
+
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *TaskStep) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["kind"]; found {
+		err = json.Unmarshal(raw, &t.Kind)
+		if err != nil {
+			return fmt.Errorf("error reading 'kind': %w", err)
+		}
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &t.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+	}
+
+	if raw, found := object["script_id"]; found {
+		err = json.Unmarshal(raw, &t.ScriptId)
+		if err != nil {
+			return fmt.Errorf("error reading 'script_id': %w", err)
+		}
+	}
+
+	if raw, found := object["script_slug"]; found {
+		err = json.Unmarshal(raw, &t.ScriptSlug)
+		if err != nil {
+			return fmt.Errorf("error reading 'script_slug': %w", err)
+		}
+	}
+
+	if raw, found := object["status"]; found {
+		err = json.Unmarshal(raw, &t.Status)
+		if err != nil {
+			return fmt.Errorf("error reading 'status': %w", err)
 		}
 	}
 

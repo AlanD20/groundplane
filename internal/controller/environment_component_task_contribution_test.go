@@ -55,9 +55,9 @@ func TestAppendEnvironmentComponentTaskContributionRequiresComposeFirst(t *testi
 
 	steps, records, err := AppendEnvironmentComponentTaskContribution(
 		[]*agentpb.ExecutionStep{compose},
-		[]etcd.TaskStepRecord{{ID: composeID}},
+		[]etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: composeID}},
 		[]*agentpb.ExecutionStep{activate},
-		[]etcd.TaskStepRecord{{ID: activateID}},
+		[]etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: activateID}},
 	)
 	if err != nil {
 		t.Fatalf("AppendEnvironmentComponentTaskContribution() error = %v", err)

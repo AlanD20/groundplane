@@ -1004,9 +1004,19 @@ type Task struct {
 	Steps         []TaskStep        `json:"steps,omitempty"`
 }
 
+type TaskStepKind string
+
+const (
+	TaskStepOperation TaskStepKind = "operation"
+	TaskStepScript    TaskStepKind = "script"
+)
+
 type TaskStep struct {
-	Name   string     `json:"name"`
-	Status TaskStatus `json:"status"`
+	Name       string       `json:"name"`
+	Status     TaskStatus   `json:"status"`
+	Kind       TaskStepKind `json:"kind" enum:"operation,script"`
+	ScriptID   string       `json:"script_id,omitempty"`
+	ScriptSlug string       `json:"script_slug,omitempty"`
 }
 
 // TaskAccepted is the 202 body every action endpoint returns — the

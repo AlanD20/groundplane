@@ -492,7 +492,7 @@ func environmentBlueprintTestTask(
 			EnvironmentDesiredRevisionParam:     taskID,
 			TaskMaterializationEnvironmentParam: environment.ID,
 		},
-		Steps:          []TaskStepRecord{{ID: ids.NewAt(ids.KindStep, at, seed+4)}},
+		Steps:          []TaskStepRecord{{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, at, seed+4)}},
 		TimeoutSeconds: 120, Status: TaskStatusPending, NextEventSequence: 1, CreatedAt: at, UpdatedAt: at,
 	}
 }

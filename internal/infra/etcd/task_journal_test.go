@@ -426,7 +426,7 @@ func validTaskRecord(now time.Time) TaskRecord {
 	task.PlanHash = strings.Repeat("a", 64)
 	task.RenderGeneration = 1
 	task.Params = map[string]string{"name": "migrate"}
-	task.Steps = []TaskStepRecord{{ID: taskJournalStepID()}}
+	task.Steps = []TaskStepRecord{{Kind: TaskStepOperation, ID: taskJournalStepID()}}
 	return task
 }
 

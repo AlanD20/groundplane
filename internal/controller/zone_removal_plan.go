@@ -50,9 +50,9 @@ func (resolver *TaskPlanResolver) PrepareZoneRemovalTask(
 		if ids.Validate(ids.KindStep, stepID) != nil {
 			return etcd.TaskRecord{}, errs.New(errs.KindValidationFailed, "Zone removal Service step id is invalid")
 		}
-		prepared.Steps = append(prepared.Steps, etcd.TaskStepRecord{ID: stepID})
+		prepared.Steps = append(prepared.Steps, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: stepID})
 	}
-	prepared.Steps = append(prepared.Steps, etcd.TaskStepRecord{ID: procedure.NetworkStepID})
+	prepared.Steps = append(prepared.Steps, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: procedure.NetworkStepID})
 	plan, err := resolver.buildZoneRemovalPlan(prepared, intent)
 	if err != nil {
 		return etcd.TaskRecord{}, err

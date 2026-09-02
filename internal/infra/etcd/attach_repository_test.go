@@ -1255,7 +1255,7 @@ func createTestAttach(
 	}
 	steps := make([]TaskStepRecord, stepCount)
 	for index := range steps {
-		steps[index] = TaskStepRecord{ID: ids.NewAt(ids.KindStep, record.CreatedAt, seed+2+int64(index))}
+		steps[index] = TaskStepRecord{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, record.CreatedAt, seed+2+int64(index))}
 	}
 	owner, err := EnvironmentTaskOwner(scope.Project.Record, scope.Environment.Record)
 	if err != nil {

@@ -57,7 +57,7 @@ func TestBuildBackupRunPlanReconnectAfterProgressIsIdentical(t *testing.T) {
 		Type: etcd.TaskBackup, Target: environmentID,
 		Executor: etcd.TaskExecutorAgent, Actor: etcd.TaskActorOperator,
 		Status: etcd.TaskStatusPending, TimeoutSeconds: backupRunTaskTimeoutSeconds,
-		Steps: []etcd.TaskStepRecord{{ID: stepID}},
+		Steps: []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: stepID}},
 	}
 	run := etcd.BackupRunRecord{
 		TaskID: taskID, OperationID: operationID, EnvironmentID: environmentID,

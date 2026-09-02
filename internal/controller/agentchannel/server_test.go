@@ -663,7 +663,7 @@ func TestConnectDoesNotDeliverAssignmentClaimedDuringPriorGenerationFence(t *tes
 		Executor: etcd.TaskExecutorAgent,
 		PlanID:   ids.NewAt(ids.KindPlan, now, 122), RenderGeneration: 7,
 		Type: etcd.TaskDeploy, Target: ids.NewAt(ids.KindService, now, 123),
-		Steps:          []etcd.TaskStepRecord{{ID: ids.NewAt(ids.KindStep, now, 124)}},
+		Steps:          []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 124)}},
 		TimeoutSeconds: 120, Status: etcd.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
@@ -763,7 +763,7 @@ func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
 		RenderGeneration: 7, Type: etcd.TaskDeploy,
 		Target:         ids.NewAt(ids.KindService, now, 23),
 		Params:         map[string]string{"strategy": "blue-green"},
-		Steps:          []etcd.TaskStepRecord{{ID: ids.NewAt(ids.KindStep, now, 24)}},
+		Steps:          []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 24)}},
 		TimeoutSeconds: 120, Status: etcd.TaskStatusRunning,
 		NextEventSequence: 1, CreatedAt: now, StartedAt: &startedAt,
 	}
@@ -980,7 +980,7 @@ func TestTaskAssignmentMessagePreservesAbsoluteDeadlineOnRedispatch(t *testing.T
 		PlanID:           ids.NewAt(ids.KindPlan, now, 8203),
 		RenderGeneration: 7, Type: etcd.TaskDeploy,
 		Target:         ids.NewAt(ids.KindService, now, 8204),
-		Steps:          []etcd.TaskStepRecord{{ID: ids.NewAt(ids.KindStep, now, 8205)}},
+		Steps:          []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 8205)}},
 		TimeoutSeconds: 120, Status: etcd.TaskStatusRunning,
 		NextEventSequence: 1, CreatedAt: now, StartedAt: &startedAt,
 	}

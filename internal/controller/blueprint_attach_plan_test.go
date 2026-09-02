@@ -67,7 +67,7 @@ func TestBlueprintAttachPlanReproducesPublishedProvisionThenCompose(t *testing.T
 	procedureStepID := ids.NewAt(ids.KindStep, now, 6)
 	task := baseTask
 	task.Steps = append([]etcd.TaskStepRecord(nil), baseTask.Steps[:len(baseTask.Steps)-1]...)
-	task.Steps = append(task.Steps, etcd.TaskStepRecord{ID: procedureStepID})
+	task.Steps = append(task.Steps, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: procedureStepID})
 	task.Steps = append(task.Steps, baseTask.Steps[len(baseTask.Steps)-1])
 	reproduced, err := resolver.ResolveExecutionPlan(context.Background(), task)
 	if err != nil {
@@ -76,7 +76,7 @@ func TestBlueprintAttachPlanReproducesPublishedProvisionThenCompose(t *testing.T
 	procedureTask := task
 	procedureTask.Type = etcd.TaskAttach
 	procedureTask.Target = attachID
-	procedureTask.Steps = []etcd.TaskStepRecord{{ID: procedureStepID}}
+	procedureTask.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: procedureStepID}}
 	procedures, err := BuildAttachProvisionSteps(procedureTask, record, "postgres:16", identity)
 	if err != nil {
 		t.Fatalf("BuildAttachProvisionSteps() error = %v", err)

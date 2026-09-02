@@ -79,7 +79,7 @@ func (service *releaseOperationService) prepareReleaseHooks(
 			bodyBytes += uint64(hook.BodySize)
 			task.Params[etcd.ReleaseHookStepMemberParam(stepID)] = strconv.Itoa(memberIndex + 1)
 			task.Params[etcd.ReleaseHookStepExecutionParam(stepID)] = executionID
-			step := etcd.TaskStepRecord{ID: stepID}
+			step := etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: stepID}
 			switch hook.When {
 			case core.ScriptPreDeploy, core.ScriptPreRollback:
 				preSteps = append(preSteps, step)

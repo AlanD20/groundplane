@@ -61,7 +61,7 @@ func environmentCreateTaskForPlanTest() etcd.TaskRecord {
 		Params: map[string]string{
 			EnvironmentCreateVolumeDirectoryParam: "/var/lib/groundplane/vol/tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		},
-		Steps:          []etcd.TaskStepRecord{{ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"}},
+		Steps:          []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"}},
 		TimeoutSeconds: 120, Status: etcd.TaskStatusPending,
 	}
 }

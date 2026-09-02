@@ -40,7 +40,7 @@ func TestTaskResponseProjectsControllerStepFromTaskLifecycle(t *testing.T) {
 	record := aliasTaskRecord(time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC), 306)
 	record.Executor = etcd.TaskExecutorController
 	record.Status = etcd.TaskStatusCompleted
-	record.Steps = []etcd.TaskStepRecord{{ID: "delete_tenant"}}
+	record.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: "delete_tenant"}}
 
 	response, err := taskResponse(record, etcd.TaskEventSnapshot{})
 	if err != nil {
@@ -104,6 +104,8 @@ func TestTaskShowReturnsFixedRevisionStepProjection(t *testing.T) {
 	now := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
 	taskID := ids.NewAt(ids.KindTask, now, 1)
 	stepID := ids.NewAt(ids.KindStep, now, 2)
+	ordinaryStepID := ids.NewAt(ids.KindStep, now, 5)
+	scriptID := ids.NewAt(ids.KindScript, now, 6)
 	startedAt := now.Add(time.Second)
 	queries := &fakeTaskQueries{
 		task: etcd.Versioned[etcd.TaskRecord]{
@@ -111,7 +113,10 @@ func TestTaskShowReturnsFixedRevisionStepProjection(t *testing.T) {
 				ID: taskID, OperationID: ids.NewAt(ids.KindOperation, now, 3),
 				PlanHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				Type:     etcd.TaskDeploy, Target: ids.NewAt(ids.KindService, now, 4),
-				Status: etcd.TaskStatusRunning, Steps: []etcd.TaskStepRecord{{ID: stepID}},
+				Status: etcd.TaskStatusRunning, Steps: []etcd.TaskStepRecord{
+					{Kind: etcd.TaskStepScript, ID: stepID, ScriptID: scriptID, ScriptSlug: "migrate-schema"},
+					{Kind: etcd.TaskStepOperation, ID: ordinaryStepID},
+				},
 				Owner: etcd.TaskOwner{WorkspaceType: etcd.TaskWorkspacePlatform}, Actor: etcd.TaskActorSystem,
 				CreatedAt: now, UpdatedAt: startedAt, StartedAt: &startedAt,
 			},
@@ -130,17 +135,32 @@ func TestTaskShowReturnsFixedRevisionStepProjection(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
+	payload := append([]byte(nil), response.Body.Bytes()...)
 	var body apiTypes.Task
-	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+	if err := json.Unmarshal(payload, &body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if body.ID != taskID || body.Status != apiTypes.TaskRunning || len(body.Steps) != 1 ||
+	if body.ID != taskID || body.Status != apiTypes.TaskRunning || len(body.Steps) != 2 ||
 		body.Steps[0].Name != stepID || body.Steps[0].Status != apiTypes.TaskRunning ||
+		body.Steps[0].ScriptID != scriptID || body.Steps[0].ScriptSlug != "migrate-schema" ||
+		body.Steps[1].Name != ordinaryStepID || body.Steps[1].Status != apiTypes.TaskPending ||
 		body.WorkspaceType != apiTypes.TaskWorkspacePlatform || body.Actor != apiTypes.TaskActorSystem ||
 		!body.CreatedAt.Equal(
 			now,
 		) || body.StartedAt == nil || !body.StartedAt.Equal(startedAt) || body.FinishedAt != nil {
 		t.Fatalf("Task response = %#v", body)
+	}
+	var raw struct {
+		Steps []map[string]json.RawMessage `json:"steps"`
+	}
+	if err := json.Unmarshal(payload, &raw); err != nil {
+		t.Fatalf("decode raw response: %v", err)
+	}
+	if _, exists := raw.Steps[1]["script_id"]; exists {
+		t.Fatalf("ordinary Task step exposed script_id: %s", raw.Steps[1]["script_id"])
+	}
+	if _, exists := raw.Steps[1]["script_slug"]; exists {
+		t.Fatalf("ordinary Task step exposed script_slug: %s", raw.Steps[1]["script_slug"])
 	}
 }
 

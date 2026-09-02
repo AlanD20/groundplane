@@ -131,9 +131,9 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 		return etcd.TaskRecord{}, nil, err
 	}
 	task.PlanHash = hex.EncodeToString(plan.PlanHash)
-	task.Steps = make([]etcd.TaskStepRecord, len(plan.Steps))
-	for index, step := range plan.Steps {
-		task.Steps[index] = etcd.TaskStepRecord{ID: step.StepId}
+	task.Steps, err = blueprintTaskStepRecords(plan.Steps, input.Members)
+	if err != nil {
+		return etcd.TaskRecord{}, nil, err
 	}
 	return task, plan, nil
 }

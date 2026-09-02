@@ -375,7 +375,7 @@ func newEnvironmentCreationTask(
 		Params: map[string]string{
 			taskcontract.EnvironmentCreateVolumeDirectoryParam: environment.VolumeDir,
 		},
-		Steps:          []etcd.TaskStepRecord{{ID: stepID}},
+		Steps:          []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: stepID}},
 		TimeoutSeconds: environmentCreationTimeoutSeconds,
 		Status:         etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}, nil

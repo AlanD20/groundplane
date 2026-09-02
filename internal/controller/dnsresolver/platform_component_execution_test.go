@@ -157,7 +157,7 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 			etcd.TaskResourceKindParam:                   etcd.TaskResourceComponent,
 			etcd.TaskPlatformComponentDesiredSHA256Param: desiredDigest,
 		},
-		Steps: []etcd.TaskStepRecord{{ID: stepID}, {ID: waitStepID}},
+		Steps: []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: stepID}, {Kind: etcd.TaskStepOperation, ID: waitStepID}},
 	}
 	input.ComposeArtifact, err = controllerpkg.RenderPlatformComponentCompose(
 		controllerpkg.PlatformComponentComposeInput{

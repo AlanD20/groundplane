@@ -479,3 +479,22 @@ regressions cover both shapes; reference-host rerun remains pending.
 ## Blueprint prerequisite gate authority (2026-09-02)
 
 The root `x-gp-requires` grammar is now closed to registered `backing-attach` targets, `exists|ready|completed_successfully` conditions, and nonempty `start|deploy|rollback|always` phase sets. Blueprint apply resolves each authored Attach label once at a fixed pre-stage revision, seals its stable Attach id, producer Task id, MVCC revision, exact Task DAG, phase plans, and final step ids, then publishes that gate atomically with the Environment desired head and sole Task. Agent claim fails closed on missing, mismatched, corrupt, unmet, or raced gate evidence; retry and exact replay retain the original DAG root and digest. Same-Task Attach dependencies, missing targets, duplicate requirements/phases, and cycles are rejected before execution. Registered Component capability availability remains validated by the existing closed catalog before staging. Focused source proof is required before landing; reference-host acceptance remains pending.
+
+## Public Blueprint Script Task step evidence (2026-09-02)
+
+Blueprint Environment update Tasks now persist the selected non-secret Script
+id and slug on each exact post-deploy RunScript step. Task detail projects that
+immutable evidence while ordinary steps omit both fields; durable validation
+rejects partial, invalid, or ambiguous duplicate metadata. Focused persistence,
+producer, and task.show contract regressions cover the public schema.
+
+## Blueprint Script Task-step identity (2026-09-02)
+
+Every durable and public Task step now carries one closed `operation|script`
+kind. Script steps require their paired stable Script id and slug, operation
+steps reject Script identity, and missing, partial, or unknown variants fail
+closed without a compatibility reader. Blueprint `RunScript` steps publish the
+exact durable identity through Task detail and events; OpenAPI and both
+generated clients expose the same closed contract. Focused race proofs, the
+complete internal compile graph, and deterministic API regeneration pass.
+Reference-host Blueprint acceptance remains pending.

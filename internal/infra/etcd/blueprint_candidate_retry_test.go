@@ -139,6 +139,6 @@ func releaseHookRetryTestTask(record ScriptExecutionRecord, taskID string, creat
 			TaskMaterializationEnvironmentParam:          record.EnvironmentID,
 			EnvironmentDesiredRevisionParam:              record.CurrentTaskID,
 		},
-		Steps: []TaskStepRecord{{ID: record.StepID}},
+		Steps: []TaskStepRecord{{Kind: TaskStepOperation, ID: record.StepID}},
 	}
 }

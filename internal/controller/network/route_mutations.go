@@ -631,7 +631,7 @@ func prepareControllerRouteMutationTask(task etcd.TaskRecord, intent etcd.RouteM
 		etcd.TaskResourceKindParam:     etcd.TaskResourceRoute,
 		etcd.TaskRouteEnvironmentParam: intent.EnvironmentID,
 	}
-	task.Steps = []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}}
+	task.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}}
 	value, err := json.Marshal(struct {
 		Version    int    `json:"version"`
 		TaskID     string `json:"task_id"`

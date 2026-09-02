@@ -69,7 +69,7 @@ func TestResolveArtifactFreeEnvironmentRemovalPlan(t *testing.T) {
 		PlanID: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV", RenderGeneration: 1,
 		Type: etcd.TaskRemove, Target: environmentID,
 		Params: map[string]string{EnvironmentRemoveVolumeDirectoryParam: directory},
-		Steps:  []etcd.TaskStepRecord{{ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"}}, TimeoutSeconds: 120,
+		Steps:  []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"}}, TimeoutSeconds: 120,
 	})
 	if err != nil {
 		t.Fatalf("ResolveExecutionPlan() error = %v", err)
@@ -110,7 +110,7 @@ func TestResolveHierarchyEnvironmentCleanupPlan(t *testing.T) {
 			etcd.TaskHierarchyDeletionProcedureParam:  "environment.cleanup",
 			etcd.TaskHierarchyDeletionInputParam:      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		},
-		Steps: []etcd.TaskStepRecord{{ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"}},
+		Steps: []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"}},
 	}
 	plan, err := resolver.ResolveExecutionPlan(context.Background(), task)
 	if err != nil {

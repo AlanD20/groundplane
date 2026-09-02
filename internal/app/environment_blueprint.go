@@ -916,7 +916,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	steps := append([]*agentpb.ExecutionStep(nil), materializationSteps...)
 	stepRecords := make([]etcd.TaskStepRecord, 0, len(materializationSteps)+4)
 	for _, step := range materializationSteps {
-		stepRecords = append(stepRecords, etcd.TaskStepRecord{ID: step.StepId})
+		stepRecords = append(stepRecords, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: step.StepId})
 	}
 	managedVolumeIDs := managedEnvironmentVolumeIDs(changes.Current.Volumes)
 	var volumeIntentDigest []byte
@@ -936,7 +936,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 				},
 			},
 		})
-		stepRecords = append(stepRecords, etcd.TaskStepRecord{ID: stepID})
+		stepRecords = append(stepRecords, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: stepID})
 	}
 	attachSteps, attachStepRecords, err := preparedAttaches.procedureSteps(
 		taskID, environmentBlueprintTimeoutSeconds, allocator.Named,

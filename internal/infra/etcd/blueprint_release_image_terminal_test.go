@@ -205,7 +205,7 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 			TaskMaterializationEnvironmentParam: environmentID,
 			EnvironmentDesiredRevisionParam:     taskID,
 		},
-		Steps: []TaskStepRecord{{ID: stepID}}, StartedAt: &startedAt,
+		Steps: []TaskStepRecord{{Kind: TaskStepOperation, ID: stepID}}, StartedAt: &startedAt,
 	}
 	failureResult := TaskResultRecord{
 		Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone, FailedStepID: stepID,

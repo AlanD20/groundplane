@@ -122,7 +122,7 @@ func taskWithMaterializationReferences() TaskRecord {
 	task.Type = TaskUpdate
 	task.Target = environmentID
 	task.Params = map[string]string{TaskMaterializationEnvironmentParam: environmentID}
-	task.Steps = []TaskStepRecord{{ID: stepIDs[0]}, {ID: stepIDs[1]}, {ID: stepIDs[2]}, {ID: stepIDs[3]}}
+	task.Steps = []TaskStepRecord{{Kind: TaskStepOperation, ID: stepIDs[0]}, {Kind: TaskStepOperation, ID: stepIDs[1]}, {Kind: TaskStepOperation, ID: stepIDs[2]}, {Kind: TaskStepOperation, ID: stepIDs[3]}}
 	plain := TaskEntryValueReference{
 		EntryID:           ids.NewAt(ids.KindEnvEntry, now, 21),
 		ValueGenerationID: ids.NewAt(ids.KindConfig, now, 22),
@@ -212,13 +212,13 @@ func TestTaskMaterializationRemovalReferenceIsClosed(t *testing.T) {
 		Source: TaskMaterializationSource{Kind: TaskMaterializationSourceRemoval},
 	}
 	if err := validateTaskMaterializationReferences(
-		[]TaskMaterializationRecord{reference}, []TaskStepRecord{{ID: stepID}}, environmentID, true, 7,
+		[]TaskMaterializationRecord{reference}, []TaskStepRecord{{Kind: TaskStepOperation, ID: stepID}}, environmentID, true, 7,
 	); err != nil {
 		t.Fatalf("validateTaskMaterializationReferences(removal) error = %v", err)
 	}
 	reference.Source.EntryValue = &TaskEntryValueReference{}
 	if err := validateTaskMaterializationReferences(
-		[]TaskMaterializationRecord{reference}, []TaskStepRecord{{ID: stepID}}, environmentID, true, 7,
+		[]TaskMaterializationRecord{reference}, []TaskStepRecord{{Kind: TaskStepOperation, ID: stepID}}, environmentID, true, 7,
 	); err == nil {
 		t.Fatal("validateTaskMaterializationReferences accepted removal with a value source")
 	}

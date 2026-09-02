@@ -3719,7 +3719,7 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 	retryTask.PlanHash = hex.EncodeToString(retrySealed.PlanHash)
 	retryTask.Steps = make([]TaskStepRecord, len(retrySealed.Steps))
 	for index, step := range retrySealed.Steps {
-		retryTask.Steps[index] = TaskStepRecord{ID: step.StepId}
+		retryTask.Steps[index] = TaskStepRecord{Kind: TaskStepOperation, ID: step.StepId}
 	}
 	retryMarker := pendingTaskMarker(retryTask)
 	retryMarker.Locator.ScopeID = dispatch.EnvironmentID
@@ -3926,7 +3926,7 @@ func backupRuntimePrunePublicationTask(
 	task.TimeoutSeconds = backupTaskTimeoutSeconds
 	task.Steps = make([]TaskStepRecord, len(sealed.Steps))
 	for index, step := range sealed.Steps {
-		task.Steps[index] = TaskStepRecord{ID: step.StepId}
+		task.Steps[index] = TaskStepRecord{Kind: TaskStepOperation, ID: step.StepId}
 	}
 	marker := pendingTaskMarker(task)
 	marker.Locator.ScopeID = dispatch.EnvironmentID
@@ -4476,7 +4476,7 @@ func backupRuntimePublicationTask(
 	task.TimeoutSeconds = backupTaskTimeoutSeconds
 	task.Steps = make([]TaskStepRecord, len(sealed.Steps))
 	for index, step := range sealed.Steps {
-		task.Steps[index] = TaskStepRecord{ID: step.StepId}
+		task.Steps[index] = TaskStepRecord{Kind: TaskStepOperation, ID: step.StepId}
 	}
 	marker := pendingTaskMarker(task)
 	marker.Locator.ScopeID = run.EnvironmentID

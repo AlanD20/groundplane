@@ -138,7 +138,7 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 		Executor: TaskExecutorAgent, PlanID: planID, Type: TaskDeploy,
 		PlanHash: hook.PlanHash, Params: map[string]string{
 			TaskReleasePublicationParam: publicationID, ReleaseHookStepExecutionParam(hook.StepID): hook.ID,
-		}, Steps: []TaskStepRecord{{ID: hook.StepID}},
+		}, Steps: []TaskStepRecord{{Kind: TaskStepOperation, ID: hook.StepID}},
 		Result: &TaskResultRecord{Kind: TaskResultCompose, ReconciliationRequired: true}, CreatedAt: now,
 	}
 	retry := cloneTaskRecord(source)

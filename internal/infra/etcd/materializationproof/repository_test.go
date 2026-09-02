@@ -345,7 +345,7 @@ func testTask(record coreproof.Record, member coreproof.MemberRecord) base.TaskR
 			base.TaskMaterializationEnvironmentParam: record.EnvironmentID,
 			base.EnvironmentDesiredRevisionParam:     record.AppliedRevisionID,
 		},
-		Steps: []base.TaskStepRecord{{ID: stepID}},
+		Steps: []base.TaskStepRecord{{Kind: base.TaskStepOperation, ID: stepID}},
 		Materializations: []base.TaskMaterializationRecord{{
 			StepID: stepID, MaterializationID: member.MaterializationID,
 			EnvironmentID: record.EnvironmentID, Destination: member.Destination,

@@ -76,7 +76,7 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 	task.Target = record.Desired.ID
 	task.Status = TaskStatusPending
 	task.Params = map[string]string{TaskResourceKindParam: TaskResourceRoute, TaskRouteEnvironmentParam: environment.Record.ID}
-	task.Steps = []TaskStepRecord{{ID: ids.NewAt(ids.KindStep, createdAt, 1204)}}
+	task.Steps = []TaskStepRecord{{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, createdAt, 1204)}}
 	task.TimeoutSeconds = 30
 	task.RenderGeneration = 1
 	task.PlanHash = strings.Repeat("a", 64)
@@ -176,7 +176,7 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 	editTask.Params = map[string]string{
 		TaskResourceKindParam: TaskResourceRoute, TaskRouteEnvironmentParam: environment.Record.ID,
 	}
-	editTask.Steps = []TaskStepRecord{{ID: ids.NewAt(ids.KindStep, editCreatedAt, 1213)}}
+	editTask.Steps = []TaskStepRecord{{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, editCreatedAt, 1213)}}
 	editTask.TimeoutSeconds = 30
 	editTask.RenderGeneration = int32(edited.DesiredGeneration)
 	editTask.PlanHash = strings.Repeat("b", 64)

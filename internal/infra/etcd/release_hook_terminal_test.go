@@ -46,10 +46,10 @@ func TestReleaseHookFailureUsesOwningMemberOrdinal(t *testing.T) {
 			ReleaseHookStepExecutionParam("hook"): "01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		},
 		Steps: []TaskStepRecord{
-			{ID: "one-apply"}, {ID: "one-health"}, {ID: "one-switch"}, {ID: "one-probe"}, {ID: "one-compensate"},
-			{ID: "two-apply"}, {ID: "two-health"}, {ID: "two-switch"}, {ID: "two-probe"}, {ID: "two-compensate"},
-			{ID: "three-apply"}, {ID: "three-health"}, {ID: "three-switch"}, {ID: "three-probe"}, {ID: "three-compensate"},
-			{ID: "hook"},
+			{Kind: TaskStepOperation, ID: "one-apply"}, {Kind: TaskStepOperation, ID: "one-health"}, {Kind: TaskStepOperation, ID: "one-switch"}, {Kind: TaskStepOperation, ID: "one-probe"}, {Kind: TaskStepOperation, ID: "one-compensate"},
+			{Kind: TaskStepOperation, ID: "two-apply"}, {Kind: TaskStepOperation, ID: "two-health"}, {Kind: TaskStepOperation, ID: "two-switch"}, {Kind: TaskStepOperation, ID: "two-probe"}, {Kind: TaskStepOperation, ID: "two-compensate"},
+			{Kind: TaskStepOperation, ID: "three-apply"}, {Kind: TaskStepOperation, ID: "three-health"}, {Kind: TaskStepOperation, ID: "three-switch"}, {Kind: TaskStepOperation, ID: "three-probe"}, {Kind: TaskStepOperation, ID: "three-compensate"},
+			{Kind: TaskStepOperation, ID: "hook"},
 		},
 	}
 	if got := releaseFailedOrdinalFromResult(task, TaskResultRecord{FailedStepID: "hook"}); got != 3 {
@@ -141,7 +141,7 @@ func TestFinalizeReleaseHookExecutionBatchReleasesSkippedReferences(t *testing.T
 	}
 	task := TaskRecord{
 		ID: taskID, OperationID: record.OperationID, PlanHash: record.PlanHash, Type: TaskDeploy,
-		Params: map[string]string{ReleaseHookStepExecutionParam(stepID): record.ID}, Steps: []TaskStepRecord{{ID: stepID}},
+		Params: map[string]string{ReleaseHookStepExecutionParam(stepID): record.ID}, Steps: []TaskStepRecord{{Kind: TaskStepOperation, ID: stepID}},
 	}
 	read, err := store.Get(ctx, scriptExecutionKey(record.ID))
 	if err != nil {
@@ -220,7 +220,7 @@ func TestFinalizeReleaseHookExecutionBatchPreservesExecutedAssignmentForAcknowle
 	input.ExpectedState, input.State = record.State, ScriptExecutionOutcomeRecorded
 	input.PayloadSHA256 = strings.Repeat("4", 64)
 	input.Evidence = ScriptCheckpointEvidence{
-		Kind: ScriptCheckpointEvidenceOutcome,
+		Kind:    ScriptCheckpointEvidenceOutcome,
 		Outcome: &ScriptOutcomeEvidence{Reason: ScriptOutcomeRuntimeFailure, ObservedAt: now.Add(2 * time.Second)},
 	}
 	record = advanceScriptCheckpointTest(t, record, input)
@@ -272,10 +272,10 @@ func TestFinalizeReleaseHookExecutionBatchPreservesExecutedAssignmentForAcknowle
 	task := TaskRecord{
 		ID: record.CurrentTaskID, OperationID: record.OperationID, PlanHash: record.PlanHash,
 		Type: TaskDeploy, Params: map[string]string{
-			TaskReleasePublicationParam:             ids.NewULID(),
+			TaskReleasePublicationParam:                  ids.NewULID(),
 			ReleaseHookStepExecutionParam(record.StepID): record.ID,
 		},
-		Steps: []TaskStepRecord{{ID: record.StepID}},
+		Steps: []TaskStepRecord{{Kind: TaskStepOperation, ID: record.StepID}},
 	}
 	read, err := store.Get(ctx, scriptExecutionKey(record.ID))
 	if err != nil {

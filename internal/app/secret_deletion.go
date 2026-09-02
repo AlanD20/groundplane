@@ -271,7 +271,7 @@ func (service *secretDeletionService) deleteSecretOnce(
 		Executor: etcd.TaskExecutorController, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
 		Type: etcd.TaskRemove, Target: secretID,
 		Params:         map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceSecret},
-		Steps:          []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}},
+		Steps:          []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}},
 		TimeoutSeconds: secretDeletionTimeoutSeconds,
 		Status:         etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}

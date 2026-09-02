@@ -73,7 +73,7 @@ func TestReleaseTerminalizationBatchesMaximumGroupBelowTransactionCeiling(t *tes
 			Mutation{Type: MutationPut, Key: releaseCheckpointStagingKey(publicationID, releaseID), Value: checkpointValue},
 		)
 		for step := range 5 {
-			steps[index*5+step] = TaskStepRecord{ID: ids.New(ids.KindStep)}
+			steps[index*5+step] = TaskStepRecord{Kind: TaskStepOperation, ID: ids.New(ids.KindStep)}
 		}
 	}
 	sort.Slice(proxyEvidence, func(left int, right int) bool {

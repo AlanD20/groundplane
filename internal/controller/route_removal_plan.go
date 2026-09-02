@@ -54,7 +54,7 @@ func (resolver *TaskPlanResolver) PrepareRouteRemovalTask(ctx context.Context, t
 	task.Executor = etcd.TaskExecutorAgent
 	task.Params = map[string]string{etcd.TaskRouteEnvironmentParam: intent.EnvironmentID, etcd.TaskMaterializationEnvironmentParam: intent.EnvironmentID, etcd.EnvironmentDesiredRevisionParam: intent.CandidateProjection.RevisionID, EnvironmentBlueprintArtifactParam: procedure.ArtifactID}
 	task.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
-	task.Steps = []etcd.TaskStepRecord{{ID: procedure.MaterializeStepID}, {ID: procedure.ComposeApplyStepID}, {ID: procedure.ActivateStepID}}
+	task.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: procedure.MaterializeStepID}, {Kind: etcd.TaskStepOperation, ID: procedure.ComposeApplyStepID}, {Kind: etcd.TaskStepOperation, ID: procedure.ActivateStepID}}
 	task.Materializations = []etcd.TaskMaterializationRecord{{StepID: procedure.MaterializeStepID, MaterializationID: procedure.MaterializationID, EnvironmentID: intent.EnvironmentID, Destination: pin.Destination, OutputKind: etcd.TaskMaterializationOutputPlainFile, Mode: uint32(entrymaterialization.ModeReadOnly), Length: uint64(length), SHA256: hex.EncodeToString(digest[:]), Source: etcd.TaskMaterializationSource{Kind: etcd.TaskMaterializationSourceComponentFile, ComponentFile: &reference}}}
 	plan, err := resolver.buildRouteRemovalPlan(ctx, task, intent)
 	if err != nil {

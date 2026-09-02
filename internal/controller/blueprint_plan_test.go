@@ -306,9 +306,9 @@ volumes:
 			),
 		},
 		Steps: []etcd.TaskStepRecord{
-			{ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
-			{ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAW"},
-			{ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAX"},
+			{Kind: etcd.TaskStepOperation, ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
+			{Kind: etcd.TaskStepOperation, ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAW"},
+			{Kind: etcd.TaskStepOperation, ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAX"},
 		},
 		TimeoutSeconds: 120, Status: etcd.TaskStatusPending, CreatedAt: at,
 	}

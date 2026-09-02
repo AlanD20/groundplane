@@ -331,7 +331,7 @@ func hierarchyDeletionTask(
 			TaskHierarchyDeletionOperationParam:  begin.OperationID,
 			TaskHierarchyDeletionTargetKindParam: string(begin.TargetKind),
 		},
-		Steps: []TaskStepRecord{{ID: "step_" + suffix}}, TimeoutSeconds: int64(hierarchyDeletionAttemptTimeout / time.Second),
+		Steps: []TaskStepRecord{{Kind: TaskStepOperation, ID: "step_" + suffix}}, TimeoutSeconds: int64(hierarchyDeletionAttemptTimeout / time.Second),
 		Status: TaskStatusPending, NextEventSequence: 1, CreatedAt: begin.CreatedAt, UpdatedAt: begin.CreatedAt,
 	}
 	if err := validateTaskRecord(task); err != nil {

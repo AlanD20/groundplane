@@ -393,7 +393,7 @@ func seedBackupCheckpointAssignmentForTask(
 	task.TimeoutSeconds = backupTaskTimeoutSeconds
 	task.Steps = make([]TaskStepRecord, len(pointIDs))
 	for index := range pointIDs {
-		task.Steps[index] = TaskStepRecord{ID: ids.NewAt(ids.KindStep, now, int64(801+index))}
+		task.Steps[index] = TaskStepRecord{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, int64(801+index))}
 	}
 	task.Status = TaskStatusPending
 	task.StartedAt = nil

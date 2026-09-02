@@ -533,15 +533,15 @@ func newPlatformComponentConfigTask(
 	createdAt time.Time,
 	ensureService bool,
 ) etcd.TaskRecord {
-	steps := []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}}
+	steps := []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}}
 	if ensureService {
 		steps = append(steps,
-			etcd.TaskStepRecord{ID: ids.New(ids.KindStep)},
-			etcd.TaskStepRecord{ID: ids.New(ids.KindStep)},
-			etcd.TaskStepRecord{ID: ids.New(ids.KindStep)},
+			etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)},
+			etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)},
+			etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)},
 		)
 	} else {
-		steps = append(steps, etcd.TaskStepRecord{ID: ids.New(ids.KindStep)})
+		steps = append(steps, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)})
 	}
 	return etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
@@ -569,7 +569,7 @@ func newPlatformComponentLifecycleTask(
 	}
 	task := newPlatformComponentConfigTask(componentID, idempotencyKey, createdAt, false)
 	task.Steps = task.Steps[:1]
-	task.Steps = append(task.Steps, etcd.TaskStepRecord{ID: ids.New(ids.KindStep)})
+	task.Steps = append(task.Steps, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)})
 	return task
 }
 

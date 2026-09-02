@@ -58,7 +58,7 @@ func TestReleasePostHookAnchorFollowsCandidateStart(t *testing.T) {
 	// Rationale: post-deploy Scripts must run after candidate start and before
 	// readiness or strategy finalization.
 	task := etcd.TaskRecord{Steps: []etcd.TaskStepRecord{
-		{ID: "step-0"}, {ID: "step-1"}, {ID: "step-2"}, {ID: "step-3"}, {ID: "step-4"},
+		{Kind: etcd.TaskStepOperation, ID: "step-0"}, {Kind: etcd.TaskStepOperation, ID: "step-1"}, {Kind: etcd.TaskStepOperation, ID: "step-2"}, {Kind: etcd.TaskStepOperation, ID: "step-3"}, {Kind: etcd.TaskStepOperation, ID: "step-4"},
 	}}
 	tests := []struct {
 		name     string

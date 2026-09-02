@@ -39,7 +39,7 @@ func (resolver *TaskPlanResolver) PrepareServiceLifecycleTask(
 		etcd.TaskServiceEnvironmentParam: input.EnvironmentID,
 		etcd.TaskComposeArtifactParam:    input.ArtifactID,
 	}
-	prepared.Steps = []etcd.TaskStepRecord{{ID: stepID}}
+	prepared.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: stepID}}
 	plan, err := resolver.buildServiceLifecyclePlan(ctx, prepared, input)
 	if err != nil {
 		return etcd.TaskRecord{}, err

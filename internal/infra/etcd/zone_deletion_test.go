@@ -301,7 +301,7 @@ func zoneDeletionAgentTask(
 			TaskZoneEnvironmentParam: environment.ID, TaskZoneRemovalOperationParam: intent.OperationID,
 			EnvironmentDesiredRevisionParam: intent.Claim.RevisionID, TaskComposeArtifactParam: artifact.GetArtifactId(),
 		},
-		Steps: []TaskStepRecord{{ID: ids.NewAt(ids.KindStep, at, 85)}}, TimeoutSeconds: 300,
+		Steps: []TaskStepRecord{{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, at, 85)}}, TimeoutSeconds: 300,
 		Status: TaskStatusPending, NextEventSequence: 1, CreatedAt: at, UpdatedAt: at,
 	}
 }

@@ -34,7 +34,7 @@ func (resolver *TaskPlanResolver) PrepareServiceRemovalTask(
 		etcd.TaskComposeArtifactParam:        artifactID,
 		etcd.EnvironmentDesiredRevisionParam: intent.Claim.RevisionID,
 	}
-	prepared.Steps = []etcd.TaskStepRecord{{ID: stepID}}
+	prepared.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: stepID}}
 	plan, err := resolver.buildServiceRemovalPlan(ctx, prepared, intent)
 	if err != nil {
 		return etcd.TaskRecord{}, err

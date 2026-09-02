@@ -161,7 +161,7 @@ func controllerMaterializationTask(
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: operationID, PlanID: planID, PlanHash: hex.EncodeToString(plan.PlanHash),
 		RenderGeneration: 7, Type: etcd.TaskUpdate, Target: environmentID,
-		Steps: []etcd.TaskStepRecord{{ID: stepID}}, TimeoutSeconds: 60,
+		Steps: []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: stepID}}, TimeoutSeconds: 60,
 		Status: etcd.TaskStatusRunning, NextEventSequence: 1, CreatedAt: now,
 	}
 	return task, plan

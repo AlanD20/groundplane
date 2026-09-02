@@ -314,7 +314,7 @@ func newAppBackupSecretFixture(t *testing.T) appBackupSecretFixture {
 		PlanHash:          hex.EncodeToString(plan.PlanHash),
 		Type:              etcd.TaskBackupPrune,
 		Target:            environmentID,
-		Steps:             []etcd.TaskStepRecord{{ID: stepID}},
+		Steps:             []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: stepID}},
 		TimeoutSeconds:    appBackupTaskTimeoutSeconds,
 		Status:            etcd.TaskStatusRunning,
 		NextEventSequence: 1,

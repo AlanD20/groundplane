@@ -55,7 +55,7 @@ func buildVolumeMutationPlan(
 	}
 	records := make([]etcd.TaskStepRecord, len(steps))
 	for index, step := range steps {
-		records[index] = etcd.TaskStepRecord{ID: step.StepId}
+		records[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: step.StepId}
 	}
 	return plan, records, nil
 }

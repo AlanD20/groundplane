@@ -54,7 +54,7 @@ func BuildEnvironmentComponentTaskContribution(
 	if err != nil {
 		return nil, nil, err
 	}
-	return []*agentpb.ExecutionStep{step}, []etcd.TaskStepRecord{{ID: stepID}}, nil
+	return []*agentpb.ExecutionStep{step}, []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: stepID}}, nil
 }
 
 // AppendEnvironmentComponentTaskContribution preserves the deploy invariant

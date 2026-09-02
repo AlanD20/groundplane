@@ -314,7 +314,7 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 				taskcontract.BlueprintComposeProcedureFullReconcile,
 			),
 		},
-		Steps:            []etcd.TaskStepRecord{{ID: environmentStepID}, {ID: volumeStepID}, {ID: materializeStep.StepId}, {ID: applyStepID}, {ID: healthStepID}},
+		Steps:            []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: environmentStepID}, {Kind: etcd.TaskStepOperation, ID: volumeStepID}, {Kind: etcd.TaskStepOperation, ID: materializeStep.StepId}, {Kind: etcd.TaskStepOperation, ID: applyStepID}, {Kind: etcd.TaskStepOperation, ID: healthStepID}},
 		Materializations: []etcd.TaskMaterializationRecord{materialization},
 		TimeoutSeconds:   environmentBlueprintTimeoutSeconds, Status: etcd.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: stage.Record.CreatedAt, UpdatedAt: stage.Record.CreatedAt,

@@ -287,7 +287,7 @@ func (service *scriptDeletionService) deleteScriptOnce(
 		Executor: etcd.TaskExecutorController, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
 		Type: etcd.TaskRemove, Target: scriptID,
 		Params:         map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceScript},
-		Steps:          []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}},
+		Steps:          []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}},
 		TimeoutSeconds: scriptDeletionTimeoutSeconds,
 		Status:         etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}

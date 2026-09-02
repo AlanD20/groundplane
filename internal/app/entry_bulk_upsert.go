@@ -334,7 +334,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	})
 	stepRecords := make([]etcd.TaskStepRecord, len(steps))
 	for index, step := range steps {
-		stepRecords[index] = etcd.TaskStepRecord{ID: step.StepId}
+		stepRecords[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: step.StepId}
 	}
 	artifact := &agentpb.ComposeArtifact{}
 	if err := protoUnmarshalEntryArtifact(candidate.ComposeArtifact, artifact); err != nil {

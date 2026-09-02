@@ -934,7 +934,7 @@ func newAttachMutationTask(
 	}
 	steps := make([]etcd.TaskStepRecord, stepCount)
 	for index := range steps {
-		steps[index] = etcd.TaskStepRecord{ID: ids.New(ids.KindStep)}
+		steps[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}
 	}
 	return etcd.TaskRecord{
 		ID: taskID, OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,

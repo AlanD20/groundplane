@@ -343,7 +343,7 @@ func newConnectorDeletionTask(
 			etcd.TaskConnectorEnvironmentParam: connector.EnvironmentID,
 			etcd.TaskConnectorNameParam:        connector.Name,
 		},
-		Steps:          []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}},
+		Steps:          []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}},
 		TimeoutSeconds: connectorDeletionTimeoutSeconds, PlanHash: planHash,
 		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}, nil

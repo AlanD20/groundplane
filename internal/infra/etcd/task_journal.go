@@ -98,10 +98,20 @@ const (
 	TaskEventStateTimedOut  TaskEventState = "timed_out"
 )
 
+type TaskStepKind string
+
+const (
+	TaskStepOperation TaskStepKind = "operation"
+	TaskStepScript    TaskStepKind = "script"
+)
+
 // TaskStepRecord is the immutable execution procedure stored with a Task.
 // ID is stable within the task and participates in Agent event identity.
 type TaskStepRecord struct {
-	ID string `json:"id"`
+	Kind       TaskStepKind `json:"kind"`
+	ID         string       `json:"id"`
+	ScriptID   string       `json:"script_id,omitempty"`
+	ScriptSlug string       `json:"script_slug,omitempty"`
 }
 
 type TaskResultKind string
@@ -836,20 +846,6 @@ func validateTaskTimeline(record TaskRecord) error {
 	return nil
 }
 
-func validateTaskSteps(steps []TaskStepRecord) error {
-	seen := make(map[string]struct{}, len(steps))
-	for _, step := range steps {
-		if err := validateStableID(ids.KindStep, step.ID); err != nil {
-			return err
-		}
-		if _, exists := seen[step.ID]; exists {
-			return errs.New(errs.KindValidationFailed, "task step ids must be unique")
-		}
-		seen[step.ID] = struct{}{}
-	}
-	return nil
-}
-
 func validateTaskEventIdentity(identity TaskEventIdentity) error {
 	if err := validateStableID(ids.KindAssignment, identity.AssignmentID); err != nil {
 		return err
@@ -1285,17 +1281,6 @@ func cloneIdempotencyLocator(locator *IdempotencyLocator) *IdempotencyLocator {
 	}
 	cloned := *locator
 	return &cloned
-}
-
-func cloneTaskSteps(steps []TaskStepRecord) []TaskStepRecord {
-	if steps == nil {
-		return nil
-	}
-	cloned := make([]TaskStepRecord, len(steps))
-	for index, step := range steps {
-		cloned[index] = TaskStepRecord{ID: step.ID}
-	}
-	return cloned
 }
 
 func cloneStringMap(values map[string]string) map[string]string {

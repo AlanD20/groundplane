@@ -51,18 +51,18 @@ func TestBlueprintReleaseProcedureStepIDsRejectInvalidAuthority(t *testing.T) {
 
 func blueprintReleaseStepIDFixture(hookCount int) (etcd.TaskRecord, []etcd.ReleaseTaskRenderMember) {
 	task := etcd.TaskRecord{Params: make(map[string]string)}
-	task.Steps = append(task.Steps, etcd.TaskStepRecord{ID: "apply"})
+	task.Steps = append(task.Steps, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: "apply"})
 	hooks := make([]etcd.ReleaseHookRenderInput, hookCount)
 	for index := range hooks {
 		stepID := fmt.Sprintf("hook-%02d", index)
 		executionID := fmt.Sprintf("execution-%02d", index)
-		task.Steps = append(task.Steps, etcd.TaskStepRecord{ID: stepID})
+		task.Steps = append(task.Steps, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: stepID})
 		task.Params[etcd.ReleaseHookStepMemberParam(stepID)] = "1"
 		task.Params[etcd.ReleaseHookStepExecutionParam(stepID)] = executionID
 		hooks[index] = etcd.ReleaseHookRenderInput{
 			When: core.ScriptPostDeploy, ScriptExecutionID: executionID,
 		}
 	}
-	task.Steps = append(task.Steps, etcd.TaskStepRecord{ID: "health"})
+	task.Steps = append(task.Steps, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: "health"})
 	return task, []etcd.ReleaseTaskRenderMember{{Render: etcd.ReleaseRenderInput{Hooks: hooks}}}
 }

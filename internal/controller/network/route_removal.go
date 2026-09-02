@@ -380,7 +380,7 @@ func prepareControllerRouteRemovalTask(
 		etcd.TaskResourceKindParam:     etcd.TaskResourceRoute,
 		etcd.TaskRouteEnvironmentParam: intent.EnvironmentID,
 	}
-	task.Steps = []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}}
+	task.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}}
 	task.TimeoutSeconds = routeRemovalControllerTimeoutSeconds
 	planHash, err := controllerRouteRemovalPlanHash(intent)
 	if err != nil {

@@ -464,7 +464,7 @@ func (fake *routeRemovalPlanFake) PrepareRouteRemovalTask(
 	}
 	task.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
 	task.Steps = []etcd.TaskStepRecord{
-		{ID: procedure.MaterializeStepID}, {ID: procedure.ComposeApplyStepID}, {ID: procedure.ActivateStepID},
+		{Kind: etcd.TaskStepOperation, ID: procedure.MaterializeStepID}, {Kind: etcd.TaskStepOperation, ID: procedure.ComposeApplyStepID}, {Kind: etcd.TaskStepOperation, ID: procedure.ActivateStepID},
 	}
 	task.Materializations = []etcd.TaskMaterializationRecord{{
 		StepID: procedure.MaterializeStepID, MaterializationID: procedure.MaterializationID,

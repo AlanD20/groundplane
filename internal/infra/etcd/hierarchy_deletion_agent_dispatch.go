@@ -91,7 +91,7 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 	planID := hierarchyDeletionChildStableID(ids.KindPlan, action.AgentProcedure.ChildOperationID, attemptID)
 	stepID := hierarchyDeletionChildStableID(ids.KindStep, action.AgentProcedure.ChildOperationID, attemptID)
 	planHash := action.AgentProcedure.InputDigest
-	taskSteps := []TaskStepRecord{{ID: stepID}}
+	taskSteps := []TaskStepRecord{{Kind: TaskStepOperation, ID: stepID}}
 	if action.AgentProcedure.TypedProcedure == "environment.cleanup" {
 		environmentResult, getErr := repository.store.Get(ctx, environmentKey(action.TargetID))
 		if getErr != nil {
@@ -121,7 +121,7 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 			directoryStepID = hierarchyDeletionChildStableID(
 				ids.KindStep, action.AgentProcedure.ChildOperationID, attemptID, "directory",
 			)
-			taskSteps = []TaskStepRecord{{ID: composeStepID}, {ID: directoryStepID}}
+			taskSteps = []TaskStepRecord{{Kind: TaskStepOperation, ID: composeStepID}, {Kind: TaskStepOperation, ID: directoryStepID}}
 			composeArtifact = projection.Record.ComposeArtifact
 		}
 		plan, planErr := hierarchyplan.EnvironmentCleanup(

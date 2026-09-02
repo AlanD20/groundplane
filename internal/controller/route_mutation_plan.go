@@ -61,7 +61,7 @@ func (resolver *TaskPlanResolver) PrepareRouteMutationTask(ctx context.Context, 
 	task.TimeoutSeconds = 120
 	task.RenderGeneration = int32(candidate.RenderGeneration)
 	task.Params = map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceRoute, etcd.TaskRouteEnvironmentParam: intent.EnvironmentID, etcd.TaskMaterializationEnvironmentParam: intent.EnvironmentID, etcd.EnvironmentDesiredRevisionParam: candidate.RevisionID, EnvironmentBlueprintArtifactParam: procedure.ArtifactID}
-	task.Steps = []etcd.TaskStepRecord{{ID: procedure.MaterializeStepID}, {ID: procedure.ApplyStepID}, {ID: procedure.ActivateStepID}}
+	task.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: procedure.MaterializeStepID}, {Kind: etcd.TaskStepOperation, ID: procedure.ApplyStepID}, {Kind: etcd.TaskStepOperation, ID: procedure.ActivateStepID}}
 	task.Materializations = []etcd.TaskMaterializationRecord{{StepID: procedure.MaterializeStepID, MaterializationID: procedure.MaterializationID, EnvironmentID: intent.EnvironmentID, Destination: pin.Destination, OutputKind: etcd.TaskMaterializationOutputPlainFile, Mode: uint32(entrymaterialization.ModeReadOnly), Length: uint64(length), SHA256: hex.EncodeToString(digest[:]), Source: etcd.TaskMaterializationSource{Kind: etcd.TaskMaterializationSourceComponentFile, ComponentFile: &reference}}}
 	plan, err := resolver.buildRouteMutationPlan(ctx, task, intent)
 	if err != nil {
@@ -76,7 +76,7 @@ func prepareNativeRouteMutation(task etcd.TaskRecord, intent etcd.RouteMutationI
 	task.TimeoutSeconds = 30
 	task.RenderGeneration = int32(intent.Route.DesiredGeneration)
 	task.Params = map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceRoute, etcd.TaskRouteEnvironmentParam: intent.EnvironmentID}
-	task.Steps = []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}}
+	task.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}}
 	value, err := json.Marshal(struct {
 		Version    int                    `json:"version"`
 		Kind       etcd.RouteMutationKind `json:"kind"`

@@ -420,7 +420,7 @@ func (service *zoneDeletionService) removeZoneOnce(
 			etcd.EnvironmentDesiredRevisionParam: claim.RevisionID,
 		}
 		task.RenderGeneration = int32(candidate.RenderGeneration)
-		task.Steps = []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}}
+		task.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}}
 		task.TimeoutSeconds = backingZoneCascadeTimeoutSeconds
 		task.PlanHash, err = backingZoneCascadePlanHash(intent, impactToken)
 		if err != nil {

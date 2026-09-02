@@ -524,7 +524,7 @@ func prepareControllerServiceLifecycleTask(
 		etcd.TaskResourceKindParam:       etcd.TaskResourceService,
 		etcd.TaskServiceEnvironmentParam: environmentID,
 	}
-	task.Steps = []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}}
+	task.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}}
 	task.TimeoutSeconds = serviceLifecycleControlTimeoutSeconds
 	value, err := json.Marshal(struct {
 		Version         int           `json:"version"`

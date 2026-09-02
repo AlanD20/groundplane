@@ -249,7 +249,7 @@ func (service *releaseGroupMutationService) apply(
 		Owner: owner, Actor: etcd.TaskActorOperator, Executor: etcd.TaskExecutorController,
 		PlanID: ids.New(ids.KindPlan), RenderGeneration: 1, Type: taskType, Target: desired.ID,
 		Params: map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceReleaseGroup},
-		Steps:  []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}}, TimeoutSeconds: releaseGroupTaskTimeout,
+		Steps:  []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}}, TimeoutSeconds: releaseGroupTaskTimeout,
 		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	task.PlanHash, err = releaseGroupMutationPlanHash(taskType, desired)

@@ -478,7 +478,7 @@ func releaseImage(value string) (string, string, string, error) {
 func taskStepRecords(steps []*agentpb.ExecutionStep) []etcd.TaskStepRecord {
 	result := make([]etcd.TaskStepRecord, len(steps))
 	for index, step := range steps {
-		result[index] = etcd.TaskStepRecord{ID: step.StepId}
+		result[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: step.StepId}
 	}
 	return result
 }

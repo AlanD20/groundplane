@@ -38,7 +38,7 @@ func newPlatformDNSResolverTask(componentID string, createdAt time.Time) TaskRec
 			TaskAutomaticReconcileParam: "true",
 		},
 		Steps: []TaskStepRecord{
-			{ID: ids.New(ids.KindStep)}, {ID: ids.New(ids.KindStep)},
+			{Kind: TaskStepOperation, ID: ids.New(ids.KindStep)}, {Kind: TaskStepOperation, ID: ids.New(ids.KindStep)},
 		}, TimeoutSeconds: 480,
 		Status: TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
@@ -53,7 +53,7 @@ func platformResolverTaskSteps(input PlatformComponentTaskRenderInput) []TaskSte
 	}
 	steps := make([]TaskStepRecord, count)
 	for index := range steps {
-		steps[index] = TaskStepRecord{ID: ids.New(ids.KindStep)}
+		steps[index] = TaskStepRecord{Kind: TaskStepOperation, ID: ids.New(ids.KindStep)}
 	}
 	return steps
 }

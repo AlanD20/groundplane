@@ -359,7 +359,7 @@ func (service *BackupRunService) RetryBackupTask(
 	defer prepared.Publication.Clear()
 	steps := make([]etcd.TaskStepRecord, len(prepared.Run.Sources))
 	for index := range steps {
-		steps[index] = etcd.TaskStepRecord{ID: ids.New(ids.KindStep)}
+		steps[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}
 	}
 	task := etcd.TaskRecord{
 		ID:                retryTaskID,
@@ -461,7 +461,7 @@ func (service *BackupRunService) runBackup(
 
 	steps := make([]etcd.TaskStepRecord, len(prepared.Run.Sources))
 	for index := range steps {
-		steps[index] = etcd.TaskStepRecord{ID: ids.New(ids.KindStep)}
+		steps[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}
 	}
 	task := etcd.TaskRecord{
 		ID:                taskID,

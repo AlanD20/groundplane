@@ -174,9 +174,9 @@ func (*fakeZoneDeletionPlans) PrepareZoneRemovalTask(
 	}
 	task.Steps = make([]etcd.TaskStepRecord, 0, len(procedure.ServiceStepIDs)+1)
 	for _, id := range procedure.ServiceStepIDs {
-		task.Steps = append(task.Steps, etcd.TaskStepRecord{ID: id})
+		task.Steps = append(task.Steps, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: id})
 	}
-	task.Steps = append(task.Steps, etcd.TaskStepRecord{ID: procedure.NetworkStepID})
+	task.Steps = append(task.Steps, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: procedure.NetworkStepID})
 	task.PlanHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	return task, nil
 }

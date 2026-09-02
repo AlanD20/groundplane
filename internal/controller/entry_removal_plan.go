@@ -173,7 +173,7 @@ func (resolver *TaskPlanResolver) prepareEntryRemovalTask(
 		reference.Length = uint64(len(content))
 		reference.SHA256 = hex.EncodeToString(digest[:])
 		clear(content)
-		task.Steps[index] = etcd.TaskStepRecord{ID: stepID}
+		task.Steps[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: stepID}
 		task.Materializations[index] = reference
 	}
 	sort.Slice(task.Materializations, func(left int, right int) bool {

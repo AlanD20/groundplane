@@ -134,7 +134,7 @@ func TestServiceLifecycleAbortReleasesActiveFence(t *testing.T) {
 	task.Params = map[string]string{
 		TaskResourceKindParam: TaskResourceService, TaskServiceEnvironmentParam: environment.Record.ID,
 	}
-	task.Steps = []TaskStepRecord{{ID: ids.NewAt(ids.KindStep, at, 6)}}
+	task.Steps = []TaskStepRecord{{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, at, 6)}}
 	task.RenderGeneration = 1
 	task.TimeoutSeconds = 30
 	marker := pendingTaskMarker(task)
@@ -184,7 +184,7 @@ func TestServiceLifecycleAbortReleasesActiveFence(t *testing.T) {
 	staleTask.IdempotencyKey = "service-stale-runtime-key-0001"
 	staleTask.CreatedAt = staleAt
 	staleTask.UpdatedAt = staleAt
-	staleTask.Steps = []TaskStepRecord{{ID: ids.NewAt(ids.KindStep, staleAt, 11)}}
+	staleTask.Steps = []TaskStepRecord{{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, staleAt, 11)}}
 	staleMarker := pendingTaskMarker(staleTask)
 	staleMarker.Locator.ScopeID = environment.Record.ID
 	staleMarker.Locator.Route = "/services/{id}/stop"

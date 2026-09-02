@@ -418,7 +418,7 @@ func applyRemovalTaskPlan(task etcd.TaskRecord, plan RemovalTaskPlan) (etcd.Task
 	task.TimeoutSeconds = plan.TimeoutSeconds
 	task.Steps = make([]etcd.TaskStepRecord, len(plan.Steps))
 	for index, step := range plan.Steps {
-		task.Steps[index] = etcd.TaskStepRecord{ID: step.ID}
+		task.Steps[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: step.ID}
 	}
 	task.Materializations = make([]etcd.TaskMaterializationRecord, len(plan.Materializations))
 	for index, materialization := range plan.Materializations {

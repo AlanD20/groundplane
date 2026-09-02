@@ -365,13 +365,9 @@ func (prepared preparedBlueprintAttaches) procedureSteps(
 	records := make([]etcd.TaskStepRecord, 0)
 	for _, procedure := range prepared.procedures {
 		stepRecords := make([]etcd.TaskStepRecord, 0, len(procedure.record.GrantAttachIDs)+1)
-		stepRecords = append(stepRecords, etcd.TaskStepRecord{
-			ID: namedID(ids.KindStep, "attach:"+procedure.record.ID+":provision"),
-		})
+		stepRecords = append(stepRecords, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: namedID(ids.KindStep, "attach:"+procedure.record.ID+":provision")})
 		for _, grantID := range procedure.record.GrantAttachIDs {
-			stepRecords = append(stepRecords, etcd.TaskStepRecord{
-				ID: namedID(ids.KindStep, "attach:"+procedure.record.ID+":grant:"+grantID),
-			})
+			stepRecords = append(stepRecords, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: namedID(ids.KindStep, "attach:"+procedure.record.ID+":grant:"+grantID)})
 		}
 		procedureTask := etcd.TaskRecord{
 			ID: taskID, Type: etcd.TaskAttach, Target: procedure.record.ID,

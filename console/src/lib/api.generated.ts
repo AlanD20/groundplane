@@ -2941,9 +2941,19 @@ export interface components {
             step_id: string;
         };
         TaskStep: {
+            /** @enum {string} */
+            kind: "operation" | "script";
             name: string;
+            script_id?: string;
+            script_slug?: string;
             status: string;
-        };
+        } & ({
+            /** @constant */
+            kind?: "operation";
+        } | {
+            /** @constant */
+            kind?: "script";
+        });
         Tenant: {
             /**
              * Format: uri

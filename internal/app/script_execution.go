@@ -65,7 +65,7 @@ func (service *scriptMutationService) RunScript(
 			etcd.ScriptExecutionIDParam: ids.NewULID(),
 			etcd.ScriptGenerationParam:  jsonNumber(sources.BodyGeneration.Record.Generation),
 		},
-		Steps:          []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}},
+		Steps:          []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}},
 		TimeoutSeconds: executionplan.ScriptExecutionTimeoutSeconds,
 		Status:         etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}

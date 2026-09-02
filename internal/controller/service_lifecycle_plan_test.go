@@ -46,7 +46,7 @@ func TestServiceLifecycleProcedureUsesTargetedComposeOperations(t *testing.T) {
 	} {
 		task := etcd.TaskRecord{
 			Type: test.taskType, Target: serviceID, TimeoutSeconds: 120,
-			Steps: []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}},
+			Steps: []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}},
 		}
 		operation, step, err := serviceLifecycleProcedure(task, artifactID)
 		if err != nil || operation != test.operation || step.TimeoutSeconds != 120 {

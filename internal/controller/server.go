@@ -342,7 +342,14 @@ func taskResponse(record etcd.TaskRecord, snapshot etcd.TaskEventSnapshot) (apiT
 	}
 	response.Steps = make([]apiTypes.TaskStep, len(record.Steps))
 	for index, step := range record.Steps {
-		response.Steps[index] = apiTypes.TaskStep{Name: step.ID, Status: stepStatus[step.ID]}
+		kind, err := taskStepKindResponse(step)
+		if err != nil {
+			return apiTypes.Task{}, err
+		}
+		response.Steps[index] = apiTypes.TaskStep{
+			Name: step.ID, Status: stepStatus[step.ID], Kind: kind,
+			ScriptID: step.ScriptID, ScriptSlug: step.ScriptSlug,
+		}
 	}
 	return response, nil
 }

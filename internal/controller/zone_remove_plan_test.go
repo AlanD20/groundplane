@@ -47,8 +47,8 @@ func TestZoneRemovalPlanRebuildsAffectedServicesBeforeManagedNetworkRemoval(t *t
 			etcd.EnvironmentDesiredRevisionParam: taskID, etcd.TaskComposeArtifactParam: artifactID,
 		},
 		Steps: []etcd.TaskStepRecord{
-			{ID: ids.NewAt(ids.KindStep, now, 9)}, {ID: ids.NewAt(ids.KindStep, now, 10)},
-			{ID: ids.NewAt(ids.KindStep, now, 11)},
+			{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 9)}, {Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 10)},
+			{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 11)},
 		},
 		TimeoutSeconds: 120,
 	}

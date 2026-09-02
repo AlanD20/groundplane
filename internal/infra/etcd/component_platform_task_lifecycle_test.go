@@ -131,7 +131,7 @@ func TestPlatformComponentAcknowledgementAtomicallyPublishesObservation(t *testi
 			TaskResourceKindParam:                   TaskResourceComponent,
 			TaskPlatformComponentDesiredSHA256Param: desiredSHA256,
 		},
-		Steps:      []TaskStepRecord{{ID: ids.NewAt(ids.KindStep, now, 7)}, {ID: stepID}},
+		Steps:      []TaskStepRecord{{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 7)}, {Kind: TaskStepOperation, ID: stepID}},
 		FinishedAt: &finishedAt,
 		TerminalAssignment: &TaskTerminalAssignmentRecord{
 			AssignmentID: ids.NewAt(ids.KindAssignment, now, 8),
@@ -239,7 +239,7 @@ func TestPlatformComponentDisableAcknowledgementReplayAcceptsEmptyDigests(t *tes
 			TaskResourceKindParam:                   TaskResourceComponent,
 			TaskPlatformComponentDesiredSHA256Param: input.DesiredSHA256,
 		},
-		Steps: []TaskStepRecord{{ID: stepID}},
+		Steps: []TaskStepRecord{{Kind: TaskStepOperation, ID: stepID}},
 		TerminalAssignment: &TaskTerminalAssignmentRecord{
 			AssignmentID: ids.NewAt(ids.KindAssignment, now, 8),
 			AgentID:      agentID, AgentGeneration: 1,

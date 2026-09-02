@@ -83,7 +83,7 @@ func assignmentQuarantineFixture(at time.Time, agentID string, entropy int64) et
 		ID: taskID, OperationID: ids.NewAt(ids.KindOperation, at, entropy),
 		PlanID: ids.NewAt(ids.KindPlan, at, entropy), PlanHash: strings.Repeat("0", 64),
 		Type: etcd.TaskDeploy, Target: ids.NewAt(ids.KindService, at, entropy),
-		Steps:          []etcd.TaskStepRecord{{ID: ids.NewAt(ids.KindStep, at, entropy)}},
+		Steps:          []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, at, entropy)}},
 		TimeoutSeconds: 60, RenderGeneration: 7, Status: etcd.TaskStatusRunning,
 		CreatedAt: at, UpdatedAt: at, StartedAt: &at,
 	}

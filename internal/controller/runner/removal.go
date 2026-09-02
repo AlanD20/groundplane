@@ -225,7 +225,7 @@ func newRunnerRemovalTask(record etcd.RunnerRecord, key string, now time.Time) e
 		PlanID: ids.New(ids.KindPlan), PlanHash: hex.EncodeToString(planDigest[:]), RenderGeneration: 1,
 		Type: etcd.TaskRemove, Target: record.Desired.ID,
 		Params: etcd.RunnerRemovalTaskParams(record),
-		Steps:  []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep)}}, TimeoutSeconds: runnerRemoveTimeoutSeconds,
+		Steps:  []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}}, TimeoutSeconds: runnerRemoveTimeoutSeconds,
 		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 }

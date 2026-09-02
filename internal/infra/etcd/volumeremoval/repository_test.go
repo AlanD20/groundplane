@@ -231,7 +231,7 @@ func environmentVolumeRemovalRuntimeFixture(
 	task.Type = etcd.TaskRemove
 	task.Target = volumeID
 	task.TimeoutSeconds = environmentVolumeRemovalTimeoutSeconds
-	task.Steps = []etcd.TaskStepRecord{{ID: stepID}}
+	task.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: stepID}}
 	task.IdempotencyKey = "volume-remove-idempotency-key-0001"
 	marker := pendingVolumeRemovalMarker(task)
 	marker.Locator = etcd.IdempotencyLocator{

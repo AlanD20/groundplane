@@ -234,8 +234,8 @@ func newVolumePlanState(t *testing.T, removal bool) volumePlanState {
 	}
 	addTask := volumeTask(addTaskID, addPlanID, etcd.TaskCreate, volumeID, environmentID, candidateRevisionID, addArtifactID, volumeKey, intentDigest, "", nil)
 	editTask := volumeTask(addTaskID, addPlanID, etcd.TaskUpdate, volumeID, environmentID, candidateRevisionID, addArtifactID, volumeKey, intentDigest, "", nil)
-	removeTask := volumeTask(removeTaskID, removePlanID, etcd.TaskRemove, volumeID, environmentID, candidateRevisionID, candidateArtifactID, volumeKey, intentDigest, baselineRevisionID, []etcd.TaskStepRecord{{ID: serviceStepID}, {ID: dockerStepID}, {ID: directoryStepID}})
-	addTask.Steps = []etcd.TaskStepRecord{{ID: serviceStepID}, {ID: dockerStepID}}
+	removeTask := volumeTask(removeTaskID, removePlanID, etcd.TaskRemove, volumeID, environmentID, candidateRevisionID, candidateArtifactID, volumeKey, intentDigest, baselineRevisionID, []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: serviceStepID}, {Kind: etcd.TaskStepOperation, ID: dockerStepID}, {Kind: etcd.TaskStepOperation, ID: directoryStepID}})
+	addTask.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: serviceStepID}, {Kind: etcd.TaskStepOperation, ID: dockerStepID}}
 	return volumePlanState{reader: reader, addTask: addTask, editTask: editTask, removeTask: removeTask,
 		volumeID: volumeID, serviceID: serviceID, volumeKey: volumeKey, intentDigest: intentDigest,
 		baselineArtifactID: baselineArtifactID, candidateArtifactID: candidateArtifactID}
