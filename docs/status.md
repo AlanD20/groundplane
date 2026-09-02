@@ -640,3 +640,11 @@ same-candidate Attach/Volume validation, lazy-key replay and retention, direct
 policy pre-ensure separation, Connector race rejection, and failure-injection
 proof that the head, Task, marker, policy, candidate identities, catalog, and
 key are wholly old or wholly new.
+
+## Blueprint secret Entry Script-source digest (2026-09-02)
+
+Blueprint post-deploy Script source retention now derives a secret Entry generation
+digest from its validated durable ciphertext while the transient runner binding
+retains the plaintext digest required after decryption. Plain Entry generations keep
+their validated plaintext digest. Focused persistence proof passes; exact
+reference-host Blueprint and Script acceptance remains pending.
