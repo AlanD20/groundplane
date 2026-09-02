@@ -83,6 +83,17 @@ one Console action, one CLI command, and one API endpoint, or when all three
 are absent by design. Local tooling and machine bootstrap qualify only when
 they are one of the closed exceptions listed in `api-cli.md`.
 
+## Repository-local temporary state
+
+Repository worktrees and all repository-managed temporary state use ignored
+repo-local `.tmp/` or `.tmp-*` paths. This includes scratch, build caches, Go
+temporary/cache paths (`GOTMPDIR` and `GOCACHE`), evidence, generated staging,
+scripts/tests, and shell intermediates. Do not use system `/tmp` for repository
+workflow, and do not use shell heredocs when the shell or runtime spills them
+to `/tmp`. External tool-internal sandbox mounts outside repository control are
+not repository paths and cannot be depended on. Resolve exact cleanup targets
+and preserve the existing safety boundaries around destructive actions.
+
 ## Multi-agent delegation
 
 The root agent assigns one integration owner. Only that agent may transplant a
@@ -159,10 +170,9 @@ justifies overlapping ownership or invented work.
 Every independent feature has exactly one durable repository-local worktree and
 one branch, with one writer and an explicit disjoint file ownership list. The
 worktree is created inside the repository area and remains available through
-review and landing; `/tmp` is for ephemeral command artifacts only. Independent
-lanes run continuously in parallel. The integration owner lands each approved
-lane immediately, then assigns the freed writer capacity to the next `Ready`
-lane.
+review and landing. Independent lanes run continuously in parallel. The
+integration owner lands each approved lane immediately, then assigns the freed
+writer capacity to the next `Ready` lane.
 
 This is the one continuous lane pipeline for delegated work:
 

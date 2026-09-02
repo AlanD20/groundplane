@@ -23,9 +23,15 @@ co-author trailers or tool attribution.
 `Ready -> Writing -> Stopped -> Frozen -> Reviewing -> Approved -> Landed`,
 with one optional `Correcting -> Delta-verifying -> Approved` path. Every
 independent feature gets one durable repository-local worktree and branch with
-disjoint owned files; independent writers run in parallel. Durable worktrees
-never live in `/tmp`, and no writer, reviewer, or correction agent edits a
-shared worktree or updates `main`.
+disjoint owned files; independent writers run in parallel. Repository worktrees
+and all repository-managed temporary state use ignored repo-local `.tmp/` or
+`.tmp-*` paths. This includes scratch, build caches, Go temporary/cache paths
+(`GOTMPDIR` and `GOCACHE`), evidence, generated staging, scripts/tests, and
+shell intermediates. Do not use system `/tmp` for repository workflow, and do
+not use shell heredocs when the shell or runtime spills them to `/tmp`.
+External tool-internal sandbox mounts outside repository control are not
+repository paths and cannot be depended on. No writer, reviewer, or correction
+agent edits a shared worktree or updates `main`.
 
 Freeze only after implementation and the named focused proof. The integration
 owner creates one signed direct-child candidate from the latest `main`. Each

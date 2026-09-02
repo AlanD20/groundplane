@@ -73,6 +73,17 @@ API contract. UI questions are answered here; product questions in mvp.md.
 - Never edit generated artifacts: `proto/` Go code and OpenAPI-derived
   clients are regenerated, and the Console's `dist/` output is untracked.
 
+## Repository-local temporary state
+
+Repository worktrees and all repository-managed temporary state use ignored
+repo-local `.tmp/` or `.tmp-*` paths. This includes scratch, build caches, Go
+temporary/cache paths (`GOTMPDIR` and `GOCACHE`), evidence, generated staging,
+scripts/tests, and shell intermediates. Do not use system `/tmp` for repository
+workflow, and do not use shell heredocs when the shell or runtime spills them
+to `/tmp`. External tool-internal sandbox mounts outside repository control are
+not repository paths and cannot be depended on. Resolve exact cleanup targets
+and preserve the existing safety boundaries around destructive actions.
+
 ## Commands
 
 - Install Console dependencies: `npm ci` (from `console/`).
