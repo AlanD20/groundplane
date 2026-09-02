@@ -23,6 +23,7 @@ function buildCrumbs(
     tenantName: (s: string) => string
     projectName: (tenantSlug: string, projectSlug: string) => string
     backingProjectName: (s: string) => string
+    agentName: (s: string) => string
   },
 ): Crumb[] {
   const parts = pathname.split('/').filter(Boolean)
@@ -33,6 +34,8 @@ function buildCrumbs(
       overview: 'Overview',
       'backing-services': 'Backing services',
       components: 'Components',
+      controller: 'Controller',
+      agents: 'Agent',
       activity: 'Activity',
       secrets: 'Secret store',
       host: 'Host',
@@ -40,7 +43,11 @@ function buildCrumbs(
     }
     const crumbs: Crumb[] = [{ label: 'Platform', href: '/platform/overview' }]
     if (parts[1]) crumbs.push({ label: map[parts[1]] ?? parts[1], href: `/platform/${parts[1]}` })
-    if (parts[2]) crumbs.push({ label: lookups.backingProjectName(parts[2]) })
+    if (parts[2]) {
+      crumbs.push({
+        label: parts[1] === 'agents' ? lookups.agentName(parts[2]) : lookups.backingProjectName(parts[2]),
+      })
+    }
     return crumbs
   }
 
@@ -64,6 +71,8 @@ const PLATFORM_SECTIONS: CrumbOption[] = [
   { label: 'Overview', href: '/platform/overview' },
   { label: 'Backing services', href: '/platform/backing-services' },
   { label: 'Components', href: '/platform/components' },
+  { label: 'Controller', href: '/platform/controller' },
+  { label: 'Agent', href: '/platform/agents' },
   { label: 'Activity', href: '/platform/activity' },
   { label: 'Secret store', href: '/platform/secrets' },
   { label: 'Host', href: '/platform/host' },
@@ -136,6 +145,7 @@ export function Topbar({ pathname }: { pathname: string }) {
       projectName: (tenantSlug, projectSlug) =>
         store.getProject(tenantSlug, projectSlug)?.name ?? projectSlug,
       backingProjectName: (s) => store.backingProjects.find((g) => g.id === s)?.name ?? s,
+      agentName: (s) => store.platform.agents.find((agent) => agent.id === s)?.host ?? s,
     }),
     store,
   )

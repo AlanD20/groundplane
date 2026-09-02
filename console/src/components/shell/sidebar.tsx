@@ -10,8 +10,10 @@ import {
   Layers,
   LayoutDashboard,
   Server,
+  ServerCog,
   Settings,
   ShieldCheck,
+  Workflow,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -25,6 +27,8 @@ function platformNav(): { section: string; items: NavItem[] }[] {
         { label: 'Overview', href: '/platform/overview', icon: <LayoutDashboard /> },
         { label: 'Backing services', href: '/platform/backing-services', icon: <Database /> },
         { label: 'Components', href: '/platform/components', icon: <Server /> },
+        { label: 'Controller', href: '/platform/controller', icon: <ServerCog /> },
+        { label: 'Agent', href: '/platform/agents', icon: <Workflow /> },
         { label: 'Activity', href: '/platform/activity', icon: <Activity /> },
         { label: 'Secret store', href: '/platform/secrets', icon: <ShieldCheck /> },
         { label: 'Host', href: '/platform/host', icon: <Cpu /> },

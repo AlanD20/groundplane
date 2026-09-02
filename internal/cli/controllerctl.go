@@ -2,10 +2,12 @@ package cli
 
 import (
 	"errors"
+	"os"
 	"strconv"
 
 	"github.com/spf13/cobra"
 
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -19,7 +21,7 @@ import (
 func newControllerCmd(deps Dependencies) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "controller",
-		Short: "Local Controller admin: run in the foreground, inspect the age key and etcd",
+		Short: "Controller configuration and same-host administration",
 	}
 
 	cmd.AddCommand(&cobra.Command{
@@ -109,7 +111,55 @@ func newControllerCmd(deps Dependencies) *cobra.Command {
 	})
 	cmd.AddCommand(etcd)
 
+	configCmd := &cobra.Command{Use: "config", Short: "The Controller startup configuration"}
+	configCmd.AddCommand(&cobra.Command{
+		Use: "show", Short: "Show the exact Controller startup configuration", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			document, err := fromContext(cmd).Client.ShowControllerConfig(cmd.Context())
+			if err != nil {
+				return err
+			}
+			return renderControllerConfig(cmd, document)
+		},
+	})
+	var configFile string
+	setConfig := &cobra.Command{
+		Use: "set", Short: "Validate and replace the Controller startup configuration", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			app := fromContext(cmd)
+			current, err := app.Client.ShowControllerConfig(cmd.Context())
+			if err != nil {
+				return err
+			}
+			content, err := os.ReadFile(configFile)
+			if err != nil {
+				return errs.Wrap(errs.KindValidationFailed, err)
+			}
+			updated, err := app.Client.SetControllerConfig(cmd.Context(), apiTypes.ControllerConfigReplacement{
+				Content: string(content), ExpectedRevision: current.Revision,
+			})
+			if err != nil {
+				return err
+			}
+			return renderControllerConfig(cmd, updated)
+		},
+	}
+	setConfig.Flags().StringVar(&configFile, "file", "", "YAML file to publish")
+	_ = setConfig.MarkFlagRequired("file")
+	configCmd.AddCommand(setConfig)
+	cmd.AddCommand(withExecutionClass(configCmd, executionAPI))
+
 	return cmd
+}
+
+func renderControllerConfig(cmd *cobra.Command, document apiTypes.ControllerConfigDocument) error {
+	fields := map[string]any{
+		"path": document.Path, "revision": document.Revision,
+		"restart_required": document.RestartRequired, "content": document.Content,
+	}
+	app := fromContext(cmd)
+	headers, rows := tabulateVia(app, []map[string]any{fields})
+	return app.Out.Render(headers, rows, document)
 }
 
 func formatOptionalInt64(value *int64) string {

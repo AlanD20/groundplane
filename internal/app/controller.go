@@ -32,6 +32,7 @@ import (
 	runnercapability "github.com/AlanD20/groundplane/internal/controller/runner"
 	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
+	controllerconfigstore "github.com/AlanD20/groundplane/internal/infra/controllerconfig"
 	"github.com/AlanD20/groundplane/internal/infra/docker/agentcontainer"
 	"github.com/AlanD20/groundplane/internal/infra/docker/etcdcontainer"
 	"github.com/AlanD20/groundplane/internal/infra/environmentroot"
@@ -116,9 +117,13 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize registered Components: %w", err)
 	}
 
-	cfg, err := loadControllerConfig(ctx, configPath)
+	cfg, startupDocument, err := loadControllerConfigDocument(ctx, configPath)
 	if err != nil {
 		return nil, err
+	}
+	controllerConfig, err := controllerconfigstore.New(ctx, configPath, startupDocument)
+	if err != nil {
+		return nil, fmt.Errorf("controller: initialize Controller config store: %w", err)
 	}
 	if _, err := environmentroot.Validate(ctx, cfg.Storage.VolumeRoot); err != nil {
 		return nil, fmt.Errorf("controller: validate Environment volume root: %w", err)
@@ -1327,7 +1332,8 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	)
 	logService := controller.NewLogService(environmentReads, serviceReads, releaseLedger, agentRuntime.registry)
 	srv := controller.New(store, logger, controller.Options{
-		Host: hostReads, Agents: agentReads, AgentMutations: agentMutations, Tenants: hierarchyService,
+		Host: hostReads, ControllerConfig: controllerConfig,
+		Agents: agentReads, AgentMutations: agentMutations, Tenants: hierarchyService,
 		Projects:                hierarchyService,
 		ProjectMutations:        projectMutations,
 		ProjectChanges:          projectChanges,

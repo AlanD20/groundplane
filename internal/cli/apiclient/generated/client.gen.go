@@ -983,6 +983,28 @@ type ConnectorCredentialInput1 struct {
 	Value string `json:"value"`
 }
 
+// ControllerConfigDocument defines model for ControllerConfigDocument.
+type ControllerConfigDocument struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ControllerConfigDocument.json
+	Schema          *string `json:"$schema,omitempty"`
+	Content         string  `json:"content"`
+	Path            string  `json:"path"`
+	RestartRequired bool    `json:"restart_required"`
+	Revision        string  `json:"revision"`
+}
+
+// ControllerConfigReplacement defines model for ControllerConfigReplacement.
+type ControllerConfigReplacement struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ControllerConfigReplacement.json
+	Schema           *string `json:"$schema,omitempty"`
+	Content          string  `json:"content"`
+	ExpectedRevision string  `json:"expected_revision"`
+}
+
 // DeployRequest defines model for DeployRequest.
 type DeployRequest struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -2455,6 +2477,11 @@ type ConnectorRemoveParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// ControllerConfigSetParams defines parameters for ControllerConfigSet.
+type ControllerConfigSetParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // EntryListParams defines parameters for EntryList.
 type EntryListParams struct {
 	Environment string  `form:"environment" json:"environment"`
@@ -2884,6 +2911,9 @@ type ComponentConfigSetJSONRequestBody = ComponentConfigMutationRequest
 
 // ConnectorCreateJSONRequestBody defines body for ConnectorCreate for application/json ContentType.
 type ConnectorCreateJSONRequestBody = ConnectorCreateRequest
+
+// ControllerConfigSetJSONRequestBody defines body for ControllerConfigSet for application/json ContentType.
+type ControllerConfigSetJSONRequestBody = ControllerConfigReplacement
 
 // EntryCreateJSONRequestBody defines body for EntryCreate for application/json ContentType.
 type EntryCreateJSONRequestBody = EntryCreateRequest
@@ -3609,6 +3639,25 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /connectors/{id} (the `ConnectorShow` operationId).
 	ConnectorShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ControllerConfigShow Show the exact Controller startup configuration
+	//
+	// Corresponds with GET /controller/config (the `ControllerConfigShow` operationId).
+	ControllerConfigShow(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ControllerConfigSetWithBody Validate and replace the Controller startup configuration
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /controller/config (the `ControllerConfigSet` operationId).
+	ControllerConfigSetWithBody(ctx context.Context, params *ControllerConfigSetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ControllerConfigSet Validate and replace the Controller startup configuration
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /controller/config (the `ControllerConfigSet` operationId).
+	ControllerConfigSet(ctx context.Context, params *ControllerConfigSetParams, body ControllerConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// EntryList List environment entries
 	//
@@ -4925,6 +4974,55 @@ func (c *Client) ConnectorRemove(ctx context.Context, id string, params *Connect
 // Corresponds with GET /connectors/{id} (the `ConnectorShow` operationId).
 func (c *Client) ConnectorShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewConnectorShowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ControllerConfigShow Show the exact Controller startup configuration
+//
+// Corresponds with GET /controller/config (the `ControllerConfigShow` operationId).
+func (c *Client) ControllerConfigShow(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewControllerConfigShowRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ControllerConfigSetWithBody Validate and replace the Controller startup configuration
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /controller/config (the `ControllerConfigSet` operationId).
+func (c *Client) ControllerConfigSetWithBody(ctx context.Context, params *ControllerConfigSetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewControllerConfigSetRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ControllerConfigSet Validate and replace the Controller startup configuration
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /controller/config (the `ControllerConfigSet` operationId).
+func (c *Client) ControllerConfigSet(ctx context.Context, params *ControllerConfigSetParams, body ControllerConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewControllerConfigSetRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -8578,6 +8676,86 @@ func NewConnectorShowRequest(server string, id string) (*http.Request, error) {
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewControllerConfigShowRequest constructs an http.Request for the ControllerConfigShow method
+func NewControllerConfigShowRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/controller/config")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewControllerConfigSetRequest calls the generic ControllerConfigSet builder with application/json body
+func NewControllerConfigSetRequest(server string, params *ControllerConfigSetParams, body ControllerConfigSetJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewControllerConfigSetRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewControllerConfigSetRequestWithBody constructs an http.Request for the ControllerConfigSet method, with any body, and a specified content type
+func NewControllerConfigSetRequestWithBody(server string, params *ControllerConfigSetParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/controller/config")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
 	}
 
 	return req, nil
@@ -13986,6 +14164,27 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /connectors/{id} (the `ConnectorShow` operationId).
 	ConnectorShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*ConnectorShowResponse, error)
 
+	// ControllerConfigShowWithResponse Show the exact Controller startup configuration
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /controller/config (the `ControllerConfigShow` operationId).
+	ControllerConfigShowWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ControllerConfigShowResponse, error)
+
+	// ControllerConfigSetWithBodyWithResponse Validate and replace the Controller startup configuration
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /controller/config (the `ControllerConfigSet` operationId).
+	ControllerConfigSetWithBodyWithResponse(ctx context.Context, params *ControllerConfigSetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ControllerConfigSetResponse, error)
+
+	// ControllerConfigSetWithResponse Validate and replace the Controller startup configuration
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /controller/config (the `ControllerConfigSet` operationId).
+	ControllerConfigSetWithResponse(ctx context.Context, params *ControllerConfigSetParams, body ControllerConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*ControllerConfigSetResponse, error)
+
 	// EntryListWithResponse List environment entries
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -16424,6 +16623,102 @@ func (r ConnectorShowResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ConnectorShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ControllerConfigShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ControllerConfigDocument
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ControllerConfigShowResponse) GetJSON200() *ControllerConfigDocument {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ControllerConfigShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ControllerConfigShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ControllerConfigShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ControllerConfigShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ControllerConfigShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ControllerConfigSetResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ControllerConfigDocument
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ControllerConfigSetResponse) GetJSON200() *ControllerConfigDocument {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ControllerConfigSetResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ControllerConfigSetResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ControllerConfigSetResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ControllerConfigSetResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ControllerConfigSetResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -21805,6 +22100,45 @@ func (c *ClientWithResponses) ConnectorShowWithResponse(ctx context.Context, id 
 	return ParseConnectorShowResponse(rsp)
 }
 
+// ControllerConfigShowWithResponse Show the exact Controller startup configuration
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /controller/config (the `ControllerConfigShow` operationId).
+func (c *ClientWithResponses) ControllerConfigShowWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ControllerConfigShowResponse, error) {
+	rsp, err := c.ControllerConfigShow(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseControllerConfigShowResponse(rsp)
+}
+
+// ControllerConfigSetWithBodyWithResponse Validate and replace the Controller startup configuration
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /controller/config (the `ControllerConfigSet` operationId).
+func (c *ClientWithResponses) ControllerConfigSetWithBodyWithResponse(ctx context.Context, params *ControllerConfigSetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ControllerConfigSetResponse, error) {
+	rsp, err := c.ControllerConfigSetWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseControllerConfigSetResponse(rsp)
+}
+
+// ControllerConfigSetWithResponse Validate and replace the Controller startup configuration
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /controller/config (the `ControllerConfigSet` operationId).
+func (c *ClientWithResponses) ControllerConfigSetWithResponse(ctx context.Context, params *ControllerConfigSetParams, body ControllerConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*ControllerConfigSetResponse, error) {
+	rsp, err := c.ControllerConfigSet(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseControllerConfigSetResponse(rsp)
+}
+
 // EntryListWithResponse List environment entries
 //
 // Returns a wrapper object for the known response body format(s).
@@ -24639,6 +24973,72 @@ func ParseConnectorShowResponse(rsp *http.Response) (*ConnectorShowResponse, err
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Connector
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseControllerConfigShowResponse parses an HTTP response from a ControllerConfigShowWithResponse call
+func ParseControllerConfigShowResponse(rsp *http.Response) (*ControllerConfigShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ControllerConfigShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ControllerConfigDocument
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseControllerConfigSetResponse parses an HTTP response from a ControllerConfigSetWithResponse call
+func ParseControllerConfigSetResponse(rsp *http.Response) (*ControllerConfigSetResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ControllerConfigSetResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ControllerConfigDocument
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

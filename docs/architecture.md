@@ -141,6 +141,9 @@ home for unrelated code.
   or `internal/controller` parses config itself.
 - **Three config inputs, one loader**:
   - `/etc/groundplane/controller.yaml` — etcd endpoint, controller key
+    path, listeners, and runtime bootstrap policy; it is exposed as one exact
+    revision-fenced document through API/CLI/Console, validated by the startup
+    parser and atomically replaced without claiming hot reload;
     path, listen addresses, scheduler cadence, log config, and the immutable
     machine `environment_pool` and `system_pool` IPv4 CIDRs. This is the
     "minimal startup config" of the DR contract: the only two things

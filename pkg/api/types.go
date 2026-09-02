@@ -1106,6 +1106,18 @@ type AgentConfig struct {
 	Labels              map[string]string `json:"labels"`
 }
 
+type ControllerConfigDocument struct {
+	Path            string `json:"path"`
+	Content         string `json:"content"`
+	Revision        string `json:"revision"         pattern:"^sha256:[0-9a-f]{64}$"`
+	RestartRequired bool   `json:"restart_required"`
+}
+
+type ControllerConfigReplacement struct {
+	Content          string `json:"content"           maxLength:"1048576"`
+	ExpectedRevision string `json:"expected_revision" pattern:"^sha256:[0-9a-f]{64}$"`
+}
+
 type LogEvent struct {
 	Sequence      uint64    `json:"sequence"`
 	ServiceID     string    `json:"service_id"`

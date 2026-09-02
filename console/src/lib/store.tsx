@@ -186,6 +186,8 @@ type AgentResponse = operations['agent.show']['responses'][200]['content']['appl
 type AgentTaskAccepted = operations['agent.join']['responses'][202]['content']['application/json']
 type AgentConfigResponse = operations['agent.config.show']['responses'][200]['content']['application/json']
 type AgentConfigRequest = operations['agent.config.set']['requestBody']['content']['application/json']
+type ControllerConfigResponse = operations['controller.config.show']['responses'][200]['content']['application/json']
+type ControllerConfigRequest = operations['controller.config.set']['requestBody']['content']['application/json']
 type HierarchyTaskAccepted = { task_id: string }
 type ComponentPageResponse = operations['component.list']['responses'][200]['content']['application/json']
 type ComponentResponse = NonNullable<ComponentPageResponse['items']>[number]
@@ -1488,6 +1490,9 @@ type State = {
   agentConfig: AgentConfigResponse | null
   agentConfigLoading: boolean
   agentConfigError: string | null
+  controllerConfig: ControllerConfigResponse | null
+  controllerConfigLoading: boolean
+  controllerConfigError: string | null
   host: HostInfo | null
   hostLoading: boolean
   hostError: string | null
@@ -1535,6 +1540,9 @@ function seed(): State {
     agentConfig: null,
     agentConfigLoading: true,
     agentConfigError: null,
+    controllerConfig: null,
+    controllerConfigLoading: false,
+    controllerConfigError: null,
     host: null,
     hostLoading: true,
     hostError: null,
@@ -1553,6 +1561,8 @@ type StoreContext = State & {
   refreshEnvironmentReleases: (environmentId: string, signal?: AbortSignal) => Promise<void>
   refreshAgents: (signal?: AbortSignal) => Promise<PlatformInfra['agents']>
   setAgentConfig: (agentId: string, config: AgentConfigRequest) => Promise<AgentConfigResponse>
+  refreshControllerConfig: (signal?: AbortSignal) => Promise<ControllerConfigResponse>
+  setControllerConfig: (config: ControllerConfigRequest) => Promise<ControllerConfigResponse>
   joinAgent: () => Promise<AgentTaskAccepted>
   updateAgent: (agentId: string) => Promise<AgentTaskAccepted>
   removeAgent: (agentId: string) => Promise<AgentTaskAccepted>
@@ -2094,6 +2104,28 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       draft.agentError = null
     })
     return agents
+  }, [update])
+
+  const refreshControllerConfig = useCallback(async (signal?: AbortSignal) => {
+    update((draft) => {
+      draft.controllerConfigLoading = true
+      draft.controllerConfigError = null
+    })
+    try {
+      const config = await tenantRequest<ControllerConfigResponse>('/controller/config', 200, { signal })
+      update((draft) => {
+        draft.controllerConfig = config
+        draft.controllerConfigLoading = false
+      })
+      return config
+    } catch (error) {
+      if (signal?.aborted) throw error
+      update((draft) => {
+        draft.controllerConfigLoading = false
+        draft.controllerConfigError = error instanceof Error ? error.message : 'Unable to load Controller config'
+      })
+      throw error
+    }
   }, [update])
 
   const reusableSecretProjectIds = useMemo(
@@ -2702,6 +2734,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       refreshEnvironmentComponents,
       refreshEnvironmentReleases,
       refreshAgents,
+      refreshControllerConfig,
+      setControllerConfig: async (config) => {
+        const updated = await tenantRequest<ControllerConfigResponse>(
+          '/controller/config',
+          200,
+          { method: 'PUT', body: config },
+        )
+        update((draft) => {
+          draft.controllerConfig = updated
+          draft.controllerConfigError = null
+        })
+        return updated
+      },
       setAgentConfig: async (agentId, config) => {
         const path = `/agents/${encodeURIComponent(agentId)}/config`
         const updated = await tenantRequest<AgentConfigResponse>(path, 200, { method: 'PUT', body: config })
@@ -3735,7 +3780,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return result.reconcile_task_id
       },
     }
-	}, [state, update, loadTaskJournal, loadBackupPolicy, replaceBackupPolicy, runBackup, rotateBackupKey, exportBackupKey, refreshPlatformComponents, refreshComponentConfig, refreshEnvironmentComponents, refreshEnvironmentReleases, refreshAgents, dispatchResourceRemoval, monitorResourceRemoval, reconcileResourceRemoval, requestResourceRemovalTask, nextEnvironmentGeneration, settleEnvironmentMutation, shouldPreserveEnvironmentOnLoad, getEnvironmentDeletionFailure, refreshEnvironmentDeletion, isEnvironmentDeletionPending, waitForResourceRemoval, retryResourceRemoval, observeEnvironmentDeletionTasks, environmentGenerations, assertEnvironmentMutable])
+	}, [state, update, loadTaskJournal, loadBackupPolicy, replaceBackupPolicy, runBackup, rotateBackupKey, exportBackupKey, refreshPlatformComponents, refreshComponentConfig, refreshEnvironmentComponents, refreshEnvironmentReleases, refreshAgents, refreshControllerConfig, dispatchResourceRemoval, monitorResourceRemoval, reconcileResourceRemoval, requestResourceRemovalTask, nextEnvironmentGeneration, settleEnvironmentMutation, shouldPreserveEnvironmentOnLoad, getEnvironmentDeletionFailure, refreshEnvironmentDeletion, isEnvironmentDeletionPending, waitForResourceRemoval, retryResourceRemoval, observeEnvironmentDeletionTasks, environmentGenerations, assertEnvironmentMutable])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

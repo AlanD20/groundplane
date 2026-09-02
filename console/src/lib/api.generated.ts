@@ -386,6 +386,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/controller/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show the exact Controller startup configuration */
+        get: operations["controller.config.show"];
+        /** Validate and replace the Controller startup configuration */
+        put: operations["controller.config.set"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entries": {
         parameters: {
             query?: never;
@@ -1784,6 +1802,28 @@ export interface components {
         } | {
             value: string;
         });
+        ControllerConfigDocument: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/ControllerConfigDocument.json
+             */
+            readonly $schema?: string;
+            content: string;
+            path: string;
+            restart_required: boolean;
+            revision: string;
+        };
+        ControllerConfigReplacement: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/ControllerConfigReplacement.json
+             */
+            readonly $schema?: string;
+            content: string;
+            expected_revision: string;
+        };
         DeployRequest: {
             /**
              * Format: uri
@@ -4107,6 +4147,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "controller.config.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControllerConfigDocument"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "controller.config.set": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ControllerConfigReplacement"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControllerConfigDocument"];
                 };
             };
             /** @description Error */

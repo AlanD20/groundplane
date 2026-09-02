@@ -32,6 +32,7 @@ type Server struct {
 	API    huma.API
 
 	host                    HostReader
+	controllerConfig        ControllerConfigStore
 	agents                  AgentReader
 	agentMutations          AgentMutator
 	tenants                 TenantReader
@@ -95,6 +96,7 @@ type Server struct {
 
 type Options struct {
 	Host                    HostReader
+	ControllerConfig        ControllerConfigStore
 	Agents                  AgentReader
 	AgentMutations          AgentMutator
 	Tenants                 TenantReader
@@ -171,6 +173,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		Mux:                     mux,
 		API:                     humago.NewWithPrefix(mux, "/api/v1", config),
 		host:                    options.Host,
+		controllerConfig:        options.ControllerConfig,
 		agents:                  options.Agents,
 		agentMutations:          options.AgentMutations,
 		tenants:                 options.Tenants,
@@ -238,6 +241,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	s.registerTenants()
 	s.registerProjects()
 	s.registerBackingServices()
+	s.registerControllerConfig()
 	s.registerComponents()
 	s.registerEnvironments()
 	registerHierarchyDeletionRoutes(s.API, s.hierarchyDeletions, s.Logger)

@@ -67,12 +67,13 @@ func inspectControllerEtcdFromConfig(
 }
 
 func loadControllerConfig(ctx context.Context, path string) (config.ControllerConfig, error) {
-	cfg := config.DefaultControllerConfig()
-	if err := config.Load(ctx, path, &cfg); err != nil {
-		return config.ControllerConfig{}, err
-	}
-	if err := cfg.Validate(); err != nil {
-		return config.ControllerConfig{}, err
-	}
-	return cfg, nil
+	cfg, _, err := loadControllerConfigDocument(ctx, path)
+	return cfg, err
+}
+
+func loadControllerConfigDocument(
+	ctx context.Context,
+	path string,
+) (config.ControllerConfig, []byte, error) {
+	return config.LoadControllerDocument(ctx, path)
 }

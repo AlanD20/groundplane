@@ -1,16 +1,15 @@
 'use client'
 
-import { ArrowLeftRight, Clock, Cpu, Database, HardDrive, MemoryStick, Server, Settings2 } from 'lucide-react'
+import { ArrowLeftRight, Clock, Cpu, Database, HardDrive, MemoryStick, Server } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useStore } from '@/lib/store'
 import { PageHeader } from '@/components/common/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { StatusBadge, StatusDot } from '@/components/common/status-badge'
+import { StatusBadge } from '@/components/common/status-badge'
 import { MetaPill } from '@/components/common/meta-pill'
-import { AgentConfigCard } from '@/features/platform-agent/agent-config-card'
-import { PlatformAgentActions } from '@/features/platform-agent/platform-agent-actions'
 
 export default function PlatformHostPage() {
-  const { host, hostLoading, hostError, tenantProjects, backingProjects, platform } = useStore()
+  const { host, hostLoading, hostError, platform } = useStore()
   if (!host) {
     return (
       <div className="flex flex-col gap-6">
@@ -43,7 +42,6 @@ export default function PlatformHostPage() {
             <MetaPill icon={<Clock />}>up {host.uptime}</MetaPill>
           </>
         }
-        actions={agent ? <PlatformAgentActions agent={agent} /> : undefined}
       />
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -59,6 +57,9 @@ export default function PlatformHostPage() {
                 <Row label="Runtime" value={host.controller.service} mono />
                 <Row label="Version" value={host.controller.version} mono />
                 <Row label="Storage" value={`etcd · ${host.etcd.node}`} mono />
+                <Link to="/platform/controller" className="mt-2 text-xs font-medium text-primary hover:underline">
+                  Open Controller settings
+                </Link>
               </CardContent>
             </Card>
             <Card>
@@ -73,30 +74,15 @@ export default function PlatformHostPage() {
                 <Row label="Task model" value="pulls tasks · acks on completion" />
                 <Row label="Max concurrent tasks" value={`${host.agent.maxConcurrent} · controller-config`} mono />
                 <Row label="Pull interval" value={`${host.agent.pullInterval} · heartbeat`} mono />
+                <Link
+                  to={agent ? `/platform/agents/${agent.id}` : '/platform/agents'}
+                  className="mt-2 text-xs font-medium text-primary hover:underline"
+                >
+                  Open Agent settings
+                </Link>
               </CardContent>
             </Card>
           </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings2 className="size-4 text-muted-foreground" /> Controller startup configuration
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3 text-sm">
-              <p className="text-muted-foreground">
-                Deployment-managed startup configuration is loaded from the Controller host when the Controller starts.
-              </p>
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-2">
-                <span className="font-mono text-xs">/etc/groundplane/controller.yaml</span>
-                <span className="text-xs text-muted-foreground">Controller restart required</span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                This configuration is not editable through the Console, API, or ordinary CLI in the MVP. Agent runtime
-                configuration is managed separately below.
-              </p>
-            </CardContent>
-          </Card>
 
           <Card>
             <CardHeader>
@@ -142,104 +128,6 @@ export default function PlatformHostPage() {
           </Card>
         </div>
       </div>
-
-      {agent ? <AgentConfigCard agentId={agent.id} /> : null}
-
-      {/* Tenant projects */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Tenant projects</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs font-semibold text-muted-foreground">
-                  <th className="py-2 pr-4">Tenant</th>
-                  <th className="py-2 pr-4">Project</th>
-                  <th className="py-2 pr-4">Environment</th>
-                  <th className="py-2 pr-4">Services</th>
-                  <th className="py-2">Attached shared</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tenantProjects.flatMap((p) =>
-                  (p.environments ?? []).map((e) => (
-                    <tr key={e.id} className="border-b border-border last:border-0">
-                      <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{p.tenantId}</td>
-                      <td className="py-2 pr-4 font-mono text-xs">{p.slug}</td>
-                      <td className="py-2 pr-4 font-mono text-xs">{e.name}</td>
-                      <td className="py-2 pr-4 text-xs">{e.services.length}</td>
-                      <td className="py-2 font-mono text-xs text-muted-foreground">
-                        {e.attaches.map((a) => a.projectId).join(', ') || '—'}
-                      </td>
-                    </tr>
-                  )),
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Backing services */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Backing services</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs font-semibold text-muted-foreground">
-                  <th className="py-2 pr-4">Service</th>
-                  <th className="py-2 pr-4">Engine</th>
-                  <th className="py-2 pr-4">Consumers</th>
-                  <th className="py-2">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {backingProjects.map((g) => {
-                  const env = g.environments?.[0]
-                  const svc = env?.services[0]
-                  return (
-                    <tr key={g.id} className="border-b border-border last:border-0">
-                      <td className="py-2 pr-4 font-mono text-xs">{svc?.serviceName ?? g.slug}</td>
-                      <td className="py-2 pr-4 text-xs">
-                        {svc?.adapter} · {svc?.image}
-                      </td>
-                      <td className="py-2 pr-4 text-xs">{g.consumers?.length ?? 0}</td>
-                      <td className="py-2">
-                        {g.status && (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <StatusDot status={g.status} /> {g.status}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* How they talk */}
-      <Card>
-        <CardHeader>
-          <CardTitle>How they talk</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="max-w-3xl text-sm text-muted-foreground">
-            The Controller is the control plane: it holds desired state, sequences actions (deploy, rollback, backup, run),
-            and tells the Agent what and how to do it. The Agent applies those procedures through Docker Compose and streams
-            observed state back. The Console is only a client of the Controller. Public routes need the ingress components
-            (Cloudflare Tunnel + Caddy), enabled per environment on the Router tab — never auto-deployed.
-          </p>
-        </CardContent>
-      </Card>
-
     </div>
   )
 }

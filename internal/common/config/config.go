@@ -7,6 +7,7 @@
 package config
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -391,13 +392,54 @@ func Load(ctx context.Context, path string, out any) error {
 	}
 	defer f.Close()
 
-	dec := yaml.NewDecoder(f)
+	return decodeDocument(ctx, path, f, out)
+}
+
+// LoadControllerDocument returns both the validated Controller configuration
+// and the exact byte snapshot decoded into it. Callers that compare live state
+// with process-startup state must retain this snapshot instead of reopening the
+// path after parsing.
+func LoadControllerDocument(
+	ctx context.Context,
+	path string,
+) (ControllerConfig, []byte, error) {
+	if err := ctx.Err(); err != nil {
+		return ControllerConfig{}, nil, err
+	}
+	content, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		content = nil
+	} else if err != nil {
+		return ControllerConfig{}, nil, fmt.Errorf("config: open %s: %w", path, err)
+	}
+	cfg, err := ParseControllerDocument(ctx, content)
+	if err != nil {
+		return ControllerConfig{}, nil, err
+	}
+	return cfg, content, nil
+}
+
+// ParseControllerDocument applies the exact Controller startup defaults,
+// strict YAML decoder, and semantic validation without publishing the file.
+func ParseControllerDocument(ctx context.Context, content []byte) (ControllerConfig, error) {
+	cfg := DefaultControllerConfig()
+	if err := decodeDocument(ctx, "controller configuration", bytes.NewReader(content), &cfg); err != nil {
+		return ControllerConfig{}, err
+	}
+	if err := cfg.Validate(); err != nil {
+		return ControllerConfig{}, err
+	}
+	return cfg, nil
+}
+
+func decodeDocument(ctx context.Context, source string, reader io.Reader, out any) error {
+	dec := yaml.NewDecoder(reader)
 	dec.KnownFields(true) // strict: unknown keys are rejected at write time
 	if err := dec.Decode(out); err != nil {
 		if err == io.EOF {
 			return nil // an empty file is absence, same as a missing one — defaults stand
 		}
-		return fmt.Errorf("config: %s: %w", path, err)
+		return fmt.Errorf("config: %s: %w", source, err)
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -405,9 +447,9 @@ func Load(ctx context.Context, path string, out any) error {
 	var trailing any
 	if err := dec.Decode(&trailing); err != io.EOF {
 		if err == nil {
-			return fmt.Errorf("config: %s: multiple YAML documents are not allowed", path)
+			return fmt.Errorf("config: %s: multiple YAML documents are not allowed", source)
 		}
-		return fmt.Errorf("config: %s: trailing document: %w", path, err)
+		return fmt.Errorf("config: %s: trailing document: %w", source, err)
 	}
 	return nil
 }

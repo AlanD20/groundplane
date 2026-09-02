@@ -194,7 +194,7 @@ Command tree:
     ├── activity         list [--limit N] [--cursor VALUE] [--tenant NAME [--project NAME [--env NAME]] | --workspace platform|<tenant>]
     │                    (exact alias of `task list` — the journal IS tasks)
     ├── host             show
-    ├── controller       serve | key show | etcd show
+    ├── controller       config show | config set --file PATH | serve | key show | etcd show
     ├── agent-run        run               (foreground, for debugging)
     ├── version
     └── completion       bash | zsh | fish
@@ -205,6 +205,12 @@ show` are same-host diagnostics: they read the local Controller startup
 configuration, fingerprint its local age key or probe the Controller-managed
 loopback etcd endpoint directly, never call the REST API, and are excluded from the 1:1
 operation manifest with the other local process/tooling commands.
+`controller config show` and `controller config set --file PATH` are ordinary
+human-API operations and are not local-command exceptions. They mirror
+`GET /controller/config` and `PUT /controller/config`; set first reads the
+current exact revision and publishes the supplied YAML only against that
+revision. The response includes `path`, exact `content`, `revision`, and
+`restart_required`.
 The key fingerprint is exactly `sha256:` plus 64 lowercase hexadecimal
 characters over SHA-256 of the canonical age recipient's UTF-8 text.
 

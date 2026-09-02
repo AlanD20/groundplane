@@ -10,6 +10,21 @@ lands or the remaining set changes. Branch names, candidate counts, and this
 checkpoint do not prove acceptance by themselves; acceptance requires the
 evidence named by `docs/capabilities.md` and `docs/delivery.md`.
 
+## Active Controller and Agent settings separation
+
+The source implementation and generated API clients now contain the ADR 0063
+separation, but this lane is not yet accepted or landed. Platform Host is
+health-only and links to dedicated Controller and Agent pages. Agent runtime
+configuration remains on the Agent resource. The Controller has an exact YAML
+document API, CLI commands, and Console editor backed by startup-parser
+validation, SHA-256 optimistic concurrency, durable exact idempotent replay,
+atomic mode-0600 replacement, and restart-required reporting against the running startup snapshot.
+
+Remaining evidence is bounded to focused Go package checks, the Console
+typecheck/build, generated-artifact cleanliness, and one live read/edit/revert
+journey. Do not mark C01 Accepted again or deploy this lane until those checks
+prove the exact generated tree.
+
 ## Current delivery pipeline
 
 Independent feature lanes now run continuously in parallel. Each lane has one
