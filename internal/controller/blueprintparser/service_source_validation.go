@@ -16,7 +16,7 @@ var authoredNetworkGroundplaneExtensions = map[string]struct{}{
 }
 
 var authoredVolumeGroundplaneExtensions = map[string]struct{}{
-	"x-gp-backup": {},
+	"x-gp-slug": {},
 }
 
 func validateAuthoredGroundplaneSource(source string, model map[string]any) error {

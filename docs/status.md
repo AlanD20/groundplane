@@ -440,3 +440,7 @@ Successful Blueprint Environment update Tasks now promote the exact candidate Re
 ## Blueprint Script namespace registration (2026-09-02)
 
 The exact-main private topology run exposed that the canonical root `x-gp-scripts` extension was omitted from namespace validation, rejecting valid Blueprint input before parsing. This lane registers the missing canonical key and adds focused acceptance and unknown-extension rejection coverage; the reference-host rerun remains pending.
+
+## Blueprint Volume slug placement (2026-09-02)
+
+The next exact-main private topology run exposed that the documented top-level Volume `x-gp-slug` extension was absent from namespace validation while the unrelated root `x-gp-backup` extension was incorrectly admitted on Volumes. This clean replacement registers `x-gp-slug` only for top-level Volumes and rejects the old wrong-scope placement; the reference-host rerun remains pending.

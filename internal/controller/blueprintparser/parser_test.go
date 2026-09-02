@@ -881,6 +881,39 @@ services: {web: {image: nginx}}
 	requireValidationError(t, parseError(bundle))
 }
 
+func TestParseAcceptsTopLevelVolumeSlugExtension(t *testing.T) {
+	bundle := parserBundle([]string{"root.yaml"}, map[string]string{
+		"root.yaml": environmentRoot(`services:
+  web: {image: nginx, volumes: [data:/data]}
+volumes:
+  data: {x-gp-slug: application-data}
+`),
+	})
+	if _, err := Parse(context.Background(), parserEnvironmentScope, bundle); err != nil {
+		t.Fatalf("Parse() top-level Volume x-gp-slug: %v", err)
+	}
+}
+
+func TestParseRejectsWrongVolumeExtensionPlacement(t *testing.T) {
+	tests := map[string]string{
+		"backup on Volume": `services: {web: {image: nginx}}
+volumes:
+  data: {x-gp-backup: {enabled: false}}
+`,
+		"slug on Service": `services:
+  web: {image: nginx, x-gp-slug: application-data}
+`,
+	}
+	for name, body := range tests {
+		t.Run(name, func(t *testing.T) {
+			requireValidationError(t, parseError(parserBundle(
+				[]string{"root.yaml"},
+				map[string]string{"root.yaml": environmentRoot(body)},
+			)))
+		})
+	}
+}
+
 func parseError(bundle core.BlueprintBundle) error {
 	_, err := Parse(context.Background(), parserEnvironmentScope, bundle)
 	return err
