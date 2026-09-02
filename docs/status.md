@@ -508,3 +508,9 @@ capability. The helper now restores only `DAC_OVERRIDE` while retaining a
 read-only root filesystem, network isolation, `no-new-privileges`, and all
 other capabilities dropped. Focused isolation proof passes; exact-host
 Blueprint acceptance remains pending.
+
+## CLI Task-step projection parity (2026-09-02)
+
+The generated-client adapter now preserves the mandatory `operation|script` Task-step
+kind and the paired Script identity in CLI Task detail, rejecting invalid closed-union
+responses instead of emitting empty or partial fields.

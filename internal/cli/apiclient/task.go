@@ -15,6 +15,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/slug"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -269,12 +270,49 @@ func taskFromGenerated(task generated.Task) (apiTypes.Task, error) {
 	if task.Steps != nil {
 		result.Steps = make([]apiTypes.TaskStep, len(*task.Steps))
 		for index, step := range *task.Steps {
-			result.Steps[index] = apiTypes.TaskStep{
-				Name: step.Name, Status: apiTypes.TaskStatus(step.Status),
+			converted, err := taskStepFromGenerated(step)
+			if err != nil {
+				return apiTypes.Task{}, err
 			}
+			result.Steps[index] = converted
 		}
 	}
 	return result, nil
+}
+
+func taskStepFromGenerated(step generated.TaskStep) (apiTypes.TaskStep, error) {
+	if !step.Kind.Valid() {
+		return apiTypes.TaskStep{}, errs.New(errs.KindInternal, "apiclient: Task response has unknown step kind")
+	}
+	result := apiTypes.TaskStep{Name: step.Name, Status: apiTypes.TaskStatus(step.Status)}
+	switch step.Kind {
+	case generated.TaskStepKindOperation:
+		if step.ScriptId != nil || step.ScriptSlug != nil {
+			return apiTypes.TaskStep{}, errs.New(
+				errs.KindInternal, "apiclient: operation Task step has Script identity",
+			)
+		}
+		result.Kind = apiTypes.TaskStepOperation
+	case generated.TaskStepKindScript:
+		if step.ScriptId == nil || step.ScriptSlug == nil ||
+			ids.Validate(ids.KindScript, valueOrEmpty(step.ScriptId)) != nil ||
+			!slug.Valid(valueOrEmpty(step.ScriptSlug)) {
+			return apiTypes.TaskStep{}, errs.New(
+				errs.KindInternal, "apiclient: script Task step has invalid Script identity",
+			)
+		}
+		result.Kind = apiTypes.TaskStepScript
+		result.ScriptID = *step.ScriptId
+		result.ScriptSlug = *step.ScriptSlug
+	}
+	return result, nil
+}
+
+func valueOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 // StreamTaskEvents follows one Task until its authoritative status is

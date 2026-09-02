@@ -32,7 +32,10 @@ func TestShowTaskUsesGeneratedOperation(t *testing.T) {
 			[]byte(
 				`{"id":"`+taskID+`","operation_id":"op_01ARZ3NDEKTSV4RRFFQ69G5FAV",`+
 					`"type":"deploy","target":"svc_01ARZ3NDEKTSV4RRFFQ69G5FAV","status":"running",`+
-					`"steps":[{"name":"step_01ARZ3NDEKTSV4RRFFQ69G5FAV","status":"completed"}]}`,
+					`"steps":[`+
+						`{"name":"operation-step","status":"completed","kind":"operation"},`+
+						`{"name":"script-step","status":"running","kind":"script",`+
+							`"script_id":"scr_01ARZ3NDEKTSV4RRFFQ69G5FAV","script_slug":"deploy-script"}]}`,
 			),
 		)
 	}))
@@ -42,8 +45,12 @@ func TestShowTaskUsesGeneratedOperation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ShowTask() error = %v", err)
 	}
-	if task.ID != taskID || task.Status != apiTypes.TaskRunning || len(task.Steps) != 1 ||
-		task.Steps[0].Status != apiTypes.TaskCompleted {
+	if task.ID != taskID || task.Status != apiTypes.TaskRunning || len(task.Steps) != 2 ||
+		task.Steps[0].Kind != apiTypes.TaskStepOperation || task.Steps[0].Status != apiTypes.TaskCompleted ||
+		task.Steps[0].ScriptID != "" || task.Steps[0].ScriptSlug != "" ||
+		task.Steps[1].Kind != apiTypes.TaskStepScript || task.Steps[1].Status != apiTypes.TaskRunning ||
+		task.Steps[1].ScriptID != "scr_01ARZ3NDEKTSV4RRFFQ69G5FAV" ||
+		task.Steps[1].ScriptSlug != "deploy-script" {
 		t.Fatalf("ShowTask() = %#v", task)
 	}
 }
@@ -127,5 +134,42 @@ func TestTaskJournalListRejectsDualScope(t *testing.T) {
 	_, err := taskListParams(TaskListOptions{Environment: "env_id", Workspace: "platform"})
 	if kind, ok := errs.KindOf(err); !ok || kind != errs.KindValidationFailed {
 		t.Fatalf("taskListParams() error = %v", err)
+	}
+}
+
+func TestShowTaskRejectsInvalidStepProjection(t *testing.T) {
+	t.Parallel()
+	const taskID = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	const taskPrefix = `{"id":"` + taskID + `","operation_id":"op_01ARZ3NDEKTSV4RRFFQ69G5FAV",` +
+		`"type":"deploy","target":"svc_01ARZ3NDEKTSV4RRFFQ69G5FAV","status":"running","steps":[`
+	tests := []struct {
+		name string
+		step string
+	}{
+		{name: "unknown kind", step: `{"name":"step","status":"running","kind":"future"}`},
+		{name: "operation has Script identity", step: `{"name":"step","status":"running","kind":"operation",` +
+			`"script_id":"scr_01ARZ3NDEKTSV4RRFFQ69G5FAV","script_slug":"deploy-script"}`},
+		{name: "script has incomplete identity", step: `{"name":"step","status":"running","kind":"script",` +
+			`"script_id":"scr_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`},
+		{name: "script has illegal ID", step: `{"name":"step","status":"running","kind":"script",` +
+			`"script_id":"script-invalid","script_slug":"deploy-script"}`},
+		{name: "script has illegal slug", step: `{"name":"step","status":"running","kind":"script",` +
+			`"script_id":"scr_01ARZ3NDEKTSV4RRFFQ69G5FAV","script_slug":"Deploy Script"}`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				writer.Header().Set("Content-Type", "application/json")
+				writeTaskClientTestResponse(t, writer, []byte(taskPrefix+test.step+`]}`))
+			}))
+			defer server.Close()
+
+			if _, err := New(server.URL).ShowTask(context.Background(), taskID); err == nil {
+				t.Fatal("ShowTask() error = nil, want invalid step projection error")
+			} else if kind, ok := errs.KindOf(err); !ok || kind != errs.KindInternal {
+				t.Fatalf("ShowTask() error = %v, want internal error", err)
+			}
+		})
 	}
 }
