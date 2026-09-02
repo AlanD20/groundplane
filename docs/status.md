@@ -444,3 +444,7 @@ The exact-main private topology run exposed that the canonical root `x-gp-script
 ## Blueprint Volume slug placement (2026-09-02)
 
 The next exact-main private topology run exposed that the documented top-level Volume `x-gp-slug` extension was absent from namespace validation while the unrelated root `x-gp-backup` extension was incorrectly admitted on Volumes. This clean replacement registers `x-gp-slug` only for top-level Volumes and rejects the old wrong-scope placement; the reference-host rerun remains pending.
+
+## Blueprint Release task restart shape (2026-09-02)
+
+The exact-main private topology run created the valid 18-step Blueprint Environment update Task but restart assignment quarantined it because the resolver counted an extra full-reconcile step and omitted sealed post-deploy hook steps. Candidate Release restart validation now derives the shared bounded procedure shape, reproduces each apply, hook, and health step in durable order, and validates the hook member and Script execution bindings before Agent assignment. Focused Controller and Blueprint Release regressions pass; reference-host rerun remains pending.

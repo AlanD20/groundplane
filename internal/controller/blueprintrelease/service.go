@@ -14,6 +14,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	controller "github.com/AlanD20/groundplane/internal/controller"
+	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -373,7 +374,7 @@ func postDeployScriptsByService(
 }
 
 func validatePostDeployHookBounds(executions int, bodyBytes uint64) error {
-	if executions > 16 || bodyBytes > 1<<20 {
+	if executions > taskcontract.MaximumBlueprintPostDeployHooks || bodyBytes > 1<<20 {
 		return errs.New(
 			errs.KindValidationFailed,
 			"Blueprint post-deploy Script selection exceeds its operation bounds",

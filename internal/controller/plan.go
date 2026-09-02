@@ -13,6 +13,7 @@ import (
 	"context"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
@@ -351,13 +352,29 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 			return nil, err
 		}
 	}
+	releaseHookCount, releaseProcedureStepCount := 0, 0
+	if hasBlueprintReleases {
+		var hookErr error
+		releaseHookCount, hookErr = blueprintReleaseHookCount(blueprintReleases.Members)
+		if hookErr != nil {
+			return nil, hookErr
+		}
+		var valid bool
+		releaseProcedureStepCount, valid = taskcontract.BlueprintReleaseProcedureStepCount(
+			len(blueprintReleases.Members),
+			releaseHookCount,
+		)
+		if !valid {
+			return nil, errs.New(errs.KindInternal, "durable Blueprint Release procedure shape is invalid")
+		}
+	}
 	managedVolumeIDs, volumeIntentDigest, err := blueprintManagedVolumeProcedure(task.Params)
 	if err != nil {
 		return nil, err
 	}
 	expectedParams := 3
 	if hasBlueprintReleases {
-		expectedParams++
+		expectedParams += 1 + releaseHookCount*2
 	}
 	if len(managedVolumeIDs) != 0 {
 		expectedParams += 2
@@ -397,9 +414,11 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if err != nil {
 		return nil, err
 	}
-	expectedSteps := len(task.Materializations) + 1
+	expectedSteps := len(task.Materializations)
 	if hasBlueprintReleases {
-		expectedSteps += len(blueprintReleases.Members) * 2
+		expectedSteps += releaseProcedureStepCount
+	} else {
+		expectedSteps++
 	}
 	if len(managedVolumeIDs) != 0 {
 		expectedSteps++
@@ -475,23 +494,28 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	steps = append(steps, attachSteps...)
 	stepIndex = nextStepIndex
 	if hasBlueprintReleases {
-		applyStepIDs := make([]string, len(blueprintReleases.Members))
-		healthStepIDs := make([]string, len(blueprintReleases.Members))
-		postStepIDs := make([][]string, len(blueprintReleases.Members))
-		for index := range blueprintReleases.Members {
-			applyStepIDs[index] = task.Steps[stepIndex+index*2].ID
-			healthStepIDs[index] = task.Steps[stepIndex+index*2+1].ID
+		applyStepIDs, healthStepIDs, postStepIDs, releaseEnd, stepErr := blueprintReleaseProcedureStepIDs(
+			task,
+			blueprintReleases.Members,
+			stepIndex,
+		)
+		if stepErr != nil {
+			return nil, stepErr
 		}
 		componentSteps := []*agentpb.ExecutionStep(nil)
 		if hasManagedConfigApply {
 			managedConfigStep, stepErr := managedConfigApply.ExecutionStep(
-				task.Steps[stepIndex+len(blueprintReleases.Members)*2].ID,
+				task.Steps[releaseEnd].ID,
 				uint32(task.TimeoutSeconds),
 			)
 			if stepErr != nil {
 				return nil, stepErr
 			}
 			componentSteps = append(componentSteps, managedConfigStep)
+			releaseEnd++
+		}
+		if releaseEnd != len(task.Steps) {
+			return nil, errs.New(errs.KindInternal, "durable Blueprint Release step order is invalid")
 		}
 		_, plan, prepareErr := resolver.PrepareBlueprintReleaseTask(ctx, task, BlueprintReleasePlanInput{
 			Members: blueprintReleases.Members, PrefixSteps: steps, ComponentSteps: componentSteps,
@@ -539,6 +563,61 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		Operation:        operation, TargetID: task.Target,
 		Artifacts: []*agentpb.ComposeArtifact{pinned.artifact}, Steps: steps,
 	})
+}
+
+func blueprintReleaseHookCount(members []etcd.ReleaseTaskRenderMember) (int, error) {
+	total := 0
+	for _, member := range members {
+		for _, hook := range member.Render.Hooks {
+			if hook.When != core.ScriptPostDeploy {
+				return 0, errs.New(errs.KindInternal, "durable Blueprint Release hook selection is invalid")
+			}
+			total++
+			if total > taskcontract.MaximumBlueprintPostDeployHooks {
+				return 0, errs.New(errs.KindInternal, "durable Blueprint Release hook count is invalid")
+			}
+		}
+	}
+	return total, nil
+}
+
+func blueprintReleaseProcedureStepIDs(
+	task etcd.TaskRecord,
+	members []etcd.ReleaseTaskRenderMember,
+	start int,
+) ([]string, []string, [][]string, int, error) {
+	hookCount, err := blueprintReleaseHookCount(members)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	procedureStepCount, valid := taskcontract.BlueprintReleaseProcedureStepCount(len(members), hookCount)
+	if !valid || start < 0 || start > len(task.Steps) || procedureStepCount > len(task.Steps)-start {
+		return nil, nil, nil, 0, errs.New(errs.KindInternal, "durable Blueprint Release procedure steps are invalid")
+	}
+	applyStepIDs := make([]string, len(members))
+	healthStepIDs := make([]string, len(members))
+	postStepIDs := make([][]string, len(members))
+	cursor := start
+	for memberIndex, member := range members {
+		applyStepIDs[memberIndex] = task.Steps[cursor].ID
+		cursor++
+		postStepIDs[memberIndex] = make([]string, len(member.Render.Hooks))
+		for hookIndex, hook := range member.Render.Hooks {
+			stepID := task.Steps[cursor].ID
+			if task.Params[etcd.ReleaseHookStepMemberParam(stepID)] != strconv.Itoa(memberIndex+1) ||
+				task.Params[etcd.ReleaseHookStepExecutionParam(stepID)] != hook.ScriptExecutionID {
+				return nil, nil, nil, 0, errs.New(
+					errs.KindInternal,
+					"durable Blueprint Release hook step authority is invalid",
+				)
+			}
+			postStepIDs[memberIndex][hookIndex] = stepID
+			cursor++
+		}
+		healthStepIDs[memberIndex] = task.Steps[cursor].ID
+		cursor++
+	}
+	return applyStepIDs, healthStepIDs, postStepIDs, cursor, nil
 }
 
 func blueprintManagedVolumeProcedure(params map[string]string) ([]string, []byte, error) {
