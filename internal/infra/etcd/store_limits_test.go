@@ -56,6 +56,60 @@ func TestStoreTransactEnforcesExactRequestCeilings(t *testing.T) {
 	}
 }
 
+// Rationale: final authored Blueprints use their dedicated per-arm executor,
+// while every ordinary transaction remains subject to the aggregate 96 bound.
+func TestEnvironmentBlueprintExecutorUsesUnifiedEnvelopeWithoutWideningStore(t *testing.T) {
+	t.Parallel()
+	conditions := make([]Condition, 143)
+	mutations := make([]Mutation, 160)
+	for index := range conditions {
+		conditions[index] = Condition{Key: fmt.Sprintf("/blueprint/conditions/%03d", index)}
+	}
+	for index := range mutations {
+		mutations[index] = Mutation{Type: MutationDelete, Key: fmt.Sprintf("/blueprint/mutations/%03d", index)}
+	}
+	backend := &fakeClient{transactionResponse: &clientv3.TxnResponse{
+		Header: &etcdserverpb.ResponseHeader{Revision: 33}, Succeeded: true,
+	}}
+	store, err := newStore(backend, "/groundplane/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executeEnvironmentBlueprintTransaction(context.Background(), store, conditions, mutations); err != nil {
+		t.Fatalf("Blueprint Transact(143/160/143) error = %v", err)
+	}
+	backend.transaction = nil
+	if _, err := store.Transact(context.Background(), conditions, mutations); !isKind(err, errs.KindValidationFailed) {
+		t.Fatalf("ordinary Transact(303 operations) error = %v, want validation", err)
+	}
+	if backend.transaction != nil {
+		t.Fatal("ordinary oversized transaction reached etcd")
+	}
+	tooMany := make([]Condition, maximumEnvironmentBlueprintTransactionOperationsPerArm+1)
+	for index := range tooMany {
+		tooMany[index] = Condition{Key: fmt.Sprintf("/blueprint/too-many/%03d", index)}
+	}
+	if _, err := executeEnvironmentBlueprintTransaction(context.Background(), store, tooMany, mutations[:1]); !isKind(err, errs.KindValidationFailed) {
+		t.Fatalf("Blueprint Transact(257 comparisons) error = %v, want validation", err)
+	}
+	maximum := make([]Condition, maximumEnvironmentBlueprintTransactionOperationsPerArm)
+	for index := range maximum {
+		maximum[index] = Condition{Key: fmt.Sprintf("/blueprint/maximum/%03d", index)}
+	}
+	backend.transaction = nil
+	if _, err := executeEnvironmentBlueprintTransaction(context.Background(), store, maximum, mutations[:1]); err != nil {
+		t.Fatalf("Blueprint Transact(256 comparisons) error = %v", err)
+	}
+	backend.transaction = nil
+	large := []Mutation{{Type: MutationPut, Key: "/blueprint/large", Value: make([]byte, maximumTransactionBytes)}}
+	if _, err := executeEnvironmentBlueprintTransaction(context.Background(), store, nil, large); !isKind(err, errs.KindValidationFailed) {
+		t.Fatalf("Blueprint Transact(oversize) error = %v, want validation", err)
+	}
+	if backend.transaction != nil {
+		t.Fatal("oversized Blueprint transaction reached etcd")
+	}
+}
+
 // Rationale: a failed compare must expose exact-key values in condition order
 // from the transaction revision, including an explicit nil for absence.
 func TestStoreTransactReturnsSameRevisionFailureReads(t *testing.T) {

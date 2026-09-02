@@ -55,8 +55,22 @@ type HierarchyRepository struct {
 	store hierarchyStore
 }
 
+// EnvironmentBlueprintRepository owns final Environment Blueprint publication.
+// Its dedicated transaction executor is mandatory and is not available to
+// ordinary hierarchy persistence paths.
+type EnvironmentBlueprintRepository struct {
+	*HierarchyRepository
+	transactions environmentBlueprintTransactionStore
+}
+
 func NewHierarchyRepository(store Store) (*HierarchyRepository, error) {
 	return newHierarchyRepository(store)
+}
+
+// NewEnvironmentBlueprintRepository constructs the only repository authorized
+// to publish a final Environment Blueprint transaction.
+func NewEnvironmentBlueprintRepository(store EnvironmentBlueprintStore) (*EnvironmentBlueprintRepository, error) {
+	return newEnvironmentBlueprintRepository(store, store)
 }
 
 func newHierarchyRepository(store hierarchyStore) (*HierarchyRepository, error) {
@@ -64,6 +78,23 @@ func newHierarchyRepository(store hierarchyStore) (*HierarchyRepository, error) 
 		return nil, errs.New(errs.KindInternal, "hierarchy store is required")
 	}
 	return &HierarchyRepository{store: store}, nil
+}
+
+func newEnvironmentBlueprintRepository(
+	store hierarchyStore,
+	transactions environmentBlueprintTransactionStore,
+) (*EnvironmentBlueprintRepository, error) {
+	hierarchy, err := newHierarchyRepository(store)
+	if err != nil {
+		return nil, err
+	}
+	if transactions == nil {
+		return nil, errs.New(errs.KindInternal, "Environment Blueprint transaction executor is required")
+	}
+	return &EnvironmentBlueprintRepository{
+		HierarchyRepository: hierarchy,
+		transactions:        transactions,
+	}, nil
 }
 
 func (repository *HierarchyRepository) CreateTenant(

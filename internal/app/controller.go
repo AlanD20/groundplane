@@ -202,6 +202,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize hierarchy repository: %w", err)
 	}
+	environmentBlueprintRecords, err := etcd.NewEnvironmentBlueprintRepository(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Environment Blueprint repository: %w", err)
+	}
 	releaseGroups, err := etcdreleasegroup.New(store)
 	if err != nil {
 		_ = store.Close()
@@ -965,7 +970,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize desired revision repository: %w", err)
 	}
 	environmentBlueprintRepository, err := newDurableEnvironmentBlueprintRepository(
-		hierarchyRecords,
+		environmentBlueprintRecords,
 		desiredRevisionRecords,
 		zoneRecords,
 		serviceRecords,
@@ -980,6 +985,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment Blueprint repositories: %w", err)
 	}
+	environmentBlueprintRepository.backups, environmentBlueprintRepository.connectors = backupPolicyRecords, connectorRecords
 	entryDesiredMutations, err := newEntryDesiredMutationService(
 		cfg.Storage.VolumeRoot, environmentBlueprintRepository, entryGeneration, materializationResolver,
 		entryCreationIdempotency, entryEditIdempotency, entryRemovalIdempotency,
@@ -1022,6 +1028,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment Blueprint service: %w", err)
 	}
+	environmentBlueprints.backups, environmentBlueprints.backupKeys = environmentBlueprintRepository, backupPolicyKeys
 	backingServiceCreations, err := newBackingServiceCreationService(
 		cfg.Storage.VolumeRoot,
 		runnerPools.Environment,

@@ -8,9 +8,8 @@ import (
 // ValidateEnvironmentBlueprintAvailability rejects valid authored contracts
 // whose durable Controller behavior is not implemented yet.
 func ValidateEnvironmentBlueprintAvailability(parsed blueprintparser.Result) error {
-	extensions := parsed.Extensions
 	if parsed.Project == nil ||
-		extensions.Backup != nil || len(parsed.Project.Configs) != 0 ||
+		len(parsed.Project.Configs) != 0 ||
 		len(parsed.Project.Secrets) != 0 {
 		return errs.New(errs.KindValidationFailed, "Blueprint uses a desired-state contract that is not available yet")
 	}

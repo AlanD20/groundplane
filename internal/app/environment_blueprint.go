@@ -97,6 +97,7 @@ type environmentBlueprintRepository interface {
 		etcd.ReleaseGroupBlueprintPreparedMutation,
 		etcd.ComponentTaskPreparation,
 		etcd.BlueprintAttachTaskPreparation,
+		etcd.BlueprintBackupPolicyPreparation,
 		etcd.BlueprintScriptPublication,
 		etcd.BlueprintReleasePublication,
 		etcd.BlueprintRequirementGate,
@@ -114,7 +115,6 @@ type environmentBlueprintRepository interface {
 		[]etcd.ScriptBodyGenerationRecord,
 	) (etcd.BlueprintScriptPublication, error)
 }
-
 type environmentBlueprintService struct {
 	volumeRoot        string
 	environmentPool   netip.Prefix
@@ -126,10 +126,11 @@ type environmentBlueprintService struct {
 	entryGeneration   *EntryGenerationService
 	attachFacts       *AttachFactService
 	componentCatalog  []controller.EnvironmentComponentRegistration
+	backups           environmentBlueprintBackupRepository
+	backupKeys        environmentBlueprintBackupKeyFactory
 	random            io.Reader
 	now               func() time.Time
 }
-
 type environmentBlueprintMaterializationResolver interface {
 	PinSecretValue(context.Context, string, string) (etcd.TaskSecretValueReference, error)
 	ResolveTaskMaterializationSource(
@@ -138,9 +139,8 @@ type environmentBlueprintMaterializationResolver interface {
 		etcd.TaskMaterializationSource,
 	) ([]byte, error)
 }
-
 type durableEnvironmentBlueprintRepository struct {
-	*etcd.HierarchyRepository
+	*etcd.EnvironmentBlueprintRepository
 	desired    *desiredrevisionstore.Repository
 	zones      *etcd.ZoneRepository
 	services   *etcd.ServiceRepository
@@ -150,10 +150,12 @@ type durableEnvironmentBlueprintRepository struct {
 	attaches   *etcd.AttachRepository
 	components *etcd.ComponentRepository
 	scripts    *etcd.ScriptRepository
+	backups    *etcd.BackupPolicyRepository
+	connectors *etcd.ConnectorRepository
 }
 
 func newDurableEnvironmentBlueprintRepository(
-	hierarchy *etcd.HierarchyRepository,
+	hierarchy *etcd.EnvironmentBlueprintRepository,
 	desired *desiredrevisionstore.Repository,
 	zones *etcd.ZoneRepository,
 	services *etcd.ServiceRepository,
@@ -169,19 +171,18 @@ func newDurableEnvironmentBlueprintRepository(
 		return nil, errs.New(errs.KindInternal, "Environment Blueprint repositories are not configured")
 	}
 	return &durableEnvironmentBlueprintRepository{
-		HierarchyRepository: hierarchy,
-		desired:             desired,
-		zones:               zones,
-		services:            services,
-		routes:              routes,
-		entries:             entries,
-		values:              values,
-		attaches:            attaches,
-		components:          components,
-		scripts:             scripts,
+		EnvironmentBlueprintRepository: hierarchy,
+		desired:                        desired,
+		zones:                          zones,
+		services:                       services,
+		routes:                         routes,
+		entries:                        entries,
+		values:                         values,
+		attaches:                       attaches,
+		components:                     components,
+		scripts:                        scripts,
 	}, nil
 }
-
 func (repository *durableEnvironmentBlueprintRepository) BlueprintEntryValueGenerationExists(
 	ctx context.Context,
 	record etcd.EntryRecord,
@@ -195,7 +196,6 @@ func (repository *durableEnvironmentBlueprintRepository) BlueprintEntryValueGene
 	defer clear(value.Content)
 	return found && value.EnvironmentID == record.EnvironmentID, err
 }
-
 func (repository *durableEnvironmentBlueprintRepository) CreateBlueprintEntryValueGeneration(
 	ctx context.Context,
 	generation etcd.EntryValueGeneration,
@@ -208,7 +208,6 @@ func (repository *durableEnvironmentBlueprintRepository) CreateBlueprintEntryVal
 	}
 	return errs.New(errs.KindInternal, "Blueprint Entry value generation is invalid")
 }
-
 func (repository *durableEnvironmentBlueprintRepository) BindBlueprintEntryEnvironment(
 	ctx context.Context,
 	environmentID string,
@@ -216,35 +215,30 @@ func (repository *durableEnvironmentBlueprintRepository) BindBlueprintEntryEnvir
 ) error {
 	return repository.entries.BindBlueprintEntryEnvironment(ctx, environmentID, entryID)
 }
-
 func (repository *durableEnvironmentBlueprintRepository) ResolveBlueprintEntryEnvironment(
 	ctx context.Context,
 	entryID string,
 ) (string, bool, error) {
 	return repository.entries.ResolveBlueprintEntryEnvironment(ctx, entryID)
 }
-
 func (repository *durableEnvironmentBlueprintRepository) ClaimEnvironmentBlueprintStage(
 	ctx context.Context,
 	request etcd.EnvironmentBlueprintStageClaimRequest,
 ) (etcd.EnvironmentBlueprintStageClaim, error) {
 	return repository.desired.ClaimEnvironmentBlueprintStage(ctx, request)
 }
-
 func (repository *durableEnvironmentBlueprintRepository) StageEnvironmentBlueprintRevision(
 	ctx context.Context,
 	request etcd.EnvironmentBlueprintStageRequest,
 ) (etcd.EnvironmentBlueprintSeal, error) {
 	return repository.desired.StageEnvironmentBlueprintRevision(ctx, request)
 }
-
 func (repository *durableEnvironmentBlueprintRepository) AbandonEnvironmentBlueprintStage(
 	ctx context.Context,
 	claim etcd.EnvironmentBlueprintStageClaim,
 ) error {
 	return repository.desired.AbandonEnvironmentBlueprintStage(ctx, claim)
 }
-
 func (repository *durableEnvironmentBlueprintRepository) ListEntries(
 	ctx context.Context,
 	environmentID string,
@@ -252,7 +246,6 @@ func (repository *durableEnvironmentBlueprintRepository) ListEntries(
 ) (etcd.Page[etcd.EntryRecord], error) {
 	return repository.entries.ListEntries(ctx, environmentID, request)
 }
-
 func (repository *durableEnvironmentBlueprintRepository) ListAttaches(
 	ctx context.Context,
 	environmentID string,
@@ -260,7 +253,6 @@ func (repository *durableEnvironmentBlueprintRepository) ListAttaches(
 ) (etcd.Page[etcd.AttachRecord], error) {
 	return repository.attaches.ListAttaches(ctx, environmentID, request)
 }
-
 func (repository *durableEnvironmentBlueprintRepository) ListEnvironmentComponents(
 	ctx context.Context,
 	environmentID string,
@@ -268,7 +260,6 @@ func (repository *durableEnvironmentBlueprintRepository) ListEnvironmentComponen
 ) (etcd.Page[etcd.ComponentRecord], error) {
 	return repository.components.ListEnvironmentComponents(ctx, environmentID, request)
 }
-
 func (repository *durableEnvironmentBlueprintRepository) ListZones(
 	ctx context.Context,
 	environmentID string,
@@ -331,16 +322,18 @@ func (repository *durableEnvironmentBlueprintRepository) PublishEnvironmentBluep
 	releaseGroupPreparation etcd.ReleaseGroupBlueprintPreparedMutation,
 	componentPreparation etcd.ComponentTaskPreparation,
 	attachPreparation etcd.BlueprintAttachTaskPreparation,
+	backupPreparation etcd.BlueprintBackupPolicyPreparation,
 	scriptPublication etcd.BlueprintScriptPublication,
 	releasePublication etcd.BlueprintReleasePublication,
 	requirementGate etcd.BlueprintRequirementGate,
 	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
-	return repository.HierarchyRepository.PublishEnvironmentBlueprintDesiredRevision(
+	return repository.EnvironmentBlueprintRepository.PublishEnvironmentBlueprintDesiredRevision(
 		ctx, environmentPool, desiredNetworkPool, project, environment, expectedHeadRevision,
 		claim, revision, projection, zoneChanges, serviceChanges, routeChanges,
 		releaseGroupPreparation, componentPreparation, attachPreparation,
+		backupPreparation,
 		scriptPublication, releasePublication, requirementGate, task, marker,
 	)
 }
@@ -977,6 +970,15 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	projection = desiredrevision.WithDesiredTopology(projection, topologyZones, topologyServices, topologyRoutes)
 	projection.ServiceDependencyPlans = dependencyPlans.Clone()
 	projection.BlueprintRequirements = requirements.Clone()
+	backup, backupPreparation, err := service.prepareEnvironmentBlueprintBackup(
+		ctx, environmentID, taskID, attachReadRevision, parsed.Extensions.Backup,
+		projection, preparedAttaches, allocator.Named, now,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	defer backupPreparation.Clear()
+	projection.Backup = backup
 	stagedPublication, err := desiredrevision.Stage(ctx, service.repository, desiredrevision.StageInput{
 		Claim: claim, Blueprint: revision, Projection: projection,
 	})
@@ -1097,6 +1099,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		ReleaseGroupPreparation: releaseGroupPreparation,
 		ComponentPreparation:    componentPreparation,
 		AttachPreparation:       preparedAttaches.publication,
+		BackupPreparation:       backupPreparation,
 		ScriptPublication:       scriptPublication,
 		ReleasePublication:      preparedRelease.Publication,
 		RequirementGate:         requirementGate,

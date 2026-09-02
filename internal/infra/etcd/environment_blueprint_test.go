@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"reflect"
 	"strings"
 	"testing"
@@ -101,6 +102,14 @@ func (store *environmentBlueprintPublicationAuditStore) Transact(
 	return store.hierarchyStore.Transact(ctx, conditions, mutations)
 }
 
+func (store *environmentBlueprintPublicationAuditStore) TransactEnvironmentBlueprint(
+	ctx context.Context,
+	conditions []Condition,
+	mutations []Mutation,
+) (TransactionResult, error) {
+	return store.Transact(ctx, conditions, mutations)
+}
+
 func TestEnvironmentBlueprintTopologyPublicationHasConstantCompactShape(t *testing.T) {
 	// Rationale: the sealed 6-Zone/13-Service/6-Route topology must publish by
 	// Environment head without consuming one transaction operation per resource.
@@ -137,7 +146,7 @@ func TestEnvironmentBlueprintTopologyPublicationHasConstantCompactShape(t *testi
 			if err != nil {
 				t.Fatal(err)
 			}
-			result, err := repository.PublishEnvironmentDesiredRevisionWithTask(
+			result, err := publishEnvironmentBlueprintClaimTest(repository,
 				ctx,
 				project,
 				environment,
@@ -360,6 +369,68 @@ func TestEnvironmentBlueprintCompletionPromotesAppliedComposeProjection(t *testi
 	}
 }
 
+type environmentBlueprintTestTransactionStore struct {
+	hierarchyStore
+}
+
+func (store environmentBlueprintTestTransactionStore) TransactEnvironmentBlueprint(
+	ctx context.Context,
+	conditions []Condition,
+	mutations []Mutation,
+) (TransactionResult, error) {
+	return store.hierarchyStore.Transact(ctx, conditions, mutations)
+}
+
+func publishEnvironmentBlueprintClaimTest(
+	repository *HierarchyRepository,
+	ctx context.Context,
+	project Versioned[ProjectRecord],
+	environment Versioned[EnvironmentRecord],
+	expectedHeadRevision int64,
+	claim EnvironmentBlueprintStageClaim,
+	revision EnvironmentDesiredRevisionIdentity,
+	projection EnvironmentComposeProjection,
+	zoneChanges []EnvironmentBlueprintZoneChange,
+	serviceChanges []EnvironmentBlueprintServiceChange,
+	routeChanges []EnvironmentBlueprintRouteChange,
+	releaseGroupPreparation ReleaseGroupBlueprintPreparedMutation,
+	componentPreparation ComponentTaskPreparation,
+	attachPreparation BlueprintAttachTaskPreparation,
+	task TaskRecord,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	final, err := newEnvironmentBlueprintRepository(
+		repository.store,
+		environmentBlueprintTestTransactionStore{hierarchyStore: repository.store},
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	return final.PublishEnvironmentBlueprintDesiredRevision(
+		ctx,
+		netip.Prefix{},
+		environment.Record.NetworkPool,
+		project,
+		environment,
+		expectedHeadRevision,
+		claim,
+		revision,
+		projection,
+		zoneChanges,
+		serviceChanges,
+		routeChanges,
+		releaseGroupPreparation,
+		componentPreparation,
+		attachPreparation,
+		BlueprintBackupPolicyPreparation{},
+		BlueprintScriptPublication{},
+		BlueprintReleasePublication{},
+		BlueprintRequirementGate{},
+		task,
+		marker,
+	)
+}
+
 func publishEnvironmentBlueprintTestRevision(
 	t *testing.T,
 	repository *HierarchyRepository,
@@ -379,7 +450,7 @@ func publishEnvironmentBlueprintTestRevision(
 	claim := stageEnvironmentBlueprintForPublicationTest(
 		t, repository, expectedHeadRevision, revision, projection, marker,
 	)
-	result, err := repository.PublishEnvironmentDesiredRevisionWithTask(
+	result, err := publishEnvironmentBlueprintClaimTest(repository,
 		context.Background(),
 		project,
 		environment,

@@ -681,6 +681,14 @@ func (store *memoryHierarchyStore) Transact(
 	return TransactionResult{Succeeded: true, Revision: store.revision}, nil
 }
 
+func (store *memoryHierarchyStore) TransactEnvironmentBlueprint(
+	ctx context.Context,
+	conditions []Condition,
+	mutations []Mutation,
+) (TransactionResult, error) {
+	return store.Transact(ctx, conditions, mutations)
+}
+
 func (store *memoryHierarchyStore) valueAt(key string, revision int64) *KeyValue {
 	versions := store.history[key]
 	for index := len(versions) - 1; index >= 0; index-- {

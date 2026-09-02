@@ -462,7 +462,7 @@ func validateBackupPolicyReplacementInput(
 	if input.Enabled || configured {
 		if input.Frequency == "" || input.Keep <= 0 || input.Keep > MaximumBackupPolicyKeep ||
 			(input.Encryption != "age" && input.Encryption != "none") ||
-			input.ConnectorID == "" || len(input.Sources) == 0 {
+			len(input.Sources) == 0 || input.Enabled && input.ConnectorID == "" {
 			return errs.New(errs.KindValidationFailed, "configured backup policy is incomplete")
 		}
 		if err := validateBackupPolicyFrequency(input.Frequency); err != nil {
@@ -495,6 +495,9 @@ func validateBackupPolicyReplacementInput(
 			return errs.New(errs.KindValidationFailed, "backup policy source identities must be unique")
 		}
 		seen[identity] = struct{}{}
+		if source.Kind == core.BackupSourceConfig && input.Encryption != "age" {
+			return errs.New(errs.KindValidationFailed, "config backup source requires age encryption")
+		}
 	}
 	return nil
 }

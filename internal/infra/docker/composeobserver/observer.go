@@ -167,15 +167,24 @@ func (observer *Observer) inspectServiceImage(
 	}
 	var service *agentpb.ComposeService
 	for _, candidate := range artifact.GetServices() {
-		if candidate.GetServiceId() == serviceID {
-			if service != nil {
-				return nil, errs.New(errs.KindInternal, "Compose service image authority is ambiguous")
-			}
-			service = candidate
+		if candidate.GetServiceId() != serviceID ||
+			candidate.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+			continue
 		}
+		if candidate.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON &&
+			candidate.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT {
+			continue
+		}
+		if candidate.GetImageReference() != requestedReference ||
+			!expectedLabel(candidate.GetExpectedLabels(), "com.groundplane.release-id", releaseID) {
+			continue
+		}
+		if service != nil {
+			return nil, errs.New(errs.KindInternal, "Compose service image authority is ambiguous")
+		}
+		service = candidate
 	}
-	if service == nil || service.GetImageReference() != requestedReference ||
-		!expectedLabel(service.GetExpectedLabels(), "com.groundplane.release-id", releaseID) {
+	if service == nil {
 		return nil, errs.New(errs.KindStateConflict, "Compose service image authority is not sealed by the plan")
 	}
 	listed, err := observer.engine.ContainerList(ctx, client.ContainerListOptions{All: true})

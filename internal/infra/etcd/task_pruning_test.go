@@ -238,6 +238,7 @@ func TestTaskPruningWaitsForMarkerAndRemovesComponentIntent(t *testing.T) {
 	task := validTaskRecord(now)
 	task.Type = TaskUpdate
 	task.Target = environmentID
+	pinComponentTaskDesiredRevision(&task)
 	createLifecycleTask(t, repository, task)
 	records := componentTaskLifecycleRecords(t, environmentID, now, true)
 	seedComponentTaskLifecycle(t, store, task, records)

@@ -417,6 +417,13 @@ identities in this candidate, not retained or pre-existing Attaches. Candidate
 Attach and Volume targets are validated against this same sealed publication.
 They are never pre-created merely to make Backup validation pass.
 
+New candidate grants and existing-credential dependents may reference retained
+ready credential-owning Attaches selected at one fixed revision. Every retained
+reference carries its exact primary revision and absent deletion tombstone.
+Final publication creates the new reverse-membership index and puts the retained
+primary bytes unchanged, matching direct Attach aggregation semantics so a
+concurrent detach or replacement and Blueprint publication cannot both win.
+
 Connector creation is not a Blueprint capability. The selected Connector must
 already exist under the same Environment at the fixed validation revision, and
 the final transaction compares its primary, owner index, and deletion fences.
@@ -430,14 +437,14 @@ The exact legal publication shapes are:
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | QA: eleven Release candidates, two hooks, two staged physical sources | 30 | 42 | 30 | 72 | 60 | 102 |
 | maximum non-Backup Script | 44 | 98 | 44 | 142 | 88 | 186 |
-| maximum non-Backup Script plus two candidate Attaches | 85 | 131 | 85 | 216 | 170 | 301 |
-| previously documented Backup-only maximum | 120 | 74 | 120 | 194 | 240 | 314 |
-| combined Backup plus Script maximum | 142 | 159 | 142 | 301 | 284 | 443 |
+| maximum non-Backup Script plus two candidate Attaches | 117 | 147 | 117 | 264 | 234 | 381 |
+| maximum Backup-only | 152 | 90 | 152 | 242 | 304 | 394 |
+| combined Backup plus Script maximum | 174 | 175 | 174 | 349 | 348 | 523 |
 
 Every counted operation is distinct and participates in the one atomic
 publication. Removing or coalescing one would discard desired-head, Task,
 marker, Release, Script, source, Attach, or Backup authority. The Backup-only
-`120/74/120` shape remains useful accounting evidence, but it no longer defines
+`152/90/152` shape remains useful accounting evidence, but it no longer defines
 a separate envelope.
 
 The final-publication builder enforces the configured etcd semantics directly:
@@ -474,11 +481,11 @@ Required focused proofs are:
   staged physical sources produces exactly `30/42/30`, a 72-operation selected
   success path, a 60-operation selected failure path, and 102 full operations;
 - the maximum legal non-Backup Script candidate produces exactly `44/98/44`,
-  and adding the maximum two candidate Attaches produces exactly `85/131/85`;
-- the previously documented maximum Backup-only candidate still produces
-  exactly `120/74/120`, while the combined maximum Backup plus Script candidate
-  produces exactly `142/159/142`, a 301-operation selected success path, a
-  284-operation selected failure path, and 443 full operations;
+  and adding the maximum two candidate Attaches produces exactly `117/147/117`;
+- the maximum Backup-only candidate produces exactly `152/90/152`, while the
+  combined maximum Backup plus Script candidate produces exactly `174/175/174`,
+  a 349-operation selected success path, a 348-operation selected failure path,
+  and 523 full operations;
 - a byte-fitting synthetic boundary plan accepts 256 operations in each arm,
   257 operations in any arm rejects locally, and a protobuf request exceeding
   1 MiB rejects locally before etcd;

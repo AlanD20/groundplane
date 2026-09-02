@@ -119,8 +119,9 @@ type TransactionResult struct {
 }
 
 const (
-	maximumTransactionOperations = 96
-	maximumTransactionBytes      = 1 << 20
+	maximumTransactionOperations                           = 96
+	maximumEnvironmentBlueprintTransactionOperationsPerArm = 256
+	maximumTransactionBytes                                = 1 << 20
 )
 
 // WatchStream separates ordinary key events from terminal watch failures.
@@ -143,19 +144,26 @@ type Store interface {
 	Delete(ctx context.Context, key string) (int64, error)
 	Range(ctx context.Context, request RangeRequest) (*RangeResult, error)
 	Transact(ctx context.Context, conditions []Condition, mutations []Mutation) (TransactionResult, error)
-
 	// Watch starts at startRevision when it is positive. A zero revision uses
 	// etcd's current-watch semantics. After Range, pass ReadRevision+1 to close
 	// the read-to-watch race.
 	Watch(ctx context.Context, prefix string, startRevision int64) (*WatchStream, error)
-
 	// Snapshot writes the complete etcd snapshot to w. The deployment contract
 	// uses a dedicated single-node etcd, so this is the complete DR state export.
 	Snapshot(ctx context.Context, w io.Writer) error
-
 	Close() error
 }
 
+// EnvironmentBlueprintStore owns the privileged final Blueprint transaction
+// envelope without widening ordinary Store transactions.
+type EnvironmentBlueprintStore interface {
+	Store
+	TransactEnvironmentBlueprint(
+		ctx context.Context,
+		conditions []Condition,
+		mutations []Mutation,
+	) (TransactionResult, error)
+}
 type client interface {
 	Get(context.Context, string, ...clientv3.OpOption) (*clientv3.GetResponse, error)
 	Put(context.Context, string, string, ...clientv3.OpOption) (*clientv3.PutResponse, error)
@@ -165,7 +173,6 @@ type client interface {
 	Snapshot(context.Context) (io.ReadCloser, error)
 	Close() error
 }
-
 type store struct {
 	client client
 	root   string
@@ -174,11 +181,10 @@ type store struct {
 // New connects to the etcd cluster named in controller.yaml and scopes every
 // ordinary key operation beneath keyPrefix. Snapshot intentionally remains a
 // cluster operation: the MVP's etcd instance is dedicated to Groundplane.
-func New(ctx context.Context, endpoints []string, keyPrefix string) (Store, error) {
+func New(ctx context.Context, endpoints []string, keyPrefix string) (EnvironmentBlueprintStore, error) {
 	if err := validateConfig(endpoints, keyPrefix); err != nil {
 		return nil, err
 	}
-
 	cli, err := clientv3.New(clientv3.Config{
 		Context:   ctx,
 		Endpoints: append([]string(nil), endpoints...),
@@ -186,10 +192,8 @@ func New(ctx context.Context, endpoints []string, keyPrefix string) (Store, erro
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
-
 	return newStore(cli, keyPrefix)
 }
-
 func newStore(cli client, keyPrefix string) (*store, error) {
 	if cli == nil {
 		return nil, errs.New(errs.KindValidationFailed, "etcd client is required")
@@ -197,10 +201,8 @@ func newStore(cli client, keyPrefix string) (*store, error) {
 	if !strings.HasPrefix(keyPrefix, "/") || !strings.HasSuffix(keyPrefix, "/") {
 		return nil, errs.New(errs.KindValidationFailed, "etcd key prefix must begin and end with /")
 	}
-
 	return &store{client: cli, root: strings.TrimSuffix(keyPrefix, "/")}, nil
 }
-
 func validateConfig(endpoints []string, keyPrefix string) error {
 	if len(endpoints) == 0 {
 		return errs.New(errs.KindValidationFailed, "at least one etcd endpoint is required")
@@ -215,20 +217,17 @@ func validateConfig(endpoints []string, keyPrefix string) error {
 	}
 	return nil
 }
-
 func (s *store) Health(ctx context.Context) error {
 	// Default etcd reads are linearizable. Reading a deliberately absent key
 	// proves that the cluster can serve a consistent request without mutating it.
 	_, err := s.client.Get(ctx, s.root+"/.health", clientv3.WithLimit(1))
 	return wrap(ctx, err)
 }
-
 func (s *store) Get(ctx context.Context, key string) (*GetResult, error) {
 	physical, err := s.physicalKey(key)
 	if err != nil {
 		return nil, err
 	}
-
 	response, err := s.client.Get(ctx, physical)
 	if err != nil {
 		return nil, wrap(ctx, err)
@@ -253,7 +252,6 @@ func (s *store) Get(ctx context.Context, key string) (*GetResult, error) {
 	}
 	return result, nil
 }
-
 func (s *store) GetMany(ctx context.Context, request GetManyRequest) (*GetManyResult, error) {
 	if len(request.Keys) == 0 {
 		return nil, errs.New(errs.KindValidationFailed, "etcd multi-get requires at least one key")
@@ -474,6 +472,25 @@ func (s *store) Transact(
 			maximumTransactionOperations,
 		)
 	}
+	return s.transact(ctx, conditions, mutations)
+}
+
+func (s *store) TransactEnvironmentBlueprint(
+	ctx context.Context,
+	conditions []Condition,
+	mutations []Mutation,
+) (TransactionResult, error) {
+	if err := validateEnvironmentBlueprintTransactionBudget(conditions, mutations); err != nil {
+		return TransactionResult{}, err
+	}
+	return s.transact(ctx, conditions, mutations)
+}
+
+func (s *store) transact(
+	ctx context.Context,
+	conditions []Condition,
+	mutations []Mutation,
+) (TransactionResult, error) {
 
 	comparisons := make([]clientv3.Cmp, 0, len(conditions))
 	failureReads := make([]clientv3.Op, 0, len(conditions))
@@ -566,6 +583,54 @@ func (s *store) Transact(
 		result.FailureReads = reads
 	}
 	return result, nil
+}
+
+func validateEnvironmentBlueprintTransactionBudget(conditions []Condition, mutations []Mutation) error {
+	if len(conditions) <= maximumEnvironmentBlueprintTransactionOperationsPerArm &&
+		len(mutations) <= maximumEnvironmentBlueprintTransactionOperationsPerArm {
+		return nil
+	}
+	return errs.Newf(
+		errs.KindValidationFailed,
+		"Environment Blueprint publication exceeds a %d-operation transaction arm (%d/%d/%d)",
+		maximumEnvironmentBlueprintTransactionOperationsPerArm,
+		len(conditions), len(mutations), len(conditions),
+	)
+}
+
+type environmentBlueprintTransactionStore interface {
+	TransactEnvironmentBlueprint(context.Context, []Condition, []Mutation) (TransactionResult, error)
+}
+
+func executeEnvironmentBlueprintTransaction(
+	ctx context.Context,
+	store environmentBlueprintTransactionStore,
+	conditions []Condition,
+	mutations []Mutation,
+) (TransactionResult, error) {
+	if store == nil {
+		return TransactionResult{}, errs.New(errs.KindInternal, "Environment Blueprint transaction store is required")
+	}
+	if err := validateEnvironmentBlueprintTransactionBudget(conditions, mutations); err != nil {
+		return TransactionResult{}, err
+	}
+	if len(mutations) == 0 {
+		return TransactionResult{}, errs.New(errs.KindValidationFailed, "etcd transaction requires a mutation")
+	}
+	physicalConditions := make([]string, len(conditions))
+	for index := range conditions {
+		physicalConditions[index] = conditions[index].Key
+	}
+	physicalMutations := make([]string, len(mutations))
+	for index := range mutations {
+		physicalMutations[index] = mutations[index].Key
+	}
+	if transactionRequest(conditions, mutations, physicalConditions, physicalMutations).Size() > maximumTransactionBytes {
+		return TransactionResult{}, errs.New(
+			errs.KindValidationFailed, "etcd transaction exceeds the 1 MiB serialized request limit",
+		)
+	}
+	return store.TransactEnvironmentBlueprint(ctx, conditions, mutations)
 }
 
 func transactionRequest(

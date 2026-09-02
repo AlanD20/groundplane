@@ -32,7 +32,7 @@ func TestEnvironmentZoneDesiredPublicationCommitsHeadPoolAndReplay(t *testing.T)
 	baseProjection := environmentBlueprintTestProjection(environment.Record.ID, baseTask, 1)
 	baseMarker := environmentBlueprintTestMarker(baseTask, environment.Record.ID)
 	baseClaim := stageEnvironmentBlueprintForPublicationTest(t, repository, 0, baseRevision, baseProjection, baseMarker)
-	baseResult, err := repository.PublishEnvironmentDesiredRevisionWithTask(
+	baseResult, err := publishEnvironmentBlueprintClaimTest(repository,
 		ctx, project, environment, 0, baseClaim,
 		EnvironmentDesiredRevisionIdentity{EnvironmentID: environment.Record.ID, RevisionID: baseTask.ID},
 		baseProjection,

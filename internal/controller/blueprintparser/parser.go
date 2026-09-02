@@ -388,8 +388,8 @@ func normalizeBackupSpec(authored *authoredBackupSpec) (*core.BackupSpec, error)
 		return &core.BackupSpec{}, nil
 	}
 	configured := authored.Frequency != "" && authored.Keep != nil && authored.Encryption != "" &&
-		authored.Connector != "" && len(authored.Sources) != 0
-	if !configured {
+		len(authored.Sources) != 0
+	if !configured || authored.Enabled && authored.Connector == "" {
 		return nil, validationError("Blueprint Backup configuration is incomplete")
 	}
 	if !apiTypes.ValidBackupPolicyKeep(*authored.Keep) {

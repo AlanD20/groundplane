@@ -76,6 +76,7 @@ func (repository *candidatePublicationRepository) PublishEnvironmentBlueprintDes
 	_ etcd.ReleaseGroupBlueprintPreparedMutation,
 	_ etcd.ComponentTaskPreparation,
 	_ etcd.BlueprintAttachTaskPreparation,
+	_ etcd.BlueprintBackupPolicyPreparation,
 	_ etcd.BlueprintScriptPublication,
 	_ etcd.BlueprintReleasePublication,
 	_ etcd.BlueprintRequirementGate,
@@ -151,6 +152,7 @@ func TestEnvironmentBlueprintApplyStagesCandidateProjectionBeforeReleaseHooksAnd
 		etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: environmentID, RevisionID: taskID},
 		projection, nil, nil, nil, etcd.ReleaseGroupBlueprintPreparedMutation{},
 		etcd.ComponentTaskPreparation{}, etcd.BlueprintAttachTaskPreparation{},
+		etcd.BlueprintBackupPolicyPreparation{},
 		etcd.BlueprintScriptPublication{}, etcd.BlueprintReleasePublication{},
 		etcd.BlueprintRequirementGate{}, etcd.TaskRecord{ID: taskID}, etcd.IdempotencyMarker{},
 	); err != nil {

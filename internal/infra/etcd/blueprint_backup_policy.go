@@ -1,0 +1,281 @@
+package etcd
+
+import (
+	"context"
+	"sync"
+	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+type blueprintBackupPolicySourceEvidence struct {
+	record           BackupSourceRecord
+	primary          *KeyValue
+	environmentIndex *KeyValue
+	identityIndex    *KeyValue
+	attach           *Versioned[AttachRecord]
+	attachOwner      *KeyValue
+	candidateAttach  bool
+}
+
+type blueprintBackupPolicyPreparationState struct {
+	mu                  sync.Mutex
+	consumed            bool
+	environmentID       string
+	taskID              string
+	createdAt           time.Time
+	desired             *EnvironmentBlueprintBackupPolicy
+	candidate           backupPolicyReplacementCandidate
+	sources             []blueprintBackupPolicySourceEvidence
+	connectorNameIndex  *KeyValue
+	connectorTombstone  *KeyValue
+	retainedConnectorID string
+	retain              bool
+	requiresInitialKey  bool
+}
+type BlueprintBackupPolicyPreparation struct {
+	state *blueprintBackupPolicyPreparationState
+}
+
+func (prepared BlueprintBackupPolicyPreparation) IsZero() bool { return prepared.state == nil }
+func (prepared BlueprintBackupPolicyPreparation) Projection() *EnvironmentBlueprintBackupPolicy {
+	if prepared.state == nil {
+		return nil
+	}
+	prepared.state.mu.Lock()
+	defer prepared.state.mu.Unlock()
+	return CloneEnvironmentBlueprintBackupPolicy(prepared.state.desired)
+}
+func (prepared BlueprintBackupPolicyPreparation) RequiresInitialKey() bool {
+	if prepared.state == nil {
+		return false
+	}
+	prepared.state.mu.Lock()
+	defer prepared.state.mu.Unlock()
+	return prepared.state.requiresInitialKey
+}
+func (prepared *BlueprintBackupPolicyPreparation) SupplyInitialKey(
+	material BackupPolicyInitialKeyMaterial,
+) error {
+	if prepared == nil || prepared.state == nil {
+		return errs.New(errs.KindInternal, "Blueprint Backup preparation is required")
+	}
+	state := prepared.state
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if state.consumed || !state.requiresInitialKey || state.candidate.InitialKey != nil {
+		return errs.New(errs.KindStateConflict, "Blueprint Backup initial key is not expected")
+	}
+	initial, err := newbackupPolicyInitialKey(state.environmentID, state.createdAt, &material)
+	if err != nil {
+		return err
+	}
+	state.candidate.InitialKey = initial
+	return nil
+}
+func (prepared *BlueprintBackupPolicyPreparation) Clear() {
+	if prepared == nil || prepared.state == nil {
+		return
+	}
+	state := prepared.state
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	clearBlueprintBackupPolicyPreparationState(state)
+}
+
+func clearBlueprintBackupPolicyPreparationState(state *blueprintBackupPolicyPreparationState) {
+	if state.candidate.ExistingKey != nil {
+		clear(state.candidate.ExistingKey.Encrypted.Ciphertext)
+		state.candidate.ExistingKey.Encrypted.Ciphertext = nil
+	}
+	if state.candidate.InitialKey != nil {
+		clear(state.candidate.InitialKey.Encrypted.Ciphertext)
+		state.candidate.InitialKey.Encrypted.Ciphertext = nil
+	}
+}
+
+func (repository *BackupPolicyRepository) PrepareEnvironmentBlueprintBackupPolicy(
+	ctx context.Context,
+	input EnvironmentBlueprintBackupPolicyInput,
+) (BlueprintBackupPolicyPreparation, error) {
+	if err := validateContext(ctx); err != nil {
+		return BlueprintBackupPolicyPreparation{}, err
+	}
+	if ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil ||
+		ids.Validate(ids.KindTask, input.TaskID) != nil || input.ReadRevision <= 0 ||
+		input.CreatedAt.IsZero() || input.CreatedAt != input.CreatedAt.UTC() ||
+		input.Projection.EnvironmentID != input.EnvironmentID || input.Projection.RevisionID != input.TaskID {
+		return BlueprintBackupPolicyPreparation{}, errs.New(
+			errs.KindValidationFailed, "Blueprint Backup preparation identity is invalid",
+		)
+	}
+	if len(input.Sources) > MaximumBackupPolicySources {
+		return BlueprintBackupPolicyPreparation{}, errs.New(
+			errs.KindValidationFailed, "backup policy may select at most 12 sources",
+		)
+	}
+	if input.Retain && (input.Enabled || input.Frequency != "" || input.Keep != 0 || input.Encryption != "" ||
+		input.ConnectorName != "" || len(input.Sources) != 0) {
+		return BlueprintBackupPolicyPreparation{}, errs.New(
+			errs.KindValidationFailed, "retained Blueprint Backup input cannot replace policy decisions",
+		)
+	}
+	if err := validateBlueprintAttachTaskPreparation(input.AttachPreparation); err != nil &&
+		!blueprintAttachTaskPreparationIsZero(input.AttachPreparation) {
+		return BlueprintBackupPolicyPreparation{}, err
+	}
+	current, coordination, key, err := repository.loadBlueprintBackupBase(
+		ctx, input.EnvironmentID, input.ReadRevision, input.CreatedAt,
+	)
+	if err != nil {
+		return BlueprintBackupPolicyPreparation{}, err
+	}
+	state := &blueprintBackupPolicyPreparationState{
+		environmentID: input.EnvironmentID, taskID: input.TaskID, createdAt: input.CreatedAt,
+		candidate: backupPolicyReplacementCandidate{
+			Current: current, Coordination: coordination, ExistingKey: key,
+		},
+	}
+	if input.Retain {
+		state.retain = true
+		if err := repository.prepareRetainedBlueprintBackupPolicy(ctx, state, input.ReadRevision); err != nil {
+			clearBlueprintBackupPolicyPreparationState(state)
+			return BlueprintBackupPolicyPreparation{}, err
+		}
+		return BlueprintBackupPolicyPreparation{state: state}, nil
+	}
+	connectorID, connector, connectorOwner, connectorName, err := repository.resolveBlueprintBackupConnector(
+		ctx, input.EnvironmentID, input.ConnectorName, input.ReadRevision,
+	)
+	if err != nil {
+		clearBlueprintBackupPolicyPreparationState(state)
+		return BlueprintBackupPolicyPreparation{}, err
+	}
+	selections := make([]BackupPolicySourceSelection, len(input.Sources))
+	for index, source := range input.Sources {
+		selections[index] = BackupPolicySourceSelection{Kind: source.Kind, TargetID: source.TargetID}
+	}
+	if err := validateBackupPolicyReplacementInput(ctx, BackupPolicyReplacementInput{
+		EnvironmentID: input.EnvironmentID, Enabled: input.Enabled, Frequency: input.Frequency,
+		Keep: input.Keep, Encryption: input.Encryption, ConnectorID: connectorID, Sources: selections,
+	}); err != nil {
+		clearBlueprintBackupPolicyPreparationState(state)
+		return BlueprintBackupPolicyPreparation{}, err
+	}
+	state.candidate.Connector = connector
+	state.candidate.ConnectorOwnerIndex = connectorOwner
+	state.connectorNameIndex = connectorName
+	state.sources, err = repository.loadBlueprintBackupSources(ctx, input, input.ReadRevision)
+	if err != nil {
+		clearBlueprintBackupPolicyPreparationState(state)
+		return BlueprintBackupPolicyPreparation{}, err
+	}
+	sourceIDs := make([]string, len(state.sources))
+	desiredSources := make([]EnvironmentBlueprintBackupPolicySource, len(state.sources))
+	for index, source := range state.sources {
+		sourceIDs[index] = source.record.ID
+		desiredSources[index] = EnvironmentBlueprintBackupPolicySource{
+			ID: source.record.ID, Kind: source.record.Kind, TargetID: source.record.TargetID,
+		}
+	}
+	state.candidate.Replacement = BackupPolicyRecord{
+		EnvironmentID: input.EnvironmentID, Enabled: input.Enabled, Frequency: input.Frequency,
+		Keep: input.Keep, Encryption: input.Encryption, ConnectorID: connectorID,
+		SourceIDs: sourceIDs, UpdatedAt: input.CreatedAt,
+	}
+	state.desired = &EnvironmentBlueprintBackupPolicy{
+		Enabled: input.Enabled, Frequency: input.Frequency, Keep: input.Keep,
+		Encryption: input.Encryption, ConnectorID: connectorID, Sources: desiredSources,
+	}
+	if err := validateEnvironmentBlueprintBackupPolicy(input.EnvironmentID, state.desired); err != nil {
+		clearBlueprintBackupPolicyPreparationState(state)
+		return BlueprintBackupPolicyPreparation{}, err
+	}
+	if err := sealBackupPolicyCandidateSchedule(&state.candidate, input.CreatedAt); err != nil {
+		clearBlueprintBackupPolicyPreparationState(state)
+		return BlueprintBackupPolicyPreparation{}, err
+	}
+	state.candidate.ConnectorReferences, err = repository.loadBackupPolicyConnectorReferences(
+		ctx, state.candidate, input.ReadRevision,
+	)
+	if err != nil {
+		clearBlueprintBackupPolicyPreparationState(state)
+		return BlueprintBackupPolicyPreparation{}, err
+	}
+	state.requiresInitialKey = input.Enabled && input.Encryption == "age" && key == nil
+	return BlueprintBackupPolicyPreparation{state: state}, nil
+}
+
+func (repository *BackupPolicyRepository) ValidateEnvironmentBlueprintBackupPolicy(
+	ctx context.Context,
+	input EnvironmentBlueprintBackupPolicyInput,
+) error {
+	if err := validateContext(ctx); err != nil {
+		return err
+	}
+	if ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil || input.ReadRevision <= 0 || input.Retain {
+		return errs.New(errs.KindValidationFailed, "Blueprint Backup validation identity is invalid")
+	}
+	connectorID, _, _, _, err := repository.resolveBlueprintBackupConnector(
+		ctx, input.EnvironmentID, input.ConnectorName, input.ReadRevision,
+	)
+	if err != nil {
+		return err
+	}
+	selections := make([]BackupPolicySourceSelection, len(input.Sources))
+	for index, source := range input.Sources {
+		selections[index] = BackupPolicySourceSelection{Kind: source.Kind, TargetID: source.TargetID}
+	}
+	return validateBackupPolicyReplacementInput(ctx, BackupPolicyReplacementInput{
+		EnvironmentID: input.EnvironmentID, Enabled: input.Enabled, Frequency: input.Frequency,
+		Keep: input.Keep, Encryption: input.Encryption, ConnectorID: connectorID, Sources: selections,
+	})
+}
+
+func (repository *BackupPolicyRepository) resolveBlueprintBackupConnector(
+	ctx context.Context,
+	environmentID string,
+	name string,
+	revision int64,
+) (string, *Versioned[ConnectorRecord], *KeyValue, *KeyValue, error) {
+	if name == "" {
+		return "", nil, nil, nil, nil
+	}
+	nameRead, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{connectorNameKey(environmentID, name)}, Revision: revision,
+	})
+	if err != nil {
+		return "", nil, nil, nil, err
+	}
+	if nameRead == nil || nameRead.ReadRevision != revision || len(nameRead.Values) != 1 {
+		return "", nil, nil, nil, errs.New(errs.KindInternal, "Blueprint Backup Connector name read is incomplete")
+	}
+	if nameRead.Values[0] == nil {
+		return "", nil, nil, nil, errs.New(errs.KindConnectorNotFound, "connector was not found")
+	}
+	connectorID := string(nameRead.Values[0].Value)
+	if ids.Validate(ids.KindConnector, connectorID) != nil {
+		return "", nil, nil, nil, corruptConnectorRecord()
+	}
+	connector, owner, err := repository.loadBackupPolicyConnectorEvidence(ctx, environmentID, connectorID, revision)
+	if err != nil {
+		return "", nil, nil, nil, err
+	}
+	if connector.Record.Connector.Name != name {
+		return "", nil, nil, nil, corruptConnectorRecord()
+	}
+	tombstone, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{deletionTombstoneKey(string(DeletionTargetConnector), connectorID)}, Revision: revision,
+	})
+	if err != nil {
+		return "", nil, nil, nil, err
+	}
+	if tombstone == nil || tombstone.ReadRevision != revision || len(tombstone.Values) != 1 {
+		return "", nil, nil, nil, errs.New(errs.KindInternal, "Blueprint Backup Connector fence read is incomplete")
+	}
+	if tombstone.Values[0] != nil {
+		return "", nil, nil, nil, errs.New(errs.KindResourceInUse, "connector deletion is in progress")
+	}
+	return connectorID, connector, owner, cloneBackupPolicyEvidenceKeyValue(nameRead.Values[0]), nil
+}

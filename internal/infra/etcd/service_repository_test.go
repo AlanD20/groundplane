@@ -106,6 +106,7 @@ func TestServiceRepositoryHidesComponentGeneratedServicesFromOrdinaryReads(t *te
 	}
 	projection := serviceRecordTestProjection(t, environment.Record.ID, authoredAPI, generatedRouter, authoredWorker)
 	projection.Components = []ComponentRecord{component, tunnel}
+	projection = withTestEnvironmentComposeArtifact(projection)
 	seedServiceRepositoryTestDesiredProjection(t, store, projection)
 
 	first, err := repository.ListServices(ctx, environment.Record.ID, PageRequest{Limit: 1})

@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/adapters/manual"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -14,7 +13,7 @@ import (
 // Rationale: direct desired-state mutations publish a selected Compose projection without a Blueprint audit input;
 // Attach must consume that selected projection instead of requiring a historical Blueprint document.
 func TestResolveAttachScopeAcceptsSelectedDesiredProjectionWithoutBlueprintAudit(t *testing.T) {
-	manual.Register()
+	registerAdapters()
 	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
 	tenantID := ids.NewAt(ids.KindTenant, now, 1)
 	projectID := ids.NewAt(ids.KindProject, now, 2)

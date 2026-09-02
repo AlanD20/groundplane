@@ -1131,6 +1131,12 @@ active-membership authority.
 
 `MaximumEnvironmentBlueprintAttachCandidates` is 2. Only Attaches newly
 introduced by the candidate count; retained and pre-existing Attaches do not.
+New Attach grants and existing-credential references may target retained ready
+credential-owning Attaches selected at the Blueprint fixed revision. Each such
+reference carries the exact retained primary revision and deletion state into
+the final transaction. Publication creates the reverse membership and rewrites
+the retained primary unchanged so direct detach and Blueprint publication have
+exactly one winner.
 An Attach or Volume source may target an identity introduced by the same
 Blueprint. The Controller validates that target against the sealed candidate
 projection and publishes its identity in the same transaction as the Backup
@@ -1162,9 +1168,9 @@ The exact legal operation shapes are:
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | QA: eleven Release candidates, two hooks, two staged physical sources | 30 | 42 | 30 | 72 | 60 | 102 |
 | maximum non-Backup Script | 44 | 98 | 44 | 142 | 88 | 186 |
-| maximum non-Backup Script plus two candidate Attaches | 85 | 131 | 85 | 216 | 170 | 301 |
-| previously documented Backup-only maximum | 120 | 74 | 120 | 194 | 240 | 314 |
-| combined Backup plus Script maximum | 142 | 159 | 142 | 301 | 284 | 443 |
+| maximum non-Backup Script plus two candidate Attaches | 117 | 147 | 117 | 264 | 234 | 381 |
+| maximum Backup-only | 152 | 90 | 152 | 242 | 304 | 394 |
+| combined Backup plus Script maximum | 174 | 175 | 174 | 349 | 348 | 523 |
 
 All counted operations are distinct and atomic. Removing or coalescing one
 would discard desired-head, Task, marker, Release, Script, source, Attach, or
@@ -1186,8 +1192,8 @@ Script source preparation/release, and every other non-final-publication limit
 remain unchanged. Ordinary non-Blueprint `Store.Transact` retains its
 96-selected-operation protection.
 
-Focused proof must cover exact `30/42/30`, `44/98/44`, `85/131/85`, and
-`142/159/142` construction; the retained Backup-only `120/74/120` accounting;
+Focused proof must cover exact `30/42/30`, `44/98/44`, `117/147/117`, and
+`174/175/174` construction; the Backup-only `152/90/152` accounting;
 256-arm acceptance and 257-arm rejection; rejection above the 1 MiB protobuf
 ceiling; and the unchanged ordinary non-Blueprint 96-operation protection.
 Known local validation or encoding failure and a confirmed comparison failure

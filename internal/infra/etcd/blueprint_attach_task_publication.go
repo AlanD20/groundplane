@@ -47,6 +47,30 @@ func prepareBlueprintAttachTaskPublication(
 	publication.mutations = append(publication.mutations, Mutation{
 		Type: MutationPut, Key: blueprintAttachTaskIntentKey(task.ID), Value: intentValue,
 	})
+	candidateIDs := make(map[string]struct{}, len(preparation.candidates))
+	for _, input := range preparation.candidates {
+		candidateIDs[input.Record.ID] = struct{}{}
+	}
+	retainedPublished := make(map[string]struct{})
+	appendRetained := func(retained Versioned[AttachRecord]) error {
+		if _, exists := retainedPublished[retained.Record.ID]; exists {
+			return nil
+		}
+		value, encodeErr := encodeAttachRecord(retained.Record)
+		if encodeErr != nil {
+			return encodeErr
+		}
+		retainedPublished[retained.Record.ID] = struct{}{}
+		publication.values = append(publication.values, value)
+		publication.conditions = append(publication.conditions,
+			Condition{Key: attachKey(retained.Record.ID), ModRevision: retained.Revision},
+			Condition{Key: deletionTombstoneKey("attach", retained.Record.ID)},
+		)
+		publication.mutations = append(publication.mutations, Mutation{
+			Type: MutationPut, Key: attachKey(retained.Record.ID), Value: value,
+		})
+		return nil
+	}
 	if preparation.Intent.OwnsEnvironmentFence {
 		publication.mutations = append(publication.mutations, Mutation{
 			Type: MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
@@ -100,6 +124,12 @@ func prepareBlueprintAttachTaskPublication(
 			})
 		}
 		if !record.OwnsCredential() {
+			if _, candidate := candidateIDs[record.CredentialAttachID]; !candidate {
+				if err := appendRetained(*input.RetainedCredentialOwner); err != nil {
+					clearPreparedBlueprintAttachTaskPublication(publication)
+					return preparedBlueprintAttachTaskPublication{}, err
+				}
+			}
 			publication.conditions = append(publication.conditions, Condition{
 				Key: attachCredentialByKey(record.CredentialAttachID, record.ID),
 			})
@@ -108,6 +138,17 @@ func prepareBlueprintAttachTaskPublication(
 			})
 		}
 		for _, grantID := range record.GrantAttachIDs {
+			if _, candidate := candidateIDs[grantID]; !candidate {
+				for _, retained := range input.RetainedGrantTargets {
+					if retained.Record.ID == grantID {
+						if err := appendRetained(retained); err != nil {
+							clearPreparedBlueprintAttachTaskPublication(publication)
+							return preparedBlueprintAttachTaskPublication{}, err
+						}
+						break
+					}
+				}
+			}
 			publication.conditions = append(publication.conditions, Condition{Key: attachGrantedByKey(grantID, record.ID)})
 			publication.mutations = append(publication.mutations, Mutation{
 				Type: MutationPut, Key: attachGrantedByKey(grantID, record.ID), Value: []byte(record.ID),

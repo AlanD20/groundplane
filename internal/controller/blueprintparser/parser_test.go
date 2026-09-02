@@ -848,6 +848,24 @@ services: {web: {image: nginx}}
 	requireValidationError(t, parseError(bundle))
 }
 
+func TestParseAcceptsConfiguredDisabledBackupWithoutConnector(t *testing.T) {
+	bundle := parserBundle([]string{"root.yaml"}, map[string]string{
+		"root.yaml": environmentRoot(`x-gp-backup:
+  enabled: false
+  frequency: "*-*-* 03:15:00"
+  keep: 7
+  encryption: age
+  sources: [{kind: config}]
+services: {web: {image: nginx}}
+`),
+	})
+	result, err := Parse(context.Background(), parserEnvironmentScope, bundle)
+	if err != nil || result.Extensions.Backup == nil || result.Extensions.Backup.Connector != "" ||
+		result.Extensions.Backup.Keep != 7 || len(result.Extensions.Backup.Sources) != 1 {
+		t.Fatalf("Parse(configured disabled Backup without Connector) = %#v, %v", result.Extensions.Backup, err)
+	}
+}
+
 // Rationale: enabled Backup configuration requires an authored in-range Keep;
 // the Go zero value cannot stand in for an omitted YAML decision.
 func TestParseRejectsEnabledBackupWithOmittedKeep(t *testing.T) {

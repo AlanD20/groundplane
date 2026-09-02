@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"sort"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller"
@@ -92,6 +93,24 @@ func (service *environmentBlueprintService) ValidateBlueprint(
 	}
 	if err := controller.ValidateEnvironmentBlueprintAvailability(parsed); err != nil {
 		return apiTypes.EnvironmentBlueprintValidation{}, err
+	}
+	if parsed.Extensions.Backup != nil {
+		attaches, readRevision, err := service.listBlueprintAttaches(ctx, environmentID)
+		if err != nil {
+			return apiTypes.EnvironmentBlueprintValidation{}, err
+		}
+		validationProjection, validationAttaches, err := environmentBlueprintBackupValidationTargets(
+			snapshot, parsed, attaches,
+		)
+		if err != nil {
+			return apiTypes.EnvironmentBlueprintValidation{}, err
+		}
+		if err := service.validateEnvironmentBlueprintBackup(
+			ctx, environmentID, readRevision, parsed.Extensions.Backup,
+			validationProjection, validationAttaches,
+		); err != nil {
+			return apiTypes.EnvironmentBlueprintValidation{}, err
+		}
 	}
 	current, err := service.environmentBlueprintAuthoringDocument(ctx, snapshot)
 	if err != nil {
@@ -215,6 +234,10 @@ func (service *environmentBlueprintService) environmentBlueprintAuthoringDocumen
 		return blueprintparser.AuthoringDocument{}, err
 	}
 	input.Attachments, err = service.environmentBlueprintAuthoringAttachments(ctx, attaches, serviceNames)
+	if err != nil {
+		return blueprintparser.AuthoringDocument{}, err
+	}
+	input.Backup, err = service.environmentBlueprintAuthoringBackup(ctx, snapshot, attaches)
 	if err != nil {
 		return blueprintparser.AuthoringDocument{}, err
 	}
@@ -404,6 +427,12 @@ func environmentBlueprintChanges(
 		addBlueprintResourceKey(currentKeys, "compose", "root")
 	}
 	addBlueprintResourceKey(candidateKeys, "compose", "root")
+	if current.Backup != nil {
+		addBlueprintResourceKey(currentKeys, "backup", "policy")
+	}
+	if candidate.Extensions.Backup != nil {
+		addBlueprintResourceKey(candidateKeys, "backup", "policy")
+	}
 	for key := range current.Attachments {
 		addBlueprintResourceKey(currentKeys, "attach", key)
 	}
@@ -492,4 +521,68 @@ func addBlueprintResourceKey(values map[string]map[string]struct{}, resource, ke
 		values[resource] = make(map[string]struct{})
 	}
 	values[resource][key] = struct{}{}
+}
+
+func environmentBlueprintBackupValidationTargets(
+	snapshot environmentBlueprintSnapshot,
+	parsed blueprintparser.Result,
+	currentAttaches []etcd.Versioned[etcd.AttachRecord],
+) (etcd.EnvironmentComposeProjection, []etcd.Versioned[etcd.AttachRecord], error) {
+	projection := snapshot.projection.Record
+	projection.EnvironmentID = snapshot.environment.Record.ID
+	volumeSlugs, err := environmentBlueprintVolumeSlugs(parsed.Project, projection, snapshot.hasHead)
+	if err != nil {
+		return etcd.EnvironmentComposeProjection{}, nil, err
+	}
+	byKey := make(map[string]etcd.EnvironmentVolumeIdentity, len(projection.Volumes))
+	for _, volume := range projection.Volumes {
+		byKey[volume.Key] = volume
+	}
+	at := snapshot.environment.Record.CreatedAt
+	if at.IsZero() {
+		at = time.Unix(0, 0).UTC()
+	}
+	for key, label := range volumeSlugs {
+		volume, found := byKey[key]
+		if !found {
+			volume = etcd.EnvironmentVolumeIdentity{
+				ID:  ids.DeriveAt(ids.KindVolume, at, snapshot.environment.Record.ID, "validate-volume/"+key),
+				Key: key,
+			}
+		}
+		volume.Slug = label
+		byKey[key] = volume
+	}
+	projection.Volumes = projection.Volumes[:0]
+	for _, volume := range byKey {
+		projection.Volumes = append(projection.Volumes, volume)
+	}
+	attaches := append([]etcd.Versioned[etcd.AttachRecord](nil), currentAttaches...)
+	attachIDs := make(map[string]string, len(attaches)+len(parsed.Extensions.Attachments))
+	for _, attach := range attaches {
+		attachIDs[attach.Record.Name] = attach.Record.ID
+	}
+	for name := range parsed.Extensions.Attachments {
+		if attachIDs[name] == "" {
+			attachIDs[name] = ids.DeriveAt(ids.KindAttach, at, snapshot.environment.Record.ID, "validate-attach/"+name)
+		}
+	}
+	for name, spec := range parsed.Extensions.Attachments {
+		found := false
+		for _, attach := range currentAttaches {
+			found = found || attach.Record.Name == name
+		}
+		if found {
+			continue
+		}
+		credentialID := attachIDs[spec.Credential.Attach]
+		if spec.Credential.Mode == "new" {
+			credentialID = attachIDs[name]
+		}
+		attaches = append(attaches, etcd.Versioned[etcd.AttachRecord]{Record: etcd.AttachRecord{
+			ID: attachIDs[name], EnvironmentID: snapshot.environment.Record.ID,
+			Name: name, CredentialAttachID: credentialID,
+		}})
+	}
+	return projection, attaches, nil
 }

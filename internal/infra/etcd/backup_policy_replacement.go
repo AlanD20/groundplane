@@ -261,13 +261,6 @@ func validatebackupPolicyReplacementCandidate(
 			return err
 		}
 	}
-	if candidate.Replacement.Encryption != "age" {
-		for _, source := range candidate.Sources {
-			if string(source.Source.Record.Kind) == "config" {
-				return errs.New(errs.KindValidationFailed, "config backup source requires age encryption")
-			}
-		}
-	}
 	if candidate.Replacement.Enabled {
 		if candidate.Connector == nil {
 			return errs.New(errs.KindValidationFailed, "enabled backup policy requires connector evidence")

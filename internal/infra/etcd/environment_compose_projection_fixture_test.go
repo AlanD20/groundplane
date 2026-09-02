@@ -10,11 +10,23 @@ import (
 func withTestEnvironmentComposeArtifact(projection EnvironmentComposeProjection) EnvironmentComposeProjection {
 	canonicalYAML := []byte("services: {}\n")
 	digest := sha256.Sum256(canonicalYAML)
+	componentOwners := make(map[string]string)
+	for _, component := range projection.Components {
+		if !component.Desired.Enabled {
+			continue
+		}
+		for _, serviceID := range component.Runtime.GeneratedServices {
+			if componentOwners[serviceID] == "" {
+				componentOwners[serviceID] = component.Desired.ID
+			}
+		}
+	}
 	services := make([]*agentpb.ComposeService, len(projection.DesiredServices))
 	for index, service := range projection.DesiredServices {
 		services[index] = &agentpb.ComposeService{
-			ServiceId:   service.Desired.ID,
-			ComposeName: service.Desired.Name,
+			ServiceId:        service.Desired.ID,
+			ComposeName:      service.Desired.Name,
+			OwnerComponentId: componentOwners[service.Desired.ID],
 		}
 	}
 	volumes := make([]*agentpb.ComposeVolume, len(projection.Volumes))

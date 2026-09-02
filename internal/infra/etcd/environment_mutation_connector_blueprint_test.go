@@ -252,7 +252,7 @@ func TestEnvironmentBlueprintUsesFixedRevisionAdvancesEpochAndReplaysReadOnly(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := repository.PublishEnvironmentDesiredRevisionWithTask(
+	first, err := publishEnvironmentBlueprintClaimTest(repository,
 		ctx, project, environment, 0, claim,
 		EnvironmentDesiredRevisionIdentity{
 			EnvironmentID: revision.EnvironmentID,
@@ -294,7 +294,7 @@ func TestEnvironmentBlueprintUsesFixedRevisionAdvancesEpochAndReplaysReadOnly(t 
 		environment.Record.ID,
 		environmentMutationFenceTestOwner(serviceRecordTestTime(), 13061),
 	)
-	replayed, err := repository.PublishEnvironmentDesiredRevisionWithTask(
+	replayed, err := publishEnvironmentBlueprintClaimTest(repository,
 		ctx, project, environment, 0, claim,
 		EnvironmentDesiredRevisionIdentity{
 			EnvironmentID: revision.EnvironmentID,
@@ -347,7 +347,7 @@ func TestEnvironmentBlueprintEpochRacePerformsNoDomainWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := repository.PublishEnvironmentDesiredRevisionWithTask(
+	result, err := publishEnvironmentBlueprintClaimTest(repository,
 		ctx,
 		project,
 		environment,
@@ -445,7 +445,7 @@ func TestConnectorAndBlueprintPublicationRejectHeldEnvironmentLock(t *testing.T)
 				13010,
 			),
 		)
-		_, err = repository.PublishEnvironmentDesiredRevisionWithTask(
+		_, err = publishEnvironmentBlueprintClaimTest(repository,
 			context.Background(),
 			project,
 			environment,

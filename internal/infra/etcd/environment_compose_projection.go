@@ -28,18 +28,15 @@ type EnvironmentServiceVolumeMount struct {
 	Target    string `json:"target"`
 	ReadOnly  bool   `json:"read_only"`
 }
-
 type EnvironmentZoneProjection struct {
 	EnvironmentID string    `json:"environment_id"`
 	Desired       core.Zone `json:"desired"`
 }
-
 type EnvironmentServiceProjection struct {
 	EnvironmentID    string       `json:"environment_id"`
 	BackingNetworkID string       `json:"backing_network_id,omitempty"`
 	Desired          core.Service `json:"desired"`
 }
-
 type EnvironmentRouteProjection struct {
 	EnvironmentID     string     `json:"environment_id"`
 	Desired           core.Route `json:"desired"`
@@ -62,6 +59,7 @@ type EnvironmentComposeProjection struct {
 	VolumeMounts      []EnvironmentServiceVolumeMount      `json:"volume_mounts,omitempty"`
 	Components        []ComponentRecord                    `json:"components,omitempty"`
 	Entries           []EntryRecord                        `json:"entries,omitempty"`
+	Backup            *EnvironmentBlueprintBackupPolicy    `json:"backup,omitempty"`
 	core.ServiceDependencyPlans
 	core.BlueprintRequirements
 }
@@ -422,6 +420,9 @@ func validateEnvironmentComposeProjection(projection EnvironmentComposeProjectio
 	if err := validateEnvironmentServiceExtensions(names, projection.ServiceExtensions); err != nil {
 		return err
 	}
+	if err := validateEnvironmentBlueprintBackupPolicy(projection.EnvironmentID, projection.Backup); err != nil {
+		return err
+	}
 	if err := validateEnvironmentZoneProjections(projection.EnvironmentID, projection.DesiredZones); err != nil {
 		return err
 	}
@@ -651,6 +652,7 @@ func cloneEnvironmentComposeProjection(source EnvironmentComposeProjection) Envi
 	clone.DesiredRoutes = append([]EnvironmentRouteProjection(nil), source.DesiredRoutes...)
 	clone.Volumes = append([]EnvironmentVolumeIdentity(nil), source.Volumes...)
 	clone.VolumeMounts = append([]EnvironmentServiceVolumeMount(nil), source.VolumeMounts...)
+	clone.Backup = CloneEnvironmentBlueprintBackupPolicy(source.Backup)
 	if source.Components != nil {
 		clone.Components = make([]ComponentRecord, len(source.Components))
 		for index, component := range source.Components {
@@ -775,10 +777,12 @@ func validateEnvironmentProjectionArtifact(projection EnvironmentComposeProjecti
 			continue
 		}
 		for _, serviceID := range component.Runtime.GeneratedServices {
-			if _, duplicate := expectedServices[serviceID]; duplicate {
+			expected := expectedServices[serviceID]
+			if expected.componentID != "" {
 				return errs.New(errs.KindValidationFailed, "Environment normalized Compose Service identity is duplicated")
 			}
-			expectedServices[serviceID] = environmentArtifactServiceIdentity{componentID: component.Desired.ID}
+			expected.componentID = component.Desired.ID
+			expectedServices[serviceID] = expected
 		}
 	}
 	if len(artifact.GetServices()) != len(expectedServices) || len(artifact.GetVolumes()) != len(projection.Volumes) {

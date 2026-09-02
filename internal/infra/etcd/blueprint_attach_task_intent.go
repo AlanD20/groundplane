@@ -11,17 +11,22 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const blueprintAttachTaskIntentPrefix = "/v1/records/blueprint-attach-task-intents/"
+const (
+	blueprintAttachTaskIntentPrefix             = "/v1/records/blueprint-attach-task-intents/"
+	MaximumEnvironmentBlueprintAttachCandidates = 2
+)
 
 // EnvironmentBlueprintAttachCandidateInput is one fully resolved Attach that
 // will be published by the same transaction as its owning Blueprint Task.
 // Versioned backing records are private compare evidence, not desired state.
 type EnvironmentBlueprintAttachCandidateInput struct {
-	Record             AttachRecord
-	Facts              *AttachEncryptedFacts
-	BackingProject     Versioned[ProjectRecord]
-	BackingEnvironment Versioned[EnvironmentRecord]
-	BackingService     Versioned[ServiceRecord]
+	Record                  AttachRecord
+	Facts                   *AttachEncryptedFacts
+	BackingProject          Versioned[ProjectRecord]
+	BackingEnvironment      Versioned[EnvironmentRecord]
+	BackingService          Versioned[ServiceRecord]
+	RetainedCredentialOwner *Versioned[AttachRecord]
+	RetainedGrantTargets    []Versioned[AttachRecord]
 }
 
 // BlueprintAttachTaskIntent is the non-secret, task-owned lifecycle manifest
@@ -43,6 +48,78 @@ type BlueprintAttachTaskPreparation struct {
 	candidates []EnvironmentBlueprintAttachCandidateInput
 }
 
+type EnvironmentBlueprintBackupPolicy struct {
+	Enabled     bool                                     `json:"enabled"`
+	Frequency   string                                   `json:"frequency,omitempty"`
+	Keep        int64                                    `json:"keep,omitempty"`
+	Encryption  string                                   `json:"encryption,omitempty"`
+	ConnectorID string                                   `json:"connector_id,omitempty"`
+	Sources     []EnvironmentBlueprintBackupPolicySource `json:"sources,omitempty"`
+}
+
+type EnvironmentBlueprintBackupPolicySource struct {
+	ID       string                `json:"id"`
+	Kind     core.BackupSourceKind `json:"kind"`
+	TargetID string                `json:"target_id"`
+}
+
+type EnvironmentBlueprintBackupPolicySourceInput struct {
+	CandidateID string
+	Kind        core.BackupSourceKind
+	TargetID    string
+}
+
+type EnvironmentBlueprintBackupPolicyInput struct {
+	EnvironmentID     string
+	TaskID            string
+	ReadRevision      int64
+	Retain            bool
+	Enabled           bool
+	Frequency         string
+	Keep              int64
+	Encryption        string
+	ConnectorName     string
+	Sources           []EnvironmentBlueprintBackupPolicySourceInput
+	Projection        EnvironmentComposeProjection
+	AttachPreparation BlueprintAttachTaskPreparation
+	CreatedAt         time.Time
+}
+
+func CloneEnvironmentBlueprintBackupPolicy(source *EnvironmentBlueprintBackupPolicy) *EnvironmentBlueprintBackupPolicy {
+	if source == nil {
+		return nil
+	}
+	clone := *source
+	clone.Sources = append([]EnvironmentBlueprintBackupPolicySource(nil), source.Sources...)
+	return &clone
+}
+
+func validateEnvironmentBlueprintBackupPolicy(
+	environmentID string,
+	policy *EnvironmentBlueprintBackupPolicy,
+) error {
+	if policy == nil {
+		return nil
+	}
+	selections := make([]BackupPolicySourceSelection, len(policy.Sources))
+	seenIDs := make(map[string]struct{}, len(policy.Sources))
+	for index, source := range policy.Sources {
+		if ids.Validate(ids.KindBackupSource, source.ID) != nil {
+			return errs.New(errs.KindValidationFailed, "Blueprint Backup source identity is invalid")
+		}
+		if _, duplicate := seenIDs[source.ID]; duplicate {
+			return errs.New(errs.KindValidationFailed, "Blueprint Backup source identity is duplicated")
+		}
+		seenIDs[source.ID] = struct{}{}
+		selections[index] = BackupPolicySourceSelection{Kind: source.Kind, TargetID: source.TargetID}
+	}
+	return validateBackupPolicyReplacementInput(context.Background(), BackupPolicyReplacementInput{
+		EnvironmentID: environmentID, Enabled: policy.Enabled, Frequency: policy.Frequency,
+		Keep: policy.Keep, Encryption: policy.Encryption, ConnectorID: policy.ConnectorID,
+		Sources: selections,
+	})
+}
+
 func PrepareEnvironmentBlueprintAttachTask(
 	taskID string,
 	environmentID string,
@@ -50,6 +127,11 @@ func PrepareEnvironmentBlueprintAttachTask(
 	ownsEnvironmentFence bool,
 	createdAt time.Time,
 ) (BlueprintAttachTaskPreparation, error) {
+	if len(inputs) > MaximumEnvironmentBlueprintAttachCandidates {
+		return BlueprintAttachTaskPreparation{}, errs.New(
+			errs.KindValidationFailed, "Blueprint may introduce at most two Attaches",
+		)
+	}
 	if len(inputs) == 0 {
 		return BlueprintAttachTaskPreparation{}, nil
 	}
@@ -191,17 +273,82 @@ func validateBlueprintAttachTaskPreparation(preparation BlueprintAttachTaskPrepa
 	if len(byID) != len(preparation.candidates) || len(byName) != len(preparation.candidates) {
 		return errs.New(errs.KindValidationFailed, "Blueprint Attach identities must be unique")
 	}
+	retainedByID := make(map[string]Versioned[AttachRecord])
+	retainedReadRevision := int64(0)
+	validateRetained := func(retained Versioned[AttachRecord], candidate AttachRecord) error {
+		if retained.Revision <= 0 || retained.ReadRevision <= 0 || retained.Revision > retained.ReadRevision ||
+			validateAttachRecord(retained.Record) != nil || retained.Record.Status != core.AttachReady ||
+			retained.Record.Operation != AttachOperationProvision || !retained.Record.OwnsCredential() ||
+			retained.Record.EnvironmentID != candidate.EnvironmentID ||
+			retained.Record.BackingProjectID != candidate.BackingProjectID ||
+			retained.Record.BackingEnvironmentID != candidate.BackingEnvironmentID ||
+			retained.Record.BackingServiceID != candidate.BackingServiceID ||
+			retained.Record.BackingNetworkID != candidate.BackingNetworkID {
+			return errs.New(errs.KindValidationFailed, "Blueprint Attach retained reference is inconsistent")
+		}
+		if retainedReadRevision == 0 {
+			retainedReadRevision = retained.ReadRevision
+		} else if retained.ReadRevision != retainedReadRevision {
+			return errs.New(errs.KindValidationFailed, "Blueprint Attach retained references changed revision")
+		}
+		if existing, duplicate := retainedByID[retained.Record.ID]; duplicate {
+			if existing.Revision != retained.Revision || existing.ReadRevision != retained.ReadRevision ||
+				!sameBlueprintAttachCandidateRecord(existing.Record, retained.Record) {
+				return errs.New(errs.KindValidationFailed, "Blueprint Attach retained reference is ambiguous")
+			}
+		} else {
+			retainedByID[retained.Record.ID] = retained
+		}
+		return nil
+	}
 	for _, input := range preparation.candidates {
 		record := input.Record
-		owner, exists := byID[record.CredentialAttachID]
-		if !exists || !owner.Record.OwnsCredential() || owner.Record.BackingServiceID != record.BackingServiceID {
-			return errs.New(errs.KindValidationFailed, "Blueprint Attach credential owner is outside the candidate set")
-		}
-		for _, grantID := range record.GrantAttachIDs {
-			grant, found := byID[grantID]
-			if !found || grant.Record.BackingServiceID != record.BackingServiceID {
-				return errs.New(errs.KindValidationFailed, "Blueprint Attach grant is outside the candidate set")
+		owner, candidateOwner := byID[record.CredentialAttachID]
+		if candidateOwner {
+			if input.RetainedCredentialOwner != nil || !owner.Record.OwnsCredential() ||
+				owner.Record.EnvironmentID != record.EnvironmentID ||
+				owner.Record.BackingServiceID != record.BackingServiceID ||
+				owner.Record.BackingNetworkID != record.BackingNetworkID {
+				return errs.New(errs.KindValidationFailed, "Blueprint Attach candidate credential owner is inconsistent")
 			}
+		} else {
+			if input.RetainedCredentialOwner == nil ||
+				input.RetainedCredentialOwner.Record.ID != record.CredentialAttachID {
+				return errs.New(errs.KindValidationFailed, "Blueprint Attach retained credential owner is missing")
+			}
+			if err := validateRetained(*input.RetainedCredentialOwner, record); err != nil {
+				return err
+			}
+		}
+		retainedGrants := make(map[string]Versioned[AttachRecord], len(input.RetainedGrantTargets))
+		for _, retained := range input.RetainedGrantTargets {
+			if _, duplicate := retainedGrants[retained.Record.ID]; duplicate {
+				return errs.New(errs.KindValidationFailed, "Blueprint Attach retained grant target is duplicated")
+			}
+			retainedGrants[retained.Record.ID] = retained
+		}
+		usedRetainedGrants := 0
+		for _, grantID := range record.GrantAttachIDs {
+			grant, candidateGrant := byID[grantID]
+			retained, retainedGrant := retainedGrants[grantID]
+			if candidateGrant == retainedGrant {
+				return errs.New(errs.KindValidationFailed, "Blueprint Attach grant must resolve exactly once")
+			}
+			if candidateGrant {
+				if !grant.Record.OwnsCredential() || grant.Record.EnvironmentID != record.EnvironmentID ||
+					grant.Record.BackingServiceID != record.BackingServiceID ||
+					grant.Record.BackingNetworkID != record.BackingNetworkID {
+					return errs.New(errs.KindValidationFailed, "Blueprint Attach candidate grant target is inconsistent")
+				}
+				continue
+			}
+			if err := validateRetained(retained, record); err != nil {
+				return err
+			}
+			usedRetainedGrants++
+		}
+		if usedRetainedGrants != len(retainedGrants) {
+			return errs.New(errs.KindValidationFailed, "Blueprint Attach retained grant evidence is unused")
 		}
 	}
 	return nil
@@ -278,6 +425,19 @@ func cloneEnvironmentBlueprintAttachCandidateInputs(
 			facts := *input.Facts
 			facts.Ciphertext = append([]byte(nil), input.Facts.Ciphertext...)
 			cloned[index].Facts = &facts
+		}
+		if input.RetainedCredentialOwner != nil {
+			owner := *input.RetainedCredentialOwner
+			owner.Record = cloneAttachRecord(owner.Record)
+			cloned[index].RetainedCredentialOwner = &owner
+		}
+		cloned[index].RetainedGrantTargets = append(
+			[]Versioned[AttachRecord](nil), input.RetainedGrantTargets...,
+		)
+		for retainedIndex := range cloned[index].RetainedGrantTargets {
+			cloned[index].RetainedGrantTargets[retainedIndex].Record = cloneAttachRecord(
+				cloned[index].RetainedGrantTargets[retainedIndex].Record,
+			)
 		}
 	}
 	return cloned

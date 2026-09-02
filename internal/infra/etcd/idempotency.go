@@ -52,7 +52,6 @@ type IdempotencyLocator struct {
 	Route     string               `json:"route"`
 	Key       string               `json:"key"`
 }
-
 type IdempotencyReplayTargetKind string
 
 const (
@@ -78,7 +77,6 @@ type IdempotencyReplayTarget struct {
 	Kind IdempotencyReplayTargetKind `json:"kind"`
 	ID   string                      `json:"id"`
 }
-
 type ProtectedIntentRecord struct {
 	EnvelopeVersion  uint8
 	Cipher           string
@@ -87,8 +85,7 @@ type ProtectedIntentRecord struct {
 	Ciphertext       []byte
 }
 
-func (value ProtectedIntentRecord) String() string { return "ProtectedIntentRecord{redacted}" }
-
+func (value ProtectedIntentRecord) String() string   { return "ProtectedIntentRecord{redacted}" }
 func (value ProtectedIntentRecord) GoString() string { return value.String() }
 
 type IdempotencyResponse struct {
@@ -104,7 +101,6 @@ func (response IdempotencyResponse) String() string {
 		response.ContentKind,
 	)
 }
-
 func (response IdempotencyResponse) GoString() string { return response.String() }
 
 type IdempotencyMarkerKind string
@@ -160,18 +156,15 @@ func NewCompletedDirectIdempotencyMarker(
 	}
 	return marker, nil
 }
-
 func (marker IdempotencyMarker) String() string {
 	return fmt.Sprintf("IdempotencyMarker{kind:%s,state:%s,redacted}", marker.Kind, marker.State)
 }
-
 func (marker IdempotencyMarker) GoString() string { return marker.String() }
 
 type IdempotencyEvidence struct {
 	marker      IdempotencyMarker
 	modRevision int64
 }
-
 type idempotencyIntentJSON struct {
 	EnvelopeVersion  uint8  `json:"envelope_version"`
 	Cipher           string `json:"cipher"`
@@ -179,13 +172,11 @@ type idempotencyIntentJSON struct {
 	CiphertextDigest string `json:"ciphertext_digest"`
 	Ciphertext       string `json:"ciphertext"`
 }
-
 type idempotencyResponseJSON struct {
 	Status      int    `json:"status"`
 	ContentKind string `json:"content_kind"`
 	Body        string `json:"body"`
 }
-
 type idempotencyMarkerJSON struct {
 	Schema         int                      `json:"schema"`
 	Kind           IdempotencyMarkerKind    `json:"kind"`
@@ -204,17 +195,14 @@ type idempotencyMarkerJSON struct {
 	TerminalAt     string                   `json:"terminal_at,omitempty"`
 	RetainUntil    string                   `json:"retain_until,omitempty"`
 }
-
 type taskReferenceJSON struct {
 	Schema   int    `json:"schema"`
 	RecordID string `json:"record_id"`
 }
-
 type retentionReferenceJSON struct {
 	Schema    int    `json:"schema"`
 	MarkerKey string `json:"marker_key"`
 }
-
 type replayTargetReferenceJSON struct {
 	Schema    int    `json:"schema"`
 	MarkerKey string `json:"marker_key"`
@@ -1092,6 +1080,30 @@ func (repository *IdempotencyRepository) Apply(
 	marker IdempotencyMarker,
 	plan *idempotencyMutationPlan,
 ) (IdempotencyTransactionResult, error) {
+	return repository.apply(ctx, marker, plan, repository.store.Transact)
+}
+
+func (repository *IdempotencyRepository) applyEnvironmentBlueprint(
+	ctx context.Context,
+	marker IdempotencyMarker,
+	plan *idempotencyMutationPlan,
+	transactions environmentBlueprintTransactionStore,
+) (IdempotencyTransactionResult, error) {
+	return repository.apply(ctx, marker, plan, func(
+		ctx context.Context,
+		conditions []Condition,
+		mutations []Mutation,
+	) (TransactionResult, error) {
+		return executeEnvironmentBlueprintTransaction(ctx, transactions, conditions, mutations)
+	})
+}
+
+func (repository *IdempotencyRepository) apply(
+	ctx context.Context,
+	marker IdempotencyMarker,
+	plan *idempotencyMutationPlan,
+	transact func(context.Context, []Condition, []Mutation) (TransactionResult, error),
+) (IdempotencyTransactionResult, error) {
 	if ctx == nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "idempotency context is required")
 	}
@@ -1151,7 +1163,7 @@ func (repository *IdempotencyRepository) Apply(
 			return IdempotencyTransactionResult{}, err
 		}
 	}
-	result, err := repository.store.Transact(ctx, conditions, mutations)
+	result, err := transact(ctx, conditions, mutations)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

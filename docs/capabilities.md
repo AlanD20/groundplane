@@ -360,13 +360,15 @@ limits are unchanged.
 
 Required implementation evidence is exact construction of `30/42/30` for the
 eleven-Release/two-hook/two-physical-source QA Blueprint, `44/98/44` for the
-maximum non-Backup Script shape, `85/131/85` with two candidate Attaches, the
-retained Backup-only `120/74/120` accounting, and `142/159/142` for the combined
+maximum non-Backup Script shape, `117/147/117` with two candidate Attaches, the
+Backup-only `152/90/152` accounting, and `174/175/174` for the combined
 maximum, plus 256-arm acceptance, 257-arm rejection, over-1-MiB rejection, and
 proof that the non-Blueprint 96-operation protection is unchanged. Every
 operation is distinct and required for atomic desired-head, Task, marker,
 Release, Script, source, Attach, and Backup authority.
 
-This is a contract correction only. No unified final-publication builder,
-persistence change, failure-injection proof, generated artifact, acceptance
-result, or real-host journey has landed. C16 and C21 remain **Scaffolded**.
+The typed unified final-publication builder, retained Attach reference fences,
+Backup desired-state publication, exact composed-shape fixtures, failure
+injection, and operation/byte boundary proofs are implemented. Generated
+artifacts, acceptance results, and a real-host journey remain outstanding, so
+C16 and C21 remain **Scaffolded**.

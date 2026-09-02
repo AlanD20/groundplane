@@ -39,6 +39,7 @@ type PublicationRepository interface {
 		etcd.ReleaseGroupBlueprintPreparedMutation,
 		etcd.ComponentTaskPreparation,
 		etcd.BlueprintAttachTaskPreparation,
+		etcd.BlueprintBackupPolicyPreparation,
 		etcd.BlueprintScriptPublication,
 		etcd.BlueprintReleasePublication,
 		etcd.BlueprintRequirementGate,
@@ -162,6 +163,7 @@ type PublishInput struct {
 	ReleaseGroupPreparation etcd.ReleaseGroupBlueprintPreparedMutation
 	ComponentPreparation    etcd.ComponentTaskPreparation
 	AttachPreparation       etcd.BlueprintAttachTaskPreparation
+	BackupPreparation       etcd.BlueprintBackupPolicyPreparation
 	ScriptPublication       etcd.BlueprintScriptPublication
 	ReleasePublication      etcd.BlueprintReleasePublication
 	RequirementGate         etcd.BlueprintRequirementGate
@@ -421,6 +423,7 @@ func Publish(
 		ctx, input.EnvironmentPool, input.NetworkPool, input.Project, input.Environment, input.ExpectedHeadRevision,
 		claim, identity, projection, input.ZoneChanges, input.ServiceChanges, input.RouteChanges,
 		input.ReleaseGroupPreparation, input.ComponentPreparation, input.AttachPreparation,
+		input.BackupPreparation,
 		input.ScriptPublication, input.ReleasePublication, input.RequirementGate, input.Task, marker,
 	)
 	var resolution idempotentintent.Resolution

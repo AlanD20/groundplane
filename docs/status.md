@@ -627,19 +627,23 @@ change.
 
 The required implementation proof is `30/42/30` for the legal QA Blueprint
 with eleven Release candidates, two hooks, and two staged physical sources;
-`44/98/44` for maximum non-Backup Script; `85/131/85` with two candidate
-Attaches; the retained Backup-only `120/74/120` accounting; and `142/159/142`
-for combined Backup plus Script, whose selected success, selected failure, and
-full counts are 301, 284, and 443. Boundary proof must accept a byte-fitting
+`44/98/44` for maximum non-Backup Script; `117/147/117` with two candidate
+Attaches; the Backup-only `152/90/152` accounting; and `174/175/174` for
+combined Backup plus Script, whose selected success, selected failure, and
+full counts are 349, 348, and 523. Boundary proof must accept a byte-fitting
 256-operation arm, reject 257, reject an encoded request over 1 MiB, and retain
 the non-Blueprint 96-operation rejection. Every operation remains distinct and
 atomic because it carries desired-head, Task, marker, Release, Script, source,
 Attach, or Backup authority.
 
-This is a contract correction only. No unified builder, persistence change,
-focused proof, generated artifact, acceptance claim, or real-host result has
-landed. The authored Backup grammar and prior parser tests remain as existing
-evidence; C16 and C21 remain **Scaffolded**.
+The dedicated typed final-publication executor is now implemented without an
+ambient context flag. Ordinary `Store.Transact` remains capped at 96 selected
+operations, while the typed Blueprint path enforces 256 operations per arm and
+the actual 1 MiB encoded request ceiling. Focused boundary proof covers 256-arm
+acceptance, 257-arm rejection, encoded overflow, and ordinary protection.
+Exact legal composed-shape, candidate Attach/Volume visibility, retained Attach
+race, failure-injection, and fixed-envelope fixtures now pass. Reference-host
+acceptance remains pending; C16 and C21 remain **Scaffolded**.
 
 ## Blueprint secret Entry Script-source digest (2026-09-02)
 
@@ -648,3 +652,34 @@ digest from its validated durable ciphertext while the transient runner binding
 retains the plaintext digest required after decryption. Plain Entry generations keep
 their validated plaintext digest. Focused persistence proof passes; exact
 reference-host Blueprint and Script acceptance remains pending.
+
+## Blueprint candidate image observation role selection (2026-09-02)
+
+The reference-host Blueprint Task proved that an addressable recreate artifact
+legitimately carries a stable proxy and a singleton workload under the same stable
+Service identity. Agent image observation now ignores the proxy and selects exactly
+one candidate workload by its closed role, requested image, and candidate Release
+label; duplicate matching workloads still fail closed. Focused observer proof and
+the exact reference-host Blueprint rerun remain required before acceptance.
+
+## Atomic Blueprint Backup desired-state implementation (2026-09-02)
+
+Environment Blueprint apply and validate now resolve authored Backup Connector and source labels,
+preserve omission through a fixed-revision compare-fenced preparation, publish a present policy as a complete replacement, carry a
+public-safe Backup decision projection, and atomically publish source catalog,
+policy, schedule, enabled Connector reference, and lazy age-key authority through
+the unified final-publication executor. Canonical authoring reconstructs current
+labels and emits a reproducible disabled policy when a retained Connector no longer
+exists. Direct Backup Policy source pre-ensure remains unchanged.
+
+Canonical disabled authoring now preserves frequency, retention, encryption, and ordered
+source labels after Connector deletion while omitting only the unavailable Connector;
+enabled missing Connector fails closed. The canonical policy validator enforces age
+encryption for every config source, including disabled policies.
+
+Focused application, parser, desired-revision compilation, persistence,
+transaction-envelope, source-identity, lazy-key, Script-publication,
+candidate-Attach-limit, retained-reference, exact maximum-shape,
+same-candidate Attach/Volume visibility, and failure-injection proofs pass.
+Generated-artifact checks and reference-host acceptance remain pending; C16 and
+C21 remain **Scaffolded**.

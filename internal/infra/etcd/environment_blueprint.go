@@ -39,12 +39,10 @@ type EnvironmentBlueprintRevision struct {
 	Files          []EnvironmentBlueprintFile
 	CreatedAt      time.Time
 }
-
 type EnvironmentBlueprintFile struct {
 	Path    string
 	Content []byte
 }
-
 type EnvironmentBlueprintHead struct {
 	EnvironmentID string
 	RevisionID    string
@@ -71,7 +69,6 @@ type EnvironmentBlueprintRouteChange struct {
 	Current *Versioned[RouteRecord]
 	Record  RouteRecord
 }
-
 type environmentBlueprintManifest struct {
 	EnvironmentID  string                             `json:"environment_id"`
 	RevisionID     string                             `json:"revision_id"`
@@ -81,7 +78,6 @@ type environmentBlueprintManifest struct {
 	Files          []environmentBlueprintManifestFile `json:"files"`
 	CreatedAt      string                             `json:"created_at"`
 }
-
 type environmentBlueprintManifestFile struct {
 	Path   string `json:"path"`
 	Size   int    `json:"size"`
@@ -91,19 +87,15 @@ type environmentBlueprintManifestFile struct {
 func environmentBlueprintHeadKey(environmentID string) string {
 	return "/v1/records/environment-blueprints/" + environmentID + "/current"
 }
-
 func environmentBlueprintRevisionsPrefix(environmentID string) string {
 	return "/v1/records/environment-blueprints/" + environmentID + "/revisions/"
 }
-
 func environmentBlueprintRevisionPrefix(environmentID string, revisionID string) string {
 	return environmentBlueprintRevisionsPrefix(environmentID) + revisionID + "/"
 }
-
 func environmentBlueprintManifestKey(environmentID string, revisionID string) string {
 	return environmentBlueprintRevisionPrefix(environmentID, revisionID) + "manifest"
 }
-
 func environmentBlueprintFileKey(environmentID string, revisionID string, index int) string {
 	return environmentBlueprintRevisionPrefix(
 		environmentID,
@@ -201,12 +193,10 @@ type preparedEnvironmentBlueprintPoolChange struct {
 func (change preparedEnvironmentBlueprintPoolChange) changed() bool {
 	return len(change.environmentValue) != 0
 }
-
 func clearPreparedEnvironmentBlueprintPoolChange(change preparedEnvironmentBlueprintPoolChange) {
 	clear(change.environmentValue)
 	clear(change.registryValue)
 }
-
 func (repository *HierarchyRepository) prepareEnvironmentBlueprintPoolChangeAtRevision(
 	ctx context.Context,
 	root netip.Prefix,
@@ -298,18 +288,25 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
+	if claim.SourceKind != EnvironmentBlueprintSourceMutation {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"direct Environment desired publication requires mutation source authority",
+		)
+	}
 	return repository.publishEnvironmentDesiredRevisionWithTask(
 		ctx, netip.Prefix{}, environment.Record.NetworkPool,
 		project, environment, expectedHeadRevision, claim, revision, projection,
 		zoneChanges, serviceChanges, routeChanges, releaseGroupPreparation,
-		componentPreparation, attachPreparation, BlueprintScriptPublication{}, BlueprintReleasePublication{},
-		BlueprintRequirementGate{}, task, marker,
+		componentPreparation, attachPreparation, BlueprintBackupPolicyPreparation{},
+		BlueprintScriptPublication{}, BlueprintReleasePublication{},
+		BlueprintRequirementGate{}, task, marker, nil,
 	)
 }
 
 // PublishEnvironmentBlueprintDesiredRevision publishes the one authored
 // Blueprint Task with its prepared Script and candidate Release fragments.
-func (repository *HierarchyRepository) PublishEnvironmentBlueprintDesiredRevision(
+func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintDesiredRevision(
 	ctx context.Context,
 	environmentPool netip.Prefix,
 	desiredNetworkPool string,
@@ -325,18 +322,25 @@ func (repository *HierarchyRepository) PublishEnvironmentBlueprintDesiredRevisio
 	releaseGroupPreparation ReleaseGroupBlueprintPreparedMutation,
 	componentPreparation ComponentTaskPreparation,
 	attachPreparation BlueprintAttachTaskPreparation,
+	backupPreparation BlueprintBackupPolicyPreparation,
 	scriptPublication BlueprintScriptPublication,
 	releasePublication BlueprintReleasePublication,
 	requirementGate BlueprintRequirementGate,
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
+	if claim.SourceKind != EnvironmentBlueprintSourceApply {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Environment Blueprint publication requires apply source authority",
+		)
+	}
 	return repository.publishEnvironmentDesiredRevisionWithTask(
 		ctx, environmentPool, desiredNetworkPool,
 		project, environment, expectedHeadRevision, claim, revision, projection,
 		zoneChanges, serviceChanges, routeChanges, releaseGroupPreparation,
-		componentPreparation, attachPreparation, scriptPublication, releasePublication,
-		requirementGate, task, marker,
+		componentPreparation, attachPreparation, backupPreparation, scriptPublication, releasePublication,
+		requirementGate, task, marker, repository.transactions,
 	)
 }
 
@@ -356,11 +360,13 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	releaseGroupPreparation ReleaseGroupBlueprintPreparedMutation,
 	componentPreparation ComponentTaskPreparation,
 	attachPreparation BlueprintAttachTaskPreparation,
+	backupPreparation BlueprintBackupPolicyPreparation,
 	scriptPublication BlueprintScriptPublication,
 	releasePublication BlueprintReleasePublication,
 	requirementGate BlueprintRequirementGate,
 	task TaskRecord,
 	marker IdempotencyMarker,
+	blueprintTransactions environmentBlueprintTransactionStore,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -477,6 +483,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	defer requirementPublication.clear()
 	var componentPublication preparedComponentTaskPublication
 	var attachPublication preparedBlueprintAttachTaskPublication
+	var backupPublication preparedBlueprintBackupPolicyPublication
 	if publishDomain {
 		componentPublication, err = repository.prepareComponentTaskPublication(
 			ctx, effectiveEnvironment, task, zoneChanges, componentPreparation,
@@ -492,10 +499,18 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 			return IdempotencyTransactionResult{}, err
 		}
 		defer clearPreparedBlueprintAttachTaskPublication(attachPublication)
+		backupPublication, err = prepareBlueprintBackupPolicyPublication(
+			task, projection, attachPreparation, backupPreparation,
+		)
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		defer clearPreparedBlueprintBackupPolicyPublication(backupPublication)
 	} else if len(zoneChanges) != 0 || len(serviceChanges) != 0 || len(routeChanges) != 0 ||
 		!releaseGroupPreparation.isZero() ||
 		!componentTaskPreparationIsZero(componentPreparation) ||
 		!blueprintAttachTaskPreparationIsZero(attachPreparation) ||
+		!backupPreparation.IsZero() ||
 		!scriptPublication.IsZero() || !releasePublication.IsZero() {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
@@ -606,18 +621,18 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	conditions = append(conditions, fence.transactionConditions()...)
 	mutations = append(mutations, epochMutation)
 	classified := baseClassifier
-	baseConditionCount := len(conditions)
+	requirementBaseConditionCount := len(conditions)
 	conditions = append(conditions, requirementPublication.conditions...)
 	mutations = append(mutations, requirementPublication.mutations...)
 	requirementBaseClassifier := classified
 	classified = func(revision int64, values []*KeyValue) error {
-		if len(values) != baseConditionCount+len(requirementPublication.conditions) {
+		if len(values) != requirementBaseConditionCount+len(requirementPublication.conditions) {
 			return errs.New(errs.KindInternal, "Blueprint requirement publication compare evidence is incomplete")
 		}
-		if err := requirementBaseClassifier(revision, values[:baseConditionCount]); err != nil {
+		if err := requirementBaseClassifier(revision, values[:requirementBaseConditionCount]); err != nil {
 			return err
 		}
-		return requirementPublication.classify(values[baseConditionCount:])
+		return requirementPublication.classify(values[requirementBaseConditionCount:])
 	}
 	if publishDomain {
 		conditions = append(conditions, componentPublication.conditions...)
@@ -629,30 +644,33 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		conditions = append(conditions, attachPublication.conditions...)
 		mutations = append(mutations, attachPublication.mutations...)
 		classified = classifyEnvironmentBlueprintAttachPublication(classified, attachPublication)
-		baseConditionCount = len(conditions)
+		conditions = append(conditions, backupPublication.conditions...)
+		mutations = append(mutations, backupPublication.mutations...)
+		classified = classifyEnvironmentBlueprintBackupPolicyPublication(classified, backupPublication)
+		releaseGroupBaseConditionCount := len(conditions)
 		conditions = append(conditions, releaseGroupPreparation.conditions...)
 		mutations = append(mutations, releaseGroupPreparation.mutations...)
 		previousClassifier := classified
 		classified = func(revision int64, values []*KeyValue) error {
-			if len(values) != baseConditionCount+len(releaseGroupPreparation.conditions) {
+			if len(values) != releaseGroupBaseConditionCount+len(releaseGroupPreparation.conditions) {
 				return errs.New(errs.KindInternal, "Blueprint Release Group compare evidence is incomplete")
 			}
-			return previousClassifier(revision, values[:baseConditionCount])
+			return previousClassifier(revision, values[:releaseGroupBaseConditionCount])
 		}
-		baseConditionCount = len(conditions)
+		scriptBaseConditionCount := len(conditions)
 		conditions = append(conditions, scriptPublication.conditions...)
 		mutations = append(mutations, scriptPublication.mutations...)
 		scriptBaseClassifier := classified
 		classified = func(revision int64, values []*KeyValue) error {
-			if len(values) != baseConditionCount+len(scriptPublication.conditions) {
+			if len(values) != scriptBaseConditionCount+len(scriptPublication.conditions) {
 				return errs.New(errs.KindInternal, "Blueprint Script compare evidence is incomplete")
 			}
-			if err := scriptBaseClassifier(revision, values[:baseConditionCount]); err != nil {
+			if err := scriptBaseClassifier(revision, values[:scriptBaseConditionCount]); err != nil {
 				return err
 			}
-			return scriptPublication.classify(values[baseConditionCount:])
+			return scriptPublication.classify(values[scriptBaseConditionCount:])
 		}
-		baseConditionCount = len(conditions)
+		releaseBaseConditionCount := len(conditions)
 		conditions = append(conditions, releasePublication.conditions...)
 		mutations = append(mutations, releasePublication.mutations...)
 		if err := releasePublication.sources.ValidateStagedMutations(claim, mutations); err != nil {
@@ -660,13 +678,13 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		}
 		releaseBaseClassifier := classified
 		classified = func(revision int64, values []*KeyValue) error {
-			if len(values) != baseConditionCount+len(releasePublication.conditions) {
+			if len(values) != releaseBaseConditionCount+len(releasePublication.conditions) {
 				return errs.New(errs.KindInternal, "Blueprint Release compare evidence is incomplete")
 			}
-			if err := releaseBaseClassifier(revision, values[:baseConditionCount]); err != nil {
+			if err := releaseBaseClassifier(revision, values[:releaseBaseConditionCount]); err != nil {
 				return err
 			}
-			return releasePublication.classify(values[baseConditionCount:])
+			return releasePublication.classify(values[releaseBaseConditionCount:])
 		}
 	}
 	classifier := func(revision int64, values []*KeyValue) error {
@@ -689,12 +707,17 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := plan.enforceTransactionBounds(validateEnvironmentDesiredPublicationBudget); err != nil {
-		return IdempotencyTransactionResult{}, err
+	if !publishDomain {
+		if err := plan.enforceTransactionBounds(validateEnvironmentDesiredPublicationBudget); err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
 	}
 	idempotency, err := newIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
+	}
+	if publishDomain {
+		return idempotency.applyEnvironmentBlueprint(ctx, marker, plan, blueprintTransactions)
 	}
 	return idempotency.Apply(ctx, marker, plan)
 }

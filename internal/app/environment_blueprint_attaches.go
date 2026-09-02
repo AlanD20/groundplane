@@ -84,7 +84,6 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 	}
 	sort.Strings(names)
 	resolved := make(map[string]resolvedBlueprintAttach, len(names))
-	matchedCurrent := 0
 	for _, name := range names {
 		if err := etcd.ValidateAttachName(name); err != nil {
 			return preparedBlueprintAttaches{}, err
@@ -142,31 +141,32 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 			name: name, spec: spec, consumer: consumer, backingProject: backingProject,
 			backingEnvironment: backingEnvironment, backingService: backingService, adapter: adapter,
 		}
-		if _, exists := currentByName[name]; exists {
-			matchedCurrent++
+	}
+	if err := validateExistingBlueprintAttaches(names, resolved, currentByName); err != nil {
+		return preparedBlueprintAttaches{}, err
+	}
+	newCount := 0
+	for _, name := range names {
+		if _, exists := currentByName[name]; !exists {
+			newCount++
 		}
 	}
-	if matchedCurrent != 0 {
-		if matchedCurrent != len(names) {
-			return preparedBlueprintAttaches{}, errs.New(
-				errs.KindStateConflict,
-				"Blueprint Attach additions cannot be mixed with an existing authored Attach set",
-			)
-		}
-		if err := validateExistingBlueprintAttaches(names, resolved, currentByName); err != nil {
-			return preparedBlueprintAttaches{}, err
-		}
+	if newCount == 0 {
 		return prepared, nil
 	}
 
 	attachIDs := make(map[string]string, len(names))
 	for _, name := range names {
-		attachIDs[name] = namedID(ids.KindAttach, "attach:"+name)
+		if currentAttach, exists := currentByName[name]; exists {
+			attachIDs[name] = currentAttach.Record.ID
+		} else {
+			attachIDs[name] = namedID(ids.KindAttach, "attach:"+name)
+		}
 	}
 	identities := make(map[string]*controllerpkg.AttachPlanIdentity)
 	for _, name := range names {
 		item := resolved[name]
-		if item.spec.Credential.Mode != "new" || item.adapter.Manual() {
+		if _, exists := currentByName[name]; exists || item.spec.Credential.Mode != "new" || item.adapter.Manual() {
 			continue
 		}
 		identityName, err := attachProvisionIdentity(attachIDs[name], item.consumer.Desired.Name)
@@ -181,8 +181,8 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 			Database: identityName, Role: identityName, Password: password,
 		}
 	}
-	inputs := make([]etcd.EnvironmentBlueprintAttachCandidateInput, 0, len(names))
-	records := make(map[string]etcd.AttachRecord, len(names))
+	inputs := make([]etcd.EnvironmentBlueprintAttachCandidateInput, 0, newCount)
+	records := make(map[string]etcd.AttachRecord, newCount)
 	failed := true
 	defer func() {
 		if failed {
@@ -194,7 +194,7 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 	}()
 	for _, name := range names {
 		item := resolved[name]
-		if item.spec.Credential.Mode != "new" {
+		if _, exists := currentByName[name]; exists || item.spec.Credential.Mode != "new" {
 			continue
 		}
 		grantNames := append([]string(nil), item.spec.Grants...)
@@ -203,28 +203,43 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 		})
 		grantIDs := make([]string, 0, len(grantNames))
 		grantFacts := make([]AttachGrantFactParams, 0, len(grantNames))
+		retainedGrants := make([]etcd.Versioned[etcd.AttachRecord], 0, len(grantNames))
 		identity := identities[name]
 		for _, grantName := range grantNames {
 			grant, exists := resolved[grantName]
 			grantIdentity := identities[grantName]
-			if !exists || grant.spec.Credential.Mode != "new" || grantIdentity == nil ||
-				grant.backingService.Record.Desired.ID != item.backingService.Record.Desired.ID {
+			retainedGrant, retained := currentByName[grantName]
+			if !exists || grant.spec.Credential.Mode != "new" ||
+				grant.backingService.Record.Desired.ID != item.backingService.Record.Desired.ID ||
+				(!retained && grantIdentity == nil) {
 				return preparedBlueprintAttaches{}, errs.New(
 					errs.KindValidationFailed,
-					"Blueprint Attach grant must name a new credential owner on the same backing Service",
+					"Blueprint Attach grant must name a credential owner on the same backing Service",
 				)
 			}
 			grantID := attachIDs[grantName]
+			database := ""
+			if retained {
+				if err := service.attachFacts.ResolveReadyDatabase(ctx, retainedGrant, func(value string) error {
+					database = value
+					return nil
+				}); err != nil {
+					return preparedBlueprintAttaches{}, err
+				}
+				retainedGrants = append(retainedGrants, retainedGrant)
+			} else {
+				database = grantIdentity.Database
+			}
 			grantIDs = append(grantIDs, grantID)
 			grantFacts = append(grantFacts, AttachGrantFactParams{
 				AttachID: grantID,
 				Params: adapters.FactParams{
 					Host: item.backingService.Record.Desired.Name, Port: item.adapter.Port(),
-					Database: grantIdentity.Database, Role: identity.Role, Password: identity.Password,
+					Database: database, Role: identity.Role, Password: identity.Password,
 				},
 			})
 			identity.Grants = append(identity.Grants, controllerpkg.AttachPlanGrantIdentity{
-				AttachID: grantID, Database: grantIdentity.Database,
+				AttachID: grantID, Database: database,
 			})
 		}
 		var own adapters.FactParams
@@ -253,6 +268,7 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 		inputs = append(inputs, etcd.EnvironmentBlueprintAttachCandidateInput{
 			Record: record, Facts: encrypted, BackingProject: item.backingProject,
 			BackingEnvironment: item.backingEnvironment, BackingService: item.backingService,
+			RetainedGrantTargets: retainedGrants,
 		})
 		if identity != nil {
 			if err := prepared.facts.addOwner(name, own, grantNames, grantFacts, item.adapter); err != nil {
@@ -266,11 +282,21 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 	}
 	for _, name := range names {
 		item := resolved[name]
-		if item.spec.Credential.Mode != "existing" {
+		if _, exists := currentByName[name]; exists || item.spec.Credential.Mode != "existing" {
 			continue
 		}
 		owner, exists := records[item.spec.Credential.Attach]
-		if !exists || !owner.OwnsCredential() || owner.BackingServiceID != item.backingService.Record.Desired.ID {
+		var retainedOwner *etcd.Versioned[etcd.AttachRecord]
+		if !exists {
+			currentOwner, retained := currentByName[item.spec.Credential.Attach]
+			if retained {
+				owner = currentOwner.Record
+				retainedOwner = &currentOwner
+				exists = true
+			}
+		}
+		if !exists || !owner.OwnsCredential() || retainedOwner != nil && owner.Status != core.AttachReady ||
+			owner.BackingServiceID != item.backingService.Record.Desired.ID {
 			return preparedBlueprintAttaches{}, errs.New(
 				errs.KindValidationFailed,
 				"Blueprint Attach credential owner is unavailable",
@@ -289,6 +315,7 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 		inputs = append(inputs, etcd.EnvironmentBlueprintAttachCandidateInput{
 			Record: record, BackingProject: item.backingProject,
 			BackingEnvironment: item.backingEnvironment, BackingService: item.backingService,
+			RetainedCredentialOwner: retainedOwner,
 		})
 		prepared.facts.addAlias(name, item.spec.Credential.Attach)
 	}
@@ -322,7 +349,11 @@ func validateExistingBlueprintAttaches(
 ) error {
 	for _, name := range names {
 		item := resolved[name]
-		record := current[name].Record
+		versioned, exists := current[name]
+		if !exists {
+			continue
+		}
+		record := versioned.Record
 		ownerID := record.ID
 		if item.spec.Credential.Mode == "existing" {
 			owner, exists := current[item.spec.Credential.Attach]
@@ -458,7 +489,12 @@ func (overlay *blueprintAttachFactOverlay) ResolveFact(
 	if !candidate {
 		return overlay.fallback.ResolveFact(ctx, environmentID, reference, destinationSecret, consume)
 	}
-	set := overlay.sets[owner][reference.Grant]
+	sets, candidateOwner := overlay.sets[owner]
+	if !candidateOwner {
+		reference.Attach = owner
+		return overlay.fallback.ResolveFact(ctx, environmentID, reference, destinationSecret, consume)
+	}
+	set := sets[reference.Grant]
 	fact, found := set[reference.Key]
 	if !found {
 		return errs.New(errs.KindValidationFailed, "Blueprint Attach fact is not declared")
