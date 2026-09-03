@@ -222,16 +222,18 @@ func canonicalMembers(operationID string, input []Member) ([]Member, string, []S
 	bySource := make(map[string]Member)
 	for _, member := range members {
 		suffix := SourceSuffix(member.Reference.Source)
-		if prior, exists := bySource[suffix]; exists && !sameSourceEvidence(prior, member) {
-			return nil, "", nil, validation("source identity has conflicting evidence")
-		}
-		bySource[suffix] = member
 		if len(canonical) != 0 && ReverseKey(canonical[len(canonical)-1].Reference) == ReverseKey(member.Reference) {
 			if !sameMember(canonical[len(canonical)-1], member) {
 				return nil, "", nil, validation("source membership conflicts")
 			}
 			continue
 		}
+		if prior, exists := bySource[suffix]; exists && !sameSourceEvidence(prior, member) {
+			if !sourceEvidenceVariesByExecution(prior, member) {
+				return nil, "", nil, validation("source identity has conflicting evidence")
+			}
+		}
+		bySource[suffix] = member
 		canonical = append(canonical, member)
 	}
 	hash := sha256.New()
@@ -312,6 +314,16 @@ func sameSourceEvidence(left, right Member) bool {
 
 func sameMember(left, right Member) bool {
 	return left.Reference == right.Reference && sameSourceEvidence(left, right)
+}
+
+func sourceEvidenceVariesByExecution(left, right Member) bool {
+	kind := left.Reference.Source.Kind
+	return left.Reference.ScriptExecutionID != right.Reference.ScriptExecutionID &&
+		left.Reference.SourceOwnerID == right.Reference.SourceOwnerID &&
+		left.Mode == EvidenceExisting &&
+		right.Mode == EvidenceExisting &&
+		kind == right.Reference.Source.Kind &&
+		(kind == SourceNetwork || kind == SourceVolume)
 }
 
 func encodeCanonicalMember(member Member) ([]byte, error) {

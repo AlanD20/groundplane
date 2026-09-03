@@ -227,6 +227,156 @@ func TestBlueprintReleaseSourceMembersUsesStoredSecretEntryCiphertextDigest(t *t
 	}
 }
 
+// Rationale: distinct Blueprint hook executions retain their own immutable runner-snapshot evidence when they share
+// one logical Network and Volume.
+func TestBlueprintReleaseSourceMembersAcceptsSharedNetworkAndVolumeSnapshots(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	at := time.Date(2026, 9, 3, 9, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)
+	serviceID := ids.NewAt(ids.KindService, at, 2)
+	releaseID := ids.NewAt(ids.KindDeployment, at, 3)
+	revisionID := ids.NewAt(ids.KindTask, at, 4)
+	scriptID := ids.NewAt(ids.KindScript, at, 5)
+	operationID := ids.NewAt(ids.KindOperation, at, 6)
+	publicationID := scriptSourceReferenceExecutionID(at, 7)
+	networkID := ids.NewAt(ids.KindNetwork, at, 8)
+	volumeID := ids.NewAt(ids.KindVolume, at, 9)
+	service := ServiceRecord{
+		EnvironmentID: environmentID,
+		Desired:       core.Service{ID: serviceID},
+		Runtime: core.ServiceRuntime{
+			ServiceID: serviceID, RuntimeIntent: core.ServiceRuntimeIntentRunning,
+		},
+	}
+	serviceValue, err := EncodeServiceRuntimeRecordStorage(service)
+	if err != nil {
+		t.Fatalf("EncodeServiceRuntimeRecordStorage() error = %v", err)
+	}
+	serviceDigest := sha256.Sum256(serviceValue)
+	store := &releasePlanningTestStore{memoryHierarchyStore: newMemoryHierarchyStore()}
+	seed, err := store.Transact(ctx, nil, []Mutation{{
+		Type: MutationPut, Key: releaseIntentStagingKey(publicationID, releaseID), Value: []byte("release intent"),
+	}})
+	if err != nil || !seed.Succeeded {
+		t.Fatalf("seed Release intent = %#v, %v", seed, err)
+	}
+	makeHook := func(idSeed byte) ReleaseHookExecutionPublication {
+		t.Helper()
+		executionID := scriptSourceReferenceExecutionID(at, idSeed)
+		snapshotID := scriptSourceReferenceExecutionID(at, idSeed+1)
+		snapshot := &agentpb.ResolvedRunnerSnapshot{
+			SnapshotId: snapshotID, ScriptExecutionId: executionID,
+			EnvironmentId: environmentID, ServiceId: serviceID, ReleaseId: releaseID,
+			ServiceSource: &agentpb.ScriptSourceAuthority{Staged: &agentpb.ScriptStagedSourceAuthority{
+				EnvironmentId: environmentID, RevisionId: revisionID, RenderGeneration: 1,
+				FixedReadRevision: uint64(seed.Revision), CanonicalValueSha256: serviceDigest[:],
+			}},
+			Networks: []*agentpb.ScriptRunnerNetwork{{NetworkId: networkID}},
+			Mounts:   []*agentpb.ScriptRunnerMount{{SourceId: volumeID}},
+		}
+		snapshotValue, marshalErr := proto.Marshal(snapshot)
+		if marshalErr != nil {
+			t.Fatalf("proto.Marshal(runner snapshot) error = %v", marshalErr)
+		}
+		snapshotDigest := sha256.Sum256(snapshotValue)
+		execution := ScriptExecutionRecord{
+			ID: executionID, SnapshotID: snapshotID, OperationID: operationID,
+			ScriptID: scriptID, ScriptGeneration: 1, EnvironmentID: environmentID,
+			ServiceID: serviceID, ReleaseID: releaseID, Snapshot: snapshotValue,
+			SnapshotSHA256: hex.EncodeToString(snapshotDigest[:]),
+			BodySHA256:     hex.EncodeToString(sha256.New().Sum(nil)),
+		}
+		storedSnapshotValue, encodeErr := encodeBlueprintReleaseHookSnapshot(execution)
+		if encodeErr != nil {
+			t.Fatalf("encodeBlueprintReleaseHookSnapshot() error = %v", encodeErr)
+		}
+		snapshotSeed, seedErr := store.Transact(ctx, nil, []Mutation{{
+			Type: MutationPut, Key: scriptRunnerSnapshotKey(snapshotID), Value: storedSnapshotValue,
+		}})
+		if seedErr != nil || !snapshotSeed.Succeeded {
+			t.Fatalf("seed runner snapshot = %#v, %v", snapshotSeed, seedErr)
+		}
+		return ReleaseHookExecutionPublication{
+			Sources: ScriptExecutionSources{
+				Revision: seed.Revision,
+				Service:  Versioned[ServiceRecord]{Record: service},
+				Script: Versioned[ScriptRecord]{Record: ScriptRecord{
+					ScriptSetGeneration: revisionID,
+				}},
+				BodyGeneration: Versioned[ScriptBodyGenerationRecord]{Revision: seed.Revision},
+			},
+			Execution: execution, SnapshotRevision: snapshotSeed.Revision,
+		}
+	}
+	hooks := []ReleaseHookExecutionPublication{makeHook(10), makeHook(20)}
+	members, err := (&ReleaseLedger{store: store}).BlueprintReleaseSourceMembers(
+		ctx,
+		VersionedReleaseManifest{
+			Record:       ReleaseStagedManifest{PublicationID: publicationID, OperationID: operationID},
+			ReadRevision: seed.Revision,
+		},
+		hooks,
+	)
+	if err != nil {
+		t.Fatalf("BlueprintReleaseSourceMembers() error = %v", err)
+	}
+	physicalMembers := make([]ScriptSourcePreparationMember, 0, 4)
+	for _, member := range members {
+		if member.Reference.Source.Kind == ScriptSourceNetwork ||
+			member.Reference.Source.Kind == ScriptSourceVolume {
+			physicalMembers = append(physicalMembers, member)
+		}
+	}
+	if len(physicalMembers) != 4 {
+		t.Fatalf("physical source membership count = %d, want 4", len(physicalMembers))
+	}
+	expectedSnapshots := map[string]ReleaseHookExecutionPublication{
+		hooks[0].Execution.ID: hooks[0],
+		hooks[1].Execution.ID: hooks[1],
+	}
+	networkCount, volumeCount := 0, 0
+	for _, member := range physicalMembers {
+		hook := expectedSnapshots[member.Reference.ScriptExecutionID]
+		if member.Evidence.Existing == nil ||
+			member.Evidence.Existing.SourceKey != scriptRunnerSnapshotKey(hook.Execution.SnapshotID) ||
+			member.Reference.SourceModRevision != hook.SnapshotRevision ||
+			member.Reference.SourceDigest != hook.Execution.SnapshotSHA256 {
+			t.Fatalf("execution-specific physical source evidence = %#v", member)
+		}
+		switch member.Reference.Source.Kind {
+		case ScriptSourceNetwork:
+			networkCount++
+			if member.Reference.Source.NetworkID != networkID {
+				t.Fatalf("Network identity = %#v, want %q", member.Reference.Source, networkID)
+			}
+		case ScriptSourceVolume:
+			volumeCount++
+			if member.Reference.Source.VolumeID != volumeID {
+				t.Fatalf("Volume identity = %#v, want %q", member.Reference.Source, volumeID)
+			}
+		}
+	}
+	if networkCount != 2 || volumeCount != 2 {
+		t.Fatalf("physical source identity counts = Network %d, Volume %d, want 2 each", networkCount, volumeCount)
+	}
+	if hooks[0].SnapshotRevision == hooks[1].SnapshotRevision ||
+		hooks[0].Execution.SnapshotSHA256 == hooks[1].Execution.SnapshotSHA256 {
+		t.Fatal("runner snapshots did not retain distinct revisions and digests")
+	}
+	authority, err := newScriptSourceReferenceAuthority(store)
+	if err != nil {
+		t.Fatalf("newScriptSourceReferenceAuthority() error = %v", err)
+	}
+	prepared, err := authority.Prepare(ctx, operationID, physicalMembers)
+	if err != nil {
+		t.Fatalf("Prepare(shared Network and Volume snapshots) error = %v", err)
+	}
+	if prepared.membershipCount != 4 {
+		t.Fatalf("prepared physical source membership count = %d, want 4", prepared.membershipCount)
+	}
+}
+
 func TestBlueprintStagedSourceEvidenceRejectsChangedCandidateBytes(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 9, 2, 14, 0, 0, 0, time.UTC)

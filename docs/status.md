@@ -602,15 +602,19 @@ Environment Blueprint and direct Route create/edit publication now reject silent
 
 ## Runner-snapshot Network and Volume Script source authority (2026-09-03)
 
-Blueprint post-deploy Script preparation preserves distinct logical Network and
-Volume memberships against the already-prepared immutable runner snapshot. Each
-membership retains the snapshot's exact key, positive prepared revision, and
-canonical digest, and validation proves the requested Network or Volume source
-id is present. Final Blueprint publication no longer writes or fences the
-Environment applied Compose projection; its exact predecessor or absence stays
-authoritative until successful terminal Task acknowledgement promotes the
-sealed candidate. Focused source and publication proofs pass; exact
-reference-host Blueprint and Script acceptance remains pending.
+Blueprint post-deploy Script preparation preserves one logical Network and
+Volume membership per execution against that execution's already-prepared
+immutable runner snapshot. Multiple executions may share the same logical
+Network or Volume while retaining distinct snapshot keys, positive prepared
+revisions, and canonical digests only when the stable source owner is identical
+and both witnesses are existing evidence. Same-execution conflicts, cross-owner
+evidence, staged evidence, and every other source family remain strict. The
+fresh reference-host Blueprint exposed the former cross-execution rejection;
+focused source-reference race proof and the real Blueprint construction
+regression now pass. Final Blueprint publication still leaves the Environment
+applied Compose predecessor or absence authoritative until successful terminal
+Task acknowledgement. Exact reference-host Blueprint and Script acceptance
+remains pending.
 
 ## Unified Blueprint final-publication contract correction (2026-09-02)
 
