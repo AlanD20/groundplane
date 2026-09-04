@@ -74,6 +74,10 @@ func renderServiceProxyTopology(
 				return nil, errs.New(errs.KindValidationFailed, "blue-green release requires an addressable TCP service")
 			}
 			if identity.Strategy == domain.StrategyRecreate {
+				replicas := authored.GetScale()
+				if replicas <= 0 {
+					return nil, errs.New(errs.KindValidationFailed, "service replicas must be positive")
+				}
 				authored.Image = identity.Image
 				if identity.Image == "" {
 					authored.Image = input.Project.Services[name].Image
@@ -91,7 +95,13 @@ func renderServiceProxyTopology(
 					return nil, err
 				}
 				project.Services[name] = authored
-				result = append(result, &agentpb.ComposeService{ServiceId: serviceID, ComposeName: name, ExpectedLabels: expected, ExpectedReplicas: expectedRuntimeReplicas(active, 1), HasHealthcheck: authored.HealthCheck != nil && !authored.HealthCheck.Disable, Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON, OwnerComponentId: composeServiceComponentOwner(input.Identities.Services, serviceID)})
+				result = append(result, &agentpb.ComposeService{
+					ServiceId: serviceID, ComposeName: name, ExpectedLabels: expected,
+					ExpectedReplicas: expectedRuntimeReplicas(active, replicas),
+					HasHealthcheck:   authored.HealthCheck != nil && !authored.HealthCheck.Disable,
+					Role:             agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
+					OwnerComponentId: composeServiceComponentOwner(input.Identities.Services, serviceID),
+				})
 				continue
 			}
 			return nil, errs.New(errs.KindValidationFailed, "release strategy is unsupported")
@@ -99,6 +109,9 @@ func renderServiceProxyTopology(
 		ports, err := domain.ProxyPorts(exposures)
 		if err != nil {
 			return nil, err
+		}
+		if identity.Strategy == domain.StrategyBlueGreen && authored.GetScale() != 1 {
+			return nil, errs.New(errs.KindValidationFailed, "blue-green release requires exactly one replica")
 		}
 		activeTarget := identity.ServingTarget
 		activeRelease := identity.ServingReleaseID
