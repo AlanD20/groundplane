@@ -379,8 +379,8 @@ the Console follows and must stay authoritative.
 ### Minimum hosting floor
 
 The first hosting milestone has two sequential gates. This is a documentation
-contract correction; runtime alignment, clean frontend/API/CLI cutover, and
-acceptance proof remain pending.
+contract correction; runtime alignment, clean frontend/API/CLI cutover,
+capability-ledger acceptance, and acceptance proof remain pending.
 
 **Gate A — disposable first-hosting acceptance.** Groundplane bootstraps on an
 already provisioned supported Linux/Docker host with a Groundplane release,
@@ -1209,8 +1209,35 @@ tenants and one database.
   historical Release that completed successfully and reached serving with that
   exact tag and a tag different from its current serving Release; omission
   selects the newest such eligible Release with a different tag for each
-  member. If any member has no
-  eligible source, the entire group rollback is rejected before publication.
+  member. The Release Group Rollback dialog has a real **Preview** action. The
+  Controller resolves every member from one fixed revision and returns each
+  selected Service, Release, and tag in exact group order. A missing, expired,
+  ineligible, or wrong-member source rejects the whole preview. Preview is
+  read-only: it creates no Task, mutation, idempotency claim, or durable preview
+  record, and it never asks the Console to reconstruct eligibility from lossy
+  Release or Task history.
+
+  The Console requires a successful preview for the current optional-tag input
+  before confirmation and sends that preview's revision with rollback. Any
+  exact tag-input change invalidates the preview; loading and selection errors
+  remain visible. A stale revision returns `state.conflict`, invalidates the
+  displayed preview, and requires a fresh preview and confirmation. Direct API
+  and CLI rollback may omit the preview revision and select from current state.
+  With a supplied preview revision, the Controller reselects all sources at
+  that fixed revision and publishes only if the Release Group desired record,
+  Environment mutation epoch, and Release publication fences still match.
+  Unrelated writes outside that authority do not stale the preview. If any
+  member has no eligible source, the entire group rollback is rejected before
+  publication.
+
+  Optional tag presence is exact. An omitted tag means implicit selection; a
+  supplied empty, blank, or surrounding-whitespace tag is invalid and is never
+  trimmed into omission. The persisted group deploy tag is never a rollback
+  fallback. Rollback accepts no client-selected Release ids, compatibility
+  alias, alternate eligibility control, or preview persistence. An accepted
+  idempotent replay remains the original replay even if its preview revision is
+  now stale; changing exact tag presence, tag value, or preview revision under
+  that key is an idempotency mismatch.
   The group `on_failure` overrides member defaults for aggregate compensation.
   Blueprint lifecycle edges
   are frozen at the same revision; publication rejects a group whose declared

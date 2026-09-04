@@ -99,8 +99,8 @@ Verb inventory (locked):
     CRUD:      list · show · create · add · edit · remove     (alias: delete)
     Lifecycle: start · stop · destroy
     Toggle:    enable · disable                                (component)
-    Ops:       deploy · rollback · backup · restore · attach · detach ·
-               run · logs · retry · apply
+    Ops:       deploy · rollback-preview · rollback · backup · restore ·
+               attach · detach · run · logs · retry · apply
     Config:    show · set       (`config show|set` addresses the Agent or
                                  component config singleton; backup policy
                                  uses `policy show|set`)
@@ -162,6 +162,7 @@ Command tree:
     │                    add <name> [--tag <tag>] [--on-failure switch_back|leave_active]
     │                    edit <name> [--tag <tag>] [--on-failure switch_back|leave_active]
     │                    deploy <name> [--tag <tag>]
+    │                    rollback-preview <name> [--tag <tag>]
     │                    rollback <name> [--tag <tag>] | remove <name>
     ├── backup            policy show
     │                    policy set --frequency <UTC-calendar> --keep N
@@ -592,7 +593,7 @@ attachment on every authorized request.
 | backing-service | `GET /backing-services` and `GET /backing-services/{project_id}` → `200` · protected `POST /backing-services` body `{slug,name,description?,adapter:"postgres:16"\|"valkey:9",network_pool,zone:{name,subnet,internal}}` → `201 {backing_service,task_id}` atomically creates the backing Project, `main` Environment, dedicated backing-owned Zone, adapter Service, adapter data Volume, and Agent Task; the Zone subnet must be inside the Environment pool and globally unreserved · bodyless `POST /backing-services/{project_id}/start\|stop\|destroy` → `202 {task_id}` and delegates to the facade's immutable adapter Service; there is no Backing-service delete endpoint, existing-Zone create branch, uploaded Blueprint, or omitted subnet default |
 | environment | `GET /environments` (`?project=`), `GET /environments/{id}`, and `GET /environments/{id}/logs?tail=0..1000&follow=true|false` → `200` · `POST /environments` body `{project_id, name, network_pool}` → `202 {task_id}` and atomically publishes the provisioning Environment, globally exclusive pool reservation, and directory-creation Task · `PATCH /environments/{id}` body `{network_pool}` → `200` only when the replacement contains every Zone and overlaps no reservation · `POST /environments/{id}/rename` → `200` · `GET /environments/{id}/blueprint` → `200 {environment_id,revision,document}` plus `ETag` · side-effect-free `POST /environments/{id}/blueprint/validate` with `If-Match` and a multipart closed bundle → `200 {revision,changes}` · revision-fenced `PUT /environments/{id}/blueprint` with `If-Match`, ordered sources, explicit interpolation, and deterministic file-part identities → `202 {task_id}` · destructive `DELETE /environments/{id}` → `202 {task_id}`, retaining the pool fence until physical network cleanup succeeds and retaining Connector credentials/key material until every Recovery Point and orphan object is checkpointed, deleted, and verified absent |
 | service | `GET /services` (`?environment=`), `GET /services/{id}`, and `GET /services/{id}/logs?tail=0..1000&follow=true|false` (non-resumable SSE) → `200` · `POST /services` → `201` · `PATCH /services/{id}` → `200` · `DELETE /services/{id}` and `POST /services/{id}/deploy\|rollback\|start\|stop\|destroy` → `202 {task_id}`; native `replicas` is an integer `N >= 1`; recreate preserves `N` through deploy, rollback, restart, and reapply, while blue-green rejects `N > 1` before mutation; lifecycle actions set `runtime_intent` to `running\|stopped\|absent`; `service show <name>` includes the release ledger and runtime intent |
-| release-group | `GET /release-groups` (`?environment_id=` with opaque revision cursors) and `GET /release-groups/{id}` → `200` · `POST /release-groups` → `201` · `PATCH /release-groups/{id}` → `200` · destructive `DELETE /release-groups/{id}` and `POST /release-groups/{id}/deploy\|rollback` with optional `{tag}` → `202 {task_id}`; create body includes an exact ordered 2..32 Service membership, optional persisted `tag`, and `on_failure: switch_back\|leave_active`, default `switch_back`; for group deploy, the request tag wins over the persisted group tag and absence of both is rejected, while each member resolves the selected tag against its own declared image, pins its exact immutable host-local Docker image identity before workload mutation, and retains independent Release history; registry or manifest digest metadata is optional and never substitutes for that local identity; group rollback never consults the persisted default: an optional request tag independently selects each member's newest eligible historical Release that completed successfully and reached serving with that exact tag and a tag different from its current serving Release, omission selects each member's newest such eligible different-tag Release, and any member without an eligible source rejects the whole group before publication; the group failure policy overrides member defaults; execution is ordered and coordinated, not simultaneous or atomic; selected hooks run once per logical Service, never per replica, with no group-hook resource; retry preserves the same operation/candidate lineage |
+| release-group | `GET /release-groups` (`?environment_id=` with opaque revision cursors) and `GET /release-groups/{id}` → `200` · read-only `GET /release-groups/{id}/rollback-preview` with an optional presence-aware `tag` query → `200 ReleaseGroupRollbackPreview` · `POST /release-groups` → `201` · `PATCH /release-groups/{id}` → `200` · destructive `DELETE /release-groups/{id}` and `POST /release-groups/{id}/deploy\|rollback` → `202 {task_id}`; rollback accepts `ReleaseGroupRollbackRequest`, while create and deploy retain their existing request contracts; create includes an exact ordered 2..32 Service membership, optional persisted `tag`, and `on_failure: switch_back\|leave_active`, default `switch_back`; for group deploy, the request tag wins over the persisted group tag and absence of both is rejected, while each member resolves the selected tag against its own declared image, pins its exact immutable host-local Docker image identity before workload mutation, and retains independent Release history; registry or manifest digest metadata is optional and never substitutes for that local identity; group rollback never consults the persisted default and rejects the whole group if any ordered member has no valid source; the group failure policy overrides member defaults; execution is ordered and coordinated, not simultaneous or atomic; selected hooks run once per logical Service, never per replica, with no group-hook resource; retry preserves the same operation/candidate lineage |
 | attach | `GET /attaches?environment={id}` (the Environment filter is required; items include one `service_id`, stable backing ownership, `credential:{mode:"new"}` or `credential:{mode:"existing",attach_id}`, plus fact keys and secret classification, never values) · `GET /attaches/{id}/facts/{key}?grant_attach_id={id}` → `200 {value}` as the explicit Console/CLI/API reveal operation; dependent existing-credential Attaches resolve through their credential owner · `POST /attaches` body `{service_id,backing_service_id,name?,credential:{mode:"new"|"existing",attach_id?},grant_attach_ids?}` → `202 {task_id}`; `credential.mode` is required, `new` rejects `attach_id`, `existing` requires a ready credential-owning Attach in the same consumer Environment and Backing Service, and only `new` accepts grants · `POST /attaches/{id}/rename` body `{name}` → `200` · `DELETE /attaches/{id}` → `202 {task_id}`; dependent detach removes only its network edge, owner detach deprovisions and is `resource.in_use` while dependents exist; there is no attach detail endpoint |
 | zone | `GET /zones?environment={id}` (required), `GET /zones/{id}`, and `GET /zones/{id}/removal-impact` → `200`; the impact read returns the exact affected Attaches, Services, provisioned databases, and an opaque impact token · `POST /zones` body `{environment_id, name, subnet, internal}` → `201`, deriving `{owner_kind, owner_id}` · `DELETE /zones/{id}?impact_token={token}` → `202 {task_id}`; ordinary removal rejects an enabled Caddy reservation, removes the managed network, strips that Zone from every Service membership, and releases the subnet only on successful acknowledgement, while backing-owned removal requires the current impact token and runs the Attach cascade · Zone fields are immutable and there is no PATCH endpoint |
 | route | `GET /routes?environment={id}` (required) and `GET /routes/{id}` → `200` · `POST /routes` body `{environment_id, host?, path?, exposure, target_service_id, target_port}` → `202 {route,task_id}` · `PATCH /routes/{id}` body `{exposure}` → `202 {route,task_id}` · `DELETE /routes/{id}` → `202 {task_id}`; target identity, port, host, and path are immutable; status is exactly `unserved` (no enabled provider), `pending` (desired generation awaits provider application), `served` (latest successful pinned provider observation matches desired generation), or `degraded` (latest provider apply failed and desired is unconfirmed); without an enabled HTTP router, mutation Tasks complete as desired-only with no Agent effect |
@@ -609,6 +610,73 @@ attachment on every authorized request.
 | activity | `GET /activity` accepts the exact Task-list query and returns the exact same fixed-revision page; Task and Activity cursors are interchangeable |
 | host | `GET /host` → `200` (includes etcd status; etcd is host-level, not a component) |
 | agent | `POST /agents` → `202 {task_id}` creates the local Agent and Controller-managed container without returning credentials and requires authenticated `Ready` within 120 seconds · `GET /agents`, `GET /agents/{id}`, and `GET /agents/{id}/config` → `200` · `PUT /agents/{id}/config` → `200` · bodyless `POST /agents/{id}/update` → `202 {task_id}` uses configured `agent.image`, requires an idle Agent, rotates generation/token, waits 120 seconds for Ready, and rolls back the prior digest inside a 300-second Task · `DELETE /agents/{id}` → `202 {task_id}` has a 120-second Controller Task deadline, stops assignments, aborts active tasks with `agent_removed`, revokes the token, waits for offline, then removes the container and record; Agent is not a Component and has no Component projection |
+
+### Release Group rollback preview
+
+`release-group.rollback-preview` is a distinct operator-facing capability, not
+`release-group rollback --preview`. Its exact CLI command is:
+
+```text
+groundplane --env <environment> [--id] release-group rollback-preview <group> [--tag <tag>]
+```
+
+Flag presence is preserved. The exact REST operation is
+`GET /release-groups/{release_group_id}/rollback-preview` with an optional
+presence-aware `tag` query parameter. The Console surface is the Preview action
+inside the Release Group Rollback dialog.
+
+The successful response is exactly:
+
+```json
+{
+  "release_group_id": "release_group_id",
+  "revision": "123456789",
+  "sources": [
+    {
+      "service_id": "service_id",
+      "release_id": "dep_id",
+      "tag": "historical-tag"
+    }
+  ]
+}
+```
+
+`revision` is a positive canonical decimal int64 encoded as a JSON string so
+JavaScript cannot lose precision. `sources` contains all 2 through 32 members
+in exact Release Group order. The response has no required manifest digest.
+The Controller reads one fixed revision and uses the sole rollback selector for
+every member. A missing, expired, ineligible, or wrong-member source rejects the
+whole preview. Preview creates no mutation, Task, idempotency claim, or durable
+preview record.
+
+`ReleaseGroupRollbackRequest` is distinct from the preview response and is
+exactly `{tag?:string,preview_revision?:string}`. A bodyless request and `{}`
+both perform direct current-state selection; this is the primary request
+contract, not a compatibility path. When `preview_revision` is present, it is
+the same positive canonical decimal int64 string shape as the response. The
+Controller reselects every source at that fixed revision and compares the
+current Release Group desired record, Environment mutation epoch, and existing
+Release publication fences before publication. Compaction, stale evidence, or
+changed authority returns `409 state.conflict`; unrelated global writes outside
+that authority do not stale the request. Omitted `preview_revision` selects at
+the current revision.
+
+The `tag` query, CLI flag, and request field all preserve presence. Omission
+means implicit selection. A supplied empty, blank, or surrounding-whitespace
+value is `400 request.invalid`; it is never trimmed into omission. The persisted
+group deploy default is never a rollback fallback. The request accepts no
+client-selected Release ids, compatibility aliases, or new eligibility knobs.
+Its idempotency canonical form includes exact `tag` presence and value plus
+`preview_revision` presence and value. An exact accepted replay remains a
+replay even when that revision is now stale; a changed payload under the same
+key returns `400 idempotency.mismatch`.
+
+The Console requires a successful preview for the current exact tag input and
+sends its revision on confirmation. An exact tag change invalidates the
+preview; an untouched empty control emits no tag. Loading and errors stay
+visible. A stale `409` invalidates the preview and requires a fresh preview and
+operator reconfirmation. The Console never fabricates eligible sources from
+lossy history.
 
 Backup restore targets only the original surviving target; proof may use a
 disposable Environment, but there is no scratch-target or whole-host import

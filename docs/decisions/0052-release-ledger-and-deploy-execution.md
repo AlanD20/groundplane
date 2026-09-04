@@ -833,6 +833,26 @@ Release, using the single-Service rollback rule. The persisted group default is
 not a rollback fallback. Failure to select an eligible source for any member
 rejects the entire group before publication.
 
+Release Group rollback source resolution has one authority:
+`ReleaseLedger.SelectRollback`. The read-only rollback-preview operation calls
+that selector for all 2 through 32 members at one fixed revision and returns the
+selected Service, Release, and tag in exact normalized order. A missing,
+expired, ineligible, or wrong-member result rejects the whole preview. Preview
+does not create a Task, mutation, idempotency claim, durable record, or
+publication digest.
+
+Rollback may carry the preview's fixed revision. When it does, the Controller
+reselects every source at that revision and compares the current Release Group
+desired record, Environment mutation epoch, and the Release publication fences
+from section 7. Compaction, stale evidence, or changed authority returns
+`state.conflict` before publication. Writes outside those authorities do not
+stale the preview. Omission selects at the current revision. The request never
+accepts client-selected Release ids, an alternate eligibility predicate, a
+compatibility alias, or a persisted preview.
+
+This preview-and-confirmation workflow changes no desired Blueprint grammar;
+`x-gp-release-groups` remains the sole desired-state extension.
+
 One group operation allocates one candidate Release per member and publishes:
 
 - one ordered immutable group manifest,
@@ -967,6 +987,7 @@ Release and a Task have no slug, so their operands are always stable ids.
 | `release-group.edit` | `groundplane --env <environment> [--id] release-group edit <group> [--name <new-name>] [--services <comma-separated-services>] [--order <comma-separated-services>] [--tag <tag>] [--clear-tag] [--on-failure switch_back\|leave_active]` |
 | `release-group.remove` | `groundplane --env <environment> [--id] release-group remove <group>` |
 | `release-group.deploy` | `groundplane --env <environment> [--id] release-group deploy <group> [--tag <tag>]` |
+| `release-group.rollback-preview` | `groundplane --env <environment> [--id] release-group rollback-preview <group> [--tag <tag>]` |
 | `release-group.rollback` | `groundplane --env <environment> [--id] release-group rollback <group> [--tag <tag>]` |
 
 For `release-group add`, `--services` contains 2 through 32 unique operands and
@@ -983,6 +1004,11 @@ exclusive. `--name` and `--on-failure` replace their current values.
 `release-group remove` deletes the Release Group resource. It does not remove a
 member Service. There are no `release-group create` or `release-group delete`
 commands and no member-scoped add or remove commands.
+
+`release-group rollback-preview` is a distinct command and capability, not a
+`release-group rollback --preview` mode. CLI `--tag` presence is preserved:
+omission selects implicitly, while a supplied empty, blank, or surrounding-
+whitespace value is invalid and is never normalized into omission.
 
 #### REST request and response types
 
@@ -1053,11 +1079,48 @@ JSON `null` clears it. `environment_id` and Release Group id are immutable.
 }
 ```
 
-`ReleaseGroupRollbackRequest` has the same closed optional-tag shape. `{}`
-selects each member's newest eligible historical Release that completed
-successfully, reached serving, and has a tag different from its current serving
-Release. An explicit `tag` adds exact tag equality to that selection. It never
-consults the persisted group deploy default.
+`ReleaseGroupRollbackRequest` is a distinct request type:
+
+```json
+{
+  "tag": "optional-string",
+  "preview_revision": "optional-positive-canonical-decimal-int64-string"
+}
+```
+
+Both fields are optional. A bodyless request and `{}` select directly at the
+current revision; both are the primary contract, not a compatibility path. An
+explicit `tag` adds exact tag equality to selection. `preview_revision`
+reselects all members from that fixed revision and applies the section 14
+authority comparisons. It never consults the persisted group deploy default.
+The request accepts no Release ids or eligibility controls.
+
+Tag presence is exact in both the preview query and rollback request. A
+supplied empty, blank, or surrounding-whitespace string is invalid and is not
+trimmed into omission. The idempotency canonical request includes exact `tag`
+presence and value and exact `preview_revision` presence and value. An exact
+accepted replay returns the accepted response even when its preview revision is
+now stale. A changed payload under the same key is `idempotency.mismatch`.
+
+`ReleaseGroupRollbackPreview` is:
+
+```json
+{
+  "release_group_id": "release_group_id",
+  "revision": "123456789",
+  "sources": [
+    {
+      "service_id": "service_id",
+      "release_id": "dep_id",
+      "tag": "historical-tag"
+    }
+  ]
+}
+```
+
+`revision` is a positive canonical decimal int64 encoded as a JSON string to
+avoid JavaScript precision loss. `sources` contains all group members in exact
+normalized order. No manifest digest is required.
 
 `ReleaseTaskAccepted` is:
 
@@ -1128,6 +1191,7 @@ and fixed `revision`. Limit defaults to 50 and is valid from 1 through 200.
 | `release-group.edit` | `PATCH /v1/release-groups/{release_group_id}` | `ReleaseGroupEditRequest` | `200 ReleaseGroupDetail` |
 | `release-group.remove` | `DELETE /v1/release-groups/{release_group_id}` | empty body | `202 ReleaseGroupMutationAccepted` |
 | `release-group.deploy` | `POST /v1/release-groups/{release_group_id}/deploy` | `ReleaseGroupDeployRequest`; `{}` uses the desired default | `202 ReleaseGroupTaskAccepted` |
+| `release-group.rollback-preview` | `GET /v1/release-groups/{release_group_id}/rollback-preview` | optional presence-aware `tag` query | `200 ReleaseGroupRollbackPreview` |
 | `release-group.rollback` | `POST /v1/release-groups/{release_group_id}/rollback` | `ReleaseGroupRollbackRequest`; `{}` selects each member's newest eligible completed-and-served different-current-tag Release | `202 ReleaseGroupTaskAccepted` |
 
 The Service rollback request always seals `on_failure=switch_back`. Release
@@ -1151,7 +1215,8 @@ Group rollback tag is a historical-source selector only.
 | `release-group.edit` | Release Group detail Edit dialog for mutable name, complete membership, order, default tag, and on-failure policy |
 | `release-group.remove` | Release Group detail Remove action that deletes the group resource |
 | `release-group.deploy` | Release Group detail Deploy dialog with optional tag override |
-| `release-group.rollback` | Release Group detail Rollback action with an optional historical tag selector, showing every member's selected source before confirmation |
+| `release-group.rollback-preview` | Preview action within the Release Group detail Rollback dialog; requires the current exact tag input, shows loading and errors, and renders all returned sources in group order |
+| `release-group.rollback` | Release Group detail Rollback confirmation; requires a successful current-input preview, sends its revision, invalidates on any exact tag change, and on stale `409` requires a fresh preview and reconfirmation |
 
 #### Errors
 
@@ -1184,6 +1249,7 @@ The exact error set per operation is:
 | `release-group.edit` | `400 request.invalid`, `422 release_group.invalid_members`, `422 release_group.invalid_order`, `400 idempotency.mismatch`, `401 auth.unauthenticated`, `403 auth.forbidden`, `404 environment.not_found`, `404 service.not_found`, `404 release_group.not_found`, `409 resource.in_use`, `409 state.conflict`, `409 idempotency.in_progress`, `413 request.too_large` |
 | `release-group.remove` | `400 request.invalid`, `400 idempotency.mismatch`, `401 auth.unauthenticated`, `403 auth.forbidden`, `404 environment.not_found`, `404 release_group.not_found`, `409 resource.in_use`, `409 state.conflict`, `409 idempotency.in_progress` |
 | `release-group.deploy` | `400 request.invalid`, `422 strategy.not_implemented`, `422 release.deadline_too_short`, `422 release.plan_too_large`, `422 release_group.tag_required`, `400 idempotency.mismatch`, `401 auth.unauthenticated`, `403 auth.forbidden`, `404 environment.not_found`, `404 service.not_found`, `404 release_group.not_found`, `409 resource.in_use`, `409 state.conflict`, `409 release.recovery_required`, `409 idempotency.in_progress`, `413 request.too_large` |
+| `release-group.rollback-preview` | `400 request.invalid`, `401 auth.unauthenticated`, `403 auth.forbidden`, `404 environment.not_found`, `404 service.not_found`, `404 release_group.not_found`, `409 state.conflict`, `409 rollback.no_previous_release`, `409 rollback.source_expired` |
 | `release-group.rollback` | `400 request.invalid`, `422 release.deadline_too_short`, `422 release.plan_too_large`, `400 idempotency.mismatch`, `401 auth.unauthenticated`, `403 auth.forbidden`, `404 environment.not_found`, `404 service.not_found`, `404 release_group.not_found`, `409 resource.in_use`, `409 state.conflict`, `409 release.recovery_required`, `409 rollback.no_previous_release`, `409 rollback.source_expired`, `409 idempotency.in_progress` |
 
 `release.recovery_incomplete` is not an HTTP dispatch error. It is the terminal

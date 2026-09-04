@@ -965,6 +965,29 @@ fixed-revision reads, and bounded publication. The group execution authority
 owns declared-order progress and compensation state. The checkpoint authority
 owns monotonic per-Release effect evidence and Service projections.
 
+`internal/controller/releaseoperation` owns the concrete Release Group
+rollback-preview and rollback-publication use cases alongside the existing
+deploy and rollback orchestration, hook selection, and publication flow. The
+concrete `ReleaseLedger` remains the only historical selection authority: both
+paths call its sole `SelectRollback` operation for every member at one fixed
+revision and preserve exact group order. The handler process port accepts and
+returns pure core domain inputs and preview results; HTTP handlers parse the
+presence-aware optional tag and canonical revision string and map only at the
+wire boundary. No `pkg/api` input enters the controller module, and the
+Console, CLI, handlers, and group store never implement a second selector or
+derive eligibility from public history.
+
+Rollback preview returns a concrete `ReleaseGroupRollbackPreview` value and is
+strictly read-only: no durable preview, idempotency claim, Task, or mutation is
+created. Rollback without a preview revision selects at the current revision.
+With a preview revision, the same controller use case reselects at that fixed
+revision and publishes only while the Release Group desired record,
+Environment mutation epoch, and existing Release publication fences still
+match. Compaction or changed authority fails closed with `state.conflict` before
+publication; writes outside those authorities do not stale the selection. The
+wire revision is a positive canonical decimal int64 JSON string and is the only
+preview token; no manifest digest or client-selected Release ids are accepted.
+
 ADR 0064 adds one shared pure `internal/common/executionplan` candidate
 procedure used by ordinary Release and Blueprint. Its immutable plan projection
 contains exact candidate and forward anchors plus the complete closed lawful
