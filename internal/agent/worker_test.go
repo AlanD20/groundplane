@@ -482,6 +482,77 @@ const (
 	workerPreviousConfigArtifactID   = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 )
 
+// Rationale: every published Task event must have exactly one consumable receipt,
+// while replayed or identity-changed acknowledgements must remain conflicts.
+func TestWorkerPoolAcceptsReceiptForNonBlockingTaskEventAndRejectsReplay(t *testing.T) {
+	t.Parallel()
+	pool := NewWorkerPool(1, "/var/lib/groundplane/vol", nil, testLogger())
+	var planHash PlanHash
+	planHash[0] = 1
+	progress := TaskProgress{
+		AssignmentID: workerTestAssignmentID, TaskID: workerTestTaskID, StepID: workerTestStepID,
+		PlanHash: planHash, ExecutionEpoch: 1, Ordinal: 1, State: TaskProgressRunning,
+	}
+	pool.emitProgress(context.Background(), progress)
+	output := <-pool.Outputs()
+	if output.Progress == nil {
+		t.Fatalf("output = %#v, want progress event", output)
+	}
+	ack := &agentpb.TaskEventAck{
+		TaskId: output.Progress.TaskID, AssignmentId: output.Progress.AssignmentID,
+		StepId: output.Progress.StepID, PlanHash: output.Progress.PlanHash[:],
+		ExecutionEpoch: output.Progress.ExecutionEpoch, Ordinal: output.Progress.Ordinal,
+		State: agentpb.TaskState_TASK_STATE_RUNNING,
+	}
+	if err := pool.AcceptTaskEventAck(context.Background(), ack); err != nil {
+		t.Fatalf("AcceptTaskEventAck(receipt) error = %v", err)
+	}
+	if err := pool.AcceptTaskEventAck(context.Background(), ack); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("AcceptTaskEventAck(replay) error = %v, want state conflict", err)
+	}
+	changed := *ack
+	changed.Ordinal++
+	if err := pool.AcceptTaskEventAck(context.Background(), &changed); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("AcceptTaskEventAck(changed identity) error = %v, want state conflict", err)
+	}
+}
+
+// Rationale: a canceled publication can finish cleanup after its acknowledgement;
+// unique registration ownership must keep a replacement receipt for the same key.
+func TestWorkerPoolReceiptCleanupPreservesReplacementRegistration(t *testing.T) {
+	t.Parallel()
+	pool := NewWorkerPool(1, "/var/lib/groundplane/vol", nil, testLogger())
+	var planHash PlanHash
+	planHash[0] = 1
+	progress := TaskProgress{
+		AssignmentID: workerTestAssignmentID, TaskID: workerTestTaskID, StepID: workerTestStepID,
+		PlanHash: planHash, ExecutionEpoch: 1, Ordinal: 1, State: TaskProgressRunning,
+	}
+	key := taskEventAckKeyForProgress(progress)
+	first, ok := pool.registerTaskEventAck(key, nil)
+	if !ok {
+		t.Fatal("registerTaskEventAck(first) rejected a new event")
+	}
+	ack := &agentpb.TaskEventAck{
+		TaskId: progress.TaskID, AssignmentId: progress.AssignmentID, StepId: progress.StepID,
+		PlanHash: progress.PlanHash[:], ExecutionEpoch: progress.ExecutionEpoch, Ordinal: progress.Ordinal,
+		State: agentpb.TaskState_TASK_STATE_RUNNING,
+	}
+	if err := pool.AcceptTaskEventAck(context.Background(), ack); err != nil {
+		t.Fatalf("AcceptTaskEventAck(first) error = %v", err)
+	}
+	if _, ok := pool.registerTaskEventAck(key, nil); !ok {
+		t.Fatal("registerTaskEventAck(replacement) rejected an available event key")
+	}
+	pool.removeTaskEventAck(key, first)
+	if err := pool.AcceptTaskEventAck(context.Background(), ack); err != nil {
+		t.Fatalf("AcceptTaskEventAck(replacement) error = %v", err)
+	}
+	if err := pool.AcceptTaskEventAck(context.Background(), ack); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("AcceptTaskEventAck(replacement replay) error = %v, want state conflict", err)
+	}
+}
+
 // Rationale: replaying one live assignment must neither execute twice nor
 // replace the cancellation authority reserved by the first delivery.
 func TestWorkerPoolDeduplicatesMatchingLiveAssignmentAndRejectsHashMismatch(t *testing.T) {

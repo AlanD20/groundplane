@@ -101,19 +101,6 @@ type taskReservation struct {
 	eventsDurable bool
 }
 
-type taskEventAckKey struct {
-	TaskID, AssignmentID, StepID string
-	PlanHash                     PlanHash
-	ExecutionEpoch               uint32
-	Ordinal                      uint64
-	State                        TaskProgressState
-}
-
-type taskEventAckInbox struct {
-	mu      sync.Mutex
-	pending map[taskEventAckKey]chan struct{}
-}
-
 type ScriptRuntime interface {
 	ExecuteScript(
 		context.Context,
@@ -175,7 +162,7 @@ func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger
 		backupCheckpoints:    newBackupCheckpointInbox(),
 		scriptCheckpoints:    newScriptCheckpointInbox(),
 		executionStepResults: newExecutionStepResultInbox(),
-		taskEventAcks:        &taskEventAckInbox{pending: make(map[taskEventAckKey]chan struct{})},
+		taskEventAcks:        &taskEventAckInbox{receipts: make(map[taskEventAckKey]*taskEventReceipt)},
 		adapter:              NewAdapterRuntime(taskRunner),
 	}
 	pool.executeStep = pool.runStep
@@ -973,82 +960,6 @@ func progressStateFor(taskCtx context.Context, err error) TaskProgressState {
 	default:
 		return 0
 	}
-}
-
-func (p *WorkerPool) emitProgress(runCtx context.Context, progress TaskProgress) {
-	owned := progress
-	owned.Chunk = append([]byte(nil), progress.Chunk...)
-	select {
-	case p.outputs <- WorkerOutput{Progress: &owned}:
-	case <-runCtx.Done():
-	}
-}
-
-func (p *WorkerPool) emitProgressAndWait(ctx context.Context, progress TaskProgress) error {
-	key := taskEventAckKey{
-		TaskID: progress.TaskID, AssignmentID: progress.AssignmentID, StepID: progress.StepID,
-		PlanHash: progress.PlanHash, ExecutionEpoch: progress.ExecutionEpoch, Ordinal: progress.Ordinal,
-		State: progress.State,
-	}
-	accepted := make(chan struct{})
-	p.taskEventAcks.mu.Lock()
-	if _, exists := p.taskEventAcks.pending[key]; exists {
-		p.taskEventAcks.mu.Unlock()
-		return errs.New(errs.KindStateConflict, "agent: Task event acceptance is already pending")
-	}
-	p.taskEventAcks.pending[key] = accepted
-	p.taskEventAcks.mu.Unlock()
-	defer func() {
-		p.taskEventAcks.mu.Lock()
-		delete(p.taskEventAcks.pending, key)
-		p.taskEventAcks.mu.Unlock()
-	}()
-	p.emitProgress(ctx, progress)
-	select {
-	case <-accepted:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-func (p *WorkerPool) AcceptTaskEventAck(_ context.Context, ack *agentpb.TaskEventAck) error {
-	if p == nil || p.taskEventAcks == nil || ack == nil || ack.GetExecutionEpoch() == 0 || ack.GetOrdinal() == 0 ||
-		len(ack.GetPlanHash()) != 32 {
-		return errs.New(errs.KindValidationFailed, "agent: Controller Task event acknowledgement is invalid")
-	}
-	state := TaskProgressState(0)
-	switch ack.GetState() {
-	case agentpb.TaskState_TASK_STATE_RUNNING:
-		state = TaskProgressRunning
-	case agentpb.TaskState_TASK_STATE_COMPLETED:
-		state = TaskProgressCompleted
-	case agentpb.TaskState_TASK_STATE_FAILED:
-		state = TaskProgressFailed
-	case agentpb.TaskState_TASK_STATE_TIMED_OUT:
-		state = TaskProgressTimedOut
-	case agentpb.TaskState_TASK_STATE_ABORTED:
-		state = TaskProgressAborted
-	default:
-		return errs.New(errs.KindValidationFailed, "agent: Controller Task event acknowledgement state is invalid")
-	}
-	var planHash PlanHash
-	copy(planHash[:], ack.GetPlanHash())
-	key := taskEventAckKey{
-		TaskID: ack.GetTaskId(), AssignmentID: ack.GetAssignmentId(), StepID: ack.GetStepId(),
-		PlanHash: planHash, ExecutionEpoch: ack.GetExecutionEpoch(), Ordinal: ack.GetOrdinal(), State: state,
-	}
-	p.taskEventAcks.mu.Lock()
-	accepted := p.taskEventAcks.pending[key]
-	if accepted != nil {
-		delete(p.taskEventAcks.pending, key)
-	}
-	p.taskEventAcks.mu.Unlock()
-	if accepted == nil {
-		return errs.New(errs.KindStateConflict, "agent: stale Task event acknowledgement")
-	}
-	close(accepted)
-	return nil
 }
 
 func (p *WorkerPool) complete(runCtx context.Context, reservation *taskReservation, result TaskResult) {
