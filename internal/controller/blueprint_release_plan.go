@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
+	"google.golang.org/protobuf/proto"
 )
 
 type BlueprintReleasePlanInput struct {
@@ -22,6 +23,13 @@ type BlueprintReleasePlanInput struct {
 	RecoveryCompensateStepIDs []string
 	PostStepIDs               [][]string
 }
+
+type blueprintReleaseForwardStage uint8
+
+const (
+	blueprintReleaseForwardPrefix blueprintReleaseForwardStage = iota + 1
+	blueprintReleaseForwardComponent
+)
 
 func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 	ctx context.Context,
@@ -85,7 +93,10 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 	if err := bindBlueprintCandidateServiceImages(artifact, input.Members); err != nil {
 		return etcd.TaskRecord{}, nil, err
 	}
-	steps := append([]*agentpb.ExecutionStep(nil), input.PrefixSteps...)
+	steps, err := cloneBlueprintReleaseForwardSteps(input.PrefixSteps, blueprintReleaseForwardPrefix)
+	if err != nil {
+		return etcd.TaskRecord{}, nil, err
+	}
 	candidateServices := make([]executionplan.CandidateServiceIdentity, len(input.Members))
 	procedureMembers := make([]executionplan.CandidateReleaseMemberInput, 0, len(input.Members))
 	for index, member := range input.Members {
@@ -97,6 +108,7 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 	for index, member := range input.Members {
 		apply := &agentpb.ExecutionStep{
 			StepId: input.ApplyStepIDs[index], TimeoutSeconds: uint32(task.TimeoutSeconds),
+			Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
 			Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
 				ArtifactId: first.ArtifactID, ServiceIds: []string{member.Render.ServiceID},
 				ForceRecreate: true, NoDependencies: true,
@@ -124,6 +136,7 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 		health := &agentpb.ExecutionStep{
 			StepId: input.HealthStepIDs[index], PrerequisiteStepId: prerequisite,
 			TimeoutSeconds: uint32(task.TimeoutSeconds),
+			Policy:         agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
 			Payload: &agentpb.ExecutionStep_WaitHealthy{WaitHealthy: &agentpb.WaitHealthy{
 				ArtifactId: first.ArtifactID, ServiceIds: []string{member.Render.ServiceID},
 			}},
@@ -144,11 +157,7 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 			}},
 		}
 		steps = append(steps, health, probe, compensate)
-		forwardStepIDs := []string{apply.StepId}
-		for _, hookStep := range hooks.PostSteps {
-			forwardStepIDs = append(forwardStepIDs, hookStep.GetStepId())
-		}
-		forwardStepIDs = append(forwardStepIDs, health.GetStepId())
+		forwardStepIDs := []string{apply.GetStepId(), health.GetStepId()}
 		procedureMembers = append(procedureMembers, executionplan.CandidateReleaseMemberInput{
 			ServiceID: member.Render.ServiceID, CandidateReleaseID: member.Intent.ID, CandidateArtifactID: first.ArtifactID,
 			ForwardStepIDs: forwardStepIDs,
@@ -161,7 +170,11 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 			},
 		})
 	}
-	steps = append(steps, input.ComponentSteps...)
+	componentSteps, err := cloneBlueprintReleaseForwardSteps(input.ComponentSteps, blueprintReleaseForwardComponent)
+	if err != nil {
+		return etcd.TaskRecord{}, nil, err
+	}
+	steps = append(steps, componentSteps...)
 	procedure, err := executionplan.BuildCandidateReleaseProcedure(executionplan.CandidateReleaseProcedureInput{
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY, Members: procedureMembers,
 	})
@@ -185,6 +198,36 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 		return etcd.TaskRecord{}, nil, err
 	}
 	return task, plan, nil
+}
+
+func cloneBlueprintReleaseForwardSteps(
+	steps []*agentpb.ExecutionStep,
+	stage blueprintReleaseForwardStage,
+) ([]*agentpb.ExecutionStep, error) {
+	owned := make([]*agentpb.ExecutionStep, len(steps))
+	for index, step := range steps {
+		if step == nil || step.GetPolicy() != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_UNSPECIFIED ||
+			!validBlueprintReleaseForwardPayload(step, stage) {
+			return nil, errs.New(errs.KindValidationFailed, "Blueprint Release caller step is not valid for its forward stage")
+		}
+		owned[index] = proto.Clone(step).(*agentpb.ExecutionStep)
+		owned[index].Policy = agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD
+	}
+	return owned, nil
+}
+
+func validBlueprintReleaseForwardPayload(step *agentpb.ExecutionStep, stage blueprintReleaseForwardStage) bool {
+	switch stage {
+	case blueprintReleaseForwardPrefix:
+		return step.GetEnvironmentDirectoryCreate() != nil ||
+			step.GetManagedVolumeDirectoriesEnsure() != nil ||
+			step.GetMaterializeFile() != nil ||
+			step.GetAdapterProcedure() != nil
+	case blueprintReleaseForwardComponent:
+		return step.GetComponentApply() != nil
+	default:
+		return false
+	}
 }
 
 func bindBlueprintCandidateServiceImages(

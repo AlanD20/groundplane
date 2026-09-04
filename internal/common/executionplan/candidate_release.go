@@ -191,6 +191,11 @@ func validateCandidateReleasePlan(plan *agentpb.ExecutionPlan, artifacts map[str
 		if procedure != nil {
 			return errs.New(errs.KindValidationFailed, "candidate Release procedure has no candidate mutation")
 		}
+		for _, step := range plan.GetSteps() {
+			if step.GetCandidateRestorationProbe() != nil || step.GetCandidateRestorationCompensate() != nil {
+				return errs.New(errs.KindValidationFailed, "candidate restoration step is not referenced by its procedure")
+			}
+		}
 		return nil
 	}
 	if procedure == nil || len(procedure.GetMembers()) != len(mutations) {
@@ -199,11 +204,12 @@ func validateCandidateReleasePlan(plan *agentpb.ExecutionPlan, artifacts map[str
 	if err := validateCandidateReleaseProcedure(plan.Operation, procedure); err != nil {
 		return err
 	}
-	stepIDs := make(map[string]struct{}, len(plan.Steps))
+	stepsByID := make(map[string][]*agentpb.ExecutionStep, len(plan.Steps))
 	for _, step := range plan.Steps {
-		stepIDs[step.GetStepId()] = struct{}{}
+		stepsByID[step.GetStepId()] = append(stepsByID[step.GetStepId()], step)
 	}
 	identities := make([]string, len(procedure.GetMembers()))
+	referencedRestorationIDs := make(map[string]struct{}, len(procedure.GetMembers())*2)
 	for index, member := range procedure.GetMembers() {
 		artifact := artifacts[member.GetCandidateArtifactId()]
 		if artifact == nil || mutations[member.GetServiceId()] != member.GetCandidateArtifactId() ||
@@ -211,10 +217,29 @@ func validateCandidateReleasePlan(plan *agentpb.ExecutionPlan, artifacts map[str
 			return errs.New(errs.KindValidationFailed, "candidate Release member does not bind its mutation artifact")
 		}
 		identities[index] = member.GetServiceId() + "\x00" + member.GetCandidateReleaseId()
-		for _, stepID := range candidateMemberStepIDs(member) {
-			if _, exists := stepIDs[stepID]; !exists {
-				return errs.New(errs.KindValidationFailed, "candidate Release procedure references an absent execution step")
+		for _, stepID := range member.GetForwardStepIds() {
+			steps := stepsByID[stepID]
+			if len(steps) != 1 ||
+				steps[0].GetPolicy() != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD {
+				return errs.New(errs.KindValidationFailed, "candidate Release forward anchor is not exactly one forward step")
 			}
+		}
+		probeID, compensateID := restorationStepIDs(member.GetServingPredecessor(), member.GetCandidateAbsence())
+		if err := validateCandidateRestorationAnchor(member, stepsByID[probeID], true); err != nil {
+			return err
+		}
+		if err := validateCandidateRestorationAnchor(member, stepsByID[compensateID], false); err != nil {
+			return err
+		}
+		referencedRestorationIDs[probeID] = struct{}{}
+		referencedRestorationIDs[compensateID] = struct{}{}
+	}
+	for _, step := range plan.GetSteps() {
+		if step.GetCandidateRestorationProbe() == nil && step.GetCandidateRestorationCompensate() == nil {
+			continue
+		}
+		if _, referenced := referencedRestorationIDs[step.GetStepId()]; !referenced {
+			return errs.New(errs.KindValidationFailed, "candidate restoration step is not referenced by its procedure")
 		}
 	}
 	for _, member := range procedure.GetMembers() {
@@ -231,6 +256,36 @@ func validateCandidateReleasePlan(plan *agentpb.ExecutionPlan, artifacts map[str
 				return errs.New(errs.KindValidationFailed, "candidate absence authority does not bind the complete candidate set")
 			}
 		}
+	}
+	return nil
+}
+
+func validateCandidateRestorationAnchor(
+	member *agentpb.CandidateReleaseMember,
+	steps []*agentpb.ExecutionStep,
+	probe bool,
+) error {
+	if len(steps) != 1 {
+		return errs.New(errs.KindValidationFailed, "candidate restoration anchor is not exactly one execution step")
+	}
+	step := steps[0]
+	artifactID, serviceID, releaseID := "", "", ""
+	if probe {
+		value := step.GetCandidateRestorationProbe()
+		if step.GetPolicy() != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE || value == nil {
+			return errs.New(errs.KindValidationFailed, "candidate restoration probe policy or payload is invalid")
+		}
+		artifactID, serviceID, releaseID = value.GetCandidateArtifactId(), value.GetServiceId(), value.GetCandidateReleaseId()
+	} else {
+		value := step.GetCandidateRestorationCompensate()
+		if step.GetPolicy() != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE || value == nil {
+			return errs.New(errs.KindValidationFailed, "candidate restoration compensation policy or payload is invalid")
+		}
+		artifactID, serviceID, releaseID = value.GetCandidateArtifactId(), value.GetServiceId(), value.GetCandidateReleaseId()
+	}
+	if artifactID != member.GetCandidateArtifactId() || serviceID != member.GetServiceId() ||
+		releaseID != member.GetCandidateReleaseId() {
+		return errs.New(errs.KindValidationFailed, "candidate restoration payload does not bind its procedure member")
 	}
 	return nil
 }
@@ -302,12 +357,6 @@ func restorationStepIDs(serving *agentpb.ServingPredecessorRestoration, absence 
 		return serving.GetProbeStepId(), serving.GetCompensateStepId()
 	}
 	return absence.GetProbeStepId(), absence.GetCompensateStepId()
-}
-
-func candidateMemberStepIDs(member *agentpb.CandidateReleaseMember) []string {
-	result := append([]string(nil), member.GetForwardStepIds()...)
-	probeID, compensateID := restorationStepIDs(member.GetServingPredecessor(), member.GetCandidateAbsence())
-	return append(result, probeID, compensateID)
 }
 
 func candidateReleaseMutations(plan *agentpb.ExecutionPlan) (map[string]string, error) {
