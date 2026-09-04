@@ -101,6 +101,7 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 	}
 	conditions = append(conditions, evidenceConditions...)
 	transaction, err := repository.store.Transact(ctx, conditions, []Mutation{
+		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue.Value},
 		{Type: MutationPut, Key: assignmentValue.Key, Value: nextValue},
 		{Type: MutationPut, Key: assignmentIndexValue.Key, Value: nextValue},
 		{Type: MutationDelete, Key: timeoutKey},
@@ -114,7 +115,7 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 	if !transaction.Succeeded {
 		return Versioned[TaskRecord]{}, false, nil
 	}
-	return Versioned[TaskRecord]{Record: task, Revision: taskValue.ModRevision, ReadRevision: transaction.Revision}, true, nil
+	return Versioned[TaskRecord]{Record: task, Revision: transaction.Revision, ReadRevision: transaction.Revision}, true, nil
 }
 
 func (repository *TaskRepository) releaseEffectEvidenceAtRevision(
@@ -271,65 +272,6 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 		}
 		return repository.GetTaskAssignment(ctx, task.ID)
 	}
-}
-
-func (repository *TaskRepository) incrementAssignmentEpoch(
-	ctx context.Context,
-	current TaskAssignment,
-	evidenceConditions []Condition,
-) error {
-	record := current.Assignment.Record
-	record.ExecutionEpoch++
-	encoded, err := encodeTaskAssignment(record)
-	if err != nil {
-		return err
-	}
-	defer clear(encoded)
-	old, _ := encodeTaskAssignment(current.Assignment.Record)
-	defer clear(old)
-	lifecycleKey, lifecycleValue, proofRequired, err := repository.assignmentLifecycleIndexAtRevision(
-		ctx, current.Assignment.Record,
-		&KeyValue{Value: old, ModRevision: current.Assignment.Revision}, current.Task.ReadRevision,
-	)
-	if err != nil || proofRequired != current.RecoveryProofRequired {
-		if err != nil {
-			return err
-		}
-		return errs.New(errs.KindStateConflict, "Agent reconnect lifecycle authority changed")
-	}
-	conditions := []Condition{
-		{Key: taskKey(record.TaskID), ModRevision: current.Task.Revision},
-		{Key: taskExecutionClaimKey(record.Executor, record.AgentID, record.TaskID), ModRevision: current.Assignment.Revision},
-		{Key: taskAssignmentIndexKey(record.TaskID), ModRevision: current.Assignment.Revision},
-		{Key: lifecycleKey, ModRevision: lifecycleValue.ModRevision},
-	}
-	conditions = append(conditions, evidenceConditions...)
-	if record.ExecutionMode == TaskExecutionModeRecoveryOnly {
-		recoveryRead, readErr := repository.store.GetMany(ctx, GetManyRequest{
-			Keys: []string{releaseRecoveryKey(record.TaskID)}, Revision: current.Task.ReadRevision,
-		})
-		if readErr != nil || recoveryRead == nil || len(recoveryRead.Values) != 1 || recoveryRead.Values[0] == nil {
-			if readErr != nil {
-				return readErr
-			}
-			return corruptTaskAssignment()
-		}
-		conditions = append(conditions, Condition{Key: releaseRecoveryKey(record.TaskID), ModRevision: recoveryRead.Values[0].ModRevision})
-	} else {
-		conditions = append(conditions, Condition{Key: releaseRecoveryKey(record.TaskID)})
-	}
-	transaction, err := repository.store.Transact(ctx, conditions, []Mutation{
-		{Type: MutationPut, Key: taskExecutionClaimKey(record.Executor, record.AgentID, record.TaskID), Value: encoded},
-		{Type: MutationPut, Key: taskAssignmentIndexKey(record.TaskID), Value: encoded},
-		{Type: MutationPut, Key: lifecycleKey, Value: encoded},
-	})
-	if err != nil {
-		return err
-	}
-	if !transaction.Succeeded {
-		return errs.New(errs.KindStateConflict, "Agent reconnect raced durable execution evidence")
-	}
-	return nil
 }
 
 type releaseRecoveryAcknowledgement struct {
@@ -690,6 +632,7 @@ func (repository *TaskRepository) markReleaseRecoveryProofRequired(
 		{Key: proofKey},
 		{Key: releaseRecoveryKey(task.ID), ModRevision: read.Values[5].ModRevision},
 	}, []Mutation{
+		{Type: MutationPut, Key: taskKey(task.ID), Value: read.Values[0].Value},
 		{Type: MutationPut, Key: claimKey, Value: nextValue},
 		{Type: MutationPut, Key: indexKey, Value: nextValue},
 		{Type: MutationDelete, Key: timeoutKey},

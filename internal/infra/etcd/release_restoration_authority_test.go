@@ -294,6 +294,46 @@ func TestReleaseReconnectAndMutationEventRaceIsCASFenced(t *testing.T) {
 	}
 }
 
+// Rationale: forward and recovery reconnects must advance the epoch without separating the Task from its assignment.
+func TestReleaseReconnectPreservesListableAssignmentCoRevision(t *testing.T) {
+	fixture := newOrdinaryReleaseClaimFixture(t)
+	ctx := context.Background()
+	forward, err := fixture.repository.ReconnectAgentAssignment(ctx, fixture.claim)
+	if err != nil || forward.Assignment.Record.ExecutionMode != TaskExecutionModeForward ||
+		forward.Assignment.Record.ExecutionEpoch != 2 || forward.Task.Revision != forward.Assignment.Revision {
+		t.Fatalf("forward reconnect = %#v, %v", forward, err)
+	}
+	listed, err := fixture.repository.ListAgentAssignments(ctx, fixture.agentID, 1, 1)
+	if err != nil || len(listed) != 1 || listed[0].Assignment.Record.ExecutionEpoch != 2 ||
+		listed[0].Task.Revision != listed[0].Assignment.Revision {
+		t.Fatalf("list forward reconnect assignment = %#v, %v", listed, err)
+	}
+	result := TaskResultRecord{
+		Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticComposeFailed,
+		ReconciliationRequired: true, ExecutionEpoch: forward.Assignment.Record.ExecutionEpoch,
+	}
+	if _, err := fixture.repository.AcknowledgeTask(
+		ctx, fixture.agentID, 1, fixture.claim.Task.Record.ID, fixture.claim.Assignment.Record.AssignmentID,
+		TaskStatusFailed, result, fixture.now.Add(2*time.Second),
+	); err != nil {
+		t.Fatal(err)
+	}
+	recovery, err := fixture.repository.GetTaskAssignment(ctx, fixture.claim.Task.Record.ID)
+	if err != nil || recovery.Assignment.Record.ExecutionMode != TaskExecutionModeRecoveryOnly {
+		t.Fatalf("recovery assignment = %#v, %v", recovery, err)
+	}
+	reconnected, err := fixture.repository.ReconnectAgentAssignment(ctx, recovery)
+	if err != nil || reconnected.Assignment.Record.ExecutionEpoch != recovery.Assignment.Record.ExecutionEpoch+1 ||
+		reconnected.Task.Revision != reconnected.Assignment.Revision {
+		t.Fatalf("recovery reconnect = %#v, %v", reconnected, err)
+	}
+	listed, err = fixture.repository.ListAgentAssignments(ctx, fixture.agentID, 1, 1)
+	if err != nil || len(listed) != 1 || listed[0].Assignment.Record.ExecutionEpoch != 4 ||
+		listed[0].Task.Revision != listed[0].Assignment.Revision {
+		t.Fatalf("list recovery reconnect assignment = %#v, %v", listed, err)
+	}
+}
+
 func TestOldPrimaryAcknowledgementReplayAfterRecoveryIsExact(t *testing.T) {
 	fixture := newOrdinaryReleaseClaimFixture(t)
 	result := TaskResultRecord{
@@ -306,6 +346,11 @@ func TestOldPrimaryAcknowledgementReplayAfterRecoveryIsExact(t *testing.T) {
 	)
 	if err != nil || transitioned.Record.Status != TaskStatusRunning || transitioned.Record.Result != nil {
 		t.Fatalf("primary recovery transition = %#v, %v", transitioned, err)
+	}
+	listed, err := fixture.repository.ListAgentAssignments(context.Background(), fixture.agentID, 1, 1)
+	if err != nil || len(listed) != 1 || listed[0].Task.Revision != listed[0].Assignment.Revision ||
+		transitioned.Revision != listed[0].Task.Revision {
+		t.Fatalf("list assignment after failed acknowledgement = %#v, %v; transition %#v", listed, err, transitioned)
 	}
 	replay, err := fixture.repository.AcknowledgeTask(
 		context.Background(), fixture.agentID, 1, fixture.claim.Task.Record.ID,

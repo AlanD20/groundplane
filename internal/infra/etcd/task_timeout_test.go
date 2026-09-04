@@ -91,8 +91,19 @@ func TestTaskRepositoryRecoveryExpiryMovesBoundedRowsToProofRequired(t *testing.
 		current, lookupErr := repository.GetTaskAssignment(ctx, assignment.TaskID)
 		if lookupErr != nil || !current.RecoveryProofRequired ||
 			!current.Assignment.Record.RecoveryDeadline.Equal(assignment.RecoveryDeadline) ||
-			!current.Assignment.Record.RecoveryExecutionDeadline.Equal(deadline.Add(releaseRecoveryProofExecutionBudget)) {
+			!current.Assignment.Record.RecoveryExecutionDeadline.Equal(deadline.Add(releaseRecoveryProofExecutionBudget)) ||
+			current.Assignment.Record.RestorationAuthority == nil ||
+			current.Assignment.Record.RestorationAuthoritySHA256 != assignment.RestorationAuthoritySHA256 {
 			t.Fatalf("proof-required assignment = %#v, %v", current, lookupErr)
+		}
+		authorityDigest, digestErr := releaseRestorationAuthoritySHA256(*current.Assignment.Record.RestorationAuthority)
+		if digestErr != nil || authorityDigest != assignment.RestorationAuthoritySHA256 {
+			t.Fatalf("proof-required restoration authority digest = %q, %v", authorityDigest, digestErr)
+		}
+		listed, listErr := repository.ListAgentAssignments(ctx, assignment.AgentID, assignment.AgentGeneration, 1)
+		if listErr != nil || len(listed) != 1 || !listed[0].RecoveryProofRequired ||
+			listed[0].Task.Revision != listed[0].Assignment.Revision {
+			t.Fatalf("list proof-required assignment = %#v, %v", listed, listErr)
 		}
 		read, readErr := store.Get(ctx, releaseRecoveryKey(assignment.TaskID))
 		if readErr != nil || read.Entry == nil {
