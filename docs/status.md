@@ -764,3 +764,12 @@ after its immutable deadline. The Agent validates and preserves that epoch
 instead of reusing attempt one after reconnect. Protobuf regeneration and the
 focused Controller and Agent race proofs pass; exact reference-host Blueprint
 acceptance remains pending.
+
+## Environment Services Console tab (2026-09-04)
+
+The Environment Console now provides a dedicated Services tab with an explicit
+service count and a responsive inventory of every Service's desired image,
+network Zones, runtime state, and observed health. It reuses the existing
+Service inspect behavior and the shared right-side create/edit drawer instead
+of introducing a second mutation path. Independent review found no landing
+blocker; Console build verification was not requested for this slice.
