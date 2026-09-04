@@ -3,74 +3,34 @@
 Self-hosted control plane for running many projects on one machine without
 hand-maintaining Docker Compose. Desired state is a **Compose-compatible
 document plus a namespaced `x-gp-*` extension grammar** — not a bespoke
-YAML schema (see `blueprint.md`). This is the **implementation
-boilerplate**: package layout, entry points, the shared "common" project,
-the domain model, the adapter/component registries, and the full CLI command
-tree, wired but not yet backed by real etcd/docker/gRPC calls. Every
-`TODO` marks where real logic replaces a stub.
+YAML schema. This repository contains the Go implementation, production
+Console, packaging, and authoritative product and engineering contracts.
+Implementation and acceptance remain incremental; use
+[`docs/capabilities.md`](docs/capabilities.md) for the delivery ledger and
+[`docs/head.md`](docs/head.md) for the compact continuation checkpoint.
 
-Companion docs (authoritative — keep these next to the repo, not
-duplicated inside it): `architecture.md` (this layout, why), `mvp.md`
-(the product contract), `api-cli.md` (CLI tree + REST resource map),
-`blueprint.md` (the authored Compose+`x-gp-*` desired-state format),
-`standards.md` (the Go-level rules this repo follows — see
-`docs/README.md` for a summary and two deliberate reconciliations
-between it and architecture.md's original sketches). Code comments
-reference all five by name.
+The authoritative documents live in [`docs/`](docs/). Start with
+[`docs/README.md`](docs/README.md), which routes product, API, Blueprint,
+architecture, delivery, and implementation-status questions to their single
+source of truth.
 
 ## Layout
 
 ```
-cmd/groundplane      CLI entry point — imports ONLY internal/app + internal/cli
-cmd/controller       Controller entry point — imports ONLY internal/app
-cmd/agent            Agent entry point — imports ONLY internal/app
-
-console/             React 19 + Vite + Tailwind v4 static SPA
-                      (go:embed'd into the Controller binary)
-
-internal/app         DI wiring, per binary: config load, logging setup,
-                      explicit adapter AND component registration,
-                      store/server/scheduler construction. The only thing
-                      cmd/* is allowed to import.
-internal/cli         Cobra commands — one file per noun, zero logic
-internal/cli/common  CLI-only: the shared error handler (HandleErrors) and
-                      the --output TABLE|JSON|YAML writer
-internal/cli/apiclient  The CLI's Go client for the human API
-internal/controller  API server, task sequencing, the render pipeline
-                      (renderer.go) and the typed ExecutionPlan (plan.go),
-                      scheduler
-internal/agent       gRPC client, worker pool (executes steps via the
-                      Runner), materializers
-internal/core        Domain model (model.go) + the authored Blueprint
-                      envelope/x-gp-* types (envelope.go) + validation
-                      (blueprint.go) — pure, no infra imports
-internal/adapters    Backing-service adapter registry — one package per
-                      kind (postgres16, valkey9, manual), each exporting
-                      an explicit Register()
-internal/components   Unified component registry — environment-owned Caddy
-                      and Cloudflare Tunnel plus platform-owned CoreDNS,
-                      Controller, and Agent share one noun and owner-aware seam
-internal/infra       Server-side platform integrations (etcd, age,
-                      systemd, docker) — ONLY the daemons import this;
-                      the CLI never does
-internal/common      Logging, the ONE config reader, ULID ids, and the
-                      locked subprocess Runner — imported by every binary
-                      including the CLI, zero heavy dependencies
-
-pkg/api              Public API DTOs (independent of internal/core's
-                      domain model — see pkg/api/types.go) + re-exported
-                      pkg/errs codes
-pkg/errs             THE single error type in the codebase: Code
-                      (dot-namespaced, grouped by domain), Class
-                      (auto-derived, drives HTTP status + retry
-                      decisions), New/Wrap/Is. A leaf: stdlib only.
-proto/                agent.proto — the Controller↔Agent gRPC contract,
-                      including the ExecutionPlan's plan_id/plan_hash/
-                      render_generation carried over the live channel
-
-config/               Example Controller and CLI config files
-docs/                 Pointer to the companion docs (kept outside the repo)
+cmd/                   Controller, Agent, CLI, and repository tool entry points
+console/               Production React/Vite Console embedded by the Controller
+internal/              Application, Controller, Agent, domain, and infrastructure code
+component-sdk/         Closed interface available to registered Components
+registered-components/ Caddy, Cloudflare Tunnel, and CoreDNS implementations
+pkg/                   Public API and shared error contracts
+proto/                 Controller↔Agent gRPC contract
+packaging/             Host installation and service packaging
+docs/                  Authoritative contracts, decisions, delivery ledger, and evidence
 ```
+
+Controller and Agent are processes and product resources, not registered
+Components. See [`docs/architecture.md`](docs/architecture.md) for the enforced
+module boundaries and [`docs/mvp.md`](docs/mvp.md) for the product model.
 
 ## What changed from the product's earlier drafts
 
@@ -78,45 +38,32 @@ Two structural shifts are worth knowing about before reading the code:
 
 - **Desired state is Compose, not a parallel grammar.** Earlier drafts
   described a bespoke `tenants.yaml`/`projects.yaml`/`environments/…`
-  document tree. The current contract (`blueprint.md`) is a real
+  document tree. The current contract ([`docs/blueprint.md`](docs/blueprint.md)) is a real
   Compose document (parsed by a real Compose library, never
-  reimplemented — see `internal/core/envelope.go`'s `TODO`) plus
+  reimplemented) plus
   `x-gp-*` extensions for everything Compose has no opinion on
   (releases, attachments, entries, requires, routes, components, backups).
-  `internal/core/model.go` is the Controller's *typed* internal
-  representation the Controller compiles a Blueprint into — the two are
-  deliberately different shapes; see `envelope.go`'s package comment for
-  the layering.
+  The Controller's typed internal representation and the authored document
+  are deliberately different shapes.
 - **The Router is a projection, not a resource.** Caddy and Cloudflare
   Tunnel used to be bespoke on/off toggles. They're now component *kinds*
-  under a generic `internal/components` registry, managed by `component
+  under the registered Component catalog, managed by `component
   enable|disable|config`; `GET /environments/{id}/router` is a read-only
   view grouping whichever ingress components happen to be enabled.
 
 ## The import matrix (locked)
 
-See `standards.md`, section 1 for the authoritative table. The
-load-bearing rules:
-
-- `cmd/*` imports **only** `internal/app` (and `internal/cli`, for the
-  CLI binary specifically) — nothing else. `go list -deps ./cmd/...` is
-  the whole story of what a binary depends on.
-- `internal/common` and `pkg/errs` are leaves: stdlib + external deps
-  only, imported by everything, importing nothing internal of their own.
-- `internal/cli` never imports `internal/infra`, `internal/controller`,
-  `internal/agent`, or `internal/adapters` — it must stay buildable
-  without etcd, docker, systemd, or age.
-- `pkg/api` never imports `internal/core` — the public API contract and
-  the internal domain model are independent shapes on purpose;
-  `internal/controller`'s handlers translate between them.
-- Go's circular-import detection enforces the rest: a violation is a
-  compile error, not a review finding.
+[`docs/standards.md`](docs/standards.md) and
+[`docs/architecture.md`](docs/architecture.md) own the import and module
+rules. `make architecture-check` enforces their machine-checkable boundaries;
+do not infer current boundaries from this overview.
 
 ## Building
 
-Requires Go 1.26+, Node 20+ (for the Console),
-`github.com/segmentio/golines@v0.12.2` (for `make ci`), and `protoc` +
-the repository-declared Go generator tools (for `proto/agent.proto`).
+Use the repository-pinned toolchains and generators. `go.mod`, `.node-version`,
+the Makefile toolchain checks, and [`docs/standards.md`](docs/standards.md) are
+the executable references; do not substitute an older compatible-looking
+Node/npm or Go version.
 
 ```sh
 go mod tidy                     # resolve the dependencies listed in go.mod
@@ -126,13 +73,6 @@ make console                    # npm ci && npm run build in console/, embedded 
 make ci                         # full local gate: tidy, gofmt, golines, vet, race tests; mirrors CI exactly
 ```
 
-This has been built, `go vet`'d, `gofmt`'d, and exercised end-to-end
-(the CLI binary really does round-trip HTTP requests against the
-Controller binary for every noun — including `release-group`, `component`,
-and the discriminated `entry` model — and decode its RFC 7807 error
-responses) — but `internal/infra`'s etcd/docker/age/systemd
-integrations, and `internal/components`' Render/Healthy implementations,
-all still return `errs.CodeNotImplemented`. Start there;
-`internal/agent/worker.go`'s `runStep` and
-`internal/controller/server.go`'s `acceptTask` are the two places that
-light up once they're wired.
+A successful focused test does not establish MVP acceptance. Follow the
+verification ladder in [`docs/delivery.md`](docs/delivery.md) and the active
+closure order in [`docs/capabilities.md`](docs/capabilities.md).

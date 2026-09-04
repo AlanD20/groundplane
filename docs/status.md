@@ -1,9 +1,11 @@
 # Implementation checkpoint
 
-Status: live handoff for implementation work, dated 2026-09-02. This document
-is implementation evidence only; it is not product authority. Product behavior
-and vocabulary remain authoritative in `docs/mvp.md`, with the source-of-truth
-order in `docs/agents.md` resolving conflicts.
+Status: historical implementation ledger, broadly reconciled on 2026-09-02
+with later entries through 2026-09-04. This document is implementation evidence
+only; it is not a current pipeline or remote-health report and is not product
+authority. Product behavior and vocabulary remain authoritative in
+`docs/mvp.md`, with the source-of-truth order in `docs/agents.md` resolving
+conflicts.
 
 This detailed ledger is task-scoped implementation evidence, not the default
 recovery handoff. `docs/head.md` is the compact operational checkpoint and is
@@ -12,7 +14,24 @@ actions change. Branch names, candidate counts, and this checkpoint do not
 prove acceptance by themselves; acceptance requires the evidence named by
 `docs/capabilities.md` and `docs/delivery.md`.
 
-## Active Controller and Agent settings separation
+## Current hosting-floor alignment
+
+The documentation-only minimum-hosting scope landed on `main` in `37bc23120`.
+That commit records contract alignment, not runtime alignment, deployment, or
+acceptance. C06 and C20 retain their historical singleton evidence, but their
+new replica, Release Group, tag, and logical-Script behavior remains pending;
+the authoritative capability ledger therefore currently classifies both as
+**Scaffolded**.
+
+Unlanded and rejected candidate commits recorded below remain historical
+evidence whose refs and worktrees must be preserved. They are not current
+resume directives. Reconcile `docs/head.md`, live Git refs/worktrees, and actual
+agent status before advancing any lane.
+
+No remote-health check accompanies this ledger update. Recorded QA evidence is
+historical; current health must be verified explicitly when a task requires it.
+
+## Historical Controller and Agent settings separation
 
 The source implementation and generated API clients now contain the ADR 0063
 separation, but this lane is not yet accepted or landed. Platform Host is
@@ -27,7 +46,7 @@ typecheck/build, generated-artifact cleanliness, and one live read/edit/revert
 journey. Do not mark C01 Accepted again or deploy this lane until those checks
 prove the exact generated tree.
 
-## Current delivery pipeline
+## Delivery workflow recorded by this ledger
 
 Independent feature lanes now run continuously in parallel. Each lane has one
 durable repository-local worktree and branch, one writer, and disjoint owned
@@ -45,8 +64,9 @@ diagnosis, approval, and land authorization; it does not construct, sign,
 fast-forward, or clean candidates. No repeated full review loop or unlanded WIP
 cleanup is permitted.
 
-The CoreDNS transactional lifecycle landed on `main` in `3884d075`.
-Independent remaining features continue in their own durable worktrees.
+The CoreDNS transactional lifecycle landed on `main` in `3884d075`. At the
+time of this ledger, independent remaining features continued in their own
+durable worktrees.
 
 On every compaction or restart, the head reads `docs/head.md` in full and then
 only the exact authoritative contract sections required for the current
@@ -68,7 +88,7 @@ dedicated integration owner constructs and signs candidates, fast-forwards
 as the sole worker while eligible delegated work exists has not restored the
 pipeline.
 
-## Candidate Release recovery correction (2026-09-04)
+## Historical Candidate Release recovery correction (2026-09-04)
 
 Signed candidate `b47bdcb9` is rejected and MUST NOT land. Its ref, tree, and
 worktree remain preserved as immutable rejection evidence. The original writer
@@ -77,15 +97,18 @@ completed the one allowed correction batch at signed commit `282ef187` and tree
 authority gaps without rewriting the rejected candidate.
 
 The replacement is a signed one-commit direct child of base `f0213ba4` carrying
-the entire recovery delta plus that correction. It remains unlanded pending the
-head's decision and explicit land authorization. Its exact commit, tree, and
-focused delta proof are integration-handoff evidence rather than a
-self-referential hash embedded in this candidate.
+the entire recovery delta plus that correction. It was unlanded at the time of
+this entry. Its exact commit, tree, and focused delta proof are preserved
+integration-handoff evidence, not authority to resume or land it without
+current reconciliation.
 
 ## Accepted and integrated checkpoint
 
-The current capability ledger marks these slices **Accepted**: `C01`, `C02`,
-`C03`, `C06`, `C08`, `C10`, `C11`, `C14`, `C15`, `C18`, `C19`, and `C20`.
+At the time of this checkpoint, the capability ledger marked these slices
+**Accepted**: `C01`, `C02`, `C03`, `C06`, `C08`, `C10`, `C11`, `C14`, `C15`,
+`C18`, `C19`, and `C20`. The current hosting-floor overlay retains C06/C20's
+historical evidence but classifies both as **Scaffolded** until their new
+contract alignment is implemented and proven.
 
 The accepted commits landed on `main` in the current checkpoint are:
 
@@ -352,7 +375,8 @@ authorities, and Component-ownership filtering across every ordinary Service
 surface. The exact Route, Zone, and Service delta proofs pass on the combined
 replacement tree.
 
-The remaining isolated implementation and acceptance lanes are:
+At the time of this checkpoint, the remaining isolated implementation and
+acceptance lanes were:
 
 1. CoreDNS reference-host capability acceptance for the landed implementation.
 2. Backup terminal delivery, capture/upload, Restore, and runtime composition.
@@ -367,15 +391,16 @@ current host-resolution projection, has no capture or persistence authority,
 and adds no endpoint or CoreDNS-specific Agent procedure. API, CLI, and Console
 surface the same preview; reference-host acceptance remains pending.
 
-The bounded native private acceptance topology journey completed on `the disposable QA host` on
-2026-09-01. The production Controller serves the embedded Console on the
-approved loopback and host listeners; the Controller-managed Agent and CoreDNS
-Component are healthy; PostgreSQL and Valkey backing services are healthy; all
-application Attaches are ready; and the recreated application and identity
-services are running from the Groundplane projection. The Environment Caddy
-Component is enabled and healthy at its allocated address, all six HTTP Routes
-report `served`, the `/up` route returns HTTP 200, and WebSocket completed a
-WebSocket upgrade through Caddy. The `edge-tunnel` Component remains authored
+The bounded native private acceptance topology journey completed on the
+disposable QA host on 2026-09-01. In that recorded run, the production
+Controller served the embedded Console on `127.0.0.1:8080` and
+`10.25.0.2:8080`; the Controller-managed Agent and CoreDNS Component were
+healthy; PostgreSQL and Valkey backing services were healthy; all
+application Attaches were ready; and the recreated application and identity
+services were running from the Groundplane projection. The Environment Caddy
+Component was enabled and healthy at its allocated address, all six HTTP Routes
+reported `served`, the `/up` route returned HTTP 200, and WebSocket completed a
+WebSocket upgrade through Caddy. The `edge-tunnel` Component remained authored
 but disabled for this no-Tunnel acceptance run.
 
 The 2026-09-01 clean reference-host deployment reaches an active Controller on
@@ -421,19 +446,26 @@ items, not permission to change the product contract or skip a landing blocker.
 
 ## Private acceptance workload
 
-The private acceptance workload, its deployment driver, topology, credentials,
-and detailed QA evidence remain in the repository-local ignored workspace. The
-public repository records only generic product behavior and capability status.
+The private acceptance workload, its deployment driver, topology, application
+credentials, and detailed QA evidence remain in the repository-local ignored
+workspace. That retained material explicitly excludes the required QA-only
+Cloudflare Tunnel token, test hostname, and provider ingress mapping; those
+inputs have not been provided. Live public-path proof is blocked until the owner
+supplies them through a repository-local ignored private file path. Use a
+dedicated QA token for that proof and never reuse a production token. The public
+repository records only generic product behavior and capability status.
 
 ## Disposable QA host authority
 
-The owner designates `the disposable QA host` as a disposable QA/testing host and explicitly
+The owner designates `10.25.0.2` as the disposable QA/testing host and explicitly
 authorizes Groundplane state on that machine to be repaired, reset, or wiped
-without another approval. Preserve the source repository and any non-Groundplane
-data. Prefer the smallest repair that restores the journey when it is faster;
-use a clean reprovision when accumulated test state makes that more efficient.
-The deterministic host driver and focused dry-run contract are implemented;
-the corrected bounded real-host execution and observations remain pending.
+without another approval. QA Controller configuration binds both
+`127.0.0.1:8080` and `10.25.0.2:8080`. Preserve the source repository and any
+non-Groundplane data. Prefer the smallest repair that restores the journey when
+it is faster; use a clean reprovision when accumulated test state makes that
+more efficient. The deterministic host driver and focused dry-run contract are
+implemented; the corrected bounded real-host execution and observations remain
+pending.
 
 ## Attach selected desired-head correction (2026-09-01)
 
