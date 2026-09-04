@@ -154,75 +154,13 @@ func (runtime *ComposeRuntime) executeStep(
 		value := payload.ServiceRecreateProbe
 		return runtime.observeRecreate(ctx, assignment.Plan, value.CandidateArtifactId, value.PriorArtifactId, value.ServiceId, value.CandidateReleaseId, value.PriorReleaseId)
 	case *agentpb.ExecutionStep_ServiceRecreateCompensate:
-		return runtime.mutate(ctx, assignment, step, payload.ServiceRecreateCompensate.ArtifactId, nil)
+		result, err := runtime.mutate(ctx, assignment, step, payload.ServiceRecreateCompensate.ArtifactId, nil)
+		return runtime.verifyReleaseRestorationPostcondition(ctx, assignment, step, result, err)
 	case *agentpb.ExecutionStep_CandidateRestorationProbe, *agentpb.ExecutionStep_CandidateRestorationCompensate:
 		return runtime.candidateRestoration(ctx, assignment, step)
 	default:
 		return composeStepResult{}, errs.New(errs.KindInternal, "agent: Controller sent an unknown step payload")
 	}
-}
-
-func (runtime *ComposeRuntime) candidateRestoration(
-	ctx context.Context,
-	assignment Assignment,
-	step *agentpb.ExecutionStep,
-) (composeStepResult, error) {
-	result := composeStepResult{MutationAttempted: step.GetCandidateRestorationCompensate() != nil}
-	response, err := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
-		Schema: composeHelperSchema, AssignmentId: assignment.AssignmentID, TaskId: assignment.TaskID,
-		OperationId: assignment.OperationID, Plan: assignment.Plan, StepId: step.GetStepId(),
-		TimeoutSeconds:       remainingSeconds(ctx, step.GetTimeoutSeconds()),
-		RestorationAuthority: assignment.RestorationAuthority,
-	})
-	if err != nil || response == nil || response.GetSchema() != composeHelperSchema ||
-		response.GetOutcome() != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED {
-		result.ReconciliationRequired = true
-		if err != nil {
-			return result, err
-		}
-		return result, errs.New(errs.KindRequestFailed, "agent: candidate restoration proof failed")
-	}
-	result.ExitCode, result.Diagnostic = response.GetExitCode(), response.GetDiagnostic()
-	switch assignment.RestorationAuthority.GetTarget() {
-	case agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE:
-		if response.GetCandidateAbsenceEvidence() == nil || response.GetRecreateEvidence() != nil {
-			result.ReconciliationRequired = true
-			return result, errs.New(errs.KindRequestFailed, "agent: candidate absence proof is missing")
-		}
-		result.CandidateAbsenceEvidence = proto.Clone(response.GetCandidateAbsenceEvidence()).(*agentpb.CandidateAbsenceEvidence)
-	case agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR:
-		if response.GetRecreateEvidence() == nil || response.GetCandidateAbsenceEvidence() != nil {
-			result.ReconciliationRequired = true
-			return result, errs.New(errs.KindRequestFailed, "agent: serving predecessor proof is missing")
-		}
-		result.RecreateEvidence = proto.Clone(response.GetRecreateEvidence()).(*agentpb.ServiceRecreateEvidence)
-	default:
-		result.ReconciliationRequired = true
-		return result, errs.New(errs.KindInternal, "agent: candidate restoration target is invalid")
-	}
-	return result, nil
-}
-
-func (runtime *ComposeRuntime) proxyProcedure(ctx context.Context, assignment Assignment, step *agentpb.ExecutionStep) (composeStepResult, error) {
-	result := composeStepResult{MutationAttempted: step.GetServiceProxySwitch() != nil || step.GetServiceProxyCompensate() != nil}
-	response, err := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
-		Schema: composeHelperSchema, AssignmentId: assignment.AssignmentID, TaskId: assignment.TaskID,
-		OperationId: assignment.OperationID, Plan: assignment.Plan, StepId: step.StepId,
-		TimeoutSeconds: remainingSeconds(ctx, step.TimeoutSeconds),
-	})
-	if err != nil {
-		result.ReconciliationRequired = true
-		return result, err
-	}
-	result.ExitCode, result.Diagnostic = response.GetExitCode(), response.GetDiagnostic()
-	if response.GetOutcome() != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED {
-		result.ReconciliationRequired = true
-		return result, errs.Newf(errs.KindRequestFailed, "agent: release proxy procedure failed with diagnostic %s", response.GetDiagnostic().String())
-	}
-	if response.ProxyEvidence != nil {
-		result.ProxyEvidence = proto.Clone(response.ProxyEvidence).(*agentpb.ServiceProxyEvidence)
-	}
-	return result, nil
 }
 
 func (runtime *ComposeRuntime) waitWorkloadHealthy(ctx context.Context, plan *agentpb.ExecutionPlan, wait *agentpb.WaitWorkloadHealthy) (composeStepResult, error) {
@@ -343,88 +281,6 @@ func (runtime *ComposeRuntime) removeManagedNetwork(
 		result.RecreateEvidence = proto.Clone(response.RecreateEvidence).(*agentpb.ServiceRecreateEvidence)
 	}
 	return result, nil
-}
-
-func (runtime *ComposeRuntime) observeRecreate(
-	ctx context.Context,
-	plan *agentpb.ExecutionPlan,
-	candidateArtifactID, priorArtifactID, serviceID, candidateReleaseID, priorReleaseID string,
-) (composeStepResult, error) {
-	result := composeStepResult{}
-	candidate := composeArtifact(plan, candidateArtifactID)
-	prior := composeArtifact(plan, priorArtifactID)
-	ticker := time.NewTicker(composeHealthPollInterval)
-	defer ticker.Stop()
-	for {
-		observed, err := runtime.observer.Observe(ctx, plan, candidateArtifactID)
-		if err != nil {
-			result.ReconciliationRequired = true
-			return result, err
-		}
-		result.Observed = observed
-		releaseID, err := observedRecreateRelease(observed, serviceID)
-		if err != nil {
-			result.ReconciliationRequired = true
-			return result, err
-		}
-		artifact, expectedReleaseID := candidate, candidateReleaseID
-		if releaseID != candidateReleaseID {
-			if priorArtifactID == "" || releaseID != priorReleaseID {
-				result.ReconciliationRequired = true
-				return result, errs.New(errs.KindStateConflict, "agent: recreate probe observed an unsealed release lineage")
-			}
-			artifact, expectedReleaseID = prior, priorReleaseID
-		}
-		name := releaseRuntimeComposeName(artifact, serviceID, "", agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON)
-		if name == "" {
-			result.ReconciliationRequired = true
-			return result, errs.New(errs.KindInternal, "agent: recreate singleton is missing from the plan")
-		}
-		convergence, err := evaluateReleaseWorkloadConvergence(artifact, observed, []string{name})
-		if err != nil {
-			result.ReconciliationRequired = true
-			return result, err
-		}
-		if convergence.Ready {
-			result.RecreateEvidence = &agentpb.ServiceRecreateEvidence{ServiceId: serviceID, ReleaseId: expectedReleaseID, ArtifactId: artifact.ArtifactId, Compensated: expectedReleaseID == priorReleaseID, Target: "singleton"}
-			return result, nil
-		}
-		select {
-		case <-ctx.Done():
-			result.ReconciliationRequired = true
-			return result, ctx.Err()
-		case <-ticker.C:
-		}
-	}
-}
-
-func observedRecreateRelease(observed *agentpb.ObservedProject, serviceID string) (string, error) {
-	found, releaseID := false, ""
-	for _, container := range observed.GetContainers() {
-		if container.GetServiceId() != serviceID {
-			continue
-		}
-		role, candidate := "", ""
-		for _, label := range container.GetLabels() {
-			switch label.GetKey() {
-			case "com.groundplane.runtime-role":
-				role = label.GetValue()
-			case "com.groundplane.release-id":
-				candidate = label.GetValue()
-			}
-		}
-		if role == "proxy" {
-			continue
-		}
-		if role != "singleton" || found || candidate != releaseID && found {
-			return "", errs.New(errs.KindStateConflict, "agent: recreate singleton labels are inconsistent")
-		}
-		found, releaseID = true, candidate
-	}
-	if !found {
-		return "", errs.New(errs.KindStateConflict, "agent: recreate singleton is not observed")
-	}
-	return releaseID, nil
 }
 
 func (runtime *ComposeRuntime) mutate(

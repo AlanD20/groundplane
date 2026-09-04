@@ -64,14 +64,15 @@ func TestExecuteReleaseHooksRespectPhasesAndPreservePrimaryFailure(t *testing.T)
 				Outcome:    agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,
 				Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
 				ProxyEvidence: &agentpb.ServiceProxyEvidence{
-					ServiceId: "api", Target: "green", ReleaseId: "prior-api", Compensated: true,
+					ServiceId: "api", Target: "green", ProxyGeneration: 1, ConfigSha256: make([]byte, 32),
+					ReleaseId: "prior-api", Compensated: true,
 				},
 			},
 		},
 		scriptExit: map[string]int32{"failure": 29},
 		scriptErr:  map[string]error{"failure": errors.New("secondary failure hook error")},
 	}
-	compose, err := NewComposeRuntime(runtime, &fakeComposeObserver{projects: []*agentpb.ObservedProject{{ProjectName: "gp-release"}}})
+	compose, err := NewComposeRuntime(runtime, &fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}})
 	if err != nil {
 		t.Fatalf("NewComposeRuntime() error = %v", err)
 	}
@@ -82,10 +83,13 @@ func TestExecuteReleaseHooksRespectPhasesAndPreservePrimaryFailure(t *testing.T)
 	post.PrerequisiteStepId = "switch-fail"
 	failure := releaseHookStep("failure", agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FAILURE_HOOK)
 	failure.GetRunScript().ReleaseId = "prior-api"
+	compensate := releaseCompensate("compensate", "switch-ok")
+	compensate.GetServiceProxyCompensate().PriorTarget = "green"
+	compensate.GetServiceProxyCompensate().PriorReleaseId = "prior-api"
 	plan := &agentpb.ExecutionPlan{Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, Steps: []*agentpb.ExecutionStep{
 		releaseHookStep("pre", agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK),
 		releaseForwardSwitch("switch-ok"), releaseForwardSwitch("switch-fail"),
-		releaseCompensate("compensate", "switch-ok"),
+		compensate,
 		post,
 		failure,
 	}}
@@ -148,7 +152,7 @@ func TestExecuteReleaseFailureHookRequiresMatchingServingEvidence(t *testing.T) 
 		Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
 	}
 	runtime := &orderedReleaseRuntime{responses: map[string]*agentpb.ComposeHelperResponse{"fail": failureResponse}}
-	compose, err := NewComposeRuntime(runtime, &fakeComposeObserver{projects: []*agentpb.ObservedProject{{ProjectName: "gp-release"}}})
+	compose, err := NewComposeRuntime(runtime, &fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +182,7 @@ func TestExecuteReleaseCompensationFailureSuppressesFailureHooks(t *testing.T) {
 			Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED,
 		},
 	}}
-	compose, err := NewComposeRuntime(runtime, &fakeComposeObserver{projects: []*agentpb.ObservedProject{{ProjectName: "gp-release"}}})
+	compose, err := NewComposeRuntime(runtime, &fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}})
 	if err != nil {
 		t.Fatalf("NewComposeRuntime() error = %v", err)
 	}
@@ -205,6 +209,47 @@ func TestExecuteReleaseCompensationFailureSuppressesFailureHooks(t *testing.T) {
 	}
 }
 
+// Rationale: leave_active is the legal post-serving failure policy. Once the
+// candidate is proved serving, a later hook failure remains terminal while
+// preserving that evidence and never inventing a compensation obligation.
+func TestExecuteReleasePostServingFailureWithDisabledCompensationStaysTerminal(t *testing.T) {
+	runtime := &orderedReleaseRuntime{
+		responses: map[string]*agentpb.ComposeHelperResponse{
+			"switch-api": releaseExecutionSuccess("api", false),
+		},
+		scriptExit: map[string]int32{"post": 23},
+		scriptErr:  map[string]error{"post": errors.New("post hook failed")},
+	}
+	compose, err := NewComposeRuntime(runtime, &fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool := NewWorkerPool(64, "/var/lib/groundplane/volumes", nil, nil)
+	pool.compose = compose
+	pool.SetScriptRuntime(runtime)
+	post := releaseHookStep("post", agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_POST_HOOK)
+	post.PrerequisiteStepId = "switch-api"
+	compensate := releaseCompensate("compensate-api", "switch-api")
+	compensate.GetServiceProxyCompensate().Enabled = false
+	result := runReleaseExecution(t, pool, "task-leave-active-failure", "", &agentpb.ExecutionPlan{
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
+		Steps:     []*agentpb.ExecutionStep{releaseForwardSwitch("switch-api"), post, compensate},
+	})
+	if result.Terminal != TaskTerminalFailed || result.Compose.GetReconciliationRequired() ||
+		len(result.Compose.GetProxyEvidence()) != 1 || result.Compose.GetProxyEvidence()[0].GetReleaseId() != "release-api" {
+		t.Fatalf("leave_active post-serving failure = %#v", result)
+	}
+	want := []string{"compose:switch-api", "script:post"}
+	if len(runtime.events) != len(want) {
+		t.Fatalf("leave_active events = %#v, want %#v", runtime.events, want)
+	}
+	for index := range want {
+		if runtime.events[index] != want[index] {
+			t.Fatalf("leave_active events = %#v, want %#v", runtime.events, want)
+		}
+	}
+}
+
 func TestExecuteReleaseRunsPostDeployAfterCandidateStartBeforeReadiness(t *testing.T) {
 	// Rationale: readiness may depend on a post-deploy migration, so it cannot
 	// precede the Script runner.
@@ -223,7 +268,7 @@ func TestExecuteReleaseRunsPostDeployAfterCandidateStartBeforeReadiness(t *testi
 				test.start: releaseExecutionSuccess("api", false), test.readiness: releaseExecutionSuccess("api", false),
 				test.finalize: releaseExecutionSuccess("api", false),
 			}}
-			compose, err := NewComposeRuntime(runtime, &fakeComposeObserver{projects: []*agentpb.ObservedProject{{ProjectName: "gp-release"}}})
+			compose, err := NewComposeRuntime(runtime, &fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}})
 			if err != nil {
 				t.Fatalf("NewComposeRuntime() error = %v", err)
 			}
