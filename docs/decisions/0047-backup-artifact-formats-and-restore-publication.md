@@ -642,9 +642,10 @@ linux/arm64
 
 The index contains exactly one runnable child manifest per supported platform.
 Each platform's authenticated upstream parent, child/config/layer descriptors,
-and derived helper/config/layer digests are retained in the platform-specific
-release record. Source documentation never predicts a post-push managed-index,
-child, config, or layer digest. The upstream runnable parents are the
+complete ordered Config.Env array, and derived helper and client-gate
+measurements are retained in that platform's level-one entry. Source
+documentation never predicts a post-push managed-index, child, config, or layer
+digest. The upstream runnable parents are the
 platform-specific children of the PostgreSQL `16.15-alpine3.24` OCI index; the
 authenticated ARM64 descriptor decides whether its variant is `v8` or `null`.
 
@@ -676,10 +677,11 @@ PG_VERSION:  16.15
 PGDATA:      /var/lib/postgresql/data
 ```
 
-The complete OCI Config.Env array is retained byte-for-byte and in order from
-the fixed upstream config digest. The derived Dockerfile declares no `ENV`.
-Release verification compares the derived array to the upstream array exactly,
-not as a map or selected subset.
+Each platform's complete OCI Config.Env array is retained byte-for-byte and in
+order from that platform's authenticated upstream config descriptor. The
+derived Dockerfile declares no `ENV`. Release verification compares each
+derived array to its matching platform entry exactly, not as a map, selected
+subset, or value borrowed from the other platform.
 
 Because OCI User is unset, normal container startup begins as uid 0. The
 inherited entrypoint performs its existing `gosu postgres` privilege drop before
@@ -721,8 +723,9 @@ The image contains:
 ```
 
 The amd64 and arm64 helper and gate builds have the same semantics, protocol,
-and security behavior; only ELF machine, syscall constants, and
-platform-specific release digests vary.
+and security behavior. ELF machine, binary size and digest, syscall constants,
+seccomp digest, and authenticated upstream descriptors and environment remain
+explicit platform-specific evidence.
 
 Helper state files within `/run/groundplane-postgres16` are `root:root`, mode
 `0600`, regular, single-link files. PostgreSQL server and client processes at
@@ -816,17 +819,11 @@ ManagedPostgres16BuildContract = {
   "client_gate": {
     "elf_class": "ELF64",
     "elf_data": "little-endian",
-    "elf_machine": {
-      "linux/amd64": "EM_X86_64",
-      "linux/arm64": "EM_AARCH64"
-    },
     "gid": 0,
     "linkage": "static",
     "mode": 320,
     "os": "linux",
     "path": "/usr/local/libexec/groundplane-postgres16-client-gate",
-    "sha256": HEX64,
-    "size_bytes": UINT64_POSITIVE,
     "uid": 0
   },
   "helper": {
@@ -836,17 +833,11 @@ ManagedPostgres16BuildContract = {
     "directory_uid": 0,
     "elf_class": "ELF64",
     "elf_data": "little-endian",
-    "elf_machine": {
-      "linux/amd64": "EM_X86_64",
-      "linux/arm64": "EM_AARCH64"
-    },
     "gid": 0,
     "linkage": "static",
     "mode": 365,
     "os": "linux",
     "path": "/usr/local/libexec/groundplane-postgres16-helper",
-    "sha256": HEX64,
-    "size_bytes": UINT64_POSITIVE,
     "uid": 0
   },
   "image_labels": {
@@ -857,8 +848,48 @@ ManagedPostgres16BuildContract = {
   },
   "launch_profile_sha256": HEX64,
   "platforms": [
-    {"os": "linux", "architecture": "amd64", "variant": null},
-    {"os": "linux", "architecture": "arm64", "variant": "v8" | null}
+    {
+      "os": "linux",
+      "architecture": "amd64",
+      "variant": null,
+      "helper": {
+        "elf_machine": "EM_X86_64",
+        "sha256": HEX64,
+        "size_bytes": UINT64_POSITIVE
+      },
+      "client_gate": {
+        "elf_machine": "EM_X86_64",
+        "sha256": HEX64,
+        "size_bytes": UINT64_POSITIVE
+      },
+      "upstream": {
+        "runnable_child_digest": OCI_SHA256,
+        "config_digest": OCI_SHA256,
+        "layer_digests": [OCI_SHA256],
+        "environment": CONFIG_ENV
+      }
+    },
+    {
+      "os": "linux",
+      "architecture": "arm64",
+      "variant": "v8" | null,
+      "helper": {
+        "elf_machine": "EM_AARCH64",
+        "sha256": HEX64,
+        "size_bytes": UINT64_POSITIVE
+      },
+      "client_gate": {
+        "elf_machine": "EM_AARCH64",
+        "sha256": HEX64,
+        "size_bytes": UINT64_POSITIVE
+      },
+      "upstream": {
+        "runnable_child_digest": OCI_SHA256,
+        "config_digest": OCI_SHA256,
+        "layer_digests": [OCI_SHA256],
+        "environment": CONFIG_ENV
+      }
+    }
   ],
   "process": {
     "child_cap_ambient": 0,
@@ -891,11 +922,24 @@ ManagedPostgres16BuildContract = {
     ],
     "fd_profile_version": 1,
     "gate_protocol_version": 1,
-    "gate_seccomp_sha256": HEX64,
-    "gate_single_thread_profile": {
-      "linux/amd64": "linux-amd64-freestanding-single-thread-v1",
-      "linux/arm64": "linux-arm64-freestanding-single-thread-v1"
-    },
+    "platform_profiles": [
+      {
+        "os": "linux",
+        "architecture": "amd64",
+        "variant": null,
+        "gate_seccomp_sha256": HEX64,
+        "gate_single_thread_profile":
+          "linux-amd64-freestanding-single-thread-v1"
+      },
+      {
+        "os": "linux",
+        "architecture": "arm64",
+        "variant": "v8" | null,
+        "gate_seccomp_sha256": HEX64,
+        "gate_single_thread_profile":
+          "linux-arm64-freestanding-single-thread-v1"
+      }
+    ],
     "helper_exec_gid": 0,
     "helper_exec_uid": 0,
     "helper_egid": 0,
@@ -926,7 +970,6 @@ ManagedPostgres16BuildContract = {
   "runtime": {
     "cmd": ["postgres"],
     "entrypoint": ["docker-entrypoint.sh"],
-    "environment": UPSTREAM_CONFIG_ENV,
     "pg_major": "16",
     "pg_version": "16.15",
     "pgdata": "/var/lib/postgresql/data",
@@ -946,14 +989,10 @@ ManagedPostgres16BuildContract = {
     "uid": 0
   },
   "upstream": {
-    "config_digest":
-      "sha256:c05eced0bdb41ea9b95a656472a6aa4d50cad0d8a2e33d14eb1c53fd6204f2ae",
     "index_digest":
       "sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685",
     "release": "16.15-alpine3.24",
     "repository": "docker.io/library/postgres",
-    "runnable_child_digest":
-      "sha256:738d1359df5aa0b6d50a9071e989c49fdd39152a2a805c6ff131bf5e2243e0b3",
     "source_commit":
       "9d15534160ade17f2b6c455a39ee967c49b1937d",
     "source_directory": "16/alpine3.24",
@@ -963,11 +1002,24 @@ ManagedPostgres16BuildContract = {
 }
 ```
 
-`HEX64` is exactly 64 lowercase hexadecimal bytes. `UINT64_POSITIVE` is a
-canonical positive JSON integer within unsigned 64-bit range.
-`UPSTREAM_CONFIG_ENV` is the complete ordered OCI Config.Env string array read
-from the fixed upstream config digest above. It is a derived value from fixed
-authenticated source bytes, not a release placeholder or operator input.
+`HEX64` is exactly 64 lowercase hexadecimal bytes. `OCI_SHA256` is exactly
+`sha256:` followed by `HEX64`. `UINT64_POSITIVE` is a canonical positive JSON
+integer within unsigned 64-bit range. Each `CONFIG_ENV` is the complete ordered
+OCI Config.Env string array read from that same platform's authenticated
+`config_digest`; the two placeholders are independently derived and do not
+assert equal arrays. Every platform
+descriptor, layer digest, environment member, helper measurement, and client-
+gate measurement is derived from authenticated bytes; none is a release
+placeholder, guessed source constant, or scalar inherited from the ARM64
+scaffold.
+
+The two `platforms` entries are exact and ordered: `linux/amd64` first with
+variant `null`, then `linux/arm64` with the variant authenticated by the fixed
+upstream index. The `process.platform_profiles` array has exactly the same two
+identities, variants, and order. Missing, duplicate, additional, reordered, or
+cross-platform evidence is invalid. The global helper and client-gate objects
+contain only properties common to both binaries; their byte measurements and
+ELF machines belong exclusively to their matching platform entries.
 
 `launch_profile_sha256` is exactly 64 lowercase hexadecimal bytes and is
 computed before the build-contract digest as:
@@ -979,18 +1031,21 @@ D("groundplane.postgres16.client-launch-profile.v1",
 
 The helper and client gate embed that exact digest. Release verification
 requires both to report it and independently reconstructs it from the closed
-`process` object. It contains no gate/helper byte digest or managed image digest
-and therefore creates no digest cycle.
+`process` object. The process object contains the two platform seccomp digests
+but no helper byte digest, client-gate byte digest, or managed image digest, so
+one global launch-profile digest remains cycle-free.
 
-`gate_seccomp_sha256` is raw SHA-256 over the exact loaded classic-BPF
-`sock_filter` array, each instruction serialized as little-endian `u16 code`,
-`u8 jt`, `u8 jf`, and little-endian `u32 k` with no header or padding. Release
-automation reconstructs each platform's array from the locked syscall constants
-for `linux/amd64` and `linux/arm64`, checks the filter semantics and digest, and
-verifies that libc `fork`/`vfork` and raw `clone`/`clone3` each fail with `EPERM`
-while the selected PostgreSQL client can exec and operate. The digest is part of
-the `process` object and therefore of `launch_profile_sha256` and the level-one
-contract.
+Each `platform_profiles[].gate_seccomp_sha256` is raw SHA-256 over that
+platform's exact loaded classic-BPF `sock_filter` array, each instruction
+serialized as little-endian `u16 code`, `u8 jt`, `u8 jf`, and little-endian
+`u32 k` with no header or padding. Release automation reconstructs each array
+from the locked syscall constants for its exact platform, checks the filter
+semantics and digest, and verifies that libc `fork`/`vfork` and raw
+`clone`/`clone3` each fail with `EPERM` while the selected PostgreSQL client can
+exec and operate. Both digests are part of the `process` object and therefore
+of `launch_profile_sha256` and the level-one contract. A launch intent carries
+only the scalar seccomp digest selected from the authenticated current platform
+profile; it never carries the other platform's digest or accepts a fallback.
 
 The level-one digest is exactly:
 
@@ -1092,24 +1147,35 @@ ADR 0048.
 Release verification independently fetches the managed index and requires:
 
 - exactly one runnable child for each of `linux/amd64` and `linux/arm64`;
+- the level-one `platforms` and `process.platform_profiles` arrays contain
+  exactly those identities in amd64-then-arm64 order, with identical
+  authenticated variants and no missing, duplicate, or additional entry;
+- each level-one platform's upstream child, config, ordered layer list, and
+  complete environment resolve from that exact platform descriptor in the
+  fixed upstream index, never from the other platform or an old scalar;
 - each child digest equals its platform-specific release-record digest;
 - each child config and added-layer set equals its platform-specific
   release-record digests;
-- each child config retains the level-one runtime values exactly;
+- each derived child retains its matching level-one upstream layers in order
+  and appends only its matching level-two added-layer set;
+- each child config retains the common level-one runtime values and its own
+  level-one platform `environment` exactly;
 - managed container HostConfig has `Privileged=false`, exact `CapDrop=[ALL]`,
   exact ordered
   `CapAdd=[CHOWN,DAC_OVERRIDE,FOWNER,KILL,SETGID,SETPCAP,SETUID,SYS_PTRACE]`, and
   exact `SecurityOpt=[no-new-privileges:true]`, with no added capability or
   alternate security option;
-- the complete Config.Env array equals the fixed upstream Config.Env array
-  byte-for-byte and in order;
+- each complete Config.Env array equals its matching authenticated upstream
+  platform array byte-for-byte and in order;
 - the two Groundplane labels have the exact keys and values above;
 - `/usr/local/libexec` has the required type, uid, gid, and mode;
-- the helper has the required path, type, uid, gid, mode, byte length, SHA-256,
-  static linkage, and ELF identity;
+- the helper has the required common path, type, uid, gid, mode, static linkage,
+  and ELF class/data plus its matching platform entry's byte length, SHA-256,
+  and ELF machine;
 - the private client gate has the required path, type, uid, gid, mode, byte
-  length, SHA-256, static linkage, ELF identity, and no setuid bit, setgid bit,
-  file capabilities, or writable path component;
+  length, SHA-256, static linkage, ELF identity selected from its matching
+  platform entry, and no setuid bit, setgid bit, file capabilities, or writable
+  path component;
 - gate READY proves one task, `pid==pgid`, all four uid/gid values zero, empty
   groups, zero inheritable/ambient sets, exact eight-capability permitted/
   effective/bounding sets, `NoNewPrivs: 1`,
@@ -1123,8 +1189,9 @@ Release verification independently fetches the managed index and requires:
   `70:70`, no supplementary groups, zero inheritable/permitted/effective/ambient
   capabilities, and `NoNewPrivs: 1`;
 - the three client paths are regular root-owned non-writable files without
-  setuid, setgid, or file capabilities, byte-identical to the fixed upstream
-  runnable child, and gate READY plus PROFILE_APPLIED evidence matches the
+  setuid, setgid, or file capabilities, byte-identical to those paths in the
+  authenticated upstream runnable child named by the matching level-one
+  platform entry, and gate READY plus PROFILE_APPLIED evidence matches the
   closed fd and security profiles;
 - the initialized live postmaster has real/effective/saved/filesystem uid and
   gid all 70, no supplementary groups, zero inheritable/permitted/effective/
@@ -1609,7 +1676,9 @@ rgid:u32,egid:u32,sgid:u32,fsgid:u32`, then `groups:vector<u32>`,
 sets in `inh,prm,eff,bnd,amb` order, `no_new_privs:bool`,
 `seccomp_sha256:digest`, and `fork_syscalls_denied:bool`. The child profile
 requires every uid/gid value 70, no groups, `cap_last_cap<=63`, all five sets
-zero, both booleans true, and the release-record seccomp digest.
+zero, both booleans true, and `seccomp_sha256` equal to the
+`gate_seccomp_sha256` in the one `process.platform_profiles` entry selected by
+the authenticated current operating system, architecture, and variant.
 
 `FdProfileV1` is `profile_version:u32` followed by `fd0:u8,fd1:u8,fd2:u8`.
 Fd values are `1=read_only_dev_null`, `2=validated_restore_input_pipe`,
@@ -1639,6 +1708,12 @@ four ordered nonempty entries in the build contract, each at most 256 bytes.
 `nofile_limit` is exactly 64.
 The complete intent is at most 32,768 bytes. Its digest is
 `D("groundplane.postgres16.client-launch-intent.v1", canonical_intent_bytes)`.
+The intent's scalar `gate_seccomp_sha256` and its embedded
+`child_security.seccomp_sha256` are byte-identical to each other and to the
+digest in that same selected `process.platform_profiles` entry. The gate
+installs the exact platform filter bytes whose canonical digest is that value;
+another platform profile, missing or additional profile, fallback digest, or
+different loaded filter rejects execution.
 
 Fd 3 accepts exactly byte `0x01` followed by EOF. EOF before that byte, another
 byte, an additional byte, or a read/error other than interrupt retry is fatal.

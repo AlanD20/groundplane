@@ -2145,10 +2145,13 @@ first-party Groundplane-managed OCI index with exactly one native runnable
 child for each supported `linux/amd64` and `linux/arm64` platform. Docker
 selects only the child matching the local host; emulation is outside the MVP.
 Each child embeds the helper and is runtime-pinned by its managed repository
-and platform-specific release-record digests. The platform-specific upstream
-parent, child/config descriptors, and derived helper/config/layer digests are
-authenticated and retained in ADR 0047's dual-platform release record; source
-documentation does not predict post-push managed digests.
+and platform-specific release-record digests. Each platform's upstream runnable
+child, config, and ordered layer descriptors, complete Config.Env, and helper and
+client-gate measurements are authenticated and retained in ADR 0047's level-one
+platform entry; its selected process profile is retained in the matching
+level-one `process.platform_profiles` entry. The level-two release record
+separately retains the post-push managed child, config, and added-layer digests;
+source documentation does not predict those post-push managed digests.
 The derived image preserves inherited Entrypoint, Cmd, and Env and does not set
 Dockerfile `USER` or `WORKDIR`. ADR 0047 exclusively defines the complete
 managed-image addition inventory.
