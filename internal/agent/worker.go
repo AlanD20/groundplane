@@ -966,6 +966,7 @@ func (p *WorkerPool) emitProgress(runCtx context.Context, progress TaskProgress)
 
 func (p *WorkerPool) complete(runCtx context.Context, reservation *taskReservation, result TaskResult) {
 	p.backupSecrets.Release(result.TaskID)
+	p.materializations.Retire(result.TaskID)
 
 	owned := result
 	if result.Compose != nil {
@@ -986,7 +987,6 @@ func (p *WorkerPool) complete(runCtx context.Context, reservation *taskReservati
 	}
 	p.mu.Unlock()
 	reservation.cancel()
-	p.materializations.Release(result.TaskID)
 	p.managedConfigs.Release(result.TaskID)
 }
 
@@ -1057,7 +1057,7 @@ func (p *WorkerPool) Abort(ctx context.Context, taskID string, assignmentID stri
 	}
 	reservation.cancel()
 	p.mu.Unlock()
-	p.materializations.Release(taskID)
+	p.materializations.Retire(taskID)
 	p.managedConfigs.Release(taskID)
 	p.backupSecrets.Release(taskID)
 	return nil

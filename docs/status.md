@@ -701,3 +701,17 @@ candidate-Attach-limit, retained-reference, exact maximum-shape,
 same-candidate Attach/Volume visibility, and failure-injection proofs pass.
 Generated-artifact checks and reference-host acceptance remain pending; C16 and
 C21 remain **Scaffolded**.
+
+## Bounded terminal materialization drain (2026-09-04)
+
+An Agent worker now retires materialization correlation after a terminal result
+instead of deleting it while Controller records may still be in flight. Retired
+transfers retain exact assignment, plan, step, sequence, length, and digest
+authority while immediately clearing every accepted or rejected plaintext chunk.
+Incremental digest state uses the canonical destroyable materialization hasher,
+the receiver enforces the protocol's 32-chunk ceiling, and incomplete retired
+state is destroyed at the immutable assignment deadline. An exact assignment
+replay replaces and destroys only its matching retired state; active duplicates
+and mismatched correlation still fail closed. Focused Agent and materialization
+hasher race proofs pass; exact reference-host Blueprint and Script acceptance
+remains pending.

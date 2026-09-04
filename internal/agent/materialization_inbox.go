@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -23,7 +24,10 @@ type materializationTaskInbox struct {
 	assignmentID     string
 	planHash         [sha256.Size]byte
 	renderGeneration uint64
+	deadline         time.Time
 	steps            map[string]*materializationStepInbox
+	retired          bool
+	expiry           *time.Timer
 }
 
 type materializationStepInbox struct {
@@ -31,7 +35,10 @@ type materializationStepInbox struct {
 	header   entrymaterialization.Header
 	content  []byte
 	chunks   uint32
+	received uint64
+	digest   entrymaterialization.Hasher
 	state    materializationTransferState
+	retired  bool
 	err      error
 	ready    chan struct{}
 }
@@ -44,6 +51,7 @@ const (
 	materializationComplete
 	materializationFailed
 	materializationConsumed
+	maximumMaterializationTransferChunks uint32 = 32
 )
 
 type materializationPayload struct {
@@ -79,12 +87,18 @@ func (inbox *materializationInbox) Register(assignment Assignment) error {
 			assignment.Plan,
 		),
 		renderGeneration: assignment.Plan.GetRenderGeneration(),
+		deadline:         assignment.Deadline,
 		steps:            steps,
 	}
 	inbox.mu.Lock()
 	defer inbox.mu.Unlock()
-	if _, exists := inbox.tasks[assignment.TaskID]; exists {
-		return errs.New(errs.KindInternal, "agent: materialization task was registered twice")
+	if existing := inbox.tasks[assignment.TaskID]; existing != nil {
+		if !existing.retired || existing.assignmentID != task.assignmentID ||
+			existing.planHash != task.planHash || existing.renderGeneration != task.renderGeneration ||
+			!existing.deadline.Equal(task.deadline) {
+			return errs.New(errs.KindInternal, "agent: materialization task was registered twice")
+		}
+		inbox.destroyTask(existing)
 	}
 	inbox.tasks[assignment.TaskID] = task
 	return nil
@@ -94,6 +108,14 @@ func (inbox *materializationInbox) Accept(
 	ctx context.Context,
 	transfer *agentpb.MaterializationTransfer,
 ) error {
+	if transfer != nil {
+		if chunk := transfer.GetChunk(); chunk != nil {
+			defer func() {
+				clear(chunk.Content)
+				chunk.Content = nil
+			}()
+		}
+	}
 	if ctx == nil || inbox == nil || transfer == nil {
 		return errs.New(errs.KindInternal, "agent: materialization transfer is invalid")
 	}
@@ -103,6 +125,13 @@ func (inbox *materializationInbox) Accept(
 	inbox.mu.Lock()
 	defer inbox.mu.Unlock()
 	task := inbox.tasks[transfer.GetTaskId()]
+	if task != nil && !time.Now().Before(task.deadline) {
+		if task.retired {
+			inbox.destroyTask(task)
+			delete(inbox.tasks, transfer.GetTaskId())
+		}
+		return errs.New(errs.KindInternal, "agent: materialization transfer correlation is expired")
+	}
 	if task == nil || transfer.GetAssignmentId() != task.assignmentID || len(transfer.GetPlanHash()) != sha256.Size ||
 		subtle.ConstantTimeCompare(transfer.GetPlanHash(), task.planHash[:]) != 1 {
 		return errs.New(errs.KindInternal, "agent: materialization transfer correlation is invalid")
@@ -121,7 +150,7 @@ func (inbox *materializationInbox) Accept(
 	case *agentpb.MaterializationTransfer_Chunk:
 		return inbox.acceptChunk(step, record.Chunk)
 	case *agentpb.MaterializationTransfer_End:
-		return inbox.acceptEnd(step, record.End)
+		return inbox.acceptEnd(transfer.GetTaskId(), transfer.GetStepId(), task, step, record.End)
 	default:
 		return inbox.failStep(step, "agent: materialization transfer record is empty")
 	}
@@ -162,7 +191,14 @@ func (inbox *materializationInbox) acceptHeader(
 		return inbox.failStep(step, "agent: materialization transfer header policy is invalid")
 	}
 	step.header = validated
-	step.content = make([]byte, 0, int(header.GetLength()))
+	if step.retired {
+		if step.digest != nil {
+			step.digest.Destroy()
+		}
+		step.digest = entrymaterialization.NewHasher()
+	} else {
+		step.content = make([]byte, 0, int(header.GetLength()))
+	}
 	step.state = materializationReceiving
 	return nil
 }
@@ -173,21 +209,54 @@ func (inbox *materializationInbox) acceptChunk(
 ) error {
 	if step.state != materializationReceiving || chunk == nil || chunk.GetSequence() != step.chunks+1 ||
 		len(chunk.GetContent()) == 0 || len(chunk.GetContent()) > entrymaterialization.MaximumChunkBytes ||
-		uint64(len(step.content)+len(chunk.GetContent())) > step.expected.GetLength() {
+		step.chunks >= maximumMaterializationTransferChunks ||
+		step.received+uint64(len(chunk.GetContent())) > step.expected.GetLength() {
 		return inbox.failStep(step, "agent: materialization transfer chunk is invalid")
 	}
-	step.content = append(step.content, chunk.GetContent()...)
+	if step.retired {
+		if step.digest == nil {
+			return inbox.failStep(step, "agent: materialization transfer digest state is invalid")
+		}
+		written, err := step.digest.Write(chunk.GetContent())
+		if err != nil || written != len(chunk.GetContent()) {
+			return inbox.failStep(step, "agent: materialization transfer digest state is invalid")
+		}
+	} else {
+		step.content = append(step.content, chunk.GetContent()...)
+	}
+	step.received += uint64(len(chunk.GetContent()))
 	step.chunks++
 	return nil
 }
 
 func (inbox *materializationInbox) acceptEnd(
+	taskID string,
+	stepID string,
+	task *materializationTaskInbox,
 	step *materializationStepInbox,
 	end *agentpb.MaterializationTransferEnd,
 ) error {
 	if step.state != materializationReceiving || end == nil || end.GetChunkCount() != step.chunks ||
-		uint64(len(step.content)) != step.expected.GetLength() {
+		step.received != step.expected.GetLength() {
 		return inbox.failStep(step, "agent: materialization transfer end is invalid")
+	}
+	if step.retired {
+		if step.digest == nil {
+			return inbox.failStep(step, "agent: materialization transfer digest state is invalid")
+		}
+		var expected entrymaterialization.Digest
+		copy(expected[:], step.expected.GetSha256())
+		digest := step.digest
+		step.digest = nil
+		if !digest.Verify(expected) {
+			return inbox.failStep(step, "agent: materialization transfer digest is invalid")
+		}
+		delete(task.steps, stepID)
+		if len(task.steps) == 0 {
+			inbox.destroyTask(task)
+			delete(inbox.tasks, taskID)
+		}
+		return nil
 	}
 	digest := sha256.Sum256(step.content)
 	if subtle.ConstantTimeCompare(digest[:], step.expected.GetSha256()) != 1 {
@@ -234,8 +303,7 @@ func transferOutputKind(value agentpb.MaterializationOutputKind) (entrymateriali
 func (inbox *materializationInbox) failStep(step *materializationStepInbox, message string) error {
 	err := errs.New(errs.KindInternal, message)
 	if step.state != materializationFailed && step.state != materializationConsumed {
-		clear(step.content)
-		step.content = nil
+		inbox.destroyStep(step)
 		step.err = err
 		if step.state != materializationComplete {
 			close(step.ready)
@@ -267,12 +335,18 @@ func (inbox *materializationInbox) Take(
 	inbox.mu.Unlock()
 	select {
 	case <-ctx.Done():
-		inbox.Release(taskID)
+		inbox.Retire(taskID)
 		return materializationPayload{}, ctx.Err()
 	case <-ready:
 	}
 	inbox.mu.Lock()
 	defer inbox.mu.Unlock()
+	if step.retired {
+		if err := ctx.Err(); err != nil {
+			return materializationPayload{}, err
+		}
+		return materializationPayload{}, errs.New(errs.KindInternal, "agent: materialization payload was retired")
+	}
 	if step.err != nil || step.state != materializationComplete {
 		if step.err != nil {
 			return materializationPayload{}, step.err
@@ -292,6 +366,112 @@ func (inbox *materializationInbox) Take(
 	return materializationPayload{Header: step.header, Source: source}, nil
 }
 
+// Retire clears all buffered plaintext after worker terminalization while
+// retaining enough exact authority to validate transfers already in transport.
+func (inbox *materializationInbox) Retire(taskID string) {
+	if inbox == nil {
+		return
+	}
+	inbox.mu.Lock()
+	defer inbox.mu.Unlock()
+	task := inbox.tasks[taskID]
+	if task == nil {
+		return
+	}
+	task.retired = true
+	for stepID, step := range task.steps {
+		if step.retired {
+			continue
+		}
+		step.retired = true
+		switch step.state {
+		case materializationReceiving:
+			if step.digest != nil {
+				step.digest.Destroy()
+			}
+			step.digest = entrymaterialization.NewHasher()
+			written, err := step.digest.Write(step.content)
+			if err != nil || written != len(step.content) {
+				inbox.failStep(step, "agent: materialization transfer digest state is invalid")
+				continue
+			}
+			clear(step.content)
+			step.content = nil
+		case materializationComplete, materializationConsumed:
+			inbox.destroyStep(step)
+			delete(task.steps, stepID)
+		default:
+			inbox.destroyStep(step)
+		}
+	}
+	if len(task.steps) == 0 {
+		inbox.destroyTask(task)
+		delete(inbox.tasks, taskID)
+		return
+	}
+	if !time.Now().Before(task.deadline) {
+		inbox.destroyTask(task)
+		delete(inbox.tasks, taskID)
+		return
+	}
+	if task.expiry == nil {
+		inbox.scheduleExpiry(taskID, task)
+	}
+}
+
+func (inbox *materializationInbox) scheduleExpiry(taskID string, task *materializationTaskInbox) {
+	assignmentID := task.assignmentID
+	planHash := task.planHash
+	deadline := task.deadline
+	task.expiry = time.AfterFunc(time.Until(deadline), func() {
+		inbox.expire(taskID, task, assignmentID, planHash, deadline)
+	})
+}
+
+func (inbox *materializationInbox) expire(
+	taskID string,
+	expected *materializationTaskInbox,
+	assignmentID string,
+	planHash [sha256.Size]byte,
+	deadline time.Time,
+) {
+	inbox.mu.Lock()
+	defer inbox.mu.Unlock()
+	task := inbox.tasks[taskID]
+	if task != expected || !task.retired || task.assignmentID != assignmentID || task.planHash != planHash ||
+		!task.deadline.Equal(deadline) {
+		return
+	}
+	if time.Now().Before(deadline) {
+		task.expiry = nil
+		inbox.scheduleExpiry(taskID, task)
+		return
+	}
+	task.expiry = nil
+	inbox.destroyTask(task)
+	delete(inbox.tasks, taskID)
+}
+
+func (inbox *materializationInbox) destroyStep(step *materializationStepInbox) {
+	clear(step.content)
+	step.content = nil
+	if step.digest != nil {
+		step.digest.Destroy()
+		step.digest = nil
+	}
+}
+
+func (inbox *materializationInbox) destroyTask(task *materializationTaskInbox) {
+	if task.expiry != nil {
+		task.expiry.Stop()
+		task.expiry = nil
+	}
+	for _, step := range task.steps {
+		inbox.destroyStep(step)
+	}
+}
+
+// Release is a hard rollback for assignments that were never admitted.
 func (inbox *materializationInbox) Release(taskID string) {
 	if inbox == nil {
 		return
@@ -306,10 +486,10 @@ func (inbox *materializationInbox) Release(taskID string) {
 		if step.state == materializationAwaitingHeader || step.state == materializationReceiving {
 			inbox.failStep(step, "agent: materialization transfer was interrupted")
 		} else {
-			clear(step.content)
-			step.content = nil
+			inbox.destroyStep(step)
 		}
 	}
+	inbox.destroyTask(task)
 	delete(inbox.tasks, taskID)
 }
 
