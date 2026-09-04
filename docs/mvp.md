@@ -1197,11 +1197,22 @@ tenants and one database.
   controls whether already-switched members return to their previous healthy
   releases after a later member fails or remain active for explicit rollback.
   Members execute serially in the declared order; this is not a simultaneous or
-  atomic distributed switch. A request `tag` overrides the persisted group tag;
-  if both are empty the group is rejected, with no member-current fallback. The
-  chosen tag resolves separately against each member's image and records each
-  member's digest and history independently. The group `on_failure` overrides
-  member defaults for aggregate compensation. Blueprint lifecycle edges
+  atomic distributed switch. For a group deploy, a request `tag` overrides the
+  persisted group tag; if both are empty the deploy is rejected, with no
+  member-current fallback. The chosen deploy tag resolves separately against
+  each member's image and pins its exact immutable host-local Docker image
+  identity before workload mutation; registry or manifest digest metadata is
+  optional and never substitutes for that local identity. Each member records
+  its release history independently.
+  Group rollback never consults the persisted group tag. An optional rollback
+  request tag makes each member independently select its newest eligible
+  historical Release that completed successfully and reached serving with that
+  exact tag and a tag different from its current serving Release; omission
+  selects the newest such eligible Release with a different tag for each
+  member. If any member has no
+  eligible source, the entire group rollback is rejected before publication.
+  The group `on_failure` overrides member defaults for aggregate compensation.
+  Blueprint lifecycle edges
   are frozen at the same revision; publication rejects a group whose declared
   order places a selected Service before its selected prerequisite and never
   silently reorders the group. A retry preserves the same candidate ids,

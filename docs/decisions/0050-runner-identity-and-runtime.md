@@ -2,7 +2,18 @@
 
 ## Status
 
-Accepted for the MVP.
+Accepted retained product, allocation, and isolation design. ADR 0057
+supersedes the executor and lifecycle placement; ADR 0060 supersedes the
+single-platform release clauses. Implementation remains subsequent to the
+hosting floor under ADR 0065's external-builder assumption.
+
+The native Controller Task executor is the sole owner of Runner create, retry,
+remove, inspection, journal, helper, and host effects. The persistent Agent has
+no Runner execution payload, token path, journal, helper, or inspection role.
+All later Agent-owned execution wording in this historical ADR is superseded
+and is not executable authority. Likewise, ARM64-specific bytes below describe
+one historical platform child only; a release must supply equivalent
+`linux/amd64` and `linux/arm64` variants through ADRs 0057 and 0060.
 
 ## Context
 
@@ -64,8 +75,9 @@ write the lifecycle record and never advance `runtime_epoch`.
 Before any create, retry, or reboot re-attestation may mutate the host, the
 Controller transaction allocates the single prospective value
 `next_epoch = current_epoch + 1`, stores it in the lifecycle record, and
-publishes the Agent Task plan that carries that value. That transaction is the
-only increment for the attempt. The Agent uses the same value in every unit,
+publishes the native Controller Task plan that carries that value. That
+transaction is the only increment for the attempt. The Controller executor
+uses the same value in every unit,
 network, nftables, container, socket, and RuntimeOwnership identity; binding
 the container and accepting attestation do not increment it again. Cleanup
 also does not increment it. Ordinary lifecycle and observation changes within
@@ -80,7 +92,7 @@ rejects unknown/duplicate members and every JSON numeric value, and is capped at
 65,536 bytes before allocation. Every integer, UID, GID, device, inode, mount
 id, handle, port, revision, PID, start tick, generation and counter is a
 canonical unsigned base-10 string with no leading zero except `"0"`. Product
-identities use their authoritative prefixed grammars: `agt_`, `run_`, `tnt_`,
+identities use their authoritative prefixed grammars: `run_`, `tnt_`,
 `task_`, `op_`, and `step_` followed by a strict uppercase 26-character
 Crockford ULID; `prj_` uses the same uppercase body where present in scope.
 Lowercase canonical UUID is used only where this contract explicitly says
@@ -95,7 +107,6 @@ Its exact top-level schema is:
 ```text
 {
   "schema":"groundplane.runtime-ownership/v1",
-  "agent_id":<canonical-agent-id>,
   "scope":{"tenant_id":<canonical-tenant-id>,"project_id":<canonical-project-id-or-null>},
   "runner_id":<canonical-runner-id>,
   "runtime_epoch":<uint-string>,
@@ -255,10 +266,11 @@ Runner removal.
 
 ### Write-before-mutation ownership journal
 
-The Agent owns one revision-chain directory per active Runner operation:
+The native Controller executor owns one revision-chain directory per active
+Runner operation:
 
 ```text
-/var/lib/groundplane/agent/runner-ownership/v1/<runner-id>/<runtime-epoch>/<task-id>.<ownership-nonce>/
+/var/lib/groundplane/controller/runner-ownership/v1/<runner-id>/<runtime-epoch>/<task-id>.<ownership-nonce>/
 ```
 
 The directory is `0700`; immutable 20-digit revision JSON files are `0600` and
@@ -303,7 +315,7 @@ confirmation matches these bytes, is unexpired, and was persisted in the
 issued revision.
 
 `RequestedInputs` is exactly
-`{scope,agent_id,runner_id,runtime_epoch,operation,cleanup_disposition,
+`{scope,runner_id,runtime_epoch,operation,cleanup_disposition,
 transfer_authorization_digest,transfer_record_digest,resource_requests}`. `cleanup_disposition` is null iff materialize and otherwise
 `delete_runner|replace_runtime`. One ResourceRequest is exactly
 `{sequence,effect_id,kind,operation,protocol_request_b64,protocol_wire_sha256,
@@ -329,7 +341,7 @@ host_target_mutation`. A `Budget` is exactly
 `{limit_ms,spent_ms,reservation}` where reservation is null or
 `{dispatch_id,kind,maximum_ms}`. Operation limit is `900000`; abort limit is
 `600000` and begins at zero. Before a mutating Docker/slot/host call or helper
-launch, the Agent persists issued state/counter plus reservation and requires
+launch, the Controller executor persists issued state/counter plus reservation and requires
 `spent_ms+maximum_ms<=limit_ms`. On return it adds ceil monotonic elapsed
 milliseconds capped at maximum and clears reservation in the outcome revision;
 a crash charges the full reservation. Already-available direct rootful Docker
@@ -400,10 +412,10 @@ Wait streams2, Remove3 and at most17 durable revisions.
 Mutators are at most 90 seconds, observers 30 seconds, and final UID proof 120
 seconds.
 
-The Agent persists `attach_issued` before Attach. A definitive pre-hijack HTTP
+The Controller executor persists `attach_issued` before Attach. A definitive pre-hijack HTTP
 failure may retry; hijack ambiguity retires the attempt because a connection
 is process-local, never a durable identity. Start is legal only while the same
-Agent process holds the live attach and `start_issued` is durable. Recovery of
+Controller process holds the live attach and `start_issued` is durable. Recovery of
 a Created helper at attach/start removes it and creates a fresh attempt. A
 Running/Exited helper at attach is conflict; at start it is allowed to reach
 the 15-second frame deadline and is then retired without observer because
@@ -422,10 +434,10 @@ Nonzero exit or missing/invalid response takes unknown-result observation.
 Docker attach uses `Tty=false`; Docker stdcopy framing is outside the
 application record and is decoded before stdout/stderr interpretation. The
 application record is exactly `uint32be(length) || deterministic protobuf`,
-where length is 1..65,536 and counts only protobuf bytes. The Agent writes
+where length is 1..65,536 and counts only protobuf bytes. The Controller executor writes
 exactly one request record to helper stdin then CloseWrite; the helper requires
 EOF immediately after it. The helper writes exactly one response record to
-stdout then EOF; the Agent rejects zero length, oversize, incomplete or trailing
+stdout then EOF; the Controller executor rejects zero length, oversize, incomplete or trailing
 bytes, a second record, or stdout bytes outside that record. The helper must
 receive the complete request within 15 seconds. Invalid or incomplete input
 mutates nothing, emits no response, and exits 64. Every valid operation result,
@@ -495,7 +507,7 @@ Fixed dispatch bounds are Network Create 2/Remove 2/no Start; Runner Create 3,
 Start 2, Stop 2, Remove 3; Slot reserve/release 2; helper bounds above; seal,
 receipt, abort ACK, and Task ACK 3. Polling never authorizes mutation.
 
-After all effects and helper removals, the Agent computes RuntimeOwnership once,
+After all effects and helper removals, the Controller executor computes RuntimeOwnership once,
 syncs `ownership_ready`, persists submit-issued, and uses Controller seal
 idempotency `(runner_id,runtime_epoch,task_id,ownership_digest)` with 0/1/>1
 semantics. It binds the response before atomically publishing the identical
@@ -563,7 +575,7 @@ Task state alone never authorizes adoption.
 Payload abort state is null or
 `{receipt_b64,receipt_digest,ack_dispatches,controller_ack_id,
 controller_response_digest}`. Controller ACK idempotency is
-`(task_id,runtime_epoch,receipt_sha256)`. After ACK the Agent persists
+`(task_id,runtime_epoch,receipt_sha256)`. After ACK the Controller executor persists
 `abort_acked`, then terminal receipt evidence. Only ACKed success is GC-eligible;
 unACKed or conflict terminal journals are retained. Terminal codes additionally
 include each AbortReason, `boot_changed_preseal_cleaned`, and the corruption,
@@ -574,7 +586,7 @@ above. Phase is terminal iff Terminal is non-null.
 
 Startup locks the Runner and resolves its unique chain. Same-boot restart
 observes every issued state before retry. Without current authenticated
-Controller authority the Agent performs no external mutation, including
+Controller authority the Controller executor performs no external mutation, including
 cleanup or observer launch; it may validate and persist bounded local/direct
 Docker observations only.
 
@@ -724,10 +736,11 @@ order. The GitHub default labels `self-hosted`, `linux`, `x64`, and
 the appropriate defaults. Groundplane does not pass `--no-default-labels`.
 
 ### Immutable Runner image and disabled updates
-The MVP Runner platform is exactly `linux/arm64`. A release publishes one
-single-platform OCI image index containing exactly one `linux/arm64` child; it
-does not publish an `amd64` child and does not describe the single-platform
-index as multiarchitecture. The OCI repository is a mandatory explicit release
+The MVP Runner release supports both `linux/amd64` and `linux/arm64` under ADR
+0060. A release publishes one multi-platform OCI image index containing exactly
+one child for each supported platform. The ARM64-specific values below are the
+historical ARM64 child input, not authority to omit the equivalent AMD64 child.
+The OCI repository is a mandatory explicit release
 build input with no default. It is 1 to 255 lowercase ASCII bytes, follows the
 OCI Distribution repository-name grammar, and contains no scheme, tag, digest,
 query, or fragment. The release build freezes that repository and the exact
@@ -985,7 +998,7 @@ in the assembled filesystem with no inherited environment and exactly
 missing executable, mismatched byte hash, non-matching exit code, or stdout or
 stderr digest mismatch fails the build or installation.
 
-The whole generated file is at most 2 MiB after adding encoded trust roots; the
+The whole generated per-platform file is at most 2 MiB after adding encoded trust roots; the
 decoded trust-root aggregate is independently capped at 262,144 bytes and the
 canonical manifest is rejected before allocation when it exceeds the 2 MiB
 aggregate bound. Identifiers and package fields are
@@ -998,13 +1011,14 @@ those 64 characters. Arrays reject duplicate semantic identities. These
 bounds, all exact object members, the stated order, and every constant are
 enforced before hashing; normalization is forbidden.
 
-The repository is a release input, but the exact child and index digests are
-build outputs. After pushing, the builder resolves the index, proves that it
-contains exactly the one expected `linux/arm64` child and that both remote
-digests equal the generated values, then seals those outputs in the outer
-manifest. Publication and installation fail closed until the base image
+The repository is a release input, but the exact platform-child and index
+digests are build outputs. After pushing, the builder resolves the index,
+proves that it contains exactly one expected `linux/amd64` child and one
+expected `linux/arm64` child and that every remote digest equals the generated
+value, then seals those outputs in the outer manifest. Publication and
+installation fail closed until the selected platform's base image
 digest, full authenticated `.deb` closure, executable hashes and probes, and
-both Runner image digests are present and verified.
+all Runner image child and index digests are present and verified.
 
 This introduces no Runner-manifest signing key or runtime trust store. The
 release builder produces immutable canonical manifest bytes, and those exact
@@ -1456,7 +1470,7 @@ nameserver 127.0.0.11
 options timeout:2 attempts:2 rotate ndots:0
 ```
 
-The Agent materializes the assets at exactly:
+The native Controller executor materializes the assets at exactly:
 
 ```text
 S/control/resolver-upstream.conf
@@ -1471,8 +1485,8 @@ fsync. A fresh unclaimed slot rejects either pre-existing path even when bytes
 match. A claimed Runner reuses a source only when path, device, inode, UID,
 GID, mode, size, and SHA-256 match RuntimeOwnership. Mismatch is
 `runner.ownership_conflict`; a source is never overwritten or repaired in
-place. This is a dedicated privileged Runner-DNS Agent module, not the
-Environment entry materializer.
+place. This is a dedicated privileged Runner-DNS procedure in the closed
+Controller-owned Runner runtime, not the Environment entry materializer.
 
 The release pins `/usr/libexec/groundplane/runner-rootless-launch`. The user
 unit executes that launcher, not `dockerd-rootless.sh` directly. The launcher
@@ -1576,12 +1590,14 @@ DNS acceptance requires:
 - Ownership substitution tests for every source, inode, mount id, namespace, PID, and target.
 - Same-boot restart reuse, host-reboot new mount identity, and tamper-to-offline reconciliation tests.
 - Local removal tests proving Docker-private resolver files are removed only by exact container/data-root cleanup and persistent sources only by inode-fenced unlink.
-- Ubuntu 24.04 ARM64 acceptance covering shell DNS, image pull/build, container action, service-container name resolution, outbound DNS, and failure of cross-Runner/private-pool access.
+- Ubuntu 24.04 acceptance on both `linux/amd64` and `linux/arm64`, covering
+  shell DNS, image pull/build, container action, service-container name
+  resolution, outbound DNS, and failure of cross-Runner/private-pool access.
 
 ### Acceptance evidence
 
-C17 remains Proposed until release and Ubuntu 24.04 ARM64 evidence proves all
-of the following against the exact pinned tuple:
+C17 remains Proposed until release and Ubuntu 24.04 evidence on both supported
+architectures proves all of the following against each exact pinned tuple:
 
 - RFC 8785 RuntimeOwnership maximum fixtures, every closed identity variant,
   65,536-byte rejection, resource cardinalities, and byte-identical
@@ -1594,7 +1610,7 @@ of the following against the exact pinned tuple:
 - the checked-in HostControl proto, helper Create/Inspect DTO/golden vectors,
   all nine AppArmor/seccomp artifacts, exact profile mapping, frame transport,
   helper retirement/observation, bootstrap revision/boot receipts, and absence
-  of persistent Agent host mutation authority;
+  of persistent Agent Runner mutation authority;
 - exact systemd 255 unit bytes and semantics, launcher clearenv boundaries,
   RootlessKit/dockerd argv and environment, effective limits/cgroups/namespaces,
   proxy readiness before Docker and API readiness after Docker;
@@ -1612,8 +1628,8 @@ of the following against the exact pinned tuple:
   success/failure/disconnect/cache-residue cleanup, and no `/grpc` or `/session`;
 - release source probes for Actions Runner 2.336.0, Docker CLI/Moby 29.1.3 API
   1.52, vendored runc, RootlessKit/slirp4netns, AppArmor parser/features, and
-  the exact ARM64 host. Missing literal artifacts or an x86-only host result is
-  not acceptance evidence.
+  exact AMD64 and ARM64 hosts. Evidence for only one architecture is not
+  acceptance evidence.
 
 
 ## Alternatives considered
@@ -1676,9 +1692,11 @@ explicit manual action.
 
 ## Integrated runtime and security contract
 
-This section is the sole executable host/runtime authority. Earlier identity,
-API, and lifecycle clauses supply inputs; they do not create alternate host
-paths, retry rules, or privilege profiles.
+This section retains the executable isolation, identity, ordering, and cleanup
+invariants. ADR 0057 relocates their execution wholesale to the native
+Controller Task executor. Historical references in this section to an Agent
+owner, Agent payload, Agent journal, Agent helper image, or Agent proof are
+superseded and must not be implemented as an alternate path.
 
 ### Machine bootstrap, slot roots, and release authority
 
@@ -1694,7 +1712,7 @@ removes machine-scoped packages, binaries, profiles, service, mount, or slot
 anchors.
 
 Bootstrap owns immutable revision directory
-`/var/lib/groundplane/agent/machine-bootstrap/v1/<64-lowerhex-runner-contract-sha256>/`
+`/var/lib/groundplane/controller/machine-bootstrap/v1/<64-lowerhex-runner-contract-sha256>/`
 mode `0700`, with 20-digit `0600` revisions, HEAD, and the same exclusive-temp,
 fsync, rename, predecessor-chain, longest-unique-chain, fork/gap rejection rules
 as the Runner journal. Bounds are 1 MiB/revision, 2,048 revisions, and 512
@@ -1825,7 +1843,7 @@ parents and exact ACLs allow U to mutate permitted contents but never replace
 W/E/T anchors. Pool changes require rebootstrap with zero claims.
 
 Release-owned `groundplane-runner-slots.service`, ordered after local
-filesystems/AppArmor and before Agent, invokes only digest-pinned
+filesystems/AppArmor and before Runner Tasks may execute, invokes only digest-pinned
 `runner-slot-mount ensure`. On each boot it verifies install receipt, nine
 profiles/features, NSS/dpkg, anchors/ACLs and the persistent self-bind, then
 atomically writes current boot receipt below `boots/<boot-id>.json` mode0600.
@@ -1834,17 +1852,18 @@ Receipt schema is `groundplane.machine-bootstrap-boot-receipt.v1` with
 mount_flags_sha256,mount_id,mount_parent_id,nss_live_sha256,
 release_contract_sha256,slot_anchor_set_sha256,receipt_sha256`, self-hashed with
 the last null. Only current and prior boot receipts remain after new fsync.
-Agent accepts no Task without current receipt. Another release is permitted only
+The Controller executor accepts no Runner Task without current receipt. Another release is permitted only
 with zero ownership/claims/journals; MVP has no live migration.
 
 ### Sealed host-control helper
 
-The persistent Agent receives no host PID/proc, user/system bus, cgroup, raw
-rootless socket, account, nft, or Runner filesystem mutation mount. It directly
-uses only rootful Docker API, its journal, and slot ledger. Each host operation
-runs one same-digest-pinned Agent-image helper with an operation-specific closed
-profile. At most one helper exists per Runner and it is removed/proven absent
-before another.
+The persistent Agent has no role or mount in this procedure. The native
+Controller executor uses the rootful Docker API, its Runner journal, and slot
+ledger. Each host operation runs one release-pinned, credential-free
+host-control helper with an operation-specific closed profile. The helper is an
+implementation detail of that Controller procedure, not an Agent executor or
+product service. At most one helper exists per Runner and it is removed/proven
+absent before another.
 
 The release checks in `runner_host_control_v1.proto`; request and response are
 1..65,536 bytes. The normative wire tags are:
@@ -1890,7 +1909,7 @@ message ControlProcessObserveV1 { ControlProcessKindV1 kind=1; AllocationV1 allo
 message UidQuiescenceObserveV1 { UidQuiescenceStageV1 stage=1; AllocationV1 allocation=2; }
 message RuntimeSocketObserveV1 { RuntimeSocketModeV1 mode=1; AllocationV1 allocation=2; bytes expected_engine_identity_sha256=3; }
 message RootlessDaemonCleanupV1 { AllocationV1 allocation=1; bytes present_response_sha256=2; string daemon_id=3; bytes expected_inventory_sha256=4; }
-message HostControlRequest { uint32 schema=1; string runner_id=2; string tenant_id=3; string task_id=4; string operation_id=5; string effect_id=6; string runtime_epoch=7; string mutation_sequence=8; bytes ownership_nonce=9; bytes invocation_nonce=10; bytes plan_sha256=11; bytes journal_payload_sha256=12; bytes release_contract_sha256=13; string host_boot_id=14; bytes request_sha256=15; string agent_id=16; reserved 17 to 19; oneof operation { MachineObserveV1 machine_observe=20; SlotObserveV1 slot_observe=21; EtcFileObserveV1 etc_file_observe=22; EtcFileMutateV1 etc_file_mutate=23; RunnerFsObserveV1 runner_fs_observe=24; RunnerFsMutateV1 runner_fs_mutate=25; Login1OperationV1 login1_operation=26; UserUnitOperationV1 user_unit_operation=27; NftOperationV1 nft_operation=28; ControlProcessObserveV1 control_process_observe=29; UidQuiescenceObserveV1 uid_quiescence_observe=30; RuntimeSocketObserveV1 runtime_socket_observe=31; RootlessDaemonCleanupV1 rootless_daemon_cleanup=32; } }
+message HostControlRequest { uint32 schema=1; string runner_id=2; string tenant_id=3; string task_id=4; string operation_id=5; string effect_id=6; string runtime_epoch=7; string mutation_sequence=8; bytes ownership_nonce=9; bytes invocation_nonce=10; bytes plan_sha256=11; bytes journal_payload_sha256=12; bytes release_contract_sha256=13; string host_boot_id=14; bytes request_sha256=15; reserved 16 to 19; oneof operation { MachineObserveV1 machine_observe=20; SlotObserveV1 slot_observe=21; EtcFileObserveV1 etc_file_observe=22; EtcFileMutateV1 etc_file_mutate=23; RunnerFsObserveV1 runner_fs_observe=24; RunnerFsMutateV1 runner_fs_mutate=25; Login1OperationV1 login1_operation=26; UserUnitOperationV1 user_unit_operation=27; NftOperationV1 nft_operation=28; ControlProcessObserveV1 control_process_observe=29; UidQuiescenceObserveV1 uid_quiescence_observe=30; RuntimeSocketObserveV1 runtime_socket_observe=31; RootlessDaemonCleanupV1 rootless_daemon_cleanup=32; } }
 ```
 
 The same file defines response proof enums/messages exactly as follows; no Go
@@ -1927,7 +1946,7 @@ message ControlProcessProofV1 { ProofStateV1 state=1; ControlProcessKindV1 kind=
 message UidQuiescenceProofV1 { ProofStateV1 state=1; UidQuiescenceStageV1 stage=2; QuiescenceV1 quiescent=3; string offender_count=4; repeated ProcessEvidenceV1 bounded_offenders=5; bytes offender_set_sha256=6; }
 message RuntimeSocketProofV1 { ProofStateV1 state=1; RuntimeSocketModeV1 mode=2; SocketEvidenceV1 raw=3; SocketEvidenceV1 proxy=4; }
 message RootlessDaemonCleanupProofV1 { ProofStateV1 state=1; string before_count=2; bytes before_sha256=3; string removed_count=4; bytes removed_sha256=5; string remaining_count=6; bytes remaining_sha256=7; string daemon_id=8; }
-message HostControlResponse { uint32 schema=1; string runner_id=2; string tenant_id=3; string task_id=4; string operation_id=5; string effect_id=6; string runtime_epoch=7; string mutation_sequence=8; bytes ownership_nonce=9; bytes invocation_nonce=10; bytes plan_sha256=11; bytes journal_payload_sha256=12; bytes release_contract_sha256=13; string host_boot_id=14; bytes request_sha256=15; string agent_id=16; ResultV1 result=17; FailureCodeV1 failure_code=18; bytes response_sha256=19; oneof proof { MachineObserveProofV1 machine_observe=20; SlotObserveProofV1 slot_observe=21; EtcFileProofV1 etc_file_observe=22; EtcFileProofV1 etc_file_mutate=23; RunnerFsProofV1 runner_fs_observe=24; RunnerFsProofV1 runner_fs_mutate=25; Login1ProofV1 login1_operation=26; UserUnitProofV1 user_unit_operation=27; NftProofV1 nft_operation=28; ControlProcessProofV1 control_process_observe=29; UidQuiescenceProofV1 uid_quiescence_observe=30; RuntimeSocketProofV1 runtime_socket_observe=31; RootlessDaemonCleanupProofV1 rootless_daemon_cleanup=32; } }
+message HostControlResponse { uint32 schema=1; string runner_id=2; string tenant_id=3; string task_id=4; string operation_id=5; string effect_id=6; string runtime_epoch=7; string mutation_sequence=8; bytes ownership_nonce=9; bytes invocation_nonce=10; bytes plan_sha256=11; bytes journal_payload_sha256=12; bytes release_contract_sha256=13; string host_boot_id=14; bytes request_sha256=15; reserved 16; ResultV1 result=17; FailureCodeV1 failure_code=18; bytes response_sha256=19; oneof proof { MachineObserveProofV1 machine_observe=20; SlotObserveProofV1 slot_observe=21; EtcFileProofV1 etc_file_observe=22; EtcFileProofV1 etc_file_mutate=23; RunnerFsProofV1 runner_fs_observe=24; RunnerFsProofV1 runner_fs_mutate=25; Login1ProofV1 login1_operation=26; UserUnitProofV1 user_unit_operation=27; NftProofV1 nft_operation=28; ControlProcessProofV1 control_process_observe=29; UidQuiescenceProofV1 uid_quiescence_observe=30; RuntimeSocketProofV1 runtime_socket_observe=31; RootlessDaemonCleanupProofV1 rootless_daemon_cleanup=32; } }
 ```
 
 Both request and response require `schema=1`; every other value is a protocol
@@ -1956,9 +1975,9 @@ validator, DTO, normalizer, or vector digest differs.
 
 Decoder rejects unknown fields/groups/extensions, duplicates, out-of-order tags,
 nonminimal varints/lengths, encoded default scalars, invalid UTF-8, and any
-deterministic remarshal mismatch. Response fields 1..16 equal request bytes.
+deterministic remarshal mismatch. Response fields 1..15 equal request bytes.
 All digests are 32 raw bytes; ownership nonce 32 and invocation nonce 16. IDs
-use agt_/run_/tnt_/task_/op_/step_ strict uppercase ULIDs; UUID and decimal
+use run_/tnt_/task_/op_/step_ strict uppercase ULIDs; UUID and decimal
 bounds follow the journal. Zero enum is invalid. Allocation and Account fields
 are complete. Conditional presence, proof order/cardinality, path derivation,
 managed row <=512, desired bytes <=16384, nft bytes <=16384/rules12, process
@@ -1969,17 +1988,17 @@ codes5..13. Response SHA domain-hashes deterministic response with field19
 absent. Decode/hash failure emits no response and exits64.
 
 Helper container name is `gp-hc-v1-<32-lowerhex-invocation_nonce>`. Its exactly
-14 ASCII-key-sorted labels are agent-id, contract, contract-sha256,
+13 ASCII-key-sorted labels are contract, contract-sha256,
 create-request-sha256, effect-id, host-control-profile,
 host-control-request-sha256, invocation-nonce, operation-id, ownership-nonce,
 runner-id, runtime-epoch, task-id, tenant-id under `com.groundplane.*`.
 Contract is `runner-host-control-helper-v1`; values equal request/release/journal.
 
 `HelperContainerCreateV1` is a checked-in canonical DTO, not Moby Go struct
-serialization. Top fields are exactly AttachStderr/Stdin/Stdout true,
-Cmd `runner-host-control-helper`, Entrypoint
-`/usr/local/bin/groundplane-agent`, four ordered Env PATH/LANG/LC_ALL/GOMAXPROCS,
-HostConfig, RepoDigest Image, 14 Labels, profile NetworkDisabled,
+serialization. Its security-relevant fields are AttachStderr/Stdin/Stdout true,
+Cmd `runner-host-control-helper`, a release-pinned Controller-owned Runner
+host-control helper Entrypoint that never invokes the Agent, four ordered Env
+PATH/LANG/LC_ALL/GOMAXPROCS, HostConfig, RepoDigest Image, 13 Labels, profile NetworkDisabled,
 `NetworkingConfig:{EndpointsConfig:{}}`, OpenStdin/StdinOnce true, Tty false,
 profile User, WorkingDir `/`. HostConfig is exactly AutoRemove false, explicit
 CapAdd, CapDrop ALL, CgroupnsMode, private IPC, log none, Memory/Swap128MiB,
@@ -2121,7 +2140,8 @@ authenticated Controller authority.
 
 ### Rootful Network and nft policy
 
-Rootful preflight requires Ubuntu 24.04 ARM64, Moby 29.1.3 API1.52, IPv4
+Rootful preflight requires Ubuntu 24.04 on the local supported `linux/amd64` or
+`linux/arm64` platform, Moby 29.1.3 API1.52, IPv4
 forwarding enabled, and `/v1.52/info` reporting nftables firewall backend. The
 configured Runner pool is disjoint from system/environment pools, persisted
 allocations, Docker IPv4 subnets, protected host-route prefixes, and the exact
@@ -2200,7 +2220,7 @@ Materialization creates/binds Network while inert, then nft, before any Runner
 UID process. Cleanup removes the exact Network/bridge, then terminates/proves
 zero UID while nft remains, then removes nft by exact policy/handle. Recurring
 proof recomputes Network/bridge/endpoint/routes and exact table. Drift marks
-local conflict, refuses new Agent operations, and reports offline. Without
+local conflict, refuses new Runner operations, and reports offline. Without
 Controller authority it performs no stop, repair, or delete; an active hostile
 job may continue until authenticated reconcile.
 
@@ -2680,8 +2700,8 @@ Ownership nonce remains phase-scoped through registration completion and config
 pull and becomes inert only after final bootstrap/config completion, cancel,
 expiry, terminal, or cleanup. Lost token response is never resent: Runner
 quiesces and Controller registration proof decides config-only recovery or
-`registration_token_required`. Helpers remain secret-blind and Agent has no host
-PID/proc relay. There is no registration socket, tmpfs token file, Docker exec,
+`registration_token_required`. Helpers remain secret-blind and the Agent has no
+Runner token or host relay. There is no registration socket, tmpfs token file, Docker exec,
 fifth bind, or durable token env.
 
 On sealed reboot, exact preserved registration files and Controller nonce
@@ -2689,7 +2709,7 @@ invalidation proof permit only fresh config-token recovery in the E+1
 materialization, without GitHub configure or registration token. Any mismatch
 terminalizes registration_token_required; a separate explicit Task is required
 to obtain a new GitHub registration token. Completion is not lifecycle seal
-until Agent proof and ownership seal succeed.
+until Controller-owned runtime proof and ownership seal succeed.
 
 Initial/post-start/recurring proof compares the single RuntimeOwnership schema.
 Drift marks offline/conflict and refuses new operations. Without Controller
@@ -2708,15 +2728,15 @@ identities. Host-root tampering remains outside threat model.
   name, canonical GitHub URL, absolute observation time, and freshness-derived
   online value while keeping host allocation and runtime internals private.
 - The production Controller needs a zeroing in-process attempt broker, durable
-  registration and one-time-config intents, immutable Agent plans, proof
-  comparison, and logical lifecycle transitions. The privileged Agent needs the sealed common.Runner entrypoint,
-  process quiescence, exact account and user-unit management, one rootless
-  daemon per Runner, live runtime inspection, fail-closed nftables, and
-  ownership-verified local cleanup. The Controller performs none of those host
-  effects directly.
+  registration and one-time-config intents, immutable Controller Task plans,
+  proof comparison, and logical lifecycle transitions. Its native Runner
+  executor owns process quiescence, exact account and user-unit management, one
+  rootless daemon per Runner, live runtime inspection, fail-closed nftables,
+  and ownership-verified local cleanup. The persistent Agent owns none of
+  those Runner host effects.
 - Every Groundplane release must build, publish, and compile the exact child and
-  index digests of its release-selected single-platform `linux/arm64` Runner image
-  quickly enough to satisfy GitHub's supported Runner-version policy.
+  index digests of equivalent `linux/amd64` and `linux/arm64` Runner image
+  variants quickly enough to satisfy GitHub's supported Runner-version policy.
 - Controller restart intentionally loses unconsumed registration tokens;
   failure and fresh retry are part of the public contract rather than an
   availability defect.

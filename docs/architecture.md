@@ -643,15 +643,25 @@ before candidate cleanup. Recovery retries use the same fixed-revision input
 and run probes plus enabled compensation only.
 
 A Release Group is one ordered coordinated action over 2 through 32 logical
-Services, not a simultaneous or atomic switch. A request tag overrides the
-persisted group tag; absence of both is invalid. The selected tag resolves
-against each member's declared image, and each member keeps its own digest and
-ledger. Group `on_failure` overrides member defaults. Selected lifecycle hooks
-execute once per logical Service in their declared order, never per replica;
-there is no group-hook resource. Migrations remain bound once to their
-designated logical Service. Each selected Script execution receives one
-task-scoped runner even when its target is replicated; no runner is created
-merely because a logical Service is a group member.
+Services, not a simultaneous or atomic switch. For group deploy, a request tag
+overrides the persisted group tag; absence of both is invalid. The selected
+deploy tag resolves against each member's declared image and pins its exact
+immutable host-local Docker image identity before workload mutation; registry
+or manifest digest metadata is optional and never substitutes for that local
+identity. Each member keeps its own ledger. Group rollback never consults the
+persisted default.
+An optional rollback request tag independently filters each member's eligible
+history and selects its newest Release that completed successfully and reached
+serving with that exact tag and a tag different from its current serving
+Release; omission selects each member's newest such eligible different-tag
+Release. Any member without an
+eligible source rejects the whole group before publication. Group `on_failure`
+overrides member defaults. Selected lifecycle hooks execute once per logical
+Service in their declared order, never per replica; there is no group-hook
+resource. Migrations remain bound once to their designated logical Service.
+Each selected Script execution receives one task-scoped runner even when its
+target is replicated; no runner is created merely because a logical Service is
+a group member.
 
 Recreate deploy, rollback, restart, and exact reapply preserve the authored
 replica count. The addressable renderer and health model support exact `N`, but

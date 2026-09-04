@@ -724,10 +724,19 @@ no blank, duplicate, additional, or omitted member.
 A group is one operator action with one task lock and `on_failure: switch_back |
 leave_active`, which defaults to `switch_back`; members execute serially, not as
 a simultaneous or atomic distributed switch. A request `tag` overrides the
-persisted group tag; if both are empty publication rejects the group, with no
-member-current fallback. The selected tag resolves separately against each
-member image, preserving per-service digest and release history. Group
-`on_failure` overrides member defaults for aggregate compensation. If a later
+persisted group tag for deploy; if both are empty publication rejects the group
+deploy, with no member-current fallback. The selected deploy tag resolves
+separately against each member image and pins its exact immutable host-local
+Docker image identity before workload mutation; registry or manifest digest
+metadata is optional and never substitutes for that local identity. Each
+member preserves its release history independently. Group rollback never uses
+the persisted default. An optional rollback request tag independently selects
+each member's newest eligible historical Release that completed successfully and
+reached serving with that exact tag and a tag different from its current
+serving Release; omission selects the newest such eligible different-tag
+Release for each member. If any member has no eligible source, publication
+rejects the whole group rollback. Group `on_failure` overrides member defaults
+for aggregate compensation. If a later
 member fails, `switch_back` returns already-switched members to their previous
 healthy releases; `leave_active` keeps them active for explicit rollback. Each
 member still retains its own release records and observed state. Hooks remain

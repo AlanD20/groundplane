@@ -55,14 +55,12 @@ The inherited hard persistence bounds are:
 
 This ADR depends on ADR 0040 for Script generation selection, runner execution,
 hook ordering, hook budgets, hook references, and hook-specific retry safety.
-ADR 0040 remains Proposed. A deploy or rollback whose sealed selection contains
-one or more hooks must fail validation until ADR 0040 is Accepted and its
-runner contract is implemented. A hook-free deploy or rollback does not depend
-on Script execution.
+ADR 0040 is Accepted. A deploy or rollback whose sealed selection contains one
+or more hooks must fail validation until its runner contract is implemented. A
+hook-free deploy or rollback does not depend on Script execution.
 
-When ADR 0040 becomes authority, its automatic hooks are steps in the parent
-Deploy or Rollback Task. They never create secondary Tasks. This ADR does not
-redefine Script execution.
+Under ADR 0040, automatic hooks are steps in the parent Deploy or Rollback Task.
+They never create secondary Tasks. This ADR does not redefine Script execution.
 
 ## Decision
 
@@ -112,7 +110,8 @@ intent is immutable and contains at least:
 - `group_member_ordinal`, when applicable
 - `image`
 - `tag`
-- resolved immutable `digest`, when registry resolution is available
+- optional registry or manifest `digest` metadata, when available; it never
+  substitutes for the host-local identity
 - `strategy`: `blue-green` or `recreate`
 - `slot`, when the strategy uses a slot
 - `on_failure`: `switch_back` or `leave_active`
@@ -229,7 +228,8 @@ needed to reproduce execution:
 - Environment desired and applied projection revisions
 - Service desired record and release projection revision
 - resolved Compose project and Service identity
-- image, tag, digest, strategy, slot, and failure policy
+- image, tag, optional registry or manifest digest metadata, strategy, slot,
+  and failure policy
 - route and Caddy input revisions and digests
 - Secret version references, never plaintext values
 - selected Script generation references, when hooks apply
@@ -415,14 +415,23 @@ Controller's canonical slot ordering and sealed in the render input. A
 blue-green Service must expose at least one addressable internal TCP port;
 publication rejects blue-green for a portless worker or scheduler.
 
+The operator-authored `deploy.replicas` count is mandatory, is at least one,
+and is captured in every candidate Release. No later than the pre-mutation
+gate, the Controller resolves the selected image and tag against the host
+Docker daemon and seals its exact immutable local image identity. That identity
+does not depend on `RepoDigests`; locally built images remain eligible. A
+missing or changed local identity stops the operation before workload mutation.
+Deploy and rollback never build, pull, or push an image.
+
 For recreate, the durable Release `slot` field is absent and the renderer
-creates exactly one singleton workload. An addressable Service may retain its
-stable proxy, but that proxy targets the singleton and no blue/green workload
-pair exists. A portless Service has the same singleton topology without a
-proxy. The immutable render input seals separate candidate and prior topology
-artifacts. Execution stops and removes the prior workload before applying the
-singleton without starting dependencies, then proves the exact replacement
-healthy. It never creates a duplicate physical workload.
+creates the exact captured logical workload set of N replicas. An addressable
+Service may retain its stable proxy, but that proxy targets the logical set and
+no blue/green workload pair exists. A portless Service has the same exact-count
+topology without a proxy. The immutable render input seals separate candidate
+and prior topology artifacts, including both replica counts. Execution stops
+and removes the prior workload set before applying the candidate set without
+starting dependencies, then proves the exact replacement set healthy. It never
+creates an unsealed physical workload.
 
 Each addressable Service released with blue-green owns one stable
 Controller-rendered Caddy proxy and two physical Compose slot workloads.
@@ -447,7 +456,7 @@ A blue-green attempt executes one closed five-step procedure per group member:
 
 Only the first three steps run during the forward attempt. A group executes
 members serially in declared order, and member `N` apply depends on member
-`N-1`'s proved serving checkpoint: proxy switch for blue-green or singleton
+`N-1`'s proved serving checkpoint: proxy switch for blue-green or exact-set
 replacement acknowledgement for recreate. The Controller records `serving` and updates
 `serving_release_id` only from matching proxy evidence, then records
 `completed`, updates `current_successful_release_id`, and releases fences.
@@ -458,20 +467,24 @@ switch.
 
 ### 10. Recreate checkpoints
 
-Every recreate Release uses one closed singleton procedure: remove the exact
-sealed prior workload topology, force-apply the sealed singleton candidate
-without dependencies, acknowledge its exact Release labels and health, retain a
-recover-only probe that accepts only the candidate or prior artifact, and
-retain an enabled compensation step only for `switch_back`. An addressable
-recreate retains only the stable logical proxy; a portless recreate has no
-proxy. Compensation force-applies and health-proves the exact prior artifact.
+Every recreate Release uses one closed exact-set procedure: remove the exact
+sealed prior workload topology, force-apply the sealed N-replica candidate
+without dependencies, acknowledge the complete set's exact Release labels,
+cardinality, and health, retain a recover-only probe that accepts only the
+candidate or prior artifact and captured replica count, and retain an enabled
+compensation step only for `switch_back`. An addressable recreate retains only
+the stable logical proxy; a portless recreate has no proxy. Compensation
+force-applies and health-proves the exact prior artifact and captured count.
 
 Strategy changes are sealed topology transitions. Blue-green to recreate
-removes the prior slot pair before applying the singleton. Recreate to
-blue-green creates and health-proves the candidate slot, switches the stable
-proxy, and only then removes the obsolete singleton. Replaying recovery probes
-or compensation after interruption is idempotent because each step accepts
-only the immutable candidate and prior artifacts and exact workload targets.
+removes the prior slot pair before applying the exact captured recreate set.
+Recreate to blue-green creates and health-proves the candidate slot, switches
+the stable proxy, and only then removes the obsolete recreate set. Any
+transition to or from blue-green is rejected before mutation unless both the
+prior/current serving Release and candidate/destination Release captured
+`replicas == 1`. Replaying recovery probes or compensation after interruption
+is idempotent because each step accepts only the immutable candidate and prior
+artifacts, replica counts, and exact workload targets.
 
 ### 11. Failure policy and compensation
 
@@ -554,9 +567,10 @@ that satisfies the common predicate.
 
 Selection records the source Release id in `rollback_source_release_id`. The
 Controller creates a new candidate Release id and copies the source image,
-tag, resolved digest, strategy, and reproducible render inputs into a new
-revision-owned render input. The strategy is the source Release's original
-strategy, not the Service's current default. Rollback never runs migrations.
+tag, optional registry or manifest digest metadata, strategy, and reproducible
+render inputs into a new revision-owned render input. The strategy is the
+source Release's original strategy, not the Service's current default.
+Rollback never runs migrations.
 
 The new Release executes the normal checkpoints and failure policy. On success,
 both Service projection ids point to the new Release, not to the historical
@@ -805,10 +819,18 @@ Release plan; it never creates a second Release path or a child Task.
 A group deploy accepts an optional tag. Omission uses the group's desired
 default tag; if both are absent, publication is rejected. Every member receives
 the same selected tag and its own strategy selected from that Service's fixed-
-revision desired state.
+revision desired state. Each member pins its exact immutable host-local Docker
+image identity before workload mutation and retains independent Release
+history. Registry or manifest digest metadata is optional and never substitutes
+for that local identity. The persisted group default applies only to deploy.
 
-A group rollback selects one eligible historical source independently for each
-member using the single-Service rollback rule. Failure to select any member
+A group rollback accepts an optional request tag. When supplied, each member
+independently selects its newest eligible historical Release that completed
+successfully and reached serving with that exact tag and a tag different from its
+current serving Release. When omitted, each member independently selects its
+newest such eligible Release whose tag differs from its current serving
+Release, using the single-Service rollback rule. The persisted group default is
+not a rollback fallback. Failure to select an eligible source for any member
 rejects the entire group before publication.
 
 One group operation allocates one candidate Release per member and publishes:
@@ -855,7 +877,8 @@ and at most 4,194,304 bytes in the sealed execution plan.
 
 For a group, primary ordering is normalized group member order and secondary
 ordering is Script slug byte order, as defined by ADR 0040. Hook results are
-member checkpoints in the one parent Task.
+member checkpoints in the one parent Task. Every selected Script executes once
+per selected logical Service Release, never once per replica.
 
 Pre hooks complete before serving-runtime mutation. Post hooks run after the
 member serving checkpoint. On-failure hooks run after compensation determines
@@ -944,7 +967,7 @@ Release and a Task have no slug, so their operands are always stable ids.
 | `release-group.edit` | `groundplane --env <environment> [--id] release-group edit <group> [--name <new-name>] [--services <comma-separated-services>] [--order <comma-separated-services>] [--tag <tag>] [--clear-tag] [--on-failure switch_back\|leave_active]` |
 | `release-group.remove` | `groundplane --env <environment> [--id] release-group remove <group>` |
 | `release-group.deploy` | `groundplane --env <environment> [--id] release-group deploy <group> [--tag <tag>]` |
-| `release-group.rollback` | `groundplane --env <environment> [--id] release-group rollback <group>` |
+| `release-group.rollback` | `groundplane --env <environment> [--id] release-group rollback <group> [--tag <tag>]` |
 
 For `release-group add`, `--services` contains 2 through 32 unique operands and
 `--order`, when present, contains each Service exactly once. The command creates
@@ -1030,6 +1053,12 @@ JSON `null` clears it. `environment_id` and Release Group id are immutable.
 }
 ```
 
+`ReleaseGroupRollbackRequest` has the same closed optional-tag shape. `{}`
+selects each member's newest eligible historical Release that completed
+successfully, reached serving, and has a tag different from its current serving
+Release. An explicit `tag` adds exact tag equality to that selection. It never
+consults the persisted group deploy default.
+
 `ReleaseTaskAccepted` is:
 
 ```json
@@ -1099,11 +1128,12 @@ and fixed `revision`. Limit defaults to 50 and is valid from 1 through 200.
 | `release-group.edit` | `PATCH /v1/release-groups/{release_group_id}` | `ReleaseGroupEditRequest` | `200 ReleaseGroupDetail` |
 | `release-group.remove` | `DELETE /v1/release-groups/{release_group_id}` | empty body | `202 ReleaseGroupMutationAccepted` |
 | `release-group.deploy` | `POST /v1/release-groups/{release_group_id}/deploy` | `ReleaseGroupDeployRequest`; `{}` uses the desired default | `202 ReleaseGroupTaskAccepted` |
-| `release-group.rollback` | `POST /v1/release-groups/{release_group_id}/rollback` | empty body | `202 ReleaseGroupTaskAccepted` |
+| `release-group.rollback` | `POST /v1/release-groups/{release_group_id}/rollback` | `ReleaseGroupRollbackRequest`; `{}` selects each member's newest eligible completed-and-served different-current-tag Release | `202 ReleaseGroupTaskAccepted` |
 
 The Service rollback request always seals `on_failure=switch_back`. Release
 Group rollback uses the group's fixed-revision `on_failure`. Neither rollback
-request accepts strategy or failure-policy overrides.
+request accepts strategy or failure-policy overrides; the optional Release
+Group rollback tag is a historical-source selector only.
 
 #### Console actions
 
@@ -1121,7 +1151,7 @@ request accepts strategy or failure-policy overrides.
 | `release-group.edit` | Release Group detail Edit dialog for mutable name, complete membership, order, default tag, and on-failure policy |
 | `release-group.remove` | Release Group detail Remove action that deletes the group resource |
 | `release-group.deploy` | Release Group detail Deploy dialog with optional tag override |
-| `release-group.rollback` | Release Group detail Rollback action showing every selected source before confirmation |
+| `release-group.rollback` | Release Group detail Rollback action with an optional historical tag selector, showing every member's selected source before confirmation |
 
 #### Errors
 
@@ -1318,13 +1348,14 @@ this proposal rather than open questions:
    traversals are bounded and Environment ordering is stable-id ascending.
 6. `controller.release_execution_timeout` defaults to `15h`, is valid from
    `40m` through `24h`, and has no user or edition override.
-7. Hook-bearing operations remain unavailable while ADR 0040 is Proposed.
+7. Hook-bearing operations remain unavailable until ADR 0040's Runner contract
+   is implemented.
 
 No unresolved product decision remains in this ADR. Its remaining gates are
-decision lifecycle and synchronization work: ADR 0013 must accept or replace
-the persistence contract, ADR 0040 must become Accepted before hooks are used,
-and all product, API, CLI, and Console mirrors must clean-replace contradictory
-contracts when this ADR is accepted.
+decision lifecycle, implementation, and synchronization work: ADR 0013 must
+accept or replace the persistence contract, ADR 0040's Runner contract must be
+implemented before hooks are used, and all product, API, CLI, and Console
+mirrors must clean-replace contradictory contracts and remain synchronized.
 
 ## Out of scope
 

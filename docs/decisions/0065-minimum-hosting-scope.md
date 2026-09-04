@@ -59,11 +59,20 @@ sequencing assumption, not an owner approval of a changed Runner scope.
 An `x-gp-release-groups` map is the sole release-group grammar. The singular
 extension is rejected, with no alias or compatibility parser. A group is one
 operator action over 2 through 32 logical Services, executed serially rather
-than as a simultaneous or atomic distributed switch. A request tag overrides a
-persisted group tag; when both are empty the group is rejected, with no
-member-current fallback. The selected tag resolves independently against each
-member image and each member retains its own digest/history. Group
-`on_failure` overrides member defaults for aggregate compensation. Existing
+than as a simultaneous or atomic distributed switch. For group deploy, a
+request tag overrides the persisted group tag; when both are empty the deploy
+is rejected, with no member-current fallback. The selected deploy tag resolves
+independently against each member image and pins its exact immutable host-local
+Docker image identity before workload mutation; registry or manifest digest
+metadata is optional and never substitutes for that local identity. Each member
+retains its own release history. Group rollback never uses the persisted
+default. An optional rollback request tag independently selects each member's
+newest eligible historical Release that completed successfully and reached
+serving with that exact tag and a tag different from its current serving
+Release; omission selects the newest such eligible different-tag Release for
+each member. Any member without an eligible source rejects the whole group
+before publication. Group `on_failure` overrides member defaults for aggregate
+compensation. Existing
 Script hooks remain supported and ordered by ADR 0040; a migration binds once to
 the designated logical member, while each selected hook executes once per
 logical Service Release, never per replica. No group-level hook resource exists.
