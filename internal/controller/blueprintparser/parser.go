@@ -323,8 +323,8 @@ func validateScriptReferences(values map[string]core.ScriptSpec, project *types.
 		if !exists {
 			return validationError("x-gp-scripts target must be an enabled Service in the same Environment")
 		}
-		if service.GetScale() != 1 {
-			return validationError("x-gp-scripts target Service must have effective replicas exactly 1")
+		if service.GetScale() < 1 {
+			return validationError("x-gp-scripts target Service must have positive effective replicas")
 		}
 	}
 	return nil

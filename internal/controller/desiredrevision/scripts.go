@@ -99,10 +99,16 @@ func ReconcileBlueprintScripts(
 				"Blueprint Script references an unknown Service",
 			)
 		}
-		if service.Desired.Replicas != 1 {
+		if service.Desired.Replicas < 1 {
 			return BlueprintScriptReconciliation{}, errs.New(
 				errs.KindValidationFailed,
-				"Blueprint Script target Service must have exactly one replica",
+				"Blueprint Script target Service must have positive replicas",
+			)
+		}
+		if service.Desired.Adapter != "" || service.BackingNetworkID != "" {
+			return BlueprintScriptReconciliation{}, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint Script target must be an operator-owned Service",
 			)
 		}
 
@@ -255,8 +261,12 @@ func validateBlueprintScriptRecord(
 	if _, exists := servicesByID[record.ServiceID]; !exists {
 		return errs.New(errs.KindInternal, "durable Script projection targets an unknown Service")
 	}
-	if servicesByID[record.ServiceID].Desired.Replicas != 1 {
-		return errs.New(errs.KindValidationFailed, "durable Script target Service must have exactly one replica")
+	service := servicesByID[record.ServiceID]
+	if service.Desired.Replicas < 1 {
+		return errs.New(errs.KindValidationFailed, "durable Script target Service must have positive replicas")
+	}
+	if service.Desired.Adapter != "" || service.BackingNetworkID != "" {
+		return errs.New(errs.KindValidationFailed, "durable Script target must be an operator-owned Service")
 	}
 	switch record.Origin {
 	case "api":

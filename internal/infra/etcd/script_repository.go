@@ -437,8 +437,12 @@ func validateScriptHierarchy(
 	if err := validateServiceVersion(target); err != nil {
 		return err
 	}
-	if target.Record.Desired.Replicas != 1 {
-		return errs.New(errs.KindValidationFailed, "Script target Service must have exactly one replica")
+	if target.Record.Desired.Replicas < 1 {
+		return errs.New(errs.KindValidationFailed, "Script target Service must have positive replicas")
+	}
+	if project.Record.Kind != ProjectKindTenant || target.Record.Desired.Adapter != "" ||
+		target.Record.BackingNetworkID != "" {
+		return errs.New(errs.KindValidationFailed, "Script target must be an operator-owned Service")
 	}
 	if err := validateScriptRecord(record); err != nil {
 		return err

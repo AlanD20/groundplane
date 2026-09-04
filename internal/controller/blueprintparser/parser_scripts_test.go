@@ -60,18 +60,6 @@ services:
   api:
     image: example/api:1
 `,
-		"non-singleton service": `x-gp-scripts:
-  migration-hook:
-    slug: migrate
-    service: api
-    when: manual
-    script: true
-services:
-  api:
-    image: example/api:1
-    deploy:
-      replicas: 2
-`,
 		"legacy task extension": `x-gp-task:
   migration-hook:
     script: true
