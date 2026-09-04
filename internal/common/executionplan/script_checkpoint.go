@@ -299,7 +299,8 @@ func validScriptOutcome(from agentpb.ScriptExecutionState, outcome *agentpb.Scri
 			outcome.Reason == agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_ABORT_BEFORE_START ||
 			outcome.Reason == agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_RECOVERY_INVARIANT_FAILURE
 	case agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_CONTAINER_CREATED:
-		return outcome.Reason == agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_RUNTIME_FAILURE ||
+		return outcome.Reason == agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_START_FAILURE ||
+			outcome.Reason == agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_RUNTIME_FAILURE ||
 			outcome.Reason == agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_TIMEOUT ||
 			outcome.Reason == agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_ABORT ||
 			outcome.Reason == agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_RECOVERY_INVARIANT_FAILURE

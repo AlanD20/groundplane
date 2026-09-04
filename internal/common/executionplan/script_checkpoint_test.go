@@ -91,6 +91,32 @@ func TestValidateScriptCheckpointRequestRejectsSkippedStateAndExitMismatch(t *te
 	}
 }
 
+// Rationale: Docker create can establish immutable container identity before
+// validation fails, so the exact id checkpoint must precede the no-exit start failure.
+func TestValidateScriptCheckpointRequestAcceptsStartFailureAfterContainerCreated(t *testing.T) {
+	t.Parallel()
+
+	outcome := &agentpb.ScriptOutcomeCheckpoint{
+		Reason:     agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_START_FAILURE,
+		ObservedAt: timestamppb.Now(),
+	}
+	request := scriptCheckpointRequest(
+		agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_CONTAINER_CREATED,
+		agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_OUTCOME_RECORDED,
+		outcome,
+	)
+	request.ControlPayloadSha256 = mustScriptCheckpointDigest(t, request)
+	if _, err := ValidateScriptCheckpointRequest(request); err != nil {
+		t.Fatalf("validate captured-container start failure: %v", err)
+	}
+
+	exitCode := int32(1)
+	outcome.ExitCode = &exitCode
+	if _, err := ComputeScriptCheckpointPayloadDigest(request); err == nil {
+		t.Fatal("expected start failure carrying exit evidence to be rejected")
+	}
+}
+
 func TestValidateScriptCheckpointAckRequiresExactDelivery(t *testing.T) {
 	t.Parallel()
 

@@ -2,6 +2,8 @@ package scriptrunner
 
 import (
 	"context"
+	"crypto/sha256"
+	"errors"
 	"os"
 	"slices"
 	"strconv"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/scriptexecution"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -70,6 +73,72 @@ func TestCleanupRemovesBodyWhenNoContainerWasCaptured(t *testing.T) {
 	}
 }
 
+// Rationale: a successful Docker create establishes immutable cleanup authority
+// even when the immediate ownership validation fails.
+func TestCreateContainerReturnsCapturedEvidenceWhenValidationFails(t *testing.T) {
+	t.Parallel()
+
+	runner, engine, request, prepared := cleanupFixture(t)
+	engine.inspected.Container.Config.WorkingDir = "/unexpected"
+	engine.createErr = errors.New("Docker create response was ambiguous")
+	ctx, cancel := context.WithCancel(context.Background())
+	engine.cancelCreate = cancel
+
+	evidence, err := runner.CreateContainer(ctx, request, bodyEvidence(prepared))
+	if err == nil {
+		t.Fatal("expected created-container validation to fail")
+	}
+	if kind, ok := errs.KindOf(err); !ok || kind != errs.KindStateConflict {
+		t.Fatalf("validation error kind = %v/%t, want state conflict: %v", kind, ok, err)
+	}
+	want := containerEvidence(request, engine.containerID)
+	if evidence.ID != engine.containerID ||
+		!slices.Equal(evidence.OwnershipLabelsSHA256, want.OwnershipLabelsSHA256) {
+		t.Fatalf("container evidence = %#v, want %#v", evidence, want)
+	}
+	if !slices.Equal(engine.operations, []string{"inspect"}) || engine.removed {
+		t.Fatalf("operations/removed = %v/%t, want inspect only and retained", engine.operations, engine.removed)
+	}
+}
+
+// Rationale: an ID-plus-error create response may be adopted only after exact
+// ownership and stopped-created state are proven, never by optimistic removal.
+func TestCreateContainerAdoptsExactCreatedIDReturnedWithError(t *testing.T) {
+	t.Parallel()
+
+	runner, engine, request, prepared := cleanupFixture(t)
+	engine.created = true
+	engine.createErr = errors.New("Docker create response was ambiguous")
+
+	evidence, err := runner.CreateContainer(context.Background(), request, bodyEvidence(prepared))
+	if err != nil {
+		t.Fatalf("adopt exact created container: %v", err)
+	}
+	if evidence.ID != engine.containerID || !slices.Equal(engine.operations, []string{"inspect"}) || engine.removed {
+		t.Fatalf("evidence/operations/removed = %#v/%v/%t", evidence, engine.operations, engine.removed)
+	}
+}
+
+// Rationale: a returned ID naming a running container is recovery evidence,
+// not removal authority, even if request cancellation races its inspection.
+func TestCreateContainerReturnsRecoveryConflictForRunningIDDuringCancellation(t *testing.T) {
+	t.Parallel()
+
+	runner, engine, request, prepared := cleanupFixture(t)
+	engine.running = true
+	engine.createErr = errors.New("Docker create response was ambiguous")
+	ctx, cancel := context.WithCancel(context.Background())
+	engine.cancelCreate = cancel
+
+	evidence, err := runner.CreateContainer(ctx, request, bodyEvidence(prepared))
+	if kind, ok := errs.KindOf(err); !ok || kind != errs.KindStateConflict {
+		t.Fatalf("running-container error kind = %v/%t, want state conflict: %v", kind, ok, err)
+	}
+	if evidence.ID != engine.containerID || !slices.Equal(engine.operations, []string{"inspect"}) || engine.removed {
+		t.Fatalf("evidence/operations/removed = %#v/%v/%t", evidence, engine.operations, engine.removed)
+	}
+}
+
 func cleanupFixture(t *testing.T) (*Runner, *cleanupEngine, scriptexecution.Request, preparedBody) {
 	t.Helper()
 
@@ -83,16 +152,25 @@ func cleanupFixture(t *testing.T) (*Runner, *cleanupEngine, scriptexecution.Requ
 		t.Fatalf("create body store: %v", err)
 	}
 	t.Cleanup(func() { _ = bodies.Close() })
-	prepared, err := bodies.Prepare(ids.New(ids.KindAssignment), ids.NewULID(), []byte("echo migration\n"), uid, gid)
+	body := []byte("echo migration\n")
+	prepared, err := bodies.Prepare(ids.New(ids.KindAssignment), ids.NewULID(), body, uid, gid)
 	if err != nil {
 		t.Fatalf("prepare body: %v", err)
 	}
+	bodyDigest := sha256.Sum256(body)
 
 	request := scriptexecution.Request{
+		TaskID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), StepID: ids.New(ids.KindStep),
 		AssignmentID: prepared.assignmentID, ExecutionID: prepared.executionID,
+		PlanHash: append([]byte(nil), bodyDigest[:]...), Body: append([]byte(nil), body...),
+		BodyMetadata: &agentpb.ScriptBodyArtifactMetadata{
+			ScriptExecutionId: prepared.executionID, Size: uint32(len(body)), Sha256: append([]byte(nil), bodyDigest[:]...),
+			Uid: uid, Gid: gid,
+		},
 		Projection: &agentpb.ScriptRunnerProjection{
-			Name: "gp-script-01k5v8k8yr0000000000000000", Image: "app@sha256:" + strings.Repeat("b", 64),
+			Name: "gp-script-" + strings.ToLower(prepared.executionID), Image: "app@sha256:" + strings.Repeat("b", 64),
 			Uid: uid, Gid: gid, Entrypoint: []string{"/bin/sh"}, Command: []string{bodyTarget},
+			StopGraceSeconds: stopSeconds,
 			Labels: []*agentpb.ScriptStringPair{
 				{Key: "com.groundplane.managed", Value: "true"},
 				{Key: "com.groundplane.kind", Value: "script-runner"},
@@ -118,15 +196,21 @@ func cleanupFixture(t *testing.T) (*Runner, *cleanupEngine, scriptexecution.Requ
 }
 
 type cleanupEngine struct {
-	containerID string
-	inspected   client.ContainerInspectResult
-	running     bool
-	removed     bool
-	operations  []string
+	containerID  string
+	inspected    client.ContainerInspectResult
+	createErr    error
+	cancelCreate context.CancelFunc
+	created      bool
+	running      bool
+	removed      bool
+	operations   []string
 }
 
 func (engine *cleanupEngine) ContainerCreate(context.Context, client.ContainerCreateOptions) (client.ContainerCreateResult, error) {
-	return client.ContainerCreateResult{}, nil
+	if engine.cancelCreate != nil {
+		engine.cancelCreate()
+	}
+	return client.ContainerCreateResult{ID: engine.containerID}, engine.createErr
 }
 
 func (engine *cleanupEngine) NetworkConnect(context.Context, string, client.NetworkConnectOptions) (client.NetworkConnectResult, error) {
@@ -151,7 +235,9 @@ func (engine *cleanupEngine) ContainerInspect(context.Context, string, client.Co
 		return client.ContainerInspectResult{}, containerderrdefs.ErrNotFound
 	}
 	engine.inspected.Container.State.Running = engine.running
-	if engine.running {
+	if engine.created {
+		engine.inspected.Container.State.Status = container.StateCreated
+	} else if engine.running {
 		engine.inspected.Container.State.Status = container.StateRunning
 	} else {
 		engine.inspected.Container.State.Status = container.StateExited

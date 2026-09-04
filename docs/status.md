@@ -616,6 +616,20 @@ applied Compose predecessor or absence authoritative until successful terminal
 Task acknowledgement. Exact reference-host Blueprint and Script acceptance
 remains pending.
 
+## Script runner inherited image ownership evidence (2026-09-04)
+
+Script runner ownership validation now requires every sealed Environment value
+exactly once and the exact closed `com.groundplane.*` ownership-label set while
+permitting immutable defaults inherited from the digest-pinned image. Once
+Docker returns a container id, the Agent validates and adopts that exact
+identity without unvalidated removal, checkpoints it before any pre-start
+outcome, and cleans only under the acknowledged ownership evidence. Ambiguous,
+invalid, mismatched, running, or exited post-create state remains a recovery
+invariant; cancellation after capture records `abort`, and a plain no-id create
+failure remains `start_failure`. Focused Docker runner, Agent runtime, and
+Script checkpoint race proofs pass; exact reference-host Blueprint and Script
+acceptance remains pending.
+
 ## Unified Blueprint final-publication contract correction (2026-09-02)
 
 ADRs 0051 and 0062 plus the Blueprint grammar now replace the ordinary

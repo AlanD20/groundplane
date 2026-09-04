@@ -9,10 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"net/netip"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -182,28 +180,30 @@ func (runner *Runner) CreateContainer(
 		return scriptexecution.ContainerEvidence{}, err
 	}
 	created, err := runner.client.ContainerCreate(ctx, options)
-	if err != nil {
-		if created.ID != "" {
-			cleanupCtx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
-			_, cleanupErr := runner.client.ContainerRemove(
-				cleanupCtx, created.ID, client.ContainerRemoveOptions{Force: true},
-			)
-			cancel()
-			err = errors.Join(err, cleanupErr)
-		}
+	if created.ID == "" && err != nil {
 		return scriptexecution.ContainerEvidence{}, operationError(ctx, "create container", err)
 	}
 	if created.ID == "" {
 		return scriptexecution.ContainerEvidence{}, errs.New(errs.KindInternal, "Script runner: Docker returned an empty container id")
 	}
+	evidence := containerEvidence(request, created.ID)
+	if !validDockerContainerID(created.ID) {
+		return evidence, errs.New(errs.KindStateConflict, "Script runner: Docker returned an invalid container id")
+	}
 	inspected, inspectErr := runner.inspectOwnedContainer(ctx, created.ID, request, prepared)
 	if inspectErr != nil {
-		return scriptexecution.ContainerEvidence{}, operationError(ctx, "validate created container", errors.Join(err, inspectErr))
+		if kind, ok := errs.KindOf(inspectErr); ok && kind == errs.KindStateConflict {
+			return evidence, inspectErr
+		}
+		return evidence, errs.Wrap(
+			errs.KindStateConflict,
+			fmt.Errorf("Script runner: inspect ambiguous created container: %w", errors.Join(err, inspectErr)),
+		)
 	}
 	if inspected.Container.State.Status != container.StateCreated || inspected.Container.State.Running {
-		return scriptexecution.ContainerEvidence{}, errs.New(errs.KindStateConflict, "Script runner: created container is not stopped in created state")
+		return evidence, errs.New(errs.KindStateConflict, "Script runner: created container is not stopped in created state")
 	}
-	return containerEvidence(request, created.ID), nil
+	return evidence, nil
 }
 
 func (runner *Runner) RunContainer(
@@ -749,60 +749,6 @@ func (runner *Runner) inspectOwnedContainer(
 		return inspected, err
 	}
 	return inspected, nil
-}
-
-func validateOwnedContainer(
-	inspected client.ContainerInspectResult,
-	containerID string,
-	request scriptexecution.Request,
-	prepared preparedBody,
-) error {
-	value := inspected.Container
-	projection := request.Projection
-	if !validDockerContainerID(containerID) || value.ID != containerID ||
-		value.Name != "/"+projection.Name || value.Config == nil || value.HostConfig == nil || value.State == nil ||
-		value.Config.Image != projection.Image ||
-		value.Config.User != strconv.FormatUint(uint64(projection.Uid), 10)+":"+strconv.FormatUint(uint64(projection.Gid), 10) ||
-		!slices.Equal([]string(value.Config.Entrypoint), projection.Entrypoint) ||
-		!slices.Equal([]string(value.Config.Cmd), projection.Command) ||
-		!slices.Equal(value.Config.Env, scriptEnvironment(projection.Environment, request.Entries)) ||
-		value.Config.WorkingDir != projection.WorkingDir ||
-		value.HostConfig.LogConfig.Type != "none" ||
-		!maps.Equal(value.Config.Labels, pairMap(projection.Labels)) {
-		return errs.New(errs.KindStateConflict, "Script runner: captured container ownership evidence does not match")
-	}
-	bodyMounts := 0
-	for _, value := range value.Mounts {
-		if value.Destination != bodyTarget {
-			continue
-		}
-		bodyMounts++
-		if value.Type != mount.TypeBind || value.Source != prepared.hostPath || value.RW {
-			return errs.New(errs.KindStateConflict, "Script runner: captured container body mount does not match")
-		}
-	}
-	if bodyMounts != 1 {
-		return errs.New(errs.KindStateConflict, "Script runner: captured container body mount is missing or ambiguous")
-	}
-	for _, entry := range request.Entries {
-		if entry.Binding.Kind != agentpb.ScriptEntryBindingKind_SCRIPT_ENTRY_BINDING_KIND_FILE {
-			continue
-		}
-		expectedSource := filepath.Join(filepath.Dir(prepared.hostPath), entryArtifactLeaf(entry.Binding))
-		matches := 0
-		for _, mounted := range value.Mounts {
-			if mounted.Destination == entry.Binding.FileTarget {
-				matches++
-				if mounted.Type != mount.TypeBind || mounted.Source != expectedSource || mounted.RW {
-					return errs.New(errs.KindStateConflict, "Script runner: captured container Entry mount does not match")
-				}
-			}
-		}
-		if matches != 1 {
-			return errs.New(errs.KindStateConflict, "Script runner: captured container Entry mount is missing or ambiguous")
-		}
-	}
-	return nil
 }
 
 func validDockerContainerID(value string) bool {

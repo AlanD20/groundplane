@@ -106,6 +106,14 @@ func (runtime *DockerScriptRuntime) ExecuteScript(
 			containerEvidence, err = runtime.engine.CreateContainer(ctx, request, body)
 			if err != nil {
 				reason := scriptFailureReason(ctx, durable.State, err)
+				if containerEvidence.ID != "" {
+					if reason == agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_ABORT_BEFORE_START {
+						reason = agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_ABORT
+					}
+					if checkpointErr := checkpointContainer(checkpoint, request, durable, containerEvidence); checkpointErr != nil {
+						return 0, errors.Join(err, checkpointErr)
+					}
+				}
 				if checkpointErr := checkpointOutcome(checkpoint, request, durable, reason, nil); checkpointErr != nil {
 					return 0, errors.Join(err, checkpointErr)
 				}
@@ -432,6 +440,9 @@ func scriptFailureReason(
 	state agentpb.ScriptExecutionState,
 	err error,
 ) agentpb.ScriptOutcomeReason {
+	if kind, ok := errs.KindOf(err); ok && kind == errs.KindStateConflict {
+		return agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_RECOVERY_INVARIANT_FAILURE
+	}
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
 		return agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_TIMEOUT
 	}
@@ -440,9 +451,6 @@ func scriptFailureReason(
 			return agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_ABORT
 		}
 		return agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_ABORT_BEFORE_START
-	}
-	if kind, ok := errs.KindOf(err); ok && kind == errs.KindStateConflict {
-		return agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_RECOVERY_INVARIANT_FAILURE
 	}
 	if state == agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_CONTAINER_CREATED {
 		return agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_RUNTIME_FAILURE
