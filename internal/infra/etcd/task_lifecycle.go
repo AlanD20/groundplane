@@ -747,6 +747,19 @@ func (repository *TaskRepository) claimNextTask(
 			{Type: MutationPut, Key: assignmentIndexKey, Value: assignmentValue},
 			{Type: MutationPut, Key: timeoutIndexKey, Value: assignmentValue},
 		}
+		scriptSourceConditions, scriptSourceReady, err :=
+			repository.prepareBlueprintScriptTaskClaimSourceAuthority(
+				ctx, task, taskValue.ModRevision, candidate.readRevision,
+			)
+		if err != nil {
+			clearMutationValues(mutations)
+			return TaskAssignment{}, false, err
+		}
+		if !scriptSourceReady {
+			clearMutationValues(mutations)
+			return TaskAssignment{}, false, nil
+		}
+		conditions = append(conditions, scriptSourceConditions...)
 		requirementEvidence, requirementApplies, requirementReady, err :=
 			repository.observeBlueprintRequirementGateForClaim(ctx, task, candidate.readRevision)
 		if err != nil {
@@ -2686,6 +2699,9 @@ func (repository *TaskRepository) AbortPendingTask(
 			validateStableID(ids.KindNetwork, current.Record.Target) == nil &&
 			current.Record.Params[TaskZoneRemovalOperationParam] != ""
 		if current.Record.Status == TaskStatusAborted {
+			if err := repository.validateBlueprintPendingAbortReplay(ctx, current); err != nil {
+				return Versioned[TaskRecord]{}, err
+			}
 			if environmentCreation {
 				if err := repository.validateEnvironmentCreationReplay(
 					ctx, current.Record, TaskStatusAborted, current.ReadRevision,
@@ -2779,6 +2795,16 @@ func (repository *TaskRepository) AbortPendingTask(
 				errs.KindStateConflict,
 				"only a pending Task can be aborted before assignment",
 			)
+		}
+		blueprintAbortChange, err := repository.prepareBlueprintPendingAbort(ctx, current, terminalAt)
+		if err != nil {
+			return Versioned[TaskRecord]{}, err
+		}
+		if blueprintAbortChange.advanced {
+			continue
+		}
+		if blueprintAbortChange.applies {
+			terminalAt = blueprintAbortChange.terminalAt
 		}
 		terminal, err := transitionTaskStatus(current.Record, TaskStatusPending, TaskStatusAborted, terminalAt)
 		if err != nil {
@@ -3192,6 +3218,10 @@ func (repository *TaskRepository) AbortPendingTask(
 		defer rotationChange.clear()
 		conditions = append(conditions, rotationChange.conditions...)
 		mutations = append(mutations, rotationChange.mutations...)
+		if blueprintAbortChange.applies {
+			conditions = append(conditions, blueprintAbortChange.conditions...)
+			mutations = append(mutations, blueprintAbortChange.mutations...)
+		}
 		environmentBinding, err := repository.bindOrdinaryTaskEnvironmentMutation(
 			ctx,
 			current.Record,
@@ -3246,6 +3276,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		clearPlatformComponentTaskChange(platformComponentChange)
 		clearConnectorTaskChange(connectorChange)
 		clearRunnerTaskChange(runnerChange)
+		blueprintAbortChange.clear()
 		clear(environmentEpochValue)
 		environmentBinding.clear()
 		if err != nil {

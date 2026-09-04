@@ -391,10 +391,26 @@ func validateScriptExecutionCheckpointShape(record ScriptExecutionRecord) error 
 	if record.State == ScriptExecutionNotStarted {
 		if record.AssignmentID != "" || record.StartAuthorized || record.BodyPrepared != nil ||
 			record.ContainerCreated != nil || record.Outcome != nil || record.Cleanup != nil ||
-			record.LastCheckpointSHA256 != "" || record.ReconciliationRequired {
+			record.ControllerCleanup != "" || record.LastCheckpointSHA256 != "" || record.ReconciliationRequired {
 			return invalidScriptCheckpointRecord()
 		}
 		return nil
+	}
+	if record.State == ScriptExecutionCleanupProven && record.AssignmentID == "" {
+		if record.StartAuthorized || record.BodyPrepared != nil || record.ContainerCreated != nil ||
+			record.Outcome == nil || record.Outcome.Reason != ScriptOutcomeAbortBeforeStart ||
+			record.Outcome.ExitCode != nil || record.Outcome.OutputTruncated || record.Outcome.ObservedAt.IsZero() ||
+			record.Cleanup == nil || record.Cleanup.ContainerID != "" || record.Cleanup.BodyDevice != 0 ||
+			record.Cleanup.BodyInode != 0 || record.Cleanup.BodyLeaf != "" || !record.Cleanup.ContainerAbsent ||
+			!record.Cleanup.BodyAbsent || !record.Cleanup.ExecutionDirectoryAbsent ||
+			record.ControllerCleanup != ScriptControllerCleanupBlueprintPendingAbort ||
+			!validLowerSHA256(record.LastCheckpointSHA256) || record.ReconciliationRequired || record.ActiveReference {
+			return invalidScriptCheckpointRecord()
+		}
+		return nil
+	}
+	if record.ControllerCleanup != "" {
+		return invalidScriptCheckpointRecord()
 	}
 	if ids.Validate(ids.KindAssignment, record.AssignmentID) != nil || !validLowerSHA256(record.LastCheckpointSHA256) ||
 		(record.BodyPrepared != nil && !record.StartAuthorized) ||

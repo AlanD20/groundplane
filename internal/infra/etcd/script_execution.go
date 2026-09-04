@@ -32,6 +32,8 @@ const (
 
 type ScriptExecutionState string
 
+type ScriptControllerCleanupAuthority string
+
 const (
 	ScriptExecutionNotStarted       ScriptExecutionState = "not_started"
 	ScriptExecutionStartAuthorized  ScriptExecutionState = "start_authorized"
@@ -39,41 +41,44 @@ const (
 	ScriptExecutionContainerCreated ScriptExecutionState = "container_created"
 	ScriptExecutionOutcomeRecorded  ScriptExecutionState = "outcome_recorded"
 	ScriptExecutionCleanupProven    ScriptExecutionState = "cleanup_proven"
+
+	ScriptControllerCleanupBlueprintPendingAbort ScriptControllerCleanupAuthority = "blueprint_pending_abort"
 )
 
 // ScriptExecutionRecord is the durable recovery authority for one one-off
 // Script container. Plan and Snapshot contain no Script body or secret bytes.
 type ScriptExecutionRecord struct {
-	ID                     string                          `json:"id"`
-	SnapshotID             string                          `json:"snapshot_id"`
-	OperationID            string                          `json:"operation_id"`
-	CurrentTaskID          string                          `json:"current_task_id"`
-	AssignmentID           string                          `json:"assignment_id,omitempty"`
-	StepID                 string                          `json:"step_id"`
-	ScriptID               string                          `json:"script_id"`
-	ScriptGeneration       uint64                          `json:"script_generation"`
-	ScriptSetGeneration    string                          `json:"script_set_generation"`
-	EnvironmentID          string                          `json:"environment_id"`
-	ServiceID              string                          `json:"service_id"`
-	ReleaseID              string                          `json:"release_id"`
-	RenderGeneration       uint64                          `json:"render_generation"`
-	PlanHash               string                          `json:"plan_hash"`
-	SnapshotSHA256         string                          `json:"snapshot_sha256"`
-	BodySHA256             string                          `json:"body_sha256"`
-	RunnerProjectionSHA256 string                          `json:"runner_projection_sha256"`
-	Plan                   []byte                          `json:"plan"`
-	Snapshot               []byte                          `json:"snapshot"`
-	State                  ScriptExecutionState            `json:"state"`
-	StartAuthorized        bool                            `json:"start_authorized"`
-	BodyPrepared           *ScriptBodyPreparedEvidence     `json:"body_prepared,omitempty"`
-	ContainerCreated       *ScriptContainerCreatedEvidence `json:"container_created,omitempty"`
-	Outcome                *ScriptOutcomeEvidence          `json:"outcome,omitempty"`
-	Cleanup                *ScriptCleanupEvidence          `json:"cleanup,omitempty"`
-	LastCheckpointSHA256   string                          `json:"last_checkpoint_sha256,omitempty"`
-	ReconciliationRequired bool                            `json:"reconciliation_required"`
-	ActiveReference        bool                            `json:"active_reference"`
-	CreatedAt              time.Time                       `json:"created_at"`
-	UpdatedAt              time.Time                       `json:"updated_at"`
+	ID                     string                           `json:"id"`
+	SnapshotID             string                           `json:"snapshot_id"`
+	OperationID            string                           `json:"operation_id"`
+	CurrentTaskID          string                           `json:"current_task_id"`
+	AssignmentID           string                           `json:"assignment_id,omitempty"`
+	StepID                 string                           `json:"step_id"`
+	ScriptID               string                           `json:"script_id"`
+	ScriptGeneration       uint64                           `json:"script_generation"`
+	ScriptSetGeneration    string                           `json:"script_set_generation"`
+	EnvironmentID          string                           `json:"environment_id"`
+	ServiceID              string                           `json:"service_id"`
+	ReleaseID              string                           `json:"release_id"`
+	RenderGeneration       uint64                           `json:"render_generation"`
+	PlanHash               string                           `json:"plan_hash"`
+	SnapshotSHA256         string                           `json:"snapshot_sha256"`
+	BodySHA256             string                           `json:"body_sha256"`
+	RunnerProjectionSHA256 string                           `json:"runner_projection_sha256"`
+	Plan                   []byte                           `json:"plan"`
+	Snapshot               []byte                           `json:"snapshot"`
+	State                  ScriptExecutionState             `json:"state"`
+	StartAuthorized        bool                             `json:"start_authorized"`
+	BodyPrepared           *ScriptBodyPreparedEvidence      `json:"body_prepared,omitempty"`
+	ContainerCreated       *ScriptContainerCreatedEvidence  `json:"container_created,omitempty"`
+	Outcome                *ScriptOutcomeEvidence           `json:"outcome,omitempty"`
+	Cleanup                *ScriptCleanupEvidence           `json:"cleanup,omitempty"`
+	ControllerCleanup      ScriptControllerCleanupAuthority `json:"controller_cleanup,omitempty"`
+	LastCheckpointSHA256   string                           `json:"last_checkpoint_sha256,omitempty"`
+	ReconciliationRequired bool                             `json:"reconciliation_required"`
+	ActiveReference        bool                             `json:"active_reference"`
+	CreatedAt              time.Time                        `json:"created_at"`
+	UpdatedAt              time.Time                        `json:"updated_at"`
 }
 
 type releaseHookExecutionStep struct {

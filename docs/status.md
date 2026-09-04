@@ -795,3 +795,15 @@ ceiling, while preparation abandonment retains its independent safe physical
 page size. Exact memberships, counts, Script aggregates, caller guards, root
 revision, and cursor are fenced against replay and races. Focused race tests,
 independent review, and the single correction-delta verification pass.
+
+## Pending Blueprint Script abort lifecycle (2026-09-04)
+
+Aborting a pending Blueprint Task now atomically validates the sealed Script
+source membership, fences assignment, records explicitly Controller-owned
+`abort_before_start` cleanup proof, and moves the source root into abandoned
+normal release. Bounded release resumes from its cursor, and only exact drain
+proof terminalizes the same Task and removes its root. Root tampering blocks
+claim and abort, completed replay requires the cleanup and Task timestamps to
+match, and unrelated Script executions cannot use the Controller-owned
+checkpoint shape. Focused races, independent review, and the single correction-
+delta verification pass.
