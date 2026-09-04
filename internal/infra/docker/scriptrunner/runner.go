@@ -660,10 +660,7 @@ func (runner *Runner) cleanup(
 	containerAbsent := containerID == ""
 	containerOwned := containerID != ""
 	if containerID != "" {
-		if prepared == nil {
-			return errs.New(errs.KindStateConflict, "Script runner: captured container has no body evidence")
-		}
-		inspected, err := runner.inspectOwnedContainer(ctx, containerID, request, *prepared)
+		inspected, err := runner.inspectCleanupContainer(ctx, containerID, request)
 		if err != nil {
 			if containerderrdefs.IsNotFound(err) {
 				containerAbsent = true
@@ -671,7 +668,7 @@ func (runner *Runner) cleanup(
 				cleanupErrors = append(cleanupErrors, fmt.Errorf("inspect container before cleanup: %w", err))
 				containerOwned = false
 			}
-		} else if inspected.Container.State.Running {
+		} else if inspected.Container.State != nil && inspected.Container.State.Running {
 			timeout := stopSeconds
 			if _, stopErr := runner.client.ContainerStop(ctx, containerID, client.ContainerStopOptions{Signal: "SIGTERM", Timeout: &timeout}); stopErr != nil && !containerderrdefs.IsNotFound(stopErr) {
 				cleanupErrors = append(cleanupErrors, fmt.Errorf("stop container: %w", stopErr))
@@ -679,7 +676,7 @@ func (runner *Runner) cleanup(
 		}
 
 		if !containerAbsent && containerOwned {
-			inspected, err = runner.inspectOwnedContainer(ctx, containerID, request, *prepared)
+			inspected, err = runner.inspectCleanupContainer(ctx, containerID, request)
 			if err != nil {
 				if containerderrdefs.IsNotFound(err) {
 					containerAbsent = true
@@ -687,7 +684,7 @@ func (runner *Runner) cleanup(
 					cleanupErrors = append(cleanupErrors, fmt.Errorf("inspect container after stop: %w", err))
 					containerOwned = false
 				}
-			} else if inspected.Container.State.Running {
+			} else if inspected.Container.State != nil && inspected.Container.State.Running {
 				if _, killErr := runner.client.ContainerKill(ctx, containerID, client.ContainerKillOptions{Signal: "SIGKILL"}); killErr != nil && !containerderrdefs.IsNotFound(killErr) {
 					cleanupErrors = append(cleanupErrors, fmt.Errorf("kill container: %w", killErr))
 				}
@@ -695,7 +692,7 @@ func (runner *Runner) cleanup(
 		}
 
 		if !containerAbsent && containerOwned {
-			if _, err = runner.inspectOwnedContainer(ctx, containerID, request, *prepared); err != nil {
+			if _, err = runner.inspectCleanupContainer(ctx, containerID, request); err != nil {
 				if containerderrdefs.IsNotFound(err) {
 					containerAbsent = true
 				} else {
@@ -733,22 +730,6 @@ func (runner *Runner) cleanup(
 		}
 	}
 	return errors.Join(cleanupErrors...)
-}
-
-func (runner *Runner) inspectOwnedContainer(
-	ctx context.Context,
-	containerID string,
-	request scriptexecution.Request,
-	prepared preparedBody,
-) (client.ContainerInspectResult, error) {
-	inspected, err := runner.client.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
-	if err != nil {
-		return inspected, err
-	}
-	if err := validateOwnedContainer(inspected, containerID, request, prepared); err != nil {
-		return inspected, err
-	}
-	return inspected, nil
 }
 
 func validDockerContainerID(value string) bool {

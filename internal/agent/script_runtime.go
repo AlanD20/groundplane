@@ -117,7 +117,8 @@ func (runtime *DockerScriptRuntime) ExecuteScript(
 				if checkpointErr := checkpointOutcome(checkpoint, request, durable, reason, nil); checkpointErr != nil {
 					return 0, errors.Join(err, checkpointErr)
 				}
-				return runtime.cleanupAndReturn(checkpoint, request, durable)
+				exitCode, cleanupErr := runtime.cleanupAndReturn(checkpoint, request, durable)
+				return exitCode, errors.Join(err, cleanupErr)
 			}
 		}
 		if err := checkpointContainer(checkpoint, request, durable, containerEvidence); err != nil {

@@ -1,6 +1,7 @@
 package scriptrunner
 
 import (
+	"context"
 	"maps"
 	"path/filepath"
 	"slices"
@@ -30,7 +31,7 @@ func validateOwnedContainer(
 		!slices.Equal([]string(value.Config.Entrypoint), projection.Entrypoint) ||
 		!slices.Equal([]string(value.Config.Cmd), projection.Command) ||
 		!hasExactSealedEnvironment(value.Config.Env, scriptEnvironment(projection.Environment, request.Entries)) ||
-		value.Config.WorkingDir != projection.WorkingDir ||
+		projection.WorkingDir != "" && value.Config.WorkingDir != projection.WorkingDir ||
 		value.HostConfig.LogConfig.Type != "none" ||
 		!hasExactGroundplaneLabels(value.Config.Labels, pairMap(projection.Labels)) {
 		return errs.New(errs.KindStateConflict, "Script runner: captured container ownership evidence does not match")
@@ -67,6 +68,50 @@ func validateOwnedContainer(
 		}
 	}
 	return nil
+}
+
+func validateCleanupContainer(
+	inspected client.ContainerInspectResult,
+	containerID string,
+	request scriptexecution.Request,
+) error {
+	value := inspected.Container
+	if !validDockerContainerID(containerID) || value.ID != containerID || value.Config == nil ||
+		!hasExactGroundplaneLabels(value.Config.Labels, pairMap(request.Projection.Labels)) {
+		return errs.New(errs.KindStateConflict, "Script runner: captured container cleanup authority does not match")
+	}
+	return nil
+}
+
+func (runner *Runner) inspectOwnedContainer(
+	ctx context.Context,
+	containerID string,
+	request scriptexecution.Request,
+	prepared preparedBody,
+) (client.ContainerInspectResult, error) {
+	inspected, err := runner.client.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
+	if err != nil {
+		return inspected, err
+	}
+	if err := validateOwnedContainer(inspected, containerID, request, prepared); err != nil {
+		return inspected, err
+	}
+	return inspected, nil
+}
+
+func (runner *Runner) inspectCleanupContainer(
+	ctx context.Context,
+	containerID string,
+	request scriptexecution.Request,
+) (client.ContainerInspectResult, error) {
+	inspected, err := runner.client.ContainerInspect(ctx, containerID, client.ContainerInspectOptions{})
+	if err != nil {
+		return inspected, err
+	}
+	if err := validateCleanupContainer(inspected, containerID, request); err != nil {
+		return inspected, err
+	}
+	return inspected, nil
 }
 
 func hasExactSealedEnvironment(effective, sealed []string) bool {

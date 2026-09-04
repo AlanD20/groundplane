@@ -100,6 +100,42 @@ func TestValidateOwnedContainer(t *testing.T) {
 	}
 }
 
+// Rationale: an empty sealed working directory delegates to the digest-pinned
+// image while image environment defaults and OCI labels remain outside ownership.
+func TestValidateOwnedContainerAllowsInheritedImageDefaults(t *testing.T) {
+	t.Parallel()
+
+	containerID := strings.Repeat("a", 64)
+	prepared := preparedBody{hostPath: "/var/lib/groundplane/agent/tasks/assignment/execution/body"}
+	request := scriptexecution.Request{Projection: &agentpb.ScriptRunnerProjection{
+		Name: "gp-script-01k5v8k8yr0000000000000000", Image: "app@sha256:" + strings.Repeat("b", 64),
+		Entrypoint: []string{"/bin/sh"}, Command: []string{bodyTarget},
+		Labels: []*agentpb.ScriptStringPair{
+			{Key: "com.groundplane.managed", Value: "true"},
+			{Key: "com.groundplane.kind", Value: "script-runner"},
+		},
+	}}
+	labels := pairMap(request.Projection.Labels)
+	labels["org.opencontainers.image.title"] = "application-base"
+	inspected := client.ContainerInspectResult{Container: container.InspectResponse{
+		ID: containerID, Name: "/" + request.Projection.Name,
+		Config: &container.Config{
+			Image: request.Projection.Image, User: "0:0", WorkingDir: "/usr/src/app",
+			Entrypoint: request.Projection.Entrypoint, Cmd: request.Projection.Command,
+			Env: []string{"PATH=/usr/local/bin:/usr/bin:/bin"}, Labels: labels,
+		},
+		HostConfig: &container.HostConfig{LogConfig: container.LogConfig{Type: "none"}},
+		State:      &container.State{Status: container.StateCreated},
+		Mounts: []container.MountPoint{{
+			Type: mount.TypeBind, Source: prepared.hostPath, Destination: bodyTarget,
+		}},
+	}}
+
+	if err := validateOwnedContainer(inspected, containerID, request, prepared); err != nil {
+		t.Fatalf("validate inherited image defaults: %v", err)
+	}
+}
+
 func TestValidateOwnedContainerRejectsBodyMountMismatch(t *testing.T) {
 	t.Parallel()
 

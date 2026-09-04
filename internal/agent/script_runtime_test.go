@@ -229,6 +229,32 @@ func TestDockerScriptRuntimeCheckpointsCreateEvidenceBeforeFailureOutcome(t *tes
 	}
 }
 
+// Rationale: a cleanup failure must not mask the original create failure after
+// the captured container evidence and failure outcome are durably checkpointed.
+func TestDockerScriptRuntimeJoinsCreateAndCleanupFailures(t *testing.T) {
+	t.Parallel()
+
+	assignment, step, bodyDigest := capturedContainerFailureFixture()
+	createErr := errors.New("created container failed validation")
+	cleanupErr := errors.New("remove captured container failed")
+	engine := &checkpointOrderScriptEngine{
+		events: &[]string{}, bodyDigest: bodyDigest, createErr: createErr, cleanupErr: cleanupErr,
+	}
+	runtime, err := NewDockerScriptRuntime(engine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkpoint := func(_ context.Context, request *agentpb.ScriptCheckpointRequest) error {
+		_, checkpointErr := executionplan.ValidateScriptCheckpointRequest(request)
+		return checkpointErr
+	}
+
+	_, err = runtime.ExecuteScript(context.Background(), assignment, step, checkpoint)
+	if !errors.Is(err, createErr) || !errors.Is(err, cleanupErr) {
+		t.Fatalf("ExecuteScript() error = %v, want joined create and cleanup causes", err)
+	}
+}
+
 // Rationale: a captured container changes cancellation to abort and makes
 // ownership/state conflicts authoritative over a concurrent cancellation.
 func TestDockerScriptRuntimePreservesCapturedContainerFailurePrecedence(t *testing.T) {
@@ -393,6 +419,7 @@ type checkpointOrderScriptEngine struct {
 	bodyDigest         [sha256.Size]byte
 	createErr          error
 	runErr             error
+	cleanupErr         error
 	cleanupContainerID string
 	cancelCreate       context.CancelFunc
 }
@@ -457,7 +484,7 @@ func (engine *checkpointOrderScriptEngine) Cleanup(
 	if body != nil {
 		proof.BodyDevice, proof.BodyInode, proof.BodyLeaf = body.Device, body.Inode, body.Leaf
 	}
-	return proof, nil
+	return proof, engine.cleanupErr
 }
 
 func (engine *checkpointOrderScriptEngine) Close() error { return nil }

@@ -644,6 +644,19 @@ failure remains `start_failure`. Focused Docker runner, Agent runtime, and
 Script checkpoint race proofs pass; exact reference-host Blueprint and Script
 acceptance remains pending.
 
+## Script runner cleanup authority (2026-09-04)
+
+Script runner adoption still validates the complete immutable container shape,
+while post-checkpoint cleanup now authorizes removal only from the exact durable
+container id and closed Groundplane ownership-label digest. An image may supply
+its working directory only when the sealed projection leaves it empty; an
+authored working directory remains exact. Cleanup can therefore remove and
+prove absence of an already-checkpointed runner after a non-ownership shape
+failure without weakening foreign-container protection, and a cleanup failure
+no longer masks the original create failure. Focused Docker runner and Agent
+runtime race proofs pass; exact reference-host Blueprint and Script acceptance
+remains pending.
+
 ## Unified Blueprint final-publication contract correction (2026-09-02)
 
 ADRs 0051 and 0062 plus the Blueprint grammar now replace the ordinary

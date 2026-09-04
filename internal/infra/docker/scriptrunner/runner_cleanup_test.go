@@ -57,6 +57,25 @@ func TestCleanupRefusesContainerWithMismatchedOwnership(t *testing.T) {
 	}
 }
 
+// Rationale: after exact container and ownership evidence is checkpointed,
+// cleanup must remove that container even if a non-ownership runner predicate differs.
+func TestCleanupUsesCheckpointedOwnershipAfterRunnerShapeMismatch(t *testing.T) {
+	t.Parallel()
+
+	runner, engine, request, prepared := cleanupFixture(t)
+	engine.inspected.Container.Config.Image = "other@sha256:" + strings.Repeat("c", 64)
+	body := bodyEvidence(prepared)
+	container := containerEvidence(request, engine.containerID)
+
+	proof, err := runner.Cleanup(request, &body, &container)
+	if err != nil {
+		t.Fatalf("cleanup checkpoint-owned container: %v", err)
+	}
+	if !engine.removed || !proof.ContainerAbsent || !proof.BodyAbsent || !proof.ExecutionDirectoryAbsent {
+		t.Fatalf("removed/proof = %t/%#v, want exact container and artifacts absent", engine.removed, proof)
+	}
+}
+
 func TestCleanupRemovesBodyWhenNoContainerWasCaptured(t *testing.T) {
 	t.Parallel()
 
@@ -79,6 +98,7 @@ func TestCreateContainerReturnsCapturedEvidenceWhenValidationFails(t *testing.T)
 	t.Parallel()
 
 	runner, engine, request, prepared := cleanupFixture(t)
+	request.Projection.WorkingDir = "/srv/app"
 	engine.inspected.Container.Config.WorkingDir = "/unexpected"
 	engine.createErr = errors.New("Docker create response was ambiguous")
 	ctx, cancel := context.WithCancel(context.Background())
