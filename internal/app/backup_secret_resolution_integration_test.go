@@ -88,7 +88,7 @@ func TestBackupSecretReaderResolverAgentChannelComposition(t *testing.T) {
 		if assignment := message.GetTaskAssignment(); assignment != nil {
 			assignmentCount++
 			if assignment.GetTaskId() != fixture.request.TaskID ||
-				assignment.GetAssignmentId() != fixture.request.AssignmentID {
+				assignment.GetAssignmentId() != fixture.request.AssignmentID || assignment.GetEventAttempt() != 1 {
 				t.Fatalf("task assignment = %#v", assignment)
 			}
 		}
@@ -684,6 +684,19 @@ func (store *appBackupSecretTaskStore) GetTask(
 		return etcd.Versioned[etcd.TaskRecord]{}, errs.New(errs.KindTaskNotFound, "unexpected task")
 	}
 	return store.claim.Task, nil
+}
+
+func (store *appBackupSecretTaskStore) ListTaskEvents(
+	_ context.Context,
+	taskID string,
+	revision int64,
+) (etcd.TaskEventSnapshot, error) {
+	if taskID != store.claim.Task.Record.ID || revision != store.claim.Task.ReadRevision {
+		return etcd.TaskEventSnapshot{}, errs.New(errs.KindInternal, "unexpected task event snapshot")
+	}
+	return etcd.TaskEventSnapshot{
+		Task: store.claim.Task.Record, Revision: store.claim.Task.ReadRevision,
+	}, nil
 }
 
 func (*appBackupSecretTaskStore) AppendTaskEvent(

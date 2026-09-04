@@ -458,7 +458,8 @@ func agentBackupSecretAssignment(t *testing.T) Assignment {
 	}
 	return Assignment{
 		AssignmentID: workerTestAssignmentID, TaskID: workerTestTaskID,
-		OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV", Plan: plan, Deadline: time.Now().Add(120 * time.Second),
+		OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV", Plan: plan,
+		EventAttempt: 1, Deadline: time.Now().Add(120 * time.Second),
 	}
 }
 

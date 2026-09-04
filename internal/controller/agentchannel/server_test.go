@@ -50,6 +50,8 @@ type fakeTaskStore struct {
 	ackTerminal     etcd.TaskStatus
 	ackResult       etcd.TaskResultRecord
 	events          []etcd.TaskEventInput
+	durableEvents   []etcd.TaskEventRecord
+	eventRevisions  []int64
 }
 
 type wakeTaskStore struct {
@@ -106,8 +108,9 @@ func (store *wakeTaskStore) claimCalls() int {
 }
 
 type fakePlanResolver struct {
-	plan *agentpb.ExecutionPlan
-	err  error
+	plan      *agentpb.ExecutionPlan
+	err       error
+	onResolve func()
 }
 
 type blockingPlanResolver struct {
@@ -263,6 +266,9 @@ func (resolver *fakePlanResolver) ResolveExecutionPlan(
 	context.Context,
 	etcd.TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
+	if resolver.onResolve != nil {
+		resolver.onResolve()
+	}
 	return resolver.plan, resolver.err
 }
 
@@ -300,13 +306,29 @@ func (store *fakeTaskStore) GetTask(
 	return task, nil
 }
 
+func (store *fakeTaskStore) ListTaskEvents(
+	_ context.Context,
+	taskID string,
+	revision int64,
+) (etcd.TaskEventSnapshot, error) {
+	store.eventRevisions = append(store.eventRevisions, revision)
+	task := store.tasks[taskID]
+	return etcd.TaskEventSnapshot{
+		Task: task.Record, Events: append([]etcd.TaskEventRecord(nil), store.durableEvents...), Revision: revision,
+	}, nil
+}
+
 func (store *fakeTaskStore) AppendTaskEvent(
 	_ context.Context,
 	input etcd.TaskEventInput,
 	_ time.Time,
 ) (etcd.TaskEventAppend, error) {
 	store.events = append(store.events, input)
-	return etcd.TaskEventAppend{Sequence: uint64(len(store.events)), Revision: 6}, nil
+	sequence := uint64(len(store.events))
+	store.durableEvents = append(store.durableEvents, etcd.TaskEventRecord{
+		Sequence: sequence, Identity: input.Identity, State: input.State, Payload: append([]byte(nil), input.Payload...),
+	})
+	return etcd.TaskEventAppend{Sequence: sequence, Revision: 6}, nil
 }
 
 func (store *fakeTaskStore) AcknowledgeTask(
@@ -884,6 +906,7 @@ func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
 	assignment := stream.sent[1].GetTaskAssignment()
 	if assignment == nil || assignment.TaskId != task.ID || assignment.AssignmentId != assignmentID ||
 		assignment.OperationId != task.OperationID || assignment.Plan == nil ||
+		assignment.EventAttempt != 1 ||
 		assignment.Plan.PlanId != task.PlanID ||
 		assignment.Plan.RenderGeneration != uint64(task.RenderGeneration) ||
 		!bytes.Equal(assignment.Plan.PlanHash, planHash) ||
@@ -1174,6 +1197,7 @@ func TestConnectDispatchRejectedAssignmentClearsScriptArtifacts(t *testing.T) {
 		stream,
 		etcd.TaskAssignment{},
 		assignment,
+		false,
 	)
 	if err != nil || sent {
 		t.Fatalf("rejected dispatch = (%v, %v), want (false, nil)", sent, err)
@@ -1382,7 +1406,7 @@ func testExecutionPlan(t *testing.T, task etcd.TaskRecord) *agentpb.ExecutionPla
 // Rationale: reconnect redispatches an existing durable assignment; it must
 // carry the original absolute deadline rather than restart Task timeout from
 // the new stream's delivery time.
-func TestTaskAssignmentMessagePreservesAbsoluteDeadlineOnRedispatch(t *testing.T) {
+func TestTaskAssignmentMessageUsesDurableEventAttemptsAcrossSessions(t *testing.T) {
 	now := testTime()
 	startedAt := now
 	task := etcd.TaskRecord{
@@ -1407,16 +1431,108 @@ func TestTaskAssignmentMessagePreservesAbsoluteDeadlineOnRedispatch(t *testing.T
 			AssignedAt: now, Deadline: deadline,
 		}},
 	}
+	tasks := &fakeTaskStore{tasks: map[string]etcd.Versioned[etcd.TaskRecord]{task.ID: claim.Task}}
 	server := New(
-		authorizedAuthenticator(), NewRegistry(), &fakeTaskStore{},
+		authorizedAuthenticator(), NewRegistry(), tasks,
 		&fakePlanResolver{plan: plan},
 	)
 	server.now = func() time.Time { return now.Add(29 * time.Second) }
-	message, err := server.taskAssignmentMessage(context.Background(), claim)
+	first, err := server.taskAssignmentMessage(context.Background(), claim, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if message.Deadline == nil || !message.Deadline.AsTime().Equal(deadline) {
-		t.Fatalf("redispatched deadline = %#v, want %s", message.Deadline, deadline)
+	if first.GetEventAttempt() != 1 {
+		t.Fatalf("first delivery event attempt = %d, want 1", first.GetEventAttempt())
+	}
+	tasks.durableEvents = []etcd.TaskEventRecord{{Identity: etcd.TaskEventIdentity{
+		AssignmentID: claim.Assignment.Record.AssignmentID,
+		AgentID:      testAgentID, AgentGeneration: 1,
+		TaskID: task.ID, StepID: task.Steps[0].ID, Attempt: 1, Ordinal: 1,
+	}}}
+	second, err := server.taskAssignmentMessage(context.Background(), claim, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayed, err := server.taskAssignmentMessage(context.Background(), claim, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.GetEventAttempt() != 2 || replayed.GetEventAttempt() != 2 ||
+		second.Deadline == nil || !second.Deadline.AsTime().Equal(deadline) {
+		t.Fatalf("recovered assignments = %#v / %#v, want stable attempt 2 and deadline %s", second, replayed, deadline)
+	}
+	if len(tasks.eventRevisions) != 2 || tasks.eventRevisions[0] != claim.Task.ReadRevision ||
+		tasks.eventRevisions[1] != claim.Task.ReadRevision {
+		t.Fatalf("event snapshot revisions = %v, want claim revision %d", tasks.eventRevisions, claim.Task.ReadRevision)
+	}
+	tasks.durableEvents[0].Identity.AgentID = ids.NewAt(ids.KindAgent, now, 8207)
+	if _, err := server.taskAssignmentMessage(context.Background(), claim, true); !errors.Is(
+		err, errs.New(errs.KindInternal, ""),
+	) {
+		t.Fatalf("mismatched durable event error = %v, want internal", err)
+	}
+	tasks.durableEvents[0].Identity.AgentID = testAgentID
+	tasks.durableEvents[0].Identity.Attempt = ^uint32(0)
+	if _, err := server.taskAssignmentMessage(context.Background(), claim, true); !errors.Is(
+		err, errs.New(errs.KindInternal, ""),
+	) {
+		t.Fatalf("exhausted durable event attempt error = %v, want internal", err)
+	}
+}
+
+// Rationale: recovered plan and private-input resolution can cross the
+// immutable deadline; the final send boundary must still leave timeout
+// terminalization to the scheduler without emitting any assignment frame.
+func TestConnectDoesNotDispatchRecoveredAssignmentThatExpiresDuringResolution(t *testing.T) {
+	now := testTime()
+	current := now.Add(-time.Nanosecond)
+	resolved := false
+	startedAt := now
+	task := etcd.TaskRecord{
+		ID: ids.NewAt(ids.KindTask, now, 8210), OperationID: ids.NewAt(ids.KindOperation, now, 8211),
+		PlanID: ids.NewAt(ids.KindPlan, now, 8212), RenderGeneration: 7, Type: etcd.TaskDeploy,
+		Target: ids.NewAt(ids.KindService, now, 8213),
+		Steps: []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 8214)}},
+		TimeoutSeconds: 120, Status: etcd.TaskStatusRunning,
+		NextEventSequence: 1, CreatedAt: now, StartedAt: &startedAt,
+	}
+	plan := testExecutionPlan(t, task)
+	task.PlanHash = hex.EncodeToString(plan.PlanHash)
+	claim := etcd.TaskAssignment{
+		Task: etcd.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5},
+		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
+			AssignmentID: ids.NewAt(ids.KindAssignment, now, 8215), TaskID: task.ID,
+			Executor: etcd.TaskExecutorAgent, AgentID: testAgentID, AgentGeneration: 1,
+			AssignedAt: now.Add(-time.Minute), Deadline: now,
+		}},
+	}
+	tasks := &fakeTaskStore{
+		assignments: []etcd.TaskAssignment{claim},
+		tasks:       map[string]etcd.Versioned[etcd.TaskRecord]{task.ID: claim.Task},
+	}
+	stream := &scriptedStream{messages: []*agentpb.AgentMessage{
+		authenticateMessage(testAgentID, testToken(13)), readyMessage(1),
+	}}
+	server := New(authorizedAuthenticator(), NewRegistry(), tasks, &fakePlanResolver{
+		plan: plan,
+		onResolve: func() {
+			resolved = true
+			current = now
+		},
+	})
+	server.now = func() time.Time { return current }
+	if err := server.Connect(stream); err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+	if len(stream.sent) != 1 || stream.sent[0].GetConfigUpdate() == nil {
+		t.Fatalf("Controller messages = %#v, want only ConfigUpdate", stream.sent)
+	}
+	if !resolved || len(tasks.eventRevisions) != 1 || tasks.eventRevisions[0] != claim.Task.ReadRevision {
+		t.Fatalf(
+			"deadline-crossing resolution = resolved %t, revisions %v; want true and [%d]",
+			resolved,
+			tasks.eventRevisions,
+			claim.Task.ReadRevision,
+		)
 	}
 }

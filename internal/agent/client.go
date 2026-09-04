@@ -563,6 +563,9 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 		if assignment.Deadline == nil || assignment.Deadline.CheckValid() != nil {
 			return false, errs.New(errs.KindInternal, "agent: Controller sent an invalid task deadline")
 		}
+		if assignment.GetEventAttempt() == 0 {
+			return false, errs.New(errs.KindInternal, "agent: Controller sent an invalid event attempt")
+		}
 		defer clearScriptArtifacts(assignment.ScriptArtifacts)
 		return false, c.pool.Submit(ctx, Assignment{
 			AssignmentID: assignment.AssignmentId,
@@ -571,6 +574,7 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 			ScriptCheckpoints:       assignment.ScriptCheckpoints,
 			AcknowledgedStepResults: assignment.AcknowledgedStepResults,
 			AutomaticReconcile:      assignment.GetAutomaticReconcile(),
+			EventAttempt:            assignment.GetEventAttempt(),
 			Deadline:                assignment.Deadline.AsTime(),
 		})
 	}

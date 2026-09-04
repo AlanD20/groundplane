@@ -175,7 +175,7 @@ func environmentDirectoryAssignment(t *testing.T) Assignment {
 	return Assignment{
 		AssignmentID: workerTestAssignmentID,
 		TaskID:       workerTestTaskID, OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		Plan: plan, Deadline: time.Now().Add(time.Minute),
+		Plan: plan, EventAttempt: 1, Deadline: time.Now().Add(time.Minute),
 	}
 }
 
@@ -202,6 +202,6 @@ func environmentDirectoryRemovalAssignment(t *testing.T) Assignment {
 	return Assignment{
 		AssignmentID: workerTestAssignmentID,
 		TaskID:       workerTestTaskID, OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		Plan: plan, Deadline: time.Now().Add(time.Minute),
+		Plan: plan, EventAttempt: 1, Deadline: time.Now().Add(time.Minute),
 	}
 }

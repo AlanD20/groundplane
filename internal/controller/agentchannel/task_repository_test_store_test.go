@@ -60,6 +60,14 @@ func (store *blockingClaimTaskStore) GetTask(
 	return store.repository.GetTask(ctx, taskID)
 }
 
+func (store *blockingClaimTaskStore) ListTaskEvents(
+	ctx context.Context,
+	taskID string,
+	revision int64,
+) (etcd.TaskEventSnapshot, error) {
+	return store.repository.ListTaskEvents(ctx, taskID, revision)
+}
+
 func (store *blockingClaimTaskStore) AppendTaskEvent(
 	ctx context.Context,
 	input etcd.TaskEventInput,

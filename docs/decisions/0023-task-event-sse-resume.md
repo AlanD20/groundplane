@@ -32,6 +32,8 @@ The decision must preserve these accepted rules:
 - the Controller assigns a contiguous `uint64` sequence starting at 1;
 - each Agent event has stable `(task id, step id, attempt, ordinal)` identity,
   and identical Agent redelivery returns the already allocated sequence;
+- each assignment delivery carries one positive Controller-authored event
+  attempt execution epoch used by every step event from that delivery;
 - one Task has at most 1,000 durable events, each with at most 32 KiB of durable
   JSON; subprocess and log streams are excluded;
 - a complete snapshot is read at fixed revision `R`, and a gap-free watch
@@ -220,6 +222,30 @@ key disappeared.
 Reconnecting after retention deletion returns `task.not_found`; there is no
 tombstone stream and no attempt to recreate historical events.
 
+### 7. Allocate an event attempt for each assignment execution epoch
+
+`TaskAssignment.event_attempt` is a required positive `uint32` authored only
+by the Controller. The Agent validates it at the protobuf boundary, copies it
+into its owned assignment, and uses it for every step event emitted by that
+delivery. It never substitutes a local constant or counter.
+
+The first delivery of a newly claimed assignment uses attempt 1. On recovery,
+the Controller reads the complete Task event journal at the recovered claim's
+fixed Task read revision. Every durable event must match the exact Task,
+assignment, Agent, and Agent generation. No events selects attempt 1; otherwise
+the next attempt is one greater than the maximum durable attempt. An identity
+mismatch, zero durable attempt, or `uint32` overflow is internal corruption.
+
+This rule deliberately does not persist delivery itself. If a delivery fails
+before any event from its attempt is durable, recovery reuses that attempt. As
+soon as one event is durable, the next recovery advances the epoch, preventing
+the same `(task, step, attempt, ordinal)` identity from describing a second
+execution. A recovered assignment at or after its immutable deadline is not
+dispatched; the existing timeout scheduler remains the sole terminalizer.
+
+There is no zero-value interpretation, Agent-authored fallback, legacy
+hardcoded attempt, or compatibility path.
+
 ## Exact stream state machine
 
 ```text
@@ -305,6 +331,13 @@ Implementation requires deterministic rationale tests covering:
 14. blocked and slow consumers do not lose events, reorder sequences, leak a
     goroutine, or outlive their context; and
 15. focused repository and handler suites pass under `-race`.
+16. first delivery uses attempt 1, while two recovered sessions advance only
+    after an event is durable and reuse the next attempt while it remains
+    eventless;
+17. recovered event identity mismatch, zero, and `uint32` exhaustion fail as
+    internal corruption at the claim's exact fixed read revision; and
+18. recovery at and after the immutable deadline sends no assignment and
+    leaves terminalization to the timeout scheduler.
 
 No test may assert or expose a raw etcd revision through SSE output or a public
 problem.
@@ -369,6 +402,8 @@ sequence resume point.
   safe disconnect and standard client resume.
 - Retention remains the authority for historical availability; no new
   tombstone, checkpoint, event key, or compatibility format is introduced.
+- A Controller-authored assignment epoch keeps Agent event deduplication
+  identity unique across executions without adding mutable delivery state.
 
 ## Accepted owner checklist
 
@@ -398,3 +433,6 @@ The owner approved each item on 2026-08-23:
   value schemas.
 - [x] The verification matrix, including focused `-race` coverage, is required
   before the slice is declared complete.
+- [x] Every assignment delivery carries one positive Controller-authored event
+  attempt; fixed-revision recovery advances only after durable event evidence,
+  and expired recovered work is never dispatched.

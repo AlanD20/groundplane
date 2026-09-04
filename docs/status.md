@@ -753,3 +753,14 @@ the failed source attempt authority before transferring the successor epoch.
 Exact durable terminal replay remains independent of later epoch movement.
 Focused original-attempt, retry-chain, independent-mutation, and replay race
 proofs pass; exact reference-host Blueprint acceptance remains pending.
+
+## Recovered Agent assignment event-attempt authority (2026-09-04)
+
+Every private Agent Task assignment now carries one positive Controller-authored
+event-attempt epoch used by all step events from that delivery. A recovered
+assignment derives the next epoch from its exact fixed-revision durable event
+journal, rejects mismatched identity or overflow, and is not redispatched at or
+after its immutable deadline. The Agent validates and preserves that epoch
+instead of reusing attempt one after reconnect. Protobuf regeneration and the
+focused Controller and Agent race proofs pass; exact reference-host Blueprint
+acceptance remains pending.

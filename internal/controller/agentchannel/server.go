@@ -56,6 +56,7 @@ type TaskStore interface {
 	ListAgentAssignments(context.Context, string, uint64, int32) ([]etcd.TaskAssignment, error)
 	ClaimNextTask(context.Context, string, uint64, time.Time) (etcd.TaskAssignment, bool, error)
 	GetTask(context.Context, string) (etcd.Versioned[etcd.TaskRecord], error)
+	ListTaskEvents(context.Context, string, int64) (etcd.TaskEventSnapshot, error)
 	AppendTaskEvent(context.Context, etcd.TaskEventInput, time.Time) (etcd.TaskEventAppend, error)
 	AcknowledgeTask(
 		context.Context,
@@ -709,6 +710,9 @@ func (s *Server) dispatchReady(
 		); err != nil {
 			return err
 		}
+		if !s.now().UTC().Before(assignment.Assignment.Record.Deadline.UTC()) {
+			continue
+		}
 		if delivered[assignment.Task.Record.ID] == assignment.Assignment.Record.AssignmentID {
 			continue
 		}
@@ -718,7 +722,7 @@ func (s *Server) dispatchReady(
 		if remaining == 0 {
 			break
 		}
-		sent, err := s.dispatchTaskAssignment(session, stream, assignment)
+		sent, err := s.dispatchTaskAssignment(session, stream, assignment, true)
 		if err != nil {
 			return err
 		}
@@ -756,7 +760,7 @@ func (s *Server) dispatchReady(
 		if !session.AssignmentsAllowed() {
 			return nil
 		}
-		sent, err := s.dispatchTaskAssignment(session, stream, assignment)
+		sent, err := s.dispatchTaskAssignment(session, stream, assignment, false)
 		if err != nil {
 			return err
 		}
@@ -796,7 +800,7 @@ func (s *Server) sendTaskAssignment(
 	stream agentpb.AgentChannel_ConnectServer,
 	claim etcd.TaskAssignment,
 ) error {
-	assignment, err := s.taskAssignmentMessage(stream.Context(), claim)
+	assignment, err := s.taskAssignmentMessage(stream.Context(), claim, false)
 	if err != nil {
 		return err
 	}
@@ -808,8 +812,9 @@ func (s *Server) dispatchTaskAssignment(
 	session *Session,
 	stream agentpb.AgentChannel_ConnectServer,
 	claim etcd.TaskAssignment,
+	recovered bool,
 ) (bool, error) {
-	assignment, err := s.taskAssignmentMessage(stream.Context(), claim)
+	assignment, err := s.taskAssignmentMessage(stream.Context(), claim, recovered)
 	if err != nil {
 		slog.Error(
 			"controller: quarantine Agent Task assignment",
@@ -819,7 +824,7 @@ func (s *Server) dispatchTaskAssignment(
 		)
 		return false, nil
 	}
-	return s.dispatchResolvedTaskAssignment(session, stream, claim, assignment)
+	return s.dispatchResolvedTaskAssignment(session, stream, claim, assignment, recovered)
 }
 
 func (s *Server) dispatchResolvedTaskAssignment(
@@ -827,11 +832,21 @@ func (s *Server) dispatchResolvedTaskAssignment(
 	stream agentpb.AgentChannel_ConnectServer,
 	claim etcd.TaskAssignment,
 	assignment *agentpb.TaskAssignment,
+	recovered bool,
 ) (bool, error) {
 	defer clearScriptAssignmentArtifacts(assignment.GetScriptArtifacts())
-	return session.sendAssignment(func() error {
+	expired := false
+	sent, err := session.sendAssignment(func() error {
+		if recovered && !s.now().UTC().Before(claim.Assignment.Record.Deadline.UTC()) {
+			expired = true
+			return nil
+		}
 		return s.sendResolvedTaskAssignment(stream, claim, assignment)
 	})
+	if expired {
+		return false, nil
+	}
+	return sent, err
 }
 
 func (s *Server) sendResolvedTaskAssignment(
@@ -1120,6 +1135,7 @@ func materializationControllerMessage(
 func (s *Server) taskAssignmentMessage(
 	ctx context.Context,
 	claim etcd.TaskAssignment,
+	recovered bool,
 ) (*agentpb.TaskAssignment, error) {
 	task := claim.Task.Record
 	record := claim.Assignment.Record
@@ -1185,6 +1201,14 @@ func (s *Server) taskAssignmentMessage(
 		clearScriptAssignmentArtifacts(scriptArtifacts)
 		return nil, err
 	}
+	eventAttempt := uint32(1)
+	if recovered {
+		eventAttempt, err = s.recoveredEventAttempt(ctx, claim)
+		if err != nil {
+			clearScriptAssignmentArtifacts(scriptArtifacts)
+			return nil, err
+		}
+	}
 	return &agentpb.TaskAssignment{
 		TaskId: task.ID, AssignmentId: record.AssignmentID,
 		OperationId: task.OperationID, RetryOf: task.RetryOf,
@@ -1192,7 +1216,39 @@ func (s *Server) taskAssignmentMessage(
 		AcknowledgedStepResults: acknowledgedStepResults,
 		AutomaticReconcile:      etcd.IsAutomaticReconcileTask(task),
 		Deadline:                timestamppb.New(record.Deadline.UTC()),
+		EventAttempt:            eventAttempt,
 	}, nil
+}
+
+func (s *Server) recoveredEventAttempt(ctx context.Context, claim etcd.TaskAssignment) (uint32, error) {
+	task := claim.Task
+	assignment := claim.Assignment.Record
+	if task.ReadRevision <= 0 {
+		return 0, errs.New(errs.KindInternal, "recovered Agent Task claim has no fixed read revision")
+	}
+	snapshot, err := s.tasks.ListTaskEvents(ctx, task.Record.ID, task.ReadRevision)
+	if err != nil {
+		return 0, err
+	}
+	if snapshot.Revision != task.ReadRevision || snapshot.Task.ID != task.Record.ID {
+		return 0, errs.New(errs.KindInternal, "recovered Agent Task event snapshot does not match its claim")
+	}
+	maximum := uint32(0)
+	for _, event := range snapshot.Events {
+		identity := event.Identity
+		if identity.TaskID != task.Record.ID || identity.AssignmentID != assignment.AssignmentID ||
+			identity.AgentID != assignment.AgentID || identity.AgentGeneration != assignment.AgentGeneration ||
+			identity.Attempt == 0 {
+			return 0, errs.New(errs.KindInternal, "recovered Agent Task event identity does not match its claim")
+		}
+		if identity.Attempt > maximum {
+			maximum = identity.Attempt
+		}
+	}
+	if maximum == ^uint32(0) {
+		return 0, errs.New(errs.KindInternal, "recovered Agent Task event attempt is exhausted")
+	}
+	return maximum + 1, nil
 }
 
 func clearScriptAssignmentArtifacts(artifacts *agentpb.ScriptAssignmentArtifacts) {

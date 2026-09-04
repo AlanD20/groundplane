@@ -4662,6 +4662,7 @@ type TaskAssignment struct {
 	ScriptCheckpoints       []*ScriptExecutionCheckpoint `protobuf:"bytes,9,rep,name=script_checkpoints,json=scriptCheckpoints,proto3" json:"script_checkpoints,omitempty"`
 	AutomaticReconcile      bool                         `protobuf:"varint,10,opt,name=automatic_reconcile,json=automaticReconcile,proto3" json:"automatic_reconcile,omitempty"`
 	AcknowledgedStepResults []*ExecutionStepResult       `protobuf:"bytes,15,rep,name=acknowledged_step_results,json=acknowledgedStepResults,proto3" json:"acknowledged_step_results,omitempty"`
+	EventAttempt            uint32                       `protobuf:"varint,16,opt,name=event_attempt,json=eventAttempt,proto3" json:"event_attempt,omitempty"` // positive Controller-authored execution epoch for every emitted step event
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -4764,6 +4765,13 @@ func (x *TaskAssignment) GetAcknowledgedStepResults() []*ExecutionStepResult {
 		return x.AcknowledgedStepResults
 	}
 	return nil
+}
+
+func (x *TaskAssignment) GetEventAttempt() uint32 {
+	if x != nil {
+		return x.EventAttempt
+	}
+	return 0
 }
 
 type ScriptStartAuthorizedCheckpoint struct {
@@ -14249,7 +14257,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\acontent\x18\x02 \x01(\fR\acontent\";\n" +
 	"\x18ManagedConfigTransferEnd\x12\x1f\n" +
 	"\vchunk_count\x18\x01 \x01(\rR\n" +
-	"chunkCount\"\xd7\x04\n" +
+	"chunkCount\"\xfc\x04\n" +
 	"\x0eTaskAssignment\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12!\n" +
 	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12\x19\n" +
@@ -14261,7 +14269,8 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x12script_checkpoints\x18\t \x03(\v2/.groundplane.agent.v1.ScriptExecutionCheckpointR\x11scriptCheckpoints\x12/\n" +
 	"\x13automatic_reconcile\x18\n" +
 	" \x01(\bR\x12automaticReconcile\x12e\n" +
-	"\x19acknowledged_step_results\x18\x0f \x03(\v2).groundplane.agent.v1.ExecutionStepResultR\x17acknowledgedStepResultsJ\x04\b\x05\x10\x06\"!\n" +
+	"\x19acknowledged_step_results\x18\x0f \x03(\v2).groundplane.agent.v1.ExecutionStepResultR\x17acknowledgedStepResults\x12#\n" +
+	"\revent_attempt\x18\x10 \x01(\rR\feventAttemptJ\x04\b\x05\x10\x06\"!\n" +
 	"\x1fScriptStartAuthorizedCheckpoint\"\xa5\x01\n" +
 	"\x1cScriptBodyPreparedCheckpoint\x12\x1f\n" +
 	"\vbody_sha256\x18\x01 \x01(\fR\n" +

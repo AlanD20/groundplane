@@ -31,6 +31,7 @@ type Assignment struct {
 	ScriptCheckpoints       []*agentpb.ScriptExecutionCheckpoint
 	AcknowledgedStepResults []*agentpb.ExecutionStepResult
 	AutomaticReconcile      bool
+	EventAttempt            uint32
 	Deadline                time.Time
 }
 
@@ -262,7 +263,8 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		p.emitProgress(runCtx, TaskProgress{
 			AssignmentID: reservation.assignment.AssignmentID,
 			TaskID:       reservation.assignment.TaskID, PlanHash: planHash,
-			StepID: step.StepId, Attempt: 1, Ordinal: 1, State: TaskProgressRunning,
+			StepID: step.StepId, Attempt: reservation.assignment.EventAttempt,
+			Ordinal: 1, State: TaskProgressRunning,
 		})
 		stepCtx, cancel := context.WithTimeout(
 			reservation.ctx,
@@ -381,7 +383,7 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		p.emitProgress(runCtx, TaskProgress{
 			AssignmentID: reservation.assignment.AssignmentID,
 			TaskID:       reservation.assignment.TaskID, PlanHash: planHash,
-			StepID: step.StepId, Attempt: 1, Ordinal: 2,
+			StepID: step.StepId, Attempt: reservation.assignment.EventAttempt, Ordinal: 2,
 			State: progressStateFor(reservation.ctx, err),
 		})
 	}
@@ -1123,6 +1125,7 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment Assignment) error {
 	}
 	if existing := p.reservations[owned.TaskID]; existing != nil {
 		if existing.assignment.AssignmentID != owned.AssignmentID ||
+			existing.assignment.EventAttempt != owned.EventAttempt ||
 			hashForPlan(existing.assignment.Plan) != hashForPlan(owned.Plan) {
 			return errs.New(errs.KindStateConflict, "agent: task id was reused with a different assignment")
 		}
@@ -1256,6 +1259,7 @@ func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assign
 		RetryOf: assignment.RetryOf, Plan: plan, ScriptArtifacts: scriptArtifacts,
 		ScriptCheckpoints: scriptCheckpoints, AcknowledgedStepResults: acknowledgedStepResults,
 		Deadline: assignment.Deadline, AutomaticReconcile: assignment.AutomaticReconcile,
+		EventAttempt: assignment.EventAttempt,
 	}, nil
 }
 

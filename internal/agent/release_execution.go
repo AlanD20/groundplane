@@ -245,7 +245,9 @@ func (p *WorkerPool) runReleaseFailureHooks(
 
 func (p *WorkerPool) runReleaseStep(runCtx context.Context, reservation *taskReservation, step *agentpb.ExecutionStep, state *releaseExecutionState) {
 	planHash := hashForPlan(reservation.assignment.Plan)
-	p.emitProgress(runCtx, TaskProgress{AssignmentID: reservation.assignment.AssignmentID, TaskID: reservation.assignment.TaskID, PlanHash: planHash, StepID: step.StepId, Attempt: 1, Ordinal: 1, State: TaskProgressRunning})
+	p.emitProgress(runCtx, TaskProgress{AssignmentID: reservation.assignment.AssignmentID,
+		TaskID: reservation.assignment.TaskID, PlanHash: planHash, StepID: step.StepId,
+		Attempt: reservation.assignment.EventAttempt, Ordinal: 1, State: TaskProgressRunning})
 	stepCtx, cancel := context.WithTimeout(reservation.ctx, time.Duration(step.TimeoutSeconds)*time.Second)
 	var result composeStepResult
 	var err error
@@ -305,7 +307,9 @@ func (p *WorkerPool) runReleaseStep(runCtx context.Context, reservation *taskRes
 	} else {
 		state.completed[step.StepId] = struct{}{}
 	}
-	p.emitProgress(runCtx, TaskProgress{AssignmentID: reservation.assignment.AssignmentID, TaskID: reservation.assignment.TaskID, PlanHash: planHash, StepID: step.StepId, Attempt: 1, Ordinal: 2, State: progress})
+	p.emitProgress(runCtx, TaskProgress{AssignmentID: reservation.assignment.AssignmentID,
+		TaskID: reservation.assignment.TaskID, PlanHash: planHash, StepID: step.StepId,
+		Attempt: reservation.assignment.EventAttempt, Ordinal: 2, State: progress})
 }
 
 func releaseFailureHookExecution(

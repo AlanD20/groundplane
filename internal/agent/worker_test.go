@@ -131,6 +131,7 @@ func TestWorkerReturnsDNSResolverObservationFromGenericComponentAction(t *testin
 	assignment := Assignment{
 		AssignmentID: workerTestAssignmentID,
 		TaskID:       workerTestTaskID,
+		EventAttempt: 1,
 		Plan: &agentpb.ExecutionPlan{
 			Operation: agentpb.PlanOperation_PLAN_OPERATION_RECONCILE,
 			Steps: []*agentpb.ExecutionStep{{
@@ -396,6 +397,7 @@ func workerResolverRollbackAssignment(
 	}
 	assignment := Assignment{
 		AssignmentID: workerTestAssignmentID, TaskID: workerTestTaskID,
+		EventAttempt: 1,
 		Plan: &agentpb.ExecutionPlan{
 			Schema:                 executionplan.SchemaVersion,
 			PlanId:                 workerCurrentPlanID,
@@ -723,7 +725,7 @@ func workerAssignment(taskID, plan string) Assignment {
 	return Assignment{
 		AssignmentID: workerTestAssignmentID,
 		TaskID:       taskID, OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		Plan: sealed, Deadline: time.Now().Add(time.Minute),
+		Plan: sealed, EventAttempt: 1, Deadline: time.Now().Add(time.Minute),
 	}
 }
 

@@ -75,6 +75,12 @@ func (store *environmentAcknowledgementStore) GetTask(
 	return etcd.Versioned[etcd.TaskRecord]{Record: store.task, Revision: 1, ReadRevision: 1}, nil
 }
 
+func (store *environmentAcknowledgementStore) ListTaskEvents(
+	context.Context, string, int64,
+) (etcd.TaskEventSnapshot, error) {
+	return etcd.TaskEventSnapshot{}, nil
+}
+
 func (store *environmentAcknowledgementStore) AppendTaskEvent(
 	context.Context, etcd.TaskEventInput, time.Time,
 ) (etcd.TaskEventAppend, error) {

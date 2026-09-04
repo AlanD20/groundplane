@@ -408,6 +408,7 @@ message TaskAssignment {
   repeated ScriptExecutionCheckpoint script_checkpoints = 9;
   bool automatic_reconcile = 10;
   repeated ExecutionStepResult acknowledged_step_results = 15;
+  uint32 event_attempt = 16; // positive Controller-authored execution epoch for every emitted step event
 }
 
 enum ScriptExecutionState {

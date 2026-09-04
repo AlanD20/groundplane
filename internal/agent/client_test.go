@@ -71,7 +71,7 @@ func TestClientSendsExactFailedTaskAcknowledgement(t *testing.T) {
 			Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: &agentpb.TaskAssignment{
 				TaskId: workerTestTaskID, AssignmentId: assignment.AssignmentID,
 				OperationId: assignment.OperationID,
-				Plan:        assignment.Plan, Deadline: timestamppb.New(time.Now().Add(time.Minute)),
+				Plan: assignment.Plan, Deadline: timestamppb.New(time.Now().Add(time.Minute)), EventAttempt: 7,
 			}},
 		},
 	)
@@ -100,9 +100,9 @@ func TestClientSendsExactFailedTaskAcknowledgement(t *testing.T) {
 		acknowledgement.GetComposeResult() == nil {
 		t.Fatalf("TaskAck = %#v", acknowledgement)
 	}
-	if len(events) != 2 || events[0].Attempt != 1 || events[0].Ordinal != 1 ||
+	if len(events) != 2 || events[0].Attempt != 7 || events[0].Ordinal != 1 ||
 		events[0].State != agentpb.TaskState_TASK_STATE_RUNNING ||
-		events[1].Attempt != 1 || events[1].Ordinal != 2 ||
+		events[1].Attempt != 7 || events[1].Ordinal != 2 ||
 		events[1].State != agentpb.TaskState_TASK_STATE_FAILED {
 		t.Fatalf("TaskEvents = %#v", events)
 	}
@@ -187,6 +187,24 @@ func TestClientRequiresConfigUpdateBeforeReadyOrWork(t *testing.T) {
 	}
 }
 
+// Rationale: zero is the protobuf default and must never become a durable
+// event identity; only a positive Controller-authored epoch may enter a worker.
+func TestClientRejectsZeroEventAttempt(t *testing.T) {
+	t.Parallel()
+	assignment := workerAssignment(workerTestTaskID, "zero-event-attempt")
+	client := &Client{pool: NewWorkerPool(1, "/var/lib/groundplane/vol", nil, testLogger())}
+	_, err := client.handleControllerMessage(context.Background(), &agentpb.ControllerMessage{
+		Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: &agentpb.TaskAssignment{
+			TaskId: assignment.TaskID, AssignmentId: assignment.AssignmentID,
+			OperationId: assignment.OperationID, Plan: assignment.Plan,
+			Deadline: timestamppb.New(time.Now().Add(time.Minute)),
+		}},
+	})
+	if !errors.Is(err, errs.New(errs.KindInternal, "")) {
+		t.Fatalf("zero event attempt error = %v, want internal", err)
+	}
+}
+
 // Rationale: process cancellation must close the authenticated stream without surfacing an error.
 func TestClientCancellationClosesStreamGracefully(t *testing.T) {
 	t.Parallel()
@@ -263,7 +281,7 @@ func TestClientReconnectsSameInstanceAndExecutesRedispatchOnReplacementPool(t *t
 					Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: &agentpb.TaskAssignment{
 						TaskId: workerTestTaskID, AssignmentId: assignment.AssignmentID,
 						OperationId: assignment.OperationID,
-						Plan:        assignment.Plan, Deadline: timestamppb.New(time.Now().Add(time.Minute)),
+						Plan: assignment.Plan, Deadline: timestamppb.New(time.Now().Add(time.Minute)), EventAttempt: 1,
 					}},
 				},
 			)
