@@ -33,19 +33,26 @@ Console (`console/`), and the Go implementation scaffold.
   before committing, opening a PR, or declaring a change complete.
 - **docs/capabilities.md** — the implementation ledger and vertical delivery
   order. Reach for it before selecting or declaring an MVP slice complete.
-- **docs/status.md** — the compact implementation checkpoint and recovery
-  handoff. Reach for it after context compaction or session restart.
+- **docs/status.md** — the detailed implementation ledger. Consult it only
+  when a task-scoped decision needs its evidence; it is not a default
+  compaction read.
+- **docs/head.md** — the compact operational head checkpoint for live lanes,
+  blockers, next actions, and integration handoffs. It is not product
+  authority.
 - **docs/decisions/** — accepted architectural decisions. Reach for the
   relevant ADR before changing a recorded seam or dependency choice.
 
 ## Context recovery (MUST)
 
-After context compaction or a session restart, before any repository work, every
-agent MUST read `docs/agents.md`, `docs/delivery.md`, `docs/capabilities.md`, and
-`docs/status.md` in full. The integration owner MUST update `docs/status.md` in
-the same commit whenever a lane lands or the remaining set changes. `docs/status.md`
-is implementation evidence only; `docs/mvp.md` remains the authoritative product
-contract.
+After context compaction, a session restart, or head-agent replacement, every
+agent MUST read `docs/head.md` in full. The head then reads only the exact
+authoritative contract sections needed for the current decision. A delegate
+reads only the task-scoped docs named in its prompt and does not reread broad
+project docs by default. The integration owner MUST update `docs/head.md` in
+the same landing commit whenever `main`, active lanes, blockers, or next
+actions change. `docs/head.md` is an operational checkpoint only; the named
+authoritative contracts remain the source of truth. `docs/status.md` is
+task-scoped implementation evidence, never a default recovery handoff.
 
 ## The Console store is the API contract
 

@@ -96,14 +96,20 @@ and preserve the existing safety boundaries around destructive actions.
 
 ## Multi-agent delegation
 
-The root agent assigns one integration owner. Only that agent may transplant a
-lane onto `main`, construct its signed candidate, rebase or merge `main`,
-decide that the lane is accepted, or land it. The integration owner does this
-work in an isolated integration worktree. The root agent owns every circuit-
-breaker interrupt, diagnosis, and next-action decision. The integration owner
-executes bounded work under that decision; when one agent serves both roles,
-root is the integration owner. Writers, correction agents, and reviewers MUST
-NOT update `main`, rebase or merge `main`, or edit a shared worktree.
+The head agent (normally root) owns minimum context, contract decisions,
+lane/model selection, reviewer assignment, blocker adjudication, and explicit
+land authorization. It consumes the exact `Commit`, `Tree`, `Proof`, and
+`Blockers` handoffs. It MUST NOT perform broad source or diff reading when a
+bounded delegate can supply the exact evidence.
+
+The head assigns one dedicated integration owner. The integration owner works
+in an isolated integration worktree and owns candidate construction, focused
+proof mechanics, signed direct-child creation, `git merge --ff-only` onto
+`main` after explicit authorization, and landed cleanup. It MUST NOT decide
+approval or reinterpret contracts. Writers, correction agents, and reviewers
+MUST NOT update `main`, rebase or merge `main`, or edit a shared worktree.
+The integration owner updates `docs/head.md` in the same landing commit when
+`main`, active lanes, blockers, or next actions change.
 
 ### Context-recovery pipeline restoration
 
@@ -111,8 +117,10 @@ After every context compaction, session restart, or head-agent replacement, the
 head agent MUST restore the live pipeline before selecting or implementing
 repository work:
 
-1. Read `docs/agents.md`, `docs/delivery.md`, `docs/capabilities.md`, and
-   `docs/status.md` in full.
+1. Read `docs/head.md` in full, then read only the exact authoritative
+   contract sections needed for the current decision. Delegate prompts name
+   the task-scoped docs each delegate must read; no agent rereads broad
+   project docs by default.
 2. Query the agent runtime and classify every delegated agent by its actual
    status. Only running agents count as active; completed, failed, interrupted,
    or blocked agents do not count as working capacity.
@@ -142,37 +150,37 @@ one bounded contract question required to make a blocked MVP lane writable.
 Speculative audits, duplicate reviews, and overlapping writers are not eligible
 actions.
 
-The head agent's steady-state job is coordination: close contracts and file
-ownership, dispatch writers, freeze candidates, adjudicate blocker reports,
-perform bounded delta verification, sign and fast-forward approved candidates,
-clean landed worktrees, and refill capacity. It does not leave completed agents
-idle while contract-closed work remains, and it does not report completed
-agents as active progress. Reviewers start only after their corresponding
-writer has stopped and the exact candidate is frozen.
+The head agent's steady-state job is minimum-context coordination: close
+contracts and file ownership, select models, dispatch writers, assign reviewers,
+freeze candidates, adjudicate blocker reports, authorize landing, and refill
+capacity. It does not leave completed agents idle while contract-closed work
+remains, and it does not report completed agents as active progress. Reviewers
+start only after their corresponding writer has stopped and the exact candidate
+is frozen.
 
-The head agent delegates ordinary implementation, independent review,
-correction batches, and bounded contract analysis. It may mutate repository
-state only for integration-owner work: create and transplant candidates,
-resolve mechanical landing conflicts, update integration evidence, sign,
-fast-forward, and clean landed lanes. A feature defect returns to its writer;
-the head does not silently become a replacement writer or reviewer. Root owns
-the final merge decision and may reject a reviewer judgment, but it does not
-repeat the review.
+The head delegates ordinary implementation, independent review, correction
+batches, bounded contract analysis, and all integration-owner mechanics. A
+feature defect returns to its writer; the head does not silently become a
+replacement writer, reviewer, or integration owner. The head decides approval
+and land authorization from the bounded handoffs but does not repeat a review.
 
 Capacity is scheduled continuously, not in waves. When a writer stops, start
 that lane's reviewer immediately and, when another disjoint `Ready` lane
 exists, start its writer without waiting for the review. When a reviewer
-approves, land immediately. When it rejects, send the single aggregate batch
-to the original writer while unrelated writers and reviewers continue. Use all
+approves, the head adjudicates the report and explicitly authorizes landing;
+the integration owner then performs the landing mechanics. When it rejects,
+the head sends the single aggregate batch to the original writer while
+unrelated writers and reviewers continue. Use all
 available slots that have eligible work; an arbitrary agent-count target never
 justifies overlapping ownership or invented work.
 
 Every independent feature has exactly one durable repository-local worktree and
 one branch, with one writer and an explicit disjoint file ownership list. The
 worktree is created inside the repository area and remains available through
-review and landing. Independent lanes run continuously in parallel. The
-integration owner lands each approved lane immediately, then assigns the freed
-writer capacity to the next `Ready` lane.
+review and landing. Independent lanes run continuously in parallel.
+After explicit head authorization, the integration owner lands each approved
+lane immediately, then the head assigns the freed writer capacity to the next
+`Ready` lane.
 
 This is the one continuous lane pipeline for delegated work:
 
@@ -184,11 +192,11 @@ Ready -> Writing -> Stopped -> Frozen -> Reviewing -> Approved -> Landed
 
 ### Lane states and exit conditions
 
-1. **Ready.** The integration owner selects one disjoint landing-blocker or
-   MVP slice and records its authoritative contract, exact owned files, earliest
-   focused proof, and exit condition. Resolve questions in the source-of-truth
-   order below. A conflict or missing decision keeps the lane `Ready` and goes
-   back to the contract owner; agents MUST NOT guess, widen scope, or invent a
+1. **Ready.** The head selects one disjoint landing-blocker or MVP slice and
+   records its authoritative contract, exact owned files, earliest focused
+   proof, and exit condition. Resolve questions in the source-of-truth order
+   below. A conflict or missing decision keeps the lane `Ready` and returns the
+   next action to the head; agents MUST NOT guess, widen scope, or invent a
    compatibility path.
 2. **Writing.** Assign exactly one writer to the lane's durable worktree and
    branch. The writer changes only its owned files, implements the closed
@@ -218,8 +226,8 @@ Ready -> Writing -> Stopped -> Frozen -> Reviewing -> Approved -> Landed
    A report may mention non-blockers, but only the blocker list can hold the
    lane.
 6. **Correcting.** If the aggregate report contains landing blockers, the
-   integration owner sends one bounded correction batch containing all blockers
-   to the original writer. The writer resumes its isolated worktree once,
+   head sends one bounded correction batch containing all blockers to the
+   original writer. The writer resumes its isolated worktree once,
    applies the batch, reruns only the exact focused proof affected by the
    corrections, commits, and stops. The integration owner builds the replacement
    signed direct-child candidate. There is no fresh full review after a
@@ -227,19 +235,22 @@ Ready -> Writing -> Stopped -> Frozen -> Reviewing -> Approved -> Landed
 7. **Delta-verifying.** The integration owner verifies only the correction
    delta and the exact tests named by the failed proof or changed behavior.
    Unchanged review evidence is retained. A passing delta verifies the lane;
-   a new blocker or failed exact test trips the circuit breaker for root
-   diagnosis rather than starting another review or correction batch.
+   a new blocker or failed exact test returns to the head, which owns the
+   circuit-breaker diagnosis and next action rather than starting another
+   review or correction batch.
 8. **Approved.** A lane with no blockers, or one that passes its single delta
-   verification, is approved. The integration owner records the exact
+   verification, is eligible for head approval. The head grants approval from
+   the exact review and proof handoffs. The integration owner records the exact
    post-review proof on the exact candidate. Broad architecture and
    full-repository gates are integration-owner work: run them when a candidate
    closes an active MVP journey and on the final MVP candidate, never as a
    writer's per-lane gate.
-9. **Landed.** The integration owner lands the approved signed direct child
-   immediately with `git merge --ff-only <candidate>`, records the evidence,
-   confirms that `main` contains the candidate tree, and only then removes the
-   lane's worktree and branch. The next ready disjoint lane uses the freed
-   capacity. Cleanup never removes an unlanded WIP.
+9. **Landed.** After explicit head land authorization, the integration owner
+   lands the approved signed direct child immediately with `git merge --ff-only
+   <candidate>`, records the evidence, confirms that `main` contains the
+   candidate tree, and only then removes the lane's worktree and branch. The
+   next ready disjoint lane uses the freed capacity. Cleanup never removes an
+   unlanded WIP.
 
 ### Progress circuit breaker
 
@@ -258,11 +269,11 @@ fingerprint or delta, correction-batch count, and turn/time/token usage. Token
 consumption and narrative effort are not progress. The same `HEAD` with the
 same blocker twice, or two invocations without an authoritative state or
 evidence change, MUST interrupt the lane. A lane has at most one correction
-batch and one delta-only verification. At the circuit-breaker cap, root owns
-the diagnosis and next action; it MUST NOT spawn a replacement or restart
-identical instructions. The integration owner either fixes the bounded issue
-locally in the isolated integration worktree, splits it into a smaller
-disjoint lane with a new contract, or asks the human only for genuine
+batch and one delta-only verification. At the circuit-breaker cap, the head
+owns the diagnosis and next action; it MUST NOT spawn a replacement or restart
+identical instructions. The original writer owns correction, while the
+integration owner executes only the bounded mechanics the head authorizes. The
+head may define a smaller disjoint lane or ask the human only for genuine
 product-contract ambiguity. A broad gate failure outside the lane's owned
 scope routes to its owning lane or issue.
 

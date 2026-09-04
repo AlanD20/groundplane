@@ -33,8 +33,9 @@ External tool-internal sandbox mounts outside repository control are not
 repository paths and cannot be depended on. No writer, reviewer, or correction
 agent edits a shared worktree or updates `main`.
 
-Freeze only after implementation and the named focused proof. The integration
-owner creates one signed direct-child candidate from the latest `main`. Each
+Freeze only after implementation and the named focused proof. Only the
+dedicated integration-owner agent creates one signed direct-child candidate
+from the latest `main`; the head never performs candidate construction. Each
 lane receives one full blocker-only review, with all findings returned in one
 aggregate report. If blockers exist, the original writer receives one bounded
 batch containing all of them; the correction reruns only exact tests covering
@@ -42,10 +43,14 @@ the correction delta. At most one delta-only verification follows, and it does
 not become a new full review. Non-blockers are documented in `docs/issues/` and
 do not hold the lane.
 
-After approval or a passing delta verification, the integration owner lands the
-signed direct child immediately with `git merge --ff-only <candidate>`, records
-the evidence, confirms the exact tree on `main`, and then removes the durable
-worktree and branch. If a writer, reviewer, correction, or delta invocation
+After approval or a passing delta verification, only the dedicated
+integration-owner agent lands the signed direct child with `git merge --ff-only
+<candidate>` after explicit land authorization from the head; the head never
+performs ff-only landing. The integration owner records the evidence, confirms
+the exact tree on `main`, and then removes the durable worktree and branch. The
+head consumes the exact commit/tree/proof/blocker handoffs and decides approval;
+the integration owner does not reinterpret contracts or decide approval. If a
+writer, reviewer, correction, or delta invocation
 reaches its recorded turn, wall-clock, or token budget, it stops. Same `HEAD`
 plus same blocker twice, or two invocations without new authoritative evidence,
 trips the root-owned circuit breaker. Root diagnoses and chooses a bounded fix,
@@ -54,16 +59,20 @@ review loop is spawned. Broad gates remain integration-owner work at active
 MVP-journey closure and final acceptance.
 
 After compaction or restart, the head agent MUST perform the pipeline-restoration
-sequence in `docs/agents.md` before repository work: reread the four recovery
-documents, query actual agent status, reconcile durable lanes, advance every
+sequence in `docs/agents.md` before repository work: read `docs/head.md` in full,
+then read only exact authoritative contract sections needed for the current
+decision, query actual agent status, reconcile durable lanes, advance every
 stopped lane without waiting for unrelated work, and refill all eligible
-contract-closed disjoint writer slots. Only running agents are active capacity.
+contract-closed disjoint writer slots. Delegate prompts name their task-scoped
+docs; no agent rereads broad project docs by default. Only running agents are active capacity.
 Review starts per lane only after that lane's writer stops and its candidate is
-frozen; landing and capacity refill happen immediately per approved lane.
+frozen; after head approval and explicit land authorization, integration-owner
+landing and head capacity refill happen immediately per approved lane.
 Restoration is not complete until the occupancy target in `docs/agents.md` is
 met. Every frozen candidate receives a reviewer subagent, ordinary writing and
-correction remain delegated, and the head stays on scheduling, adjudication,
-signed candidate construction, and fast-forward landing.
+correction remain delegated, and the head stays on scheduling, contract
+decisions, adjudication, reviewer assignment, and explicit authorization. The
+integration owner performs signed-candidate construction and ff-only landing.
 
 ### Landing blockers and deferred issues
 
