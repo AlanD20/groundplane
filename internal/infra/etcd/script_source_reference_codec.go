@@ -21,12 +21,15 @@ import (
 )
 
 func validateScriptSourceReference(reference ScriptSourceReference) error {
-	if ids.Validate(ids.KindOperation, reference.OperationID) != nil || !validRawScriptExecutionID(reference.ScriptExecutionID) ||
-		validateScriptSourceIdentity(reference.Source) != nil || reference.SourceOwnerID == "" {
+	if ids.Validate(ids.KindOperation, reference.OperationID) != nil ||
+		!validRawScriptExecutionID(reference.ScriptExecutionID) ||
+		validateScriptSourceIdentity(reference.Source) != nil ||
+		reference.SourceOwnerID == "" {
 		return errs.New(errs.KindValidationFailed, "Script source reference is invalid")
 	}
 	if reference.Source.Kind == ScriptSourceSecretValue {
-		if reference.SourceOwnerID != scriptSourcePlatformOwner && ids.Validate(ids.KindProject, reference.SourceOwnerID) != nil {
+		if reference.SourceOwnerID != scriptSourcePlatformOwner &&
+			ids.Validate(ids.KindProject, reference.SourceOwnerID) != nil {
 			return errs.New(errs.KindValidationFailed, "Script Secret source owner is invalid")
 		}
 	} else if ids.Validate(ids.KindEnvironment, reference.SourceOwnerID) != nil {
@@ -35,11 +38,16 @@ func validateScriptSourceReference(reference ScriptSourceReference) error {
 	if reference.Source.Kind == ScriptSourceBody && reference.SourceOwnerID != reference.Source.EnvironmentID {
 		return errs.New(errs.KindValidationFailed, "Script body source owner is invalid")
 	}
-	requiresDigest := reference.Source.Kind == ScriptSourceBody || reference.Source.Kind == ScriptSourceRunnerSnapshot ||
-		reference.Source.Kind == ScriptSourceRelease || reference.Source.Kind == ScriptSourceNetwork ||
-		reference.Source.Kind == ScriptSourceVolume || reference.Source.Kind == ScriptSourceEntryValue ||
-		reference.Source.Kind == ScriptSourceSecretValue || reference.Source.Kind == ScriptSourceMaterialization
-	if (requiresDigest && !validLowerSHA256(reference.SourceDigest)) || (!requiresDigest && reference.SourceDigest != "") {
+	requiresDigest := reference.Source.Kind == ScriptSourceBody ||
+		reference.Source.Kind == ScriptSourceRunnerSnapshot ||
+		reference.Source.Kind == ScriptSourceRelease ||
+		reference.Source.Kind == ScriptSourceNetwork ||
+		reference.Source.Kind == ScriptSourceVolume ||
+		reference.Source.Kind == ScriptSourceEntryValue ||
+		reference.Source.Kind == ScriptSourceSecretValue ||
+		reference.Source.Kind == ScriptSourceMaterialization
+	if (requiresDigest && !validLowerSHA256(reference.SourceDigest)) ||
+		(!requiresDigest && reference.SourceDigest != "") {
 		return errs.New(errs.KindValidationFailed, "Script source digest is invalid")
 	}
 	return nil
@@ -51,7 +59,12 @@ func validateScriptSourceIdentity(source ScriptSourceIdentity) error {
 	switch source.Kind {
 	case ScriptSourceBody:
 		valid = ids.Validate(ids.KindEnvironment, source.EnvironmentID) == nil &&
-			validateScriptSetGeneration(ScriptSetGenerationRecord{EnvironmentID: source.EnvironmentID, GenerationID: source.ScriptSetGeneration}) == nil &&
+			validateScriptSetGeneration(
+				ScriptSetGenerationRecord{
+					EnvironmentID: source.EnvironmentID,
+					GenerationID:  source.ScriptSetGeneration,
+				},
+			) == nil &&
 			ids.Validate(ids.KindScript, source.ScriptID) == nil && source.BodyGeneration > 0
 		copy.EnvironmentID, copy.ScriptSetGeneration, copy.ScriptID, copy.BodyGeneration = source.EnvironmentID, source.ScriptSetGeneration, source.ScriptID, source.BodyGeneration
 	case ScriptSourceRunnerSnapshot:
@@ -65,7 +78,8 @@ func validateScriptSourceIdentity(source ScriptSourceIdentity) error {
 	case ScriptSourceVolume:
 		valid, copy.VolumeID = ids.Validate(ids.KindVolume, source.VolumeID) == nil, source.VolumeID
 	case ScriptSourceEntryValue:
-		valid = ids.Validate(ids.KindEnvEntry, source.EntryID) == nil && ids.Validate(ids.KindConfig, source.ValueGenerationID) == nil
+		valid = ids.Validate(ids.KindEnvEntry, source.EntryID) == nil &&
+			ids.Validate(ids.KindConfig, source.ValueGenerationID) == nil
 		copy.EntryID, copy.ValueGenerationID = source.EntryID, source.ValueGenerationID
 	case ScriptSourceSecretValue:
 		valid = ids.Validate(ids.KindSecret, source.SecretID) == nil && source.ValueGenerationID == source.SecretID
@@ -92,8 +106,16 @@ func validateScriptSourceRecord(key string, value []byte, reference ScriptSource
 	switch source.Kind {
 	case ScriptSourceBody:
 		generation, err := decodeScriptBodyGeneration(value)
-		if err != nil || key != scriptSetBodyGenerationKey(source.EnvironmentID, source.ScriptSetGeneration, source.ScriptID, source.BodyGeneration) ||
-			generation.ScriptID != source.ScriptID || generation.Generation != source.BodyGeneration || generation.BodySHA256 != reference.SourceDigest {
+		if err != nil ||
+			key != scriptSetBodyGenerationKey(
+				source.EnvironmentID,
+				source.ScriptSetGeneration,
+				source.ScriptID,
+				source.BodyGeneration,
+			) ||
+			generation.ScriptID != source.ScriptID ||
+			generation.Generation != source.BodyGeneration ||
+			generation.BodySHA256 != reference.SourceDigest {
 			return errs.New(errs.KindValidationFailed, "Script body source evidence is invalid")
 		}
 	case ScriptSourceRunnerSnapshot:
@@ -103,7 +125,8 @@ func validateScriptSourceRecord(key string, value []byte, reference ScriptSource
 		}
 	case ScriptSourceService:
 		record, err := decodeServiceRuntimeRecord(value)
-		if err != nil || key != serviceRuntimeKey(source.ServiceID) || record.ServiceID != source.ServiceID || record.EnvironmentID != reference.SourceOwnerID {
+		if err != nil || key != serviceRuntimeKey(source.ServiceID) || record.ServiceID != source.ServiceID ||
+			record.EnvironmentID != reference.SourceOwnerID {
 			return errs.New(errs.KindValidationFailed, "Script Service source evidence is invalid")
 		}
 	case ScriptSourceRelease:
@@ -154,8 +177,10 @@ func validateScriptSourceRecord(key string, value []byte, reference ScriptSource
 				}
 			}
 		}
-		if err != nil || !found || key != scriptSourceMaterializationRecordKey(reference.SourceOwnerID, source.RenderGeneration) ||
-			proof.EnvironmentID() != reference.SourceOwnerID || proof.RenderGeneration() != source.RenderGeneration ||
+		if err != nil || !found ||
+			key != scriptSourceMaterializationRecordKey(reference.SourceOwnerID, source.RenderGeneration) ||
+			proof.EnvironmentID() != reference.SourceOwnerID ||
+			proof.RenderGeneration() != source.RenderGeneration ||
 			proof.CanonicalSHA256() != reference.SourceDigest {
 			return errs.New(errs.KindValidationFailed, "Script materialization source evidence is invalid")
 		}
@@ -208,34 +233,55 @@ func decodeScriptMaterializationProof(encoded []byte) (coreproof.Proof, error) {
 	const magic = "GPM1"
 	const header = len(magic) + 4 + sha256.Size
 	if len(encoded) < header || string(encoded[:len(magic)]) != magic {
-		return coreproof.Proof{}, errs.New(errs.KindValidationFailed, "Script materialization source evidence is invalid")
+		return coreproof.Proof{}, errs.New(
+			errs.KindValidationFailed,
+			"Script materialization source evidence is invalid",
+		)
 	}
 	length := binary.BigEndian.Uint32(encoded[len(magic):])
 	if length == 0 || int(length) != len(encoded)-header {
-		return coreproof.Proof{}, errs.New(errs.KindValidationFailed, "Script materialization source evidence is invalid")
+		return coreproof.Proof{}, errs.New(
+			errs.KindValidationFailed,
+			"Script materialization source evidence is invalid",
+		)
 	}
 	payload := encoded[header:]
 	digest := sha256.Sum256(payload)
 	if subtle.ConstantTimeCompare(digest[:], encoded[len(magic)+4:header]) != 1 {
-		return coreproof.Proof{}, errs.New(errs.KindValidationFailed, "Script materialization source evidence is invalid")
+		return coreproof.Proof{}, errs.New(
+			errs.KindValidationFailed,
+			"Script materialization source evidence is invalid",
+		)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(payload))
 	decoder.DisallowUnknownFields()
 	var record coreproof.Record
 	if err := decoder.Decode(&record); err != nil {
-		return coreproof.Proof{}, errs.New(errs.KindValidationFailed, "Script materialization source evidence is invalid")
+		return coreproof.Proof{}, errs.New(
+			errs.KindValidationFailed,
+			"Script materialization source evidence is invalid",
+		)
 	}
 	var trailing struct{}
 	if err := decoder.Decode(&trailing); err != io.EOF {
-		return coreproof.Proof{}, errs.New(errs.KindValidationFailed, "Script materialization source evidence is invalid")
+		return coreproof.Proof{}, errs.New(
+			errs.KindValidationFailed,
+			"Script materialization source evidence is invalid",
+		)
 	}
 	proof, err := coreproof.Restore(record)
 	if err != nil {
-		return coreproof.Proof{}, errs.New(errs.KindValidationFailed, "Script materialization source evidence is invalid")
+		return coreproof.Proof{}, errs.New(
+			errs.KindValidationFailed,
+			"Script materialization source evidence is invalid",
+		)
 	}
 	canonical, err := json.Marshal(proof.Record())
 	if err != nil || !bytes.Equal(canonical, payload) {
-		return coreproof.Proof{}, errs.New(errs.KindValidationFailed, "Script materialization source evidence is invalid")
+		return coreproof.Proof{}, errs.New(
+			errs.KindValidationFailed,
+			"Script materialization source evidence is invalid",
+		)
 	}
 	return proof, nil
 }
@@ -261,5 +307,38 @@ func decodeScriptSourcePreparation(value []byte) (ScriptSourcePreparation, error
 	return decodeEnvelope[ScriptSourcePreparation](value, "script-source-preparation")
 }
 func decodeScriptOperationSourceRoot(value []byte) (ScriptOperationSourceRoot, error) {
-	return decodeEnvelope[ScriptOperationSourceRoot](value, "script-operation-source-root")
+	root, err := decodeEnvelope[ScriptOperationSourceRoot](value, "script-operation-source-root")
+	if err != nil || ids.Validate(ids.KindOperation, root.OperationID) != nil || root.MembershipCount == 0 ||
+		!validLowerSHA256(root.MembershipSHA256) || root.ReleaseCursor > root.MembershipCount {
+		return ScriptOperationSourceRoot{}, errs.New(
+			errs.KindInternal,
+			"Script operation source root is corrupt",
+		)
+	}
+	if root.Phase == ScriptOperationSourceActive {
+		if root.ReleasePath != ScriptSourceReleaseAbsent || root.ReleaseCursor != 0 ||
+			(root.RetryDisposition != ScriptRetryDispositionUndecided &&
+				root.RetryDisposition != ScriptRetryDispositionAvailable &&
+				root.RetryDisposition != ScriptRetryDispositionTransferred) {
+			return ScriptOperationSourceRoot{}, errs.New(
+				errs.KindInternal,
+				"Script operation source root is corrupt",
+			)
+		}
+		return root, nil
+	}
+	if root.Phase != ScriptOperationSourceReleasing ||
+		(root.ReleasePath == ScriptSourceReleaseNormal &&
+			root.RetryDisposition != ScriptRetryDispositionForbidden &&
+			root.RetryDisposition != ScriptRetryDispositionAbandoned) ||
+		(root.ReleasePath == ScriptSourceReleaseRetryExpiry &&
+			root.RetryDisposition != ScriptRetryDispositionExpired) ||
+		(root.ReleasePath != ScriptSourceReleaseNormal &&
+			root.ReleasePath != ScriptSourceReleaseRetryExpiry) {
+		return ScriptOperationSourceRoot{}, errs.New(
+			errs.KindInternal,
+			"Script operation source root is corrupt",
+		)
+	}
+	return root, nil
 }

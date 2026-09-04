@@ -108,13 +108,33 @@ type Preparation struct {
 }
 
 type OperationSourceRoot struct {
-	OperationID      string `json:"operation_id"`
-	MembershipCount  uint64 `json:"membership_count"`
-	MembershipSHA256 string `json:"membership_sha256"`
-	Phase            string `json:"phase"`
-	ReleasePath      string `json:"release_path"`
-	ReleaseCursor    uint64 `json:"release_cursor"`
+	OperationID      string           `json:"operation_id"`
+	MembershipCount  uint64           `json:"membership_count"`
+	MembershipSHA256 string           `json:"membership_sha256"`
+	Phase            string           `json:"phase"`
+	ReleasePath      string           `json:"release_path"`
+	RetryDisposition RetryDisposition `json:"retry_disposition"`
+	ReleaseCursor    uint64           `json:"release_cursor"`
 }
+
+type RetryDisposition string
+
+const (
+	RetryDispositionUndecided   RetryDisposition = "undecided"
+	RetryDispositionAvailable   RetryDisposition = "available"
+	RetryDispositionTransferred RetryDisposition = "transferred"
+	RetryDispositionForbidden   RetryDisposition = "forbidden"
+	RetryDispositionAbandoned   RetryDisposition = "abandoned"
+	RetryDispositionExpired     RetryDisposition = "expired"
+)
+
+const (
+	operationSourcePhaseActive    = "active"
+	operationSourcePhaseReleasing = "releasing"
+	sourceReleasePathAbsent       = "absent"
+	sourceReleasePathNormal       = "normal_completion"
+	sourceReleasePathRetryExpiry  = "retry_expiry"
+)
 
 type StagedRequirement struct {
 	Source                 SourceIdentity
@@ -163,7 +183,9 @@ func ReversePrefix(operationID string) string {
 	return RootPrefix + operationID + "/executions/"
 }
 func ForwardKey(reference Reference) string {
-	return ForwardReferencePrefix + SourceSuffix(reference.Source) + "/" + reference.OperationID + "/" + reference.ScriptExecutionID
+	return ForwardReferencePrefix + SourceSuffix(
+		reference.Source,
+	) + "/" + reference.OperationID + "/" + reference.ScriptExecutionID
 }
 func ReverseKey(reference Reference) string {
 	return ReversePrefix(reference.OperationID) + reference.ScriptExecutionID + "/" + SourceSuffix(reference.Source)
@@ -177,7 +199,12 @@ func ScriptPrimaryKey(source SourceIdentity) string {
 func SourceSuffix(source SourceIdentity) string {
 	switch source.Kind {
 	case SourceBody:
-		return "body/" + source.EnvironmentID + "/~" + base64.RawURLEncoding.EncodeToString([]byte(source.ScriptSetGeneration)) + "/" + source.ScriptID + "/" + strconv.FormatUint(source.BodyGeneration, 10)
+		return "body/" + source.EnvironmentID + "/~" + base64.RawURLEncoding.EncodeToString(
+			[]byte(source.ScriptSetGeneration),
+		) + "/" + source.ScriptID + "/" + strconv.FormatUint(
+			source.BodyGeneration,
+			10,
+		)
 	case SourceRunnerSnapshot:
 		return "runner-snapshot/" + source.SnapshotID
 	case SourceService:
@@ -212,7 +239,11 @@ func canonicalMembers(operationID string, input []Member) ([]Member, string, []S
 		members[index] = member
 	}
 	sort.Slice(members, func(left, right int) bool {
-		leftSuffix, rightSuffix := SourceSuffix(members[left].Reference.Source), SourceSuffix(members[right].Reference.Source)
+		leftSuffix, rightSuffix := SourceSuffix(
+			members[left].Reference.Source,
+		), SourceSuffix(
+			members[right].Reference.Source,
+		)
 		if leftSuffix != rightSuffix {
 			return leftSuffix < rightSuffix
 		}
@@ -280,8 +311,11 @@ func canonicalMembers(operationID string, input []Member) ([]Member, string, []S
 
 func validateMember(operationID string, member Member) error {
 	reference := member.Reference
-	if reference.OperationID != operationID || reference.ScriptExecutionID == "" || SourceSuffix(reference.Source) == "" ||
-		reference.SourceOwnerID == "" || member.SourceKey == "" || member.SourceKey[0] != '/' {
+	if reference.OperationID != operationID || reference.ScriptExecutionID == "" ||
+		SourceSuffix(reference.Source) == "" ||
+		reference.SourceOwnerID == "" ||
+		member.SourceKey == "" ||
+		member.SourceKey[0] != '/' {
 		return validation("source member is invalid")
 	}
 	switch member.Mode {
@@ -380,7 +414,49 @@ func decodePreparation(value []byte) (Preparation, error) {
 	return decode[Preparation]("script-source-preparation", value)
 }
 func encodeRoot(value OperationSourceRoot) ([]byte, error) {
+	if !validOperationSourceRoot(value) {
+		return nil, validation("script operation source root is invalid")
+	}
 	return encode("script-operation-source-root", value)
+}
+
+func decodeRoot(value []byte) (OperationSourceRoot, error) {
+	root, err := decode[OperationSourceRoot]("script-operation-source-root", value)
+	if err != nil {
+		return OperationSourceRoot{}, err
+	}
+	if !validOperationSourceRoot(root) {
+		return OperationSourceRoot{}, corruption("script operation source root is invalid")
+	}
+	return root, nil
+}
+
+func validOperationSourceRoot(root OperationSourceRoot) bool {
+	if root.OperationID == "" || root.MembershipCount == 0 ||
+		len(root.MembershipSHA256) != hex.EncodedLen(sha256.Size) ||
+		root.ReleaseCursor > root.MembershipCount {
+		return false
+	}
+	digest, err := hex.DecodeString(root.MembershipSHA256)
+	if err != nil || hex.EncodeToString(digest) != root.MembershipSHA256 {
+		return false
+	}
+	switch root.Phase {
+	case operationSourcePhaseActive:
+		return root.ReleasePath == sourceReleasePathAbsent && root.ReleaseCursor == 0 &&
+			(root.RetryDisposition == RetryDispositionUndecided ||
+				root.RetryDisposition == RetryDispositionAvailable ||
+				root.RetryDisposition == RetryDispositionTransferred)
+	case operationSourcePhaseReleasing:
+		if root.ReleasePath == sourceReleasePathNormal {
+			return root.RetryDisposition == RetryDispositionForbidden ||
+				root.RetryDisposition == RetryDispositionAbandoned
+		}
+		return root.ReleasePath == sourceReleasePathRetryExpiry &&
+			root.RetryDisposition == RetryDispositionExpired
+	default:
+		return false
+	}
 }
 
 func bytesEqual(left, right []byte) bool {

@@ -784,3 +784,14 @@ that authority; failed, aborted, timed-out, retried, or unrelated Environment
 mutations cannot refresh it. The focused etcd race proof covers successful,
 failed, aborted, and unrelated-mutation paths, and independent review plus the
 single correction-delta verification found no remaining landing blocker.
+
+## Bounded Script source-reference normal release (2026-09-04)
+
+The canonical Script operation source root now carries one mandatory closed
+retry disposition and owns resumable normal release without a parallel Release
+operation record. Normal release processes logical windows of at most sixteen
+members through deterministic transactions inside the ordinary 96-operation
+ceiling, while preparation abandonment retains its independent safe physical
+page size. Exact memberships, counts, Script aggregates, caller guards, root
+revision, and cursor are fenced against replay and races. Focused race tests,
+independent review, and the single correction-delta verification pass.

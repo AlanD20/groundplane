@@ -9,7 +9,11 @@ func (repository *Repository) FinalPublicationFragment(
 	if ctx == nil || prepared.IsZero() || prepared.descriptorRevision <= 0 || prepared.membershipCount == 0 {
 		return PublicationFragment{}, validation("prepared source set is invalid")
 	}
-	read, err := repository.store.GetMany(ctx, []string{PreparationKey(prepared.operationID), RootKey(prepared.operationID)}, 0)
+	read, err := repository.store.GetMany(
+		ctx,
+		[]string{PreparationKey(prepared.operationID), RootKey(prepared.operationID)},
+		0,
+	)
 	if err != nil {
 		return PublicationFragment{}, err
 	}
@@ -30,7 +34,10 @@ func (repository *Repository) FinalPublicationFragment(
 	}
 	root := OperationSourceRoot{
 		OperationID: prepared.operationID, MembershipCount: prepared.membershipCount,
-		MembershipSHA256: prepared.membershipSHA256, Phase: "active", ReleasePath: "absent",
+		MembershipSHA256: prepared.membershipSHA256,
+		Phase:            operationSourcePhaseActive,
+		ReleasePath:      sourceReleasePathAbsent,
+		RetryDisposition: RetryDispositionUndecided,
 	}
 	value, err := encodeRoot(root)
 	if err != nil {

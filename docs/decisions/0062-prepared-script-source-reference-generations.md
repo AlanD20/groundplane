@@ -174,6 +174,7 @@ membership_count
 membership_sha256
 phase = active | releasing
 release_path = absent | normal_completion | retry_expiry
+retry_disposition = undecided | available | transferred | forbidden | abandoned | expired
 release_cursor
 ```
 
@@ -183,6 +184,15 @@ means the current Task is still nonterminal and its terminal state and
 retain-until index belong to the final release transaction. `retry_expiry`
 means the retry-available Task is already terminal and already has its
 retain-until index; reference release must not rewrite either one.
+
+`retry_disposition` is mandatory in schema 1 and has no decoded default. An
+active root is `undecided`, `available`, or `transferred`. A
+`normal_completion` release is `forbidden` or `abandoned`, and a
+`retry_expiry` release is `expired`. Every root constructor writes the value
+explicitly; an absent or unknown value is corruption.
+`ScriptOperationSourceRoot` is the sole Script-operation authority for retry
+disposition and reference-release phase; no parallel operation record may
+default, infer, or repair either value.
 
 `ScriptSourcePreparation` uses the same operation id, membership count, and
 digest plus `phase = preparing | sealed | abandoning`, a preparation cursor,
@@ -287,7 +297,12 @@ There are exactly two completion paths for an active operation:
   existing retain-until index byte-for-byte. The Task and index remain
   unchanged throughout release.
 
-Release removes at most 16 memberships per transaction. Each transaction
+Release reads at most 16 memberships per logical page. Within that window it
+selects the largest deterministic key-ordered prefix whose complete compare
+and mutation set fits the ordinary 96-operation transaction ceiling; the
+remaining suffix is the next physical page. This decomposition does not lower
+the accepted 16-membership source cardinality or split any membership's
+symmetric/count/Script-aggregate mutation. Each physical transaction
 compares the releasing root including `release_path`, operation, path-specific
 Task fence, exact byte-identical forward and reverse membership, source count,
 and Script aggregate when applicable; deletes both memberships; decrements the

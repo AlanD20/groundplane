@@ -39,6 +39,7 @@ type ScriptSourceReference = ref.Reference
 type ScriptSourceCount = ref.Count
 type ScriptSourcePreparation = ref.Preparation
 type ScriptOperationSourceRoot = ref.OperationSourceRoot
+type ScriptRetryDisposition = ref.RetryDisposition
 type ScriptSourcePreparationPhase = ref.PreparationPhase
 
 const (
@@ -48,6 +49,14 @@ const (
 	ScriptOperationSourceActive       = "active"
 	ScriptOperationSourceReleasing    = "releasing"
 	ScriptSourceReleaseAbsent         = "absent"
+	ScriptSourceReleaseNormal         = "normal_completion"
+	ScriptSourceReleaseRetryExpiry    = "retry_expiry"
+	ScriptRetryDispositionUndecided   = ref.RetryDispositionUndecided
+	ScriptRetryDispositionAvailable   = ref.RetryDispositionAvailable
+	ScriptRetryDispositionTransferred = ref.RetryDispositionTransferred
+	ScriptRetryDispositionForbidden   = ref.RetryDispositionForbidden
+	ScriptRetryDispositionAbandoned   = ref.RetryDispositionAbandoned
+	ScriptRetryDispositionExpired     = ref.RetryDispositionExpired
 )
 
 type ScriptExistingSourceEvidence struct{ SourceKey string }
@@ -105,6 +114,19 @@ type ScriptSourcePublicationFragment struct {
 	conditions []Condition
 	mutations  []Mutation
 	staged     []ScriptStagedSourceRequirement
+}
+
+type ScriptSourceReleaseFragment struct {
+	conditions []Condition
+	mutations  []Mutation
+}
+
+func (fragment *ScriptSourceReleaseFragment) Clear() {
+	if fragment == nil {
+		return
+	}
+	clearMutationValues(fragment.mutations)
+	*fragment = ScriptSourceReleaseFragment{}
 }
 
 func (fragment ScriptSourcePublicationFragment) StagedRequirements() []ScriptStagedSourceRequirement {
@@ -243,6 +265,54 @@ func (authority *ScriptSourceReferenceAuthority) FinalPublicationFragment(
 	return result, nil
 }
 
+func (authority *ScriptSourceReferenceAuthority) PrepareNormalRelease(
+	ctx context.Context,
+	operationID string,
+	disposition ScriptRetryDisposition,
+) (ScriptSourceReleaseFragment, error) {
+	fragment, err := authority.repository.PrepareNormalRelease(ctx, operationID, disposition)
+	if err != nil {
+		return ScriptSourceReleaseFragment{}, mapScriptSourceReferenceError(err)
+	}
+	result := ScriptSourceReleaseFragment{
+		conditions: convertScriptSourceConditions(fragment.Conditions),
+		mutations:  convertScriptSourceMutations(fragment.Mutations),
+	}
+	fragment.Clear()
+	return result, nil
+}
+
+func (authority *ScriptSourceReferenceAuthority) ReleaseNext(
+	ctx context.Context,
+	operationID string,
+	guards []Condition,
+) (bool, bool, error) {
+	converted := make([]ref.Condition, len(guards))
+	for index, guard := range guards {
+		converted[index] = ref.Condition{
+			Key: guard.Key, ModRevision: guard.ModRevision, Prefix: guard.Prefix,
+		}
+	}
+	processed, drained, err := authority.repository.ReleaseNext(ctx, operationID, converted)
+	return processed, drained, mapScriptSourceReferenceError(err)
+}
+
+func (authority *ScriptSourceReferenceAuthority) PrepareReleaseFinalization(
+	ctx context.Context,
+	operationID string,
+) (ScriptSourceReleaseFragment, error) {
+	fragment, err := authority.repository.PrepareReleaseFinalization(ctx, operationID)
+	if err != nil {
+		return ScriptSourceReleaseFragment{}, mapScriptSourceReferenceError(err)
+	}
+	result := ScriptSourceReleaseFragment{
+		conditions: convertScriptSourceConditions(fragment.Conditions),
+		mutations:  convertScriptSourceMutations(fragment.Mutations),
+	}
+	fragment.Clear()
+	return result, nil
+}
+
 func (authority *ScriptSourceReferenceAuthority) validateMembers(
 	ctx context.Context,
 	operationID string,
@@ -286,7 +356,11 @@ func (authority *ScriptSourceReferenceAuthority) validateMembers(
 			!scriptSourceKindMayBeBlueprintStaged(member.Reference.Source.Kind) {
 			return nil, errs.New(errs.KindValidationFailed, "staged Script source kind is invalid")
 		}
-		if err := validateScriptCandidateSourceStage(staged.Stage, staged.Value, member.Reference.SourceOwnerID); err != nil {
+		if err := validateScriptCandidateSourceStage(
+			staged.Stage,
+			staged.Value,
+			member.Reference.SourceOwnerID,
+		); err != nil {
 			return nil, err
 		}
 		if candidateStage != nil && !sameScriptCandidateStage(*candidateStage, staged.Stage) {
