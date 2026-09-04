@@ -766,12 +766,20 @@ func (repository *TaskRepository) claimNextTask(
 			mutations = append(mutations, Mutation{
 				Type: MutationPut, Key: candidate.writerKey, Value: writerValue,
 			})
+			if taskHasBlueprintCandidateAppliedAuthority(task) {
+				epochCondition, epochMutation, claimErr :=
+					repository.prepareBlueprintCandidateClaimEpoch(ctx, task, candidate.readRevision)
+				if claimErr != nil {
+					clearMutationValues(mutations)
+					return TaskAssignment{}, false, claimErr
+				}
+				conditions = append(conditions, epochCondition)
+				mutations = append(mutations, epochMutation)
+			}
 		}
 		attachChange, err := repository.prepareAttachTaskClaim(ctx, task, candidate.readRevision)
 		if err != nil {
-			clear(runningValue)
-			clear(assignmentValue)
-			clear(writerValue)
+			clearMutationValues(mutations)
 			return TaskAssignment{}, false, err
 		}
 		if attachChange.applies {
@@ -782,9 +790,7 @@ func (repository *TaskRepository) claimNextTask(
 		}
 		blueprintAttachChange, err := repository.prepareBlueprintAttachTaskClaim(ctx, task, candidate.readRevision)
 		if err != nil {
-			clear(runningValue)
-			clear(assignmentValue)
-			clear(writerValue)
+			clearMutationValues(mutations)
 			clearAttachTaskChange(attachChange)
 			return TaskAssignment{}, false, err
 		}
@@ -795,17 +801,13 @@ func (repository *TaskRepository) claimNextTask(
 		requirementEvidence, requirementApplies, requirementReady, err :=
 			repository.observeBlueprintRequirementGateForClaim(ctx, task, candidate.readRevision)
 		if err != nil {
-			clear(runningValue)
-			clear(assignmentValue)
-			clear(writerValue)
+			clearMutationValues(mutations)
 			clearAttachTaskChange(attachChange)
 			clearBlueprintAttachTaskChange(blueprintAttachChange)
 			return TaskAssignment{}, false, err
 		}
 		if requirementApplies && !requirementReady {
-			clear(runningValue)
-			clear(assignmentValue)
-			clear(writerValue)
+			clearMutationValues(mutations)
 			clearAttachTaskChange(attachChange)
 			clearBlueprintAttachTaskChange(blueprintAttachChange)
 			return TaskAssignment{}, false, nil
@@ -814,9 +816,7 @@ func (repository *TaskRepository) claimNextTask(
 			conditions = append(conditions, requirementEvidence.conditions...)
 		}
 		transaction, err := repository.store.Transact(ctx, conditions, mutations)
-		clear(runningValue)
-		clear(assignmentValue)
-		clear(writerValue)
+		clearMutationValues(mutations)
 		clearAttachTaskChange(attachChange)
 		clearBlueprintAttachTaskChange(blueprintAttachChange)
 		if err != nil {
@@ -3518,12 +3518,7 @@ func (repository *TaskRepository) bindOrdinaryTaskEnvironmentMutation(
 	connectorChange bool,
 ) (*ordinaryEnvironmentMutationBinding, error) {
 	environmentID, applies, err := ordinaryTaskEnvironmentMutationTarget(
-		task,
-		materializationChange,
-		attachChange,
-		entryChange,
-		serviceChange,
-		connectorChange,
+		task, materializationChange, attachChange, entryChange, serviceChange, connectorChange,
 	)
 	if err != nil || !applies {
 		return nil, err
@@ -3532,12 +3527,16 @@ func (repository *TaskRepository) bindOrdinaryTaskEnvironmentMutation(
 	if err != nil {
 		return nil, err
 	}
+	advanceEpoch, err := blueprintCandidateShouldAdvanceEpoch(task, environmentID, mutations)
+	if err != nil {
+		return nil, err
+	}
 	mutationContext := ordinaryEnvironmentMutationContext{
 		environmentID: environmentID,
 		readRevision:  readRevision,
 		fence:         fence,
 	}
-	return mutationContext.bind(ctx, repository.store, conditions, mutations, true)
+	return mutationContext.bind(ctx, repository.store, conditions, mutations, advanceEpoch)
 }
 
 func ordinaryTaskEnvironmentMutationTarget(

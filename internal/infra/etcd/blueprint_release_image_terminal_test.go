@@ -18,9 +18,37 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
+type blueprintEpochMutationRejectingStore struct {
+	*releaseRenderInputTestStore
+	epochKey               string
+	lastEpochMutationCount int
+}
+
+func (store *blueprintEpochMutationRejectingStore) Transact(
+	ctx context.Context,
+	conditions []Condition,
+	mutations []Mutation,
+) (TransactionResult, error) {
+	epochMutations := 0
+	for _, mutation := range mutations {
+		if mutation.Type == MutationPut && mutation.Key == store.epochKey {
+			epochMutations++
+			if epochMutations > 1 {
+				return TransactionResult{}, errs.New(errs.KindInternal, "duplicate Blueprint epoch mutation")
+			}
+		}
+	}
+	store.lastEpochMutationCount = epochMutations
+	return store.releaseRenderInputTestStore.Transact(ctx, conditions, mutations)
+}
+
+// Rationale: a claimed Blueprint attempt owns the Environment mutation epoch through its
+// materialization writer, while proven terminalization and retry transfer that authority atomically.
 func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDesiredHead(t *testing.T) {
 	ctx := context.Background()
-	store := &releaseRenderInputTestStore{memoryTaskStore: newMemoryTaskStore()}
+	store := &blueprintEpochMutationRejectingStore{
+		releaseRenderInputTestStore: &releaseRenderInputTestStore{memoryTaskStore: newMemoryTaskStore()},
+	}
 	repository, err := newTaskRepository(store)
 	if err != nil {
 		t.Fatal(err)
@@ -33,6 +61,7 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 	tenantID := ids.NewAt(ids.KindTenant, now, 4)
 	projectID := ids.NewAt(ids.KindProject, now, 5)
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 6)
+	store.epochKey = environmentMutationEpochKey(environmentID)
 	predecessorTaskID := ids.NewAt(ids.KindTask, now, 16)
 	serviceID := ids.NewAt(ids.KindService, now, 7)
 	releaseID := ids.NewAt(ids.KindDeployment, now, 8)
@@ -40,7 +69,6 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 	priorArtifactID := ids.NewAt(ids.KindConfig, now, 14)
 	stepID := ids.NewAt(ids.KindStep, now, 10)
 	agentID := ids.NewAt(ids.KindAgent, now, 11)
-	assignmentID := ids.NewAt(ids.KindAssignment, now, 12)
 	planHash := strings.Repeat("a", 64)
 	requested := "docker.io/library/nginx:stable"
 	immutable := "docker.io/library/nginx@sha256:" + strings.Repeat("b", 64)
@@ -55,6 +83,47 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 		ServiceDependencyPlans: core.ServiceDependencyPlans{},
 	}
 	projection = withTestEnvironmentComposeArtifact(projection)
+	projectionValue, err := encodeEnvironmentComposeProjection(projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectionChunkValue, err := encodeEnvironmentBlueprintChunk(EnvironmentBlueprintChunk{
+		Family:        EnvironmentBlueprintChunkProjection,
+		Sequence:      0,
+		LogicalOffset: 0,
+		LogicalLength: uint32(len(projectionValue)),
+		Digest:        sha256.Sum256(projectionValue),
+		Data:          projectionValue,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tenantValue, err := encodeTenant(TenantRecord{ID: tenantID, Slug: "tenant", Name: "Tenant"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectValue, err := encodeProject(ProjectRecord{
+		ID: projectID, TenantID: tenantID, Slug: "project", Name: "Project", Kind: ProjectKindTenant,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	environmentValue, err := encodeEnvironment(EnvironmentRecord{
+		ID: environmentID, ProjectID: projectID, Name: "production", NetworkPool: "10.40.0.0/16",
+		VolumeDir:         "/var/lib/groundplane/vol/" + tenantID + "/" + projectID + "/" + environmentID,
+		ProvisioningState: EnvironmentProvisioningReady, CreateTaskID: predecessorTaskID, CreatedAt: now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hierarchySeed, err := store.Transact(ctx, nil, []Mutation{
+		{Type: MutationPut, Key: tenantKey(tenantID), Value: tenantValue},
+		{Type: MutationPut, Key: projectKey(projectID), Value: projectValue},
+		{Type: MutationPut, Key: environmentKey(environmentID), Value: environmentValue},
+	})
+	if err != nil || !hierarchySeed.Succeeded {
+		t.Fatalf("seed Blueprint hierarchy = %#v, %v", hierarchySeed, err)
+	}
 	predecessorProjection := projection
 	predecessorProjection.RevisionID = predecessorTaskID
 	predecessorProjection.RenderGeneration = 1
@@ -184,19 +253,30 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 		SourceKind: EnvironmentBlueprintSourceApply, RenderGeneration: 3,
 		ProjectionSchema: 1,
 		AuditChunks:      1, AuditBytes: 1, AuditSHA256: sha256.Sum256([]byte("audit")),
-		ProjectionChunks: 1, ProjectionBytes: 1,
-		ProjectionSHA256:    sha256.Sum256([]byte("projection")),
+		ProjectionChunks: 1, ProjectionBytes: uint64(len(projectionValue)),
+		ProjectionSHA256:    sha256.Sum256(projectionValue),
 		ProjectionResources: 1, BaselineHeadRevision: desiredBaseline.Revision,
 		DependencyDigest: sha256.Sum256([]byte("dependencies")),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	epochValue, err := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{
+		EnvironmentID: environmentID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	mutations = append(mutations,
 		Mutation{Type: MutationPut, Key: releaseServiceIndexKey(environmentID, serviceID, releaseID), Value: indexValue},
-		Mutation{Type: MutationPut, Key: environmentMutationEpochKey(environmentID), Value: []byte(`{"schema":1}`)},
+		Mutation{Type: MutationPut, Key: environmentMutationEpochKey(environmentID), Value: epochValue},
 		Mutation{Type: MutationPut, Key: environmentBlueprintHeadKey(environmentID), Value: headValue},
 		Mutation{Type: MutationPut, Key: environmentBlueprintRootKey(environmentID, taskID), Value: sealValue},
+		Mutation{
+			Type:  MutationPut,
+			Key:   environmentBlueprintChunkKeyFor(environmentID, taskID, EnvironmentBlueprintChunkProjection, 0),
+			Value: projectionChunkValue,
+		},
 		Mutation{Type: MutationPut, Key: executionStepResultKey(operationID, planHash, stepID), Value: resolvedValue},
 	)
 	seeded, err := store.Transact(ctx, nil, mutations)
@@ -207,6 +287,14 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 	driftRepository, err := newTaskRepository(driftStore)
 	if err != nil {
 		t.Fatal(err)
+	}
+	driftHierarchySeed, err := driftStore.Transact(ctx, nil, []Mutation{
+		{Type: MutationPut, Key: tenantKey(tenantID), Value: tenantValue},
+		{Type: MutationPut, Key: projectKey(projectID), Value: projectValue},
+		{Type: MutationPut, Key: environmentKey(environmentID), Value: environmentValue},
+	})
+	if err != nil || !driftHierarchySeed.Succeeded {
+		t.Fatalf("seed drift Blueprint hierarchy = %#v, %v", driftHierarchySeed, err)
 	}
 	driftAppliedSeed, err := driftStore.Transact(ctx, nil, []Mutation{{
 		Type: MutationPut, Key: environmentComposeProjectionKey(environmentID), Value: predecessorValue,
@@ -231,17 +319,50 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 	if err != nil || len(journal) != 1 {
 		t.Fatalf("resolved journal = %#v, %v", journal, err)
 	}
-	startedAt := now.Add(time.Second)
-	task := TaskRecord{
-		ID: taskID, OperationID: operationID,
-		Owner:    TaskOwner{WorkspaceType: TaskWorkspaceTenant, TenantID: tenantID, ProjectID: projectID, EnvironmentID: environmentID},
-		Executor: TaskExecutorAgent, PlanID: planID, PlanHash: planHash, RenderGeneration: 3,
-		Type: TaskUpdate, Target: environmentID, Params: map[string]string{
-			TaskReleasePublicationParam:         publicationID,
-			TaskMaterializationEnvironmentParam: environmentID,
-			EnvironmentDesiredRevisionParam:     taskID,
+	task := newTaskRecord(
+		taskID,
+		operationID,
+		TaskOwner{
+			WorkspaceType: TaskWorkspaceTenant,
+			TenantID:      tenantID, ProjectID: projectID, EnvironmentID: environmentID,
 		},
-		Steps: []TaskStepRecord{{Kind: TaskStepOperation, ID: stepID}}, StartedAt: &startedAt,
+		TaskActorOperator,
+		TaskUpdate,
+		environmentID,
+		120,
+		now,
+	)
+	task.IdempotencyKey = "blueprint-candidate-original"
+	task.Executor = TaskExecutorAgent
+	task.PlanID = planID
+	task.PlanHash = planHash
+	task.RenderGeneration = 3
+	task.Params = map[string]string{
+		TaskReleasePublicationParam:         publicationID,
+		TaskMaterializationEnvironmentParam: environmentID,
+		EnvironmentDesiredRevisionParam:     taskID,
+	}
+	task.Steps = []TaskStepRecord{{Kind: TaskStepOperation, ID: stepID}}
+	pendingTask := cloneTaskRecord(task)
+	seedBlueprintRequirementTask(t, store.memoryTaskStore, task)
+	claim, found, err := repository.ClaimNextTask(ctx, agentID, 1, now.Add(time.Second))
+	if err != nil || !found || claim.Task.Record.ID != task.ID {
+		t.Fatalf("claim original Blueprint Task = %#v, %t, %v", claim, found, err)
+	}
+	task = claim.Task.Record
+	assignment := claim.Assignment.Record
+	writerKey := taskMaterializationWriterKey(environmentID)
+	claimAuthority, err := store.GetMany(ctx, GetManyRequest{Keys: []string{
+		writerKey, environmentMutationEpochKey(environmentID),
+	}})
+	if err != nil || claimAuthority.Values[0] == nil || claimAuthority.Values[1] == nil ||
+		claimAuthority.Values[0].ModRevision != claim.Assignment.Revision ||
+		claimAuthority.Values[1].ModRevision != claim.Assignment.Revision {
+		t.Fatalf("original Blueprint claim authority = %#v, %v", claimAuthority, err)
+	}
+	writer, err := decodeTaskMaterializationWriter(claimAuthority.Values[0].Value)
+	if err != nil {
+		t.Fatal(err)
 	}
 	failureResult := TaskResultRecord{
 		Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone, FailedStepID: stepID,
@@ -250,42 +371,46 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 			Target: string(domain.WorkloadSingleton), Compensated: true,
 		}},
 	}
-	predecessor := taskMaterializationAppliedPredecessor{
-		Present: true, KeyRevision: appliedSeed.Revision,
-		RevisionID: predecessorTaskID, RenderGeneration: 1,
-	}
-	writer := taskMaterializationWriter(task, environmentID, &predecessor)
 	_, err = repository.prepareBlueprintCandidateTerminalAcknowledgement(
-		ctx, task, writer, TaskAssignmentRecord{AssignmentID: assignmentID}, TaskStatusFailed,
+		ctx, task, writer, assignment, TaskStatusFailed,
 		TaskResultRecord{
 			Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
 			FailedStepID: stepID, ReconciliationRequired: true,
 			RecreateEvidence: failureResult.RecreateEvidence,
 		},
-		agentID, now.Add(2*time.Second), seeded.Revision,
+		agentID, now.Add(2*time.Second), claim.Assignment.Revision,
 	)
 	if !errors.Is(err, errs.New(errs.KindReleaseRecoveryRequired, "")) {
 		t.Fatalf("unproven Blueprint failure error = %v", err)
 	}
 	unproven, err := store.GetMany(ctx, GetManyRequest{Keys: []string{
-		environmentComposeProjectionKey(environmentID), blueprintCandidateAttemptAuthorityKey(task.ID),
+		environmentComposeProjectionKey(environmentID), writerKey,
+		blueprintCandidateAttemptAuthorityKey(task.ID), environmentMutationEpochKey(environmentID),
 	}})
 	if err != nil || unproven.Values[0] == nil || unproven.Values[0].ModRevision != appliedSeed.Revision ||
-		unproven.Values[1] != nil {
+		unproven.Values[1] == nil || unproven.Values[1].ModRevision != claim.Assignment.Revision ||
+		unproven.Values[2] != nil || unproven.Values[3] == nil ||
+		unproven.Values[3].ModRevision != claim.Assignment.Revision {
 		t.Fatalf("unproven Blueprint failure wrote state = %#v, %v", unproven, err)
 	}
-	failureChange, err := repository.prepareBlueprintCandidateTerminalAcknowledgement(
-		ctx, task, writer, TaskAssignmentRecord{AssignmentID: assignmentID}, TaskStatusFailed,
-		failureResult,
-		agentID, now.Add(2*time.Second), seeded.Revision,
+	failedVersion, err := repository.AcknowledgeTask(
+		ctx, agentID, 1, task.ID, assignment.AssignmentID,
+		TaskStatusFailed, failureResult, now.Add(2*time.Second),
 	)
-	if err != nil || !failureChange.applies || len(failureChange.mutations) != 1 {
-		t.Fatalf("proven Blueprint failure contribution = %#v, %v", failureChange, err)
+	if err != nil || failedVersion.Record.Status != TaskStatusFailed {
+		t.Fatalf("acknowledge proven Blueprint failure = %#v, %v", failedVersion, err)
 	}
-	failureTransaction, err := store.Transact(ctx, failureChange.conditions, failureChange.mutations)
-	failureChange.clear()
-	if err != nil || !failureTransaction.Succeeded {
-		t.Fatalf("commit Blueprint failure proof = %#v, %v", failureTransaction, err)
+	if store.lastEpochMutationCount != 1 {
+		t.Fatalf("original Blueprint failure epoch mutation count = %d", store.lastEpochMutationCount)
+	}
+	failureRevision := failedVersion.Revision
+	failureAuthority, err := store.GetMany(ctx, GetManyRequest{Keys: []string{
+		blueprintCandidateAttemptAuthorityKey(task.ID), environmentMutationEpochKey(environmentID), writerKey,
+	}})
+	if err != nil || failureAuthority.Values[0] == nil || failureAuthority.Values[1] == nil ||
+		failureAuthority.Values[0].ModRevision != failureRevision ||
+		failureAuthority.Values[1].ModRevision != failureRevision || failureAuthority.Values[2] != nil {
+		t.Fatalf("original Blueprint terminal authority = %#v, %v", failureAuthority, err)
 	}
 	unpublished, err := store.GetMany(ctx, GetManyRequest{Keys: []string{
 		releaseTerminalKey(releaseID), releaseProjectionKey(serviceID),
@@ -298,27 +423,40 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 		t.Fatalf("failed Blueprint desired head = %q, %v", desired, decodeErr)
 	}
 	failedAt := now.Add(2 * time.Second)
-	failed := cloneTaskRecord(task)
-	failed.Status = TaskStatusFailed
-	failed.FinishedAt = &failedAt
-	failed.Result = cloneTaskResult(&failureResult)
-	retry := cloneTaskRecord(failed)
-	retry.ID = ids.NewAt(ids.KindTask, now.Add(3*time.Second), 13)
-	retry.RetryOf = failed.ID
-	retry.Status = TaskStatusPending
-	retry.CreatedAt = now.Add(3 * time.Second)
-	retry.FinishedAt = nil
-	retry.Result = nil
-	driftPredecessor := predecessor
-	driftPredecessor.KeyRevision = driftAppliedSeed.Revision
-	driftWriter := taskMaterializationWriter(task, environmentID, &driftPredecessor)
+	failed := failedVersion.Record
+	retry, err := cloneRetryTask(
+		failed,
+		ids.NewAt(ids.KindTask, now.Add(3*time.Second), 13),
+		TaskActorOperator,
+		now.Add(3*time.Second),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedBlueprintRequirementTask(t, driftStore.memoryTaskStore, pendingTask)
+	driftClaim, found, err := driftRepository.ClaimNextTask(ctx, agentID, 2, now.Add(time.Second))
+	if err != nil || !found || driftClaim.Task.Record.ID != pendingTask.ID {
+		t.Fatalf("claim drift original Blueprint Task = %#v, %t, %v", driftClaim, found, err)
+	}
+	driftWriterRead, err := driftStore.GetMany(ctx, GetManyRequest{Keys: []string{writerKey}})
+	if err != nil || driftWriterRead.Values[0] == nil ||
+		driftWriterRead.Values[0].ModRevision != driftClaim.Assignment.Revision {
+		t.Fatalf("drift original Blueprint writer = %#v, %v", driftWriterRead, err)
+	}
+	driftWriter, err := decodeTaskMaterializationWriter(driftWriterRead.Values[0].Value)
+	if err != nil {
+		t.Fatal(err)
+	}
 	driftFailureChange, err := driftRepository.prepareBlueprintCandidateTerminalAcknowledgement(
-		ctx, task, driftWriter, TaskAssignmentRecord{AssignmentID: assignmentID}, TaskStatusFailed,
-		failureResult, agentID, now.Add(2*time.Second), driftSeeded.Revision,
+		ctx, driftClaim.Task.Record, driftWriter, driftClaim.Assignment.Record, TaskStatusFailed,
+		failureResult, agentID, now.Add(2*time.Second), driftClaim.Assignment.Revision,
 	)
 	if err != nil {
 		t.Fatalf("prepare drift Blueprint failure = %v", err)
 	}
+	driftFailureChange.mutations = append(
+		driftFailureChange.mutations, Mutation{Type: MutationDelete, Key: writerKey},
+	)
 	driftFailureTransaction, err := driftStore.Transact(
 		ctx, driftFailureChange.conditions, driftFailureChange.mutations,
 	)
@@ -326,8 +464,12 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 	if err != nil || !driftFailureTransaction.Succeeded {
 		t.Fatalf("commit drift Blueprint failure = %#v, %v", driftFailureTransaction, err)
 	}
+	driftFailed := cloneTaskRecord(driftClaim.Task.Record)
+	driftFailed.Status = TaskStatusFailed
+	driftFailed.FinishedAt = &failedAt
+	driftFailed.Result = cloneTaskResult(&failureResult)
 	driftRetryChange, err := driftRepository.prepareBlueprintCandidateRetry(
-		ctx, failed, retry, driftFailureTransaction.Revision,
+		ctx, driftFailed, retry, driftFailureTransaction.Revision,
 	)
 	if err != nil || !driftRetryChange.applies {
 		t.Fatalf("prepare Blueprint retry drift fixture = %#v, %v", driftRetryChange, err)
@@ -337,27 +479,38 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 	if err != nil || !driftRetryTransaction.Succeeded {
 		t.Fatalf("commit Blueprint retry drift fixture = %#v, %v", driftRetryTransaction, err)
 	}
+	seedBlueprintRequirementTask(t, driftStore.memoryTaskStore, retry)
+	driftRetryClaim, found, err := driftRepository.ClaimNextTask(ctx, agentID, 3, now.Add(4*time.Second))
+	if err != nil || !found || driftRetryClaim.Task.Record.ID != retry.ID {
+		t.Fatalf("claim drift Blueprint retry = %#v, %t, %v", driftRetryClaim, found, err)
+	}
+	driftRetryAuthority, err := driftStore.GetMany(ctx, GetManyRequest{Keys: []string{
+		writerKey, environmentMutationEpochKey(environmentID),
+	}})
+	if err != nil || driftRetryAuthority.Values[0] == nil || driftRetryAuthority.Values[1] == nil ||
+		driftRetryAuthority.Values[0].ModRevision != driftRetryClaim.Assignment.Revision ||
+		driftRetryAuthority.Values[1].ModRevision != driftRetryClaim.Assignment.Revision {
+		t.Fatalf("drift Blueprint retry claim authority = %#v, %v", driftRetryAuthority, err)
+	}
+	driftRetryWriter, err := decodeTaskMaterializationWriter(driftRetryAuthority.Values[0].Value)
+	if err != nil {
+		t.Fatal(err)
+	}
 	driftEpoch, err := driftStore.Transact(ctx, nil, []Mutation{{
 		Type: MutationPut, Key: environmentMutationEpochKey(environmentID), Value: []byte(`{"schema":1,"drift":true}`),
 	}})
 	if err != nil || !driftEpoch.Succeeded {
 		t.Fatalf("advance Blueprint retry epoch = %#v, %v", driftEpoch, err)
 	}
-	driftTask := cloneTaskRecord(retry)
-	driftTask.Status = TaskStatusRunning
-	driftTask.StartedAt = &startedAt
 	_, err = driftRepository.prepareBlueprintCandidateTerminalAcknowledgement(
-		ctx, driftTask, taskMaterializationWriter(
-			driftTask, environmentID, driftWriter.BlueprintAppliedPredecessor,
-		),
-		TaskAssignmentRecord{AssignmentID: assignmentID}, TaskStatusCompleted,
+		ctx, driftRetryClaim.Task.Record, driftRetryWriter, driftRetryClaim.Assignment.Record, TaskStatusCompleted,
 		TaskResultRecord{Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone},
 		agentID, now.Add(4*time.Second), driftEpoch.Revision,
 	)
 	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("Blueprint retry with intervening epoch error = %v", err)
 	}
-	retryChange, err := repository.prepareBlueprintCandidateRetry(ctx, failed, retry, failureTransaction.Revision)
+	retryChange, err := repository.prepareBlueprintCandidateRetry(ctx, failed, retry, failureRevision)
 	if err != nil || !retryChange.applies {
 		t.Fatalf("prepare exact Blueprint retry = %#v, %v", retryChange, err)
 	}
@@ -367,9 +520,11 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 		t.Fatalf("commit exact Blueprint retry = %#v, %v", retryTransaction, err)
 	}
 	retryAuthorityRead, err := store.GetMany(ctx, GetManyRequest{Keys: []string{
-		blueprintCandidateAttemptAuthorityKey(retry.ID),
+		blueprintCandidateAttemptAuthorityKey(retry.ID), environmentMutationEpochKey(environmentID),
 	}})
-	if err != nil || retryAuthorityRead.Values[0] == nil {
+	if err != nil || retryAuthorityRead.Values[0] == nil || retryAuthorityRead.Values[1] == nil ||
+		retryAuthorityRead.Values[0].ModRevision != retryTransaction.Revision ||
+		retryAuthorityRead.Values[1].ModRevision != retryTransaction.Revision {
 		t.Fatalf("read retry applied authority = %#v, %v", retryAuthorityRead, err)
 	}
 	retryAuthority, err := decodeEnvelope[blueprintCandidateAttemptAuthorityRecord](
@@ -386,73 +541,72 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 		retainedEvidence.Values[0].ModRevision == retryTransaction.Revision {
 		t.Fatalf("resolved image evidence changed during retry = %#v, %v", retainedEvidence, err)
 	}
-	retryFailed := cloneTaskRecord(retry)
-	retryFailed.Status = TaskStatusFailed
-	retryFailed.FinishedAt = &failedAt
-	retryFailed.Result = cloneTaskResult(&failureResult)
-	retryAgain := cloneTaskRecord(retryFailed)
-	retryAgain.ID = ids.NewAt(ids.KindTask, now.Add(4*time.Second), 17)
-	retryAgain.RetryOf = retryFailed.ID
-	retryAgain.Status = TaskStatusPending
-	retryAgain.CreatedAt = now.Add(4 * time.Second)
-	retryAgain.FinishedAt = nil
-	retryAgain.Result = nil
-	retryAgainChange, err := repository.prepareBlueprintCandidateRetry(
-		ctx, retryFailed, retryAgain, retryTransaction.Revision,
-	)
-	if err != nil || !retryAgainChange.applies {
-		t.Fatalf("prepare Blueprint retry-of-retry = %#v, %v", retryAgainChange, err)
+	seedBlueprintRequirementTask(t, store.memoryTaskStore, retry)
+	retryClaim, found, err := repository.ClaimNextTask(ctx, agentID, 4, now.Add(4*time.Second))
+	if err != nil || !found || retryClaim.Task.Record.ID != retry.ID {
+		t.Fatalf("claim exact Blueprint retry = %#v, %t, %v", retryClaim, found, err)
 	}
-	conditionKeys := make(map[string]struct{}, len(retryAgainChange.conditions))
-	for _, condition := range retryAgainChange.conditions {
-		if _, duplicate := conditionKeys[condition.Key]; duplicate {
-			t.Fatalf("Blueprint retry-of-retry emitted duplicate compare %q", condition.Key)
-		}
-		conditionKeys[condition.Key] = struct{}{}
+	task = retryClaim.Task.Record
+	assignment = retryClaim.Assignment.Record
+	retryClaimAuthority, err := store.GetMany(ctx, GetManyRequest{Keys: []string{
+		writerKey, environmentMutationEpochKey(environmentID), blueprintCandidateAttemptAuthorityKey(task.ID),
+	}})
+	if err != nil || retryClaimAuthority.Values[0] == nil || retryClaimAuthority.Values[1] == nil ||
+		retryClaimAuthority.Values[2] == nil ||
+		retryClaimAuthority.Values[0].ModRevision != retryClaim.Assignment.Revision ||
+		retryClaimAuthority.Values[1].ModRevision != retryClaim.Assignment.Revision {
+		t.Fatalf("exact Blueprint retry claim authority = %#v, %v", retryClaimAuthority, err)
 	}
-	retryAgainTransaction, err := store.Transact(
-		ctx, retryAgainChange.conditions, retryAgainChange.mutations,
-	)
-	retryAgainChange.clear()
-	if err != nil || !retryAgainTransaction.Succeeded {
-		t.Fatalf("commit Blueprint retry-of-retry = %#v, %v", retryAgainTransaction, err)
-	}
-	task = retryAgain
-	task.Status = TaskStatusRunning
-	task.StartedAt = &startedAt
-	assignment := TaskAssignmentRecord{AssignmentID: assignmentID}
-	change, err := repository.prepareBlueprintCandidateTerminalAcknowledgement(
-		ctx, task, taskMaterializationWriter(task, environmentID, writer.BlueprintAppliedPredecessor),
-		assignment, TaskStatusCompleted,
-		TaskResultRecord{Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone},
-		agentID, now.Add(5*time.Second), retryAgainTransaction.Revision,
-	)
-	if err != nil || !change.applies {
-		t.Fatalf("prepare Blueprint candidate terminal = %#v, %v", change, err)
-	}
-	defer change.clear()
-	appliedValue, err := encodeEnvironmentComposeProjection(projection)
+	retryWriter, err := decodeTaskMaterializationWriter(retryClaimAuthority.Values[0].Value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	change.mutations = append(change.mutations, Mutation{
-		Type: MutationPut, Key: environmentComposeProjectionKey(environmentID), Value: appliedValue,
-	})
-	transaction, err := store.Transact(ctx, change.conditions, change.mutations)
-	if err != nil || !transaction.Succeeded {
-		t.Fatalf("commit Blueprint candidate terminal = %#v, %v", transaction, err)
+	retryAuthorityRevision := retryClaimAuthority.Values[2].ModRevision
+	_, err = repository.prepareBlueprintCandidateTerminalAcknowledgement(
+		ctx, task, retryWriter, assignment, TaskStatusFailed,
+		TaskResultRecord{
+			Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
+			FailedStepID: stepID, ReconciliationRequired: true,
+			RecreateEvidence: failureResult.RecreateEvidence,
+		},
+		agentID, now.Add(5*time.Second), retryClaim.Assignment.Revision,
+	)
+	if !errors.Is(err, errs.New(errs.KindReleaseRecoveryRequired, "")) {
+		t.Fatalf("unproven Blueprint retry failure error = %v", err)
 	}
+	retryUnproven, err := store.GetMany(ctx, GetManyRequest{Keys: []string{
+		writerKey, environmentMutationEpochKey(environmentID), blueprintCandidateAttemptAuthorityKey(task.ID),
+	}})
+	if err != nil || retryUnproven.Values[0] == nil || retryUnproven.Values[1] == nil ||
+		retryUnproven.Values[2] == nil ||
+		retryUnproven.Values[0].ModRevision != retryClaim.Assignment.Revision ||
+		retryUnproven.Values[1].ModRevision != retryClaim.Assignment.Revision ||
+		retryUnproven.Values[2].ModRevision != retryAuthorityRevision {
+		t.Fatalf("unproven Blueprint retry failure wrote state = %#v, %v", retryUnproven, err)
+	}
+	completedResult := TaskResultRecord{Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone}
+	completedVersion, err := repository.AcknowledgeTask(
+		ctx, agentID, 4, task.ID, assignment.AssignmentID,
+		TaskStatusCompleted, completedResult, now.Add(5*time.Second),
+	)
+	if err != nil || completedVersion.Record.Status != TaskStatusCompleted {
+		t.Fatalf("acknowledge Blueprint retry success = %#v, %v", completedVersion, err)
+	}
+	if store.lastEpochMutationCount != 1 {
+		t.Fatalf("Blueprint retry success epoch mutation count = %d", store.lastEpochMutationCount)
+	}
+	terminalRevision := completedVersion.Revision
 	currentRevision, err := store.GetMany(ctx, GetManyRequest{Keys: []string{
 		releaseTerminalKey(releaseID), releaseProjectionKey(serviceID),
 		environmentBlueprintHeadKey(environmentID),
 	}})
 	if err != nil || currentRevision.Values[0] == nil || currentRevision.Values[1] == nil ||
-		currentRevision.Values[0].ModRevision != transaction.Revision ||
-		currentRevision.Values[1].ModRevision != transaction.Revision {
+		currentRevision.Values[0].ModRevision != terminalRevision ||
+		currentRevision.Values[1].ModRevision != terminalRevision {
 		t.Fatalf("atomic terminal read = %#v, %v", currentRevision, err)
 	}
 	if desired, decodeErr := decodeTaskReference(currentRevision.Values[2].Value); decodeErr != nil || desired != taskID ||
-		currentRevision.Values[2].ModRevision == transaction.Revision {
+		currentRevision.Values[2].ModRevision == terminalRevision {
 		t.Fatalf("desired head moved during promotion = %#v, %v", currentRevision.Values[2], decodeErr)
 	}
 	ledger := &ReleaseLedger{store: store}
@@ -478,12 +632,9 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 	if err != nil || strings.Contains(references, requested) || !strings.Contains(references, immutable) {
 		t.Fatalf("rollback material = %#v, %v", retention, err)
 	}
-	finishedAt := now.Add(5 * time.Second)
-	task.Status = TaskStatusCompleted
-	task.FinishedAt = &finishedAt
-	task.Result = &TaskResultRecord{Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone}
+	task = completedVersion.Record
 	if err := repository.validateBlueprintCandidateTerminalReplay(
-		ctx, task, TaskStatusCompleted, transaction.Revision,
+		ctx, task, TaskStatusCompleted, terminalRevision,
 	); err != nil {
 		t.Fatalf("exact Blueprint terminal replay error = %v", err)
 	}

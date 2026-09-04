@@ -116,9 +116,18 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 			"Blueprint candidate restoration is not yet proven",
 		)
 	}
-	baseConditions, manifest, err := repository.blueprintCandidateAuthority(
-		ctx, task, publicationID, *writer.BlueprintAppliedPredecessor, revision,
+	writerCondition, err := repository.blueprintCandidateLiveWriterAuthority(ctx, task, writer, revision)
+	if err != nil {
+		return blueprintCandidateTerminalChange{}, err
+	}
+	baseConditions, manifest, epochValue, err := repository.blueprintCandidateAuthority(
+		ctx, task, publicationID, *writer.BlueprintAppliedPredecessor, writerCondition.ModRevision, revision,
 	)
+	if err != nil {
+		return blueprintCandidateTerminalChange{}, err
+	}
+	defer clear(epochValue)
+	baseConditions, err = appendBlueprintCandidateCondition(baseConditions, writerCondition)
 	if err != nil {
 		return blueprintCandidateTerminalChange{}, err
 	}
@@ -139,7 +148,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 		return blueprintCandidateTerminalChange{}, err
 	}
 	authorityConditions, authorityMutations, err := repository.prepareBlueprintCandidateTerminalAuthority(
-		ctx, task, writer, revision,
+		ctx, task, writer, epochValue, revision,
 	)
 	if err != nil {
 		return blueprintCandidateTerminalChange{}, err
@@ -486,12 +495,14 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 	if err != nil {
 		return releaseTaskRetryChange{}, err
 	}
-	baseConditions, manifest, err := repository.blueprintCandidateAuthority(
-		ctx, source, publicationID, sourceAuthority.AppliedPredecessor, revision,
+	baseConditions, manifest, epochValue, err := repository.blueprintCandidateAuthority(
+		ctx, source, publicationID, sourceAuthority.AppliedPredecessor,
+		sourceAuthorityCondition.ModRevision, revision,
 	)
 	if err != nil {
 		return releaseTaskRetryChange{}, err
 	}
+	defer clear(epochValue)
 	baseConditions, err = appendBlueprintCandidateCondition(baseConditions, sourceAuthorityCondition)
 	if err != nil {
 		return releaseTaskRetryChange{}, err
@@ -574,22 +585,9 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 		Type: MutationPut, Key: blueprintCandidateAttemptAuthorityKey(retry.ID),
 		Value: slices.Clone(attemptAuthorityValue),
 	})
-	epochKey := environmentMutationEpochKey(source.Owner.EnvironmentID)
-	for _, condition := range baseConditions {
-		if condition.Key == epochKey {
-			epochRead, readErr := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{epochKey}, Revision: revision})
-			if readErr != nil || epochRead == nil || len(epochRead.Values) != 1 || epochRead.Values[0] == nil {
-				clearMutations(mutations)
-				if readErr != nil {
-					return releaseTaskRetryChange{}, readErr
-				}
-				return releaseTaskRetryChange{}, corruptReleaseRecord()
-			}
-			mutations = append(mutations, Mutation{
-				Type: MutationPut, Key: epochKey, Value: slices.Clone(epochRead.Values[0].Value),
-			})
-			break
-		}
-	}
+	mutations = append(mutations, Mutation{
+		Type: MutationPut, Key: environmentMutationEpochKey(source.Owner.EnvironmentID),
+		Value: slices.Clone(epochValue),
+	})
 	return releaseTaskRetryChange{applies: true, conditions: conditions, mutations: mutations}, nil
 }

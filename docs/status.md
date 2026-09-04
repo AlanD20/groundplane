@@ -742,3 +742,14 @@ replay replaces and destroys only its matching retired state; active duplicates
 and mismatched correlation still fail closed. Focused Agent and materialization
 hasher race proofs pass; exact reference-host Blueprint and Script acceptance
 remains pending.
+
+## Blueprint claim-time mutation epoch authority (2026-09-04)
+
+A claimed Blueprint candidate attempt now transfers the Environment mutation
+epoch to its live materialization writer before Agent effects. Active terminal
+acknowledgement compares that exact writer revision, proven terminalization
+atomically refreshes attempt authority and the epoch, and retry creation uses
+the failed source attempt authority before transferring the successor epoch.
+Exact durable terminal replay remains independent of later epoch movement.
+Focused original-attempt, retry-chain, independent-mutation, and replay race
+proofs pass; exact reference-host Blueprint acceptance remains pending.
