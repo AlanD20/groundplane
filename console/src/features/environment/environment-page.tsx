@@ -73,6 +73,7 @@ import type { ActivityEntry, Attach, BackupPolicyReplacement, BackupPolicySource
 
 type EnvTab =
   | 'overview'
+  | 'services'
   | 'state'
   | 'router'
   | 'releases'
@@ -93,7 +94,7 @@ export default function EnvironmentPage() {
   const [tab, setTab] = useState<EnvTab>('overview')
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get('tab')
-    if (t && ['overview', 'state', 'router', 'releases', 'release-groups', 'tasks', 'backups', 'volumes', 'environments', 'settings', 'scripts'].includes(t)) {
+    if (t && ['overview', 'services', 'state', 'router', 'releases', 'release-groups', 'tasks', 'backups', 'volumes', 'environments', 'settings', 'scripts'].includes(t)) {
       setTab(t as EnvTab)
     }
   }, [])
@@ -173,6 +174,7 @@ export default function EnvironmentPage() {
       <Tabs value={tab} onValueChange={(v) => setTab(v as EnvTab)}>
         <TabsList>
           <TabsTab value="overview">Overview</TabsTab>
+          <TabsTab value="services">Services</TabsTab>
           <TabsTab value="state">Blueprint</TabsTab>
           <TabsTab value="router">Router</TabsTab>
           <TabsTab value="releases">Releases</TabsTab>
@@ -188,6 +190,9 @@ export default function EnvironmentPage() {
           <Topology env={env} />
           <RoutesCard env={env} />
           <AttachesCard env={env} />
+        </TabsPanel>
+        <TabsPanel value="services" className="mt-6 flex flex-col gap-4">
+          <ServicesPanel env={env} />
         </TabsPanel>
         <TabsPanel value="state" className="mt-6 flex flex-col gap-4">
           <BlueprintState env={env} />
@@ -832,6 +837,9 @@ function ServiceCard({ service, env }: { service: Service; env: Environment }) {
           <ServiceStateBadges service={service} compact />
           <span className="truncate text-[11px] text-muted-foreground">{service.role}</span>
           <span className="truncate font-mono text-[10px] text-muted-foreground/60">{service.image}</span>
+          <span className="truncate text-[10px] text-muted-foreground/70">
+            zones: {service.zones.join(', ') || 'none'}
+          </span>
           <div className="mt-1 flex flex-wrap gap-1">
             {service.resources && (
               <span className="rounded-full bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] text-primary">
@@ -880,6 +888,49 @@ function ServiceCard({ service, env }: { service: Service; env: Environment }) {
 			onOpenChange={setOpen}
 		/>
     </>
+  )
+}
+
+function ServicesPanel({ env }: { env: Environment }) {
+  const count = env.services.length
+  return (
+    <section aria-labelledby="environment-services-heading" className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 id="environment-services-heading" className="flex items-center gap-2 text-sm font-semibold">
+            <Boxes className="size-4 text-muted-foreground" /> Services
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Inspect each service's desired configuration, runtime state, health, image, and network zones.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="font-mono">
+            {count} {count === 1 ? 'service' : 'services'}
+          </Badge>
+          <ServiceFormDialog env={env} />
+        </div>
+      </div>
+      {count === 0 ? (
+        <EmptyState
+          icon={<Boxes />}
+          title="No services yet"
+          description="Add a service to start building this environment's workload."
+          action={<ServiceFormDialog env={env} />}
+        />
+      ) : (
+        <div role="list" aria-label="Environment services" className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {env.services.map((service) => (
+            <div key={service.id} role="listitem" className="min-w-0 rounded-xl border border-border bg-card p-2">
+              <ServiceCard service={service} env={env} />
+              <p className="px-2 pb-1 pt-2 text-[11px] text-muted-foreground">
+                Select to inspect details or edit this service.
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   )
 }
 

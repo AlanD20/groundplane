@@ -1361,7 +1361,7 @@ named Network Zones, not through published host ports.
   tenant.
 - Inside a tenant, **Projects -> environment tabs** (Render/Neon branch style):
   a project lists its environments, each environment being the topology page
-  with the tab bar (Overview, Desired state, Router, Releases, Tasks, Backups,
+  with the tab bar (Overview, Services, Blueprint, Router, Releases, Tasks, Backups,
   Volumes, Environments, Scripts, Settings last). **Releases is the
   per-service release ledger** (active/superseded records — the state
   rollback reads); **the Tasks tab is the environment's live task queue**
