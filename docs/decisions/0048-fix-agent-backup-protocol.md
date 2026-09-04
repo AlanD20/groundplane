@@ -47,6 +47,11 @@ carries exactly the 32 decoded bytes of ADR 0047's
 ordinary Backup admission. The field is not a mutable image reference, a
 whole-ledger digest, or a generic adapter registry.
 
+An actual ADR 0047 managed PostgreSQL asset and its registry-readback release
+record are prerequisites to implementing this protocol. An implementation
+MUST NOT make tag 5 optional, send an empty or zero digest, or fabricate a
+placeholder digest while that release authority is unavailable.
+
 PostgreSQL authority exists only when the authenticated value equals the
 Controller's embedded ADR 0047 managed release digest. The same release record
 controls the plan, Compose image, observed image, helper, recovery protocol,
@@ -93,6 +98,11 @@ message Authenticate {
   bytes process_generation = 4;         // exactly 16 random bytes per process start
   bytes postgres16_managed_release_sha256 = 5; // exactly 32 decoded ADR 0047 bytes
 }
+message AgentConfig {
+  int32 pull_interval_seconds = 1;
+  int32 max_concurrent_tasks = 2;
+  repeated AgentLabel labels = 3;       // clean replacement; sorted and unique
+}
 message Ready {
   int32 capacity = 1;                   // 0..32 free worker slots
   string version = 2;                   // 1..128 UTF-8 bytes, no NUL
@@ -121,6 +131,7 @@ message AgentMessage {
     BackupVolumeManifestAckCredit backup_volume_manifest_ack_credit = 16;
     TaskTerminalReceiptApplied task_terminal_receipt_applied = 17;
     TaskTerminalAssignmentRetired task_terminal_assignment_retired = 18;
+    ExecutionStepResultRequest execution_step_result_request = 19;
   }
 }
 message ControllerMessage {
@@ -145,6 +156,8 @@ message ControllerMessage {
     TaskTerminalReceiptAppliedAck task_terminal_receipt_applied_ack = 18;
     BackupStagingRecoveryAckReceipt backup_staging_recovery_ack_receipt = 19;
     TaskTerminalAssignmentRetiredAck task_terminal_assignment_retired_ack = 20;
+    ExecutionStepResultAck execution_step_result_ack = 21;
+    TaskEventAck task_event_ack = 22;
   }
 }
 message TaskAssignment {
@@ -155,7 +168,7 @@ message TaskAssignment {
   reserved 5;
   reserved "timeout_seconds";
   string assignment_id = 6;
-  google.protobuf.Timestamp deadline = 7;
+  google.protobuf.Timestamp forward_deadline = 7;
   ScriptAssignmentArtifacts script_artifacts = 8;
   repeated ScriptExecutionCheckpoint script_checkpoints = 9;
   bool automatic_reconcile = 10;
@@ -163,6 +176,14 @@ message TaskAssignment {
   BackupTaskResume backup_resume = 12;
   bytes backup_authority_sha256 = 13;   // exactly 32 bytes
   uint64 assignment_generation = 14;   // 1..MaxInt64
+  repeated ExecutionStepResult acknowledged_step_results = 15;
+  uint32 execution_epoch = 16;          // positive; distinct from assignment_generation
+  TaskExecutionMode execution_mode = 17;
+  google.protobuf.Timestamp recovery_deadline = 18;
+  ReleaseRestorationAuthority restoration_authority = 19; // ADR 0064 authority
+  bytes release_recovery_record_sha256 = 20;
+  ReleaseRecoveryDirective release_recovery_directive = 21;
+  google.protobuf.Timestamp execution_deadline = 22;
 }
 message TaskAck {
   string task_id = 1;
@@ -172,10 +193,12 @@ message TaskAck {
   oneof result {
     ComposeTaskResult compose_result = 5;
     EnvironmentDirectoryTaskResult environment_directory_result = 6;
-    BackupTaskResult backup_result = 8;
+    BackupTaskResult backup_result = 10;
   }
   string assignment_id = 7;
-  uint64 assignment_generation = 9;    // 1..MaxInt64
+  uint32 execution_epoch = 8;
+  bytes release_recovery_record_sha256 = 9;
+  uint64 assignment_generation = 11;   // 1..MaxInt64
 }
 message TaskAbort {
   string task_id = 1;
@@ -260,8 +283,22 @@ assignment those three are absent. Field 14 is required for every assignment.
 identity and is included in authority, every stream transfer, checkpoint,
 terminal acknowledgement, and adoption fence. `TaskAck.backup_result` is valid
 only with a non-`UNSPECIFIED` `TaskTerminal` outcome and the exact assignment id
-and generation fence. Tag 3 preserves the existing `TaskTerminal` enum and MUST
-never be decoded or represented as a bool.
+and generation fence. `assignment_generation` is the Controller-owned assignment
+identity fence; it is distinct from, and MUST NOT be substituted for or derived
+from, the existing `execution_epoch` field. `TaskAck.execution_epoch` at tag 8
+and `TaskAck.release_recovery_record_sha256` at tag 9 retain their current
+meanings and validators. Tag 3 preserves the existing `TaskTerminal` enum and
+MUST never be decoded or represented as a bool.
+
+The current protobuf occupies `AgentMessage` tag 19, `ControllerMessage` tags
+21 and 22, `TaskAssignment` tags 15 through 22, and `TaskAck` tags 8 and 9.
+Those names, types, and numbers are retained exactly. The accepted Backup outer
+additions use only free `AgentMessage` tags 11 through 18 and
+`ControllerMessage` tags 12 through 20; the accepted `TaskAssignment` additions
+use only free tags 11 through 14; and the accepted `TaskAck` additions use only
+free tags 10 and 11. Current `TaskAbort` ends at tag 3, so its final additions at
+tags 4 through 9 remain free. These are clean schema-1 additions, not alternate
+wire shapes.
 
 ### 2. Wire envelopes, sizes, and stream scheduling
 
@@ -313,6 +350,17 @@ exactly 120 bytes at its maximum. Its complete AgentMessage variant is 122
 bytes. The 32-record connection-control queue therefore reserves exactly 3,904
 bytes for 32 maximum Authenticate envelopes within its unchanged 262,144-byte
 cap.
+
+Moving the accepted `TaskAck.backup_result` and `assignment_generation` to
+free tags 10 and 11 does not change their protobuf key widths. Retaining the
+occupied `uint32 execution_epoch` at tag 8 adds at most six bytes and retaining
+the occupied 32-byte recovery-record digest at tag 9 adds at most 34 bytes
+relative to the incomplete Backup draft. The nested `TaskAck` payload therefore
+grows by at most 40 bytes. Its enclosing `AgentMessage` field-5 length prefix
+can grow by one byte at a varint boundary, so the complete outer envelope grows
+by at most 41 bytes. Both remain subject to the unchanged 16,777,216-byte
+variant and global `AgentMessage` caps and the complete-envelope serialized-size
+check.
 
 The deterministic serialization of an `ExecutionPlan`, with its 32-byte
 `plan_hash` field populated, is at most 4,194,304 bytes. A `TaskAssignment`,
@@ -417,16 +465,17 @@ members including those four-byte wrappers is capped at 256,000. Thus
 repeated references to the sole common facts and count inside the step and
 aggregate caps; no Service fact is duplicated per source.
 
-The complete assignment proof is also constructive. The maximum populated plan
-including its wrapper is 4,194,309 bytes, authority plus field-11 wrapper is
-522,756, resume plus field-12 wrapper is 65,540, authority digest is 34, and all
-maximum fixed fields including the exact 29-byte Operation id, absolute
-Timestamp deadline, and assignment generation total at most 155. The
-`TaskAssignment` is therefore at most 4,782,794 bytes
-and ControllerMessage field 1 adds five bytes, producing exact outer maximum
-4,782,799. This leaves 460,081
-bytes below 5,242,880. Absence of Config Entries and Volume manifests from the
-assignment is required. Every sender still checks actual `proto.Size`.
+The complete assignment proof accounts for the occupied fields as well as the
+Backup additions. The maximum populated plan including its wrapper is
+4,194,309 bytes, authority plus field-11 wrapper is 522,756, resume plus
+field-12 wrapper is 65,540, and the authority digest is 34. Those four fields
+consume at most 4,782,639 bytes. The five-byte `ControllerMessage` field-1
+wrapper leaves 460,236 bytes under the 5,242,880-byte complete-envelope cap for
+all other `TaskAssignment` fields and wrappers, including fields 1..3, 6..10,
+and 14..22. Their message-specific bounds and this complete-envelope bound both
+apply; one bound does not relax the other. Absence of Config Entries and Volume
+manifests from the assignment is required. Every sender still checks actual
+`proto.Size` of the final outer envelope.
 
 A checkpoint contains no manifest batch. The largest checkpoint payload is a Volume delete intent:
 8,351 bytes for two 4,095-byte paths plus IDs, digests, cursors, and kind. With
@@ -740,7 +789,7 @@ wrapper, or textual length enters a digest unless listed below.
 | Digest field | Exact preimage after domain and NUL |
 | --- | --- |
 | plan step digest, domain `groundplane.agent.v1.execution-step` | `plan_hash || P(ExecutionStep)` |
-| Agent terminal acknowledgement, `groundplane.agent.v1.task-terminal-result` | `P(TaskAck)` |
+| Agent terminal acknowledgement, `groundplane.agent.v1.task-terminal-result` | `P(TaskAck)` over the sole final schema-1 shape: fields 1..4, the selected result at 5, 6, or 10, `assignment_id` at 7, `execution_epoch` at 8, `release_recovery_record_sha256` at 9, and required `assignment_generation` at 11 |
 | canonical terminal Task, `groundplane.task.terminal-record.v1` | `B(the exact canonical terminal Task primary value bytes)` |
 | durable terminal receipt, `groundplane.agent.v1.task-terminal-receipt` | `P(TaskTerminalReceiptRecord)`; the record has no digest field |
 | Backup authority, `groundplane.agent.v1.backup-authority` | `P(BackupTaskAuthority)` |
@@ -791,6 +840,12 @@ revision, delivery state, process generation, or receipt-digest field. Ack
 digest and the Task/receipt modification revision travel only in the separate
 pending/applied delivery handshake.
 
+Canonical `P(TaskAck)` is formed only after validating every field of that
+final shape. It binds the current `execution_epoch` and
+`release_recovery_record_sha256` as well as the new `assignment_generation`;
+no field may be cleared, defaulted, aliased, or omitted to reproduce the
+incomplete draft. A decoder or hash path for the old shape is forbidden.
+
 The chain seed is `D(domain, listed seed)` and each member is
 `D(domain, listed previous-chain/member bytes)`. Empty chains are their seed.
 The Config metadata content row is likewise transfer-independent and
@@ -826,7 +881,8 @@ For an API accepting integral seconds, remaining timeout is
 `floor((deadline_unix_nano-now_unix_nano)/1_000_000_000)`, clamped at zero. Zero
 means do not start. A monotonic timer correlated to the absolute deadline still
 terminates work at that deadline, so rounding can shorten but never lengthen it.
-`TaskAssignment.deadline` is the exact persisted absolute Task deadline. It is
+`TaskAssignment.forward_deadline` is the exact persisted absolute Task
+deadline. It is
 never recomputed from the remaining whole-second value, extended on assignment
 or reconnect, or treated as a fresh relative deadline. The superseded field
 name `timeout_seconds` and its tag 5 are both reserved.
