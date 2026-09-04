@@ -193,14 +193,17 @@ transaction. An over-budget transaction is split only where the staged
 generation protocol permits it; an atomic publication or ownership transfer is
 rejected rather than partially committed.
 
-### Singleton restriction
+### Logical-service target
 
-Every Script target must have effective replicas exactly 1. For blue-green,
-each physical slot also has exactly one container. Script creation and
-Blueprint apply reject another replica count, and Service replacement rejects
-changing a targeted Service away from 1 while any Script points to it. Manual
-and release publication validate the invariant again against the sealed
-Service definition. The Controller never chooses a replica.
+The prior singleton-only restriction is superseded for the hosting contract.
+`deploy.replicas` remains operator-authored and is captured in each logical
+Service Release. A Script targets the logical Service and executes once per
+selected Script per logical Release, regardless of the replica count; it never
+executes once per replica. A migration Script may bind once to its designated
+logical group member. The durable Script body, runner, cleanup, retry, and
+secret-delivery protocol in this ADR is unchanged. Exact replica-set rendering,
+health observation, and release guards remain bounded implementation and proof
+work; the Controller never guesses a replica count.
 
 ### Manual run and frontend parity
 
@@ -825,11 +828,10 @@ permits a healthcheck to depend on a post-deploy migration without deadlocking
 the Release.
 
 Blueprint apply publishes Script desired state and executes matching
-`post-deploy` hooks only for a newly introduced singleton Service or a
-materially changed existing singleton Service whose effective
-`runtime_intent` is `running`. Stopped or absent existing Services retain their
-desired changes for a later explicit Release action and are not implicitly
-applied or hooked. Release Group members are excluded from implicit candidate
+`post-deploy` hooks only for a newly introduced or materially changed logical
+Service whose effective `runtime_intent` is `running`, regardless of replica
+count. Stopped or absent existing Services retain their desired changes for a
+later explicit Release action and are not implicitly applied or hooked. Release Group members are excluded from implicit candidate
 Release and hook execution; Blueprint publishes their desired change only,
 while explicit group Deploy/Rollback retains declared serial order and
 `on_failure` policy. Candidate Releases come only from the sealed candidate
@@ -915,8 +917,9 @@ older execution path as a compatibility fallback.
   and failure execution; no Script enters a serving container.
 - Container ownership and Controller-acknowledged checkpoints make recovery,
   termination, and cleanup evidence exact across reconnects.
-- Parameters, multi-replica Script selection, alternate interpreters, and
-  per-Script runtime overrides remain post-MVP contract changes.
+- Parameters, alternate interpreters, and per-Script runtime overrides remain
+  post-MVP contract changes. Replica count does not multiply Script selection:
+  one execution is selected per Script per logical Release.
 - Script output is drained and discarded; the MVP exposes only typed terminal
   metadata and never creates a partially replayable human-output channel.
 - Generic retry remains safe by refusing to cross an arbitrary-effect start

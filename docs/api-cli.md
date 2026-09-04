@@ -159,9 +159,10 @@ Command tree:
     │                    edit | remove
     ├── script            list | show | add | edit | run <name> | remove
     ├── release-group     list | show <name>
-    │                    add <name> [--on-failure switch_back|leave_active]
-    │                    edit <name> [--on-failure switch_back|leave_active]
-    │                    deploy <name> | rollback <name> | remove <name>
+    │                    add <name> [--tag <tag>] [--on-failure switch_back|leave_active]
+    │                    edit <name> [--tag <tag>] [--on-failure switch_back|leave_active]
+    │                    deploy <name> [--tag <tag>]
+    │                    rollback <name> [--tag <tag>] | remove <name>
     ├── backup            policy show
     │                    policy set --frequency <UTC-calendar> --keep N
     │                              --encryption age|none --connector <name|id>
@@ -220,11 +221,12 @@ uses the generated `host.show` operation; the Console loads the same document
 without fixture fallback. Neither surface adds endpoint details, relative
 report ages, scheduler claims, or locally inferred health.
 
-Machine bootstrap requires two non-overlapping IPv4 CIDRs in the local
+Machine bootstrap requires three pairwise-disjoint IPv4 CIDRs in the local
 Controller startup config: `environment_pool`, from which operators reserve
-Environment pools, and `system_pool`, from which the Controller derives Agent,
-Runner, and other generated infrastructure networks. Bootstrap validates both
-against protected host routes and existing Docker networks. These are local
+Environment pools; `system_pool`, for Agent and other generated infrastructure
+networks; and a `/24`, `/25`, or `/26` `runner.network_pool`, divided into
+per-Runner `/29`s. Runner space is not reserved from `system_pool`. Bootstrap
+validates all three against protected host routes and existing Docker networks. These are local
 machine/bootstrap inputs, not mutable Controller resources, and therefore have
 no Console, REST, or ordinary CLI operation.
 
@@ -300,6 +302,12 @@ Conventions:
   retains Volumes and immutable release history, and promotes the exact
   candidate revision only after local runtime cleanup succeeds. ADR 0058 is
   the sole direct Service desired-mutation contract.
+- **Workload images are host-local inputs.** Deploy and rollback resolve the
+  selected tag against each Service's declared image already present in the
+  host Docker daemon and pin its exact local identity before mutation. They do
+  not build, pull, or push. Groundplane-managed pinned Agent, etcd, Component,
+  and backing images are release/installation assets and do not create an
+  operator registry-integration contract.
 - **Every mutation is idempotent at the human API boundary.** Every `POST`,
   `PUT`, `PATCH`, and `DELETE` requires `Idempotency-Key` except the bodyless,
   read-like `POST /environments/{id}/export-key`, which persists neither marker
@@ -583,8 +591,8 @@ attachment on every authorized request.
 | project | `GET /projects` (`?kind=tenant\|backing`) and `GET /projects/{id}` → `200` · `POST /projects` → `201` · `PATCH /projects/{id}` and `POST /projects/{id}/rename` → `200` · destructive `DELETE /projects/{id}` → `202 {task_id}` |
 | backing-service | `GET /backing-services` and `GET /backing-services/{project_id}` → `200` · protected `POST /backing-services` body `{slug,name,description?,adapter:"postgres:16"\|"valkey:9",network_pool,zone:{name,subnet,internal}}` → `201 {backing_service,task_id}` atomically creates the backing Project, `main` Environment, dedicated backing-owned Zone, adapter Service, adapter data Volume, and Agent Task; the Zone subnet must be inside the Environment pool and globally unreserved · bodyless `POST /backing-services/{project_id}/start\|stop\|destroy` → `202 {task_id}` and delegates to the facade's immutable adapter Service; there is no Backing-service delete endpoint, existing-Zone create branch, uploaded Blueprint, or omitted subnet default |
 | environment | `GET /environments` (`?project=`), `GET /environments/{id}`, and `GET /environments/{id}/logs?tail=0..1000&follow=true|false` → `200` · `POST /environments` body `{project_id, name, network_pool}` → `202 {task_id}` and atomically publishes the provisioning Environment, globally exclusive pool reservation, and directory-creation Task · `PATCH /environments/{id}` body `{network_pool}` → `200` only when the replacement contains every Zone and overlaps no reservation · `POST /environments/{id}/rename` → `200` · `GET /environments/{id}/blueprint` → `200 {environment_id,revision,document}` plus `ETag` · side-effect-free `POST /environments/{id}/blueprint/validate` with `If-Match` and a multipart closed bundle → `200 {revision,changes}` · revision-fenced `PUT /environments/{id}/blueprint` with `If-Match`, ordered sources, explicit interpolation, and deterministic file-part identities → `202 {task_id}` · destructive `DELETE /environments/{id}` → `202 {task_id}`, retaining the pool fence until physical network cleanup succeeds and retaining Connector credentials/key material until every Recovery Point and orphan object is checkpointed, deleted, and verified absent |
-| service | `GET /services` (`?environment=`), `GET /services/{id}`, and `GET /services/{id}/logs?tail=0..1000&follow=true|false` (non-resumable SSE) → `200` · `POST /services` → `201` · `PATCH /services/{id}` → `200` · `DELETE /services/{id}` and `POST /services/{id}/deploy\|rollback\|start\|stop\|destroy` → `202 {task_id}`; lifecycle actions set `runtime_intent` to `running\|stopped\|absent`; `service show <name>` includes the release ledger and runtime intent |
-| release-group | `GET /release-groups` (`?environment_id=` with opaque revision cursors) and `GET /release-groups/{id}` → `200` · `POST /release-groups` → `201` · `PATCH /release-groups/{id}` → `200` · destructive `DELETE /release-groups/{id}` and `POST /release-groups/{id}/deploy\|rollback` → `202 {task_id}`; create body includes an exact ordered 2..32 Service membership and `on_failure: switch_back\|leave_active`, default `switch_back`; deploy/rollback freeze tag, digest, slots, proxy configuration, and dependency phase plan, reject selected hooks with `422`, and preserve the same operation/candidate lineage on Task retry |
+| service | `GET /services` (`?environment=`), `GET /services/{id}`, and `GET /services/{id}/logs?tail=0..1000&follow=true|false` (non-resumable SSE) → `200` · `POST /services` → `201` · `PATCH /services/{id}` → `200` · `DELETE /services/{id}` and `POST /services/{id}/deploy\|rollback\|start\|stop\|destroy` → `202 {task_id}`; native `replicas` is an integer `N >= 1`; recreate preserves `N` through deploy, rollback, restart, and reapply, while blue-green rejects `N > 1` before mutation; lifecycle actions set `runtime_intent` to `running\|stopped\|absent`; `service show <name>` includes the release ledger and runtime intent |
+| release-group | `GET /release-groups` (`?environment_id=` with opaque revision cursors) and `GET /release-groups/{id}` → `200` · `POST /release-groups` → `201` · `PATCH /release-groups/{id}` → `200` · destructive `DELETE /release-groups/{id}` and `POST /release-groups/{id}/deploy\|rollback` with optional `{tag}` → `202 {task_id}`; create body includes an exact ordered 2..32 Service membership, optional persisted `tag`, and `on_failure: switch_back\|leave_active`, default `switch_back`; request tag wins over group tag and an empty result is rejected; each member resolves the tag against its own declared image and retains its own digest/history; the group failure policy overrides member defaults; execution is ordered and coordinated, not simultaneous or atomic; selected hooks run once per logical Service, never per replica, with no group-hook resource; retry preserves the same operation/candidate lineage |
 | attach | `GET /attaches?environment={id}` (the Environment filter is required; items include one `service_id`, stable backing ownership, `credential:{mode:"new"}` or `credential:{mode:"existing",attach_id}`, plus fact keys and secret classification, never values) · `GET /attaches/{id}/facts/{key}?grant_attach_id={id}` → `200 {value}` as the explicit Console/CLI/API reveal operation; dependent existing-credential Attaches resolve through their credential owner · `POST /attaches` body `{service_id,backing_service_id,name?,credential:{mode:"new"|"existing",attach_id?},grant_attach_ids?}` → `202 {task_id}`; `credential.mode` is required, `new` rejects `attach_id`, `existing` requires a ready credential-owning Attach in the same consumer Environment and Backing Service, and only `new` accepts grants · `POST /attaches/{id}/rename` body `{name}` → `200` · `DELETE /attaches/{id}` → `202 {task_id}`; dependent detach removes only its network edge, owner detach deprovisions and is `resource.in_use` while dependents exist; there is no attach detail endpoint |
 | zone | `GET /zones?environment={id}` (required), `GET /zones/{id}`, and `GET /zones/{id}/removal-impact` → `200`; the impact read returns the exact affected Attaches, Services, provisioned databases, and an opaque impact token · `POST /zones` body `{environment_id, name, subnet, internal}` → `201`, deriving `{owner_kind, owner_id}` · `DELETE /zones/{id}?impact_token={token}` → `202 {task_id}`; ordinary removal rejects an enabled Caddy reservation, removes the managed network, strips that Zone from every Service membership, and releases the subnet only on successful acknowledgement, while backing-owned removal requires the current impact token and runs the Attach cascade · Zone fields are immutable and there is no PATCH endpoint |
 | route | `GET /routes?environment={id}` (required) and `GET /routes/{id}` → `200` · `POST /routes` body `{environment_id, host?, path?, exposure, target_service_id, target_port}` → `202 {route,task_id}` · `PATCH /routes/{id}` body `{exposure}` → `202 {route,task_id}` · `DELETE /routes/{id}` → `202 {task_id}`; target identity, port, host, and path are immutable; status is exactly `unserved` (no enabled provider), `pending` (desired generation awaits provider application), `served` (latest successful pinned provider observation matches desired generation), or `degraded` (latest provider apply failed and desired is unconfirmed); without an enabled HTTP router, mutation Tasks complete as desired-only with no Agent effect |
@@ -601,6 +609,14 @@ attachment on every authorized request.
 | activity | `GET /activity` accepts the exact Task-list query and returns the exact same fixed-revision page; Task and Activity cursors are interchangeable |
 | host | `GET /host` → `200` (includes etcd status; etcd is host-level, not a component) |
 | agent | `POST /agents` → `202 {task_id}` creates the local Agent and Controller-managed container without returning credentials and requires authenticated `Ready` within 120 seconds · `GET /agents`, `GET /agents/{id}`, and `GET /agents/{id}/config` → `200` · `PUT /agents/{id}/config` → `200` · bodyless `POST /agents/{id}/update` → `202 {task_id}` uses configured `agent.image`, requires an idle Agent, rotates generation/token, waits 120 seconds for Ready, and rolls back the prior digest inside a 300-second Task · `DELETE /agents/{id}` → `202 {task_id}` has a 120-second Controller Task deadline, stops assignments, aborts active tasks with `agent_removed`, revokes the token, waits for offline, then removes the container and record; Agent is not a Component and has no Component projection |
+
+Backup restore targets only the original surviving target; proof may use a
+disposable Environment, but there is no scratch-target or whole-host import
+API. PostgreSQL Attach, config, and Volume remain the implemented runtime
+source kinds. Valkey data recovery is required for production MVP, but the
+runtime must continue to reject `strategy.not_implemented` until a safe source
+contract lands: a shared-instance RDB is not a per-Attach backup, and live
+data-directory archival is forbidden.
 
 Blueprint multipart requests begin with one `application/json` field named
 `manifest`, with exactly `{root, compose_sources, interpolation, files}`.

@@ -22,12 +22,21 @@ environment**, selectable **sources** (attach databases, any volume subset,
 and the environment's **config** — entries only, never backing environments,
 with a warning to that effect on config backups), the public recipient in desired
 state and the private identity wrapped at rest by a root-only controller key
-(exportable for DR, rotatable per environment), the **environment Settings
+(exportable for old-era point restore, rotatable per environment), the **environment Settings
 tab** (encryption key, rename, delete), and **stable ids for every referenced
 entity** — environment ids are static (`env_…`, the name is only a label),
 env vars and deployments gained ids, and every Volume separates its stable id,
 mutable slug, and immutable Compose key. `volume_dir` derives from stable ids,
 so a label change never renames or orphans data.
+
+**MVP trust boundary (locked).** Hosting assumes a trusted operator
+organization; the MVP remains generic for many Tenants, Projects, and
+Environments. Tenant, Project, Environment, and credential-owning Attach scopes
+remain enforced in records and APIs, but the MVP makes no tenant-network
+security guarantee and does not claim strict peer isolation. Backing networks are
+shared bridges by design: attached consumer peers and the backing service may
+reach one another. Strict peer-isolation enforcement and multi-tenant security
+guarantees are post-MVP.
 
 **Backing services (locked).** Shared infrastructure is renamed to
 **backing services** (the Twelve-Factor term: "any service the app consumes
@@ -318,8 +327,9 @@ The Console store (`console/src/lib/store.tsx`) is the stand-in for the Controll
 API: **anything the UI does today is the API contract** — if it isn't in
 the store, it doesn't exist in the product. Frontends carry zero logic:
 they render Controller responses and send Controller-validated requests.
-The acceptance test (private acceptance workload deploys, rolls back, backs up through Groundplane
-with zero hand-written shell scripts) applies equally to all three
+The acceptance test (the selected workload completes Gate A and Gate B through
+Groundplane, including replica-aware release/Tunnel traffic and source
+restore/recovery proof, with zero hand-written shell scripts) applies equally to all three
 frontends — the same operations must work from the CLI with no Console
 session involved.
 
@@ -366,13 +376,77 @@ The product goal is narrow: navigate Tenant -> Project -> Environment -> Service
 then deploy, roll back, and back up without pain. This document is the contract
 the Console follows and must stay authoritative.
 
+### Minimum hosting floor
+
+The first hosting milestone has two sequential gates. This is a documentation
+contract correction; runtime alignment, clean frontend/API/CLI cutover, and
+acceptance proof remain pending.
+
+**Gate A — disposable first-hosting acceptance.** Groundplane bootstraps on an
+already provisioned supported Linux/Docker host with a Groundplane release,
+explicit non-overlapping
+environment, system, and dedicated Runner network pools, and all operator
+workload images already present in the host Docker daemon. One trusted operator
+acceptance exercises one selected Tenant, Project, Environment, and Blueprint;
+the MVP product remains generic for many tenants, projects, and environments.
+The floor
+requires PostgreSQL and Valkey backing with fact mappings, explicit
+uid/gid-aware Volumes, Entries, and files, identity dependencies, generated CA
+and leaf TLS material before identity starts, and the exact existing
+HTTP/WebSocket/internal-callback and deny-by-default policy. Caddy plus
+Cloudflare Tunnel is the public path; provider DNS and ingress configuration are
+external prerequisites. The selected acceptance workload must persist and
+reconcile operator-authored native `deploy.replicas` counts (N is at least one).
+The Gate A proof exercises more than one WebSocket replica with Valkey fan-out
+and a stable logical target. API blue-green, scheduler, and queue remain
+singleton in this floor unless an application explicitly opts in; a replicated
+Service uses recreate, preserves its count through deploy, rollback, restart,
+and exact reapply, and may be a Release Group member. Blue-green with N greater
+than one is rejected before mutation and is post-MVP; N==1 remains supported.
+There is no advertised zero-downtime replicated recreate. A single ordered
+Release Group action covers migration once and the selected service releases.
+Health, logs, Tasks, rollback, restart, and exact reapply are included.
+TLS first-provision workflow and exact Caddy policy rendering are named proof
+gates. Gate A is disposable acceptance only; production cutover requires Gate B
+and its backup/restore/retention proof.
+
+**Gate B — production MVP operations acceptance.** Every actual persistent source has a
+proven backup, restore, and retention path with existing per-source safety and
+original-target rules. Restore tests may use a disposable environment; there is
+no new scratch-target API. PostgreSQL Attach/config/Volume sources are the
+  current bounded restore scope. Valkey data backup/restore is required by this
+  floor, but the namespace-safe per-consumer source versus an explicit
+  shared-instance RDB source still needs a closed contract and proof;
+the current runtime rejects `strategy.not_implemented` until implemented, and
+live data-directory archival is not authorized. Gate B is Gate A plus these
+required source backup, verified original-target restore, and retention proofs.
+
+The floor exclusions apply to both gates: no replica scaling beyond the
+WebSocket proof and operator-authored counts above, a second private acceptance
+workload, or GP-managed CI Runner provisioning is required. Under the explicit
+assumption that the existing external build process supplies host-local
+workload images, GP-managed CI Runner provisioning is not a Gate A or Gate B
+dependency; its detailed Runner design remains subsequent work without changing
+that contract. Extra
+router providers or runtime plugins, registry integration or hosting, tenant
+peer-firewall isolation, automated empty-host DR, advanced monitoring/alerting,
+or unrelated repository refactors. The current no-host-port rule remains locked.
+A proposed bounded seam
+for a topology-specific break-glass need—explicit loopback-only native Compose
+mapping on operator-owned recreate Services—requires owner resolution before any
+implementation and is not current behavior.
+These exclusions do not waive the existing full CI, API/CLI/Console parity,
+security, generated-artifact, or exercised destructive-path requirements.
+
 ## Mission: replace the operational shell scripts
 
 Groundplane is not a general orchestrator. It is built to express and run a
 representative multi-service workload that was previously operated with Docker
 Compose files, shell scripts, timers, and state files. The **acceptance test for
-the MVP** is that this private workload deploys, rolls back, and backs up through
-Groundplane with **zero hand-written operational shell scripts**. Every required
+the MVP** is that this private workload completes the Gate A hosting journey
+(including replica-aware release and Cloudflare Tunnel traffic) and Gate B
+backup/restore/retention and recovery proof through Groundplane with **zero
+hand-written operational shell scripts**. Every required
 step becomes declarative desired state, an operator-authored Script resource, or
 a **baked-in action** provided by the Controller. The private workload, its
 credentials, topology, and deployment driver remain outside Git.
@@ -384,7 +458,7 @@ owned by the Controller** or an explicit operator-authored **Script** resource.
 Built-in actions have named typed parameters that the Console and API expose
 and the Agent implements against Docker. Script resources intentionally allow
 free-form bodies for operator automation; they are still explicit desired
-state, task-dispatched, scoped to one singleton Service, fixed to a 900-second
+state, task-dispatched, scoped to one logical Service, fixed to a 900-second
 timeout, and never stored as Agent-owned commands. MVP Script output is drained
 and discarded; only typed terminal metadata is retained. Adapters and platform
 components may not smuggle arbitrary shell through their contracts. Each
@@ -405,7 +479,7 @@ operation has:
   observed state, so `active-slot` and `image-history` stop being ad-hoc files.
 
 Scripts use the closed `RunScript` Agent step. The Controller seals the
-immutable body generation, singleton Service and Release snapshot, resolved
+  immutable body generation, logical Service and Release snapshot, resolved
 runner projection, and operation identity; the Agent executes it only in a
 task-scoped one-off container. Manual scripts and deploy/rollback hooks are in
 the MVP. Their immutable runner sources use ADR 0062's prepared reference
@@ -586,17 +660,21 @@ API); gRPC+protobuf is the **machine** surface (Agent). "One backend, many
 frontends" is unchanged: the Controller is still the single backend, and
 the Agent is simply another client of it.
 
-**Images.** Only **local daemon images** (the private workload CI builds them on the host)
-and **public registry pulls** are supported in the MVP — no private registry
-auth. Deploy references an immutable local tag (`storefront-app:sha-…`) or a
-public image.
+**Images (locked).** Workload deployments use only images already present in the
+host Docker daemon, including preloaded third-party workload images. The
+Controller resolves and pins the exact local image identity for the accepted
+release; a missing image fails before any workload mutation. Deploy has no
+registry pull or image build side effect. Pinned Groundplane-managed Agent,
+etcd, Component, and backing-service images remain release or installation
+assets, not operator registry integration. Public/private registry integration,
+registry-backed deployment, and build-on-deploy are post-MVP.
 
 The full catalog of scripts and the task that replaces each one:
 
 | Legacy workflow | What it does | Groundplane replaces it with |
 | --- | --- | --- |
 | scripts/deploy.sh | blue/green API deploy: start inactive slot, healthcheck, render + validate + reload router | **Deploy** action on a **Service** (per-service: service + tag + strategy chosen at deploy time); the Agent runs the same ordered steps (inactive slot -> /up healthcheck -> router switch -> record active slot) |
-| scripts/workers-deploy.sh | recreate singleton scheduler / queue / WebSocket once, after the API switch | independent **Deploy** actions by default; one of the environment's explicit release groups may coordinate them when the operator chooses |
+| scripts/workers-deploy.sh | recreate operator-configured scheduler, queue, and WebSocket replicas after the API switch | independent **Deploy** actions by default; one of the environment's explicit release groups may coordinate them when the operator chooses |
 | scripts/identity-deploy.sh | bring up the private identity stack, optional migrate | **Deploy** of the identity services, including its TLS-provisioned prerequisites |
 | scripts/migrate.sh | run Laravel migrations against prod_backend_net before the switch | the migrate step of **Deploy** (expand/contract, one-shot `artisan migrate`) |
 | scripts/rollback.sh | previous immutable image into the inactive slot, then workers | **Rollback** action — per-service, the previous tag is tracked from deploy history and pre-selected; a traffic switch, never a cold start |
@@ -638,7 +716,7 @@ State files also move into the tool:
        │              ├── tenant Project   (an application; may be a microservice architecture)
        │              └── backing Project  (a backing service — datastore/cache, built once, attachable anywhere)
        │
-       └── strict isolation boundary
+       └── resource and credential-scoping boundary
 
 A Tenant's public record is `{id, slug, name, description}`. `description` is
 an optional operator-authored summary and may be empty; it is persisted and
@@ -677,7 +755,9 @@ The template is **dynamic**: any number of Tenants, Projects, Environments,
 Services, Network Zones, and backing Projects. Nothing is hard-coded to two
 tenants and one database.
 
-- **Tenant** - a strict isolation boundary (for example, acme or example-org). May register
+- **Tenant** - a resource and credential-scoping boundary within the trusted
+  operator organization. Shared backing bridges may permit peer
+  reachability; the MVP does not claim tenant-network security. May register
   org-scoped Runners, managed on its Runners page.
 - **Project** - an application (tenant) or a backing service (backing). A
   tenant Project may be a microservice architecture with many Services; a
@@ -986,8 +1066,10 @@ tenants and one database.
   Pending or failed creation and pending removal retain the quota until
   successful finalization.
 
-  Each Runner uses its own generated `/29` bridge allocated from the machine
-  system pool. It never joins another Runner, Environment, backing, or platform
+  Each Runner uses its own generated `/29` bridge allocated from the dedicated
+  `runner.network_pool`, which is disjoint from both `environment_pool` and
+  `system_pool` and is provisioned as a `/24`, `/25`, or `/26` at bootstrap. It
+  never joins another Runner, Environment, backing, or platform
   network and publishes no host port. The Runner container receives only its
   dedicated unprivileged rootless Docker daemon socket, never the host Docker
   socket. The native Controller allocates one persisted host identity slot per
@@ -1020,9 +1102,9 @@ tenants and one database.
   (`online`/`offline`) is a Controller-observed projection of the supervised
   local runtime, never desired state or an operator mutation.
 - **Route** - a provider-neutral domain or path that sends traffic to a Service.
-  A public Route requires the Environment's enabled HTTP-router provider;
-  Cloudflare Tunnel is an optional edge tunnel and never a
-  router. A Route stores stable `target_service_id`, required `target_port`,
+  A Route remains valid without an enabled HTTP-router provider and is observed
+  as `unserved`; it is served only when the Environment has an enabled provider.
+  Cloudflare Tunnel is an edge tunnel and never a router. A Route stores stable `target_service_id`, required `target_port`,
   `exposure: public|internal`, host, and path. Public Routes require a lowercase
   ASCII DNS host; internal Routes may omit it. Paths default to `/`, are
   absolute, contain no query or fragment, and may use only an optional terminal
@@ -1062,7 +1144,7 @@ tenants and one database.
   restart, or recreate a Service, so environment values already loaded by a
   running process change only on its next deploy or reconciliation. Reusable
   Secret deletion, not Entry deletion, enforces Component reverse references.
-- **Deploy** - a **per-service action**: pick ONE service, the immutable
+- **Deploy** - a **per-service action**: pick ONE logical service, the immutable
   image **tag** for it, and the **strategy** for this release
   (`blue-green` / `recreate` implemented; `rolling` is rejected in the MVP). The
   strategy is chosen **at deploy time**, per deployment — it is not a
@@ -1070,27 +1152,25 @@ tenants and one database.
   default for this release only (see Release strategy rules). The Deploy
   task's typed parameters are `{ service, tag, strategy, on_failure }`, where
   `on_failure` defaults to `switch_back` and may be set to `leave_active` for
-  this release. For blue-green,
-  the generated Compose project contains two physical slot workloads and one
-  stable Controller-owned Caddy proxy for the logical service. Routed Caddy
-  and internal consumers target only that stable proxy. The Controller starts
-  the inactive slot, waits for exact candidate health, then atomically reloads
-  the proxy from a sealed JSON configuration to replace its upstream. The old
-  healthy slot is retained for rollback. Blue-green is rejected when the
-  Service has no addressable internal TCP port because no safe logical traffic
-  switch exists. Recreate always keeps the durable `slot` absent and renders
-  exactly one physical singleton workload. An addressable recreate may retain
-  the stable logical proxy, but it targets that singleton and owns no internal
-  blue/green workload pair. A portless recreate owns the same singleton without
-  a proxy. The Controller seals candidate and prior Compose artifacts, stops
-  and removes the prior workload before applying the singleton, proves it
-  healthy, and can restore and prove the exact prior artifact under
-  `switch_back`. Blue-green to recreate removes the sealed slot topology before
-  applying the singleton. Recreate to blue-green creates and proves the
-  candidate slot, switches the stable proxy, then removes the obsolete
-  singleton. Restart and retry use only the same sealed artifacts and converge
-  idempotently. This is the required strategy for portless workers and
-  schedulers, so duplicate singleton execution is impossible. The Agent
+  this release. The accepted Release captures the Service's desired
+  `deploy.replicas` count. For blue-green with N==1, the generated Compose
+  project contains two physical singleton slot workloads and one stable
+  Controller-owned Caddy proxy for the logical service. Routed Caddy and
+  internal consumers target only that stable proxy. The Controller starts the
+  inactive slot, waits for exact candidate health, then atomically reloads the
+  proxy from a sealed JSON configuration to replace its upstream. The old
+  healthy slot is retained for rollback. Blue-green is rejected when N is
+  greater than one or when the Service has no addressable internal TCP port;
+  replicated blue-green is post-MVP. Recreate stops the old logical set before
+  creating the desired N workloads (N==1 is a singleton), so downtime is
+  explicit; it retains the stable logical proxy when addressable and targets
+  only the desired set. The Controller seals candidate and prior Compose
+  artifacts, proves the full desired set healthy, and can restore and prove the
+  exact prior artifact and captured count under `switch_back`. Blue-green to
+  recreate removes the sealed slot topology before applying the desired set.
+  Recreate to blue-green is allowed only when both releases have N==1. Restart
+  and retry use only the same sealed artifacts and converge idempotently. Start,
+  Stop, Destroy, and reconciliation operate on the full logical set. The Agent
   applies the procedure, health and proxy configuration are observed, and the
   run lands in
   deploy history as one record per service (`service · tag · strategy · when ·
@@ -1111,12 +1191,17 @@ tenants and one database.
   default; an explicit tag may be entered
   instead. It is a traffic switch through the same strategy as the original
   deployment, never a cold start, and it never reverses migrations.
-- **Release group** - an explicit ordered set of 2 through 32 services with one group-level
+- **Release group** - one operator action for an explicit ordered set of 2 through 32 logical services with one group-level
   `on_failure: switch_back | leave_active` policy. The default is
   `switch_back`. Each service retains its own release record; the group policy
   controls whether already-switched members return to their previous healthy
   releases after a later member fails or remain active for explicit rollback.
-  Members execute serially in the declared order. Blueprint lifecycle edges
+  Members execute serially in the declared order; this is not a simultaneous or
+  atomic distributed switch. A request `tag` overrides the persisted group tag;
+  if both are empty the group is rejected, with no member-current fallback. The
+  chosen tag resolves separately against each member's image and records each
+  member's digest and history independently. The group `on_failure` overrides
+  member defaults for aggregate compensation. Blueprint lifecycle edges
   are frozen at the same revision; publication rejects a group whose declared
   order places a selected Service before its selected prerequisite and never
   silently reorders the group. A retry preserves the same candidate ids,
@@ -1124,8 +1209,11 @@ tenants and one database.
   and runs only the required physical compensation. It never replays forward
   switches.
   Release execution includes the Script lifecycle hooks selected by ADR 0040.
-  Manual and deploy, rollback, and failure hooks use the same task-scoped
-  one-off runner; there is no hook-free compatibility path.
+  A migration Script binds once to its designated logical member (for example,
+  the API), while every selected Script targets its logical Service and executes
+  once per logical Release, never once per replica. Manual and deploy, rollback,
+  and failure hooks use the same task-scoped one-off runner; there is no hook-
+  free compatibility path and no group-level hook resource.
 - **Backup** - three parts, and database identity is **per credential-owning
   Attach, never per consuming Service**: the
   Controller tracks every database it provisions on the shared instance, and
@@ -1192,7 +1280,8 @@ tenants and one database.
   enabled policy but not by a disabled retained configuration.
 
   Runtime supports PostgreSQL Attach, Environment config, and Volume sources.
-  Valkey and manual Attach runtime are explicitly deferred and fail with
+  Valkey backup is required by the hosting floor, but its source procedure and
+  safe format remain unclosed; current runtime rejects
   `strategy.not_implemented` before Task creation. A run is bodyless and always
   captures every configured source at one policy revision. One visible Task
   processes stored order and fails fast; earlier verified points survive, and
@@ -1286,8 +1375,12 @@ tenants and one database.
   **A live data directory is never a backup source.** PostgreSQL and Valkey
   data directories live in backing Environments and are never offered as
   Volume sources. PostgreSQL backup is only the typed consumer-Attach
-  `pg_dump` procedure. Valkey backup/restore is deferred and rejected before
-  Task publication; the MVP makes no RDB capture or restore promise.
+  `pg_dump` procedure. No live Valkey data-directory archival is authorized;
+  the bounded Valkey source procedure and restore proof remain a Gate B delivery
+  item, and `strategy.not_implemented` is rejected before Task publication until
+  that contract is closed. The source must resolve the namespace-safe
+  per-consumer versus shared-instance RDB boundary; no whole-instance RDB is
+  claimed as a per-consumer format.
 
 ### Microservice communication
 
@@ -1452,9 +1545,9 @@ not a desired-state-only publication: the apply Task is the sole execution for
 that apply. It creates no child Deploy Task, hidden Deploy request, second
 operation, or new operator action or endpoint.
 
-From the sealed candidate projection, the Controller implicitly selects only
-newly introduced singleton Services and materially changed existing singleton
-Services whose effective `runtime_intent` is `running`, and derives their
+From the sealed candidate projection, the Controller implicitly selects newly
+introduced or materially changed logical Services whose effective
+`runtime_intent` is `running`, regardless of replica count, and derives their
 candidate Releases solely from that projection. An existing Service whose
 intent is `stopped` or `absent` remains stopped or absent: its desired change
 is retained for a later explicit Release action and is not implicitly applied
@@ -1594,17 +1687,17 @@ An environment document and its mapping to Compose:
 **Scripts.** Scripts are a first-class per-environment concept (like volumes,
 secrets, and the router): `{ slug, service, script, when }` under one immutable
 `x-gp-scripts` reconciliation key. The `script` field holds the **full script
-body** - one line or many, entered in a multi-line editor - executed against a
-singleton Service in a task-scoped one-off container. Scripts double as
+  body** - one line or many, entered in a multi-line editor - executed against a
+  logical Service in a task-scoped one-off container. Scripts double as
 **hooks**: pre hooks finish before candidate mutation; post hooks run after the
 candidate is applied and started but before readiness observation and the
 strategy's proxy switch or recreate acknowledgement. This permits a
 migration-dependent healthcheck without deadlocking the Release.
 `pre/post-rollback` plus `on-failure` hooks cover rollbacks and failed
 deploys/rollbacks. One Blueprint apply publishes Script desired state and
-implicitly selects only a newly introduced singleton Service or a materially
-changed existing singleton Service whose effective `runtime_intent` is
-`running`; stopped or absent existing Services retain desired changes for a
+  implicitly selects only a newly introduced or materially changed logical
+  Service whose effective `runtime_intent` is `running`, regardless of its
+  replica count; stopped or absent existing Services retain desired changes for a
 later explicit Release action and are not implicitly applied or hooked. Release
 Group members are excluded from implicit candidate Release and hook execution;
 explicit group Deploy/Rollback retains declared serial order and `on_failure`.
@@ -1612,9 +1705,11 @@ For the remaining selected Services, the apply creates candidate Releases from
 the sealed candidate projection and executes matching `post-deploy` Scripts in
 the same Environment update Task, operation id, and Agent assignment. Services
 run in dependency-topological order with slug-byte ordering as the tie breaker;
-each Service's Scripts run in slug-byte order. Manual Scripts do not execute
+  each Service's Scripts run in slug-byte order, once per selected logical
+  Service Release rather than once per replica. Manual Scripts do not execute
 during apply. The complete apply selection is limited to 16 hook executions and
-1,048,576 aggregate UTF-8 body bytes, rejected before Task publication.
+  1,048,576 aggregate UTF-8 body bytes, rejected before Task publication; these
+  bounds count logical hooks, not replicas.
 
 The sealed Blueprint plan orders materialization, managed-Volume ensure, Attach
 procedures, candidate workload apply/start without readiness, `RunScript`,
@@ -2098,10 +2193,9 @@ reference is not a desired-state reference and blocks deletion with
     (0600, root-only) before the value lands in etcd. Nothing else on the host
     can read the secret store; only a root compromise exposes it. This key is
     platform-wide and never per-environment — per-environment wrapping
-    keys would be reachable by the same compromise and buy nothing. **It IS
-    exported, as part of the DR bundle** (see "Everything is etcd" below): an
-    etcd snapshot without this key restores all configs but none of the
-    secret values, because the snapshot only holds the wrapped blobs.
+    keys would be reachable by the same compromise and buy nothing. The key is
+    a recovery prerequisite, but MVP does not define an export bundle that
+    restores an entire host.
   - **Backups — one age keypair per environment, generated LAZILY the first
     time backups are enabled** (a staging/dev environment that never backs up
     gets no key; the Settings tab shows "not generated yet" until then).
@@ -2110,27 +2204,25 @@ reference is not a desired-state reference and blocks deletion with
     it); the **private identity** is stored only under the controller-key wrap,
     delivered to the Agent only for current-era restore through its task-scoped
     transient secret slot,
-    repeatably exported with `no-store` for disaster recovery, and rotatable per
+    repeatably exported with `no-store` for old-era point restore, and rotatable per
     environment (rotation affects new backups; prior recovery points need the
     previously exported identity). The host therefore CAN restore backups
     on-box (decision A, MVP), while the export gives the operator an off-host
     copy that survives a full host compromise.
 
-**Everything is etcd (locked) — the DR story.** Every source of truth lives
-in etcd: desired-state docs, the task queue, the encrypted secret store,
-agent config (pull interval / max concurrent / labels), platform component
-settings (DNS resolver, forwarders, tailnet delegation), connectors,
-runners. Rendered artifacts — Corefile, Caddyfiles, env files, resolv.conf,
-compose projects — are **derived**, never stored: after an import the
-reconcile loop re-renders the entire host from etcd. The only two things
-etcd cannot contain are bootstrap necessities: (1) the **controller age
-key** (`/etc/groundplane/controller.age`) — it wraps the secret store, so it
-can't live inside it; and (2) a **minimal startup config**
-(`/etc/groundplane/controller.yaml`: etcd endpoint, key path, listen
-addresses) needed before etcd is reachable. **Export = etcd snapshot +
-controller.age (+ the tiny startup config); import on a fresh host restores
-the entire host's state**, secrets included, with zero hand-written shell
-scripts — the acceptance test applies to recovery too.
+**Control-plane metadata in etcd (locked) — the future DR boundary.** etcd
+stores desired-state documents, the task queue, encrypted secret metadata,
+Agent and component settings, connectors, and Runner records. It is not the
+whole host: workload data and volumes, workload images, rendered artifacts,
+the controller age key, startup configuration, and host/bootstrap prerequisites
+remain external. Corefiles, Caddyfiles, env files, resolv.conf, and Compose
+projects are derived and can be re-rendered from control-plane metadata, but
+this does not restore external workload data or images. MVP does not promise an
+automated
+empty-host export/import or a complete host restore. A future DR procedure must
+provide metadata, the controller key, startup config, images and data backups,
+and recovery bootstrap before reconcile; the host and its prerequisites are
+outside this current source contract.
 
 The startup config remains a native bootstrap file rather than etcd desired
 state, but it is an operator-facing document. `GET /controller/config`,

@@ -1,6 +1,6 @@
-# ADR 0057: Controller-owned Runner lifecycle for the MVP
+# ADR 0057: Controller-owned Runner lifecycle design
 
-Status: Accepted for the MVP
+Status: Accepted retained design; implementation is subsequent to the hosting floor
 
 ## Context
 
@@ -20,7 +20,7 @@ that is restricted to ARM64 would prevent deployment on x86_64 hosts.
 
 ## Decision
 
-For the MVP, the native Controller Task executor exclusively owns Runner
+For the retained Runner design, the native Controller Task executor exclusively owns Runner
 create, retry, and remove host effects. This is the closed Runner exception in
 ADR 0056; it is not general authority for workload or platform data-plane
 operations.
@@ -49,8 +49,9 @@ the Agent to recover, fetch, or persist the token.
 Each Runner keeps its existing isolation contract:
 
 - a dedicated rootless Docker daemon and socket;
-- one dedicated `/29` allocated from `runner.network_pool`, which is reserved
-  from `system_pool` at bootstrap;
+  - one dedicated `/29` allocated from a machine-bootstrap
+    `runner.network_pool`, disjoint from both `environment_pool` and
+    `system_pool`; the Runner pool is provisioned as a `/24`, `/25`, or `/26`;
 - a unique host identity and non-overlapping subordinate UID/GID ranges;
 - no host Docker socket; and
 - no network reachability to another Runner, including a Runner owned by a
@@ -92,9 +93,10 @@ it does not conflict with this decision, `docs/mvp.md`, or ADR 0056.
 - Workload and platform mutations remain Agent-owned; this decision cannot be
   used to move them into the Controller executor.
 
-## MVP acceptance
+## Runner design acceptance (subsequent work)
 
-The Runner vertical is complete when focused proof demonstrates:
+This vertical is not a Gate A or Gate B dependency under the explicit
+external-builder assumption. It is complete when focused proof demonstrates:
 
 1. API, CLI, and Console parity for create, retry, edit, and remove.
 2. A create or retry publishes a native Controller Task before host mutation.

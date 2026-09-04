@@ -145,9 +145,9 @@ home for unrelated code.
     revision-fenced document through API/CLI/Console, validated by the startup
     parser and atomically replaced without claiming hot reload;
     path, listen addresses, scheduler cadence, log config, and the immutable
-    machine `environment_pool` and `system_pool` IPv4 CIDRs. This is the
-    "minimal startup config" of the DR contract: the only two things
-    etcd cannot hold, exported with the DR bundle.
+    machine `environment_pool`, `system_pool`, and `runner.network_pool` IPv4
+    CIDRs. MVP recovery restores per-source data to an original surviving
+    target; it does not promise a startup-config export or empty-host bundle.
   - the Agent runtime document — channel location, Agent id, pull interval,
     max concurrent tasks, labels, and log config. It is Controller-owned in
     etcd and injected only into the Controller-managed container. There is no
@@ -199,8 +199,10 @@ manual GitHub operation.
 
 ### Machine IPAM and Runner isolation
 
-The startup `environment_pool` and `system_pool` are non-overlapping local
-bootstrap inputs, not etcd resources or human API capabilities. Environment
+The startup `environment_pool`, `system_pool`, and `runner.network_pool` are
+pairwise-disjoint local bootstrap inputs, not etcd resources or human API
+capabilities. `runner.network_pool` is a `/24`, `/25`, or `/26`; it is not
+reserved from `system_pool`. Environment
 creation transactionally reserves a globally exclusive child `network_pool`;
 Zone creation reserves a child subnet and materializes only that child as
 `gp_net_<stable-zone-id>`. Parent pools are never Docker networks. Environment
@@ -209,7 +211,7 @@ network settings are immutable because bridge IPAM changes require replacement.
 
 A Tenant owns no runtime network. Tenant- and Project-scoped GitHub Runners
 share one atomic five-record quota per Tenant, but each Runner receives a
-separate `/29` from `system_pool`. The native Controller supervises one
+separate `/29` from `runner.network_pool`. The native Controller supervises one
 rootless Docker daemon per Runner under a distinct unprivileged host UID,
 subordinate UID/GID range, runtime directory, data root, and Unix socket. The
 Runner OCI container mounts only that socket and runs with the same numeric UID;
@@ -220,7 +222,8 @@ Controller-owned UID/cgroup egress rules deny Environment, backing, platform,
 and other Runner pools except the authenticated Controller endpoint while
 retaining DNS and outbound internet. Registration and removal are replayable
 Controller Tasks that own the daemon, Runner container, network, and local
-state as one lifecycle boundary.
+state as one lifecycle boundary. ADR 0057 remains the Controller lifecycle
+authority; the pool correction does not move that ownership.
 
 ## Module, executor, and type architecture (locked: ADR 0056)
 
@@ -607,23 +610,53 @@ are not used as the ownership contract.
 
 Generated Compose carries the current per-service image name and tag. The
 source of that tag is the service's durable release ledger, not one global
-environment release field. A rollback changes the release projection and
+environment release field. Before mutation, workload release resolution pins
+the exact identity of an image already present in the host Docker daemon; it
+never builds, pulls, or pushes implicitly. Pinned Groundplane-managed Agent,
+etcd, Component, and backing images remain release/installation assets outside
+operator registry integration. A rollback changes the release projection and
 causes the renderer to regenerate image references, slot aliases, router
 targets, and labels.
 
+Workload Services expose no host ports in the accepted MVP contract. A narrow
+loopback-only mapping for an operator-owned recreate Service is merely a
+proposed break-glass seam; until separately accepted, it has no schema, API,
+renderer, or runtime implementation.
+
 Release execution does not move a mutable Compose network alias. Blue-green
 renders two physical slot workloads and one stable Controller-owned Caddy proxy
-endpoint. Recreate renders exactly one singleton workload; an addressable
+endpoint and is limited to `deploy.replicas == 1`. Recreate renders the exact
+authored replica count `N >= 1`; an addressable
 recreate may retain the stable proxy, but never retains the slot pair. Internal
 consumers and the Environment router target the stable endpoint when present.
-The immutable render input seals explicit `singleton`, `blue`, or `green`
-workload targets, both candidate and prior topology artifacts, proxy JSON and
-digests, generations, and Release ids. Blue-green to recreate removes the exact
-sealed slot topology before applying the singleton. Recreate to blue-green
-creates and health-proves the candidate slot topology, atomically switches the
-proxy, then removes the obsolete singleton. `switch_back` restores and proves
-the exact prior topology before candidate cleanup. Recovery retries use the
-same fixed-revision input and run probes plus enabled compensation only.
+The immutable render input seals candidate and prior logical workload sets,
+their exact expected counts, the internal `singleton`, `blue`, or `green` slot
+labels, proxy JSON and digests, generations, and Release ids. The `singleton`
+label names the recreate slot; it does not imply one physical replica.
+Blue-green to recreate removes the exact sealed prior workload set before
+applying the exact-count candidate set. Recreate to blue-green creates and
+health-proves the candidate slot set, atomically switches the proxy, then
+removes the obsolete prior workload set. Any transition to or from blue-green
+requires both the prior/current serving Release and candidate/destination
+Release to have `replicas == 1` before mutation. `switch_back` restores and proves the exact prior topology
+before candidate cleanup. Recovery retries use the same fixed-revision input
+and run probes plus enabled compensation only.
+
+A Release Group is one ordered coordinated action over 2 through 32 logical
+Services, not a simultaneous or atomic switch. A request tag overrides the
+persisted group tag; absence of both is invalid. The selected tag resolves
+against each member's declared image, and each member keeps its own digest and
+ledger. Group `on_failure` overrides member defaults. Selected lifecycle hooks
+execute once per logical Service in their declared order, never per replica;
+there is no group-hook resource. Migrations remain bound once to their
+designated logical Service. Each selected Script execution receives one
+task-scoped runner even when its target is replicated; no runner is created
+merely because a logical Service is a group member.
+
+Recreate deploy, rollback, restart, and exact reapply preserve the authored
+replica count. The addressable renderer and health model support exact `N`, but
+lifting remaining singleton execution guards and proving DNS, WebSocket/Valkey
+fan-out, and replicated Script targeting are pending runtime alignment.
 
 The applied Blueprint projection embeds one owned
 `core.ServiceDependencyPlans` value for deploy and rollback. Release render
@@ -704,6 +737,15 @@ publication; and acknowledged stage inventory/disposition before true Ready.
 There is no old protobuf decoder, mixed binary mode, staging salvage, or
 compatibility contract. These accepted decisions are implementation authority,
 not evidence that the checked-in schema or runtime already implements them.
+
+Production MVP also requires a safe Valkey data source and verified restore.
+Until its bounded source contract lands, runtime rejection with
+`strategy.not_implemented` is correct: a whole shared-instance RDB is not a
+per-Attach artifact, and archiving a live Valkey data directory is forbidden.
+MVP recovery is per source to its original surviving target, without
+cross-source atomicity or an empty-host restore/export/import promise. Future
+full-host DR must inventory metadata, keys, startup configuration, exact
+images, data backups, and a recovery bootstrap before reconciliation.
 
 The collector starts each expired Task with a private phase-and-cursor intent
 transaction. Under the task and relevant revision/absence fences, that
@@ -900,7 +942,8 @@ The generic Route module owns desired Route state whether or not an HTTP-router
 implementation is enabled. A desired-only Controller Task records an `unserved`
 result without an Agent effect. Enabling the Environment's one logical router
 applies all stored Routes. Disabling it removes the entry point and preserves
-the Routes. Component-managed resources retain their product owner and record
+the Routes. Caddy provides `http-router` and consumes the authorized Route set;
+it does not own Route creation. Component-managed resources retain their product owner and record
 separate Component management ownership. Ordinary collections exclude them;
 the owning Component detail groups them by capability.
 

@@ -308,7 +308,7 @@ features:
 | Compose feature | MVP behavior |
 | --- | --- |
 | `ports` | rejected for tenant services; Caddy's pinned bridge address is the documented router exception |
-| `build` | rejected; deploys use local daemon images or public registry images |
+| `build` | rejected; workload deploys require images already present in the host Docker daemon and never pull or build as a side effect |
 | native Compose `secrets` / `configs` | preserved as native Compose; Groundplane-managed values use `x-gp-entry` when scope, encryption, and volume-relative paths are required |
 | `profiles` | preserved as native Compose; the Controller never silently activates or drops a profile |
 | `include` / `extends` / multiple source files | accepted where supported, then resolved into the one canonical project file before Agent execution |
@@ -392,9 +392,9 @@ Omission never implies deletion or rename.
 ### Apply execution contract
 
 The Controller derives candidate Releases only from the sealed candidate
-projection. Implicit candidate selection includes only newly introduced
-singleton Services and materially changed existing singleton Services whose
-effective `runtime_intent` is `running`. Stopped or absent existing Services
+projection. Implicit candidate selection includes newly introduced or materially
+changed logical Services whose effective `runtime_intent` is `running`,
+regardless of their authored replica count. Stopped or absent existing Services
 remain stopped or absent, retain their desired changes for a later explicit
 Release action, and are not implicitly applied or hooked. A Service that is a
 Release Group member is excluded from implicit Blueprint candidate Release and
@@ -543,7 +543,7 @@ The initial extension families are:
 | `x-gp-resource` | stable resource kind/id and ownership | Docker labels and task context |
 | `x-gp-slug` | mutable public slug on a top-level Volume | normalized Volume identity; no Compose runtime field |
 | `x-gp-release` | default strategy and current image/tag/slot projection | Compose image, aliases, labels, deploy records |
-| `x-gp-release-groups` | named explicit coordinated releases of multiple logical services | one task, lock, and release ledger per group |
+| `x-gp-release-groups` | named explicit coordinated releases of multiple logical services | one task and lock with per-service release records |
 | `x-gp-adapter` | backing-service adapter contract and provisioning knowledge | adapter tasks and fact records |
 | `x-gp-network` | stable network identity and ownership | native Compose network definition or external join |
 | `x-gp-attach` / `x-gp-attachments` | Backing Service, one consumer Service, credential source, grants, and fact sources | external network joins and owner-only provisioning tasks |
@@ -584,8 +584,8 @@ x-gp-scripts:
       php artisan migrate --force
 ```
 
-`service` names one Service in the same Environment, resolves to its stable id,
-is immutable in the MVP, and must have effective replicas exactly `1`. `when` is exactly `manual`, `pre-deploy`,
+`service` names one logical Service in the same Environment and resolves to its
+stable id. `when` is exactly `manual`, `pre-deploy`,
 `post-deploy`, `pre-rollback`, `post-rollback`, or `on-failure`. `script` is
 required, non-blank valid UTF-8 without NUL, and at most 65,536 encoded bytes.
 There are no authored parameters, arguments, timeout, interpreter, user,
@@ -721,13 +721,19 @@ in the resolved enabled Compose project. An omitted `order` normalizes to the
 listed `services` order; an explicit `order` must be an exact permutation with
 no blank, duplicate, additional, or omitted member.
 
-A group has one task lock and `on_failure: switch_back | leave_active`, which
-defaults to `switch_back`. If a later member fails, `switch_back` returns
-already-switched members to their previous healthy releases; `leave_active`
-keeps them active for an explicit rollback. Each member still retains its own
-release records and observed state. This supports services sharing an image/tag
-without reintroducing hidden worker side effects into an ordinary service
-deploy.
+A group is one operator action with one task lock and `on_failure: switch_back |
+leave_active`, which defaults to `switch_back`; members execute serially, not as
+a simultaneous or atomic distributed switch. A request `tag` overrides the
+persisted group tag; if both are empty publication rejects the group, with no
+member-current fallback. The selected tag resolves separately against each
+member image, preserving per-service digest and release history. Group
+`on_failure` overrides member defaults for aggregate compensation. If a later
+member fails, `switch_back` returns already-switched members to their previous
+healthy releases; `leave_active` keeps them active for explicit rollback. Each
+member still retains its own release records and observed state. Hooks remain
+supported by ADR 0040: they target logical Services and execute once per logical
+Release, never per replica; a migration binds once to its designated logical
+member and there is no group-level hook resource.
 
 `x-gp-release-group` is not part of the schema. The Controller rejects that
 singular spelling as an unknown Groundplane extension; there is no alias or
@@ -775,20 +781,21 @@ healthchecks and diagnostics. A switch is a typed atomic reload of the proxy's
 sealed canonical JSON configuration, not a mutable alias or an image mutation
 hidden inside Compose.
 
-`recreate` always renders exactly one physical workload for the Service. An
-addressable Service may retain its stable logical proxy, but that proxy targets
-the singleton workload; recreate never retains or creates a blue/green workload
-pair, and the durable Release `slot` remains absent. A portless recreate has the
-same singleton topology without a proxy. The Controller seals both candidate
-and prior topology artifacts, stops and removes the prior workload before
-replacement, and proves the exact singleton healthy. No duplicate worker or
-scheduler may run during the transition.
+`recreate` renders the authored N physical workloads for the Service (N==1 is a
+singleton). An addressable Service may retain its stable logical proxy, which
+targets only the desired set; recreate never retains or creates a blue/green
+workload pair, and the durable Release `slot` remains absent. A portless recreate
+has the same topology without a proxy. The Controller seals both candidate and
+prior topology artifacts, stops and removes the prior set before replacement,
+and proves the exact desired set healthy. There is explicit downtime and no
+duplicate Script execution per replica.
 
-Changing strategy is an explicit topology transition. Blue-green to recreate
-removes the sealed prior slot topology before applying the singleton and
-proving the new serving state. Recreate to blue-green creates the candidate
-slot topology, proves candidate health, atomically switches the stable proxy,
-then removes the obsolete singleton. Retries probe and compensate only against
+Changing strategy is an explicit topology transition. Blue-green with N greater
+than one is rejected before mutation in the MVP. Blue-green to recreate removes
+the sealed prior slot topology before applying the desired set and proving the
+new serving state. Recreate to blue-green is allowed only for N==1, creates the
+candidate slot topology, proves candidate health, atomically switches the stable
+proxy, then removes the obsolete set. Retries probe and compensate only against
 the same sealed candidate and prior artifacts, so interruption at any boundary
 converges idempotently instead of stranding both topologies. A Service with no
 internal TCP port cannot safely select `blue-green`; publication rejects that
@@ -1087,7 +1094,9 @@ starts or stops the connector and reports health, but does not configure its
 DNS, public hostnames, ingress rules, origin targets, or protocol. A future source-registered
 Traefik or Nginx implementation must reuse the HTTP-router capability, generic
 Route API, and generic catalog action procedure; it does not add a new router
-architecture or technology-specific backend endpoint.
+architecture or technology-specific backend endpoint. Caddy PROVIDES the
+`http-router` capability and CONSUMES existing GP Routes; registered components
+may produce authorized Route intents, but Caddy does not need to create Routes.
 
 The Caddy component receives a pinned bridge address while enabled. Redeploys
 retain that address. Disabling Caddy releases the allocation; re-enabling it
@@ -1297,7 +1306,11 @@ per source: config is one etcd revision, Volume stops mounting Services, and no
 cross-source snapshot is claimed. Retry preserves that captured run, validates
 its pinned dependencies, allocates fresh point ids for failed/unstarted
 sources, and never reloads the current policy. PostgreSQL Attach, config, and
-Volume are the MVP runtime sources; Valkey runtime is deferred.
+Volume are the current bounded runtime sources. Valkey data backup/restore is
+required by the hosting floor, but the namespace-safe per-consumer source versus
+an explicit shared-instance RDB source remains unclosed; current runtime
+rejects `strategy.not_implemented` until that contract and proof land. Live
+data-directory archival is not authorized.
 
 `x-gp-execution` is generated and may be carried alongside the Compose file
 so the Agent can validate exactly what it is applying:
