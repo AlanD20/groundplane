@@ -794,7 +794,7 @@ func (repository *TaskRepository) claimNextTask(
 			if taskHasBlueprintCandidateAppliedAuthority(task) {
 				epochCondition, epochMutation, claimErr :=
 					repository.prepareBlueprintCandidateClaimEpoch(
-						ctx, task, candidate.readRevision, requirementEvidence.gateRevision,
+						ctx, task, writer, candidate.readRevision, requirementEvidence.gateRevision,
 					)
 				if claimErr != nil {
 					clearMutationValues(mutations)

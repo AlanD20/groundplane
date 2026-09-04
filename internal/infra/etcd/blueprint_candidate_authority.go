@@ -247,6 +247,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAuthority(
 func (repository *TaskRepository) prepareBlueprintCandidateClaimEpoch(
 	ctx context.Context,
 	task TaskRecord,
+	writer taskMaterializationWriterRecord,
 	revision int64,
 	readyGateRevision int64,
 ) (Condition, Mutation, error) {
@@ -284,14 +285,16 @@ func (repository *TaskRepository) prepareBlueprintCandidateClaimEpoch(
 			return Condition{}, Mutation{}, corruptReleaseRecord()
 		}
 	}
-	epochAuthorityRevision := read.Values[0].ModRevision
-	if readyGateRevision > 0 {
-		epochAuthorityRevision = readyGateRevision
-	}
-	if epochAuthorityRevision != read.Values[1].ModRevision {
+	epochRevision := read.Values[1].ModRevision
+	markerOrAttemptMatches := epochRevision == read.Values[0].ModRevision
+	readyGateMatches := readyGateRevision > 0 && epochRevision == readyGateRevision
+	appliedPredecessorMatches := writer.BlueprintAppliedPredecessor != nil &&
+		writer.BlueprintAppliedPredecessor.Present &&
+		epochRevision == writer.BlueprintAppliedPredecessor.KeyRevision
+	if !markerOrAttemptMatches && !readyGateMatches && !appliedPredecessorMatches {
 		return Condition{}, Mutation{}, errs.New(errs.KindStateConflict, "Blueprint claim mutation epoch changed")
 	}
-	return Condition{Key: epochKey, ModRevision: read.Values[1].ModRevision},
+	return Condition{Key: epochKey, ModRevision: epochRevision},
 		Mutation{Type: MutationPut, Key: epochKey, Value: slices.Clone(read.Values[1].Value)}, nil
 }
 

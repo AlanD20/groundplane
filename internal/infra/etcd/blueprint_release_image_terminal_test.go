@@ -24,6 +24,135 @@ type blueprintEpochMutationRejectingStore struct {
 	lastEpochMutationCount int
 }
 
+// Rationale: an older pending reconciliation may lawfully advance the applied projection and
+// Environment epoch after candidate publication, while an unrelated epoch rewrite remains drift.
+func TestBlueprintCandidateClaimEpochAcceptsOnlyValidatedAppliedPredecessor(t *testing.T) {
+	for _, test := range []struct {
+		name                      string
+		advanceAppliedPredecessor bool
+		wantClaim                 bool
+	}{
+		{name: "applied predecessor and epoch", advanceAppliedPredecessor: true, wantClaim: true},
+		{name: "epoch only", wantClaim: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			store := newMemoryTaskStore()
+			repository, err := newTaskRepository(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			now := time.Date(2026, 9, 4, 18, 0, 0, 0, time.UTC)
+			tenantID := ids.NewAt(ids.KindTenant, now, 801)
+			projectID := ids.NewAt(ids.KindProject, now, 802)
+			environmentID := ids.NewAt(ids.KindEnvironment, now, 803)
+			initialTaskID := ids.NewAt(ids.KindTask, now, 804)
+			intermediateTaskID := ids.NewAt(ids.KindTask, now, 805)
+			publicationID := ids.NewULID()
+
+			initialProjection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+				EnvironmentID: environmentID, RevisionID: initialTaskID, RenderGeneration: 1,
+			})
+			initialValue, err := encodeEnvironmentComposeProjection(initialProjection)
+			if err != nil {
+				t.Fatal(err)
+			}
+			initial, err := store.Transact(ctx, nil, []Mutation{{
+				Type: MutationPut, Key: environmentComposeProjectionKey(environmentID), Value: initialValue,
+			}})
+			if err != nil || !initial.Succeeded {
+				t.Fatalf("seed lower applied projection = %#v, %v", initial, err)
+			}
+
+			task := materializationLifecycleTask(now.Add(time.Second), environmentID, 3)
+			task.Owner = TaskOwner{
+				WorkspaceType: TaskWorkspaceTenant, TenantID: tenantID,
+				ProjectID: projectID, EnvironmentID: environmentID,
+			}
+			task.Params[TaskReleasePublicationParam] = publicationID
+			task.Params[EnvironmentDesiredRevisionParam] = task.ID
+			seedBlueprintRequirementTask(t, store, task)
+
+			markerValue, err := encodeReleaseRecord("release-publication", ReleasePublicationMarker{
+				PublicationID: publicationID, OperationID: task.OperationID,
+				ManifestDigest: strings.Repeat("b", 64), PublishedAt: now,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			epochValue, err := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{
+				EnvironmentID: environmentID,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			published, err := store.Transact(ctx, nil, []Mutation{
+				{Type: MutationPut, Key: releasePublicationKey(publicationID), Value: markerValue},
+				{Type: MutationPut, Key: environmentMutationEpochKey(environmentID), Value: epochValue},
+			})
+			if err != nil || !published.Succeeded {
+				t.Fatalf("publish pending Blueprint candidate = %#v, %v", published, err)
+			}
+
+			intermediateProjection := initialProjection
+			intermediateProjection.RevisionID = intermediateTaskID
+			intermediateProjection.RenderGeneration = 2
+			intermediateValue, err := encodeEnvironmentComposeProjection(intermediateProjection)
+			if err != nil {
+				t.Fatal(err)
+			}
+			mutations := []Mutation{{
+				Type: MutationPut, Key: environmentMutationEpochKey(environmentID), Value: epochValue,
+			}}
+			if test.advanceAppliedPredecessor {
+				mutations = append(mutations, Mutation{
+					Type: MutationPut, Key: environmentComposeProjectionKey(environmentID), Value: intermediateValue,
+				})
+			}
+			advanced, err := store.Transact(ctx, nil, mutations)
+			if err != nil || !advanced.Succeeded || advanced.Revision == published.Revision {
+				t.Fatalf("advance intermediate applied state = %#v, %v", advanced, err)
+			}
+
+			claim, found, claimErr := repository.ClaimNextTask(
+				ctx, ids.NewAt(ids.KindAgent, now, 806), 1, now.Add(2*time.Second),
+			)
+			if !test.wantClaim {
+				if claimErr == nil || found || !errors.Is(claimErr, errs.New(errs.KindStateConflict, "")) {
+					t.Fatalf("claim after epoch-only rewrite = %#v, %t, %v", claim, found, claimErr)
+				}
+				pending, getErr := repository.GetTask(ctx, task.ID)
+				if getErr != nil || pending.Record.Status != TaskStatusPending {
+					t.Fatalf("rejected Blueprint claim = %#v, %v", pending, getErr)
+				}
+				return
+			}
+			if claimErr != nil || !found || claim.Task.Record.ID != task.ID {
+				t.Fatalf("claim after applied predecessor advance = %#v, %t, %v", claim, found, claimErr)
+			}
+			authority, err := store.GetMany(ctx, GetManyRequest{Keys: []string{
+				taskMaterializationWriterKey(environmentID),
+				environmentMutationEpochKey(environmentID),
+				environmentComposeProjectionKey(environmentID),
+			}})
+			if err != nil || authority.Values[0] == nil || authority.Values[1] == nil || authority.Values[2] == nil ||
+				authority.Values[0].ModRevision != claim.Assignment.Revision ||
+				authority.Values[1].ModRevision != claim.Assignment.Revision ||
+				authority.Values[2].ModRevision != advanced.Revision {
+				t.Fatalf("claimed Blueprint authority = %#v, %v", authority, err)
+			}
+			writer, err := decodeTaskMaterializationWriter(authority.Values[0].Value)
+			if err != nil || writer.BlueprintAppliedPredecessor == nil ||
+				*writer.BlueprintAppliedPredecessor != (taskMaterializationAppliedPredecessor{
+					Present: true, KeyRevision: advanced.Revision,
+					RevisionID: intermediateTaskID, RenderGeneration: 2,
+				}) {
+				t.Fatalf("claimed applied predecessor writer = %#v, %v", writer, err)
+			}
+		})
+	}
+}
+
 func (store *blueprintEpochMutationRejectingStore) Transact(
 	ctx context.Context,
 	conditions []Condition,

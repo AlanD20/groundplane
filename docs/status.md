@@ -807,3 +807,14 @@ claim and abort, completed replay requires the cleanup and Task timestamps to
 match, and unrelated Script executions cannot use the Controller-owned
 checkpoint shape. Focused races, independent review, and the single correction-
 delta verification pass.
+
+## Blueprint applied-predecessor claim epoch continuation (2026-09-04)
+
+A Blueprint candidate may be published while an older pending Environment
+reconciliation later advances the applied Compose projection and mutation epoch
+in one terminal transaction. Claim-time epoch admission now consumes the
+already-validated applied-predecessor witness in addition to immutable
+publication and ready prerequisite-gate authority. Exact co-revision evidence
+admits that lawful predecessor while an epoch-only or unrelated mutation remains
+a permanent conflict. Focused positive and negative race proof passes; recovery
+of the preserved reference-host Task after deployment remains pending.
