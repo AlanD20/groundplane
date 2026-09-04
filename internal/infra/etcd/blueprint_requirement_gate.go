@@ -42,7 +42,10 @@ func NewBlueprintRequirementGate(
 		CandidateRevision: candidateRevision, DAG: dag.Clone(), DAGDigest: digest,
 	}
 	if task.RetryOf != "" {
-		return BlueprintRequirementGate{}, errs.New(errs.KindValidationFailed, "Blueprint requirement gate must originate on its root Task")
+		return BlueprintRequirementGate{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint requirement gate must originate on its root Task",
+		)
 	}
 	if err := gate.validateTaskIdentity(task, false); err != nil {
 		return BlueprintRequirementGate{}, err
@@ -185,13 +188,19 @@ func prepareBlueprintRequirementGatePublication(
 	marker := task.Params[TaskBlueprintRequirementGateSHA256Param]
 	if !required {
 		if !gate.IsZero() || marker != "" {
-			return preparedBlueprintRequirementGatePublication{}, errs.New(errs.KindValidationFailed, "unexpected Blueprint requirement gate")
+			return preparedBlueprintRequirementGatePublication{}, errs.New(
+				errs.KindValidationFailed,
+				"unexpected Blueprint requirement gate",
+			)
 		}
 		return preparedBlueprintRequirementGatePublication{}, nil
 	}
 	if gate.IsZero() || gate.CandidateRevision != projection.BlueprintRequirements.ResolutionRevision ||
 		len(gate.DAG.Requirements) != len(projection.BlueprintRequirements.Resolved) {
-		return preparedBlueprintRequirementGatePublication{}, errs.New(errs.KindValidationFailed, "Blueprint requirement gate is incomplete")
+		return preparedBlueprintRequirementGatePublication{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint requirement gate is incomplete",
+		)
 	}
 	if err := gate.validateForTask(task); err != nil {
 		return preparedBlueprintRequirementGatePublication{}, err
@@ -203,7 +212,10 @@ func prepareBlueprintRequirementGatePublication(
 			sealed.TargetRevision != requirement.Target.Revision ||
 			sealed.Condition != requirement.Condition ||
 			!slices.Equal(sealed.Phases, requirement.Phases) {
-			return preparedBlueprintRequirementGatePublication{}, errs.New(errs.KindValidationFailed, "Blueprint requirement gate projection changed")
+			return preparedBlueprintRequirementGatePublication{}, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint requirement gate projection changed",
+			)
 		}
 	}
 	value, err := encodeBlueprintRequirementGate(gate)
@@ -249,7 +261,8 @@ func (prepared preparedBlueprintRequirementGatePublication) classify(values []*K
 }
 
 type blueprintRequirementGateClaimEvidence struct {
-	conditions []Condition
+	conditions   []Condition
+	gateRevision int64
 }
 
 func (repository *TaskRepository) observeBlueprintRequirementGateForClaim(
@@ -287,7 +300,8 @@ func (repository *TaskRepository) observeBlueprintRequirementGateForClaim(
 		return blueprintRequirementGateClaimEvidence{}, true, false, corruptBlueprintRequirementGate()
 	}
 	evidence := blueprintRequirementGateClaimEvidence{
-		conditions: []Condition{{Key: gateKey, ModRevision: read.Values[0].ModRevision}},
+		conditions:   []Condition{{Key: gateKey, ModRevision: read.Values[0].ModRevision}},
+		gateRevision: read.Values[0].ModRevision,
 	}
 	for _, requirement := range gate.DAG.Requirements {
 		attachRead, readErr := repository.store.GetMany(ctx, GetManyRequest{
@@ -346,6 +360,83 @@ func (repository *TaskRepository) observeBlueprintRequirementGateForClaim(
 		}
 	}
 	return evidence, true, true, nil
+}
+
+func (repository *TaskRepository) prepareBlueprintRequirementGatePrerequisiteAcknowledgement(
+	ctx context.Context,
+	task TaskRecord,
+	fence environmentMutationFenceEvidence,
+	readRevision int64,
+) ([]Condition, []Mutation, error) {
+	if task.Status != TaskStatusCompleted || task.Type != TaskAttach ||
+		ids.Validate(ids.KindAttach, task.Target) != nil ||
+		task.Params[TaskMutationEnvironmentParam] != fence.environmentID {
+		return nil, nil, nil
+	}
+	epochRevision := int64(0)
+	for _, condition := range fence.transactionConditions() {
+		if condition.Key == environmentMutationEpochKey(fence.environmentID) {
+			epochRevision = condition.ModRevision
+			break
+		}
+	}
+	if epochRevision <= 0 || readRevision != fence.readAtRevision() {
+		return nil, nil, errs.New(errs.KindInternal, "Blueprint prerequisite epoch fence is invalid")
+	}
+
+	headKey := environmentBlueprintHeadKey(fence.environmentID)
+	headRead, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{headKey}, Revision: readRevision,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if headRead == nil || headRead.ReadRevision != readRevision || len(headRead.Values) != 1 {
+		return nil, nil, errs.New(errs.KindInternal, "Blueprint prerequisite head read is incomplete")
+	}
+	if headRead.Values[0] == nil {
+		return nil, nil, nil
+	}
+	candidateTaskID, err := decodeTaskReference(headRead.Values[0].Value)
+	if err != nil {
+		return nil, nil, nil
+	}
+	gateKey := blueprintRequirementGateKey(candidateTaskID)
+	candidateRead, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{taskKey(candidateTaskID), gateKey}, Revision: readRevision,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if candidateRead == nil || candidateRead.ReadRevision != readRevision || len(candidateRead.Values) != 2 {
+		return nil, nil, errs.New(errs.KindInternal, "Blueprint prerequisite candidate read is incomplete")
+	}
+	if candidateRead.Values[0] == nil || candidateRead.Values[1] == nil ||
+		candidateRead.Values[1].ModRevision != epochRevision {
+		return nil, nil, nil
+	}
+	candidate, err := decodeTaskRecord(candidateRead.Values[0].Value)
+	if err != nil || candidate.Status != TaskStatusPending ||
+		candidate.Owner.EnvironmentID != fence.environmentID || candidate.Target != fence.environmentID ||
+		candidate.Params[EnvironmentDesiredRevisionParam] != candidateTaskID ||
+		!taskHasBlueprintCandidateAppliedAuthority(candidate) ||
+		validatePublicationID(candidate.Params[TaskReleasePublicationParam]) != nil {
+		return nil, nil, nil
+	}
+	gate, err := decodeBlueprintRequirementGate(candidateRead.Values[1].Value)
+	if err != nil || gate.validateForTask(candidate) != nil {
+		return nil, nil, nil
+	}
+	for _, requirement := range gate.DAG.Requirements {
+		if requirement.TargetID == task.Target && requirement.TargetTaskID == task.ID {
+			return []Condition{{Key: gateKey, ModRevision: candidateRead.Values[1].ModRevision}},
+				[]Mutation{{
+					Type: MutationPut, Key: gateKey,
+					Value: slices.Clone(candidateRead.Values[1].Value),
+				}}, nil
+		}
+	}
+	return nil, nil, nil
 }
 
 func (repository *TaskRepository) prepareBlueprintRequirementGateRetry(

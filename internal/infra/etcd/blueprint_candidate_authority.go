@@ -248,6 +248,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateClaimEpoch(
 	ctx context.Context,
 	task TaskRecord,
 	revision int64,
+	readyGateRevision int64,
 ) (Condition, Mutation, error) {
 	publicationID := task.Params[TaskReleasePublicationParam]
 	if !taskHasBlueprintCandidateAppliedAuthority(task) || validatePublicationID(publicationID) != nil {
@@ -283,7 +284,11 @@ func (repository *TaskRepository) prepareBlueprintCandidateClaimEpoch(
 			return Condition{}, Mutation{}, corruptReleaseRecord()
 		}
 	}
-	if read.Values[0].ModRevision != read.Values[1].ModRevision {
+	epochAuthorityRevision := read.Values[0].ModRevision
+	if readyGateRevision > 0 {
+		epochAuthorityRevision = readyGateRevision
+	}
+	if epochAuthorityRevision != read.Values[1].ModRevision {
 		return Condition{}, Mutation{}, errs.New(errs.KindStateConflict, "Blueprint claim mutation epoch changed")
 	}
 	return Condition{Key: epochKey, ModRevision: read.Values[1].ModRevision},

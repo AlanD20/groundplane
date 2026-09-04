@@ -19,6 +19,300 @@ type blueprintRequirementGateFixture struct {
 	projection EnvironmentComposeProjection
 }
 
+type blueprintRequirementGateTestStore interface {
+	Transact(context.Context, []Condition, []Mutation) (TransactionResult, error)
+}
+
+// Rationale: only the exact acknowledged prerequisite may carry a pending Blueprint gate across an
+// Environment epoch advance; unrelated mutation must remain permanent conflict evidence.
+func TestBlueprintRequirementGateClaimEpochAllowsOnlyExactPrerequisiteAcknowledgements(t *testing.T) {
+	for _, test := range []struct {
+		name           string
+		unrelatedEpoch bool
+	}{
+		{name: "exact prerequisite"},
+		{name: "unrelated epoch before acknowledgement", unrelatedEpoch: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			store := newAttachTestStore()
+			scope := seedAttachScope(t, ctx, store)
+			attaches, err := NewAttachRepository(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tasks, err := newTaskRepository(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			attach, facts := testPendingAttach(t, scope, 920, "epoch-gate-db", nil)
+			createTestAttach(t, ctx, attaches, scope, attach, &facts)
+			agentID := ids.NewAt(ids.KindAgent, attach.CreatedAt, 921)
+			claimedAttach, found, err := tasks.ClaimNextTask(
+				ctx, agentID, 1, attach.CreatedAt.Add(time.Second),
+			)
+			if err != nil || !found || claimedAttach.Task.Record.ID != attach.TaskID {
+				t.Fatalf("claim Attach = %#v, %t, %v", claimedAttach, found, err)
+			}
+			provisioning, err := attaches.GetAttach(ctx, attach.ID)
+			if err != nil || provisioning.Record.Status != core.AttachProvisioning {
+				t.Fatalf("provisioning Attach = %#v, %v", provisioning, err)
+			}
+
+			blueprintTask, publicationRevision := publishBlueprintRequirementCandidateForAttach(
+				t, store, scope, provisioning, core.RequirementReady,
+			)
+			if test.unrelatedEpoch {
+				epochValue, encodeErr := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{
+					EnvironmentID: scope.Environment.Record.ID,
+				})
+				if encodeErr != nil {
+					t.Fatal(encodeErr)
+				}
+				advanced, advanceErr := store.Transact(ctx, nil, []Mutation{{
+					Type: MutationPut, Key: environmentMutationEpochKey(scope.Environment.Record.ID), Value: epochValue,
+				}})
+				if advanceErr != nil || !advanced.Succeeded {
+					t.Fatalf("advance unrelated epoch = %#v, %v", advanced, advanceErr)
+				}
+			}
+
+			terminal, err := tasks.AcknowledgeTask(
+				ctx,
+				agentID,
+				1,
+				attach.TaskID,
+				claimedAttach.Assignment.Record.AssignmentID,
+				TaskStatusCompleted,
+				completedComposeTaskResult(),
+				attach.CreatedAt.Add(2*time.Second),
+			)
+			if err != nil || terminal.Record.Status != TaskStatusCompleted {
+				t.Fatalf("acknowledge Attach = %#v, %v", terminal, err)
+			}
+			gateAndEpoch, err := store.GetMany(ctx, GetManyRequest{Keys: []string{
+				blueprintRequirementGateKey(blueprintTask.ID),
+				environmentMutationEpochKey(scope.Environment.Record.ID),
+			}})
+			if err != nil || gateAndEpoch.Values[0] == nil || gateAndEpoch.Values[1] == nil ||
+				gateAndEpoch.Values[1].ModRevision != terminal.Revision {
+				t.Fatalf("gate/epoch after Attach acknowledgement = %#v, %v", gateAndEpoch, err)
+			}
+
+			claimedBlueprint, found, claimErr := tasks.ClaimNextTask(
+				ctx, agentID, 2, blueprintTask.CreatedAt.Add(time.Second),
+			)
+			if test.unrelatedEpoch {
+				if claimErr == nil || found || !isKind(claimErr, errs.KindStateConflict) {
+					t.Fatalf("claim Blueprint after unrelated epoch = %#v, %t, %v", claimedBlueprint, found, claimErr)
+				}
+				if gateAndEpoch.Values[0].ModRevision != publicationRevision {
+					t.Fatalf(
+						"gate revision after unrelated mutation = %d, want publication %d",
+						gateAndEpoch.Values[0].ModRevision,
+						publicationRevision,
+					)
+				}
+				pending, getErr := tasks.GetTask(ctx, blueprintTask.ID)
+				if getErr != nil || pending.Record.Status != TaskStatusPending {
+					t.Fatalf("Blueprint after rejected claim = %#v, %v", pending, getErr)
+				}
+				return
+			}
+			if claimErr != nil || !found || claimedBlueprint.Task.Record.ID != blueprintTask.ID {
+				t.Fatalf("claim Blueprint after exact prerequisite = %#v, %t, %v", claimedBlueprint, found, claimErr)
+			}
+			if gateAndEpoch.Values[0].ModRevision != terminal.Revision {
+				t.Fatalf(
+					"gate revision after exact prerequisite = %d, want terminal %d",
+					gateAndEpoch.Values[0].ModRevision,
+					terminal.Revision,
+				)
+			}
+			writerAndEpoch, err := store.GetMany(ctx, GetManyRequest{Keys: []string{
+				taskMaterializationWriterKey(scope.Environment.Record.ID),
+				environmentMutationEpochKey(scope.Environment.Record.ID),
+			}})
+			if err != nil || writerAndEpoch.Values[0] == nil || writerAndEpoch.Values[1] == nil ||
+				writerAndEpoch.Values[0].ModRevision != claimedBlueprint.Assignment.Revision ||
+				writerAndEpoch.Values[1].ModRevision != claimedBlueprint.Assignment.Revision {
+				t.Fatalf("Blueprint writer/epoch transfer = %#v, %v", writerAndEpoch, err)
+			}
+		})
+	}
+}
+
+// Rationale: a failed or aborted prerequisite Attach still exists, but it must not carry gate authority
+// across its terminal epoch advance and make an exists-gated Blueprint claimable.
+func TestBlueprintRequirementGateNonSuccessPrerequisiteNeverRefreshesEpoch(t *testing.T) {
+	for _, terminalStatus := range []TaskStatus{TaskStatusFailed, TaskStatusAborted} {
+		t.Run(string(terminalStatus), func(t *testing.T) {
+			ctx := context.Background()
+			store := newAttachTestStore()
+			scope := seedAttachScope(t, ctx, store)
+			attaches, err := NewAttachRepository(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tasks, err := newTaskRepository(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			attach, facts := testPendingAttach(t, scope, 940, "non-success-gate-db", nil)
+			created := createTestAttach(t, ctx, attaches, scope, attach, &facts)
+			agentID := ids.NewAt(ids.KindAgent, attach.CreatedAt, 941)
+			var assignmentID string
+			prerequisite := created
+			if terminalStatus == TaskStatusFailed {
+				claim, found, claimErr := tasks.ClaimNextTask(
+					ctx, agentID, 1, attach.CreatedAt.Add(time.Second),
+				)
+				if claimErr != nil || !found || claim.Task.Record.ID != attach.TaskID {
+					t.Fatalf("claim Attach = %#v, %t, %v", claim, found, claimErr)
+				}
+				assignmentID = claim.Assignment.Record.AssignmentID
+				prerequisite, err = attaches.GetAttach(ctx, attach.ID)
+				if err != nil || prerequisite.Record.Status != core.AttachProvisioning {
+					t.Fatalf("provisioning Attach = %#v, %v", prerequisite, err)
+				}
+			}
+			blueprintTask, publicationRevision := publishBlueprintRequirementCandidateForAttach(
+				t, store, scope, prerequisite, core.RequirementExists,
+			)
+
+			var terminal Versioned[TaskRecord]
+			if terminalStatus == TaskStatusAborted {
+				terminal, err = tasks.AbortPendingTask(
+					ctx, attach.TaskID, attach.CreatedAt.Add(2*time.Second),
+				)
+			} else {
+				terminal, err = tasks.AcknowledgeTask(
+					ctx,
+					agentID,
+					1,
+					attach.TaskID,
+					assignmentID,
+					TaskStatusFailed,
+					TaskResultRecord{
+						Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
+						FailedStepID:           attachTaskStepIDForTest(t, tasks, attach.TaskID),
+						ReconciliationRequired: true,
+					},
+					attach.CreatedAt.Add(2*time.Second),
+				)
+			}
+			if err != nil || terminal.Record.Status != terminalStatus {
+				t.Fatalf("terminalize Attach = %#v, %v", terminal, err)
+			}
+			gateAndEpoch, err := store.GetMany(ctx, GetManyRequest{Keys: []string{
+				blueprintRequirementGateKey(blueprintTask.ID),
+				environmentMutationEpochKey(scope.Environment.Record.ID),
+			}})
+			if err != nil || gateAndEpoch.Values[0] == nil || gateAndEpoch.Values[1] == nil ||
+				gateAndEpoch.Values[0].ModRevision != publicationRevision ||
+				gateAndEpoch.Values[1].ModRevision != terminal.Revision {
+				t.Fatalf("non-success gate/epoch = %#v, %v", gateAndEpoch, err)
+			}
+			claimed, found, claimErr := tasks.ClaimNextTask(
+				ctx, agentID, 2, blueprintTask.CreatedAt.Add(time.Second),
+			)
+			if claimErr == nil || found || !isKind(claimErr, errs.KindStateConflict) {
+				t.Fatalf("claim Blueprint after non-success = %#v, %t, %v", claimed, found, claimErr)
+			}
+			pending, err := tasks.GetTask(ctx, blueprintTask.ID)
+			if err != nil || pending.Record.Status != TaskStatusPending {
+				t.Fatalf("Blueprint after non-success = %#v, %v", pending, err)
+			}
+		})
+	}
+}
+
+func attachTaskStepIDForTest(t *testing.T, tasks *TaskRepository, taskID string) string {
+	t.Helper()
+	task, err := tasks.GetTask(context.Background(), taskID)
+	if err != nil || len(task.Record.Steps) == 0 {
+		t.Fatalf("get Attach Task step = %#v, %v", task, err)
+	}
+	return task.Record.Steps[0].ID
+}
+
+func publishBlueprintRequirementCandidateForAttach(
+	t *testing.T,
+	store blueprintRequirementGateTestStore,
+	scope AttachCreateScope,
+	attach Versioned[AttachRecord],
+	condition core.RequirementCondition,
+) (TaskRecord, int64) {
+	t.Helper()
+	task := environmentBlueprintTestTask(t, scope.Project.Record, scope.Environment.Record, 930)
+	task.RenderGeneration = int32(scope.ComposeProjection.Record.RenderGeneration + 1)
+	publicationID := ids.NewULID()
+	task.Params[TaskReleasePublicationParam] = publicationID
+	requirements := core.BlueprintRequirements{
+		Authored: []core.Requirement{{
+			Target: core.RequirementTarget{
+				Kind: core.RequirementTargetBackingAttach, Name: attach.Record.Name,
+			},
+			Condition: condition,
+			Phases:    []core.RequirementPhase{core.RequirementPhaseDeploy},
+		}},
+		Resolved: []core.ResolvedRequirement{{
+			Target: core.ResolvedRequirementTarget{
+				Kind: core.RequirementTargetBackingAttach, Name: attach.Record.Name,
+				ID: attach.Record.ID, TaskID: attach.Record.TaskID, Revision: attach.Revision,
+			},
+			Condition: condition,
+			Phases:    []core.RequirementPhase{core.RequirementPhaseDeploy},
+		}},
+		ResolutionRevision: attach.ReadRevision,
+	}
+	dag, err := core.BuildBlueprintRequirementDAG(
+		task.ID, requirements, []string{task.Steps[0].ID}, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate, err := NewBlueprintRequirementGate(task, requirements.ResolutionRevision, dag)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task.Params[TaskBlueprintRequirementGateSHA256Param] = gate.DAGDigest
+	seedBlueprintRequirementTask(t, store, task)
+	gateValue, err := encodeBlueprintRequirementGate(gate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	markerValue, err := encodeReleaseRecord("release-publication", ReleasePublicationMarker{
+		PublicationID:  publicationID,
+		OperationID:    task.OperationID,
+		ManifestDigest: gate.DAGDigest,
+		PublishedAt:    task.CreatedAt,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	headValue, err := encodeTaskReference(task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	epochValue, err := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{
+		EnvironmentID: scope.Environment.Record.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	published, err := store.Transact(context.Background(), nil, []Mutation{
+		{Type: MutationPut, Key: releasePublicationKey(publicationID), Value: markerValue},
+		{Type: MutationPut, Key: environmentBlueprintHeadKey(scope.Environment.Record.ID), Value: headValue},
+		{Type: MutationPut, Key: blueprintRequirementGateKey(task.ID), Value: gateValue},
+		{Type: MutationPut, Key: environmentMutationEpochKey(scope.Environment.Record.ID), Value: epochValue},
+	})
+	if err != nil || !published.Succeeded {
+		t.Fatalf("publish Blueprint candidate = %#v, %v", published, err)
+	}
+	return task, published.Revision
+}
+
 func newBlueprintRequirementGateFixture(
 	t *testing.T,
 	status core.AttachStatus,
@@ -109,7 +403,7 @@ func newBlueprintRequirementGateFixture(
 	}
 }
 
-func seedBlueprintRequirementTask(t *testing.T, store *memoryTaskStore, task TaskRecord) {
+func seedBlueprintRequirementTask(t *testing.T, store blueprintRequirementGateTestStore, task TaskRecord) {
 	t.Helper()
 	marker := pendingTaskMarker(task)
 	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)

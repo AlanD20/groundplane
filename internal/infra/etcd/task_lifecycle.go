@@ -553,7 +553,9 @@ func (repository *TaskRepository) retryTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	if retry.Params[TaskZoneRemovalOperationParam] != "" {
-		if err := plan.enforceTransactionBounds(zoneRemovalTransactionBudgetValidator(zoneRemovalTransactionRetry)); err != nil {
+		if err := plan.enforceTransactionBounds(
+			zoneRemovalTransactionBudgetValidator(zoneRemovalTransactionRetry),
+		); err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
 	}
@@ -745,6 +747,16 @@ func (repository *TaskRepository) claimNextTask(
 			{Type: MutationPut, Key: assignmentIndexKey, Value: assignmentValue},
 			{Type: MutationPut, Key: timeoutIndexKey, Value: assignmentValue},
 		}
+		requirementEvidence, requirementApplies, requirementReady, err :=
+			repository.observeBlueprintRequirementGateForClaim(ctx, task, candidate.readRevision)
+		if err != nil {
+			clearMutationValues(mutations)
+			return TaskAssignment{}, false, err
+		}
+		if requirementApplies && !requirementReady {
+			clearMutationValues(mutations)
+			return TaskAssignment{}, false, nil
+		}
 		var writerValue []byte
 		if candidate.writerKey != "" {
 			writer, writerConditions, writerErr := repository.prepareTaskMaterializationWriter(
@@ -768,7 +780,9 @@ func (repository *TaskRepository) claimNextTask(
 			})
 			if taskHasBlueprintCandidateAppliedAuthority(task) {
 				epochCondition, epochMutation, claimErr :=
-					repository.prepareBlueprintCandidateClaimEpoch(ctx, task, candidate.readRevision)
+					repository.prepareBlueprintCandidateClaimEpoch(
+						ctx, task, candidate.readRevision, requirementEvidence.gateRevision,
+					)
 				if claimErr != nil {
 					clearMutationValues(mutations)
 					return TaskAssignment{}, false, claimErr
@@ -797,20 +811,6 @@ func (repository *TaskRepository) claimNextTask(
 		if blueprintAttachChange.applies {
 			conditions = append(conditions, blueprintAttachChange.conditions...)
 			mutations = append(mutations, blueprintAttachChange.mutations...)
-		}
-		requirementEvidence, requirementApplies, requirementReady, err :=
-			repository.observeBlueprintRequirementGateForClaim(ctx, task, candidate.readRevision)
-		if err != nil {
-			clearMutationValues(mutations)
-			clearAttachTaskChange(attachChange)
-			clearBlueprintAttachTaskChange(blueprintAttachChange)
-			return TaskAssignment{}, false, err
-		}
-		if requirementApplies && !requirementReady {
-			clearMutationValues(mutations)
-			clearAttachTaskChange(attachChange)
-			clearBlueprintAttachTaskChange(blueprintAttachChange)
-			return TaskAssignment{}, false, nil
 		}
 		if requirementApplies {
 			conditions = append(conditions, requirementEvidence.conditions...)
@@ -1577,7 +1577,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			return Versioned[TaskRecord]{}, err
 		}
 		transitionedMarker, markerKey, retentionKey, err := prepareTerminalTaskMarker(
-			task,
+			terminal,
 			terminalStatus,
 			terminalAt,
 		)
@@ -2036,7 +2036,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		}
 		environmentBinding, err := repository.bindOrdinaryTaskEnvironmentMutation(
 			ctx,
-			task,
+			terminal,
 			primaryAndAssignment.ReadRevision,
 			conditions,
 			mutations,
@@ -3526,6 +3526,17 @@ func (repository *TaskRepository) bindOrdinaryTaskEnvironmentMutation(
 	fence, err := loadOrdinaryEnvironmentMutationFence(ctx, repository.store, environmentID, readRevision)
 	if err != nil {
 		return nil, err
+	}
+	if attachChange {
+		gateConditions, gateMutations, gateErr :=
+			repository.prepareBlueprintRequirementGatePrerequisiteAcknowledgement(
+				ctx, task, fence, readRevision,
+			)
+		if gateErr != nil {
+			return nil, gateErr
+		}
+		conditions = append(conditions, gateConditions...)
+		mutations = append(mutations, gateMutations...)
 	}
 	advanceEpoch, err := blueprintCandidateShouldAdvanceEpoch(task, environmentID, mutations)
 	if err != nil {

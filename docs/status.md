@@ -773,3 +773,14 @@ network Zones, runtime state, and observed health. It reuses the existing
 Service inspect behavior and the shared right-side create/edit drawer instead
 of introducing a second mutation path. Independent review found no landing
 blocker; Console build verification was not requested for this slice.
+
+## Blueprint prerequisite mutation-epoch continuation (2026-09-04)
+
+An exact sealed prerequisite Attach acknowledgement now advances the existing
+Blueprint requirement gate and Environment mutation epoch together before the
+dependent Blueprint Task claims execution. Only a successfully completed exact
+Attach and producer Task recorded in the immutable requirement DAG can carry
+that authority; failed, aborted, timed-out, retried, or unrelated Environment
+mutations cannot refresh it. The focused etcd race proof covers successful,
+failed, aborted, and unrelated-mutation paths, and independent review plus the
+single correction-delta verification found no remaining landing blocker.
