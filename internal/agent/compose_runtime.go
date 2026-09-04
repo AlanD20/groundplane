@@ -149,10 +149,10 @@ func (runtime *ComposeRuntime) executeStep(
 		return runtime.proxyProcedure(ctx, assignment, step)
 	case *agentpb.ExecutionStep_ServiceRecreateAcknowledge:
 		value := payload.ServiceRecreateAcknowledge
-		return runtime.observeRecreate(ctx, assignment.Plan, value.ArtifactId, "", value.ServiceId, value.ReleaseId, "")
+		return runtime.observeRecreateSet(ctx, assignment.Plan, value.ArtifactId, "", value.ServiceId, value.ReleaseId, "")
 	case *agentpb.ExecutionStep_ServiceRecreateProbe:
 		value := payload.ServiceRecreateProbe
-		return runtime.observeRecreate(ctx, assignment.Plan, value.CandidateArtifactId, value.PriorArtifactId, value.ServiceId, value.CandidateReleaseId, value.PriorReleaseId)
+		return runtime.observeRecreateSet(ctx, assignment.Plan, value.CandidateArtifactId, value.PriorArtifactId, value.ServiceId, value.CandidateReleaseId, value.PriorReleaseId)
 	case *agentpb.ExecutionStep_ServiceRecreateCompensate:
 		result, err := runtime.mutate(ctx, assignment, step, payload.ServiceRecreateCompensate.ArtifactId, nil)
 		return runtime.verifyReleaseRestorationPostcondition(ctx, assignment, step, result, err)

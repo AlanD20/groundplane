@@ -113,7 +113,7 @@ func validateServiceRecreateProbe(operation agentpb.PlanOperation, value *agentp
 	if value == nil || !releaseOperation(operation) || validateID(ids.KindService, value.ServiceId) != nil ||
 		ids.Validate(ids.KindDeployment, value.CandidateReleaseId) != nil || !validPriorReleaseID(value.PriorReleaseId) ||
 		validateRecreateArtifact(value.CandidateArtifactId, value.ServiceId, value.CandidateReleaseId, artifacts) != nil ||
-		validatePriorTopologyArtifact(value.PriorArtifactId, value.ServiceId, artifacts) != nil {
+		validatePriorTopologyArtifact(value.PriorArtifactId, value.ServiceId, value.PriorReleaseId, "", artifacts) != nil {
 		return errs.New(errs.KindValidationFailed, "release recreate probe is invalid")
 	}
 	return nil
@@ -122,25 +122,42 @@ func validateServiceRecreateProbe(operation agentpb.PlanOperation, value *agentp
 func validateServiceRecreateCompensate(operation agentpb.PlanOperation, value *agentpb.ServiceRecreateCompensate, artifacts map[string]*agentpb.ComposeArtifact) error {
 	if value == nil || !releaseOperation(operation) || validateID(ids.KindService, value.ServiceId) != nil ||
 		ids.Validate(ids.KindDeployment, value.CandidateReleaseId) != nil || !validPriorReleaseID(value.PriorReleaseId) ||
-		!validReleaseTarget(value.PriorTarget) || artifacts[value.CandidateArtifactId] == nil ||
-		validatePriorTopologyArtifact(value.ArtifactId, value.ServiceId, artifacts) != nil {
+		!validReleaseTarget(value.PriorTarget) ||
+		validateRecreateArtifact(value.CandidateArtifactId, value.ServiceId, value.CandidateReleaseId, artifacts) != nil ||
+		validatePriorTopologyArtifact(
+			value.ArtifactId, value.ServiceId, value.PriorReleaseId, value.PriorTarget, artifacts,
+		) != nil {
 		return errs.New(errs.KindValidationFailed, "release recreate compensation is invalid")
 	}
 	return nil
 }
 
-func validatePriorTopologyArtifact(artifactID, serviceID string, artifacts map[string]*agentpb.ComposeArtifact) error {
+func validatePriorTopologyArtifact(
+	artifactID, serviceID, releaseID, target string,
+	artifacts map[string]*agentpb.ComposeArtifact,
+) error {
 	artifact := artifacts[artifactID]
 	if artifact == nil {
 		return errs.New(errs.KindValidationFailed, "prior release topology artifact is absent")
 	}
 	workloads := 0
+	var selected *agentpb.ComposeService
 	for _, service := range artifact.GetServices() {
 		if service.GetServiceId() == serviceID && (service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON || service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT) {
 			workloads++
+			serviceTarget := service.GetSlot()
+			if serviceTarget == "" {
+				serviceTarget = "singleton"
+			}
+			if expectedReleaseLabel(service) == releaseID && (target == "" || serviceTarget == target) {
+				if selected != nil {
+					return errs.New(errs.KindValidationFailed, "prior release workload topology is ambiguous")
+				}
+				selected = service
+			}
 		}
 	}
-	if workloads != 1 && workloads != 2 {
+	if workloads != 1 && workloads != 2 || !validObservedRecreateService(selected) {
 		return errs.New(errs.KindValidationFailed, "prior release workload topology is invalid")
 	}
 	return nil
@@ -149,10 +166,20 @@ func validatePriorTopologyArtifact(artifactID, serviceID string, artifacts map[s
 func validateRecreateArtifact(artifactID, serviceID, releaseID string, artifacts map[string]*agentpb.ComposeArtifact) error {
 	artifact := artifacts[artifactID]
 	service := releaseRuntimeService(artifact, serviceID, "", agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON)
-	if artifact == nil || service == nil || expectedReleaseLabel(service) != releaseID {
+	if artifact == nil || service == nil || expectedReleaseLabel(service) != releaseID ||
+		!validObservedRecreateService(service) {
 		return errs.New(errs.KindValidationFailed, "release recreate singleton is absent from its Compose artifact")
 	}
 	return nil
+}
+
+func validObservedRecreateService(service *agentpb.ComposeService) bool {
+	if service == nil || service.GetExpectedReplicas() < 1 || !service.GetHasHealthcheck() ||
+		service.GetImageReference() == "" {
+		return false
+	}
+	return service.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT ||
+		service.GetExpectedReplicas() == 1
 }
 
 func expectedReleaseLabel(service *agentpb.ComposeService) string {

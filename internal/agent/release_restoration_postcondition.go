@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -138,7 +137,9 @@ func restorationObservationTarget(
 		if result.RecreateEvidence.GetArtifactId() == probe.GetCandidateArtifactId() {
 			artifactID, releaseID = probe.GetCandidateArtifactId(), probe.GetCandidateReleaseId()
 		}
-		return planRestorationTarget(assignment.Plan, artifactID, probe.GetServiceId(), "singleton", releaseID)
+		return planRestorationTarget(
+			assignment.Plan, artifactID, probe.GetServiceId(), result.RecreateEvidence.GetTarget(), releaseID,
+		)
 	}
 	if assignment.RestorationAuthority.GetTarget() == agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE {
 		return nil, "", "", "", assignment.Plan, nil
@@ -278,6 +279,12 @@ func releaseRestorationWorkloadTargetProven(
 	if len(expected) == 0 {
 		return errs.New(errs.KindInternal, "agent: sealed predecessor workload is absent")
 	}
+	for _, service := range expected {
+		if service.GetExpectedReplicas() < 1 ||
+			(target != "" || releaseID != "") && (service.GetImageReference() == "" || !service.GetHasHealthcheck()) {
+			return errs.New(errs.KindInternal, "agent: sealed predecessor workload health authority is incomplete")
+		}
+	}
 	counts := make([]uint32, len(expected))
 	for _, container := range observed.GetContainers() {
 		if container.GetServiceId() != serviceID || observedLabel(container, "com.groundplane.runtime-role") == "proxy" {
@@ -301,8 +308,9 @@ func releaseRestorationWorkloadTargetProven(
 				continue
 			}
 		}
-		if matched == -1 || container.GetState() != agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING ||
-			expected[matched].GetHasHealthcheck() && container.GetHealth() != agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY {
+		if matched == -1 || container.GetImageReference() != expected[matched].GetImageReference() ||
+			container.GetState() != agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING ||
+			container.GetHealth() != agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY {
 			return errs.New(errs.KindStateConflict, "agent: predecessor workload is foreign or unhealthy")
 		}
 		counts[matched]++
@@ -340,39 +348,4 @@ func containerHasExpectedLabels(container *agentpb.ObservedContainer, expected [
 		}
 	}
 	return true
-}
-
-func (runtime *ComposeRuntime) observeRecreate(
-	ctx context.Context,
-	plan *agentpb.ExecutionPlan,
-	candidateArtifactID, priorArtifactID, serviceID, candidateReleaseID, priorReleaseID string,
-) (composeStepResult, error) {
-	result := composeStepResult{}
-	ticker := time.NewTicker(composeHealthPollInterval)
-	defer ticker.Stop()
-	for {
-		observed, err := runtime.observer.Observe(ctx, plan, candidateArtifactID)
-		result.Observed = observed
-		if err == nil {
-			for _, value := range []struct {
-				artifactID, releaseID string
-				compensated           bool
-			}{
-				{candidateArtifactID, candidateReleaseID, false}, {priorArtifactID, priorReleaseID, true},
-			} {
-				artifact := composeArtifact(plan, value.artifactID)
-				if value.artifactID != "" && releaseRestorationWorkloadTargetProven(artifact, observed, serviceID, "singleton", value.releaseID) == nil {
-					result.RecreateEvidence = &agentpb.ServiceRecreateEvidence{ServiceId: serviceID, ReleaseId: value.releaseID,
-						ArtifactId: value.artifactID, Compensated: value.compensated, Target: "singleton"}
-					return result, nil
-				}
-			}
-		}
-		select {
-		case <-ctx.Done():
-			result.ReconciliationRequired = true
-			return result, ctx.Err()
-		case <-ticker.C:
-		}
-	}
 }

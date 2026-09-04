@@ -665,7 +665,8 @@ func releaseTestArtifact(artifactID string) *agentpb.ComposeArtifact {
 			labels = append(labels, &agentpb.LabelPair{Key: "com.groundplane.slot", Value: slot})
 		}
 		return &agentpb.ComposeService{ServiceId: serviceID, ComposeName: name, Role: kind, Slot: slot,
-			ExpectedReplicas: 1, ExpectedLabels: labels}
+			ExpectedReplicas: 1, HasHealthcheck: true, ImageReference: "example/" + serviceID + ":sealed",
+			ExpectedLabels: labels}
 	}
 	return &agentpb.ComposeArtifact{ArtifactId: artifactID, ProjectName: "gp-release", Services: []*agentpb.ComposeService{
 		service("api", "api-blue", "slot", "blue", "release-api", agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT),
@@ -684,8 +685,9 @@ func releaseObservedContainer(name, serviceID, role, slot, releaseID string) *ag
 		labels = append(labels, &agentpb.LabelPair{Key: "com.groundplane.slot", Value: slot})
 	}
 	return &agentpb.ObservedContainer{ContainerId: name, Name: name, ServiceId: serviceID, Labels: labels,
-		State:  agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING,
-		Health: agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_NONE}
+		ImageReference: "example/" + serviceID + ":sealed",
+		State:          agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING,
+		Health:         agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY}
 }
 
 func releaseObservedProject() *agentpb.ObservedProject {

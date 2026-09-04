@@ -111,12 +111,12 @@ func recreateEvidenceExpectation(
 	}
 	target, matches := "", 0
 	for _, service := range artifact.GetServices() {
-		if service.GetServiceId() != serviceID ||
-			service.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON ||
-			restorationReleaseLabel(service) != releaseID {
+		serviceTarget, valid := sealedRecreateServiceTarget(service)
+		if !valid || service.GetServiceId() != serviceID || restorationReleaseLabel(service) != releaseID ||
+			!compensated && serviceTarget != recreateRuntimeRole {
 			continue
 		}
-		target, matches = "singleton", matches+1
+		target, matches = serviceTarget, matches+1
 	}
 	return recreateEvidenceExpectationValue{serviceID, artifactID, releaseID, target, compensated}, matches == 1
 }

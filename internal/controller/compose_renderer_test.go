@@ -30,7 +30,8 @@ func TestRenderComposePortlessRecreateGroupMemberIsSingleton(t *testing.T) {
 		t.Fatalf("RenderCompose() error = %v", err)
 	}
 	if len(artifact.Services) != 1 || artifact.Services[0].ComposeName != "worker" ||
-		artifact.Services[0].Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON {
+		artifact.Services[0].Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON ||
+		artifact.Services[0].ImageReference != "example/worker:next" {
 		t.Fatalf("portless recreate services = %#v, want one singleton", artifact.Services)
 	}
 	labels := labelPairMap(artifact.Services[0].ExpectedLabels)
@@ -57,7 +58,8 @@ func TestRenderComposeAddressableRecreateHasOneWorkloadAndStableProxy(t *testing
 	for _, service := range artifact.Services {
 		roles[service.Role]++
 		if service.Role == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON {
-			candidate = labelPairMap(service.ExpectedLabels)[composeLabelReleaseID] == input.Releases[serviceID].ReleaseID
+			candidate = labelPairMap(service.ExpectedLabels)[composeLabelReleaseID] == input.Releases[serviceID].ReleaseID &&
+				service.ImageReference == "example/api:next"
 		}
 	}
 	if roles[agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY] != 1 ||
@@ -76,6 +78,36 @@ func TestRenderComposeAddressableRecreateHasOneWorkloadAndStableProxy(t *testing
 	wantCommand := []string{"caddy", "run", "--config", serviceProxyConfigPath}
 	if !reflect.DeepEqual(rendered.Services["api"].Command, wantCommand) {
 		t.Fatalf("stable proxy command = %#v, want %#v", rendered.Services["api"].Command, wantCommand)
+	}
+}
+
+// Rationale: the ordinary Release artifact is the immutable observation authority;
+// each blue-green workload must carry the exact image written to its canonical YAML.
+func TestRenderComposeSealsBlueGreenWorkloadImages(t *testing.T) {
+	serviceID := composeIdentityTestID(ids.KindService, 39)
+	project := &composetypes.Project{Services: composetypes.Services{"api": {
+		Image: "example/api:previous", Expose: []string{"8080"}, HealthCheck: &composetypes.HealthCheckConfig{},
+	}}}
+	input := composeRenderTestInput(project)
+	input.Identities.Services = []ComposeResourceIdentity{{ID: serviceID, Name: "api"}}
+	input.Releases = map[string]ComposeReleaseIdentity{serviceID: {
+		ReleaseID: composeIdentityTestID(ids.KindDeployment, 40), Image: "example/api:next",
+		Strategy: domain.StrategyBlueGreen, Target: domain.WorkloadBlue,
+		ServingTarget: domain.WorkloadGreen, ServingReleaseID: composeIdentityTestID(ids.KindDeployment, 41),
+		ServingProxyGeneration: 1,
+	}}
+	artifact, err := RenderCompose(input)
+	if err != nil {
+		t.Fatalf("RenderCompose() error = %v", err)
+	}
+	images := map[string]string{}
+	for _, service := range artifact.GetServices() {
+		if service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT {
+			images[service.GetSlot()] = service.GetImageReference()
+		}
+	}
+	if images["blue"] != "example/api:next" || images["green"] != "example/api:previous" {
+		t.Fatalf("sealed workload images = %#v", images)
 	}
 }
 

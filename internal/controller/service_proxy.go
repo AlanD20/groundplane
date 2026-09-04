@@ -99,6 +99,7 @@ func renderServiceProxyTopology(
 					ServiceId: serviceID, ComposeName: name, ExpectedLabels: expected,
 					ExpectedReplicas: expectedRuntimeReplicas(active, replicas),
 					HasHealthcheck:   authored.HealthCheck != nil && !authored.HealthCheck.Disable,
+					ImageReference:   authored.Image,
 					Role:             agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
 					OwnerComponentId: composeServiceComponentOwner(input.Identities.Services, serviceID),
 				})
@@ -218,6 +219,7 @@ func renderServiceProxyTopology(
 				OwnerComponentId: composeServiceComponentOwner(input.Identities.Services, serviceID),
 				ExpectedReplicas: expectedRuntimeReplicas(active, replicas),
 				HasHealthcheck:   workload.HealthCheck != nil && !workload.HealthCheck.Disable,
+				ImageReference:   workload.Image,
 				Role:             serviceRole, Slot: slot,
 			})
 		}
