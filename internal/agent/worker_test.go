@@ -25,12 +25,29 @@ type workerRollbackActionStub struct {
 	previousDigest         []byte
 	candidateEvidence      *agentpb.DNSResolverObservationEvidence
 	rollbackEvidence       *agentpb.DNSResolverObservationEvidence
-	rollbackAction         **agentpb.ComponentApply
 	events                 *[]string
 	publishErr             error
 	commitFinalizeErr      error
 	rollbackObservationErr error
 	rollbackFinalizeErr    error
+}
+
+type workerComposeHelper struct {
+	request **agentpb.ComposeHelperRequest
+	events  *[]string
+}
+
+func (helper workerComposeHelper) Execute(
+	_ context.Context,
+	request *agentpb.ComposeHelperRequest,
+) (*agentpb.ComposeHelperResponse, error) {
+	*helper.request = proto.Clone(request).(*agentpb.ComposeHelperRequest)
+	apply := request.GetPlan().GetSteps()[0].GetComposeApply()
+	*helper.events = append(*helper.events, "compose:"+apply.GetArtifactId())
+	return &agentpb.ComposeHelperResponse{
+		Schema: composeHelperSchema, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,
+		Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
+	}, nil
 }
 
 func (runtime workerRollbackActionStub) record(event string) {
@@ -83,9 +100,6 @@ func (runtime workerRollbackActionStub) ExecuteComponentAction(
 	}
 	if bytes.Equal(action.GetArtifactDigest(), runtime.previousDigest) {
 		runtime.record("rollback-observation")
-		if runtime.rollbackAction != nil {
-			*runtime.rollbackAction = proto.Clone(action).(*agentpb.ComponentApply)
-		}
 		if runtime.rollbackObservationErr != nil {
 			return nil, runtime.rollbackObservationErr
 		}
@@ -181,11 +195,9 @@ func TestWorkerRestoresPredecessorComposeArtifactBeforeRollbackObservation(t *te
 	candidate := sha256.Sum256([]byte("candidate Corefile"))
 	previous := sha256.Sum256([]byte("previous Corefile"))
 	events := make([]string, 0, 6)
-	var rollbackAction *agentpb.ComponentApply
 	pool := NewWorkerPool(8, "/var/lib/groundplane/vol", nil, testLogger())
 	pool.SetComponentActionRuntime(workerRollbackActionStub{
 		candidateDigest: candidate[:], previousDigest: previous[:], events: &events,
-		rollbackAction: &rollbackAction,
 		rollbackEvidence: &agentpb.DNSResolverObservationEvidence{
 			ComponentId: "cmp_exact", ArtifactId: workerPreviousConfigArtifactID,
 			ArtifactSha256: previous[:], RenderGeneration: 6,
@@ -203,53 +215,41 @@ func TestWorkerRestoresPredecessorComposeArtifactBeforeRollbackObservation(t *te
 		workerComponentComposeArtifact(workerCandidateComposeArtifactID, workerCurrentPlanID, "7", "candidate"),
 		workerComponentComposeArtifact(workerPreviousComposeArtifactID, workerPreviousPlanID, "6", "previous"),
 	}
-	derived, derivedStep, err := componentRollbackComposeAssignment(
-		assignment,
-		assignment.Plan.Steps[0].GetComposeApply(),
-		assignment.Plan.Artifacts[1],
+	var composeRequest *agentpb.ComposeHelperRequest
+	compose, err := NewComposeRuntime(
+		workerComposeHelper{request: &composeRequest, events: &events},
+		&fakeComposeObserver{projects: []*agentpb.ObservedProject{{ProjectName: "groundplane-infra"}}},
 	)
-	if err != nil || derivedStep.GetComposeApply().GetArtifactId() != workerPreviousComposeArtifactID ||
-		len(derived.Plan.GetSteps()) != 1 || derived.Plan.GetSteps()[0].GetStepId() != derivedStep.GetStepId() ||
-		len(derived.Plan.GetArtifacts()) != 1 ||
-		derived.Plan.GetArtifacts()[0].GetArtifactId() != workerPreviousComposeArtifactID {
-		t.Fatalf("derived Compose compensation plan = %#v/%#v, %v", derived.Plan, derivedStep, err)
+	if err != nil {
+		t.Fatal(err)
 	}
+	pool.compose = compose
 	if err := pool.managedConfigs.Register(assignment); err != nil {
 		t.Fatal(err)
 	}
 	workerAcceptManagedConfig(t, pool, assignment, managed, []byte("candidate Corefile"))
-	composeCalls := make([]*agentpb.ComposeApply, 0, 2)
-	pool.executeStep = func(_ context.Context, step *agentpb.ExecutionStep) error {
-		apply := step.GetComposeApply()
-		if apply == nil {
-			t.Fatalf("unexpected compensation step = %#v", step)
-		}
-		composeCalls = append(composeCalls, proto.Clone(apply).(*agentpb.ComposeApply))
-		events = append(events, "compose:"+apply.GetArtifactId())
-		return nil
-	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	reservation := &taskReservation{assignment: assignment, ctx: ctx, cancel: cancel}
 	pool.reservations[assignment.TaskID] = reservation
 	pool.execute(context.Background(), reservation)
 	result := nextWorkerResult(t, pool)
-
 	if result.Terminal != TaskTerminalFailed || result.Compose == nil ||
 		result.Compose.GetReconciliationRequired() {
 		t.Fatalf("worker result = %#v", result)
 	}
 	rollback := result.Compose.GetDnsResolverRollbackObservation()
-	if rollback == nil || !bytes.Equal(rollback.GetArtifactSha256(), previous[:]) {
+	if rollback == nil || rollback.GetArtifactId() != workerPreviousConfigArtifactID ||
+		rollback.GetRenderGeneration() != 6 || !bytes.Equal(rollback.GetArtifactSha256(), previous[:]) {
 		t.Fatalf("worker rollback observation = %#v", rollback)
 	}
-	if rollbackAction.GetArtifactId() != workerPreviousConfigArtifactID || rollbackAction.GetGeneration() != 6 {
-		t.Fatalf("rollback observation action = %#v", rollbackAction)
-	}
-	if len(composeCalls) != 2 || composeCalls[0].GetArtifactId() != workerCandidateComposeArtifactID ||
-		composeCalls[1].GetArtifactId() != workerPreviousComposeArtifactID ||
-		!composeCalls[1].GetForceRecreate() || !composeCalls[1].GetNoDependencies() {
-		t.Fatalf("Compose compensation calls = %#v", composeCalls)
+	rollbackPlan := composeRequest.GetPlan()
+	rollbackApply := rollbackPlan.GetSteps()[0].GetComposeApply()
+	if len(rollbackPlan.GetPlanHash()) != sha256.Size || len(rollbackPlan.GetArtifacts()) != 1 ||
+		rollbackPlan.GetArtifacts()[0].GetArtifactId() != workerPreviousComposeArtifactID ||
+		rollbackApply.GetArtifactId() != workerPreviousComposeArtifactID ||
+		!rollbackApply.GetForceRecreate() || !rollbackApply.GetNoDependencies() {
+		t.Fatalf("sealed Compose compensation request = %#v", composeRequest)
 	}
 	expectedEvents := []string{
 		"compose:" + workerCandidateComposeArtifactID, "managed-config-apply", "candidate-observation",
