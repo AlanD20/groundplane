@@ -76,7 +76,7 @@ func (planner *PlatformExecutionPlanner) ResolveComponentExecutionPlan(
 	service := resolved.plan.Services[0]
 	ownershipPlanID := task.PlanID
 	ownershipGeneration := uint64(task.RenderGeneration)
-	if !resolved.input.EnsureService && !resolved.input.DisableService {
+	if !resolved.input.EnsureService {
 		ownershipPlanID = resolved.input.OwnershipPlanID
 		ownershipGeneration = resolved.input.OwnershipGeneration
 	}

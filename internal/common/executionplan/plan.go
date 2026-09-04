@@ -647,7 +647,14 @@ func validateLabels(
 				strconv.FormatUint(generation, 10) != labelGeneration {
 				return errs.New(errs.KindValidationFailed, "expected service labels do not identify a sealed plan")
 			}
-		} else if !validPriorComponentOwnership(plan, labelPlan, labelGeneration) &&
+		} else if !validPriorComponentOwnership(
+			plan,
+			artifact,
+			resourceID,
+			values,
+			labelPlan,
+			labelGeneration,
+		) &&
 			(labelPlan != plan.PlanId || labelGeneration != strconv.FormatUint(plan.RenderGeneration, 10)) {
 			return errs.New(errs.KindValidationFailed, "expected service labels do not identify the current plan")
 		}
@@ -701,16 +708,6 @@ func validateLabels(
 		}
 	}
 	return nil
-}
-
-func validPriorComponentOwnership(plan *agentpb.ExecutionPlan, planID, generationValue string) bool {
-	if plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY || len(plan.Steps) != 2 ||
-		plan.Steps[0].GetComponentApply() == nil || plan.Steps[1].GetComponentApply() == nil ||
-		validateID(ids.KindPlan, planID) != nil {
-		return false
-	}
-	generation, err := strconv.ParseUint(generationValue, 10, 64)
-	return err == nil && generation != 0 && strconv.FormatUint(generation, 10) == generationValue
 }
 
 func validateStep(

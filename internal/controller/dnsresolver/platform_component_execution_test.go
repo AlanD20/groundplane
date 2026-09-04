@@ -15,6 +15,7 @@ import (
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"google.golang.org/protobuf/proto"
 )
 
 type executionRepositoryStub struct {
@@ -45,6 +46,144 @@ func (repository executionRepositoryStub) GetHostResolverBaseline(
 
 type executionCatalogStub struct {
 	plan componentsdk.EnvironmentPlan
+}
+
+// Rationale: a disable Task removes the already-serving Compose artifact, so
+// dispatch must reconstruct the exact sealed predecessor ownership and hash.
+func TestPlatformExecutionDisableReusesSealedPredecessorOwnership(t *testing.T) {
+	t.Parallel()
+	now := time.Unix(1_700_000_000, 0).UTC()
+	componentID := ids.NewAt(ids.KindComponent, now, 1)
+	serviceID := ids.NewAt(ids.KindService, now, 2)
+	taskPlanID := ids.NewAt(ids.KindPlan, now, 3)
+	predecessorPlanID := ids.NewAt(ids.KindPlan, now, 10)
+	taskID := ids.NewAt(ids.KindTask, now, 4)
+	component := core.Component{
+		ID: componentID, Owner: core.ComponentOwnerPlatform, Kind: core.ComponentKindCoreDNS,
+		Enabled: true, GeneratedServices: []string{serviceID}, Healthy: true,
+		Config: core.ComponentConfig{CoreDNS: &core.CoreDNSComponentConfig{
+			CorefileTemplate: testCorefileTemplate,
+			UpstreamAuto:     true,
+		}},
+	}
+	record, err := etcd.NewComponentRecord(component)
+	if err != nil {
+		t.Fatalf("NewComponentRecord() error = %v", err)
+	}
+	desiredDigest, err := etcd.PlatformComponentDesiredDigest(record)
+	if err != nil {
+		t.Fatalf("PlatformComponentDesiredDigest() error = %v", err)
+	}
+	registeredPlan := executionPlanFixture(serviceID, "example/resolver@sha256:"+strings.Repeat("1", 64))
+	variant := ""
+	if runtime.GOARCH == "arm64" {
+		variant = "v8"
+	}
+	selectedPlatform, selectedReference, selected := registeredPlan.Services[0].Image.Select(
+		runtime.GOOS,
+		runtime.GOARCH,
+		variant,
+	)
+	if !selected {
+		t.Fatalf("execution fixture does not support %s/%s/%s", runtime.GOOS, runtime.GOARCH, variant)
+	}
+	artifactDigest := sha256.Sum256(registeredPlan.Files[0].Content)
+	registeredPlanDigest := componentsdk.DigestEnvironmentPlan(registeredPlan)
+	input := etcd.PlatformComponentTaskRenderInput{
+		PlanID:                         taskPlanID,
+		TaskID:                         taskID,
+		ComponentID:                    componentID,
+		DesiredSHA256:                  desiredDigest,
+		BaselineGeneration:             1,
+		BaselineSHA256:                 strings.Repeat("2", 64),
+		Config:                         *component.Config.CoreDNS,
+		HostResolutionInputRevision:    1,
+		HostResolutionSHA256:           strings.Repeat("5", 64),
+		GeneratedServiceID:             serviceID,
+		DisableService:                 true,
+		DefinitionSHA256:               strings.Repeat("3", 64),
+		CatalogSHA256:                  strings.Repeat("4", 64),
+		ActionID:                       "activate-config",
+		ArtifactID:                     ids.NewAt(ids.KindConfig, now, 6),
+		ComposeArtifactID:              ids.NewAt(ids.KindConfig, now, 7),
+		OwnershipPlanID:                predecessorPlanID,
+		OwnershipGeneration:            7,
+		PriorObservationModRevision:    11,
+		PriorObservationRevision:       11,
+		PredecessorTaskID:              ids.NewAt(ids.KindTask, now, 11),
+		ExpectedPreviousArtifactSHA256: hex.EncodeToString(artifactDigest[:]),
+		ExpectedPreviousArtifactID:     ids.NewAt(ids.KindConfig, now, 12),
+		ExpectedPreviousGeneration:     6,
+		ImageRepository:                registeredPlan.Services[0].Image.Repository,
+		ImageIndexDigest:               registeredPlan.Services[0].Image.IndexDigest,
+		ImageOS:                        selectedPlatform.OS,
+		ImageArchitecture:              selectedPlatform.Architecture,
+		ImageVariant:                   selectedPlatform.Variant,
+		ImageChildDigest:               selectedPlatform.ChildDigest,
+		ImageReference:                 selectedReference,
+		ArtifactSHA256:                 hex.EncodeToString(artifactDigest[:]),
+		ArtifactLength:                 uint64(len(registeredPlan.Files[0].Content)),
+		PlanSHA256:                     hex.EncodeToString(registeredPlanDigest[:]),
+	}
+	task := etcd.TaskRecord{
+		ID:               taskID,
+		PlanID:           taskPlanID,
+		RenderGeneration: 8,
+		Executor:         etcd.TaskExecutorAgent,
+		Type:             etcd.TaskUpdate,
+		Target:           componentID,
+		Actor:            etcd.TaskActorOperator,
+		Params: map[string]string{
+			etcd.TaskResourceKindParam:                   etcd.TaskResourceComponent,
+			etcd.TaskPlatformComponentDesiredSHA256Param: desiredDigest,
+		},
+		Steps: []etcd.TaskStepRecord{
+			{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 5)},
+			{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 9)},
+		},
+	}
+	input.ComposeArtifact, err = controllerpkg.RenderPlatformComponentCompose(
+		controllerpkg.PlatformComponentComposeInput{
+			ComponentID: componentID, PlanID: input.OwnershipPlanID,
+			RenderGeneration: input.OwnershipGeneration,
+			ArtifactID:       input.ComposeArtifactID, Plan: registeredPlan,
+			ImageRepository: input.ImageRepository, ImageIndexDigest: input.ImageIndexDigest,
+			ImageChildDigest: input.ImageChildDigest, ImageReference: input.ImageReference,
+			ImageOS: input.ImageOS, ImageArchitecture: input.ImageArchitecture, ImageVariant: input.ImageVariant,
+		},
+	)
+	if err != nil {
+		t.Fatalf("RenderPlatformComponentCompose() error = %v", err)
+	}
+	input, err = sealPlatformComponentTaskPlanHash(task, input, registeredPlan.Services[0].ObservationAction)
+	if err != nil {
+		t.Fatalf("sealPlatformComponentTaskPlanHash() error = %v", err)
+	}
+	task.PlanHash = input.ExecutionPlanSHA256
+	baseline := etcd.Versioned[etcd.HostResolverBaselineRecord]{Record: etcd.HostResolverBaselineRecord{
+		Generation: 1, Content: []byte("nameserver 1.1.1.1\n"), SHA256: input.BaselineSHA256,
+	}}
+	planner, err := NewPlatformComponentExecutionPlanner(
+		"/var/lib/groundplane",
+		executionRepositoryStub{
+			input: input, current: etcd.Versioned[etcd.ComponentRecord]{Record: record}, baseline: baseline,
+		},
+		&executionCatalogStub{plan: registeredPlan},
+	)
+	if err != nil {
+		t.Fatalf("NewPlatformComponentExecutionPlanner() error = %v", err)
+	}
+
+	execution, err := planner.ResolveComponentExecutionPlan(context.Background(), task)
+	if err != nil {
+		t.Fatalf("ResolveComponentExecutionPlan() error = %v", err)
+	}
+	if len(execution.GetArtifacts()) != 1 || !proto.Equal(execution.GetArtifacts()[0], input.ComposeArtifact) {
+		t.Fatal("disable dispatch changed sealed predecessor Compose artifact")
+	}
+	if hex.EncodeToString(execution.GetPlanHash()) != input.ExecutionPlanSHA256 {
+		t.Fatal("disable dispatch changed sealed execution plan hash")
+	}
 }
 
 func (catalog *executionCatalogStub) ResolveActionEnvelope(
