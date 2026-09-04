@@ -75,7 +75,7 @@ func managedNetworkRequest(t *testing.T) (*agentpb.ComposeHelperRequest, string,
 	now := time.Date(2026, time.August, 23, 12, 0, 0, 0, time.UTC)
 	zoneID := ids.NewAt(ids.KindNetwork, now, 1)
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 2)
-	dockerName := "gp_net_" + stringLower(zoneID)
+	dockerName := "gp_net_" + zoneID
 	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
 		Schema: executionplan.SchemaVersion, PlanId: ids.NewAt(ids.KindPlan, now, 3), RenderGeneration: 1,
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_REMOVE, TargetId: zoneID,
@@ -95,14 +95,4 @@ func managedNetworkRequest(t *testing.T) (*agentpb.ComposeHelperRequest, string,
 		OperationId: ids.NewAt(ids.KindOperation, now, 6), Plan: plan,
 		StepId: plan.Steps[0].StepId, TimeoutSeconds: 120,
 	}, dockerName, environmentID
-}
-
-func stringLower(value string) string {
-	result := []byte(value)
-	for index, character := range result {
-		if character >= 'A' && character <= 'Z' {
-			result[index] = character + ('a' - 'A')
-		}
-	}
-	return string(result)
 }

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 
+	"github.com/AlanD20/groundplane/internal/common/networkname"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -269,10 +270,14 @@ func validateZoneArtifactAddition(currentValue []byte, candidateValue []byte, zo
 	}
 	stripped := proto.Clone(candidate).(*agentpb.ComposeArtifact)
 	stripped.Networks = stripped.Networks[:0]
+	dockerName, err := networkname.New(zone.Desired.ID)
+	if err != nil {
+		return errs.New(errs.KindValidationFailed, "direct Zone candidate artifact has an invalid Network id")
+	}
 	found := false
 	for _, network := range candidate.GetNetworks() {
 		if network.GetNetworkId() == zone.Desired.ID && network.GetComposeName() == zone.Desired.Name &&
-			network.GetDockerName() == "gp_net_"+zone.Desired.ID {
+			network.GetDockerName() == dockerName {
 			if found {
 				return errs.New(errs.KindValidationFailed, "direct Zone candidate artifact duplicates the Zone")
 			}

@@ -68,6 +68,7 @@ func TestZoneRemovalPlanRebuildsAffectedServicesBeforeManagedNetworkRemoval(t *t
 		plan.Steps[1].GetComposeApply().GetServiceIds()[0] != secondServiceID ||
 		plan.Steps[1].GetPrerequisiteStepId() != plan.Steps[0].GetStepId() ||
 		plan.Steps[2].GetManagedNetworkRemove().GetNetworkId() != zoneID ||
+		plan.Steps[2].GetManagedNetworkRemove().GetDockerName() != "gp_net_"+zoneID ||
 		plan.Steps[2].GetPrerequisiteStepId() != plan.Steps[1].GetStepId() {
 		t.Fatalf("Zone removal plan = %#v", plan)
 	}

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/networkname"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -90,8 +91,12 @@ func NormalizedEnvironmentArtifact(
 	networks := make([]*agentpb.ComposeNetwork, len(projection.DesiredZones))
 	for index, desired := range projection.DesiredZones {
 		identity := desired.Desired
+		dockerName, err := networkname.New(identity.ID)
+		if err != nil {
+			return nil, errs.New(errs.KindInternal, "Environment normalized Compose Network identity is invalid")
+		}
 		networks[index] = &agentpb.ComposeNetwork{
-			NetworkId: identity.ID, ComposeName: identity.Name, DockerName: "gp_net_" + identity.ID,
+			NetworkId: identity.ID, ComposeName: identity.Name, DockerName: dockerName,
 		}
 	}
 	volumes := make([]*agentpb.ComposeVolume, len(projection.Volumes))

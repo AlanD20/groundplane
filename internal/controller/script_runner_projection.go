@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
+	"github.com/AlanD20/groundplane/internal/common/networkname"
 	release "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -441,6 +442,10 @@ func projectScriptNetworks(
 		if len(config.Extensions) != 0 {
 			return nil, errs.New(errs.KindValidationFailed, "Script runner network contains unsupported extensions")
 		}
+		dockerName, err := networkname.New(networkID)
+		if err != nil {
+			return nil, errs.New(errs.KindStateConflict, "Script runner network identity is invalid")
+		}
 		source := existingScriptSourceAuthority(revisionByID[networkID])
 		if candidate != nil {
 			source = blueprintScriptStagedSourceAuthority(candidate, candidate.ProjectionSHA256)
@@ -448,7 +453,7 @@ func projectScriptNetworks(
 		result = append(result, &agentpb.ScriptRunnerNetwork{
 			NetworkId: networkID, Source: source,
 			RenderedAttachment: &agentpb.ScriptNetworkAttachment{
-				DockerNetworkName: "gp_net_" + strings.ToLower(networkID),
+				DockerNetworkName: dockerName,
 				DriverOptions:     scriptPairs(config.DriverOpts), InterfaceName: config.InterfaceName,
 				Priority: int64(config.Priority),
 			},

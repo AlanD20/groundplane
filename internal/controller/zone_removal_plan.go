@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/hex"
 	"math"
-	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/networkname"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -114,10 +114,14 @@ func (resolver *TaskPlanResolver) buildZoneRemovalPlan(task etcd.TaskRecord, int
 	if ids.Validate(ids.KindStep, networkStep.ID) != nil {
 		return nil, errs.New(errs.KindInternal, "Zone removal network procedure changed")
 	}
+	dockerName, err := networkname.New(intent.ZoneID)
+	if err != nil {
+		return nil, errs.New(errs.KindInternal, "Zone removal Network identity is invalid")
+	}
 	steps = append(steps, &agentpb.ExecutionStep{
 		StepId: networkStep.ID, TimeoutSeconds: uint32(task.TimeoutSeconds), PrerequisiteStepId: previous,
 		Payload: &agentpb.ExecutionStep_ManagedNetworkRemove{ManagedNetworkRemove: &agentpb.ManagedNetworkRemove{
-			NetworkId: intent.ZoneID, EnvironmentId: intent.EnvironmentID, DockerName: "gp_net_" + strings.ToLower(task.Target),
+			NetworkId: intent.ZoneID, EnvironmentId: intent.EnvironmentID, DockerName: dockerName,
 		}},
 	})
 	return BuildPlan(PlanBuildInput{

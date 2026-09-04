@@ -6,6 +6,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
+	"github.com/AlanD20/groundplane/internal/common/networkname"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -41,9 +42,10 @@ func AddEnvironmentZoneArtifact(
 	addition ZoneArtifactAddition,
 ) (*agentpb.ComposeArtifact, error) {
 	subnet, subnetErr := ipam.ParseIPv4Prefix(addition.Zone.Subnet)
+	dockerName, networkNameErr := networkname.New(addition.Zone.ID)
 	if current == nil || current.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
 		ids.Validate(ids.KindEnvironment, current.GetOwnerId()) != nil ||
-		ids.Validate(ids.KindNetwork, addition.Zone.ID) != nil || addition.Zone.Name == "" ||
+		networkNameErr != nil || addition.Zone.Name == "" ||
 		subnetErr != nil || subnet.String() != addition.Zone.Subnet ||
 		ids.Validate(ids.KindProject, addition.ProjectID) != nil ||
 		(addition.TenantID != "" && ids.Validate(ids.KindTenant, addition.TenantID) != nil) ||
@@ -83,7 +85,7 @@ func AddEnvironmentZoneArtifact(
 	if addition.TenantID != "" {
 		labels[composeLabelTenantID] = addition.TenantID
 	}
-	setMappingScalar(network, "name", "gp_net_"+addition.Zone.ID)
+	setMappingScalar(network, "name", dockerName)
 	setMappingScalar(network, "driver", "bridge")
 	if addition.Zone.Internal {
 		setMappingTypedScalar(network, "internal", "!!bool", "true")
@@ -108,7 +110,7 @@ func AddEnvironmentZoneArtifact(
 	sortMapping(network)
 	sortMapping(networks)
 	owned.Networks = append(owned.Networks, &agentpb.ComposeNetwork{
-		NetworkId: addition.Zone.ID, ComposeName: addition.Zone.Name, DockerName: "gp_net_" + addition.Zone.ID,
+		NetworkId: addition.Zone.ID, ComposeName: addition.Zone.Name, DockerName: dockerName,
 		ExpectedLabels: labelPairs(labels),
 	})
 	if err := rewriteArtifactOwnership(root, addition.PlanID, addition.RenderGeneration); err != nil {

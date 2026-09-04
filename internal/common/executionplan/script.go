@@ -11,6 +11,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
+	"github.com/AlanD20/groundplane/internal/common/networkname"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/oklog/ulid/v2"
@@ -295,9 +296,13 @@ func validateScriptNetworks(
 ) error {
 	previous := ""
 	for _, network := range networks {
-		if network == nil || validateID(ids.KindNetwork, network.NetworkId) != nil ||
+		if network == nil {
+			return errs.New(errs.KindValidationFailed, "Script runner network is invalid or unsorted")
+		}
+		dockerName, err := networkname.New(network.NetworkId)
+		if err != nil ||
 			network.NetworkId <= previous || network.RenderedAttachment == nil ||
-			network.RenderedAttachment.DockerNetworkName != "gp_net_"+strings.ToLower(network.NetworkId) ||
+			network.RenderedAttachment.DockerNetworkName != dockerName ||
 			!validScriptString(network.RenderedAttachment.InterfaceName) {
 			return errs.New(errs.KindValidationFailed, "Script runner network is invalid or unsorted")
 		}

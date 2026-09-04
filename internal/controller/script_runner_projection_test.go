@@ -132,6 +132,31 @@ func TestProjectScriptNetworksOmitsServiceEndpointIdentity(t *testing.T) {
 	}
 }
 
+func TestProjectScriptNetworksUsesCanonicalPhysicalName(t *testing.T) {
+	const networkID = "net_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	sources := etcd.ScriptExecutionSources{
+		DesiredProjection: etcd.Versioned[etcd.EnvironmentComposeProjection]{
+			Record: etcd.EnvironmentComposeProjection{DesiredZones: []etcd.EnvironmentZoneProjection{{
+				Desired: core.Zone{ID: networkID, Name: "backend"},
+			}}},
+		},
+		Networks: []etcd.Versioned[etcd.ZoneRecord]{{
+			Record: etcd.ZoneRecord{Desired: core.Zone{ID: networkID, Name: "backend"}}, Revision: 7,
+		}},
+	}
+	service := composetypes.ServiceConfig{Networks: map[string]*composetypes.ServiceNetworkConfig{
+		"backend": {},
+	}}
+
+	projected, err := projectScriptNetworks(service, sources, nil)
+	if err != nil {
+		t.Fatalf("projectScriptNetworks() error = %v", err)
+	}
+	if len(projected) != 1 || projected[0].GetRenderedAttachment().GetDockerNetworkName() != "gp_net_"+networkID {
+		t.Fatalf("Script physical network = %#v, want gp_net_%s", projected, networkID)
+	}
+}
+
 func TestExistingScriptSourceAuthorityEmitsOnlyPositiveExistingEvidence(t *testing.T) {
 	authority := existingScriptSourceAuthority(19)
 	if authority == nil || authority.GetExisting() == nil || authority.GetExisting().ModRevision != 19 ||

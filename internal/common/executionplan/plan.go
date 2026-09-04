@@ -17,6 +17,7 @@ import (
 	"filippo.io/age"
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/networkname"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -587,7 +588,11 @@ func validateServices(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArti
 func validateNetworks(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArtifact) error {
 	previous := ""
 	for _, network := range artifact.Networks {
-		if network == nil || validateID(ids.KindNetwork, network.NetworkId) != nil {
+		if network == nil {
+			return errs.New(errs.KindValidationFailed, "Compose artifact network id is invalid")
+		}
+		dockerName, err := networkname.New(network.NetworkId)
+		if err != nil {
 			return errs.New(errs.KindValidationFailed, "Compose artifact network id is invalid")
 		}
 		if previous >= network.NetworkId {
@@ -599,6 +604,9 @@ func validateNetworks(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArti
 		}
 		if err := validateComposeName(network.DockerName); err != nil {
 			return err
+		}
+		if network.DockerName != dockerName {
+			return errs.New(errs.KindValidationFailed, "Compose artifact physical network name is invalid")
 		}
 		if err := validateLabels(plan, artifact, "network", network.NetworkId, network.ExpectedLabels); err != nil {
 			return err
@@ -858,10 +866,13 @@ func validateStep(
 		return validateAdapterProcedure(operation, payload.AdapterProcedure)
 	case *agentpb.ExecutionStep_ManagedNetworkRemove:
 		remove := payload.ManagedNetworkRemove
-		if operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE || remove == nil ||
-			validateID(ids.KindNetwork, remove.NetworkId) != nil ||
+		if operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE || remove == nil {
+			return errs.New(errs.KindValidationFailed, "managed network remove payload is invalid")
+		}
+		dockerName, err := networkname.New(remove.NetworkId)
+		if err != nil ||
 			validateID(ids.KindEnvironment, remove.EnvironmentId) != nil ||
-			remove.DockerName != "gp_net_"+strings.ToLower(remove.NetworkId) {
+			remove.DockerName != dockerName {
 			return errs.New(errs.KindValidationFailed, "managed network remove payload is invalid")
 		}
 		return nil

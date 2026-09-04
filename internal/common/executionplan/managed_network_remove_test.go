@@ -23,7 +23,7 @@ func TestManagedNetworkRemovePlanHasClosedIdentity(t *testing.T) {
 			Payload: &agentpb.ExecutionStep_ManagedNetworkRemove{
 				ManagedNetworkRemove: &agentpb.ManagedNetworkRemove{
 					NetworkId: zoneID, EnvironmentId: ids.NewAt(ids.KindEnvironment, now, 4),
-					DockerName: "gp_net_" + strings.ToLower(zoneID),
+					DockerName: "gp_net_" + zoneID,
 				},
 			},
 		}},
@@ -34,6 +34,10 @@ func TestManagedNetworkRemovePlanHasClosedIdentity(t *testing.T) {
 	}
 	if _, err := Validate(sealed); err != nil {
 		t.Fatalf("Validate() error = %v", err)
+	}
+	plan.Steps[0].GetManagedNetworkRemove().DockerName = "gp_net_" + strings.ToLower(zoneID)
+	if _, err := Seal(plan); err == nil {
+		t.Fatal("Seal(lowercase network name) error = nil")
 	}
 	plan.Steps[0].GetManagedNetworkRemove().DockerName = "operator-selected"
 	if _, err := Seal(plan); err == nil {

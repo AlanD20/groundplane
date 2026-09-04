@@ -8,6 +8,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
+	"github.com/AlanD20/groundplane/internal/common/networkname"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -255,7 +256,7 @@ func validateServiceArtifactZones(names []string, zones []ServiceArtifactZone) e
 	seen := make(map[string]struct{}, len(zones))
 	for index, zone := range zones {
 		subnet, err := ipam.ParseIPv4Prefix(zone.Subnet)
-		if ids.Validate(ids.KindNetwork, zone.ID) != nil || zone.Name != names[index] ||
+		if _, nameErr := networkname.New(zone.ID); nameErr != nil || zone.Name != names[index] ||
 			err != nil || subnet.String() != zone.Subnet {
 			return errs.New(errs.KindInternal, "Service artifact Zone bindings are invalid")
 		}
@@ -273,6 +274,10 @@ func ensureServiceZoneNetworks(root *yaml.Node, artifact *agentpb.ComposeArtifac
 		return errs.New(errs.KindInternal, "normalized Compose network mapping is corrupt")
 	}
 	for _, zone := range mutation.Zones {
+		dockerName, err := networkname.New(zone.ID)
+		if err != nil {
+			return errs.New(errs.KindInternal, "Service artifact Zone identity is invalid")
+		}
 		owned := false
 		for _, network := range artifact.GetNetworks() {
 			if network.GetNetworkId() == zone.ID || network.GetComposeName() == zone.Name {
@@ -298,7 +303,7 @@ func ensureServiceZoneNetworks(root *yaml.Node, artifact *agentpb.ComposeArtifac
 			composeLabelManaged: "true", composeLabelProjectID: mutation.ProjectID,
 			composeLabelTenantID: mutation.TenantID,
 		}
-		setMappingScalar(network, "name", "gp_net_"+zone.ID)
+		setMappingScalar(network, "name", dockerName)
 		setMappingScalar(network, "driver", "bridge")
 		removeMappingValue(network, "external")
 		if zone.Internal {
@@ -326,7 +331,7 @@ func ensureServiceZoneNetworks(root *yaml.Node, artifact *agentpb.ComposeArtifac
 		setMappingNode(network, composeResourceExtension, resource)
 		sortMapping(network)
 		artifact.Networks = append(artifact.Networks, &agentpb.ComposeNetwork{
-			NetworkId: zone.ID, ComposeName: zone.Name, DockerName: "gp_net_" + zone.ID,
+			NetworkId: zone.ID, ComposeName: zone.Name, DockerName: dockerName,
 			ExpectedLabels: labelPairs(labels),
 		})
 	}

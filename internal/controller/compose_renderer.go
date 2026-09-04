@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/networkname"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -125,7 +126,10 @@ func RenderCompose(input ComposeRenderInput) (*agentpb.ComposeArtifact, error) {
 		if err != nil {
 			return nil, err
 		}
-		dockerName := "gp_net_" + networkID
+		dockerName, err := networkname.New(networkID)
+		if err != nil {
+			return nil, err
+		}
 		network.Name = dockerName
 		network.Labels = labels
 		network.Extensions = extensions
@@ -143,7 +147,11 @@ func RenderCompose(input ComposeRenderInput) (*agentpb.ComposeArtifact, error) {
 		if err := rejectComposeOwnershipLabels(network.Labels); err != nil {
 			return nil, err
 		}
-		network.Name = "gp_net_" + externalNetworkIDs[name]
+		dockerName, err := networkname.New(externalNetworkIDs[name])
+		if err != nil {
+			return nil, err
+		}
+		network.Name = dockerName
 		rendered.Networks[name] = network
 	}
 

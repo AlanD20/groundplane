@@ -826,3 +826,14 @@ identity contract rather than a test-only package helper. Abort behavior is
 unchanged, while the production-tagged Controller build and the focused abort
 race proof both pass. Deployment and recovery of the preserved reference-host
 Blueprint Task remain the next acceptance step.
+
+## Canonical physical Network identity (2026-09-04)
+
+One leaf naming module now owns the exact managed Docker Network identity
+`gp_net_<canonical-network-id>`. Compose creation, external joins, normalized
+artifacts, direct Zone mutation, Script runner attachment, execution-plan
+validation, and managed removal all preserve the canonical uppercase stable id
+instead of independently constructing or lowercasing it. Lowercase, arbitrary,
+and caller-selected physical names fail closed. Focused Controller, execution-
+plan, persistence, naming, and Compose-helper proofs pass; the clean reference-
+host Blueprint and post-deploy Script rerun remains pending.
