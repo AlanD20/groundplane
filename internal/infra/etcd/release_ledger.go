@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -38,22 +39,23 @@ const (
 )
 
 type ReleasePublicationEvidence struct {
-	Manifest                 VersionedReleaseManifest
-	EnvironmentID            string
-	ProjectID                string
-	TenantID                 string
-	DesiredKind              ReleaseDesiredKind
-	DesiredID                string
-	DesiredRevision          int64
-	EnvironmentEpochRevision int64
-	EnvironmentEpochValue    []byte
-	FenceRevision            int64
-	Task                     TaskRecord
-	Marker                   IdempotencyMarker
-	Fence                    ReleaseFenceSet
-	Operation                ReleaseOperationHead
-	Hooks                    []ReleaseHookExecutionPublication
-	PublishedAt              time.Time
+	Manifest                   VersionedReleaseManifest
+	EnvironmentID              string
+	ProjectID                  string
+	TenantID                   string
+	DesiredKind                ReleaseDesiredKind
+	DesiredID                  string
+	DesiredRevision            int64
+	EnvironmentEpochRevision   int64
+	EnvironmentEpochValue      []byte
+	FenceRevision              int64
+	Task                       TaskRecord
+	Marker                     IdempotencyMarker
+	Fence                      ReleaseFenceSet
+	Operation                  ReleaseOperationHead
+	CandidateReleaseDescriptor executionplan.CandidateReleaseDescriptor
+	Hooks                      []ReleaseHookExecutionPublication
+	PublishedAt                time.Time
 }
 
 type ReleasePublicationResult struct {
@@ -190,7 +192,9 @@ func (ledger *ReleaseLedger) Publish(
 	defer clear(markerValue)
 	publicationValue, err := encodeReleaseRecord("release-publication", ReleasePublicationMarker{
 		PublicationID: evidence.Manifest.Record.PublicationID, OperationID: evidence.Manifest.Record.OperationID,
-		ManifestDigest: evidence.Manifest.Record.Digest, PublishedAt: evidence.PublishedAt,
+		ManifestDigest:             evidence.Manifest.Record.Digest,
+		CandidateReleaseDescriptor: executionplan.CloneCandidateReleaseDescriptor(evidence.CandidateReleaseDescriptor),
+		PublishedAt:                evidence.PublishedAt,
 	})
 	if err != nil {
 		return ReleasePublicationResult{}, err
@@ -338,6 +342,9 @@ func validateReleasePublicationEvidence(value ReleasePublicationEvidence) error 
 		value.Marker.TaskID != value.Task.ID || value.Marker.Response.Status != http.StatusAccepted ||
 		value.Marker.Locator.ScopeKind != IdempotencyScopeEnvironment || value.Marker.Locator.ScopeID != value.EnvironmentID {
 		return errs.New(errs.KindValidationFailed, "release publication task or idempotency evidence is invalid")
+	}
+	if _, err := validateReleaseCandidateDescriptor(value.CandidateReleaseDescriptor, value.Task, manifest); err != nil {
+		return err
 	}
 	if err := validateReleaseOperationHead(value.Operation, manifest, value.Task); err != nil {
 		return err

@@ -673,10 +673,13 @@ func materializationAssignment(t *testing.T, content []byte) Assignment {
 	if err != nil {
 		t.Fatalf("Seal() error = %v", err)
 	}
+	deadline := time.Now().Add(time.Minute)
 	return Assignment{
 		AssignmentID: workerTestAssignmentID,
 		TaskID:       materializationTaskID, OperationID: materializationOperationID,
-		Plan: plan, EventAttempt: 1, Deadline: time.Now().Add(time.Minute),
+		Plan: plan, Deadline: deadline, ExecutionEpoch: 1,
+		ExecutionMode:   agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
+		ForwardDeadline: deadline, RecoveryDeadline: deadline.Add(time.Minute),
 	}
 }
 

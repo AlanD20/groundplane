@@ -124,9 +124,10 @@ const (
 type TaskResultDiagnostic string
 
 const (
-	TaskResultDiagnosticNone           TaskResultDiagnostic = "none"
-	TaskResultDiagnosticConfigRejected TaskResultDiagnostic = "config_rejected"
-	TaskResultDiagnosticComposeFailed  TaskResultDiagnostic = "compose_failed"
+	TaskResultDiagnosticNone                TaskResultDiagnostic = "none"
+	TaskResultDiagnosticConfigRejected      TaskResultDiagnostic = "config_rejected"
+	TaskResultDiagnosticComposeFailed       TaskResultDiagnostic = "compose_failed"
+	TaskResultDiagnosticTimeoutBeforeEffect TaskResultDiagnostic = "timeout_before_effect"
 )
 
 type TaskObservedProjectSummary struct {
@@ -153,6 +154,21 @@ type TaskRecreateEvidence struct {
 	ArtifactID  string `json:"artifact_id"`
 	Compensated bool   `json:"compensated"`
 	Target      string `json:"target"`
+}
+
+type TaskCandidateAbsenceCandidate struct {
+	ServiceID string `json:"service_id"`
+	ReleaseID string `json:"release_id"`
+}
+
+type TaskCandidateAbsenceEvidence struct {
+	AssignmentID        string                          `json:"assignment_id"`
+	PlanHash            string                          `json:"plan_hash"`
+	AuthoritySHA256     string                          `json:"authority_sha256"`
+	ComposeProjectName  string                          `json:"compose_project_name"`
+	CandidateArtifactID string                          `json:"candidate_artifact_id"`
+	Candidates          []TaskCandidateAbsenceCandidate `json:"candidates"`
+	AbsenceProven       bool                            `json:"absence_proven"`
 }
 
 type TaskDNSResolverObservationEvidence struct {
@@ -186,8 +202,11 @@ type TaskResultRecord struct {
 	Projects                        []TaskObservedProjectSummary        `json:"projects,omitempty"`
 	ProxyEvidence                   []TaskProxyEvidence                 `json:"proxy_evidence,omitempty"`
 	RecreateEvidence                []TaskRecreateEvidence              `json:"recreate_evidence,omitempty"`
+	CandidateAbsenceEvidence        *TaskCandidateAbsenceEvidence       `json:"candidate_absence_evidence,omitempty"`
 	DNSResolverCandidateObservation *TaskDNSResolverObservationEvidence `json:"dns_resolver_candidate_observation,omitempty"`
 	DNSResolverRollbackObservation  *TaskDNSResolverObservationEvidence `json:"dns_resolver_rollback_observation,omitempty"`
+	ExecutionEpoch                  uint32                              `json:"-"`
+	ReleaseRecoveryRecordSHA256     string                              `json:"-"`
 }
 
 type TaskTerminalAssignmentRecord struct {
@@ -317,6 +336,7 @@ type taskResultData struct {
 	Projects                        []taskObservedProjectSummaryData    `json:"projects,omitempty"`
 	ProxyEvidence                   []TaskProxyEvidence                 `json:"proxy_evidence,omitempty"`
 	RecreateEvidence                []TaskRecreateEvidence              `json:"recreate_evidence,omitempty"`
+	CandidateAbsenceEvidence        *TaskCandidateAbsenceEvidence       `json:"candidate_absence_evidence,omitempty"`
 	DNSResolverCandidateObservation *TaskDNSResolverObservationEvidence `json:"dns_resolver_candidate_observation,omitempty"`
 	DNSResolverRollbackObservation  *TaskDNSResolverObservationEvidence `json:"dns_resolver_rollback_observation,omitempty"`
 }
@@ -676,7 +696,8 @@ func validateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 		return errs.New(errs.KindValidationFailed, "task result kind is invalid")
 	}
 	switch result.Diagnostic {
-	case TaskResultDiagnosticNone, TaskResultDiagnosticConfigRejected, TaskResultDiagnosticComposeFailed:
+	case TaskResultDiagnosticNone, TaskResultDiagnosticConfigRejected, TaskResultDiagnosticComposeFailed,
+		TaskResultDiagnosticTimeoutBeforeEffect:
 	default:
 		return errs.New(errs.KindValidationFailed, "task result diagnostic is invalid")
 	}
@@ -735,10 +756,26 @@ func validateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 	}
 	for index, evidence := range result.RecreateEvidence {
 		if ids.Validate(ids.KindService, evidence.ServiceID) != nil || !validReleaseEvidenceTarget(evidence.Target) ||
-			(evidence.ReleaseID != "baseline" && ids.Validate(ids.KindDeployment, evidence.ReleaseID) != nil) ||
+			ids.Validate(ids.KindDeployment, evidence.ReleaseID) != nil ||
 			ids.Validate(ids.KindConfig, evidence.ArtifactID) != nil ||
 			(index > 0 && result.RecreateEvidence[index-1].ServiceID >= evidence.ServiceID) {
 			return errs.New(errs.KindValidationFailed, "task result recreate evidence is invalid or unsorted")
+		}
+	}
+	if evidence := result.CandidateAbsenceEvidence; evidence != nil {
+		if result.Kind != TaskResultCompose || ids.Validate(ids.KindAssignment, evidence.AssignmentID) != nil ||
+			!validSHA256(evidence.PlanHash) || !validSHA256(evidence.AuthoritySHA256) ||
+			evidence.ComposeProjectName == "" || ids.Validate(ids.KindConfig, evidence.CandidateArtifactID) != nil ||
+			len(evidence.Candidates) == 0 || len(evidence.Candidates) > 32 {
+			return errs.New(errs.KindValidationFailed, "task candidate absence evidence is invalid")
+		}
+		previous := ""
+		for _, candidate := range evidence.Candidates {
+			identity := candidate.ServiceID + "\x00" + candidate.ReleaseID
+			if ids.Validate(ids.KindService, candidate.ServiceID) != nil || ids.Validate(ids.KindDeployment, candidate.ReleaseID) != nil || identity <= previous {
+				return errs.New(errs.KindValidationFailed, "task candidate absence evidence is invalid or unsorted")
+			}
+			previous = identity
 		}
 	}
 	for _, candidate := range []*TaskDNSResolverObservationEvidence{
@@ -1142,9 +1179,10 @@ func taskResultToData(result *TaskResultRecord) *taskResultData {
 	data := &taskResultData{
 		Kind: result.Kind, ExitCode: result.ExitCode, FailedStepID: result.FailedStepID,
 		Diagnostic: result.Diagnostic, ReconciliationRequired: result.ReconciliationRequired,
-		Projects:         make([]taskObservedProjectSummaryData, len(result.Projects)),
-		ProxyEvidence:    append([]TaskProxyEvidence(nil), result.ProxyEvidence...),
-		RecreateEvidence: append([]TaskRecreateEvidence(nil), result.RecreateEvidence...),
+		Projects:                 make([]taskObservedProjectSummaryData, len(result.Projects)),
+		ProxyEvidence:            append([]TaskProxyEvidence(nil), result.ProxyEvidence...),
+		RecreateEvidence:         append([]TaskRecreateEvidence(nil), result.RecreateEvidence...),
+		CandidateAbsenceEvidence: cloneTaskCandidateAbsenceEvidence(result.CandidateAbsenceEvidence),
 	}
 	data.DNSResolverCandidateObservation = cloneTaskDNSResolverObservationEvidence(
 		result.DNSResolverCandidateObservation,
@@ -1167,9 +1205,10 @@ func taskResultFromData(data *taskResultData) (*TaskResultRecord, error) {
 	result := &TaskResultRecord{
 		Kind: data.Kind, ExitCode: data.ExitCode, FailedStepID: data.FailedStepID,
 		Diagnostic: data.Diagnostic, ReconciliationRequired: data.ReconciliationRequired,
-		Projects:         make([]TaskObservedProjectSummary, len(data.Projects)),
-		ProxyEvidence:    append([]TaskProxyEvidence(nil), data.ProxyEvidence...),
-		RecreateEvidence: append([]TaskRecreateEvidence(nil), data.RecreateEvidence...),
+		Projects:                 make([]TaskObservedProjectSummary, len(data.Projects)),
+		ProxyEvidence:            append([]TaskProxyEvidence(nil), data.ProxyEvidence...),
+		RecreateEvidence:         append([]TaskRecreateEvidence(nil), data.RecreateEvidence...),
+		CandidateAbsenceEvidence: cloneTaskCandidateAbsenceEvidence(data.CandidateAbsenceEvidence),
 	}
 	if data.DNSResolverCandidateObservation != nil {
 		evidence := *data.DNSResolverCandidateObservation
@@ -1256,6 +1295,7 @@ func cloneTaskResult(result *TaskResultRecord) *TaskResultRecord {
 	cloned.Projects = append([]TaskObservedProjectSummary(nil), result.Projects...)
 	cloned.ProxyEvidence = append([]TaskProxyEvidence(nil), result.ProxyEvidence...)
 	cloned.RecreateEvidence = append([]TaskRecreateEvidence(nil), result.RecreateEvidence...)
+	cloned.CandidateAbsenceEvidence = cloneTaskCandidateAbsenceEvidence(result.CandidateAbsenceEvidence)
 	cloned.DNSResolverCandidateObservation = cloneTaskDNSResolverObservationEvidence(
 		result.DNSResolverCandidateObservation,
 	)
@@ -1263,6 +1303,15 @@ func cloneTaskResult(result *TaskResultRecord) *TaskResultRecord {
 		result.DNSResolverRollbackObservation,
 	)
 	return &cloned
+}
+
+func cloneTaskCandidateAbsenceEvidence(evidence *TaskCandidateAbsenceEvidence) *TaskCandidateAbsenceEvidence {
+	if evidence == nil {
+		return nil
+	}
+	clone := *evidence
+	clone.Candidates = append([]TaskCandidateAbsenceCandidate(nil), evidence.Candidates...)
+	return &clone
 }
 
 func cloneTaskTerminalAssignment(

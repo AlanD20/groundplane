@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -66,10 +67,11 @@ type ReleaseStagedMemberRef struct {
 }
 
 type ReleasePublicationMarker struct {
-	PublicationID  string    `json:"publication_id"`
-	OperationID    string    `json:"operation_id"`
-	ManifestDigest string    `json:"manifest_digest"`
-	PublishedAt    time.Time `json:"published_at"`
+	PublicationID              string                                   `json:"publication_id"`
+	OperationID                string                                   `json:"operation_id"`
+	ManifestDigest             string                                   `json:"manifest_digest"`
+	CandidateReleaseDescriptor executionplan.CandidateReleaseDescriptor `json:"candidate_release_descriptor"`
+	PublishedAt                time.Time                                `json:"published_at"`
 }
 
 type ReleaseFenceMember struct {

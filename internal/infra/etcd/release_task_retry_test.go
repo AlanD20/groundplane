@@ -1,14 +1,19 @@
 package etcd
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 // Rationale: recovery retry is a ledger transition, not an ordinary Task
@@ -83,7 +88,41 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifestDigest := renderDigest
+	forwardStepID := ids.NewAt(ids.KindStep, now, 14)
+	probeStepID := ids.NewAt(ids.KindStep, now, 15)
+	compensateStepID := ids.NewAt(ids.KindStep, now, 16)
+	procedure, err := executionplan.BuildCandidateReleaseProcedure(executionplan.CandidateReleaseProcedureInput{
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
+		Members: []executionplan.CandidateReleaseMemberInput{{
+			ServiceID: serviceID, CandidateReleaseID: releaseID, CandidateArtifactID: artifactID,
+			ForwardStepIDs: []string{forwardStepID},
+			ServingPredecessor: &executionplan.ServingPredecessorInput{
+				ProbeStepID: probeStepID, CompensateStepID: compensateStepID,
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	procedureBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(procedure)
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor := executionplan.CandidateReleaseDescriptor{
+		PlanID: planID, PlanHash: bytes.Repeat([]byte{0xaa}, sha256.Size),
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, ProcedureBytes: procedureBytes,
+	}
+	manifest := ReleaseStagedManifest{
+		PublicationID: publicationID, OperationID: operationID,
+		Members: []ReleaseStagedMemberRef{{
+			ReleaseID: releaseID, ServiceID: serviceID, IntentDigest: intentDigest,
+			RenderDigest: renderDigest, CheckpointDigest: checkpointDigest,
+		}}, CreatedAt: now,
+	}
+	manifest.Digest, err = blueprintCandidateManifestDigest(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
 	member := domain.GroupMember{Ordinal: 1, ServiceID: serviceID, ReleaseID: releaseID}
 	records := []struct {
 		key      string
@@ -91,15 +130,10 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 		value    any
 	}{
 		{releasePublicationKey(publicationID), "release-publication", ReleasePublicationMarker{
-			PublicationID: publicationID, OperationID: operationID, ManifestDigest: manifestDigest, PublishedAt: now,
+			PublicationID: publicationID, OperationID: operationID, ManifestDigest: manifest.Digest,
+			CandidateReleaseDescriptor: descriptor, PublishedAt: now,
 		}},
-		{releaseManifestStagingKey(publicationID), "release-staged-manifest", ReleaseStagedManifest{
-			PublicationID: publicationID, OperationID: operationID,
-			Members: []ReleaseStagedMemberRef{{
-				ReleaseID: releaseID, ServiceID: serviceID, IntentDigest: intentDigest,
-				RenderDigest: renderDigest, CheckpointDigest: checkpointDigest,
-			}}, Digest: manifestDigest, CreatedAt: now,
-		}},
+		{releaseManifestStagingKey(publicationID), "release-staged-manifest", manifest},
 		{releaseOperationKey(operationID), "release-operation", ReleaseOperationHead{
 			OperationID: operationID, PublicationID: publicationID, EnvironmentID: environmentID,
 			FailurePolicy: domain.OnFailureLeaveActive, State: domain.StateRecoveryRequired,
@@ -138,7 +172,12 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 		Executor: TaskExecutorAgent, PlanID: planID, Type: TaskDeploy,
 		PlanHash: hook.PlanHash, Params: map[string]string{
 			TaskReleasePublicationParam: publicationID, ReleaseHookStepExecutionParam(hook.StepID): hook.ID,
-		}, Steps: []TaskStepRecord{{Kind: TaskStepOperation, ID: hook.StepID}},
+		}, Steps: []TaskStepRecord{
+			{Kind: TaskStepOperation, ID: forwardStepID},
+			{Kind: TaskStepOperation, ID: hook.StepID},
+			{Kind: TaskStepOperation, ID: probeStepID},
+			{Kind: TaskStepOperation, ID: compensateStepID},
+		},
 		Result: &TaskResultRecord{Kind: TaskResultCompose, ReconciliationRequired: true}, CreatedAt: now,
 	}
 	retry := cloneTaskRecord(source)

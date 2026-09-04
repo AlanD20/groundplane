@@ -202,12 +202,8 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 		}
 		artifacts[artifact.ArtifactId] = artifact
 	}
-	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_DEPLOY ||
-		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK ||
-		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY {
-		if err := validateReleaseScriptPlan(plan, artifacts); err != nil {
-			return err
-		}
+	if err := validateCandidateReleasePlan(plan, artifacts); err != nil {
+		return err
 	}
 	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
 		if err := validateComponentApplyPlan(plan, artifacts); err != nil {
@@ -795,6 +791,12 @@ func validateStep(
 		return validateServiceRecreateProbe(operation, payload.ServiceRecreateProbe, artifacts)
 	case *agentpb.ExecutionStep_ServiceRecreateCompensate:
 		return validateServiceRecreateCompensate(operation, payload.ServiceRecreateCompensate, artifacts)
+	case *agentpb.ExecutionStep_CandidateRestorationProbe:
+		value := payload.CandidateRestorationProbe
+		return validateCandidateRestorationStep(operation, value.GetCandidateArtifactId(), value.GetServiceId(), value.GetCandidateReleaseId(), artifacts)
+	case *agentpb.ExecutionStep_CandidateRestorationCompensate:
+		value := payload.CandidateRestorationCompensate
+		return validateCandidateRestorationStep(operation, value.GetCandidateArtifactId(), value.GetServiceId(), value.GetCandidateReleaseId(), artifacts)
 	case *agentpb.ExecutionStep_EnvironmentDirectoryCreate:
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE ||
 			payload.EnvironmentDirectoryCreate == nil ||

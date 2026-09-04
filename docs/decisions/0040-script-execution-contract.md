@@ -851,6 +851,29 @@ while every selected execution is durably `not_started`; `start_authorized` or
 an unknown state returns `script.retry_unsafe` and recovery continues the
 authorized execution.
 
+ADR 0064 owns candidate Release restoration around this Script boundary. A
+durably accepted candidate mutation event or Script `start_authorized`
+checkpoint permanently forbids replay of the forward prefix after reconnect.
+An unproven reconciliation-required terminal acknowledgement retains this
+Task, its original Script failure, assignment, writer, and source authority and
+atomically enters private recovery-only execution. Recovery may run only the
+selected sealed probe and compensation cursor. For a first candidate it
+removes the exact plan-owned candidate workloads and must prove their typed
+absence in the exact Compose project; zero applicable compensation after a
+completed mutation is not success. The Script failure remains primary after
+restoration, and `cleanup_proven` remains mandatory before the final recovery
+acknowledgement can terminalize the original Task.
+
+After the final recovery acknowledgement has proved that immutable parent
+failure and the exact selected restoration, the Controller may move only an
+exact selected `not_started` execution directly to `cleanup_proven` with
+`reason=parent_failure_before_start`, explicit container, body, and execution
+directory absence, and `active_reference=false`. `start_authorized` or later,
+or unknown state, fails closed. The same fenced transaction begins ADR 0062's
+`normal_completion` release with retry forbidden. Bounded release pages retain
+the Task and every recovery authority; only source finalization joins the
+original Task's terminal transaction.
+
 For a failure after activation, urgent `switch_back` compensation completes
 before `on-failure`; a pre-activation or `leave_active` failure needs no switch.
 `on-failure` runners use the sealed definition selected by the final known

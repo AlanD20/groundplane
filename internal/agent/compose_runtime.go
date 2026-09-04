@@ -49,14 +49,15 @@ type ComposeRuntime struct {
 }
 
 type composeStepResult struct {
-	Observed               *agentpb.ObservedProject
-	ExitCode               int32
-	Diagnostic             agentpb.ComposeHelperDiagnostic
-	MutationAttempted      bool
-	ReconciliationRequired bool
-	ProxyEvidence          *agentpb.ServiceProxyEvidence
-	RecreateEvidence       *agentpb.ServiceRecreateEvidence
-	ExecutionStepResult    *agentpb.ExecutionStepResult
+	Observed                 *agentpb.ObservedProject
+	ExitCode                 int32
+	Diagnostic               agentpb.ComposeHelperDiagnostic
+	MutationAttempted        bool
+	ReconciliationRequired   bool
+	ProxyEvidence            *agentpb.ServiceProxyEvidence
+	RecreateEvidence         *agentpb.ServiceRecreateEvidence
+	CandidateAbsenceEvidence *agentpb.CandidateAbsenceEvidence
+	ExecutionStepResult      *agentpb.ExecutionStepResult
 }
 
 func NewComposeRuntime(helper ComposeHelper, observer ComposeObserver) (*ComposeRuntime, error) {
@@ -154,9 +155,52 @@ func (runtime *ComposeRuntime) executeStep(
 		return runtime.observeRecreate(ctx, assignment.Plan, value.CandidateArtifactId, value.PriorArtifactId, value.ServiceId, value.CandidateReleaseId, value.PriorReleaseId)
 	case *agentpb.ExecutionStep_ServiceRecreateCompensate:
 		return runtime.mutate(ctx, assignment, step, payload.ServiceRecreateCompensate.ArtifactId, nil)
+	case *agentpb.ExecutionStep_CandidateRestorationProbe, *agentpb.ExecutionStep_CandidateRestorationCompensate:
+		return runtime.candidateRestoration(ctx, assignment, step)
 	default:
 		return composeStepResult{}, errs.New(errs.KindInternal, "agent: Controller sent an unknown step payload")
 	}
+}
+
+func (runtime *ComposeRuntime) candidateRestoration(
+	ctx context.Context,
+	assignment Assignment,
+	step *agentpb.ExecutionStep,
+) (composeStepResult, error) {
+	result := composeStepResult{MutationAttempted: step.GetCandidateRestorationCompensate() != nil}
+	response, err := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
+		Schema: composeHelperSchema, AssignmentId: assignment.AssignmentID, TaskId: assignment.TaskID,
+		OperationId: assignment.OperationID, Plan: assignment.Plan, StepId: step.GetStepId(),
+		TimeoutSeconds:       remainingSeconds(ctx, step.GetTimeoutSeconds()),
+		RestorationAuthority: assignment.RestorationAuthority,
+	})
+	if err != nil || response == nil || response.GetSchema() != composeHelperSchema ||
+		response.GetOutcome() != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED {
+		result.ReconciliationRequired = true
+		if err != nil {
+			return result, err
+		}
+		return result, errs.New(errs.KindRequestFailed, "agent: candidate restoration proof failed")
+	}
+	result.ExitCode, result.Diagnostic = response.GetExitCode(), response.GetDiagnostic()
+	switch assignment.RestorationAuthority.GetTarget() {
+	case agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE:
+		if response.GetCandidateAbsenceEvidence() == nil || response.GetRecreateEvidence() != nil {
+			result.ReconciliationRequired = true
+			return result, errs.New(errs.KindRequestFailed, "agent: candidate absence proof is missing")
+		}
+		result.CandidateAbsenceEvidence = proto.Clone(response.GetCandidateAbsenceEvidence()).(*agentpb.CandidateAbsenceEvidence)
+	case agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR:
+		if response.GetRecreateEvidence() == nil || response.GetCandidateAbsenceEvidence() != nil {
+			result.ReconciliationRequired = true
+			return result, errs.New(errs.KindRequestFailed, "agent: serving predecessor proof is missing")
+		}
+		result.RecreateEvidence = proto.Clone(response.GetRecreateEvidence()).(*agentpb.ServiceRecreateEvidence)
+	default:
+		result.ReconciliationRequired = true
+		return result, errs.New(errs.KindInternal, "agent: candidate restoration target is invalid")
+	}
+	return result, nil
 }
 
 func (runtime *ComposeRuntime) proxyProcedure(ctx context.Context, assignment Assignment, step *agentpb.ExecutionStep) (composeStepResult, error) {
@@ -325,7 +369,7 @@ func (runtime *ComposeRuntime) observeRecreate(
 		}
 		artifact, expectedReleaseID := candidate, candidateReleaseID
 		if releaseID != candidateReleaseID {
-			if priorArtifactID == "" || releaseID != priorArtifactLabel(priorReleaseID) {
+			if priorArtifactID == "" || releaseID != priorReleaseID {
 				result.ReconciliationRequired = true
 				return result, errs.New(errs.KindStateConflict, "agent: recreate probe observed an unsealed release lineage")
 			}
@@ -381,13 +425,6 @@ func observedRecreateRelease(observed *agentpb.ObservedProject, serviceID string
 		return "", errs.New(errs.KindStateConflict, "agent: recreate singleton is not observed")
 	}
 	return releaseID, nil
-}
-
-func priorArtifactLabel(value string) string {
-	if value == "baseline" {
-		return ""
-	}
-	return value
 }
 
 func (runtime *ComposeRuntime) mutate(

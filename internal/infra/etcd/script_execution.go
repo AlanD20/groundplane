@@ -42,7 +42,8 @@ const (
 	ScriptExecutionOutcomeRecorded  ScriptExecutionState = "outcome_recorded"
 	ScriptExecutionCleanupProven    ScriptExecutionState = "cleanup_proven"
 
-	ScriptControllerCleanupBlueprintPendingAbort ScriptControllerCleanupAuthority = "blueprint_pending_abort"
+	ScriptControllerCleanupBlueprintPendingAbort        ScriptControllerCleanupAuthority = "blueprint_pending_abort"
+	ScriptControllerCleanupReleaseRecoveryParentFailure ScriptControllerCleanupAuthority = "release_recovery_parent_failure"
 )
 
 // ScriptExecutionRecord is the durable recovery authority for one one-off
@@ -345,6 +346,52 @@ func releaseHookExecutionSteps(task TaskRecord) ([]releaseHookExecutionStep, err
 		steps = append(steps, releaseHookExecutionStep{stepID: step.ID, executionID: executionID})
 	}
 	return steps, nil
+}
+
+// releaseScriptEffectEvidenceAtRevision returns only durable checkpoint
+// evidence. A host observation is never used to choose recovery mode.
+func (repository *TaskRepository) releaseScriptEffectEvidenceAtRevision(
+	ctx context.Context,
+	task TaskRecord,
+	assignment TaskAssignmentRecord,
+	revision int64,
+) (bool, []Condition, error) {
+	steps, err := releaseHookExecutionSteps(task)
+	if err != nil {
+		return false, nil, err
+	}
+	if len(steps) == 0 {
+		return false, nil, nil
+	}
+	keys := make([]string, len(steps))
+	for index, step := range steps {
+		keys[index] = scriptExecutionKey(step.executionID)
+	}
+	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	if err != nil {
+		return false, nil, err
+	}
+	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
+		return false, nil, corruptReleaseRecord()
+	}
+	effect := false
+	conditions := make([]Condition, len(keys))
+	for index, value := range read.Values {
+		if value == nil {
+			return false, nil, corruptReleaseRecord()
+		}
+		record, decodeErr := decodeEnvelope[ScriptExecutionRecord](value.Value, "script-execution")
+		if decodeErr != nil || validateScriptExecutionRecord(record) != nil || record.ID != steps[index].executionID ||
+			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID ||
+			record.StepID != steps[index].stepID || record.PlanHash != task.PlanHash ||
+			record.State == ScriptExecutionNotStarted && record.AssignmentID != "" ||
+			record.State != ScriptExecutionNotStarted && record.AssignmentID != assignment.AssignmentID {
+			return false, nil, corruptReleaseRecord()
+		}
+		conditions[index] = Condition{Key: value.Key, ModRevision: value.ModRevision}
+		effect = effect || record.State != ScriptExecutionNotStarted
+	}
+	return effect, conditions, nil
 }
 
 func scriptRetryUnsafe(detail string) error {

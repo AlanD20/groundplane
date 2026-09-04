@@ -3,11 +3,47 @@ package executionplan
 import (
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/json"
+	"strconv"
+	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
+
+// ProxyConfigGeneration opens the generation embedded in every canonical
+// server identity of a sealed Groundplane proxy config.
+func ProxyConfigGeneration(config []byte, releaseID string) (uint64, error) {
+	var document struct {
+		Apps struct {
+			HTTP struct {
+				Servers map[string]json.RawMessage `json:"servers"`
+			} `json:"http"`
+		} `json:"apps"`
+	}
+	if ids.Validate(ids.KindDeployment, releaseID) != nil || json.Unmarshal(config, &document) != nil || len(document.Apps.HTTP.Servers) == 0 {
+		return 0, errs.New(errs.KindValidationFailed, "release proxy config generation is invalid")
+	}
+	wantSuffix := "_" + strings.ToLower(releaseID) + "_p"
+	var generation uint64
+	for name := range document.Apps.HTTP.Servers {
+		if !strings.HasPrefix(name, "gp_g") {
+			return 0, errs.New(errs.KindValidationFailed, "release proxy config generation is invalid")
+		}
+		rest := strings.TrimPrefix(name, "gp_g")
+		separator := strings.IndexByte(rest, '_')
+		if separator <= 0 || !strings.HasPrefix(rest[separator:], wantSuffix) {
+			return 0, errs.New(errs.KindValidationFailed, "release proxy config generation is invalid")
+		}
+		parsed, err := strconv.ParseUint(rest[:separator], 10, 64)
+		if err != nil || parsed == 0 || generation != 0 && generation != parsed {
+			return 0, errs.New(errs.KindValidationFailed, "release proxy config generation is invalid")
+		}
+		generation = parsed
+	}
+	return generation, nil
+}
 
 func validateReleaseWorkloadStep(operation agentpb.PlanOperation, artifactID, serviceID, target string, artifacts map[string]*agentpb.ComposeArtifact) error {
 	if !releaseOperation(operation) || validateID(ids.KindService, serviceID) != nil || !validReleaseTarget(target) {
@@ -129,14 +165,7 @@ func expectedReleaseLabel(service *agentpb.ComposeService) string {
 }
 
 func validPriorReleaseID(value string) bool {
-	return value == "baseline" || ids.Validate(ids.KindDeployment, value) == nil
-}
-
-func priorArtifactLabel(value string) string {
-	if value == "baseline" {
-		return ""
-	}
-	return value
+	return ids.Validate(ids.KindDeployment, value) == nil
 }
 
 func releaseRuntimeService(artifact *agentpb.ComposeArtifact, serviceID, slot string, role agentpb.ComposeServiceRole) *agentpb.ComposeService {

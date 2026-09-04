@@ -1,15 +1,65 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
+
+func TestPrepareReleaseTaskFirstDeploySealsCandidateAbsence(t *testing.T) {
+	reader, task := blueprintPlanTestState(t)
+	const (
+		publicationID = "publication-first-release"
+		releaseID     = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+		serviceID     = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		artifactID    = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAZ"
+	)
+	task.Type, task.Target = etcd.TaskDeploy, serviceID
+	task.Params[etcd.TaskReleasePublicationParam] = publicationID
+	task.Steps = []etcd.TaskStepRecord{
+		{Kind: etcd.TaskStepOperation, ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FB0"},
+		{Kind: etcd.TaskStepOperation, ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FB1"},
+		{Kind: etcd.TaskStepOperation, ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FB2"},
+		{Kind: etcd.TaskStepOperation, ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FB3"},
+		{Kind: etcd.TaskStepOperation, ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FB4"},
+	}
+	member := etcd.ReleaseTaskRenderMember{
+		Intent: domain.Intent{ID: releaseID, EnvironmentID: reader.environment.ID, ServiceID: serviceID,
+			OperationID: task.OperationID, OperationKind: domain.OperationDeploy, Image: "example/api:first",
+			Strategy: domain.StrategyRecreate, OnFailure: domain.OnFailureSwitchBack},
+		Render: etcd.ReleaseRenderInput{ReleaseID: releaseID, PlanID: task.PlanID, ArtifactID: artifactID,
+			ServiceID: serviceID, ServiceName: "api", Image: "example/api:first", Strategy: domain.StrategyRecreate,
+			CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
+			TenantID: reader.tenant.ID, TenantSlug: reader.tenant.Slug, ProjectID: reader.project.ID,
+			ProjectSlug: reader.project.Slug, EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
+			AuthorizedVolumeDir: reader.environment.VolumeDir, Projection: reader.projection},
+	}
+	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, plan, err := resolver.PrepareReleaseTask(context.Background(), task, etcd.ReleaseTaskRenderInput{
+		PublicationID: publicationID,
+		Operation: etcd.ReleaseOperationHead{OperationID: task.OperationID, PublicationID: publicationID,
+			EnvironmentID: reader.environment.ID, FailurePolicy: domain.OnFailureSwitchBack},
+		Members: []etcd.ReleaseTaskRenderMember{member},
+	})
+	if err != nil {
+		t.Fatalf("PrepareReleaseTask(first candidate) error = %v", err)
+	}
+	procedure := plan.GetCandidateReleaseProcedure()
+	if procedure == nil || len(procedure.GetMembers()) != 1 || procedure.GetMembers()[0].GetCandidateAbsence() == nil ||
+		procedure.GetMembers()[0].GetServingPredecessor() != nil || len(plan.GetArtifacts()) != 1 {
+		t.Fatalf("first Release procedure = %#v", procedure)
+	}
+}
 
 // Rationale: a profiled Service remains disabled when its frozen external
 // dependency is compiled into the immutable release artifact.

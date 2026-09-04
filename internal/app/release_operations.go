@@ -595,6 +595,10 @@ func (service *releaseOperationService) publish(
 		return etcd.IdempotencyResponse{}, err
 	}
 	task = preparedTask
+	candidateDescriptor, err := executionplan.DescribeCandidateRelease(plan)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+	}
 	executions, err := etcd.NewScriptExecutionRecords(task, plan, now)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -629,7 +633,8 @@ func (service *releaseOperationService) publish(
 		Fence: etcd.ReleaseFenceSet{
 			EnvironmentID: scope.Environment.Record.ID, Generation: 1, OperationID: operationID,
 			AttemptTaskID: taskID, Group: groupID != "", Members: fenceMembers,
-		}, Operation: head, Hooks: hookPublications, PublishedAt: now,
+		}, Operation: head, CandidateReleaseDescriptor: candidateDescriptor,
+		Hooks: hookPublications, PublishedAt: now,
 	})
 	if err != nil {
 		if !releaseGroupUnknownOutcome(err) {

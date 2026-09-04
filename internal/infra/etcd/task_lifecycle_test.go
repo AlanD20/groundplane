@@ -24,6 +24,7 @@ func TestTaskAssignmentCodecIsStrict(t *testing.T) {
 		TaskID:       ids.NewAt(ids.KindTask, now, 1), Executor: TaskExecutorAgent,
 		AgentID:         ids.NewAt(ids.KindAgent, now, 2),
 		AgentGeneration: 7, ClaimedTaskRevision: 41, AssignedAt: now, Deadline: now.Add(time.Minute),
+		RecoveryDeadline: now.Add(2 * time.Minute), ExecutionMode: TaskExecutionModeForward, ExecutionEpoch: 1,
 	}
 	value, err := encodeTaskAssignment(record)
 	if err != nil {
@@ -33,11 +34,11 @@ func TestTaskAssignmentCodecIsStrict(t *testing.T) {
 	if err != nil || decoded != record {
 		t.Fatalf("decodeTaskAssignment() = %#v, %v", decoded, err)
 	}
-	duplicate := bytes.Replace(value, []byte(`"schema":1`), []byte(`"schema":1,"schema":1`), 1)
+	duplicate := bytes.Replace(value, []byte(`"schema":3`), []byte(`"schema":3,"schema":3`), 1)
 	if _, err := decodeTaskAssignment(duplicate); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("decodeTaskAssignment(duplicate) error = %v, want internal", err)
 	}
-	unknown := bytes.Replace(value, []byte(`"schema":1`), []byte(`"schema":1,"extra":true`), 1)
+	unknown := bytes.Replace(value, []byte(`"schema":3`), []byte(`"schema":3,"extra":true`), 1)
 	if _, err := decodeTaskAssignment(unknown); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("decodeTaskAssignment(unknown) error = %v, want internal", err)
 	}
@@ -379,7 +380,12 @@ func TestTaskRepositoryClaimsFIFOAndAcknowledgesTerminalState(t *testing.T) {
 		claim.Assignment.Record.TaskID != first.ID ||
 		ids.Validate(ids.KindAssignment, claim.Assignment.Record.AssignmentID) != nil ||
 		claim.Assignment.Record.AgentGeneration != 3 ||
-		claim.Assignment.Record.ClaimedTaskRevision <= 0 {
+		claim.Assignment.Record.ClaimedTaskRevision <= 0 ||
+		claim.Assignment.Record.ExecutionMode != TaskExecutionModeForward ||
+		claim.Assignment.Record.ExecutionEpoch != 1 ||
+		!claim.Assignment.Record.RecoveryDeadline.Equal(
+			claim.Assignment.Record.Deadline.Add(time.Duration(first.TimeoutSeconds)*time.Second),
+		) {
 		t.Fatalf("ClaimNextTask() = %#v", claim)
 	}
 	assertTaskLifecycleValue(t, store, taskQueueKey(first.Executor, first.ID), false)

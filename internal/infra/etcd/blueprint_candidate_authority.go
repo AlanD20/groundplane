@@ -83,7 +83,16 @@ func validateBlueprintCandidateCompensation(
 	recreate, hasRecreate := releaseRecreateEvidence(result, intent.ServiceID)
 	priorReleaseID := intent.PriorServingReleaseID
 	if priorReleaseID == "" {
-		priorReleaseID = "baseline"
+		absence := result.CandidateAbsenceEvidence
+		if hasProxy || hasRecreate || absence == nil || !absence.AbsenceProven {
+			return errs.New(errs.KindReleaseRecoveryRequired, "Blueprint candidate absence restoration is unproven")
+		}
+		for _, candidate := range absence.Candidates {
+			if candidate.ServiceID == intent.ServiceID && candidate.ReleaseID == intent.ID {
+				return nil
+			}
+		}
+		return errs.New(errs.KindReleaseRecoveryRequired, "Blueprint candidate absence restoration is unproven")
 	}
 	switch intent.Strategy {
 	case domain.StrategyBlueGreen:

@@ -92,7 +92,8 @@ func assignmentQuarantineFixture(at time.Time, agentID string, entropy int64) et
 		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
 			AssignmentID: assignmentID, TaskID: taskID, Executor: etcd.TaskExecutorAgent,
 			AgentID: agentID, AgentGeneration: 7, ClaimedTaskRevision: 1,
-			AssignedAt: at, Deadline: at.Add(time.Minute),
+			AssignedAt: at, Deadline: at.Add(time.Minute), RecoveryDeadline: at.Add(2 * time.Minute),
+			ExecutionEpoch: 1, ExecutionMode: etcd.TaskExecutionModeForward,
 		}},
 	}
 }

@@ -105,69 +105,64 @@ func TestExecuteReleaseHooksRespectPhasesAndPreservePrimaryFailure(t *testing.T)
 }
 
 func TestExecuteReleaseFailureHookRequiresMatchingServingEvidence(t *testing.T) {
-	failureResponse := &agentpb.ComposeHelperResponse{
-		Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED, ExitCode: 17,
-		Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
-	}
 	tests := []struct {
-		name          string
-		responses     map[string]*agentpb.ComposeHelperResponse
-		releaseID     string
-		wantLastEvent string
-		wantReconcile bool
+		name       string
+		state      *releaseExecutionState
+		releaseID  string
+		wantRun    bool
+		wantReason agentpb.ScriptOutcomeReason
 	}{
 		{
 			name: "matching candidate executes",
-			responses: map[string]*agentpb.ComposeHelperResponse{
-				"activate": releaseExecutionSuccess("api", false), "fail": failureResponse,
-			},
-			releaseID: "release-api", wantLastEvent: "script:failure",
+			state: &releaseExecutionState{evidence: map[string]*agentpb.ServiceProxyEvidence{
+				"api": {ServiceId: "api", ReleaseId: "release-api"},
+			}},
+			releaseID: "release-api", wantRun: true,
 		},
 		{
-			name:          "absent serving evidence records no serving release",
-			responses:     map[string]*agentpb.ComposeHelperResponse{"fail": failureResponse},
-			releaseID:     "release-api",
-			wantLastEvent: "script-without-start:failure:SCRIPT_OUTCOME_REASON_NO_SERVING_RELEASE",
+			name:      "absent serving evidence records no serving release",
+			state:     &releaseExecutionState{evidence: map[string]*agentpb.ServiceProxyEvidence{}, recreate: map[string]*agentpb.ServiceRecreateEvidence{}},
+			releaseID: "release-api", wantReason: agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_NO_SERVING_RELEASE,
 		},
 		{
 			name: "different serving release fails closed",
-			responses: map[string]*agentpb.ComposeHelperResponse{
-				"activate": releaseExecutionSuccess("api", false), "fail": failureResponse,
-			},
-			releaseID: "different-release", wantReconcile: true,
-			wantLastEvent: "script-without-start:failure:SCRIPT_OUTCOME_REASON_RECOVERY_INVARIANT_FAILURE",
+			state: &releaseExecutionState{recreate: map[string]*agentpb.ServiceRecreateEvidence{
+				"api": {ServiceId: "api", ReleaseId: "release-api"},
+			}},
+			releaseID: "different-release", wantReason: agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_RECOVERY_INVARIANT_FAILURE,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			runtime := &orderedReleaseRuntime{responses: test.responses}
-			compose, err := NewComposeRuntime(runtime, &fakeComposeObserver{
-				projects: []*agentpb.ObservedProject{{ProjectName: "gp-release"}},
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			pool := NewWorkerPool(64, "/var/lib/groundplane/volumes", nil, nil)
-			pool.compose = compose
-			pool.SetScriptRuntime(runtime)
 			failure := releaseHookStep("failure", agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FAILURE_HOOK)
 			failure.GetRunScript().ReleaseId = test.releaseID
-			steps := []*agentpb.ExecutionStep{}
-			if _, exists := test.responses["activate"]; exists {
-				steps = append(steps, releaseForwardSwitch("activate"))
-			}
-			steps = append(steps, releaseForwardSwitch("fail"), failure)
-			result := runReleaseExecution(t, pool, "task-failure-evidence", "", &agentpb.ExecutionPlan{
-				Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, Steps: steps,
-			})
-			if result.Terminal != TaskTerminalFailed ||
-				result.Compose.GetReconciliationRequired() != test.wantReconcile {
-				t.Fatalf("release result = %#v", result)
-			}
-			if len(runtime.events) == 0 || runtime.events[len(runtime.events)-1] != test.wantLastEvent {
-				t.Fatalf("release events = %#v, want final %q", runtime.events, test.wantLastEvent)
+			run, reason := releaseFailureHookExecution(failure, test.state)
+			if run != test.wantRun || reason != test.wantReason {
+				t.Fatalf("releaseFailureHookExecution() = %t/%s, want %t/%s", run, reason, test.wantRun, test.wantReason)
 			}
 		})
+	}
+
+	failureResponse := &agentpb.ComposeHelperResponse{
+		Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED, ExitCode: 17,
+		Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
+	}
+	runtime := &orderedReleaseRuntime{responses: map[string]*agentpb.ComposeHelperResponse{"fail": failureResponse}}
+	compose, err := NewComposeRuntime(runtime, &fakeComposeObserver{projects: []*agentpb.ObservedProject{{ProjectName: "gp-release"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool := NewWorkerPool(64, "/var/lib/groundplane/volumes", nil, nil)
+	pool.compose = compose
+	pool.SetScriptRuntime(runtime)
+	failure := releaseHookStep("failure", agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FAILURE_HOOK)
+	result := runReleaseExecution(t, pool, "task-recovery-defers-failure-hook", "", &agentpb.ExecutionPlan{
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
+		Steps:     []*agentpb.ExecutionStep{releaseForwardSwitch("fail"), failure},
+	})
+	if result.Terminal != TaskTerminalFailed || !result.Compose.GetReconciliationRequired() ||
+		len(runtime.events) != 1 || runtime.events[0] != "compose:fail" {
+		t.Fatalf("recovery-required failure hook deferral = %#v / %#v", result, runtime.events)
 	}
 }
 

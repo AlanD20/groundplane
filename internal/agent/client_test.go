@@ -71,7 +71,9 @@ func TestClientSendsExactFailedTaskAcknowledgement(t *testing.T) {
 			Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: &agentpb.TaskAssignment{
 				TaskId: workerTestTaskID, AssignmentId: assignment.AssignmentID,
 				OperationId: assignment.OperationID,
-				Plan: assignment.Plan, Deadline: timestamppb.New(time.Now().Add(time.Minute)), EventAttempt: 7,
+				Plan:        assignment.Plan, ForwardDeadline: timestamppb.New(assignment.ForwardDeadline),
+				RecoveryDeadline: timestamppb.New(assignment.RecoveryDeadline), ExecutionDeadline: timestamppb.New(assignment.ForwardDeadline), ExecutionEpoch: 7,
+				ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
 			}},
 		},
 	)
@@ -100,9 +102,9 @@ func TestClientSendsExactFailedTaskAcknowledgement(t *testing.T) {
 		acknowledgement.GetComposeResult() == nil {
 		t.Fatalf("TaskAck = %#v", acknowledgement)
 	}
-	if len(events) != 2 || events[0].Attempt != 7 || events[0].Ordinal != 1 ||
+	if len(events) != 2 || events[0].ExecutionEpoch != 7 || events[0].Ordinal != 1 ||
 		events[0].State != agentpb.TaskState_TASK_STATE_RUNNING ||
-		events[1].Attempt != 7 || events[1].Ordinal != 2 ||
+		events[1].ExecutionEpoch != 7 || events[1].Ordinal != 2 ||
 		events[1].State != agentpb.TaskState_TASK_STATE_FAILED {
 		t.Fatalf("TaskEvents = %#v", events)
 	}
@@ -189,7 +191,7 @@ func TestClientRequiresConfigUpdateBeforeReadyOrWork(t *testing.T) {
 
 // Rationale: zero is the protobuf default and must never become a durable
 // event identity; only a positive Controller-authored epoch may enter a worker.
-func TestClientRejectsZeroEventAttempt(t *testing.T) {
+func TestClientRejectsZeroExecutionEpoch(t *testing.T) {
 	t.Parallel()
 	assignment := workerAssignment(workerTestTaskID, "zero-event-attempt")
 	client := &Client{pool: NewWorkerPool(1, "/var/lib/groundplane/vol", nil, testLogger())}
@@ -197,7 +199,10 @@ func TestClientRejectsZeroEventAttempt(t *testing.T) {
 		Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: &agentpb.TaskAssignment{
 			TaskId: assignment.TaskID, AssignmentId: assignment.AssignmentID,
 			OperationId: assignment.OperationID, Plan: assignment.Plan,
-			Deadline: timestamppb.New(time.Now().Add(time.Minute)),
+			ForwardDeadline:   timestamppb.New(assignment.ForwardDeadline),
+			RecoveryDeadline:  timestamppb.New(assignment.RecoveryDeadline),
+			ExecutionDeadline: timestamppb.New(assignment.ForwardDeadline),
+			ExecutionMode:     agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
 		}},
 	})
 	if !errors.Is(err, errs.New(errs.KindInternal, "")) {
@@ -281,7 +286,9 @@ func TestClientReconnectsSameInstanceAndExecutesRedispatchOnReplacementPool(t *t
 					Payload: &agentpb.ControllerMessage_TaskAssignment{TaskAssignment: &agentpb.TaskAssignment{
 						TaskId: workerTestTaskID, AssignmentId: assignment.AssignmentID,
 						OperationId: assignment.OperationID,
-						Plan: assignment.Plan, Deadline: timestamppb.New(time.Now().Add(time.Minute)), EventAttempt: 1,
+						Plan:        assignment.Plan, ForwardDeadline: timestamppb.New(assignment.ForwardDeadline),
+						RecoveryDeadline: timestamppb.New(assignment.RecoveryDeadline), ExecutionDeadline: timestamppb.New(assignment.ForwardDeadline), ExecutionEpoch: 1,
+						ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
 					}},
 				},
 			)
@@ -682,6 +689,8 @@ func (s *fakeStream) Send(message *agentpb.AgentMessage) error {
 			TaskId: acknowledgement.TaskId, AssignmentId: acknowledgement.AssignmentId,
 			PlanHash: append([]byte(nil), acknowledgement.PlanHash...),
 			Terminal: acknowledgement.Terminal, ExitCode: acknowledgement.ExitCode,
+			ExecutionEpoch:              acknowledgement.ExecutionEpoch,
+			ReleaseRecoveryRecordSha256: append([]byte(nil), acknowledgement.ReleaseRecoveryRecordSha256...),
 		}
 		if acknowledgement.GetComposeResult() != nil {
 			owned.Result = &agentpb.TaskAck_ComposeResult{ComposeResult: acknowledgement.GetComposeResult()}
@@ -698,7 +707,7 @@ func (s *fakeStream) Send(message *agentpb.AgentMessage) error {
 		copyMessage.Payload = &agentpb.AgentMessage_TaskEvent{TaskEvent: &agentpb.TaskEvent{
 			TaskId: event.TaskId, AssignmentId: event.AssignmentId,
 			PlanHash: append([]byte(nil), event.PlanHash...),
-			StepId:   event.StepId, Attempt: event.Attempt, Ordinal: event.Ordinal,
+			StepId:   event.StepId, ExecutionEpoch: event.ExecutionEpoch, Ordinal: event.Ordinal,
 			State: event.State, Chunk: append([]byte(nil), event.Chunk...),
 		}}
 	}

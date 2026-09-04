@@ -20,7 +20,10 @@ func TestAutomaticReconcileAssignmentRequiresComponentApply(t *testing.T) {
 		OperationID:        "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Plan:               automaticComponentApplyPlan(t),
 		AutomaticReconcile: true,
-		Deadline:           time.Unix(1_700_000_000, 0).UTC().Add(time.Minute),
+		ExecutionEpoch:     1,
+		ExecutionMode:      agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
+		ForwardDeadline:    time.Unix(1_700_000_000, 0).UTC().Add(time.Minute),
+		RecoveryDeadline:   time.Unix(1_700_000_000, 0).UTC().Add(2 * time.Minute),
 	}
 	accepted, err := validateAndCopyAssignment(component, "/var/lib/groundplane/vol")
 	if err != nil {

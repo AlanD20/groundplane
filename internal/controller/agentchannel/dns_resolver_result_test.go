@@ -69,7 +69,8 @@ func TestDurableComposeTaskResultPreservesDNSResolverObservation(t *testing.T) {
 		t.Fatal(err)
 	}
 	ack := &agentpb.TaskAck{
-		Terminal: agentpb.TaskTerminal_TASK_TERMINAL_FAILED,
+		ExecutionEpoch: 1,
+		Terminal:       agentpb.TaskTerminal_TASK_TERMINAL_FAILED,
 		Result: &agentpb.TaskAck_ComposeResult{ComposeResult: &agentpb.ComposeTaskResult{
 			Diagnostic:                      agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
 			DnsResolverCandidateObservation: evidence,

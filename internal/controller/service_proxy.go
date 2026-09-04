@@ -107,7 +107,7 @@ func renderServiceProxyTopology(
 			activeTarget = domain.WorkloadSingleton
 		}
 		if activeRelease == "" {
-			activeRelease = "baseline"
+			activeRelease = identity.ReleaseID
 		}
 		if identity.ServingProxyGeneration != 0 {
 			activeGeneration = identity.ServingProxyGeneration

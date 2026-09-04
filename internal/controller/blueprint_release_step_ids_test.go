@@ -13,14 +13,15 @@ import (
 // Script selection and reproduce its exact apply, hook, then health ordering.
 func TestBlueprintReleaseProcedureStepIDsAcceptMaximumHooks(t *testing.T) {
 	task, members := blueprintReleaseStepIDFixture(taskcontract.MaximumBlueprintPostDeployHooks)
-	apply, health, post, next, err := blueprintReleaseProcedureStepIDs(task, members, 0)
+	apply, health, probe, compensate, post, next, err := blueprintReleaseProcedureStepIDs(task, members, 0)
 	if err != nil {
 		t.Fatalf("blueprintReleaseProcedureStepIDs() error = %v", err)
 	}
 	if len(apply) != 1 || apply[0] != "apply" || len(health) != 1 || health[0] != "health" ||
+		len(probe) != 1 || probe[0] != "recovery-probe" || len(compensate) != 1 || compensate[0] != "recovery-compensate" ||
 		len(post) != 1 || len(post[0]) != taskcontract.MaximumBlueprintPostDeployHooks ||
 		post[0][0] != "hook-00" || post[0][len(post[0])-1] != "hook-15" || next != len(task.Steps) {
-		t.Fatalf("procedure ids = apply=%v health=%v post=%v next=%d", apply, health, post, next)
+		t.Fatalf("procedure ids = apply=%v health=%v probe=%v compensate=%v post=%v next=%d", apply, health, probe, compensate, post, next)
 	}
 }
 
@@ -29,21 +30,21 @@ func TestBlueprintReleaseProcedureStepIDsAcceptMaximumHooks(t *testing.T) {
 func TestBlueprintReleaseProcedureStepIDsRejectInvalidAuthority(t *testing.T) {
 	t.Run("overflow", func(t *testing.T) {
 		task, members := blueprintReleaseStepIDFixture(taskcontract.MaximumBlueprintPostDeployHooks + 1)
-		if _, _, _, _, err := blueprintReleaseProcedureStepIDs(task, members, 0); err == nil {
+		if _, _, _, _, _, _, err := blueprintReleaseProcedureStepIDs(task, members, 0); err == nil {
 			t.Fatal("blueprintReleaseProcedureStepIDs() accepted an oversized hook selection")
 		}
 	})
 	t.Run("missing execution binding", func(t *testing.T) {
 		task, members := blueprintReleaseStepIDFixture(1)
 		delete(task.Params, etcd.ReleaseHookStepExecutionParam("hook-00"))
-		if _, _, _, _, err := blueprintReleaseProcedureStepIDs(task, members, 0); err == nil {
+		if _, _, _, _, _, _, err := blueprintReleaseProcedureStepIDs(task, members, 0); err == nil {
 			t.Fatal("blueprintReleaseProcedureStepIDs() accepted a missing execution binding")
 		}
 	})
 	t.Run("wrong member binding", func(t *testing.T) {
 		task, members := blueprintReleaseStepIDFixture(1)
 		task.Params[etcd.ReleaseHookStepMemberParam("hook-00")] = "2"
-		if _, _, _, _, err := blueprintReleaseProcedureStepIDs(task, members, 0); err == nil {
+		if _, _, _, _, _, _, err := blueprintReleaseProcedureStepIDs(task, members, 0); err == nil {
 			t.Fatal("blueprintReleaseProcedureStepIDs() accepted a forged member binding")
 		}
 	})
@@ -64,5 +65,9 @@ func blueprintReleaseStepIDFixture(hookCount int) (etcd.TaskRecord, []etcd.Relea
 		}
 	}
 	task.Steps = append(task.Steps, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: "health"})
+	task.Steps = append(task.Steps,
+		etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: "recovery-probe"},
+		etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: "recovery-compensate"},
+	)
 	return task, []etcd.ReleaseTaskRenderMember{{Render: etcd.ReleaseRenderInput{Hooks: hooks}}}
 }

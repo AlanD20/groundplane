@@ -175,7 +175,9 @@ func environmentDirectoryAssignment(t *testing.T) Assignment {
 	return Assignment{
 		AssignmentID: workerTestAssignmentID,
 		TaskID:       workerTestTaskID, OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		Plan: plan, EventAttempt: 1, Deadline: time.Now().Add(time.Minute),
+		Plan: plan, ExecutionEpoch: 1,
+		ExecutionMode:   agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
+		ForwardDeadline: time.Now().Add(time.Minute), RecoveryDeadline: time.Now().Add(2 * time.Minute),
 	}
 }
 
@@ -202,6 +204,8 @@ func environmentDirectoryRemovalAssignment(t *testing.T) Assignment {
 	return Assignment{
 		AssignmentID: workerTestAssignmentID,
 		TaskID:       workerTestTaskID, OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		Plan: plan, EventAttempt: 1, Deadline: time.Now().Add(time.Minute),
+		Plan: plan, ExecutionEpoch: 1,
+		ExecutionMode:   agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
+		ForwardDeadline: time.Now().Add(time.Minute), RecoveryDeadline: time.Now().Add(2 * time.Minute),
 	}
 }

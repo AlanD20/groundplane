@@ -460,14 +460,6 @@ func (repository *TaskRepository) AppendTaskEvent(
 		if err != nil {
 			return TaskEventAppend{}, err
 		}
-		if prepared.Duplicate {
-			if err := repository.verifyDuplicateEvent(ctx, result.ReadRevision, task, *existing); err != nil {
-				return TaskEventAppend{}, err
-			}
-			return TaskEventAppend{
-				Sequence: prepared.Sequence, Revision: result.ReadRevision, Duplicate: true,
-			}, nil
-		}
 		assignmentValue := result.Values[2]
 		assignmentIndexValue := result.Values[3]
 		if task.Status != TaskStatusRunning || assignmentValue == nil || assignmentIndexValue == nil {
@@ -484,8 +476,53 @@ func (repository *TaskRepository) AppendTaskEvent(
 		if assignment.AssignmentID != input.Identity.AssignmentID ||
 			assignment.TaskID != input.Identity.TaskID || assignment.Executor != TaskExecutorAgent ||
 			assignment.AgentID != input.Identity.AgentID ||
-			assignment.AgentGeneration != input.Identity.AgentGeneration {
+			assignment.AgentGeneration != input.Identity.AgentGeneration ||
+			assignment.ExecutionEpoch != input.Identity.Attempt {
 			return TaskEventAppend{}, errs.New(errs.KindStateConflict, "task event assignment identity does not match")
+		}
+		if prepared.Duplicate {
+			if err := repository.verifyDuplicateEvent(ctx, result.ReadRevision, task, *existing); err != nil {
+				return TaskEventAppend{}, err
+			}
+			return TaskEventAppend{Sequence: prepared.Sequence, Revision: result.ReadRevision, Duplicate: true}, nil
+		}
+
+		var recoveryValue *KeyValue
+		var recoveryMutation []Mutation
+		if assignment.ExecutionMode == TaskExecutionModeRecoveryOnly {
+			recoveryRead, readErr := repository.store.GetMany(ctx, GetManyRequest{
+				Keys: []string{releaseRecoveryKey(task.ID)}, Revision: result.ReadRevision,
+			})
+			if readErr != nil {
+				return TaskEventAppend{}, readErr
+			}
+			if recoveryRead == nil || recoveryRead.ReadRevision != result.ReadRevision || len(recoveryRead.Values) != 1 || recoveryRead.Values[0] == nil {
+				return TaskEventAppend{}, corruptTaskAssignment()
+			}
+			recoveryValue = recoveryRead.Values[0]
+			record, decodeErr := decodeReleaseRecoveryRecord(recoveryValue.Value)
+			digest, digestErr := releaseRecoveryRecordSHA256(record)
+			if decodeErr != nil || digestErr != nil || digest != assignment.ReleaseRecoveryRecordSHA256 ||
+				record.TaskID != task.ID || record.AssignmentID != assignment.AssignmentID ||
+				record.OperationID != task.OperationID || record.PlanHash != task.PlanHash ||
+				record.RestorationAuthoritySHA256 != assignment.RestorationAuthoritySHA256 ||
+				!record.RecoveryDeadline.Equal(assignment.RecoveryDeadline) {
+				return TaskEventAppend{}, corruptTaskAssignment()
+			}
+			next, changed, advanceErr := advanceReleaseRecoveryRecord(record, input, result.ReadRevision)
+			if advanceErr != nil {
+				return TaskEventAppend{}, advanceErr
+			}
+			if changed {
+				encoded, encodeErr := encodeReleaseRecoveryRecord(next)
+				if encodeErr != nil {
+					return TaskEventAppend{}, encodeErr
+				}
+				defer clear(encoded)
+				recoveryMutation = []Mutation{{Type: MutationPut, Key: recoveryValue.Key, Value: encoded}}
+			}
+		} else if assignment.ExecutionMode != TaskExecutionModeForward {
+			return TaskEventAppend{}, corruptTaskAssignment()
 		}
 
 		eventKey := taskEventKey(task.ID, prepared.Sequence)
@@ -514,20 +551,26 @@ func (repository *TaskRepository) AppendTaskEvent(
 		if err != nil {
 			return TaskEventAppend{}, err
 		}
+		conditions := []Condition{
+			{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
+			{Key: claimKey, ModRevision: assignmentValue.ModRevision},
+			{Key: taskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
+			{Key: taskEventDedupKey(input.Identity)},
+			{Key: eventKey},
+		}
+		if recoveryValue != nil {
+			conditions = append(conditions, Condition{Key: recoveryValue.Key, ModRevision: recoveryValue.ModRevision})
+		}
+		mutations := []Mutation{
+			{Type: MutationPut, Key: taskKey(task.ID), Value: encodedTask},
+			{Type: MutationPut, Key: eventKey, Value: encodedEvent},
+			{Type: MutationPut, Key: taskEventDedupKey(input.Identity), Value: encodedDedup},
+		}
+		mutations = append(mutations, recoveryMutation...)
 		transaction, err := repository.store.Transact(
 			ctx,
-			[]Condition{
-				{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
-				{Key: claimKey, ModRevision: assignmentValue.ModRevision},
-				{Key: taskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
-				{Key: taskEventDedupKey(input.Identity)},
-				{Key: eventKey},
-			},
-			[]Mutation{
-				{Type: MutationPut, Key: taskKey(task.ID), Value: encodedTask},
-				{Type: MutationPut, Key: eventKey, Value: encodedEvent},
-				{Type: MutationPut, Key: taskEventDedupKey(input.Identity), Value: encodedDedup},
-			},
+			conditions,
+			mutations,
 		)
 		if err != nil {
 			return TaskEventAppend{}, err

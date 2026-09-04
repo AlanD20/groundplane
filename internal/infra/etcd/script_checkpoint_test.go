@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"context"
 	"reflect"
 	"strings"
 	"testing"
@@ -10,6 +11,56 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/oklog/ulid/v2"
 )
+
+func TestReleaseScriptNoEffectEvidenceConditionFencesCheckpointRevision(t *testing.T) {
+	ctx := context.Background()
+	at := time.Date(2026, 9, 4, 18, 0, 0, 0, time.UTC)
+	store := newMemoryTaskStore()
+	repository, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution := scriptCheckpointTestRecord(at)
+	assignmentID := ids.NewAt(ids.KindAssignment, at, 20)
+	value, err := encodeEnvelope("script-execution", execution)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seeded, err := store.Transact(ctx, []Condition{{Key: scriptExecutionKey(execution.ID)}}, []Mutation{{
+		Type: MutationPut, Key: scriptExecutionKey(execution.ID), Value: value,
+	}})
+	if err != nil || !seeded.Succeeded {
+		t.Fatalf("seed Script execution = %#v, %v", seeded, err)
+	}
+	task := TaskRecord{
+		ID: execution.CurrentTaskID, OperationID: execution.OperationID, Type: TaskDeploy,
+		PlanHash: execution.PlanHash,
+		Params:   map[string]string{ReleaseHookStepExecutionParam(execution.StepID): execution.ID},
+		Steps:    []TaskStepRecord{{Kind: TaskStepScript, ID: execution.StepID}},
+	}
+	assignment := TaskAssignmentRecord{AssignmentID: assignmentID}
+	effect, conditions, err := repository.releaseScriptEffectEvidenceAtRevision(
+		ctx, task, assignment, seeded.Revision,
+	)
+	if err != nil || effect || len(conditions) != 1 || conditions[0].ModRevision != seeded.Revision {
+		t.Fatalf("no-effect Script evidence = %t, %#v, %v", effect, conditions, err)
+	}
+	execution.UpdatedAt = execution.UpdatedAt.Add(time.Nanosecond)
+	changedValue, err := encodeEnvelope("script-execution", execution)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed, err := store.Transact(ctx, nil, []Mutation{{
+		Type: MutationPut, Key: scriptExecutionKey(execution.ID), Value: changedValue,
+	}})
+	if err != nil || !changed.Succeeded {
+		t.Fatalf("change Script checkpoint = %#v, %v", changed, err)
+	}
+	fenced, err := store.Transact(ctx, conditions, []Mutation{{Type: MutationPut, Key: "/test/no-effect-terminal", Value: []byte("invalid")}})
+	if err != nil || fenced.Succeeded {
+		t.Fatalf("stale Script checkpoint evidence transaction = %#v, %v", fenced, err)
+	}
+}
 
 func TestScriptExecutionProjectionSourcesUseImmutableDesiredZones(t *testing.T) {
 	at := time.Date(2026, 9, 1, 2, 0, 0, 0, time.UTC)

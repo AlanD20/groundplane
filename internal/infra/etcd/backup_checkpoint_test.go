@@ -416,7 +416,8 @@ func seedBackupCheckpointAssignmentForTask(
 		AssignmentID: ids.NewAt(ids.KindAssignment, now, 803), TaskID: task.ID,
 		Executor: TaskExecutorAgent, AgentID: agentID, AgentGeneration: 7,
 		ClaimedTaskRevision: created.Revision, AssignedAt: now.Add(time.Second),
-		Deadline: now.Add(6*time.Hour + time.Second),
+		Deadline: now.Add(6*time.Hour + time.Second), RecoveryDeadline: now.Add(12*time.Hour + time.Second),
+		ExecutionMode: TaskExecutionModeForward, ExecutionEpoch: 1,
 	}
 	running := task
 	running.Status = TaskStatusRunning

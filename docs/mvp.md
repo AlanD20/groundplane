@@ -1650,7 +1650,7 @@ starting a replacement. Recovery may inspect only the deterministic runner
 name before an id is captured, then uses only the validated immutable container
 id. Terminal reasons are exactly `normal_exit`, `start_failure`,
 `runtime_failure`, `timeout`, `abort`, `abort_before_start`,
-`expiry_before_start`, `no_serving_release`, and
+`expiry_before_start`, `no_serving_release`, `parent_failure_before_start`, and
 `recovery_invariant_failure`.
 
 **Labels & reconciliation.** The Controller owns desired state and reconciles

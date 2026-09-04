@@ -518,7 +518,7 @@ func (c *Client) sendTaskEvent(stream agentStream, progress TaskProgress) error 
 		TaskEvent: &agentpb.TaskEvent{
 			AssignmentId: progress.AssignmentID,
 			TaskId:       progress.TaskID, PlanHash: append([]byte(nil), progress.PlanHash[:]...),
-			StepId: progress.StepID, Attempt: progress.Attempt, Ordinal: progress.Ordinal,
+			StepId: progress.StepID, ExecutionEpoch: progress.ExecutionEpoch, Ordinal: progress.Ordinal,
 			State: state, Chunk: append([]byte(nil), progress.Chunk...),
 		},
 	}})
@@ -551,6 +551,12 @@ func (c *Client) sendReady(stream agentStream) error {
 }
 
 func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.ControllerMessage) (bool, error) {
+	if acknowledgement := message.GetTaskEventAck(); acknowledgement != nil {
+		if c.pool == nil {
+			return false, errs.New(errs.KindInternal, "agent: Task event acknowledgement arrived before worker configuration")
+		}
+		return false, c.pool.AcceptTaskEventAck(ctx, acknowledgement)
+	}
 	if subscription := message.GetLogSubscribe(); subscription != nil {
 		c.logs.Subscribe(ctx, proto.Clone(subscription).(*agentpb.LogSubscribe))
 		return false, nil
@@ -560,22 +566,40 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 		return false, nil
 	}
 	if assignment := message.GetTaskAssignment(); assignment != nil {
-		if assignment.Deadline == nil || assignment.Deadline.CheckValid() != nil {
-			return false, errs.New(errs.KindInternal, "agent: Controller sent an invalid task deadline")
+		if assignment.ForwardDeadline == nil || assignment.ForwardDeadline.CheckValid() != nil ||
+			assignment.RecoveryDeadline == nil || assignment.RecoveryDeadline.CheckValid() != nil ||
+			assignment.ExecutionDeadline == nil || assignment.ExecutionDeadline.CheckValid() != nil {
+			return false, errs.New(errs.KindInternal, "agent: Controller sent invalid fixed deadlines")
 		}
-		if assignment.GetEventAttempt() == 0 {
-			return false, errs.New(errs.KindInternal, "agent: Controller sent an invalid event attempt")
+		if assignment.GetExecutionEpoch() == 0 ||
+			(assignment.GetExecutionMode() != agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD &&
+				assignment.GetExecutionMode() != agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY) {
+			return false, errs.New(errs.KindInternal, "agent: Controller sent invalid execution authority")
 		}
 		defer clearScriptArtifacts(assignment.ScriptArtifacts)
+		executionDeadline := assignment.ExecutionDeadline.AsTime()
+		recoveryProofRequired := assignment.GetExecutionMode() == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY &&
+			executionDeadline.After(assignment.RecoveryDeadline.AsTime())
+		if assignment.GetExecutionMode() == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD &&
+			!executionDeadline.Equal(assignment.ForwardDeadline.AsTime()) ||
+			assignment.GetExecutionMode() == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY &&
+				!recoveryProofRequired && !executionDeadline.Equal(assignment.RecoveryDeadline.AsTime()) {
+			return false, errs.New(errs.KindInternal, "agent: Controller sent mismatched execution deadline")
+		}
 		return false, c.pool.Submit(ctx, Assignment{
 			AssignmentID: assignment.AssignmentId,
 			TaskID:       assignment.TaskId, OperationID: assignment.OperationId,
 			RetryOf: assignment.RetryOf, Plan: assignment.Plan, ScriptArtifacts: assignment.ScriptArtifacts,
 			ScriptCheckpoints:       assignment.ScriptCheckpoints,
 			AcknowledgedStepResults: assignment.AcknowledgedStepResults,
-			AutomaticReconcile:      assignment.GetAutomaticReconcile(),
-			EventAttempt:            assignment.GetEventAttempt(),
-			Deadline:                assignment.Deadline.AsTime(),
+			AutomaticReconcile:      assignment.GetAutomaticReconcile(), ExecutionEpoch: assignment.GetExecutionEpoch(),
+			ExecutionMode: assignment.GetExecutionMode(), ForwardDeadline: assignment.ForwardDeadline.AsTime(),
+			RecoveryDeadline:            assignment.RecoveryDeadline.AsTime(),
+			Deadline:                    executionDeadline,
+			RecoveryProofRequired:       recoveryProofRequired,
+			RestorationAuthority:        assignment.GetRestorationAuthority(),
+			ReleaseRecoveryDirective:    assignment.GetReleaseRecoveryDirective(),
+			ReleaseRecoveryRecordSHA256: append([]byte(nil), assignment.GetReleaseRecoveryRecordSha256()...),
 		})
 	}
 	if abort := message.GetTaskAbort(); abort != nil {
@@ -623,7 +647,8 @@ func (c *Client) sendTaskAck(stream agentStream, result TaskResult) error {
 	acknowledgement := &agentpb.TaskAck{
 		AssignmentId: result.AssignmentID,
 		TaskId:       result.TaskID, PlanHash: append([]byte(nil), result.PlanHash[:]...), Terminal: terminal,
-		ExitCode: result.ExitCode,
+		ExitCode: result.ExitCode, ExecutionEpoch: result.ExecutionEpoch,
+		ReleaseRecoveryRecordSha256: append([]byte(nil), result.ReleaseRecoveryRecordSHA256...),
 	}
 	if result.Compose != nil {
 		for _, evidence := range []*agentpb.DNSResolverObservationEvidence{

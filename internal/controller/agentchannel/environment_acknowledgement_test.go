@@ -34,7 +34,8 @@ func TestEnvironmentDirectoryAcknowledgementUsesAtomicProvisioningPath(t *testin
 	}}
 	acknowledgement := &agentpb.TaskAck{
 		TaskId: taskID, AssignmentId: assignmentID, PlanHash: planHash,
-		Terminal: agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED,
+		ExecutionEpoch: 1,
+		Terminal:       agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED,
 		Result: &agentpb.TaskAck_EnvironmentDirectoryResult{
 			EnvironmentDirectoryResult: &agentpb.EnvironmentDirectoryTaskResult{},
 		},

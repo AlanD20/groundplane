@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	controller "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
@@ -123,7 +124,6 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 	}
 	task.Params[etcd.TaskReleasePublicationParam] = publicationID
 	artifactID := task.Params[controller.EnvironmentBlueprintArtifactParam]
-	priorArtifactID := input.AllocateNamed(ids.KindConfig, "blueprint-release-prior-artifact")
 	stage := etcd.ReleaseStage{PublicationID: publicationID, OperationID: task.OperationID, CreatedAt: input.CreatedAt,
 		Members: make([]etcd.ReleaseStageMember, len(candidates))}
 	members := make([]etcd.ReleaseTaskRenderMember, len(candidates))
@@ -133,14 +133,10 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 		if imageErr != nil {
 			return Prepared{}, imageErr
 		}
-		priorImage := image
-		if candidate.Current != nil {
-			priorImage = candidate.Current.Record.Desired.Image
-		}
 		render := etcd.ReleaseRenderInput{
-			ReleaseID: releaseID, PlanID: task.PlanID, ArtifactID: artifactID, PriorArtifactID: priorArtifactID,
+			ReleaseID: releaseID, PlanID: task.PlanID, ArtifactID: artifactID,
 			ServiceID: candidate.Record.Desired.ID, ServiceName: candidate.Record.Desired.Name,
-			Image: image, PriorImage: priorImage, Strategy: domain.StrategyRecreate,
+			Image: image, Strategy: domain.StrategyRecreate,
 			PriorStrategy: domain.StrategyRecreate, CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
 			ServiceDependencyPlans: input.Projection.ServiceDependencyPlans.Clone(),
 			TenantID:               input.Tenant.Record.ID, TenantSlug: input.Tenant.Record.Slug,
@@ -177,16 +173,25 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 	}
 	task, members = hooks.task, hooks.members
 	applyStepIDs, healthStepIDs := make([]string, len(members)), make([]string, len(members))
+	recoveryProbeStepIDs, recoveryCompensateStepIDs := make([]string, len(members)), make([]string, len(members))
 	for index, member := range members {
 		applyStepIDs[index] = input.AllocateNamed(ids.KindStep, "blueprint-candidate-apply/"+member.Render.ServiceID)
 		healthStepIDs[index] = input.AllocateNamed(ids.KindStep, "blueprint-candidate-health/"+member.Render.ServiceID)
+		recoveryProbeStepIDs[index] = input.AllocateNamed(ids.KindStep, "blueprint-candidate-recovery-probe/"+member.Render.ServiceID)
+		recoveryCompensateStepIDs[index] = input.AllocateNamed(ids.KindStep, "blueprint-candidate-recovery-compensate/"+member.Render.ServiceID)
 	}
 	task, plan, err := service.plans.PrepareBlueprintReleaseTask(ctx, task, controller.BlueprintReleasePlanInput{
 		Members: members, PrefixSteps: input.PrefixSteps, ComponentSteps: input.ComponentSteps,
-		ApplyStepIDs: applyStepIDs, HealthStepIDs: healthStepIDs, PostStepIDs: hooks.postStepIDs,
+		ApplyStepIDs: applyStepIDs, HealthStepIDs: healthStepIDs,
+		RecoveryProbeStepIDs: recoveryProbeStepIDs, RecoveryCompensateStepIDs: recoveryCompensateStepIDs,
+		PostStepIDs: hooks.postStepIDs,
 	})
 	if err != nil {
 		return Prepared{}, err
+	}
+	candidateDescriptor, err := executionplan.DescribeCandidateRelease(plan)
+	if err != nil {
+		return Prepared{}, errs.Wrap(errs.KindInternal, err)
 	}
 	executions, err := etcd.NewScriptExecutionRecords(task, plan, input.CreatedAt)
 	if err != nil {
@@ -229,7 +234,8 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 	}
 	publication, err := service.ledger.PrepareBlueprintReleasePublication(ctx, service.sources, etcd.BlueprintReleasePublicationEvidence{
 		Manifest: manifest, EnvironmentID: input.Environment.Record.ID, Task: task, PublishedAt: input.CreatedAt,
-		Hooks: hookPublications, HookPrepared: hookPrepared, SourcePrepared: sourcePrepared, SourceMembers: sourceMembers,
+		CandidateReleaseDescriptor: candidateDescriptor,
+		Hooks:                      hookPublications, HookPrepared: hookPrepared, SourcePrepared: sourcePrepared, SourceMembers: sourceMembers,
 	})
 	if err != nil {
 		if blueprintPublicationOutcomeUnknown(err) {

@@ -187,6 +187,12 @@ func execute(
 	if step.GetServiceProxySwitch() != nil || step.GetServiceProxyProbe() != nil || step.GetServiceProxyCompensate() != nil {
 		return executeServiceProxy(ctx, taskRunner, owned.TimeoutSeconds, owned.Plan, artifact, step)
 	}
+	if step.GetCandidateRestorationProbe() != nil || step.GetCandidateRestorationCompensate() != nil {
+		if owned.GetRestorationAuthority().GetTarget() == agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR {
+			return executeServingPredecessor(ctx, taskRunner, owned.TimeoutSeconds, owned, artifact, step)
+		}
+		return executeCandidateAbsence(ctx, taskRunner, owned.TimeoutSeconds, owned, artifact, step)
+	}
 	commands, err := commandsFor(owned, step, artifact)
 	if err != nil {
 		return nil, err
@@ -293,6 +299,10 @@ func validateRequest(
 		artifactID = payload.ServiceProxyCompensate.CandidateArtifactId
 	case *agentpb.ExecutionStep_ServiceRecreateCompensate:
 		artifactID = payload.ServiceRecreateCompensate.ArtifactId
+	case *agentpb.ExecutionStep_CandidateRestorationProbe:
+		artifactID = payload.CandidateRestorationProbe.CandidateArtifactId
+	case *agentpb.ExecutionStep_CandidateRestorationCompensate:
+		artifactID = payload.CandidateRestorationCompensate.CandidateArtifactId
 	default:
 		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Compose helper step payload is unsupported")
 	}
@@ -306,6 +316,10 @@ func validateRequest(
 	}
 	if artifactID != "" && artifact == nil {
 		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Compose helper artifact selection is invalid")
+	}
+	candidateRestoration := selected.GetCandidateRestorationProbe() != nil || selected.GetCandidateRestorationCompensate() != nil
+	if candidateRestoration != (request.GetRestorationAuthority() != nil) {
+		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Compose helper restoration authority presence is invalid")
 	}
 	owned := proto.Clone(request).(*agentpb.ComposeHelperRequest)
 	owned.Plan = plan
@@ -858,6 +872,13 @@ func validateResponse(response *agentpb.ComposeHelperResponse) error {
 		if response.RecreateEvidence != nil && (response.RecreateEvidence.ServiceId == "" || response.RecreateEvidence.ReleaseId == "" || response.RecreateEvidence.ArtifactId == "" || !validRuntimeTarget(response.RecreateEvidence.Target)) {
 			return errs.New(errs.KindValidationFailed, "completed Compose helper recreate evidence is invalid")
 		}
+		if evidence := response.GetCandidateAbsenceEvidence(); evidence != nil {
+			if evidence.GetAssignmentId() == "" || len(evidence.GetPlanHash()) != sha256.Size ||
+				len(evidence.GetAuthoritySha256()) != sha256.Size || evidence.GetComposeProjectName() == "" ||
+				evidence.GetCandidateArtifactId() == "" || len(evidence.GetCandidates()) == 0 {
+				return errs.New(errs.KindValidationFailed, "completed candidate absence evidence is invalid")
+			}
+		}
 	case agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED:
 		if response.ExitCode <= 0 ||
 			(response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CONFIG_REJECTED &&
@@ -866,7 +887,7 @@ func validateResponse(response *agentpb.ComposeHelperResponse) error {
 				response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED) {
 			return errs.New(errs.KindValidationFailed, "failed Compose helper response is inconsistent")
 		}
-		if response.ProxyEvidence != nil || response.RecreateEvidence != nil {
+		if response.ProxyEvidence != nil || response.RecreateEvidence != nil || response.CandidateAbsenceEvidence != nil {
 			return errs.New(errs.KindValidationFailed, "failed Compose helper response carries release evidence")
 		}
 	default:

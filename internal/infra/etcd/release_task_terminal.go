@@ -35,7 +35,8 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 		validatePublicationID(publicationID) != nil || task.OperationID == "" || task.RenderGeneration <= 0 {
 		return false, corruptReleaseRecord()
 	}
-	if terminalStatus != TaskStatusCompleted && result.FailedStepID == "" {
+	if terminalStatus != TaskStatusCompleted && result.FailedStepID == "" &&
+		result.Diagnostic != TaskResultDiagnosticTimeoutBeforeEffect {
 		return false, errs.New(errs.KindStateConflict, "release failure is missing its failed step identity")
 	}
 	if task.Type == TaskUpdate {
@@ -204,10 +205,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 			evidence = []domain.EffectEvidence{effect}
 		} else if compensated {
 			priorReleaseID := intent.PriorServingReleaseID
-			if priorReleaseID == "" {
-				priorReleaseID = "baseline"
-			}
-			if observedReleaseID != priorReleaseID {
+			if priorReleaseID == "" || observedReleaseID != priorReleaseID {
 				return false, errs.New(errs.KindStateConflict, "release compensation evidence does not match prior serving state")
 			}
 		}
@@ -417,6 +415,9 @@ func releaseFailedMemberOrdinal(task TaskRecord, terminalStatus TaskStatus, resu
 		return 0, nil
 	}
 	ordinal := releaseFailedOrdinalFromResult(task, result)
+	if ordinal == 0 && result.Diagnostic == TaskResultDiagnosticTimeoutBeforeEffect {
+		return 1, nil
+	}
 	if ordinal == 0 {
 		return 0, errs.New(errs.KindStateConflict, "release failed step is outside the frozen procedure")
 	}
@@ -619,5 +620,5 @@ func releasePriorServingEvidence(result TaskResultRecord, serviceID string) stri
 	if found {
 		return recreate.ReleaseID
 	}
-	return "baseline"
+	return ""
 }

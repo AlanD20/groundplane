@@ -912,6 +912,25 @@ fixed-revision reads, and bounded publication. The group execution authority
 owns declared-order progress and compensation state. The checkpoint authority
 owns monotonic per-Release effect evidence and Service projections.
 
+ADR 0064 adds one shared pure `internal/common/executionplan` candidate
+procedure used by ordinary Release and Blueprint. Its immutable plan projection
+contains exact candidate and forward anchors plus the complete closed lawful
+`serving_predecessor` and `candidate_absence` restoration alternatives. The
+Controller claim selects exactly one from the already-sealed nullable applied
+predecessor and persists that choice plus its canonical digest with the
+assignment, writer, and execution epoch. The Agent receives a selection; it
+never derives one from Docker or current Controller projections.
+
+The private release-recovery record at
+`/v1/records/release-recoveries/{task_id}` is continuation authority for the
+same nonterminal Task. It stores the immutable primary report, assignment,
+operation, plan, selected restoration authority, exact recovery steps, cursor,
+phase, deadline, and evidence revision. It is neither desired state nor a
+second Task. Recovery-only dispatch cannot execute forward work, and final
+restoration proof closes the original Task and every ownership fence in one
+transaction. Assignment execution epoch is the shared event and terminal-ACK
+attempt fence; connection loss alone does not select recovery.
+
 Task publication contributes a closed transaction fragment, including the
 Task operation-history index. The ledger never writes Task-owned keys
 directly. A maximum 32-member publication is exactly 75 mutations plus 11

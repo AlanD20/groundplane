@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -12,12 +13,14 @@ import (
 )
 
 type BlueprintReleasePlanInput struct {
-	Members        []etcd.ReleaseTaskRenderMember
-	PrefixSteps    []*agentpb.ExecutionStep
-	ComponentSteps []*agentpb.ExecutionStep
-	ApplyStepIDs   []string
-	HealthStepIDs  []string
-	PostStepIDs    [][]string
+	Members                   []etcd.ReleaseTaskRenderMember
+	PrefixSteps               []*agentpb.ExecutionStep
+	ComponentSteps            []*agentpb.ExecutionStep
+	ApplyStepIDs              []string
+	HealthStepIDs             []string
+	RecoveryProbeStepIDs      []string
+	RecoveryCompensateStepIDs []string
+	PostStepIDs               [][]string
 }
 
 func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
@@ -27,7 +30,8 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 ) (etcd.TaskRecord, *agentpb.ExecutionPlan, error) {
 	if resolver == nil || ctx == nil || len(input.Members) == 0 || task.Type != etcd.TaskUpdate ||
 		task.Params[etcd.TaskReleasePublicationParam] == "" || len(input.ApplyStepIDs) != len(input.Members) ||
-		len(input.HealthStepIDs) != len(input.Members) || len(input.PostStepIDs) != len(input.Members) {
+		len(input.HealthStepIDs) != len(input.Members) || len(input.RecoveryProbeStepIDs) != len(input.Members) ||
+		len(input.RecoveryCompensateStepIDs) != len(input.Members) || len(input.PostStepIDs) != len(input.Members) {
 		return etcd.TaskRecord{}, nil, errs.New(errs.KindValidationFailed, "Blueprint Release Task preparation is invalid")
 	}
 	first := input.Members[0].Render
@@ -43,8 +47,8 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 		images[member.Render.ServiceName] = member.Render.Image
 		labels[member.Render.ServiceID] = ComposeReleaseIdentity{
 			ReleaseID: member.Intent.ID, Target: member.Render.CandidateTarget,
-			Image: member.Render.Image, ServingReleaseID: priorReleaseLabel(member.Intent.PriorServingReleaseID),
-			ServingTarget: member.Render.PriorTarget, ServingProxyGeneration: member.Render.PriorProxyGeneration,
+			Image: member.Render.Image, ServingReleaseID: member.Intent.ID,
+			ServingTarget: member.Render.CandidateTarget, ServingProxyGeneration: member.Render.ProxyGeneration,
 			Strategy: member.Render.Strategy,
 		}
 		serviceIDs[index] = member.Render.ServiceID
@@ -82,6 +86,11 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 		return etcd.TaskRecord{}, nil, err
 	}
 	steps := append([]*agentpb.ExecutionStep(nil), input.PrefixSteps...)
+	candidateServices := make([]executionplan.CandidateServiceIdentity, len(input.Members))
+	procedureMembers := make([]executionplan.CandidateReleaseMemberInput, 0, len(input.Members))
+	for index, member := range input.Members {
+		candidateServices[index] = executionplan.CandidateServiceIdentity{ServiceID: member.Render.ServiceID, ReleaseID: member.Intent.ID}
+	}
 	snapshots := []*agentpb.ResolvedRunnerSnapshot{}
 	projections := []*agentpb.ScriptRunnerProjection{}
 	bodies := []*agentpb.ScriptBodyArtifactMetadata{}
@@ -112,22 +121,60 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 		if len(hooks.PostSteps) != 0 {
 			prerequisite = hooks.PostSteps[len(hooks.PostSteps)-1].StepId
 		}
-		steps = append(steps, &agentpb.ExecutionStep{
+		health := &agentpb.ExecutionStep{
 			StepId: input.HealthStepIDs[index], PrerequisiteStepId: prerequisite,
 			TimeoutSeconds: uint32(task.TimeoutSeconds),
 			Payload: &agentpb.ExecutionStep_WaitHealthy{WaitHealthy: &agentpb.WaitHealthy{
 				ArtifactId: first.ArtifactID, ServiceIds: []string{member.Render.ServiceID},
 			}},
+		}
+		probe := &agentpb.ExecutionStep{
+			StepId: input.RecoveryProbeStepIDs[index], TimeoutSeconds: uint32(task.TimeoutSeconds),
+			Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
+			Payload: &agentpb.ExecutionStep_CandidateRestorationProbe{CandidateRestorationProbe: &agentpb.CandidateRestorationProbe{
+				CandidateArtifactId: first.ArtifactID, ServiceId: member.Render.ServiceID, CandidateReleaseId: member.Intent.ID,
+			}},
+		}
+		compensate := &agentpb.ExecutionStep{
+			StepId: input.RecoveryCompensateStepIDs[index], TimeoutSeconds: uint32(task.TimeoutSeconds),
+			Policy:             agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
+			PrerequisiteStepId: apply.StepId,
+			Payload: &agentpb.ExecutionStep_CandidateRestorationCompensate{CandidateRestorationCompensate: &agentpb.CandidateRestorationCompensate{
+				CandidateArtifactId: first.ArtifactID, ServiceId: member.Render.ServiceID, CandidateReleaseId: member.Intent.ID,
+			}},
+		}
+		steps = append(steps, health, probe, compensate)
+		forwardStepIDs := []string{apply.StepId}
+		for _, hookStep := range hooks.PostSteps {
+			forwardStepIDs = append(forwardStepIDs, hookStep.GetStepId())
+		}
+		forwardStepIDs = append(forwardStepIDs, health.GetStepId())
+		procedureMembers = append(procedureMembers, executionplan.CandidateReleaseMemberInput{
+			ServiceID: member.Render.ServiceID, CandidateReleaseID: member.Intent.ID, CandidateArtifactID: first.ArtifactID,
+			ForwardStepIDs: forwardStepIDs,
+			ServingPredecessor: &executionplan.ServingPredecessorInput{
+				ProbeStepID: probe.GetStepId(), CompensateStepID: compensate.GetStepId(),
+			},
+			CandidateAbsence: &executionplan.CandidateAbsenceInput{
+				ComposeProjectName: artifact.GetProjectName(), Services: candidateServices,
+				ProbeStepID: probe.GetStepId(), CompensateStepID: compensate.GetStepId(),
+			},
 		})
 	}
 	steps = append(steps, input.ComponentSteps...)
+	procedure, err := executionplan.BuildCandidateReleaseProcedure(executionplan.CandidateReleaseProcedureInput{
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY, Members: procedureMembers,
+	})
+	if err != nil {
+		return etcd.TaskRecord{}, nil, err
+	}
 	plan, err := BuildPlan(PlanBuildInput{
 		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
 		RenderGeneration: uint64(task.RenderGeneration),
 		Operation:        agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,
 		TargetID:         task.Target, Artifacts: []*agentpb.ComposeArtifact{artifact},
 		ScriptRunnerSnapshots: snapshots, ScriptRunnerProjections: projections,
-		ScriptBodyArtifacts: bodies, Steps: steps,
+		ScriptBodyArtifacts: bodies, Steps: steps, CandidateReleaseProcedure: procedure,
 	})
 	if err != nil {
 		return etcd.TaskRecord{}, nil, err

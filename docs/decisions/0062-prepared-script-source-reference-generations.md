@@ -286,6 +286,9 @@ There are exactly two completion paths for an active operation:
   with `release_path=normal_completion`. It compares the current Task as
   nonterminal. That transition permanently forbids assignment, start, and
   retry, and the Task remains nonterminal until the final release transaction.
+  Candidate-Release recovery uses this same path only after exact restoration
+  proof; its Controller-owned `parent_failure_before_start` transition and
+  retry-forbidden root transition are one CAS-fenced transaction.
 - **Retry expiry.** A retry-eligible failure has already terminalized its Task,
   published that Task's retain-until index, left the operation open with
   `retry_disposition=available`, and retained every reference. At or after the

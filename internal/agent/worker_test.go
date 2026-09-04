@@ -129,9 +129,9 @@ func TestWorkerReturnsDNSResolverObservationFromGenericComponentAction(t *testin
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	assignment := Assignment{
-		AssignmentID: workerTestAssignmentID,
-		TaskID:       workerTestTaskID,
-		EventAttempt: 1,
+		AssignmentID:   workerTestAssignmentID,
+		TaskID:         workerTestTaskID,
+		ExecutionEpoch: 1,
 		Plan: &agentpb.ExecutionPlan{
 			Operation: agentpb.PlanOperation_PLAN_OPERATION_RECONCILE,
 			Steps: []*agentpb.ExecutionStep{{
@@ -397,7 +397,7 @@ func workerResolverRollbackAssignment(
 	}
 	assignment := Assignment{
 		AssignmentID: workerTestAssignmentID, TaskID: workerTestTaskID,
-		EventAttempt: 1,
+		ExecutionEpoch: 1,
 		Plan: &agentpb.ExecutionPlan{
 			Schema:                 executionplan.SchemaVersion,
 			PlanId:                 workerCurrentPlanID,
@@ -725,7 +725,9 @@ func workerAssignment(taskID, plan string) Assignment {
 	return Assignment{
 		AssignmentID: workerTestAssignmentID,
 		TaskID:       taskID, OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		Plan: sealed, EventAttempt: 1, Deadline: time.Now().Add(time.Minute),
+		Plan: sealed, ExecutionEpoch: 1,
+		ExecutionMode:   agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
+		ForwardDeadline: time.Now().Add(time.Minute), RecoveryDeadline: time.Now().Add(2 * time.Minute),
 	}
 }
 
@@ -740,5 +742,19 @@ func nextWorkerResult(t *testing.T, pool *WorkerPool) TaskResult {
 		case <-time.After(time.Second):
 			t.Fatal("timed out waiting for worker result")
 		}
+	}
+}
+
+func TestBlueprintCandidatePlanUsesReleaseExecutor(t *testing.T) {
+	plan := &agentpb.ExecutionPlan{
+		Operation:                 agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,
+		CandidateReleaseProcedure: &agentpb.CandidateReleaseProcedure{Members: []*agentpb.CandidateReleaseMember{{}}},
+	}
+	if !isReleaseExecution(plan) {
+		t.Fatal("Blueprint candidate plan was routed to the generic executor")
+	}
+	plan.CandidateReleaseProcedure = nil
+	if isReleaseExecution(plan) {
+		t.Fatal("ordinary Blueprint plan was routed to the release executor")
 	}
 }

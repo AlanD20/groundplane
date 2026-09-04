@@ -550,6 +550,15 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 					)
 					return taskStoreStatus(err)
 				}
+				if err := stream.Send(&agentpb.ControllerMessage{
+					Payload: &agentpb.ControllerMessage_TaskEventAck{TaskEventAck: &agentpb.TaskEventAck{
+						TaskId: event.GetTaskId(), AssignmentId: event.GetAssignmentId(),
+						PlanHash: append([]byte(nil), event.GetPlanHash()...), StepId: event.GetStepId(),
+						ExecutionEpoch: event.GetExecutionEpoch(), Ordinal: event.GetOrdinal(), State: event.GetState(),
+					}},
+				}); err != nil {
+					return err
+				}
 				continue
 			}
 			if request := result.message.GetExecutionStepResultRequest(); request != nil {
@@ -622,7 +631,7 @@ func (s *Server) recordTaskEvent(
 	event *agentpb.TaskEvent,
 ) error {
 	if event == nil || ids.Validate(ids.KindAssignment, event.AssignmentId) != nil ||
-		len(event.PlanHash) != 32 || event.Attempt == 0 || event.Ordinal == 0 {
+		len(event.PlanHash) != 32 || event.ExecutionEpoch == 0 || event.Ordinal == 0 {
 		return errs.New(errs.KindValidationFailed, "Agent Task event is invalid")
 	}
 	if len(event.Chunk) != 0 {
@@ -634,6 +643,15 @@ func (s *Server) recordTaskEvent(
 	task, err := s.tasks.GetTask(ctx, event.TaskId)
 	if err != nil {
 		return err
+	}
+	if assignments, ok := s.tasks.(interface {
+		GetTaskAssignment(context.Context, string) (etcd.TaskAssignment, error)
+	}); ok {
+		assignment, assignmentErr := assignments.GetTaskAssignment(ctx, event.GetTaskId())
+		if assignmentErr != nil || assignment.Assignment.Record.AssignmentID != event.GetAssignmentId() ||
+			assignment.Assignment.Record.ExecutionEpoch != event.GetExecutionEpoch() {
+			return errs.New(errs.KindStateConflict, "Agent Task event execution epoch does not match")
+		}
 	}
 	planHash, err := hex.DecodeString(task.Record.PlanHash)
 	if err != nil || !bytes.Equal(planHash, event.PlanHash) {
@@ -666,7 +684,7 @@ func (s *Server) recordTaskEvent(
 		Identity: etcd.TaskEventIdentity{
 			AssignmentID: event.AssignmentId, AgentID: agentID, AgentGeneration: agentGeneration,
 			TaskID: event.TaskId, StepID: event.StepId,
-			Attempt: event.Attempt, Ordinal: event.Ordinal,
+			Attempt: event.ExecutionEpoch, Ordinal: event.Ordinal,
 		},
 		State:   state,
 		Payload: json.RawMessage(`{}`),
@@ -703,6 +721,18 @@ func (s *Server) dispatchReady(
 		if !session.AssignmentsAllowed() {
 			return nil
 		}
+		if delivered[assignment.Task.Record.ID] == assignment.Assignment.Record.AssignmentID ||
+			quarantined[assignment.Task.Record.ID] == assignment.Assignment.Record.AssignmentID {
+			continue
+		}
+		if reconnect, ok := s.tasks.(interface {
+			ReconnectAgentAssignment(context.Context, etcd.TaskAssignment) (etcd.TaskAssignment, error)
+		}); ok && assignment.Task.Record.Params[etcd.TaskReleasePublicationParam] != "" {
+			assignment, err = reconnect.ReconnectAgentAssignment(stream.Context(), assignment)
+			if err != nil {
+				return err
+			}
+		}
 		if err := validateAgentDispatchClaim(
 			assignment,
 			agentID,
@@ -710,13 +740,8 @@ func (s *Server) dispatchReady(
 		); err != nil {
 			return err
 		}
-		if !s.now().UTC().Before(assignment.Assignment.Record.Deadline.UTC()) {
-			continue
-		}
-		if delivered[assignment.Task.Record.ID] == assignment.Assignment.Record.AssignmentID {
-			continue
-		}
-		if quarantined[assignment.Task.Record.ID] == assignment.Assignment.Record.AssignmentID {
+		if assignment.Assignment.Record.ExecutionMode == etcd.TaskExecutionModeForward &&
+			!s.now().UTC().Before(assignment.Assignment.Record.Deadline.UTC()) {
 			continue
 		}
 		if remaining == 0 {
@@ -837,7 +862,8 @@ func (s *Server) dispatchResolvedTaskAssignment(
 	defer clearScriptAssignmentArtifacts(assignment.GetScriptArtifacts())
 	expired := false
 	sent, err := session.sendAssignment(func() error {
-		if recovered && !s.now().UTC().Before(claim.Assignment.Record.Deadline.UTC()) {
+		if recovered && claim.Assignment.Record.ExecutionMode == etcd.TaskExecutionModeForward &&
+			!s.now().UTC().Before(claim.Assignment.Record.Deadline.UTC()) {
 			expired = true
 			return nil
 		}
@@ -1137,6 +1163,7 @@ func (s *Server) taskAssignmentMessage(
 	claim etcd.TaskAssignment,
 	recovered bool,
 ) (*agentpb.TaskAssignment, error) {
+	_ = recovered
 	task := claim.Task.Record
 	record := claim.Assignment.Record
 	if ids.Validate(ids.KindAssignment, record.AssignmentID) != nil || record.TaskID != task.ID ||
@@ -1180,6 +1207,13 @@ func (s *Server) taskAssignmentMessage(
 			stepsMatch,
 		)
 	}
+	if err := validateCandidateReleaseAssignment(ctx, s.tasks, claim, plan); err != nil {
+		return nil, err
+	}
+	executionAuthority, err := candidateReleaseAssignmentAuthority(claim, plan)
+	if err != nil {
+		return nil, err
+	}
 	var scriptArtifacts *agentpb.ScriptAssignmentArtifacts
 	var scriptCheckpoints []*agentpb.ScriptExecutionCheckpoint
 	if len(plan.ScriptBodyArtifacts) != 0 {
@@ -1201,54 +1235,33 @@ func (s *Server) taskAssignmentMessage(
 		clearScriptAssignmentArtifacts(scriptArtifacts)
 		return nil, err
 	}
-	eventAttempt := uint32(1)
-	if recovered {
-		eventAttempt, err = s.recoveredEventAttempt(ctx, claim)
-		if err != nil {
-			clearScriptAssignmentArtifacts(scriptArtifacts)
-			return nil, err
+	executionDeadline := record.Deadline
+	if record.ExecutionMode == etcd.TaskExecutionModeRecoveryOnly {
+		executionDeadline = record.RecoveryDeadline
+		if claim.RecoveryProofRequired {
+			if record.RecoveryExecutionDeadline.IsZero() {
+				return nil, errs.New(errs.KindInternal, "proof-required recovery has no execution budget")
+			}
+			executionDeadline = record.RecoveryExecutionDeadline
+		} else if !record.RecoveryExecutionDeadline.IsZero() {
+			return nil, errs.New(errs.KindInternal, "active recovery carries proof-required execution budget")
 		}
 	}
 	return &agentpb.TaskAssignment{
 		TaskId: task.ID, AssignmentId: record.AssignmentID,
 		OperationId: task.OperationID, RetryOf: task.RetryOf,
 		Plan: plan, ScriptArtifacts: scriptArtifacts, ScriptCheckpoints: scriptCheckpoints,
-		AcknowledgedStepResults: acknowledgedStepResults,
-		AutomaticReconcile:      etcd.IsAutomaticReconcileTask(task),
-		Deadline:                timestamppb.New(record.Deadline.UTC()),
-		EventAttempt:            eventAttempt,
+		AcknowledgedStepResults:     acknowledgedStepResults,
+		AutomaticReconcile:          etcd.IsAutomaticReconcileTask(task),
+		ForwardDeadline:             timestamppb.New(record.Deadline.UTC()),
+		ExecutionEpoch:              record.ExecutionEpoch,
+		ExecutionMode:               executionAuthority.mode,
+		RecoveryDeadline:            timestamppb.New(record.RecoveryDeadline.UTC()),
+		RestorationAuthority:        executionAuthority.restoration,
+		ReleaseRecoveryRecordSha256: append([]byte(nil), executionAuthority.recoveryDigest...),
+		ReleaseRecoveryDirective:    executionAuthority.recovery,
+		ExecutionDeadline:           timestamppb.New(executionDeadline.UTC()),
 	}, nil
-}
-
-func (s *Server) recoveredEventAttempt(ctx context.Context, claim etcd.TaskAssignment) (uint32, error) {
-	task := claim.Task
-	assignment := claim.Assignment.Record
-	if task.ReadRevision <= 0 {
-		return 0, errs.New(errs.KindInternal, "recovered Agent Task claim has no fixed read revision")
-	}
-	snapshot, err := s.tasks.ListTaskEvents(ctx, task.Record.ID, task.ReadRevision)
-	if err != nil {
-		return 0, err
-	}
-	if snapshot.Revision != task.ReadRevision || snapshot.Task.ID != task.Record.ID {
-		return 0, errs.New(errs.KindInternal, "recovered Agent Task event snapshot does not match its claim")
-	}
-	maximum := uint32(0)
-	for _, event := range snapshot.Events {
-		identity := event.Identity
-		if identity.TaskID != task.Record.ID || identity.AssignmentID != assignment.AssignmentID ||
-			identity.AgentID != assignment.AgentID || identity.AgentGeneration != assignment.AgentGeneration ||
-			identity.Attempt == 0 {
-			return 0, errs.New(errs.KindInternal, "recovered Agent Task event identity does not match its claim")
-		}
-		if identity.Attempt > maximum {
-			maximum = identity.Attempt
-		}
-	}
-	if maximum == ^uint32(0) {
-		return 0, errs.New(errs.KindInternal, "recovered Agent Task event attempt is exhausted")
-	}
-	return maximum + 1, nil
 }
 
 func clearScriptAssignmentArtifacts(artifacts *agentpb.ScriptAssignmentArtifacts) {
@@ -1381,6 +1394,19 @@ func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) etcd.TaskResultR
 		ProxyEvidence:          make([]etcd.TaskProxyEvidence, len(result.GetProxyEvidence())),
 		RecreateEvidence:       make([]etcd.TaskRecreateEvidence, len(result.GetRecreateEvidence())),
 	}
+	if evidence := result.GetCandidateAbsenceEvidence(); evidence != nil {
+		durable.CandidateAbsenceEvidence = &etcd.TaskCandidateAbsenceEvidence{
+			AssignmentID: evidence.GetAssignmentId(), PlanHash: hex.EncodeToString(evidence.GetPlanHash()),
+			AuthoritySHA256:    hex.EncodeToString(evidence.GetAuthoritySha256()),
+			ComposeProjectName: evidence.GetComposeProjectName(), CandidateArtifactID: evidence.GetCandidateArtifactId(),
+			AbsenceProven: evidence.GetAbsenceProven(), Candidates: make([]etcd.TaskCandidateAbsenceCandidate, len(evidence.GetCandidates())),
+		}
+		for index, candidate := range evidence.GetCandidates() {
+			durable.CandidateAbsenceEvidence.Candidates[index] = etcd.TaskCandidateAbsenceCandidate{
+				ServiceID: candidate.GetServiceId(), ReleaseID: candidate.GetReleaseId(),
+			}
+		}
+	}
 	for index, project := range result.GetProjects() {
 		durable.Projects[index] = etcd.TaskObservedProjectSummary{
 			ProjectName: project.GetProjectName(),
@@ -1456,6 +1482,24 @@ func validateComposeTaskResult(acknowledgement *agentpb.TaskAck) error {
 		len(result.GetRecreateEvidence()) > 32 {
 		return errs.New(errs.KindValidationFailed, "Agent Compose Task result is invalid")
 	}
+	if evidence := result.GetCandidateAbsenceEvidence(); evidence != nil {
+		if evidence.GetAssignmentId() != acknowledgement.GetAssignmentId() ||
+			!bytes.Equal(evidence.GetPlanHash(), acknowledgement.GetPlanHash()) ||
+			len(evidence.GetAuthoritySha256()) != sha256.Size || evidence.GetComposeProjectName() == "" ||
+			ids.Validate(ids.KindConfig, evidence.GetCandidateArtifactId()) != nil ||
+			len(evidence.GetCandidates()) == 0 || len(evidence.GetCandidates()) > 32 {
+			return errs.New(errs.KindValidationFailed, "Agent candidate absence evidence is invalid")
+		}
+		previous := ""
+		for _, candidate := range evidence.GetCandidates() {
+			identity := candidate.GetServiceId() + "\x00" + candidate.GetReleaseId()
+			if ids.Validate(ids.KindService, candidate.GetServiceId()) != nil ||
+				ids.Validate(ids.KindDeployment, candidate.GetReleaseId()) != nil || identity <= previous {
+				return errs.New(errs.KindValidationFailed, "Agent candidate absence evidence is invalid or unsorted")
+			}
+			previous = identity
+		}
+	}
 	switch result.GetDiagnostic() {
 	case agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
 		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CONFIG_REJECTED,
@@ -1503,7 +1547,7 @@ func validateComposeTaskResult(acknowledgement *agentpb.TaskAck) error {
 	previousServiceID = ""
 	for _, evidence := range result.GetRecreateEvidence() {
 		if evidence == nil || ids.Validate(ids.KindService, evidence.GetServiceId()) != nil ||
-			(evidence.GetReleaseId() != "baseline" && ids.Validate(ids.KindDeployment, evidence.GetReleaseId()) != nil) ||
+			ids.Validate(ids.KindDeployment, evidence.GetReleaseId()) != nil ||
 			ids.Validate(
 				ids.KindConfig,
 				evidence.GetArtifactId(),

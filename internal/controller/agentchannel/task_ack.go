@@ -21,12 +21,41 @@ func (s *Server) acknowledge(
 ) error {
 	if acknowledgement == nil ||
 		ids.Validate(ids.KindAssignment, acknowledgement.AssignmentId) != nil ||
-		len(acknowledgement.PlanHash) != 32 {
+		len(acknowledgement.PlanHash) != 32 || acknowledgement.GetExecutionEpoch() == 0 {
 		return errs.New(errs.KindValidationFailed, "Agent Task acknowledgement is invalid")
 	}
 	task, err := s.tasks.GetTask(ctx, acknowledgement.TaskId)
 	if err != nil {
 		return err
+	}
+	if assignments, ok := s.tasks.(interface {
+		GetTaskAssignment(context.Context, string) (etcd.TaskAssignment, error)
+	}); ok {
+		assignment, assignmentErr := assignments.GetTaskAssignment(ctx, acknowledgement.GetTaskId())
+		terminalReplay := assignmentErr != nil && task.Record.Result != nil && task.Record.TerminalAssignment != nil
+		if assignmentErr != nil && !terminalReplay {
+			return assignmentErr
+		}
+		if !terminalReplay && assignment.Assignment.Record.AssignmentID != acknowledgement.GetAssignmentId() {
+			return errs.New(errs.KindStateConflict, "Agent Task acknowledgement execution epoch does not match")
+		}
+		if terminalReplay {
+			if task.Record.Result.ExecutionEpoch != acknowledgement.GetExecutionEpoch() ||
+				task.Record.Result.ReleaseRecoveryRecordSHA256 != hex.EncodeToString(acknowledgement.GetReleaseRecoveryRecordSha256()) {
+				return errs.New(errs.KindStateConflict, "Agent terminal acknowledgement replay authority changed")
+			}
+		} else {
+			recoveryDigest, decodeErr := hex.DecodeString(assignment.Assignment.Record.ReleaseRecoveryRecordSHA256)
+			oldPrimaryReplay := assignment.Assignment.Record.ExecutionMode == etcd.TaskExecutionModeRecoveryOnly &&
+				acknowledgement.GetExecutionEpoch() < assignment.Assignment.Record.ExecutionEpoch &&
+				len(acknowledgement.GetReleaseRecoveryRecordSha256()) == 0
+			if !oldPrimaryReplay && assignment.Assignment.Record.ExecutionEpoch != acknowledgement.GetExecutionEpoch() {
+				return errs.New(errs.KindStateConflict, "Agent Task acknowledgement execution epoch does not match")
+			}
+			if !oldPrimaryReplay && (decodeErr != nil || !bytes.Equal(recoveryDigest, acknowledgement.GetReleaseRecoveryRecordSha256())) {
+				return errs.New(errs.KindStateConflict, "Agent Task acknowledgement recovery digest does not match")
+			}
+		}
 	}
 	environmentTarget := ids.Validate(ids.KindEnvironment, task.Record.Target) == nil
 	environmentCreation := task.Record.Type == etcd.TaskCreate && environmentTarget
@@ -89,6 +118,8 @@ func (s *Server) acknowledge(
 		)
 	} else {
 		result := durableComposeTaskResult(acknowledgement)
+		result.ExecutionEpoch = acknowledgement.GetExecutionEpoch()
+		result.ReleaseRecoveryRecordSHA256 = hex.EncodeToString(acknowledgement.GetReleaseRecoveryRecordSha256())
 		if environmentDirectory {
 			result = durableEnvironmentDirectoryTaskResult(acknowledgement)
 		}

@@ -22,6 +22,7 @@ const (
 	ScriptOutcomeAbortBeforeStart         ScriptOutcomeReason = "abort_before_start"
 	ScriptOutcomeExpiryBeforeStart        ScriptOutcomeReason = "expiry_before_start"
 	ScriptOutcomeNoServingRelease         ScriptOutcomeReason = "no_serving_release"
+	ScriptOutcomeParentFailureBeforeStart ScriptOutcomeReason = "parent_failure_before_start"
 	ScriptOutcomeRecoveryInvariantFailure ScriptOutcomeReason = "recovery_invariant_failure"
 )
 
@@ -397,13 +398,17 @@ func validateScriptExecutionCheckpointShape(record ScriptExecutionRecord) error 
 		return nil
 	}
 	if record.State == ScriptExecutionCleanupProven && record.AssignmentID == "" {
+		controllerCleanupMatches := record.Outcome != nil &&
+			(record.Outcome.Reason == ScriptOutcomeAbortBeforeStart &&
+				record.ControllerCleanup == ScriptControllerCleanupBlueprintPendingAbort ||
+				record.Outcome.Reason == ScriptOutcomeParentFailureBeforeStart &&
+					record.ControllerCleanup == ScriptControllerCleanupReleaseRecoveryParentFailure)
 		if record.StartAuthorized || record.BodyPrepared != nil || record.ContainerCreated != nil ||
-			record.Outcome == nil || record.Outcome.Reason != ScriptOutcomeAbortBeforeStart ||
+			record.Outcome == nil || !controllerCleanupMatches ||
 			record.Outcome.ExitCode != nil || record.Outcome.OutputTruncated || record.Outcome.ObservedAt.IsZero() ||
 			record.Cleanup == nil || record.Cleanup.ContainerID != "" || record.Cleanup.BodyDevice != 0 ||
 			record.Cleanup.BodyInode != 0 || record.Cleanup.BodyLeaf != "" || !record.Cleanup.ContainerAbsent ||
 			!record.Cleanup.BodyAbsent || !record.Cleanup.ExecutionDirectoryAbsent ||
-			record.ControllerCleanup != ScriptControllerCleanupBlueprintPendingAbort ||
 			!validLowerSHA256(record.LastCheckpointSHA256) || record.ReconciliationRequired || record.ActiveReference {
 			return invalidScriptCheckpointRecord()
 		}
@@ -501,7 +506,7 @@ func validScriptOutcomeEvidence(evidence ScriptOutcomeEvidence) bool {
 	switch evidence.Reason {
 	case ScriptOutcomeStartFailure, ScriptOutcomeRuntimeFailure, ScriptOutcomeTimeout, ScriptOutcomeAbort,
 		ScriptOutcomeAbortBeforeStart, ScriptOutcomeExpiryBeforeStart, ScriptOutcomeNoServingRelease,
-		ScriptOutcomeRecoveryInvariantFailure:
+		ScriptOutcomeParentFailureBeforeStart, ScriptOutcomeRecoveryInvariantFailure:
 		return true
 	default:
 		return false

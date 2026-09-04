@@ -22,17 +22,24 @@ import (
 type PlanHash [sha256.Size]byte
 
 type Assignment struct {
-	AssignmentID            string
-	TaskID                  string
-	OperationID             string
-	RetryOf                 string
-	Plan                    *agentpb.ExecutionPlan
-	ScriptArtifacts         *agentpb.ScriptAssignmentArtifacts
-	ScriptCheckpoints       []*agentpb.ScriptExecutionCheckpoint
-	AcknowledgedStepResults []*agentpb.ExecutionStepResult
-	AutomaticReconcile      bool
-	EventAttempt            uint32
-	Deadline                time.Time
+	AssignmentID                string
+	TaskID                      string
+	OperationID                 string
+	RetryOf                     string
+	Plan                        *agentpb.ExecutionPlan
+	ScriptArtifacts             *agentpb.ScriptAssignmentArtifacts
+	ScriptCheckpoints           []*agentpb.ScriptExecutionCheckpoint
+	AcknowledgedStepResults     []*agentpb.ExecutionStepResult
+	AutomaticReconcile          bool
+	ExecutionEpoch              uint32
+	ExecutionMode               agentpb.TaskExecutionMode
+	ForwardDeadline             time.Time
+	RecoveryDeadline            time.Time
+	Deadline                    time.Time
+	RecoveryProofRequired       bool
+	RestorationAuthority        *agentpb.ReleaseRestorationAuthority
+	ReleaseRecoveryDirective    *agentpb.ReleaseRecoveryDirective
+	ReleaseRecoveryRecordSHA256 []byte
 }
 
 type TaskTerminal uint8
@@ -45,13 +52,15 @@ const (
 )
 
 type TaskResult struct {
-	AssignmentID         string
-	TaskID               string
-	PlanHash             PlanHash
-	Terminal             TaskTerminal
-	ExitCode             int32
-	Compose              *agentpb.ComposeTaskResult
-	EnvironmentDirectory *agentpb.EnvironmentDirectoryTaskResult
+	AssignmentID                string
+	TaskID                      string
+	PlanHash                    PlanHash
+	Terminal                    TaskTerminal
+	ExitCode                    int32
+	ExecutionEpoch              uint32
+	ReleaseRecoveryRecordSHA256 []byte
+	Compose                     *agentpb.ComposeTaskResult
+	EnvironmentDirectory        *agentpb.EnvironmentDirectoryTaskResult
 }
 
 type TaskProgressState uint8
@@ -65,14 +74,14 @@ const (
 )
 
 type TaskProgress struct {
-	AssignmentID string
-	TaskID       string
-	PlanHash     PlanHash
-	StepID       string
-	Attempt      uint32
-	Ordinal      uint64
-	State        TaskProgressState
-	Chunk        []byte
+	AssignmentID   string
+	TaskID         string
+	PlanHash       PlanHash
+	StepID         string
+	ExecutionEpoch uint32
+	Ordinal        uint64
+	State          TaskProgressState
+	Chunk          []byte
 }
 
 // WorkerOutput is a closed ordered union. Exactly one member is non-nil, and
@@ -86,9 +95,23 @@ type WorkerOutput struct {
 }
 
 type taskReservation struct {
-	assignment Assignment
-	ctx        context.Context
-	cancel     context.CancelFunc
+	assignment    Assignment
+	ctx           context.Context
+	cancel        context.CancelFunc
+	eventsDurable bool
+}
+
+type taskEventAckKey struct {
+	TaskID, AssignmentID, StepID string
+	PlanHash                     PlanHash
+	ExecutionEpoch               uint32
+	Ordinal                      uint64
+	State                        TaskProgressState
+}
+
+type taskEventAckInbox struct {
+	mu      sync.Mutex
+	pending map[taskEventAckKey]chan struct{}
 }
 
 type ScriptRuntime interface {
@@ -129,6 +152,7 @@ type WorkerPool struct {
 	backupCheckpoints      *backupCheckpointInbox
 	scriptCheckpoints      *scriptCheckpointInbox
 	executionStepResults   *executionStepResultInbox
+	taskEventAcks          *taskEventAckInbox
 
 	mu           sync.Mutex
 	reservations map[string]*taskReservation
@@ -151,6 +175,7 @@ func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger
 		backupCheckpoints:    newBackupCheckpointInbox(),
 		scriptCheckpoints:    newScriptCheckpointInbox(),
 		executionStepResults: newExecutionStepResultInbox(),
+		taskEventAcks:        &taskEventAckInbox{pending: make(map[taskEventAckKey]chan struct{})},
 		adapter:              NewAdapterRuntime(taskRunner),
 	}
 	pool.executeStep = pool.runStep
@@ -263,7 +288,7 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		p.emitProgress(runCtx, TaskProgress{
 			AssignmentID: reservation.assignment.AssignmentID,
 			TaskID:       reservation.assignment.TaskID, PlanHash: planHash,
-			StepID: step.StepId, Attempt: reservation.assignment.EventAttempt,
+			StepID: step.StepId, ExecutionEpoch: reservation.assignment.ExecutionEpoch,
 			Ordinal: 1, State: TaskProgressRunning,
 		})
 		stepCtx, cancel := context.WithTimeout(
@@ -383,7 +408,7 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		p.emitProgress(runCtx, TaskProgress{
 			AssignmentID: reservation.assignment.AssignmentID,
 			TaskID:       reservation.assignment.TaskID, PlanHash: planHash,
-			StepID: step.StepId, Attempt: reservation.assignment.EventAttempt, Ordinal: 2,
+			StepID: step.StepId, ExecutionEpoch: reservation.assignment.ExecutionEpoch, Ordinal: 2,
 			State: progressStateFor(reservation.ctx, err),
 		})
 	}
@@ -425,7 +450,8 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 	result := TaskResult{
 		AssignmentID: reservation.assignment.AssignmentID,
 		TaskID:       reservation.assignment.TaskID, PlanHash: planHash, Terminal: terminal,
-		ExitCode: exitCode,
+		ExitCode: exitCode, ExecutionEpoch: reservation.assignment.ExecutionEpoch,
+		ReleaseRecoveryRecordSHA256: append([]byte(nil), reservation.assignment.ReleaseRecoveryRecordSHA256...),
 	}
 	if environmentDirectoryTask {
 		result.EnvironmentDirectory = &agentpb.EnvironmentDirectoryTaskResult{FailedStepId: failedStepID}
@@ -908,25 +934,17 @@ func composeTaskResult(
 }
 
 func isReleaseExecution(plan *agentpb.ExecutionPlan) bool {
-	if plan == nil || (plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_DEPLOY &&
-		plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK) {
+	if plan == nil || plan.GetCandidateReleaseProcedure() == nil {
 		return false
 	}
-	for _, step := range plan.Steps {
-		if step == nil {
-			continue
-		}
-		switch step.Policy {
-		case agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
-			agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
-			agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
-			agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK,
-			agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_POST_HOOK,
-			agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FAILURE_HOOK:
-			return true
-		}
+	switch plan.GetOperation() {
+	case agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
+		agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK,
+		agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY:
+		return true
+	default:
+		return false
 	}
-	return false
 }
 
 func terminalFor(taskCtx context.Context, err error) TaskTerminal {
@@ -964,6 +982,73 @@ func (p *WorkerPool) emitProgress(runCtx context.Context, progress TaskProgress)
 	case p.outputs <- WorkerOutput{Progress: &owned}:
 	case <-runCtx.Done():
 	}
+}
+
+func (p *WorkerPool) emitProgressAndWait(ctx context.Context, progress TaskProgress) error {
+	key := taskEventAckKey{
+		TaskID: progress.TaskID, AssignmentID: progress.AssignmentID, StepID: progress.StepID,
+		PlanHash: progress.PlanHash, ExecutionEpoch: progress.ExecutionEpoch, Ordinal: progress.Ordinal,
+		State: progress.State,
+	}
+	accepted := make(chan struct{})
+	p.taskEventAcks.mu.Lock()
+	if _, exists := p.taskEventAcks.pending[key]; exists {
+		p.taskEventAcks.mu.Unlock()
+		return errs.New(errs.KindStateConflict, "agent: Task event acceptance is already pending")
+	}
+	p.taskEventAcks.pending[key] = accepted
+	p.taskEventAcks.mu.Unlock()
+	defer func() {
+		p.taskEventAcks.mu.Lock()
+		delete(p.taskEventAcks.pending, key)
+		p.taskEventAcks.mu.Unlock()
+	}()
+	p.emitProgress(ctx, progress)
+	select {
+	case <-accepted:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (p *WorkerPool) AcceptTaskEventAck(_ context.Context, ack *agentpb.TaskEventAck) error {
+	if p == nil || p.taskEventAcks == nil || ack == nil || ack.GetExecutionEpoch() == 0 || ack.GetOrdinal() == 0 ||
+		len(ack.GetPlanHash()) != 32 {
+		return errs.New(errs.KindValidationFailed, "agent: Controller Task event acknowledgement is invalid")
+	}
+	state := TaskProgressState(0)
+	switch ack.GetState() {
+	case agentpb.TaskState_TASK_STATE_RUNNING:
+		state = TaskProgressRunning
+	case agentpb.TaskState_TASK_STATE_COMPLETED:
+		state = TaskProgressCompleted
+	case agentpb.TaskState_TASK_STATE_FAILED:
+		state = TaskProgressFailed
+	case agentpb.TaskState_TASK_STATE_TIMED_OUT:
+		state = TaskProgressTimedOut
+	case agentpb.TaskState_TASK_STATE_ABORTED:
+		state = TaskProgressAborted
+	default:
+		return errs.New(errs.KindValidationFailed, "agent: Controller Task event acknowledgement state is invalid")
+	}
+	var planHash PlanHash
+	copy(planHash[:], ack.GetPlanHash())
+	key := taskEventAckKey{
+		TaskID: ack.GetTaskId(), AssignmentID: ack.GetAssignmentId(), StepID: ack.GetStepId(),
+		PlanHash: planHash, ExecutionEpoch: ack.GetExecutionEpoch(), Ordinal: ack.GetOrdinal(), State: state,
+	}
+	p.taskEventAcks.mu.Lock()
+	accepted := p.taskEventAcks.pending[key]
+	if accepted != nil {
+		delete(p.taskEventAcks.pending, key)
+	}
+	p.taskEventAcks.mu.Unlock()
+	if accepted == nil {
+		return errs.New(errs.KindStateConflict, "agent: stale Task event acknowledgement")
+	}
+	close(accepted)
+	return nil
 }
 
 func (p *WorkerPool) complete(runCtx context.Context, reservation *taskReservation, result TaskResult) {
@@ -1009,7 +1094,8 @@ func (p *WorkerPool) releaseQueued(runCtx context.Context) {
 			result := TaskResult{
 				AssignmentID: reservation.assignment.AssignmentID,
 				TaskID:       reservation.assignment.TaskID, PlanHash: hashForPlan(reservation.assignment.Plan),
-				Terminal: TaskTerminalAborted,
+				Terminal: TaskTerminalAborted, ExecutionEpoch: reservation.assignment.ExecutionEpoch,
+				ReleaseRecoveryRecordSHA256: append([]byte(nil), reservation.assignment.ReleaseRecoveryRecordSHA256...),
 			}
 			if usesEnvironmentDirectory(reservation.assignment.Plan) {
 				result.EnvironmentDirectory = &agentpb.EnvironmentDirectoryTaskResult{}
@@ -1125,7 +1211,7 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment Assignment) error {
 	}
 	if existing := p.reservations[owned.TaskID]; existing != nil {
 		if existing.assignment.AssignmentID != owned.AssignmentID ||
-			existing.assignment.EventAttempt != owned.EventAttempt ||
+			existing.assignment.ExecutionEpoch != owned.ExecutionEpoch ||
 			hashForPlan(existing.assignment.Plan) != hashForPlan(owned.Plan) {
 			return errs.New(errs.KindStateConflict, "agent: task id was reused with a different assignment")
 		}
@@ -1147,7 +1233,7 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment Assignment) error {
 		return err
 	}
 	taskCtx, cancel := context.WithDeadline(ctx, owned.Deadline)
-	reservation := &taskReservation{assignment: owned, ctx: taskCtx, cancel: cancel}
+	reservation := &taskReservation{assignment: owned, ctx: taskCtx, cancel: cancel, eventsDurable: true}
 	p.reservations[owned.TaskID] = reservation
 	select {
 	case p.work <- reservation:
@@ -1184,8 +1270,29 @@ func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assign
 	if err := ids.Validate(ids.KindTask, assignment.TaskID); err != nil {
 		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid task id")
 	}
-	if assignment.Deadline.IsZero() {
-		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid task deadline")
+	if assignment.ExecutionEpoch == 0 || assignment.ForwardDeadline.IsZero() || assignment.RecoveryDeadline.IsZero() ||
+		assignment.RecoveryDeadline.Before(assignment.ForwardDeadline) {
+		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent invalid execution authority")
+	}
+	deadline := assignment.ForwardDeadline
+	switch assignment.ExecutionMode {
+	case agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD:
+		if assignment.ReleaseRecoveryDirective != nil || len(assignment.ReleaseRecoveryRecordSHA256) != 0 ||
+			assignment.RecoveryProofRequired {
+			return Assignment{}, errs.New(errs.KindInternal, "agent: forward assignment carries recovery authority")
+		}
+	case agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY:
+		deadline = assignment.RecoveryDeadline
+		if assignment.RecoveryProofRequired {
+			deadline = assignment.Deadline
+		}
+		if assignment.ReleaseRecoveryDirective == nil || len(assignment.ReleaseRecoveryRecordSHA256) != 32 ||
+			!bytes.Equal(assignment.ReleaseRecoveryDirective.GetReleaseRecoveryRecordSha256(), assignment.ReleaseRecoveryRecordSHA256) ||
+			assignment.RecoveryProofRequired && !assignment.Deadline.After(assignment.RecoveryDeadline) {
+			return Assignment{}, errs.New(errs.KindInternal, "agent: recovery assignment authority is incomplete")
+		}
+	default:
+		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid execution mode")
 	}
 	if err := ids.Validate(ids.KindOperation, assignment.OperationID); err != nil {
 		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid operation id")
@@ -1205,6 +1312,9 @@ func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assign
 	}
 	if err := executionplan.AuthorizeVolumeDirectories(plan, volumeRoot); err != nil {
 		return Assignment{}, errs.Wrap(errs.KindInternal, err)
+	}
+	if err := validateCandidateReleaseAssignmentAuthority(assignment, plan); err != nil {
+		return Assignment{}, err
 	}
 	if assignment.AutomaticReconcile && plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
 		return Assignment{}, errs.New(
@@ -1253,14 +1363,120 @@ func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assign
 		}
 		seenCheckpoints[scriptCheckpoints[index].ScriptExecutionId] = struct{}{}
 	}
+	var restorationAuthority *agentpb.ReleaseRestorationAuthority
+	if assignment.RestorationAuthority != nil {
+		restorationAuthority = proto.Clone(assignment.RestorationAuthority).(*agentpb.ReleaseRestorationAuthority)
+	}
+	var recoveryDirective *agentpb.ReleaseRecoveryDirective
+	if assignment.ReleaseRecoveryDirective != nil {
+		recoveryDirective = proto.Clone(assignment.ReleaseRecoveryDirective).(*agentpb.ReleaseRecoveryDirective)
+	}
 	return Assignment{
 		AssignmentID: assignment.AssignmentID,
 		TaskID:       assignment.TaskID, OperationID: assignment.OperationID,
 		RetryOf: assignment.RetryOf, Plan: plan, ScriptArtifacts: scriptArtifacts,
 		ScriptCheckpoints: scriptCheckpoints, AcknowledgedStepResults: acknowledgedStepResults,
-		Deadline: assignment.Deadline, AutomaticReconcile: assignment.AutomaticReconcile,
-		EventAttempt: assignment.EventAttempt,
+		Deadline: deadline, ForwardDeadline: assignment.ForwardDeadline, RecoveryDeadline: assignment.RecoveryDeadline,
+		RecoveryProofRequired: assignment.RecoveryProofRequired,
+		ExecutionMode:         assignment.ExecutionMode, ExecutionEpoch: assignment.ExecutionEpoch,
+		RestorationAuthority: restorationAuthority, ReleaseRecoveryDirective: recoveryDirective,
+		ReleaseRecoveryRecordSHA256: append([]byte(nil), assignment.ReleaseRecoveryRecordSHA256...),
+		AutomaticReconcile:          assignment.AutomaticReconcile,
 	}, nil
+}
+
+func validateCandidateReleaseAssignmentAuthority(assignment Assignment, plan *agentpb.ExecutionPlan) error {
+	procedure := plan.GetCandidateReleaseProcedure()
+	if procedure == nil {
+		if assignment.RestorationAuthority != nil || assignment.ReleaseRecoveryDirective != nil ||
+			len(assignment.ReleaseRecoveryRecordSHA256) != 0 {
+			return errs.New(errs.KindInternal, "agent: non-release assignment carries restoration authority")
+		}
+		return nil
+	}
+	authority := assignment.RestorationAuthority
+	if authority == nil || len(authority.GetPlanHash()) != 32 || !bytes.Equal(authority.GetPlanHash(), plan.GetPlanHash()) ||
+		len(authority.GetAuthoritySha256()) != 32 || authority.GetTaskId() != assignment.TaskID ||
+		authority.GetOperationId() != assignment.OperationID || len(authority.GetCandidates()) != len(procedure.GetMembers()) {
+		return errs.New(errs.KindInternal, "agent: candidate Release restoration authority is invalid")
+	}
+	selectedStepIDs := make([]string, 0, len(procedure.GetMembers())*2)
+	compensateStepIDs := make([]string, 0, len(procedure.GetMembers()))
+	for index, member := range procedure.GetMembers() {
+		candidate := authority.GetCandidates()[index]
+		if candidate.GetServiceId() != member.GetServiceId() || candidate.GetReleaseId() != member.GetCandidateReleaseId() ||
+			authority.GetCandidateArtifactId() != member.GetCandidateArtifactId() {
+			return errs.New(errs.KindInternal, "agent: candidate Release restoration members diverge")
+		}
+		var probeID, compensateID string
+		switch authority.GetTarget() {
+		case agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR:
+			selected := member.GetServingPredecessor()
+			if selected == nil || authority.GetServingPredecessor() == nil ||
+				authority.GetServingPredecessor().GetKeyRevision() <= 0 ||
+				len(authority.GetServingPredecessor().GetComposeArtifactSha256()) != 32 ||
+				len(authority.GetServingPredecessor().GetComposeArtifact()) == 0 {
+				return errs.New(errs.KindInternal, "agent: serving predecessor authority is incomplete")
+			}
+			artifactDigest := sha256.Sum256(authority.GetServingPredecessor().GetComposeArtifact())
+			if !bytes.Equal(artifactDigest[:], authority.GetServingPredecessor().GetComposeArtifactSha256()) {
+				return errs.New(errs.KindInternal, "agent: serving predecessor artifact digest diverges")
+			}
+			probeID, compensateID = selected.GetProbeStepId(), selected.GetCompensateStepId()
+		case agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE:
+			selected := member.GetCandidateAbsence()
+			if selected == nil || authority.GetServingPredecessor() != nil {
+				return errs.New(errs.KindInternal, "agent: candidate absence authority is incomplete")
+			}
+			probeID, compensateID = selected.GetProbeStepId(), selected.GetCompensateStepId()
+		default:
+			return errs.New(errs.KindInternal, "agent: candidate Release restoration target is invalid")
+		}
+		selectedStepIDs = append(selectedStepIDs, probeID)
+		compensateStepIDs = append(compensateStepIDs, compensateID)
+	}
+	for index := len(compensateStepIDs) - 1; index >= 0; index-- {
+		selectedStepIDs = append(selectedStepIDs, compensateStepIDs[index])
+	}
+	if assignment.ExecutionMode != agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY {
+		return nil
+	}
+	directive := assignment.ReleaseRecoveryDirective
+	if directive.GetCursor() > uint32(len(directive.GetStepIds())) || len(directive.GetStepIds()) != len(selectedStepIDs) {
+		return errs.New(errs.KindInternal, "agent: candidate Release recovery cursor is invalid")
+	}
+	for index := range selectedStepIDs {
+		if directive.GetStepIds()[index] != selectedStepIDs[index] {
+			return errs.New(errs.KindInternal, "agent: candidate Release recovery procedure diverges")
+		}
+	}
+	applicableIndex := 0
+	for _, compensationStepID := range selectedStepIDs[len(procedure.GetMembers()):] {
+		if applicableIndex < len(directive.GetApplicableCompensationStepIds()) &&
+			directive.GetApplicableCompensationStepIds()[applicableIndex] == compensationStepID {
+			applicableIndex++
+		}
+	}
+	if applicableIndex != len(directive.GetApplicableCompensationStepIds()) {
+		return errs.New(errs.KindInternal, "agent: recovery compensation obligation is not canonical")
+	}
+	switch directive.GetPhase() {
+	case agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROBE:
+		if int(directive.GetCursor()) >= len(procedure.GetMembers()) {
+			return errs.New(errs.KindInternal, "agent: recovery probe phase cursor is invalid")
+		}
+	case agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_COMPENSATE:
+		if int(directive.GetCursor()) < len(procedure.GetMembers()) || int(directive.GetCursor()) >= len(selectedStepIDs) {
+			return errs.New(errs.KindInternal, "agent: recovery compensation phase cursor is invalid")
+		}
+	case agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROVEN:
+		if int(directive.GetCursor()) != len(selectedStepIDs) {
+			return errs.New(errs.KindInternal, "agent: recovery proven phase cursor is invalid")
+		}
+	default:
+		return errs.New(errs.KindInternal, "agent: recovery assignment phase is invalid")
+	}
+	return nil
 }
 
 // runStep fails closed until the corresponding typed procedure is accepted.

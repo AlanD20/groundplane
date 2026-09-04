@@ -172,6 +172,9 @@ func controllerMaterializationClaim(task etcd.TaskRecord) etcd.TaskAssignment {
 		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
 			AssignmentID: "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 			TaskID:       task.ID, Executor: etcd.TaskExecutorAgent,
+			AssignedAt: task.CreatedAt, Deadline: task.CreatedAt.Add(time.Minute),
+			RecoveryDeadline: task.CreatedAt.Add(2 * time.Minute), ExecutionEpoch: 1,
+			ExecutionMode: etcd.TaskExecutionModeForward,
 		}},
 		Task: etcd.Versioned[etcd.TaskRecord]{Record: task},
 	}

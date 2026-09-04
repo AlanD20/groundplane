@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -15,32 +16,58 @@ import (
 // Agent daemon generation. ClaimedTaskRevision is the pending Task revision
 // consumed by the assignment transaction, not the transaction's new revision.
 type TaskAssignmentRecord struct {
-	AssignmentID        string
-	TaskID              string
-	Executor            TaskExecutor
-	AgentID             string
-	AgentGeneration     uint64
-	ClaimedTaskRevision int64
-	AssignedAt          time.Time
-	Deadline            time.Time
+	AssignmentID                string
+	TaskID                      string
+	Executor                    TaskExecutor
+	AgentID                     string
+	AgentGeneration             uint64
+	ClaimedTaskRevision         int64
+	AssignedAt                  time.Time
+	Deadline                    time.Time
+	RecoveryDeadline            time.Time
+	RecoveryExecutionDeadline   time.Time
+	ExecutionMode               TaskExecutionMode
+	ExecutionEpoch              uint32
+	RestorationAuthority        *ReleaseRestorationAuthority
+	RestorationAuthoritySHA256  string
+	ReleaseRecoveryRecordSHA256 string
 }
 
 // TaskAssignment contains both records created by one successful claim.
 type TaskAssignment struct {
-	Assignment Versioned[TaskAssignmentRecord]
-	Task       Versioned[TaskRecord]
+	Assignment      Versioned[TaskAssignmentRecord]
+	Task            Versioned[TaskRecord]
+	ReleaseRecovery *ReleaseRecoveryDirective
+	// RecoveryProofRequired is private lifecycle state. It is true only after
+	// the immutable recovery deadline expired without exact restoration proof.
+	RecoveryProofRequired bool
+}
+
+type ReleaseRecoveryDirective struct {
+	Phase                         ReleaseRecoveryPhase
+	StepIDs                       []string
+	Cursor                        uint32
+	RecordSHA256                  string
+	ApplicableCompensationStepIDs []string
 }
 
 type taskAssignmentJSON struct {
-	Schema              int          `json:"schema"`
-	AssignmentID        string       `json:"assignment_id"`
-	TaskID              string       `json:"task_id"`
-	Executor            TaskExecutor `json:"executor"`
-	AgentID             string       `json:"agent_id"`
-	AgentGeneration     uint64       `json:"agent_generation"`
-	ClaimedTaskRevision int64        `json:"claimed_task_revision"`
-	AssignedAt          string       `json:"assigned_at"`
-	Deadline            string       `json:"deadline"`
+	Schema                      int                          `json:"schema"`
+	AssignmentID                string                       `json:"assignment_id"`
+	TaskID                      string                       `json:"task_id"`
+	Executor                    TaskExecutor                 `json:"executor"`
+	AgentID                     string                       `json:"agent_id"`
+	AgentGeneration             uint64                       `json:"agent_generation"`
+	ClaimedTaskRevision         int64                        `json:"claimed_task_revision"`
+	AssignedAt                  string                       `json:"assigned_at"`
+	ForwardDeadline             string                       `json:"forward_deadline"`
+	RecoveryDeadline            string                       `json:"recovery_deadline"`
+	RecoveryExecutionDeadline   string                       `json:"recovery_execution_deadline,omitempty"`
+	ExecutionMode               TaskExecutionMode            `json:"execution_mode"`
+	ExecutionEpoch              uint32                       `json:"execution_epoch"`
+	RestorationAuthority        *ReleaseRestorationAuthority `json:"restoration_authority,omitempty"`
+	RestorationAuthoritySHA256  string                       `json:"restoration_authority_sha256,omitempty"`
+	ReleaseRecoveryRecordSHA256 string                       `json:"release_recovery_record_sha256,omitempty"`
 }
 
 func encodeTaskAssignment(record TaskAssignmentRecord) ([]byte, error) {
@@ -48,11 +75,22 @@ func encodeTaskAssignment(record TaskAssignmentRecord) ([]byte, error) {
 		return nil, err
 	}
 	return json.Marshal(taskAssignmentJSON{
-		Schema: 1, AssignmentID: record.AssignmentID, TaskID: record.TaskID,
+		Schema: 3, AssignmentID: record.AssignmentID, TaskID: record.TaskID,
 		Executor: record.Executor, AgentID: record.AgentID,
 		AgentGeneration: record.AgentGeneration, ClaimedTaskRevision: record.ClaimedTaskRevision,
-		AssignedAt: record.AssignedAt.Format(time.RFC3339Nano),
-		Deadline:   record.Deadline.Format(time.RFC3339Nano),
+		AssignedAt:       record.AssignedAt.Format(time.RFC3339Nano),
+		ForwardDeadline:  record.Deadline.Format(time.RFC3339Nano),
+		RecoveryDeadline: record.RecoveryDeadline.Format(time.RFC3339Nano),
+		RecoveryExecutionDeadline: func() string {
+			if record.RecoveryExecutionDeadline.IsZero() {
+				return ""
+			}
+			return record.RecoveryExecutionDeadline.Format(time.RFC3339Nano)
+		}(),
+		ExecutionMode: record.ExecutionMode, ExecutionEpoch: record.ExecutionEpoch,
+		RestorationAuthority:        cloneReleaseRestorationAuthority(record.RestorationAuthority),
+		RestorationAuthoritySHA256:  record.RestorationAuthoritySHA256,
+		ReleaseRecoveryRecordSHA256: record.ReleaseRecoveryRecordSHA256,
 	})
 }
 
@@ -63,21 +101,37 @@ func decodeTaskAssignment(value []byte) (TaskAssignmentRecord, error) {
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	decoder.DisallowUnknownFields()
 	var data taskAssignmentJSON
-	if err := decoder.Decode(&data); err != nil || requireJSONEOF(decoder) != nil || data.Schema != 1 {
+	if err := decoder.Decode(&data); err != nil || requireJSONEOF(decoder) != nil || data.Schema != 3 {
 		return TaskAssignmentRecord{}, corruptTaskAssignment()
 	}
 	assignedAt, err := parseCanonicalTimestamp(data.AssignedAt)
 	if err != nil {
 		return TaskAssignmentRecord{}, corruptTaskAssignment()
 	}
-	deadline, err := parseCanonicalTimestamp(data.Deadline)
+	deadline, err := parseCanonicalTimestamp(data.ForwardDeadline)
 	if err != nil {
 		return TaskAssignmentRecord{}, corruptTaskAssignment()
+	}
+	recoveryDeadline, err := parseCanonicalTimestamp(data.RecoveryDeadline)
+	if err != nil {
+		return TaskAssignmentRecord{}, corruptTaskAssignment()
+	}
+	var recoveryExecutionDeadline time.Time
+	if data.RecoveryExecutionDeadline != "" {
+		recoveryExecutionDeadline, err = parseCanonicalTimestamp(data.RecoveryExecutionDeadline)
+		if err != nil {
+			return TaskAssignmentRecord{}, corruptTaskAssignment()
+		}
 	}
 	record := TaskAssignmentRecord{
 		AssignmentID: data.AssignmentID, TaskID: data.TaskID,
 		Executor: data.Executor, AgentID: data.AgentID, AgentGeneration: data.AgentGeneration,
 		ClaimedTaskRevision: data.ClaimedTaskRevision, AssignedAt: assignedAt, Deadline: deadline,
+		RecoveryDeadline: recoveryDeadline, RecoveryExecutionDeadline: recoveryExecutionDeadline,
+		ExecutionMode: data.ExecutionMode, ExecutionEpoch: data.ExecutionEpoch,
+		RestorationAuthority:        cloneReleaseRestorationAuthority(data.RestorationAuthority),
+		RestorationAuthoritySHA256:  data.RestorationAuthoritySHA256,
+		ReleaseRecoveryRecordSHA256: data.ReleaseRecoveryRecordSHA256,
 	}
 	if err := validateTaskAssignment(record); err != nil {
 		return TaskAssignmentRecord{}, corruptTaskAssignment()
@@ -89,9 +143,10 @@ func validateTaskAssignment(record TaskAssignmentRecord) error {
 	if validateStableID(ids.KindAssignment, record.AssignmentID) != nil ||
 		validateStableID(ids.KindTask, record.TaskID) != nil || !validTaskExecutor(record.Executor) ||
 		record.ClaimedTaskRevision <= 0 ||
+		record.ExecutionEpoch == 0 ||
 		validateTimestamp("task assignment assigned_at", record.AssignedAt) != nil ||
 		validateTimestamp("task assignment deadline", record.Deadline) != nil ||
-		!record.Deadline.After(record.AssignedAt) {
+		!record.Deadline.After(record.AssignedAt) || !record.RecoveryDeadline.After(record.Deadline) {
 		return corruptTaskAssignment()
 	}
 	if record.Executor == TaskExecutorAgent &&
@@ -100,6 +155,31 @@ func validateTaskAssignment(record TaskAssignmentRecord) error {
 	}
 	if record.Executor == TaskExecutorController && (record.AgentID != "" || record.AgentGeneration != 0) {
 		return corruptTaskAssignment()
+	}
+	switch record.ExecutionMode {
+	case TaskExecutionModeForward:
+		if record.ReleaseRecoveryRecordSHA256 != "" || !record.RecoveryExecutionDeadline.IsZero() {
+			return corruptTaskAssignment()
+		}
+	case TaskExecutionModeRecoveryOnly:
+		if !validSHA256(record.ReleaseRecoveryRecordSHA256) ||
+			(!record.RecoveryExecutionDeadline.IsZero() &&
+				(validateTimestamp("task assignment recovery execution deadline", record.RecoveryExecutionDeadline) != nil ||
+					!record.RecoveryExecutionDeadline.After(record.RecoveryDeadline))) {
+			return corruptTaskAssignment()
+		}
+	default:
+		return corruptTaskAssignment()
+	}
+	if record.RestorationAuthority == nil {
+		if record.RestorationAuthoritySHA256 != "" || record.ExecutionMode == TaskExecutionModeRecoveryOnly {
+			return corruptTaskAssignment()
+		}
+	} else {
+		digest, err := releaseRestorationAuthoritySHA256(*record.RestorationAuthority)
+		if err != nil || digest != record.RestorationAuthoritySHA256 || record.RestorationAuthority.TaskID != record.TaskID {
+			return corruptTaskAssignment()
+		}
 	}
 	return nil
 }
@@ -682,6 +762,7 @@ func (repository *TaskRepository) claimNextTask(
 		assignmentKey := taskExecutionClaimKey(executor, agentID, task.ID)
 		assignmentIndexKey := taskAssignmentIndexKey(task.ID)
 		deadline := claimAt.Add(time.Duration(task.TimeoutSeconds) * time.Second)
+		recoveryDeadline := deadline.Add(time.Duration(task.TimeoutSeconds) * time.Second)
 		timeoutIndexKey := taskTimeoutIndexKey(task.ID, deadline)
 		companionKeys := []string{activeKey, assignmentKey, assignmentIndexKey, timeoutIndexKey}
 		if candidate.writerKey != "" {
@@ -722,6 +803,7 @@ func (repository *TaskRepository) claimNextTask(
 			AssignmentID: ids.New(ids.KindAssignment),
 			TaskID:       task.ID, Executor: executor, AgentID: agentID, AgentGeneration: agentGeneration,
 			ClaimedTaskRevision: taskValue.ModRevision, AssignedAt: claimAt, Deadline: deadline,
+			RecoveryDeadline: recoveryDeadline, ExecutionMode: TaskExecutionModeForward, ExecutionEpoch: 1,
 		}
 		runningValue, err := encodeTaskRecord(running)
 		if err != nil {
@@ -792,6 +874,25 @@ func (repository *TaskRepository) claimNextTask(
 				Type: MutationPut, Key: candidate.writerKey, Value: writerValue,
 			})
 			if taskHasBlueprintCandidateAppliedAuthority(task) {
+				authority, authorityDigest, authorityConditions, authorityErr := repository.prepareBlueprintRestorationAuthority(
+					ctx, task, writer, candidate.readRevision,
+				)
+				if authorityErr != nil {
+					clearMutationValues(mutations)
+					return TaskAssignment{}, false, authorityErr
+				}
+				assignment.RestorationAuthority = &authority
+				assignment.RestorationAuthoritySHA256 = authorityDigest
+				updatedAssignmentValue, encodeErr := encodeTaskAssignment(assignment)
+				if encodeErr != nil {
+					clearMutationValues(mutations)
+					return TaskAssignment{}, false, encodeErr
+				}
+				clear(assignmentValue)
+				assignmentValue = updatedAssignmentValue
+				mutations[2].Value, mutations[3].Value, mutations[4].Value = assignmentValue, assignmentValue, assignmentValue
+				conditions = append(conditions, authorityConditions...)
+				conditions = append(conditions, Condition{Key: releaseRecoveryKey(task.ID)})
 				epochCondition, epochMutation, claimErr :=
 					repository.prepareBlueprintCandidateClaimEpoch(
 						ctx, task, writer, candidate.readRevision, requirementEvidence.gateRevision,
@@ -802,6 +903,26 @@ func (repository *TaskRepository) claimNextTask(
 				}
 				conditions = append(conditions, epochCondition)
 				mutations = append(mutations, epochMutation)
+			} else if task.Params[TaskReleasePublicationParam] != "" {
+				authority, authorityDigest, authorityConditions, authorityErr := repository.prepareOrdinaryRestorationAuthority(
+					ctx, task, candidate.readRevision,
+				)
+				if authorityErr != nil {
+					clearMutationValues(mutations)
+					return TaskAssignment{}, false, authorityErr
+				}
+				assignment.RestorationAuthority = &authority
+				assignment.RestorationAuthoritySHA256 = authorityDigest
+				updatedAssignmentValue, encodeErr := encodeTaskAssignment(assignment)
+				if encodeErr != nil {
+					clearMutationValues(mutations)
+					return TaskAssignment{}, false, encodeErr
+				}
+				clear(assignmentValue)
+				assignmentValue = updatedAssignmentValue
+				mutations[2].Value, mutations[3].Value, mutations[4].Value = assignmentValue, assignmentValue, assignmentValue
+				conditions = append(conditions, authorityConditions...)
+				conditions = append(conditions, Condition{Key: releaseRecoveryKey(task.ID)})
 			}
 		}
 		attachChange, err := repository.prepareAttachTaskClaim(ctx, task, candidate.readRevision)
@@ -990,7 +1111,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 	}
 
 	records := make([]TaskAssignmentRecord, len(assignments.Values))
-	companionKeys := make([]string, 0, len(assignments.Values)*3)
+	companionKeys := make([]string, 0, len(assignments.Values)*4)
 	for index, value := range assignments.Values {
 		taskID, err := taskIDFromAssignmentKey(agentID, value.Key)
 		if err != nil {
@@ -1010,11 +1131,16 @@ func (repository *TaskRepository) ListAgentAssignments(
 			return nil, corruptTaskAssignment()
 		}
 		records[index] = record
+		timeoutDeadline := record.Deadline
+		if record.ExecutionMode == TaskExecutionModeRecoveryOnly {
+			timeoutDeadline = record.RecoveryDeadline
+		}
 		companionKeys = append(
 			companionKeys,
 			taskKey(taskID),
 			taskAssignmentIndexKey(taskID),
-			taskTimeoutIndexKey(taskID, record.Deadline),
+			taskTimeoutIndexKey(taskID, timeoutDeadline),
+			taskRecoveryProofRequiredKey(taskID),
 		)
 	}
 	companions, err := repository.store.GetMany(ctx, GetManyRequest{
@@ -1028,17 +1154,25 @@ func (repository *TaskRepository) ListAgentAssignments(
 	}
 	result := make([]TaskAssignment, len(records))
 	for index, record := range records {
-		taskValue := companions.Values[index*3]
-		indexValue := companions.Values[index*3+1]
-		timeoutValue := companions.Values[index*3+2]
+		taskValue := companions.Values[index*4]
+		indexValue := companions.Values[index*4+1]
+		timeoutValue := companions.Values[index*4+2]
+		proofRequiredValue := companions.Values[index*4+3]
 		assignmentValue := assignments.Values[index]
-		if taskValue == nil || indexValue == nil || timeoutValue == nil {
+		proofRequired := proofRequiredValue != nil
+		if taskValue == nil || indexValue == nil ||
+			timeoutValue == nil == (record.ExecutionMode == TaskExecutionModeForward || !proofRequired) ||
+			proofRequired && record.ExecutionMode != TaskExecutionModeRecoveryOnly {
 			return nil, errs.New(errs.KindInternal, "assigned Task companion is missing")
 		}
+		lifecycleValue := timeoutValue
+		if proofRequired {
+			lifecycleValue = proofRequiredValue
+		}
 		if indexValue.ModRevision != assignmentValue.ModRevision ||
-			timeoutValue.ModRevision != assignmentValue.ModRevision ||
+			lifecycleValue.ModRevision != assignmentValue.ModRevision ||
 			!bytes.Equal(indexValue.Value, assignmentValue.Value) ||
-			!bytes.Equal(timeoutValue.Value, assignmentValue.Value) {
+			!bytes.Equal(lifecycleValue.Value, assignmentValue.Value) {
 			return nil, errs.New(errs.KindInternal, "durable Task assignment copies do not match")
 		}
 		task, err := decodeTaskRecord(taskValue.Value)
@@ -1048,6 +1182,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 		if task.ID != record.TaskID || task.Status != TaskStatusRunning ||
 			task.StartedAt == nil || !task.StartedAt.Equal(record.AssignedAt) ||
 			!record.Deadline.Equal(record.AssignedAt.Add(time.Duration(task.TimeoutSeconds)*time.Second)) ||
+			!record.RecoveryDeadline.Equal(record.Deadline.Add(time.Duration(task.TimeoutSeconds)*time.Second)) ||
 			taskValue.ModRevision < assignmentValue.ModRevision ||
 			task.idempotencyMarker == nil && !isMarkerlessHierarchyDeletionAgentChild(task) {
 			return nil, errs.New(errs.KindInternal, "durable Task assignment and Task are inconsistent")
@@ -1058,9 +1193,6 @@ func (repository *TaskRepository) ListAgentAssignments(
 		}
 		if materializes {
 			writerKeys := []string{taskMaterializationWriterKey(environmentID)}
-			if taskHasBlueprintCandidateAppliedAuthority(task) {
-				writerKeys = append(writerKeys, environmentComposeProjectionKey(environmentID))
-			}
 			writerRead, err := repository.store.GetMany(ctx, GetManyRequest{
 				Keys: writerKeys, Revision: assignments.ReadRevision,
 			})
@@ -1074,13 +1206,21 @@ func (repository *TaskRepository) ListAgentAssignments(
 			if err != nil || validateTaskMaterializationWriterForTask(writer, task, environmentID) != nil {
 				return nil, corruptTaskMaterializationWriter()
 			}
-			if taskHasBlueprintCandidateAppliedAuthority(task) {
-				predecessor, predecessorErr := taskMaterializationAppliedPredecessorFromValue(
-					writerRead.Values[1], environmentID, task.RenderGeneration,
+		}
+		var recovery *ReleaseRecoveryDirective
+		if task.Params[TaskReleasePublicationParam] != "" {
+			_, procedure, descriptorErr := repository.candidateReleaseDescriptorAtRevision(
+				ctx, task, assignments.ReadRevision,
+			)
+			if descriptorErr != nil || validateAssignmentRestorationDescriptor(task, record, procedure) != nil {
+				return nil, corruptTaskAssignment()
+			}
+			if record.ExecutionMode == TaskExecutionModeRecoveryOnly {
+				recovery, err = repository.releaseRecoveryDirectiveAtRevision(
+					ctx, task, record, procedure, assignments.ReadRevision,
 				)
-				if predecessorErr != nil || writer.BlueprintAppliedPredecessor == nil ||
-					*writer.BlueprintAppliedPredecessor != predecessor {
-					return nil, corruptTaskMaterializationWriter()
+				if err != nil {
+					return nil, err
 				}
 			}
 		}
@@ -1093,6 +1233,8 @@ func (repository *TaskRepository) ListAgentAssignments(
 				Record: task, Revision: taskValue.ModRevision,
 				ReadRevision: assignments.ReadRevision,
 			},
+			ReleaseRecovery:       recovery,
+			RecoveryProofRequired: proofRequired,
 		}
 	}
 	return result, nil
@@ -1200,6 +1342,43 @@ func (repository *TaskRepository) TimeoutAgentAssignments(
 	}
 	timedOut := 0
 	for _, assignment := range assignments {
+		record := assignment.Assignment.Record
+		deadline := record.Deadline
+		if record.ExecutionMode == TaskExecutionModeRecoveryOnly {
+			deadline = record.RecoveryDeadline
+		}
+		if terminalAt.Before(deadline) {
+			continue
+		}
+		if record.ExecutionMode == TaskExecutionModeRecoveryOnly {
+			if assignment.RecoveryProofRequired {
+				continue
+			}
+			processed, markErr := repository.markReleaseRecoveryProofRequired(
+				ctx, record, assignment.Task.ReadRevision, terminalAt,
+			)
+			if markErr != nil {
+				if errors.Is(markErr, errs.New(errs.KindStateConflict, "")) {
+					continue
+				}
+				return timedOut, markErr
+			}
+			if processed {
+				timedOut++
+			}
+			continue
+		}
+		result := TaskResultRecord{
+			Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
+			ReconciliationRequired: true, ExecutionEpoch: assignment.Assignment.Record.ExecutionEpoch,
+			ReleaseRecoveryRecordSHA256: assignment.Assignment.Record.ReleaseRecoveryRecordSHA256,
+		}
+		if classified, candidate, classifyErr := repository.candidateReleaseTimeoutResult(ctx, assignment); candidate {
+			if classifyErr != nil {
+				return timedOut, classifyErr
+			}
+			result = classified
+		}
 		_, err := repository.AcknowledgeTask(
 			ctx,
 			agentID,
@@ -1207,10 +1386,7 @@ func (repository *TaskRepository) TimeoutAgentAssignments(
 			assignment.Task.Record.ID,
 			assignment.Assignment.Record.AssignmentID,
 			TaskStatusTimedOut,
-			TaskResultRecord{
-				Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
-				ReconciliationRequired: true,
-			},
+			result,
 			terminalAt,
 		)
 		if err != nil {
@@ -1318,8 +1494,12 @@ func (repository *TaskRepository) acknowledgeTask(
 	}
 
 	claimKey := taskExecutionClaimKey(executor, agentID, taskID)
+	submittedResult := cloneTaskResult(result)
+	submittedTerminalStatus := terminalStatus
 	conflicts := 0
 	for {
+		terminalStatus = submittedTerminalStatus
+		result = cloneTaskResult(submittedResult)
 		primaryAndAssignment, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
 			taskKey(taskID), claimKey, taskAssignmentIndexKey(taskID),
 		}})
@@ -1394,6 +1574,17 @@ func (repository *TaskRepository) acknowledgeTask(
 		if assignmentValue == nil {
 			if assignmentIndexValue != nil {
 				return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task assignment index is orphaned")
+			}
+			if executor == TaskExecutorAgent && result != nil && task.Params[TaskReleasePublicationParam] != "" {
+				normalizedStatus, normalizedResult, handled, normalizeErr := repository.normalizeReleaseRecoveryTerminalReplay(
+					ctx, task, terminalStatus, *result, agentID, agentGeneration, assignmentID, primaryAndAssignment.ReadRevision,
+				)
+				if normalizeErr != nil {
+					return Versioned[TaskRecord]{}, normalizeErr
+				}
+				if handled {
+					terminalStatus, result = normalizedStatus, normalizedResult
+				}
 			}
 			if task.Status == terminalStatus &&
 				((result == nil && task.Result == nil) ||
@@ -1554,6 +1745,75 @@ func (repository *TaskRepository) acknowledgeTask(
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
+		var timeoutEvidenceConditions []Condition
+		if executor == TaskExecutorAgent && result != nil && task.Params[TaskReleasePublicationParam] != "" &&
+			assignment.ExecutionMode == TaskExecutionModeForward &&
+			result.Diagnostic == TaskResultDiagnosticTimeoutBeforeEffect && !result.ReconciliationRequired {
+			_, procedure, descriptorErr := repository.candidateReleaseDescriptorAtRevision(
+				ctx, task, primaryAndAssignment.ReadRevision,
+			)
+			if descriptorErr != nil || validateAssignmentRestorationDescriptor(task, assignment, procedure) != nil {
+				return Versioned[TaskRecord]{}, corruptTaskAssignment()
+			}
+			effect, evidenceConditions, classifyErr := repository.releaseEffectEvidenceAtRevision(
+				ctx, task, assignment, procedure, primaryAndAssignment.ReadRevision,
+			)
+			if classifyErr != nil {
+				return Versioned[TaskRecord]{}, classifyErr
+			}
+			timeoutEvidenceConditions = evidenceConditions
+			if effect {
+				result.Diagnostic = TaskResultDiagnosticNone
+				result.ReconciliationRequired = true
+			}
+			if err := validateTaskResult(*result, task.Steps, terminalStatus); err != nil {
+				return Versioned[TaskRecord]{}, err
+			}
+		}
+		var recoveryAcknowledgement releaseRecoveryAcknowledgement
+		var recoveryScriptSourceRelease blueprintRecoveryScriptSourceRelease
+		if executor == TaskExecutorAgent && result != nil && task.Params[TaskReleasePublicationParam] != "" &&
+			assignment.ExecutionMode == TaskExecutionModeRecoveryOnly {
+			recoveryAcknowledgement, err = repository.releaseRecoveryAcknowledgementAtRevision(
+				ctx, task, assignment, terminalStatus, *result, primaryAndAssignment.ReadRevision,
+			)
+			if err != nil {
+				return Versioned[TaskRecord]{}, err
+			}
+			if !recoveryAcknowledgement.final {
+				return Versioned[TaskRecord]{Record: task, Revision: taskValue.ModRevision, ReadRevision: primaryAndAssignment.ReadRevision}, nil
+			}
+			terminalStatus = recoveryAcknowledgement.status
+			resolved := recoveryAcknowledgement.result
+			result = &resolved
+			var processed bool
+			var releaseErr error
+			recoveryScriptSourceRelease, processed, releaseErr = repository.prepareBlueprintRecoveryScriptSourceRelease(
+				ctx, task, taskValue, assignment, assignmentValue, assignmentIndexValue,
+				recoveryAcknowledgement, terminalAt, primaryAndAssignment.ReadRevision,
+			)
+			if releaseErr != nil {
+				return Versioned[TaskRecord]{}, releaseErr
+			}
+			if processed {
+				continue
+			}
+			defer recoveryScriptSourceRelease.clear()
+		}
+		if executor == TaskExecutorAgent && result != nil && task.Params[TaskReleasePublicationParam] != "" &&
+			result.ReconciliationRequired {
+			transitioned, processed, transitionErr := repository.transitionReleaseAcknowledgementToRecovery(
+				ctx, task, taskValue, assignment, assignmentValue, assignmentIndexValue,
+				terminalStatus, *result, primaryAndAssignment.ReadRevision, timeoutEvidenceConditions...,
+			)
+			if transitionErr != nil {
+				return Versioned[TaskRecord]{}, transitionErr
+			}
+			if processed {
+				return transitioned, nil
+			}
+			continue
+		}
 		if executor == TaskExecutorAgent && task.Params[TaskReleasePublicationParam] != "" &&
 			task.Type != TaskUpdate {
 			processed, err := repository.finalizeReleaseTaskBatch(
@@ -1601,9 +1861,15 @@ func (repository *TaskRepository) acknowledgeTask(
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
+		lifecycleKey, _, _, err := repository.assignmentLifecycleIndexAtRevision(
+			ctx, assignment, assignmentValue, primaryAndAssignment.ReadRevision,
+		)
+		if err != nil {
+			return Versioned[TaskRecord]{}, err
+		}
 		companionKeys := []string{
 			taskActiveOperationKey(task.OperationID), markerKey, taskQueueKey(task.Executor, task.ID), retentionKey,
-			taskTimeoutIndexKey(task.ID, assignment.Deadline),
+			lifecycleKey,
 		}
 		writerKey := ""
 		materializationWriter := taskMaterializationWriterRecord{}
@@ -1678,8 +1944,9 @@ func (repository *TaskRepository) acknowledgeTask(
 			{Key: taskQueueKey(task.Executor, task.ID)},
 			{Key: retentionKey},
 			{Key: taskRetentionKey},
-			{Key: taskTimeoutIndexKey(task.ID, assignment.Deadline), ModRevision: companions.Values[4].ModRevision},
+			{Key: lifecycleKey, ModRevision: companions.Values[4].ModRevision},
 		}
+		conditions = append(conditions, timeoutEvidenceConditions...)
 		mutations := []Mutation{
 			{Type: MutationPut, Key: taskKey(task.ID), Value: terminalValue},
 			{Type: MutationDelete, Key: claimKey},
@@ -1688,7 +1955,13 @@ func (repository *TaskRepository) acknowledgeTask(
 			{Type: MutationPut, Key: markerKey, Value: markerValue},
 			{Type: MutationPut, Key: retentionKey, Value: retentionValue},
 			{Type: MutationPut, Key: taskRetentionKey, Value: taskRetentionValue},
-			{Type: MutationDelete, Key: taskTimeoutIndexKey(task.ID, assignment.Deadline)},
+			{Type: MutationDelete, Key: lifecycleKey},
+		}
+		if recoveryAcknowledgement.final {
+			conditions = append(conditions, Condition{Key: releaseRecoveryKey(task.ID), ModRevision: recoveryAcknowledgement.value.ModRevision})
+			mutations = append(mutations, Mutation{Type: MutationDelete, Key: releaseRecoveryKey(task.ID)})
+			conditions = append(conditions, recoveryScriptSourceRelease.conditions...)
+			mutations = append(mutations, recoveryScriptSourceRelease.mutations...)
 		}
 		if materializes {
 			conditions = append(conditions, Condition{Key: writerKey, ModRevision: companions.Values[5].ModRevision})
@@ -2579,15 +2852,45 @@ func (repository *TaskRepository) ExpireTimedOutTasks(ctx context.Context, now t
 			return expired, err
 		}
 		assignment, err := decodeTaskAssignment(value.Value)
-		if err != nil || assignment.TaskID != taskID || !assignment.Deadline.Equal(deadline) {
+		assignmentDeadline := assignment.Deadline
+		if assignment.ExecutionMode == TaskExecutionModeRecoveryOnly {
+			assignmentDeadline = assignment.RecoveryDeadline
+		}
+		if err != nil || assignment.TaskID != taskID || !assignmentDeadline.Equal(deadline) {
 			return expired, errs.New(errs.KindInternal, "task timeout index does not match assignment")
 		}
 		if deadline.After(now) {
 			break
 		}
+		if assignment.ExecutionMode == TaskExecutionModeRecoveryOnly {
+			processed, markErr := repository.markReleaseRecoveryProofRequired(ctx, assignment, page.ReadRevision, now)
+			if markErr != nil {
+				if errors.Is(markErr, errs.New(errs.KindStateConflict, "")) {
+					continue
+				}
+				return expired, markErr
+			}
+			if processed {
+				expired++
+			}
+			continue
+		}
 		if assignment.Executor == TaskExecutorController {
 			_, err = repository.AcknowledgeControllerTask(ctx, taskID, TaskStatusTimedOut, now)
 		} else {
+			result := TaskResultRecord{
+				Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
+				ReconciliationRequired: true, ExecutionEpoch: assignment.ExecutionEpoch,
+				ReleaseRecoveryRecordSHA256: assignment.ReleaseRecoveryRecordSHA256,
+			}
+			if current, assignmentErr := repository.GetTaskAssignment(ctx, taskID); assignmentErr == nil {
+				if classified, candidate, classifyErr := repository.candidateReleaseTimeoutResult(ctx, current); candidate {
+					if classifyErr != nil {
+						return expired, classifyErr
+					}
+					result = classified
+				}
+			}
 			_, err = repository.AcknowledgeTask(
 				ctx,
 				assignment.AgentID,
@@ -2595,10 +2898,7 @@ func (repository *TaskRepository) ExpireTimedOutTasks(ctx context.Context, now t
 				taskID,
 				assignment.AssignmentID,
 				TaskStatusTimedOut,
-				TaskResultRecord{
-					Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
-					ReconciliationRequired: true,
-				},
+				result,
 				now,
 			)
 		}
@@ -2618,7 +2918,8 @@ func taskResultsEqual(left, right TaskResultRecord) bool {
 		left.FailedStepID != right.FailedStepID || left.Diagnostic != right.Diagnostic ||
 		left.ReconciliationRequired != right.ReconciliationRequired || len(left.Projects) != len(right.Projects) ||
 		len(left.ProxyEvidence) != len(right.ProxyEvidence) ||
-		len(left.RecreateEvidence) != len(right.RecreateEvidence) {
+		len(left.RecreateEvidence) != len(right.RecreateEvidence) ||
+		!taskCandidateAbsenceEvidenceEqual(left.CandidateAbsenceEvidence, right.CandidateAbsenceEvidence) {
 		return false
 	}
 	for index := range left.Projects {
@@ -2638,6 +2939,19 @@ func taskResultsEqual(left, right TaskResultRecord) bool {
 	}
 	return taskDNSResolverEvidenceEqual(left.DNSResolverCandidateObservation, right.DNSResolverCandidateObservation) &&
 		taskDNSResolverEvidenceEqual(left.DNSResolverRollbackObservation, right.DNSResolverRollbackObservation)
+}
+
+func taskCandidateAbsenceEvidenceEqual(left, right *TaskCandidateAbsenceEvidence) bool {
+	if (left == nil) != (right == nil) {
+		return false
+	}
+	if left == nil {
+		return true
+	}
+	return left.AssignmentID == right.AssignmentID && left.PlanHash == right.PlanHash &&
+		left.AuthoritySHA256 == right.AuthoritySHA256 && left.ComposeProjectName == right.ComposeProjectName &&
+		left.CandidateArtifactID == right.CandidateArtifactID && left.AbsenceProven == right.AbsenceProven &&
+		slices.Equal(left.Candidates, right.Candidates)
 }
 
 func taskDNSResolverEvidenceEqual(

@@ -63,6 +63,12 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(ctx context.Context, s
 	if err != nil || manifest.PublicationID != publicationID || manifest.OperationID != source.OperationID || len(manifest.Members) == 0 {
 		return releaseTaskRetryChange{}, corruptReleaseRecord()
 	}
+	if _, err := validateReleaseCandidateMarker(source, marker, manifest); err != nil {
+		return releaseTaskRetryChange{}, err
+	}
+	if _, err := validateReleaseCandidateDescriptor(marker.CandidateReleaseDescriptor, retry, manifest); err != nil {
+		return releaseTaskRetryChange{}, err
+	}
 	head, err := decodeReleaseRecord[ReleaseOperationHead](base.Values[2].Value, "release-operation")
 	if err != nil || head.OperationID != source.OperationID || head.PublicationID != publicationID ||
 		head.EnvironmentID != source.Owner.EnvironmentID || head.LatestTaskID != source.ID ||

@@ -389,6 +389,8 @@ func validBlueprintScriptReconcilePlan(t *testing.T) *agentpb.ExecutionPlan {
 	run := plan.Steps[0].GetRunScript()
 	snapshot := plan.ScriptRunnerSnapshots[0]
 	applyStepID := "step_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	probeStepID := "step_01ARZ3NDEKTSV4RRFFQ69G5FB0"
+	compensateStepID := "step_01ARZ3NDEKTSV4RRFFQ69G5FB1"
 	yaml := []byte("services:\n  api:\n    image: registry.example/app@sha256:" + strings.Repeat("a", 64) + "\n")
 	yamlDigest := sha256.Sum256(yaml)
 	artifact := &agentpb.ComposeArtifact{
@@ -427,6 +429,31 @@ func validBlueprintScriptReconcilePlan(t *testing.T) *agentpb.ExecutionPlan {
 			ForceRecreate: true, NoDependencies: true,
 		}},
 	}}, plan.Steps...)
+	plan.Steps = append(plan.Steps,
+		&agentpb.ExecutionStep{
+			StepId: probeStepID, TimeoutSeconds: 30,
+			Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
+			Payload: &agentpb.ExecutionStep_CandidateRestorationProbe{CandidateRestorationProbe: &agentpb.CandidateRestorationProbe{
+				CandidateArtifactId: artifact.ArtifactId, ServiceId: run.ServiceId, CandidateReleaseId: run.ReleaseId,
+			}},
+		},
+		&agentpb.ExecutionStep{
+			StepId: compensateStepID, TimeoutSeconds: 30, PrerequisiteStepId: applyStepID,
+			Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
+			Payload: &agentpb.ExecutionStep_CandidateRestorationCompensate{CandidateRestorationCompensate: &agentpb.CandidateRestorationCompensate{
+				CandidateArtifactId: artifact.ArtifactId, ServiceId: run.ServiceId, CandidateReleaseId: run.ReleaseId,
+			}},
+		},
+	)
+	plan.CandidateReleaseProcedure = &agentpb.CandidateReleaseProcedure{Members: []*agentpb.CandidateReleaseMember{{
+		ServiceId: run.ServiceId, CandidateReleaseId: run.ReleaseId, CandidateArtifactId: artifact.ArtifactId,
+		ForwardStepIds:     []string{applyStepID, plan.Steps[1].StepId},
+		ServingPredecessor: &agentpb.ServingPredecessorRestoration{ProbeStepId: probeStepID, CompensateStepId: compensateStepID},
+		CandidateAbsence: &agentpb.CandidateAbsenceRestoration{
+			ComposeProjectName: artifact.ProjectName, ProbeStepId: probeStepID, CompensateStepId: compensateStepID,
+			Services: []*agentpb.CandidateReleaseService{{ServiceId: run.ServiceId, ReleaseId: run.ReleaseId}},
+		},
+	}}}
 	bindBlueprintProcedureAuthorityForTest(t, plan)
 	return plan
 }
@@ -476,7 +503,7 @@ func refreshBlueprintSnapshotDigestForTest(t *testing.T, plan *agentpb.Execution
 func TestSealBlueprintCandidatePostDeployScriptBeforeReadiness(t *testing.T) {
 	t.Parallel()
 	plan := validBlueprintScriptReconcilePlan(t)
-	run := plan.Steps[len(plan.Steps)-1]
+	run := plan.Steps[1]
 	wait := &agentpb.ExecutionStep{
 		StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAY", PrerequisiteStepId: run.StepId,
 		TimeoutSeconds: 30,
@@ -485,13 +512,13 @@ func TestSealBlueprintCandidatePostDeployScriptBeforeReadiness(t *testing.T) {
 			ServiceIds: []string{run.GetRunScript().ServiceId},
 		}},
 	}
-	plan.Steps = append(plan.Steps, wait)
+	plan.Steps = append(plan.Steps[:2], append([]*agentpb.ExecutionStep{wait}, plan.Steps[2:]...)...)
 	sealed, err := Seal(plan)
 	if err != nil {
 		t.Fatalf("Seal(Blueprint post-deploy chain) error = %v", err)
 	}
 	if sealed.Operation != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY ||
-		len(sealed.Steps) != 3 || sealed.Steps[0].GetComposeApply() == nil ||
+		len(sealed.Steps) != 5 || sealed.Steps[0].GetComposeApply() == nil ||
 		sealed.Steps[1].GetRunScript() == nil || sealed.Steps[2].GetWaitHealthy() == nil ||
 		sealed.Steps[1].PrerequisiteStepId != sealed.Steps[0].StepId ||
 		sealed.Steps[2].PrerequisiteStepId != sealed.Steps[1].StepId {

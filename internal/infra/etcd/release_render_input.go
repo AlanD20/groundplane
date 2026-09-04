@@ -114,19 +114,21 @@ func validateReleaseRenderInput(input ReleaseRenderInput) error {
 	} else if input.Strategy != domain.StrategyRecreate || input.Slot != "" {
 		return errs.New(errs.KindValidationFailed, "release render input strategy is invalid")
 	} else if len(input.ProxyPorts) != 0 {
-		if input.CandidateTarget != domain.WorkloadSingleton || input.ProxyGeneration == 0 ||
-			input.PriorProxyGeneration == 0 || input.ProxyConfigDigest == "" || input.PriorProxyDigest == "" ||
-			ids.Validate(ids.KindConfig, input.PriorArtifactID) != nil || input.PriorImage == "" {
+		hasPrior := input.PriorArtifactID != "" || input.PriorImage != ""
+		if input.CandidateTarget != domain.WorkloadSingleton || input.ProxyGeneration == 0 || input.ProxyConfigDigest == "" ||
+			hasPrior && (input.PriorProxyGeneration == 0 || input.PriorProxyDigest == "" ||
+				ids.Validate(ids.KindConfig, input.PriorArtifactID) != nil || input.PriorImage == "") ||
+			!hasPrior && (input.PriorProxyGeneration != 0 || input.PriorProxyDigest != "") {
 			return errs.New(errs.KindValidationFailed, "addressable recreate render authority is invalid")
 		}
-	} else if ids.Validate(ids.KindConfig, input.PriorArtifactID) != nil || input.PriorImage == "" ||
+	} else if (input.PriorArtifactID != "" && ids.Validate(ids.KindConfig, input.PriorArtifactID) != nil) ||
+		(input.PriorArtifactID == "") != (input.PriorImage == "") ||
 		input.CandidateTarget != domain.WorkloadSingleton || input.PriorTarget != domain.WorkloadSingleton ||
 		input.ProxyGeneration != 0 || input.PriorProxyGeneration != 0 ||
 		input.ProxyConfigDigest != "" || input.PriorProxyDigest != "" {
 		return errs.New(errs.KindValidationFailed, "portless recreate render authority is invalid")
 	}
-	needsPriorArtifact := input.Strategy == domain.StrategyRecreate || input.Strategy != input.PriorStrategy
-	if needsPriorArtifact != (input.PriorArtifactID != "") || needsPriorArtifact != (input.PriorImage != "") {
+	if (input.PriorArtifactID != "") != (input.PriorImage != "") {
 		return errs.New(errs.KindValidationFailed, "release prior topology artifact authority is invalid")
 	}
 	serviceNames := make([]string, 0, len(input.Projection.DesiredServices)+1)
@@ -151,13 +153,6 @@ func validateReleaseRenderInput(input ReleaseRenderInput) error {
 	}
 	if len(input.ProxyPorts) != 0 {
 		if _, err := domain.RenderProxyConfig(input.ServiceName, input.ReleaseID, input.CandidateTarget, input.ProxyGeneration, input.ProxyPorts); err != nil {
-			return err
-		}
-		priorReleaseID := "baseline"
-		if input.PriorImage == "" && input.PriorArtifactID == "" {
-			priorReleaseID = input.ReleaseID
-		}
-		if _, err := domain.RenderProxyConfig(input.ServiceName, priorReleaseID, input.PriorTarget, input.PriorProxyGeneration, input.ProxyPorts); err != nil {
 			return err
 		}
 	}

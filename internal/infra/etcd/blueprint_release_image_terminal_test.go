@@ -16,6 +16,7 @@ import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type blueprintEpochMutationRejectingStore struct {
@@ -71,12 +72,64 @@ func TestBlueprintCandidateClaimEpochAcceptsOnlyValidatedAppliedPredecessor(t *t
 			}
 			task.Params[TaskReleasePublicationParam] = publicationID
 			task.Params[EnvironmentDesiredRevisionParam] = task.ID
+			artifactID := ids.NewAt(ids.KindConfig, now, 807)
+			serviceID := ids.NewAt(ids.KindService, now, 808)
+			releaseID := ids.NewAt(ids.KindDeployment, now, 809)
+			probeStepID := ids.NewAt(ids.KindStep, now, 810)
+			compensateStepID := ids.NewAt(ids.KindStep, now, 811)
+			task.Params[TaskComposeArtifactParam] = artifactID
+			task.Steps = append(task.Steps,
+				TaskStepRecord{Kind: TaskStepOperation, ID: probeStepID},
+				TaskStepRecord{Kind: TaskStepOperation, ID: compensateStepID},
+			)
+			procedure, err := executionplan.BuildCandidateReleaseProcedure(executionplan.CandidateReleaseProcedureInput{
+				Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,
+				Members: []executionplan.CandidateReleaseMemberInput{{
+					ServiceID: serviceID, CandidateReleaseID: releaseID, CandidateArtifactID: artifactID,
+					ForwardStepIDs: []string{task.Steps[0].ID},
+					ServingPredecessor: &executionplan.ServingPredecessorInput{
+						ProbeStepID: probeStepID, CompensateStepID: compensateStepID,
+					},
+					CandidateAbsence: &executionplan.CandidateAbsenceInput{
+						ComposeProjectName: "gp-" + environmentID,
+						ProbeStepID:        probeStepID, CompensateStepID: compensateStepID,
+						Services: []executionplan.CandidateServiceIdentity{{ServiceID: serviceID, ReleaseID: releaseID}},
+					},
+				}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			procedureBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(procedure)
+			if err != nil {
+				t.Fatal(err)
+			}
+			descriptor := executionplan.CandidateReleaseDescriptor{
+				PlanID: task.PlanID, PlanHash: bytes.Repeat([]byte{0xaa}, sha256.Size),
+				Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY, ProcedureBytes: procedureBytes,
+			}
+			manifest := ReleaseStagedManifest{
+				PublicationID: publicationID, OperationID: task.OperationID, CreatedAt: now,
+				Members: []ReleaseStagedMemberRef{{
+					ReleaseID: releaseID, ServiceID: serviceID,
+					IntentDigest: strings.Repeat("b", 64), RenderDigest: strings.Repeat("c", 64),
+					CheckpointDigest: strings.Repeat("d", 64),
+				}},
+			}
+			manifest.Digest, err = blueprintCandidateManifestDigest(manifest)
+			if err != nil {
+				t.Fatal(err)
+			}
 			seedBlueprintRequirementTask(t, store, task)
 
 			markerValue, err := encodeReleaseRecord("release-publication", ReleasePublicationMarker{
 				PublicationID: publicationID, OperationID: task.OperationID,
-				ManifestDigest: strings.Repeat("b", 64), PublishedAt: now,
+				ManifestDigest: manifest.Digest, CandidateReleaseDescriptor: descriptor, PublishedAt: now,
 			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			manifestValue, err := encodeReleaseRecord("release-staged-manifest", manifest)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -88,6 +141,7 @@ func TestBlueprintCandidateClaimEpochAcceptsOnlyValidatedAppliedPredecessor(t *t
 			}
 			published, err := store.Transact(ctx, nil, []Mutation{
 				{Type: MutationPut, Key: releasePublicationKey(publicationID), Value: markerValue},
+				{Type: MutationPut, Key: releaseManifestStagingKey(publicationID), Value: manifestValue},
 				{Type: MutationPut, Key: environmentMutationEpochKey(environmentID), Value: epochValue},
 			})
 			if err != nil || !published.Succeeded {
@@ -197,6 +251,9 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 	artifactID := ids.NewAt(ids.KindConfig, now, 9)
 	priorArtifactID := ids.NewAt(ids.KindConfig, now, 14)
 	stepID := ids.NewAt(ids.KindStep, now, 10)
+	probeStepID := ids.NewAt(ids.KindStep, now, 17)
+	compensateStepID := ids.NewAt(ids.KindStep, now, 18)
+	priorReleaseID := ids.NewAt(ids.KindDeployment, now, 15)
 	agentID := ids.NewAt(ids.KindAgent, now, 11)
 	planHash := strings.Repeat("a", 64)
 	requested := "docker.io/library/nginx:stable"
@@ -256,6 +313,18 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 	predecessorProjection := projection
 	predecessorProjection.RevisionID = predecessorTaskID
 	predecessorProjection.RenderGeneration = 1
+	predecessorArtifact := new(agentpb.ComposeArtifact)
+	if err := proto.Unmarshal(predecessorProjection.ComposeArtifact, predecessorArtifact); err != nil {
+		t.Fatal(err)
+	}
+	priorArtifactID = predecessorArtifact.GetArtifactId()
+	predecessorArtifact.Services[0].ExpectedLabels = []*agentpb.LabelPair{{
+		Key: "com.groundplane.release-id", Value: priorReleaseID,
+	}}
+	predecessorProjection.ComposeArtifact, err = proto.MarshalOptions{Deterministic: true}.Marshal(predecessorArtifact)
+	if err != nil {
+		t.Fatal(err)
+	}
 	predecessorValue, err := encodeEnvironmentComposeProjection(predecessorProjection)
 	if err != nil {
 		t.Fatal(err)
@@ -301,6 +370,7 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 		GroupOperationID: operationID, GroupMemberOrdinal: 1,
 		Image: requested, Tag: "stable", Strategy: domain.StrategyRecreate,
 		OnFailure: domain.OnFailureSwitchBack, RenderInputID: artifactID,
+		PriorServingReleaseID: priorReleaseID, PriorSuccessfulReleaseID: priorReleaseID,
 		RenderInputDigest: renderDigest, CreatedAt: now,
 		Actor: "operator", OriginatingTaskID: taskID,
 		Workspace: domain.Workspace{
@@ -325,9 +395,32 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 	if err != nil {
 		t.Fatal(err)
 	}
+	procedure, err := executionplan.BuildCandidateReleaseProcedure(executionplan.CandidateReleaseProcedureInput{
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,
+		Members: []executionplan.CandidateReleaseMemberInput{{
+			ServiceID: serviceID, CandidateReleaseID: releaseID, CandidateArtifactID: artifactID,
+			ForwardStepIDs:     []string{stepID},
+			ServingPredecessor: &executionplan.ServingPredecessorInput{ProbeStepID: probeStepID, CompensateStepID: compensateStepID},
+			CandidateAbsence: &executionplan.CandidateAbsenceInput{
+				ComposeProjectName: "gp-" + environmentID, ProbeStepID: probeStepID, CompensateStepID: compensateStepID,
+				Services: []executionplan.CandidateServiceIdentity{{ServiceID: serviceID, ReleaseID: releaseID}},
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	procedureBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(procedure)
+	if err != nil {
+		t.Fatal(err)
+	}
 	marker := ReleasePublicationMarker{
 		PublicationID: publicationID, OperationID: operationID,
 		ManifestDigest: manifest.Digest, PublishedAt: now,
+		CandidateReleaseDescriptor: executionplan.CandidateReleaseDescriptor{
+			PlanID: planID, PlanHash: bytes.Repeat([]byte{0xaa}, sha256.Size),
+			Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY, ProcedureBytes: procedureBytes,
+		},
 	}
 	sealedResult, err := executionplan.SealExecutionStepResult(&agentpb.ExecutionStepResult{
 		OperationId: operationID, PlanHash: bytes.Repeat([]byte{0xaa}, 32), StepId: stepID,
@@ -354,6 +447,10 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 		releaseIntentStagingKey(publicationID, releaseID):      {"release-intent", intent},
 		releaseRenderInputStagingKey(publicationID, releaseID): {"release-render-input", json.RawMessage(rawRender)},
 		releaseCheckpointStagingKey(publicationID, releaseID):  {"release-checkpoint", checkpoint},
+		releaseProjectionKey(serviceID): {"service-release-projection", domain.ServiceProjection{
+			EnvironmentID: environmentID, ServiceID: serviceID,
+			ServingReleaseID: priorReleaseID, CurrentSuccessfulReleaseID: priorReleaseID, Revision: 1,
+		}},
 	} {
 		value, encodeErr := encodeReleaseRecord(record.typeName, record.value)
 		if encodeErr != nil {
@@ -468,10 +565,15 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 	task.RenderGeneration = 3
 	task.Params = map[string]string{
 		TaskReleasePublicationParam:         publicationID,
+		TaskComposeArtifactParam:            artifactID,
 		TaskMaterializationEnvironmentParam: environmentID,
 		EnvironmentDesiredRevisionParam:     taskID,
 	}
-	task.Steps = []TaskStepRecord{{Kind: TaskStepOperation, ID: stepID}}
+	task.Steps = []TaskStepRecord{
+		{Kind: TaskStepOperation, ID: stepID},
+		{Kind: TaskStepOperation, ID: probeStepID},
+		{Kind: TaskStepOperation, ID: compensateStepID},
+	}
 	pendingTask := cloneTaskRecord(task)
 	seedBlueprintRequirementTask(t, store.memoryTaskStore, task)
 	claim, found, err := repository.ClaimNextTask(ctx, agentID, 1, now.Add(time.Second))
@@ -496,7 +598,7 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 	failureResult := TaskResultRecord{
 		Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone, FailedStepID: stepID,
 		RecreateEvidence: []TaskRecreateEvidence{{
-			ServiceID: serviceID, ReleaseID: "baseline", ArtifactID: priorArtifactID,
+			ServiceID: serviceID, ReleaseID: priorReleaseID, ArtifactID: priorArtifactID,
 			Target: string(domain.WorkloadSingleton), Compensated: true,
 		}},
 	}
@@ -545,8 +647,15 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesResolvedImageAndPreservesDes
 		releaseTerminalKey(releaseID), releaseProjectionKey(serviceID),
 		environmentBlueprintHeadKey(environmentID),
 	}})
-	if err != nil || unpublished.Values[0] != nil || unpublished.Values[1] != nil {
+	if err != nil || unpublished.Values[0] != nil || unpublished.Values[1] == nil {
 		t.Fatalf("failed Blueprint candidate was published = %#v, %v", unpublished, err)
+	}
+	predecessorReleaseProjection, err := decodeReleaseRecord[domain.ServiceProjection](
+		unpublished.Values[1].Value, "service-release-projection",
+	)
+	if err != nil || predecessorReleaseProjection.ServingReleaseID != priorReleaseID ||
+		predecessorReleaseProjection.CurrentSuccessfulReleaseID != priorReleaseID {
+		t.Fatalf("failed Blueprint predecessor projection = %#v, %v", predecessorReleaseProjection, err)
 	}
 	if desired, decodeErr := decodeTaskReference(unpublished.Values[2].Value); decodeErr != nil || desired != taskID {
 		t.Fatalf("failed Blueprint desired head = %q, %v", desired, decodeErr)

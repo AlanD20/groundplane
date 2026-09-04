@@ -62,11 +62,21 @@ message TaskEvent {
   string task_id = 1;
   bytes plan_hash = 2; // exactly 32 immutable SHA-256 bytes
   string step_id = 3;
-  uint32 attempt = 4; // one-based execution attempt for this step
+  uint32 execution_epoch = 4; // exact durable assignment execution epoch
   uint64 ordinal = 5; // one-based stable delivery identity within the step attempt
   TaskState state = 6;
   bytes chunk = 7; // streamed log/output, proxied through the Controller with a short-lived buffer, never persisted in etcd
   string assignment_id = 8;
+}
+
+message TaskEventAck {
+  string task_id = 1;
+  bytes plan_hash = 2;
+  string step_id = 3;
+  uint32 execution_epoch = 4;
+  uint64 ordinal = 5;
+  TaskState state = 6;
+  string assignment_id = 7;
 }
 
 enum TaskState {
@@ -154,6 +164,8 @@ message TaskAck {
     EnvironmentDirectoryTaskResult environment_directory_result = 6;
   }
   string assignment_id = 7;
+  uint32 execution_epoch = 8;
+  bytes release_recovery_record_sha256 = 9;
 }
 
 message ComposeTaskResult {
@@ -165,6 +177,17 @@ message ComposeTaskResult {
   repeated ServiceRecreateEvidence recreate_evidence = 6;
   DNSResolverObservationEvidence dns_resolver_candidate_observation = 7;
   DNSResolverObservationEvidence dns_resolver_rollback_observation = 8;
+  CandidateAbsenceEvidence candidate_absence_evidence = 9;
+}
+
+message CandidateAbsenceEvidence {
+  string assignment_id = 1;
+  bytes plan_hash = 2;
+  bytes authority_sha256 = 3;
+  string compose_project_name = 4;
+  string candidate_artifact_id = 5;
+  repeated CandidateReleaseService candidates = 6;
+  bool absence_proven = 7;
 }
 
 // DNSResolverObservationEvidence is the bounded full proof returned by a
@@ -258,6 +281,7 @@ message ControllerMessage {
     ManagedConfigTransfer managed_config_transfer = 10;
     ScriptCheckpointAck script_checkpoint_ack = 11;
     ExecutionStepResultAck execution_step_result_ack = 21;
+    TaskEventAck task_event_ack = 22;
   }
 }
 
@@ -402,13 +426,71 @@ message TaskAssignment {
   string retry_of = 3;     // set iff this is a retry of a prior task_id
   ExecutionPlan plan = 4;  // complete authoritative procedure
   reserved 5;
-  google.protobuf.Timestamp deadline = 7; // durable absolute assignment deadline; reconnect never restarts the budget
+  google.protobuf.Timestamp forward_deadline = 7; // durable absolute forward deadline; reconnect never restarts the budget
   string assignment_id = 6;
   ScriptAssignmentArtifacts script_artifacts = 8;
   repeated ScriptExecutionCheckpoint script_checkpoints = 9;
   bool automatic_reconcile = 10;
   repeated ExecutionStepResult acknowledged_step_results = 15;
-  uint32 event_attempt = 16; // positive Controller-authored execution epoch for every emitted step event
+  uint32 execution_epoch = 16; // positive shared fence for every emitted event and terminal acknowledgement
+  TaskExecutionMode execution_mode = 17;
+  google.protobuf.Timestamp recovery_deadline = 18; // fixed at first claim and never extended
+  ReleaseRestorationAuthority restoration_authority = 19;
+  bytes release_recovery_record_sha256 = 20; // required only in recovery_only mode
+  ReleaseRecoveryDirective release_recovery_directive = 21; // required only in recovery_only mode
+  google.protobuf.Timestamp execution_deadline = 22; // current bounded attempt deadline; proof-required recovery uses a distinct non-renewable budget
+}
+
+message ReleaseRecoveryDirective {
+  repeated string step_ids = 1;
+  uint32 cursor = 2;
+  bytes release_recovery_record_sha256 = 3;
+  ReleaseRecoveryPhase phase = 4;
+  repeated string applicable_compensation_step_ids = 5;
+}
+
+enum ReleaseRecoveryPhase {
+  RELEASE_RECOVERY_PHASE_UNSPECIFIED = 0;
+  RELEASE_RECOVERY_PHASE_PROBE = 1;
+  RELEASE_RECOVERY_PHASE_COMPENSATE = 2;
+  RELEASE_RECOVERY_PHASE_PROVEN = 3;
+}
+
+enum TaskExecutionMode {
+  TASK_EXECUTION_MODE_UNSPECIFIED = 0;
+  TASK_EXECUTION_MODE_FORWARD = 1;
+  TASK_EXECUTION_MODE_RECOVERY_ONLY = 2;
+}
+
+enum ReleaseRestorationTarget {
+  RELEASE_RESTORATION_TARGET_UNSPECIFIED = 0;
+  RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR = 1;
+  RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE = 2;
+}
+
+message ReleaseRestorationCandidate {
+  string service_id = 1;
+  string release_id = 2;
+}
+
+message ReleaseServingPredecessorAuthority {
+  int64 key_revision = 1;
+  string revision_id = 2;
+  uint64 render_generation = 3;
+  bytes compose_artifact_sha256 = 4;
+  bytes compose_artifact = 5;
+}
+
+message ReleaseRestorationAuthority {
+  ReleaseRestorationTarget target = 1;
+  string task_id = 2;
+  string operation_id = 3;
+  bytes plan_hash = 4;
+  string environment_id = 5;
+  string candidate_artifact_id = 6;
+  repeated ReleaseRestorationCandidate candidates = 7;
+  ReleaseServingPredecessorAuthority serving_predecessor = 8;
+  bytes authority_sha256 = 9;
 }
 
 enum ScriptExecutionState {
@@ -563,6 +645,51 @@ message ExecutionPlan {
   repeated ScriptBodyArtifactMetadata script_body_artifacts = 11;
   ComponentLifecycleMode component_lifecycle_mode = 12;
   ComponentApply component_rollback_observation = 13;
+  CandidateReleaseProcedure candidate_release_procedure = 14;
+}
+
+// CandidateReleaseProcedure is the single immutable restoration authority for
+// every candidate Service mutation in an execution plan.
+message CandidateReleaseProcedure {
+  repeated CandidateReleaseMember members = 1;
+}
+
+message CandidateReleaseMember {
+  string service_id = 1;
+  string candidate_release_id = 2;
+  string candidate_artifact_id = 3;
+  repeated string forward_step_ids = 4;
+  ServingPredecessorRestoration serving_predecessor = 5;
+  CandidateAbsenceRestoration candidate_absence = 6;
+}
+
+message ServingPredecessorRestoration {
+  string probe_step_id = 1;
+  string compensate_step_id = 2;
+}
+
+message CandidateAbsenceRestoration {
+  string compose_project_name = 1;
+  repeated CandidateReleaseService services = 2;
+  string probe_step_id = 3;
+  string compensate_step_id = 4;
+}
+
+message CandidateReleaseService {
+  string service_id = 1;
+  string release_id = 2;
+}
+
+message CandidateRestorationProbe {
+  string candidate_artifact_id = 1;
+  string service_id = 2;
+  string candidate_release_id = 3;
+}
+
+message CandidateRestorationCompensate {
+  string candidate_artifact_id = 1;
+  string service_id = 2;
+  string candidate_release_id = 3;
 }
 
 enum ComponentLifecycleMode {
@@ -687,6 +814,8 @@ message ExecutionStep {
     HostResolutionApply host_resolution_apply = 27;
     HostResolutionRestore host_resolution_restore = 28;
     RunScript run_script = 29;
+    CandidateRestorationProbe candidate_restoration_probe = 32;
+    CandidateRestorationCompensate candidate_restoration_compensate = 33;
   }
   ExecutionStepPolicy policy = 30;
   string prerequisite_step_id = 31;
@@ -1549,6 +1678,7 @@ message ComposeHelperRequest {
   string step_id = 5;
   uint32 timeout_seconds = 6; // remaining bounded execution time
   string assignment_id = 7;
+  ReleaseRestorationAuthority restoration_authority = 9;
 }
 
 message ComposeHelperResponse {
@@ -1558,6 +1688,7 @@ message ComposeHelperResponse {
   ComposeHelperDiagnostic diagnostic = 4;
   ServiceProxyEvidence proxy_evidence = 5;
   ServiceRecreateEvidence recreate_evidence = 6;
+  CandidateAbsenceEvidence candidate_absence_evidence = 7;
 }
 
 enum ComposeHelperOutcome {

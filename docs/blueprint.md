@@ -426,6 +426,34 @@ durably `not_started`; `start_authorized` or later, or unknown Script state,
 returns `script.retry_unsafe` through the existing retry action and recovery
 continues the authorized execution.
 
+The plan seals one immutable candidate Release procedure for each selected
+Service. It declares the exact forward mutation anchors and the complete lawful
+restoration alternatives `serving_predecessor` and `candidate_absence`; it
+never fabricates `baseline` or derives restoration from a mutable current
+Service projection. Claim selects exactly one alternative from the sealed
+nullable applied predecessor and stores that selection plus its canonical
+digest with the assignment and execution epoch. Host state can prove the
+selected target but cannot choose it.
+
+No mutation-capable candidate step begins until its running event is durably
+accepted for that epoch. A reconnect remains forward only while the Controller
+proves no effect-possible event or Script checkpoint exists. Once such evidence
+exists, or a recovery record exists, dispatch is permanently recovery-only and
+contains only the selected probe/compensation cursor. An unproven terminal ACK
+privately records the original failure and recovery continuation while the same
+public Task remains running. First-candidate recovery removes the exact
+plan-owned candidate Service/Release set from its exact Compose project and
+terminalizes only after typed candidate-absence proof. Desired head and failed
+staged candidates remain.
+
+That final restoration proof may close only selected Script executions still
+exactly `not_started`, using Controller-owned
+`parent_failure_before_start` with explicit runner/body absence. Script source
+references then follow the existing bounded `normal_completion` path while the
+Task, recovery record, assignment, timeout, writer, and operation stay live;
+their final source transaction and the original Task terminalization are
+atomic. A later or unknown Script checkpoint fails closed.
+
 The existing Task detail step projection records each selected Script's
 captured non-secret id and slug, while existing events carry its `step_id`
 transitions; the parent Task terminal state records success or failure. This is

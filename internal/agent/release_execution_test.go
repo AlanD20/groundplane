@@ -59,6 +59,81 @@ func TestExecuteReleaseCompensatesPriorSuccessfulSwitch(t *testing.T) {
 	})
 }
 
+// Rationale: a failed candidate mutation without any applicable sealed
+// compensation can never claim that reconciliation is complete.
+func TestExecuteReleaseZeroApplicableCompensationRemainsReconciliationRequired(t *testing.T) {
+	t.Parallel()
+	helper := &releaseExecutionHelper{responses: map[string]*agentpb.ComposeHelperResponse{
+		"switch-api": {
+			Schema: 1, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED, ExitCode: 17,
+			Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED,
+		},
+	}}
+	plan := &agentpb.ExecutionPlan{Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, Steps: []*agentpb.ExecutionStep{
+		releaseForwardSwitch("switch-api"),
+	}}
+	result := runReleaseExecution(t, releaseExecutionPool(t, helper), "task-zero-compensation", "", plan)
+	if result.Terminal != TaskTerminalFailed || !result.Compose.GetReconciliationRequired() {
+		t.Fatalf("release result = %#v, want failed reconciliation-required", result)
+	}
+}
+
+// Rationale: a mutation-capable candidate step cannot reach the host until
+// Controller acceptance of its exact running event is returned to the Agent.
+func TestExecuteReleaseWaitsForDurableRunningEventBeforeCandidateMutation(t *testing.T) {
+	helper := &releaseExecutionHelper{responses: map[string]*agentpb.ComposeHelperResponse{
+		"switch-api": releaseExecutionSuccess("api", false),
+	}}
+	pool := releaseExecutionPool(t, helper)
+	plan := &agentpb.ExecutionPlan{
+		PlanHash: make([]byte, 32), Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
+		Steps: []*agentpb.ExecutionStep{releaseForwardSwitch("switch-api")},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	reservation := &taskReservation{assignment: Assignment{
+		AssignmentID: "assignment-event-fence", TaskID: "task-event-fence", OperationID: "operation-event-fence",
+		Plan: plan, ExecutionEpoch: 2, ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
+		Deadline: time.Now().Add(5 * time.Second),
+	}, ctx: ctx, cancel: cancel, eventsDurable: true}
+	go pool.executeRelease(context.Background(), reservation)
+
+	output := <-pool.Outputs()
+	if output.Progress == nil || output.Progress.State != TaskProgressRunning {
+		t.Fatalf("first output = %#v, want running event", output)
+	}
+	helper.mu.Lock()
+	if len(helper.calls) != 0 {
+		helper.mu.Unlock()
+		t.Fatalf("candidate mutation ran before event acceptance: %#v", helper.calls)
+	}
+	helper.mu.Unlock()
+	ack := &agentpb.TaskEventAck{
+		TaskId: output.Progress.TaskID, AssignmentId: output.Progress.AssignmentID,
+		PlanHash: output.Progress.PlanHash[:], StepId: output.Progress.StepID,
+		ExecutionEpoch: 1, Ordinal: output.Progress.Ordinal, State: agentpb.TaskState_TASK_STATE_RUNNING,
+	}
+	if err := pool.AcceptTaskEventAck(context.Background(), ack); err == nil {
+		t.Fatal("accepted stale execution epoch")
+	}
+	ack.ExecutionEpoch = output.Progress.ExecutionEpoch
+	if err := pool.AcceptTaskEventAck(context.Background(), ack); err != nil {
+		t.Fatalf("AcceptTaskEventAck() error = %v", err)
+	}
+
+	for {
+		output = <-pool.Outputs()
+		if output.Result != nil {
+			break
+		}
+	}
+	helper.mu.Lock()
+	defer helper.mu.Unlock()
+	if len(helper.calls) != 1 || helper.calls[0].stepID != "switch-api" {
+		t.Fatalf("candidate mutation calls = %#v", helper.calls)
+	}
+}
+
 func TestExecuteReleaseRecreateCompensatesSingletonReplacement(t *testing.T) {
 	t.Parallel()
 	helper := &releaseExecutionHelper{responses: map[string]*agentpb.ComposeHelperResponse{
@@ -70,7 +145,7 @@ func TestExecuteReleaseRecreateCompensatesSingletonReplacement(t *testing.T) {
 		"restore-worker": {
 			Schema: 1, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,
 			Diagnostic:       agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
-			RecreateEvidence: &agentpb.ServiceRecreateEvidence{ServiceId: "worker", ReleaseId: "baseline", ArtifactId: "prior-artifact", Compensated: true, Target: "singleton"},
+			RecreateEvidence: &agentpb.ServiceRecreateEvidence{ServiceId: "worker", ReleaseId: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", ArtifactId: "prior-artifact", Compensated: true, Target: "singleton"},
 		},
 	}}
 	pool := releaseExecutionPool(t, helper)
@@ -158,13 +233,12 @@ func TestExecuteReleaseRestartCompensatesAfterAmbiguousTransitionProbe(t *testin
 		releaseProbe("probe-transition"), releaseCompensate("restore-prior", ""),
 	}}
 	result := runReleaseExecution(t, releaseExecutionPool(t, helper), "task-transition-retry", "task-original", plan)
-	if result.Terminal != TaskTerminalFailed || result.Compose.GetReconciliationRequired() ||
-		len(result.Compose.GetProxyEvidence()) != 1 || !result.Compose.GetProxyEvidence()[0].GetCompensated() {
+	if result.Terminal != TaskTerminalFailed || !result.Compose.GetReconciliationRequired() ||
+		len(result.Compose.GetProxyEvidence()) != 0 {
 		t.Fatalf("transition recovery result = %#v", result)
 	}
 	assertReleaseExecutionCalls(t, helper, []releaseExecutionCall{
 		{taskID: "task-transition-retry", stepID: "probe-transition"},
-		{taskID: "task-transition-retry", stepID: "restore-prior"},
 	})
 }
 
@@ -224,8 +298,28 @@ func runReleaseExecution(
 	taskCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	reservation := &taskReservation{assignment: Assignment{
 		AssignmentID: "assignment-" + taskID, TaskID: taskID, OperationID: "operation-" + taskID,
-		RetryOf: retryOf, Plan: plan, Deadline: time.Now().Add(5 * time.Second),
+		RetryOf: retryOf, Plan: plan, Deadline: time.Now().Add(5 * time.Second), ExecutionEpoch: 1,
+		ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
 	}, ctx: taskCtx, cancel: cancel}
+	if retryOf != "" {
+		reservation.assignment.ExecutionMode = agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY
+		stepIDs := make([]string, 0)
+		compensateIDs := make([]string, 0)
+		for _, step := range plan.GetSteps() {
+			if step.GetPolicy() == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE {
+				stepIDs = append(stepIDs, step.GetStepId())
+			} else if step.GetPolicy() == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE {
+				compensateIDs = append(compensateIDs, step.GetStepId())
+			}
+		}
+		for index := len(compensateIDs) - 1; index >= 0; index-- {
+			stepIDs = append(stepIDs, compensateIDs[index])
+		}
+		reservation.assignment.ReleaseRecoveryDirective = &agentpb.ReleaseRecoveryDirective{
+			StepIds: stepIDs, Phase: agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROBE,
+			ApplicableCompensationStepIds: append([]string(nil), stepIDs[len(stepIDs)-len(compensateIDs):]...),
+		}
+	}
 	pool.executeRelease(context.Background(), reservation)
 	for len(pool.outputs) > 0 {
 		output := <-pool.outputs
@@ -252,10 +346,36 @@ func releaseForwardApply(stepID string) *agentpb.ExecutionStep {
 	}
 }
 
+func TestComposeRemoveIsCandidateMutation(t *testing.T) {
+	step := &agentpb.ExecutionStep{Payload: &agentpb.ExecutionStep_ComposeRemove{ComposeRemove: &agentpb.ComposeRemove{}}}
+	if !candidateMutationStep(step) {
+		t.Fatal("ComposeRemove did not require the durable running-event barrier")
+	}
+}
+
+func TestRecoveryLeaveActiveAllowsProbeProvenNoop(t *testing.T) {
+	probe := releaseProbe("probe-api")
+	probe.GetServiceProxyProbe().ExpectedTarget = "blue"
+	probe.GetServiceProxyProbe().ReleaseId = "release-api"
+	probe.GetServiceProxyProbe().AlternateTarget = "green"
+	compensate := releaseCompensate("compensate-api", "switch-api")
+	compensate.GetServiceProxyCompensate().Enabled = false
+	helper := &releaseExecutionHelper{responses: map[string]*agentpb.ComposeHelperResponse{
+		"probe-api": releaseExecutionSuccess("api", false),
+	}}
+	result := runReleaseExecution(t, releaseExecutionPool(t, helper), "task-leave-active-noop", "task-original", &agentpb.ExecutionPlan{
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, Steps: []*agentpb.ExecutionStep{probe, compensate},
+	})
+	if result.Terminal != TaskTerminalCompleted || result.Compose.GetReconciliationRequired() {
+		t.Fatalf("probe-proven leave_active recovery = %#v", result)
+	}
+	assertReleaseExecutionCalls(t, helper, []releaseExecutionCall{{taskID: "task-leave-active-noop", stepID: "probe-api"}})
+}
+
 func releaseProbe(stepID string) *agentpb.ExecutionStep {
 	return &agentpb.ExecutionStep{
 		StepId: stepID, TimeoutSeconds: 5,
-		Policy:  agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
+		Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
 		Payload: &agentpb.ExecutionStep_ServiceProxyProbe{ServiceProxyProbe: &agentpb.ServiceProxyProbe{
 			ServiceId: "api", ExpectedTarget: "green", ReleaseId: "prior-api",
 			AlternateTarget: "blue", AlternateReleaseId: "release-api",
@@ -275,7 +395,7 @@ func releaseRecreateCompensate(stepID string, prerequisite string) *agentpb.Exec
 	return &agentpb.ExecutionStep{
 		StepId: stepID, PrerequisiteStepId: prerequisite, TimeoutSeconds: 5,
 		Policy:  agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
-		Payload: &agentpb.ExecutionStep_ServiceRecreateCompensate{ServiceRecreateCompensate: &agentpb.ServiceRecreateCompensate{Enabled: true, ArtifactId: "prior-artifact", ServiceId: "worker", PriorReleaseId: "baseline"}},
+		Payload: &agentpb.ExecutionStep_ServiceRecreateCompensate{ServiceRecreateCompensate: &agentpb.ServiceRecreateCompensate{Enabled: true, ArtifactId: "prior-artifact", ServiceId: "worker", PriorReleaseId: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV"}},
 	}
 }
 

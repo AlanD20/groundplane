@@ -32,7 +32,9 @@ func seedTaskRepositoryRunningTask(t *testing.T, store *memoryTaskStore, task Ta
 		TaskID:       running.ID, Executor: TaskExecutorAgent,
 		AgentID: taskEventTestAgentID, AgentGeneration: 1,
 		ClaimedTaskRevision: 1, AssignedAt: *running.StartedAt,
-		Deadline: running.StartedAt.Add(time.Duration(running.TimeoutSeconds) * time.Second),
+		Deadline:         running.StartedAt.Add(time.Duration(running.TimeoutSeconds) * time.Second),
+		RecoveryDeadline: running.StartedAt.Add(2 * time.Duration(running.TimeoutSeconds) * time.Second),
+		ExecutionMode:    TaskExecutionModeForward, ExecutionEpoch: 1,
 	}
 	value, err := encodeTaskAssignment(assignment)
 	if err != nil {
@@ -41,9 +43,11 @@ func seedTaskRepositoryRunningTask(t *testing.T, store *memoryTaskStore, task Ta
 	result, err := store.Transact(context.Background(), []Condition{
 		{Key: taskAssignmentKey(taskEventTestAgentID, running.ID)},
 		{Key: taskAssignmentIndexKey(running.ID)},
+		{Key: taskTimeoutIndexKey(running.ID, assignment.Deadline)},
 	}, []Mutation{
 		{Type: MutationPut, Key: taskAssignmentKey(taskEventTestAgentID, running.ID), Value: value},
 		{Type: MutationPut, Key: taskAssignmentIndexKey(running.ID), Value: value},
+		{Type: MutationPut, Key: taskTimeoutIndexKey(running.ID, assignment.Deadline), Value: value},
 	})
 	if err != nil || !result.Succeeded {
 		t.Fatalf("seed Task assignment = %#v, %v", result, err)

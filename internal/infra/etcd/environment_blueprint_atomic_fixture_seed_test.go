@@ -3,14 +3,18 @@ package etcd
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 func seedEnvironmentBlueprintBackingScope(
@@ -432,6 +436,53 @@ func prepareEnvironmentBlueprintReleaseShape(
 	if err != nil || !manifestResult.Succeeded {
 		t.Fatalf("stage Release manifest = %#v, %v", manifestResult, err)
 	}
+	artifactID := task.Params[TaskComposeArtifactParam]
+	if artifactID == "" {
+		artifactID = ids.NewAt(ids.KindConfig, task.CreatedAt, 7650)
+		task.Params[TaskComposeArtifactParam] = artifactID
+	}
+	absenceServices := make([]executionplan.CandidateServiceIdentity, len(manifest.Members))
+	procedureMembers := make([]executionplan.CandidateReleaseMemberInput, len(manifest.Members))
+	for index, member := range manifest.Members {
+		forwardStepID := ids.NewAt(ids.KindStep, task.CreatedAt, int64(17651+index*3))
+		probeStepID := ids.NewAt(ids.KindStep, task.CreatedAt, int64(17652+index*3))
+		compensateStepID := ids.NewAt(ids.KindStep, task.CreatedAt, int64(17653+index*3))
+		task.Steps = append(task.Steps,
+			TaskStepRecord{Kind: TaskStepOperation, ID: forwardStepID},
+			TaskStepRecord{Kind: TaskStepOperation, ID: probeStepID},
+			TaskStepRecord{Kind: TaskStepOperation, ID: compensateStepID},
+		)
+		absenceServices[index] = executionplan.CandidateServiceIdentity{ServiceID: member.ServiceID, ReleaseID: member.ReleaseID}
+		procedureMembers[index] = executionplan.CandidateReleaseMemberInput{
+			ServiceID: member.ServiceID, CandidateReleaseID: member.ReleaseID, CandidateArtifactID: artifactID,
+			ForwardStepIDs: []string{forwardStepID},
+			ServingPredecessor: &executionplan.ServingPredecessorInput{
+				ProbeStepID: probeStepID, CompensateStepID: compensateStepID,
+			},
+			CandidateAbsence: &executionplan.CandidateAbsenceInput{
+				ComposeProjectName: "gp-" + environmentID, Services: absenceServices,
+				ProbeStepID: probeStepID, CompensateStepID: compensateStepID,
+			},
+		}
+	}
+	procedure, err := executionplan.BuildCandidateReleaseProcedure(executionplan.CandidateReleaseProcedureInput{
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY, Members: procedureMembers,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	procedureBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(procedure)
+	if err != nil {
+		t.Fatal(err)
+	}
+	planHash, err := hex.DecodeString(task.PlanHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor := executionplan.CandidateReleaseDescriptor{
+		PlanID: task.PlanID, PlanHash: planHash, Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,
+		ProcedureBytes: procedureBytes,
+	}
 
 	hooks := make([]ReleaseHookExecutionPublication, hookCount)
 	for index := range hooks {
@@ -469,13 +520,14 @@ func prepareEnvironmentBlueprintReleaseShape(
 				Revision:     manifestResult.Revision,
 				ReadRevision: manifestResult.Revision,
 			},
-			EnvironmentID:  environmentID,
-			Task:           *task,
-			Hooks:          hooks,
-			PublishedAt:    task.CreatedAt.Add(time.Minute),
-			SourcePrepared: sourcePrepared,
-			SourceMembers:  sourceMembers,
-			HookPrepared:   hookPrepared,
+			EnvironmentID:              environmentID,
+			Task:                       *task,
+			CandidateReleaseDescriptor: descriptor,
+			Hooks:                      hooks,
+			PublishedAt:                task.CreatedAt.Add(time.Minute),
+			SourcePrepared:             sourcePrepared,
+			SourceMembers:              sourceMembers,
+			HookPrepared:               hookPrepared,
 		},
 	)
 	if err != nil {

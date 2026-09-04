@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -279,14 +280,15 @@ func (prepared PreparedBlueprintReleaseHooks) SnapshotRevision(id string) int64 
 }
 
 type BlueprintReleasePublicationEvidence struct {
-	Manifest       VersionedReleaseManifest
-	EnvironmentID  string
-	Task           TaskRecord
-	Hooks          []ReleaseHookExecutionPublication
-	PublishedAt    time.Time
-	SourcePrepared PreparedSourceSet
-	SourceMembers  []ScriptSourcePreparationMember
-	HookPrepared   PreparedBlueprintReleaseHooks
+	Manifest                   VersionedReleaseManifest
+	EnvironmentID              string
+	Task                       TaskRecord
+	CandidateReleaseDescriptor executionplan.CandidateReleaseDescriptor
+	Hooks                      []ReleaseHookExecutionPublication
+	PublishedAt                time.Time
+	SourcePrepared             PreparedSourceSet
+	SourceMembers              []ScriptSourcePreparationMember
+	HookPrepared               PreparedBlueprintReleaseHooks
 }
 
 // BlueprintReleaseSourceMembers derives the immutable ADR 0062 authority for
@@ -632,15 +634,19 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 		evidence.PublishedAt.IsZero() || evidence.PublishedAt.Location() != time.UTC {
 		return BlueprintReleasePublication{}, errs.New(errs.KindValidationFailed, "Blueprint Release publication evidence is invalid")
 	}
+	if _, err := validateReleaseCandidateDescriptor(evidence.CandidateReleaseDescriptor, evidence.Task, evidence.Manifest.Record); err != nil {
+		return BlueprintReleasePublication{}, err
+	}
 	conditions := []Condition{
 		{Key: releaseManifestStagingKey(evidence.Manifest.Record.PublicationID), ModRevision: evidence.Manifest.Revision},
 		{Key: releasePublicationKey(evidence.Manifest.Record.PublicationID)},
 	}
 	publicationValue, err := encodeReleaseRecord("release-publication", ReleasePublicationMarker{
-		PublicationID:  evidence.Manifest.Record.PublicationID,
-		OperationID:    evidence.Manifest.Record.OperationID,
-		ManifestDigest: evidence.Manifest.Record.Digest,
-		PublishedAt:    evidence.PublishedAt,
+		PublicationID:              evidence.Manifest.Record.PublicationID,
+		OperationID:                evidence.Manifest.Record.OperationID,
+		ManifestDigest:             evidence.Manifest.Record.Digest,
+		CandidateReleaseDescriptor: executionplan.CloneCandidateReleaseDescriptor(evidence.CandidateReleaseDescriptor),
+		PublishedAt:                evidence.PublishedAt,
 	})
 	if err != nil {
 		return BlueprintReleasePublication{}, err

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
@@ -10,10 +11,10 @@ import (
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
 
-// Rationale: Blueprint candidate Compose rendering must carry the sealed
-// predecessor topology even for an initial candidate with baseline identity;
-// otherwise the shared renderer rejects the rebuilt task before assignment.
-func TestPrepareBlueprintReleaseTaskCarriesPredecessorComposeIdentity(t *testing.T) {
+// Rationale: a first Blueprint candidate has no predecessor to render. Its
+// immutable plan must seal both lawful restoration alternatives and remain
+// identical when applied predecessor state advances before claim.
+func TestPrepareBlueprintReleaseTaskFirstCandidateAuthorityIsPredecessorIndependent(t *testing.T) {
 	reader, task := blueprintPlanTestState(t)
 	const candidateReleaseID = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 	task.Params[etcd.TaskReleasePublicationParam] = "publication"
@@ -36,17 +37,34 @@ func TestPrepareBlueprintReleaseTaskCarriesPredecessorComposeIdentity(t *testing
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
 	}
-	_, plan, err := resolver.PrepareBlueprintReleaseTask(context.Background(), task, BlueprintReleasePlanInput{
-		Members:       []etcd.ReleaseTaskRenderMember{member},
-		ApplyStepIDs:  []string{task.Steps[0].ID},
-		HealthStepIDs: []string{task.Steps[1].ID},
-		PostStepIDs:   [][]string{nil},
-	})
+	input := BlueprintReleasePlanInput{
+		Members:                   []etcd.ReleaseTaskRenderMember{member},
+		ApplyStepIDs:              []string{task.Steps[0].ID},
+		HealthStepIDs:             []string{task.Steps[1].ID},
+		RecoveryProbeStepIDs:      []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FAY"},
+		RecoveryCompensateStepIDs: []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FAZ"},
+		PostStepIDs:               [][]string{nil},
+	}
+	_, plan, err := resolver.PrepareBlueprintReleaseTask(context.Background(), task, input)
 	if err != nil {
 		t.Fatalf("PrepareBlueprintReleaseTask() error = %v", err)
 	}
-	if plan == nil || len(plan.Artifacts) != 1 {
-		t.Fatalf("Blueprint Release plan = %#v, want one artifact", plan)
+	if plan == nil || len(plan.Artifacts) != 1 || plan.GetCandidateReleaseProcedure() == nil {
+		t.Fatalf("Blueprint Release plan = %#v, want one artifact and one procedure", plan)
+	}
+	procedureMember := plan.GetCandidateReleaseProcedure().GetMembers()[0]
+	if procedureMember.GetCandidateAbsence() == nil || procedureMember.GetServingPredecessor() == nil {
+		t.Fatalf("Blueprint restoration alternatives = %#v, want both", procedureMember)
+	}
+	input.Members[0].Intent.PriorServingReleaseID = "dep_01ARZ3NDEKTSV4RRFFQ69G5FB0"
+	input.Members[0].Render.PriorArtifactID = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FB1"
+	input.Members[0].Render.PriorImage = "example/api:advanced"
+	_, advanced, err := resolver.PrepareBlueprintReleaseTask(context.Background(), task, input)
+	if err != nil {
+		t.Fatalf("PrepareBlueprintReleaseTask(advanced predecessor) error = %v", err)
+	}
+	if !bytes.Equal(plan.GetPlanHash(), advanced.GetPlanHash()) {
+		t.Fatalf("Blueprint plan hash changed with applied predecessor: %x != %x", plan.GetPlanHash(), advanced.GetPlanHash())
 	}
 }
 
@@ -93,10 +111,12 @@ func TestPrepareBlueprintReleaseTaskBindsAddressableRecreateWorkload(t *testing.
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
 	}
 	_, plan, err := resolver.PrepareBlueprintReleaseTask(context.Background(), task, BlueprintReleasePlanInput{
-		Members:       []etcd.ReleaseTaskRenderMember{member},
-		ApplyStepIDs:  []string{task.Steps[0].ID},
-		HealthStepIDs: []string{task.Steps[1].ID},
-		PostStepIDs:   [][]string{nil},
+		Members:                   []etcd.ReleaseTaskRenderMember{member},
+		ApplyStepIDs:              []string{task.Steps[0].ID},
+		HealthStepIDs:             []string{task.Steps[1].ID},
+		RecoveryProbeStepIDs:      []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FB2"},
+		RecoveryCompensateStepIDs: []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FB3"},
+		PostStepIDs:               [][]string{nil},
 	})
 	if err != nil {
 		t.Fatalf("PrepareBlueprintReleaseTask() error = %v", err)

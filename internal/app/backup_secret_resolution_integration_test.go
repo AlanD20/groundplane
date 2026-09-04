@@ -88,7 +88,7 @@ func TestBackupSecretReaderResolverAgentChannelComposition(t *testing.T) {
 		if assignment := message.GetTaskAssignment(); assignment != nil {
 			assignmentCount++
 			if assignment.GetTaskId() != fixture.request.TaskID ||
-				assignment.GetAssignmentId() != fixture.request.AssignmentID || assignment.GetEventAttempt() != 1 {
+				assignment.GetAssignmentId() != fixture.request.AssignmentID || assignment.GetExecutionEpoch() != 1 {
 				t.Fatalf("task assignment = %#v", assignment)
 			}
 		}

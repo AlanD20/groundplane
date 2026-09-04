@@ -51,26 +51,41 @@ func (repository *TaskRepository) GetTaskAssignment(
 	}
 	claimKey := taskExecutionClaimKey(assignment.Executor, assignment.AgentID, taskID)
 	claim, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys: []string{
-			claimKey,
-			taskTimeoutIndexKey(taskID, assignment.Deadline),
-		},
+		Keys:     []string{claimKey},
 		Revision: indexed.ReadRevision,
 	})
 	if err != nil {
 		return TaskAssignment{}, err
 	}
-	if len(claim.Values) != 2 || claim.Values[0] == nil || claim.Values[1] == nil {
+	if len(claim.Values) != 1 || claim.Values[0] == nil {
 		clearKeyValues(claim.Values)
 		return TaskAssignment{}, errs.New(errs.KindStateConflict, "Task execution claim changed")
 	}
 	claimValue := claim.Values[0]
 	defer clear(claimValue.Value)
-	timeoutValue := claim.Values[1]
-	defer clear(timeoutValue.Value)
-	if claimValue.ModRevision != indexValue.ModRevision || timeoutValue.ModRevision != indexValue.ModRevision ||
-		!bytes.Equal(claimValue.Value, indexValue.Value) || !bytes.Equal(timeoutValue.Value, indexValue.Value) {
+	if claimValue.ModRevision != indexValue.ModRevision || !bytes.Equal(claimValue.Value, indexValue.Value) {
 		return TaskAssignment{}, errs.New(errs.KindInternal, "Task assignment index does not match its claim")
+	}
+	_, _, proofRequired, err := repository.assignmentLifecycleIndexAtRevision(
+		ctx, assignment, indexValue, indexed.ReadRevision,
+	)
+	if err != nil {
+		return TaskAssignment{}, err
+	}
+	var recovery *ReleaseRecoveryDirective
+	if task.Params[TaskReleasePublicationParam] != "" {
+		_, procedure, descriptorErr := repository.candidateReleaseDescriptorAtRevision(ctx, task, indexed.ReadRevision)
+		if descriptorErr != nil || validateAssignmentRestorationDescriptor(task, assignment, procedure) != nil {
+			return TaskAssignment{}, corruptTaskAssignment()
+		}
+		if assignment.ExecutionMode == TaskExecutionModeRecoveryOnly {
+			recovery, err = repository.releaseRecoveryDirectiveAtRevision(
+				ctx, task, assignment, procedure, indexed.ReadRevision,
+			)
+			if err != nil {
+				return TaskAssignment{}, err
+			}
+		}
 	}
 	return TaskAssignment{
 		Assignment: Versioned[TaskAssignmentRecord]{
@@ -79,5 +94,7 @@ func (repository *TaskRepository) GetTaskAssignment(
 		Task: Versioned[TaskRecord]{
 			Record: task, Revision: taskValue.ModRevision, ReadRevision: indexed.ReadRevision,
 		},
+		ReleaseRecovery:       recovery,
+		RecoveryProofRequired: proofRequired,
 	}, nil
 }

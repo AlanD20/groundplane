@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"slices"
 	"sort"
 	"time"
 
@@ -20,6 +21,7 @@ type releaseExecutionState struct {
 	projects       map[string]*agentpb.ObservedProject
 	evidence       map[string]*agentpb.ServiceProxyEvidence
 	recreate       map[string]*agentpb.ServiceRecreateEvidence
+	absence        *agentpb.CandidateAbsenceEvidence
 	completed      map[string]struct{}
 	recoveryClosed bool
 }
@@ -32,68 +34,8 @@ func (p *WorkerPool) executeRelease(runCtx context.Context, reservation *taskRes
 	}
 	if p.compose == nil {
 		state.err = errs.New(errs.KindInternal, "agent: release Compose runtime is not configured")
-	} else if reservation.assignment.RetryOf != "" {
-		var probeErr error
-		probeStepID := ""
-		compensationRequired := make(map[string]bool)
-		for _, step := range reservation.assignment.Plan.Steps {
-			if step.Policy != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE {
-				continue
-			}
-			serviceID, ok := releaseRecoveryProbeServiceID(step)
-			if !ok {
-				if probeErr == nil {
-					probeErr = errs.New(errs.KindInternal, "agent: release recovery probe has no Service identity")
-					probeStepID = step.StepId
-				}
-				continue
-			}
-			state.err, state.failedStepID = nil, ""
-			p.runReleaseStep(runCtx, reservation, step, state)
-			if state.err != nil {
-				if probeErr == nil {
-					probeErr, probeStepID = state.err, state.failedStepID
-				}
-				compensationRequired[serviceID] = true
-				continue
-			}
-			required, dispositionErr := releaseProbeRequiresCompensation(step, state)
-			if dispositionErr != nil {
-				if probeErr == nil {
-					probeErr, probeStepID = dispositionErr, step.StepId
-				}
-				compensationRequired[serviceID] = true
-				continue
-			}
-			compensationRequired[serviceID] = required
-		}
-		state.err, state.failedStepID = nil, ""
-		compensated := false
-		for index := len(reservation.assignment.Plan.Steps) - 1; index >= 0; index-- {
-			step := reservation.assignment.Plan.Steps[index]
-			if step.Policy != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE || !releaseCompensationEnabled(step) {
-				continue
-			}
-			serviceID, ok := releaseCompensationServiceID(step)
-			if !ok {
-				state.err = errs.New(errs.KindInternal, "agent: release compensation has no Service identity")
-				state.failedStepID = step.StepId
-				break
-			}
-			if !compensationRequired[serviceID] {
-				continue
-			}
-			compensated = true
-			p.runReleaseStep(runCtx, reservation, step, state)
-			if state.err != nil {
-				break
-			}
-		}
-		if state.err == nil && probeErr != nil {
-			state.err, state.failedStepID = probeErr, probeStepID
-			state.recoveryClosed = compensated
-			state.reconciliation = !compensated
-		}
+	} else if reservation.assignment.ExecutionMode == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY {
+		p.runReleaseRecovery(runCtx, reservation, state)
 	} else {
 		p.runReleasePhase(runCtx, reservation, state,
 			agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK)
@@ -103,6 +45,7 @@ func (p *WorkerPool) executeRelease(runCtx context.Context, reservation *taskRes
 		if state.err != nil {
 			original, originalStep := state.err, state.failedStepID
 			originalExitCode, originalDiagnostic := state.exitCode, state.diagnostic
+			compensationApplicable := false
 			compensated := true
 			for index := len(reservation.assignment.Plan.Steps) - 1; index >= 0; index-- {
 				step := reservation.assignment.Plan.Steps[index]
@@ -112,6 +55,7 @@ func (p *WorkerPool) executeRelease(runCtx context.Context, reservation *taskRes
 				if _, ok := state.completed[step.PrerequisiteStepId]; !ok {
 					continue
 				}
+				compensationApplicable = true
 				state.err = nil
 				p.runReleaseStep(runCtx, reservation, step, state)
 				if state.err != nil {
@@ -119,12 +63,12 @@ func (p *WorkerPool) executeRelease(runCtx context.Context, reservation *taskRes
 					break
 				}
 			}
-			if compensated {
+			if compensationApplicable && compensated {
 				state.reconciliation = false
 			}
 			state.err, state.failedStepID = original, originalStep
 			state.exitCode, state.diagnostic = originalExitCode, originalDiagnostic
-			if compensated && reservation.ctx.Err() == nil && !errors.Is(original, context.DeadlineExceeded) {
+			if compensationApplicable && compensated && reservation.ctx.Err() == nil && !errors.Is(original, context.DeadlineExceeded) {
 				p.runReleaseFailureHooks(runCtx, reservation, state)
 				state.err, state.failedStepID = original, originalStep
 				state.exitCode, state.diagnostic = originalExitCode, originalDiagnostic
@@ -138,12 +82,171 @@ func (p *WorkerPool) executeRelease(runCtx context.Context, reservation *taskRes
 	result := TaskResult{
 		AssignmentID: reservation.assignment.AssignmentID, TaskID: reservation.assignment.TaskID,
 		PlanHash: hashForPlan(reservation.assignment.Plan), Terminal: terminal, ExitCode: state.exitCode,
-		Compose: releaseComposeTaskResult(state),
+		ExecutionEpoch:              reservation.assignment.ExecutionEpoch,
+		ReleaseRecoveryRecordSHA256: append([]byte(nil), reservation.assignment.ReleaseRecoveryRecordSHA256...),
+		Compose:                     releaseComposeTaskResult(state),
 	}
 	if state.err != nil && p.logger != nil {
 		p.logger.Error("agent: release step failed", "task_id", reservation.assignment.TaskID, "error", state.err)
 	}
 	p.complete(runCtx, reservation, result)
+}
+
+func (p *WorkerPool) runReleaseRecovery(
+	runCtx context.Context,
+	reservation *taskReservation,
+	state *releaseExecutionState,
+) {
+	directive := reservation.assignment.ReleaseRecoveryDirective
+	steps := make(map[string]*agentpb.ExecutionStep, len(reservation.assignment.Plan.GetSteps()))
+	probes := make(map[string]*agentpb.ExecutionStep)
+	for _, step := range reservation.assignment.Plan.GetSteps() {
+		steps[step.GetStepId()] = step
+		if step.GetPolicy() == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE {
+			if serviceID, ok := releaseRecoveryProbeServiceID(step); ok {
+				probes[serviceID] = step
+			}
+		}
+	}
+	compensationRequired := make(map[string]bool)
+	if directive.GetPhase() == agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROVEN {
+		for _, step := range probes {
+			required, err := p.probeReleaseRecoveryWithoutEvent(reservation, step, state)
+			if err != nil || required {
+				state.err, state.failedStepID = errors.Join(err, errs.New(errs.KindInternal, "agent: proven release restoration no longer has exact proof")), step.GetStepId()
+				state.reconciliation = true
+				return
+			}
+		}
+		state.recoveryClosed = true
+		return
+	}
+	for _, stepID := range directive.GetStepIds()[directive.GetCursor():] {
+		step := steps[stepID]
+		if step == nil {
+			state.err, state.failedStepID = errs.New(errs.KindInternal, "agent: release recovery directive step is absent"), stepID
+			state.reconciliation = true
+			return
+		}
+		switch step.GetPolicy() {
+		case agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE:
+			serviceID, ok := releaseRecoveryProbeServiceID(step)
+			if !ok {
+				state.err, state.failedStepID = errs.New(errs.KindInternal, "agent: release recovery probe has no Service identity"), stepID
+				state.reconciliation = true
+				return
+			}
+			p.runReleaseStep(runCtx, reservation, step, state)
+			if state.err != nil {
+				state.reconciliation = true
+				return
+			}
+			required, err := releaseProbeRequiresCompensation(step, state)
+			if err != nil {
+				state.err, state.failedStepID, state.reconciliation = err, stepID, true
+				return
+			}
+			compensationRequired[serviceID] = required
+		case agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE:
+			serviceID, ok := releaseCompensationServiceID(step)
+			if !ok {
+				state.err, state.failedStepID = errs.New(errs.KindInternal, "agent: release recovery compensation is invalid"), stepID
+				state.reconciliation = true
+				return
+			}
+			required, known := compensationRequired[serviceID]
+			applicable := slices.Contains(directive.GetApplicableCompensationStepIds(), stepID)
+			if !known {
+				probe := probes[serviceID]
+				if probe == nil {
+					state.err, state.failedStepID = errs.New(errs.KindInternal, "agent: release recovery compensation has no sealed probe"), stepID
+					state.reconciliation = true
+					return
+				}
+				var err error
+				required, err = p.probeReleaseRecoveryWithoutEvent(reservation, probe, state)
+				if err != nil {
+					state.err, state.failedStepID, state.reconciliation = err, probe.GetStepId(), true
+					return
+				}
+			}
+			if required && !applicable {
+				state.err, state.failedStepID = errs.New(errs.KindInternal, "agent: host state cannot create an unrecorded compensation obligation"), stepID
+				state.reconciliation = true
+				return
+			}
+			if required {
+				if !releaseCompensationEnabled(step) {
+					state.err, state.failedStepID = errs.New(errs.KindInternal, "agent: required release recovery compensation is disabled"), stepID
+					state.reconciliation = true
+					return
+				}
+				p.runReleaseStep(runCtx, reservation, step, state)
+				if state.err != nil {
+					state.reconciliation = true
+					return
+				}
+			} else if err := p.completeReleaseRecoveryNoop(reservation, step, state); err != nil {
+				state.err, state.failedStepID, state.reconciliation = err, stepID, true
+				return
+			}
+		default:
+			state.err, state.failedStepID = errs.New(errs.KindInternal, "agent: release recovery directive selected a forward step"), stepID
+			state.reconciliation = true
+			return
+		}
+	}
+	state.recoveryClosed = true
+}
+
+func (p *WorkerPool) probeReleaseRecoveryWithoutEvent(
+	reservation *taskReservation,
+	step *agentpb.ExecutionStep,
+	state *releaseExecutionState,
+) (bool, error) {
+	stepCtx, cancel := context.WithTimeout(reservation.ctx, time.Duration(step.GetTimeoutSeconds())*time.Second)
+	result, err := p.compose.executeStep(stepCtx, reservation.assignment, step)
+	cancel()
+	if err != nil {
+		return false, err
+	}
+	if result.ProxyEvidence != nil {
+		state.evidence[result.ProxyEvidence.GetServiceId()] = proto.Clone(result.ProxyEvidence).(*agentpb.ServiceProxyEvidence)
+	}
+	if result.RecreateEvidence != nil {
+		state.recreate[result.RecreateEvidence.GetServiceId()] = proto.Clone(result.RecreateEvidence).(*agentpb.ServiceRecreateEvidence)
+	}
+	if result.CandidateAbsenceEvidence != nil {
+		state.absence = proto.Clone(result.CandidateAbsenceEvidence).(*agentpb.CandidateAbsenceEvidence)
+	}
+	if result.ReconciliationRequired {
+		return false, errs.New(errs.KindInternal, "agent: release recovery probe requires reconciliation")
+	}
+	return releaseProbeRequiresCompensation(step, state)
+}
+
+func (p *WorkerPool) completeReleaseRecoveryNoop(
+	reservation *taskReservation,
+	step *agentpb.ExecutionStep,
+	state *releaseExecutionState,
+) error {
+	planHash := hashForPlan(reservation.assignment.Plan)
+	for ordinal, progressState := range []TaskProgressState{TaskProgressRunning, TaskProgressCompleted} {
+		progress := TaskProgress{
+			AssignmentID: reservation.assignment.AssignmentID, TaskID: reservation.assignment.TaskID,
+			PlanHash: planHash, StepID: step.GetStepId(), ExecutionEpoch: reservation.assignment.ExecutionEpoch,
+			Ordinal: uint64(ordinal + 1), State: progressState,
+		}
+		if reservation.eventsDurable {
+			if err := p.emitProgressAndWait(reservation.ctx, progress); err != nil {
+				return err
+			}
+		} else {
+			p.emitProgress(reservation.ctx, progress)
+		}
+	}
+	state.completed[step.GetStepId()] = struct{}{}
+	return nil
 }
 
 func (p *WorkerPool) runReleaseForward(
@@ -245,9 +348,17 @@ func (p *WorkerPool) runReleaseFailureHooks(
 
 func (p *WorkerPool) runReleaseStep(runCtx context.Context, reservation *taskReservation, step *agentpb.ExecutionStep, state *releaseExecutionState) {
 	planHash := hashForPlan(reservation.assignment.Plan)
-	p.emitProgress(runCtx, TaskProgress{AssignmentID: reservation.assignment.AssignmentID,
+	running := TaskProgress{AssignmentID: reservation.assignment.AssignmentID,
 		TaskID: reservation.assignment.TaskID, PlanHash: planHash, StepID: step.StepId,
-		Attempt: reservation.assignment.EventAttempt, Ordinal: 1, State: TaskProgressRunning})
+		ExecutionEpoch: reservation.assignment.ExecutionEpoch, Ordinal: 1, State: TaskProgressRunning}
+	if reservation.eventsDurable && candidateMutationStep(step) {
+		if err := p.emitProgressAndWait(reservation.ctx, running); err != nil {
+			state.err, state.failedStepID = err, step.GetStepId()
+			return
+		}
+	} else {
+		p.emitProgress(runCtx, running)
+	}
 	stepCtx, cancel := context.WithTimeout(reservation.ctx, time.Duration(step.TimeoutSeconds)*time.Second)
 	var result composeStepResult
 	var err error
@@ -292,6 +403,9 @@ func (p *WorkerPool) runReleaseStep(runCtx context.Context, reservation *taskRes
 	if result.RecreateEvidence != nil {
 		state.recreate[result.RecreateEvidence.ServiceId] = proto.Clone(result.RecreateEvidence).(*agentpb.ServiceRecreateEvidence)
 	}
+	if result.CandidateAbsenceEvidence != nil {
+		state.absence = proto.Clone(result.CandidateAbsenceEvidence).(*agentpb.CandidateAbsenceEvidence)
+	}
 	state.reconciliation = state.reconciliation || result.ReconciliationRequired
 	if err != nil {
 		if p.logger != nil {
@@ -307,9 +421,28 @@ func (p *WorkerPool) runReleaseStep(runCtx context.Context, reservation *taskRes
 	} else {
 		state.completed[step.StepId] = struct{}{}
 	}
-	p.emitProgress(runCtx, TaskProgress{AssignmentID: reservation.assignment.AssignmentID,
+	completedProgress := TaskProgress{AssignmentID: reservation.assignment.AssignmentID,
 		TaskID: reservation.assignment.TaskID, PlanHash: planHash, StepID: step.StepId,
-		Attempt: reservation.assignment.EventAttempt, Ordinal: 2, State: progress})
+		ExecutionEpoch: reservation.assignment.ExecutionEpoch, Ordinal: 2, State: progress}
+	if reservation.eventsDurable && reservation.assignment.ExecutionMode == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY {
+		if progressErr := p.emitProgressAndWait(reservation.ctx, completedProgress); progressErr != nil && state.err == nil {
+			state.err, state.failedStepID, state.reconciliation = progressErr, step.GetStepId(), true
+		}
+	} else {
+		p.emitProgress(runCtx, completedProgress)
+	}
+}
+
+func candidateMutationStep(step *agentpb.ExecutionStep) bool {
+	if step.GetComposeRemove() != nil {
+		return true
+	}
+	if apply := step.GetComposeApply(); apply != nil {
+		return apply.GetForceRecreate() && apply.GetNoDependencies()
+	}
+	return step.GetComposeWorkloadApply() != nil || step.GetServiceProxySwitch() != nil ||
+		step.GetServiceProxyCompensate() != nil || step.GetServiceRecreateCompensate() != nil ||
+		step.GetCandidateRestorationCompensate() != nil
 }
 
 func releaseFailureHookExecution(
@@ -361,6 +494,9 @@ func releaseComposeTaskResult(state *releaseExecutionState) *agentpb.ComposeTask
 	for _, serviceID := range recreateIDs {
 		result.RecreateEvidence = append(result.RecreateEvidence, state.recreate[serviceID])
 	}
+	if state.absence != nil {
+		result.CandidateAbsenceEvidence = proto.Clone(state.absence).(*agentpb.CandidateAbsenceEvidence)
+	}
 	return result
 }
 
@@ -370,6 +506,9 @@ func releaseCompensationEnabled(step *agentpb.ExecutionStep) bool {
 	}
 	if value := step.GetServiceRecreateCompensate(); value != nil {
 		return value.Enabled
+	}
+	if step.GetCandidateRestorationCompensate() != nil {
+		return true
 	}
 	return false
 }
@@ -381,6 +520,9 @@ func releaseRecoveryProbeServiceID(step *agentpb.ExecutionStep) (string, bool) {
 	if value := step.GetServiceRecreateProbe(); value != nil {
 		return value.ServiceId, value.ServiceId != ""
 	}
+	if value := step.GetCandidateRestorationProbe(); value != nil {
+		return value.ServiceId, value.ServiceId != ""
+	}
 	return "", false
 }
 
@@ -389,6 +531,9 @@ func releaseCompensationServiceID(step *agentpb.ExecutionStep) (string, bool) {
 		return value.ServiceId, value.ServiceId != ""
 	}
 	if value := step.GetServiceRecreateCompensate(); value != nil {
+		return value.ServiceId, value.ServiceId != ""
+	}
+	if value := step.GetCandidateRestorationCompensate(); value != nil {
 		return value.ServiceId, value.ServiceId != ""
 	}
 	return "", false
@@ -423,6 +568,16 @@ func releaseProbeRequiresCompensation(
 			return false, nil
 		}
 		return false, errs.New(errs.KindInternal, "agent: release recovery recreate evidence is ambiguous")
+	}
+	if step.GetCandidateRestorationProbe() != nil {
+		if state.absence != nil {
+			return !state.absence.GetAbsenceProven(), nil
+		}
+		probe := step.GetCandidateRestorationProbe()
+		if evidence := state.recreate[probe.GetServiceId()]; evidence != nil && evidence.GetCompensated() {
+			return false, nil
+		}
+		return false, errs.New(errs.KindInternal, "agent: candidate restoration probe returned no exact evidence")
 	}
 	return false, errs.New(errs.KindInternal, "agent: release recovery probe type is invalid")
 }

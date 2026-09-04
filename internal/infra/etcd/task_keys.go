@@ -23,6 +23,7 @@ const (
 	controllerTaskClaimPrefix       = "/v1/runtime/controller-task-claims/"
 	taskAssignmentIndexPrefix       = "/v1/indexes/tasks/assignment/"
 	taskTimeoutIndexPrefix          = "/v1/indexes/tasks/timeout/"
+	taskRecoveryProofRequiredPrefix = "/v1/indexes/tasks/recovery-proof-required/"
 	taskRetentionIndexPrefix        = "/v1/indexes/tasks/by-retain-until/"
 	taskWorkspacePlatformPrefix     = "/v1/indexes/tasks/by-workspace/platform/"
 	taskWorkspaceTenantPrefix       = "/v1/indexes/tasks/by-workspace/tenant/"
@@ -125,6 +126,10 @@ func taskAssignmentIndexKey(taskID string) string {
 
 func taskTimeoutIndexKey(taskID string, deadline time.Time) string {
 	return taskTimeoutIndexPrefix + fmt.Sprintf("%020d", deadline.UnixNano()) + "/" + taskID
+}
+
+func taskRecoveryProofRequiredKey(taskID string) string {
+	return taskRecoveryProofRequiredPrefix + taskID
 }
 
 func taskRetentionIndexKey(taskID string, retainUntil time.Time) string {

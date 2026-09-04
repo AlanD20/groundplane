@@ -126,6 +126,10 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 	if err != nil {
 		return blueprintCandidateTerminalChange{}, err
 	}
+	_, procedure, err := repository.candidateReleaseDescriptorAtRevision(ctx, task, revision)
+	if err != nil || validateAssignmentRestorationDescriptor(task, assignment, procedure) != nil {
+		return blueprintCandidateTerminalChange{}, corruptTaskAssignment()
+	}
 	defer clear(epochValue)
 	baseConditions, err = appendBlueprintCandidateCondition(baseConditions, writerCondition)
 	if err != nil {
@@ -133,13 +137,16 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 	}
 	var compensationResult *TaskResultRecord
 	if terminalStatus != TaskStatusCompleted {
-		if result.FailedStepID == "" || !taskContainsStep(task, result.FailedStepID) {
+		if result.FailedStepID == "" && result.Diagnostic == TaskResultDiagnosticTimeoutBeforeEffect {
+			compensationResult = nil
+		} else if result.FailedStepID == "" || !taskContainsStep(task, result.FailedStepID) {
 			return blueprintCandidateTerminalChange{}, errs.New(
 				errs.KindReleaseRecoveryRequired,
 				"Blueprint failure lacks an exact failed step",
 			)
+		} else {
+			compensationResult = &result
 		}
-		compensationResult = &result
 	}
 	candidateConditions, err := repository.validateBlueprintCandidateUnpublished(
 		ctx, task, publicationID, manifest, compensationResult, revision,
@@ -309,6 +316,9 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 	}
 	manifest, err := decodeReleaseRecord[ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
 	if err != nil || validateBlueprintCandidateManifest(task, marker, manifest) != nil {
+		return corruptReleaseRecord()
+	}
+	if _, err := validateReleaseCandidateMarker(task, marker, manifest); err != nil {
 		return corruptReleaseRecord()
 	}
 	seal, err := decodeEnvironmentBlueprintSeal(read.Values[2].Value)
@@ -500,6 +510,13 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 		sourceAuthorityCondition.ModRevision, revision,
 	)
 	if err != nil {
+		return releaseTaskRetryChange{}, err
+	}
+	descriptor, procedure, err := repository.candidateReleaseDescriptorAtRevision(ctx, source, revision)
+	if err != nil || validateSelectedRestorationTarget(procedure, sourceAuthority.AppliedPredecessor.Present) != nil {
+		return releaseTaskRetryChange{}, corruptReleaseRecord()
+	}
+	if _, err := validateReleaseCandidateDescriptor(descriptor, retry, manifest); err != nil {
 		return releaseTaskRetryChange{}, err
 	}
 	defer clear(epochValue)

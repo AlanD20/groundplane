@@ -101,11 +101,7 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 		}
 		candidate := !compensated && observedReleaseID == intent.ID
 		priorReleaseID := intent.PriorServingReleaseID
-		observedPrior := priorReleaseID
-		if observedPrior == "" {
-			observedPrior = "baseline"
-		}
-		if !candidate && observedReleaseID != observedPrior {
+		if !candidate && (priorReleaseID == "" || observedReleaseID != priorReleaseID) {
 			return false, errs.New(errs.KindStateConflict, "release recovery observed an unsealed proxy lineage")
 		}
 		if projection.EnvironmentID == "" {

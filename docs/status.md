@@ -5,10 +5,12 @@ is implementation evidence only; it is not product authority. Product behavior
 and vocabulary remain authoritative in `docs/mvp.md`, with the source-of-truth
 order in `docs/agents.md` resolving conflicts.
 
-The integration owner MUST update this file in the same commit whenever a lane
-lands or the remaining set changes. Branch names, candidate counts, and this
-checkpoint do not prove acceptance by themselves; acceptance requires the
-evidence named by `docs/capabilities.md` and `docs/delivery.md`.
+This detailed ledger is task-scoped implementation evidence, not the default
+recovery handoff. `docs/head.md` is the compact operational checkpoint and is
+updated in each landing candidate when `main`, active lanes, blockers, or next
+actions change. Branch names, candidate counts, and this checkpoint do not
+prove acceptance by themselves; acceptance requires the evidence named by
+`docs/capabilities.md` and `docs/delivery.md`.
 
 ## Active Controller and Agent settings separation
 
@@ -35,17 +37,20 @@ implementation and its named focused proof, receives one aggregate
 blocker-only review, and gets at most one bounded correction batch followed by
 one delta-only verification. Corrections rerun only the exact tests covering
 their changed behavior; non-blockers are recorded in `docs/issues/` and do not
-hold landing. Approved lanes land immediately as signed straight-line
-fast-forwards, and their worktree and branch are cleaned up only after `main`
-contains the exact landed tree. The root agent owns time/token circuit-breaker
-interrupts and diagnosis; no repeated full review loop or unlanded WIP cleanup
-is permitted.
+hold landing. After head approval and explicit land authorization, the
+dedicated integration owner lands the signed direct child as a straight-line
+fast-forward and cleans its worktree and branch only after `main` contains the
+exact landed tree. The head owns time/token circuit-breaker interrupts,
+diagnosis, approval, and land authorization; it does not construct, sign,
+fast-forward, or clean candidates. No repeated full review loop or unlanded WIP
+cleanup is permitted.
 
 The CoreDNS transactional lifecycle landed on `main` in `3884d075`.
 Independent remaining features continue in their own durable worktrees.
 
-On every compaction or restart, the head agent first rereads the four mandatory
-recovery documents, queries actual agent status, and reconciles it with durable
+On every compaction or restart, the head reads `docs/head.md` in full and then
+only the exact authoritative contract sections required for the current
+decision. It queries actual agent status and reconciles that state with durable
 worktrees and frozen candidates. Completed agents are not active capacity.
 Stopped lanes advance independently into freeze/review/correction/landing, and
 every freed slot is immediately refilled with the next contract-closed,
@@ -55,11 +60,27 @@ frozen.
 
 Pipeline restoration now has an enforceable occupancy criterion: running
 delegates must equal the lesser of free delegated slots and eligible delegated
-actions. Ordinary writers, reviewers, correction batches, and bounded contract
-scopers are subagents; the head coordinates, adjudicates, constructs signed
-direct-child candidates, lands, cleans, and refills. A compaction that leaves
-the head as the sole worker while eligible delegated work exists has not
-restored the pipeline.
+actions. Ordinary writers, reviewers, correction batches, bounded contract
+scopers, and integration mechanics are delegated. The head selects and
+adjudicates lanes, then grants approval and explicit land authorization; the
+dedicated integration owner constructs and signs candidates, fast-forwards
+`main`, and cleans only after authorization. A compaction that leaves the head
+as the sole worker while eligible delegated work exists has not restored the
+pipeline.
+
+## Candidate Release recovery correction (2026-09-04)
+
+Signed candidate `b47bdcb9` is rejected and MUST NOT land. Its ref, tree, and
+worktree remain preserved as immutable rejection evidence. The original writer
+completed the one allowed correction batch at signed commit `282ef187` and tree
+`97f95994ad4d15a581f641d216cf10e09e503495`, closing the reviewed recovery
+authority gaps without rewriting the rejected candidate.
+
+The replacement is a signed one-commit direct child of base `f0213ba4` carrying
+the entire recovery delta plus that correction. It remains unlanded pending the
+head's decision and explicit land authorization. Its exact commit, tree, and
+focused delta proof are integration-handoff evidence rather than a
+self-referential hash embedded in this candidate.
 
 ## Accepted and integrated checkpoint
 
