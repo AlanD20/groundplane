@@ -818,3 +818,11 @@ publication and ready prerequisite-gate authority. Exact co-revision evidence
 admits that lawful predecessor while an epoch-only or unrelated mutation remains
 a permanent conflict. Focused positive and negative race proof passes; recovery
 of the preserved reference-host Task after deployment remains pending.
+
+## Blueprint pending-abort production error matching (2026-09-04)
+
+The pending Blueprint Script-abort release path now uses the production error
+identity contract rather than a test-only package helper. Abort behavior is
+unchanged, while the production-tagged Controller build and the focused abort
+race proof both pass. Deployment and recovery of the preserved reference-host
+Blueprint Task remain the next acceptance step.

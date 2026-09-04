@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -132,7 +133,7 @@ func (repository *TaskRepository) prepareBlueprintPendingAbort(
 	}
 	processed, drained, err := authority.ReleaseNext(ctx, task.Record.OperationID, guards)
 	if err != nil {
-		if isKind(err, errs.KindStateConflict) {
+		if errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 			return blueprintPendingAbortChange{applies: true, advanced: true, terminalAt: terminalAt}, nil
 		}
 		return blueprintPendingAbortChange{}, err
