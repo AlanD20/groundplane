@@ -160,6 +160,9 @@ func openServingPredecessor(
 	if releaseID == "" || !validRuntimeTarget(target) {
 		return nil, nil, "", "", errs.New(errs.KindValidationFailed, "serving predecessor identity is incomplete")
 	}
+	if _, roleErr := sealedServingPredecessorRuntimeRole(selected); roleErr != nil || selected.GetImageReference() == "" {
+		return nil, nil, "", "", errs.New(errs.KindValidationFailed, "serving predecessor runtime identity is incomplete")
+	}
 	return predecessor, selected, releaseID, target, nil
 }
 
@@ -169,6 +172,12 @@ func servingPredecessorProven(
 	artifact *agentpb.ComposeArtifact,
 	service *agentpb.ComposeService,
 ) (bool, error) {
+	expectedRole, roleErr := sealedServingPredecessorRuntimeRole(service)
+	workloadWithoutImage := service.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY &&
+		service.GetImageReference() == ""
+	if roleErr != nil || workloadWithoutImage {
+		return false, errs.New(errs.KindValidationFailed, "serving predecessor runtime identity is incomplete")
+	}
 	list, err := taskRunner.Run(ctx, runner.RunCmdOpts{
 		Name: DockerExecutable,
 		Args: []string{"container", "ls", "--all", "--filter", "label=com.docker.compose.project=" + artifact.GetProjectName(), "--format", "{{.ID}}"},
@@ -194,8 +203,7 @@ func servingPredecessorProven(
 		if labels["com.groundplane.service-id"] != service.GetServiceId() {
 			continue
 		}
-		expectedRole := expectedLabel(service.GetExpectedLabels(), "com.groundplane.role")
-		if expectedRole != "" && labels["com.groundplane.role"] != expectedRole {
+		if labels["com.groundplane.runtime-role"] != expectedRole {
 			continue
 		}
 		expectedSlot := expectedLabel(service.GetExpectedLabels(), "com.groundplane.slot")
@@ -204,6 +212,16 @@ func servingPredecessorProven(
 		}
 		if !hasAllExpectedLabels(labels, service.GetExpectedLabels()) {
 			return false, errs.New(errs.KindStateConflict, "serving predecessor observed foreign service state")
+		}
+		if service.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+			image, imageErr := taskRunner.Run(ctx, runner.RunCmdOpts{
+				Name: DockerExecutable, Args: []string{"container", "inspect", "--format", "{{.Config.Image}}", containerID},
+				Dir: WorkDirectory, Env: append([]string(nil), fixedEnvironment...), ReplaceEnv: true,
+			})
+			if imageErr != nil || image.ExitCode != 0 ||
+				strings.TrimSpace(string(image.Stdout)) != service.GetImageReference() {
+				return false, errs.New(errs.KindStateConflict, "serving predecessor workload image diverges")
+			}
 		}
 		state, stateErr := taskRunner.Run(ctx, runner.RunCmdOpts{
 			Name: DockerExecutable, Args: []string{"container", "inspect", "--format", "{{json .State}}", containerID},
@@ -225,6 +243,24 @@ func servingPredecessorProven(
 		return false, errs.New(errs.KindStateConflict, "serving predecessor workload count is ambiguous")
 	}
 	return true, nil
+}
+
+func sealedServingPredecessorRuntimeRole(service *agentpb.ComposeService) (string, error) {
+	role := ""
+	switch service.GetRole() {
+	case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON:
+		role = "singleton"
+	case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT:
+		role = "slot"
+	case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY:
+		role = "proxy"
+	default:
+		return "", errs.New(errs.KindValidationFailed, "serving predecessor runtime role is unsupported")
+	}
+	if expectedLabel(service.GetExpectedLabels(), "com.groundplane.runtime-role") != role {
+		return "", errs.New(errs.KindValidationFailed, "serving predecessor runtime role diverges")
+	}
+	return role, nil
 }
 
 func expectedLabel(labels []*agentpb.LabelPair, key string) string {
