@@ -27,8 +27,8 @@ func TestPrepareReleaseHookPublicationBindsInitialPostDeployScriptSetGeneration(
 	script.ScriptSetGeneration = generationID
 	sources := ScriptExecutionSources{
 		Revision: revision,
-		Tenant: Versioned[TenantRecord]{ReadRevision: revision},
-		Project: Versioned[ProjectRecord]{ReadRevision: revision},
+		Tenant:   Versioned[TenantRecord]{ReadRevision: revision},
+		Project:  Versioned[ProjectRecord]{ReadRevision: revision},
 		Environment: Versioned[EnvironmentRecord]{
 			Record: EnvironmentRecord{ID: record.EnvironmentID}, ReadRevision: revision,
 		},
@@ -36,7 +36,7 @@ func TestPrepareReleaseHookPublicationBindsInitialPostDeployScriptSetGeneration(
 			Record: ServiceRecord{Desired: core.Service{ID: record.ServiceID}}, ReadRevision: revision,
 		},
 		ScriptSet: Versioned[ScriptSetGenerationRecord]{
-			Record: ScriptSetGenerationRecord{EnvironmentID: record.EnvironmentID, GenerationID: generationID},
+			Record:   ScriptSetGenerationRecord{EnvironmentID: record.EnvironmentID, GenerationID: generationID},
 			Revision: 31, ReadRevision: revision,
 		},
 		Script: Versioned[ScriptRecord]{Record: script, Revision: 32, ReadRevision: revision},
@@ -51,13 +51,13 @@ func TestPrepareReleaseHookPublicationBindsInitialPostDeployScriptSetGeneration(
 		},
 		RenderInput: Versioned[ReleaseRenderInput]{
 			Record: ReleaseRenderInput{
-				ReleaseID: record.ReleaseID,
+				ReleaseID:  record.ReleaseID,
 				Projection: EnvironmentComposeProjection{RenderGeneration: record.RenderGeneration},
 			},
 			ReadRevision: revision,
 		},
 		DesiredHead: Versioned[EnvironmentBlueprintHead]{
-			Record: EnvironmentBlueprintHead{EnvironmentID: record.EnvironmentID, RevisionID: record.CurrentTaskID},
+			Record:   EnvironmentBlueprintHead{EnvironmentID: record.EnvironmentID, RevisionID: record.CurrentTaskID},
 			Revision: 34, ReadRevision: revision,
 		},
 		DesiredProjection: Versioned[EnvironmentComposeProjection]{

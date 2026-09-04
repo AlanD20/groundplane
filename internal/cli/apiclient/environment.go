@@ -263,7 +263,7 @@ func (c *Client) ApplyEnvironmentBlueprint(
 	path := "/api/v1/environments/" + id + "/blueprint"
 	params := &generated.BlueprintApplyParams{
 		IdempotencyKey: ids.NewULID(),
-		IfMatch: quoteBlueprintRevision(expectedRevision),
+		IfMatch:        quoteBlueprintRevision(expectedRevision),
 	}
 	response, err := client.BlueprintApplyWithBodyWithResponse(
 		ctx, id, params, contentType, bytes.NewReader(body),

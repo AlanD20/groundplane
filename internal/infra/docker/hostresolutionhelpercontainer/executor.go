@@ -122,8 +122,8 @@ func createOptions(image string, operation Operation) client.ContainerCreateOpti
 			WorkingDir: "/", NetworkDisabled: true,
 		},
 		HostConfig: &container.HostConfig{
-			NetworkMode: container.NetworkMode("none"),
-			RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyDisabled},
+			NetworkMode:    container.NetworkMode("none"),
+			RestartPolicy:  container.RestartPolicy{Name: container.RestartPolicyDisabled},
 			ReadonlyRootfs: true,
 			CapDrop:        []string{"ALL"},
 			CapAdd:         []string{"DAC_OVERRIDE"},

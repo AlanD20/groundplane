@@ -154,9 +154,9 @@ func (planner *ReleaseGroupBlueprintPlanner) AuthoringSpecs(
 			order[index] = name
 		}
 		specs[group.Name] = core.ReleaseGroupSpec{
-			Services: services,
-			Order: order,
-			Tag: group.DefaultTag,
+			Services:  services,
+			Order:     order,
+			Tag:       group.DefaultTag,
 			OnFailure: core.OnFailure(group.OnFailure),
 		}
 	}

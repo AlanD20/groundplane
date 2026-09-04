@@ -62,10 +62,10 @@ func mustDefinition(t *testing.T, actions []ActionDefinition) Definition {
 	t.Helper()
 	definition, err := NewDefinition(DefinitionInput{
 		Implementation: "test-router",
-		ConfigVariant:   "test-router-v1",
-		Provides:        []Capability{CapabilityHTTPRouter},
-		OwnerScopes:     []OwnerScope{OwnerScopeEnvironment},
-		Actions:         actions,
+		ConfigVariant:  "test-router-v1",
+		Provides:       []Capability{CapabilityHTTPRouter},
+		OwnerScopes:    []OwnerScope{OwnerScopeEnvironment},
+		Actions:        actions,
 	})
 	if err != nil {
 		t.Fatalf("NewDefinition() error = %v", err)

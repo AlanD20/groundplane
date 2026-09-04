@@ -212,7 +212,7 @@ func TestPrepareEnvironmentComponentTaskAllowsInitialProjectionAbsence(t *testin
 		environment.Record.ID,
 		[]EnvironmentBlueprintZoneChange{{Record: zone}},
 		[]EnvironmentComponentCandidateInput{{
-			Current: current,
+			Current:   current,
 			Candidate: candidate,
 		}},
 		now,
@@ -294,7 +294,7 @@ func TestPrepareEnvironmentComponentTaskUsesAppliedProjectionAuthority(t *testin
 	candidate := core.Component{
 		ID: component.Desired.ID, Owner: core.ComponentOwnerEnvironment,
 		OwnerID: environment.Record.ID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
-		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{ZoneID: zone.Desired.ID}},
+		Config:            core.ComponentConfig{Caddy: &core.CaddyComponentConfig{ZoneID: zone.Desired.ID}},
 		GeneratedServices: []string{ids.NewAt(ids.KindService, task.CreatedAt, 1523)},
 	}
 	zoneChanges := []EnvironmentBlueprintZoneChange{{Record: zone}}
@@ -373,7 +373,7 @@ func TestPrepareEnvironmentComponentTaskAllowsMixedAppliedAndNewZones(t *testing
 	component, err := NewComponentRecord(core.Component{
 		ID: ids.NewAt(ids.KindComponent, now, 1534), Owner: core.ComponentOwnerEnvironment,
 		OwnerID: environment.Record.ID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
-		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{ZoneID: existingZone.Desired.ID}},
+		Config:            core.ComponentConfig{Caddy: &core.CaddyComponentConfig{ZoneID: existingZone.Desired.ID}},
 		GeneratedServices: []string{serviceID}, PinnedIPv4: "10.40.14.6", Healthy: true,
 	})
 	if err != nil {
@@ -400,7 +400,7 @@ func TestPrepareEnvironmentComponentTaskAllowsMixedAppliedAndNewZones(t *testing
 		[]EnvironmentComponentCandidateInput{{Current: current, Candidate: core.Component{
 			ID: component.Desired.ID, Owner: core.ComponentOwnerEnvironment,
 			OwnerID: environment.Record.ID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
-			Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{ZoneID: newZone.Desired.ID}},
+			Config:            core.ComponentConfig{Caddy: &core.CaddyComponentConfig{ZoneID: newZone.Desired.ID}},
 			GeneratedServices: []string{serviceID},
 		}}}, now,
 	)

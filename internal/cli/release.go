@@ -61,13 +61,13 @@ func newReleaseCmd() *cobra.Command {
 
 func releaseFields(release apiTypes.ReleaseSummary) map[string]any {
 	return map[string]any{
-		"id":          release.ID,
-		"service_id":  release.ServiceID,
-		"image":       release.Image,
-		"tag":         release.Tag,
-		"state":       release.State,
-		"serving":     release.Serving,
-		"created_at":  release.CreatedAt,
+		"id":           release.ID,
+		"service_id":   release.ServiceID,
+		"image":        release.Image,
+		"tag":          release.Tag,
+		"state":        release.State,
+		"serving":      release.Serving,
+		"created_at":   release.CreatedAt,
 		"completed_at": release.CompletedAt,
 	}
 }

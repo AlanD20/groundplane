@@ -391,11 +391,11 @@ func loadScriptExecutionDesiredProjection(
 			corruptEnvironmentComposeProjection()
 	}
 	return Versioned[EnvironmentBlueprintHead]{
-		Record:   EnvironmentBlueprintHead{EnvironmentID: environmentID, RevisionID: headRevisionID},
-		Revision: headValue.ModRevision, ReadRevision: revision,
-	}, Versioned[EnvironmentComposeProjection]{
-		Record: projection, Revision: rootValue.ModRevision, ReadRevision: revision,
-	}, nil
+			Record:   EnvironmentBlueprintHead{EnvironmentID: environmentID, RevisionID: headRevisionID},
+			Revision: headValue.ModRevision, ReadRevision: revision,
+		}, Versioned[EnvironmentComposeProjection]{
+			Record: projection, Revision: rootValue.ModRevision, ReadRevision: revision,
+		}, nil
 }
 
 func resolveScriptExecutionNetworks(

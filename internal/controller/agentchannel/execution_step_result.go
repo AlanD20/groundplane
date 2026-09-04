@@ -72,7 +72,7 @@ func (s *Server) acknowledgeExecutionStepResult(
 	ack := &agentpb.ExecutionStepResultAck{
 		TaskId: request.GetTaskId(), AssignmentId: request.GetAssignmentId(),
 		OperationId: durable.GetOperationId(), PlanHash: append([]byte(nil), durable.GetPlanHash()...),
-		StepId: durable.GetStepId(),
+		StepId:               durable.GetStepId(),
 		ControlPayloadSha256: append([]byte(nil), durable.GetControlPayloadSha256()...),
 	}
 	if _, err := executionplan.ValidateExecutionStepResultAck(ack, request); err != nil {

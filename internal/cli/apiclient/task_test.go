@@ -33,9 +33,9 @@ func TestShowTaskUsesGeneratedOperation(t *testing.T) {
 				`{"id":"`+taskID+`","operation_id":"op_01ARZ3NDEKTSV4RRFFQ69G5FAV",`+
 					`"type":"deploy","target":"svc_01ARZ3NDEKTSV4RRFFQ69G5FAV","status":"running",`+
 					`"steps":[`+
-						`{"name":"operation-step","status":"completed","kind":"operation"},`+
-						`{"name":"script-step","status":"running","kind":"script",`+
-							`"script_id":"scr_01ARZ3NDEKTSV4RRFFQ69G5FAV","script_slug":"deploy-script"}]}`,
+					`{"name":"operation-step","status":"completed","kind":"operation"},`+
+					`{"name":"script-step","status":"running","kind":"script",`+
+					`"script_id":"scr_01ARZ3NDEKTSV4RRFFQ69G5FAV","script_slug":"deploy-script"}]}`,
 			),
 		)
 	}))

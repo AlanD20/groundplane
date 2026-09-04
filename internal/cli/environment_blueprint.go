@@ -77,8 +77,8 @@ func newEnvironmentBlueprintCmd() *cobra.Command {
 			for index, change := range validation.Changes {
 				items[index] = map[string]any{
 					"resource": change.Resource,
-					"key": change.Key,
-					"action": change.Action,
+					"key":      change.Key,
+					"action":   change.Action,
 				}
 			}
 			headers, rows := tabulateVia(app, items)

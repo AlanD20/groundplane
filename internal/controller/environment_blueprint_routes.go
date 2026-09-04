@@ -83,7 +83,7 @@ func (s *Server) registerEnvironmentBlueprints() {
 		}},
 		Responses: map[string]*huma.Response{strconv.Itoa(http.StatusOK): {
 			Description: http.StatusText(http.StatusOK),
-			Content: map[string]*huma.MediaType{"application/json": {Schema: validationSchema}},
+			Content:     map[string]*huma.MediaType{"application/json": {Schema: validationSchema}},
 		}},
 	}
 	huma.Register(s.API, validate, s.validateEnvironmentBlueprint)
