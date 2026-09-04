@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -54,5 +55,48 @@ func TestTaskMaterializationEnvironmentAcceptsClosedRemovalTargets(t *testing.T)
 	}
 	if _, _, err := taskMaterializationEnvironment(serviceTask); !isKind(err, errs.KindValidationFailed) {
 		t.Fatalf("taskMaterializationEnvironment(Service removal) error = %v", err)
+	}
+}
+
+func TestAttachDetachWriterClaimHasNoBlueprintAppliedAuthority(t *testing.T) {
+	// Rationale: Attach and Detach share only the generic Environment writer
+	// fence and must not read or CAS the Blueprint applied projection.
+	t.Parallel()
+	ctx := context.Background()
+	store := newMemoryTaskStore()
+	repository, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 4, 10, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 10)
+	for index, taskType := range []TaskType{TaskAttach, TaskDetach} {
+		task := TaskRecord{
+			ID: ids.NewAt(ids.KindTask, now, int64(index+11)), Executor: TaskExecutorAgent,
+			Type: taskType, RenderGeneration: 7,
+			Params: map[string]string{TaskMutationEnvironmentParam: environmentID},
+		}
+		writer, conditions, err := repository.prepareTaskMaterializationWriter(ctx, task, environmentID, 0)
+		if err != nil || len(conditions) != 0 || writer.BlueprintAppliedPredecessor != nil {
+			t.Fatalf("prepare %s writer claim = %#v, %#v, %v", taskType, writer, conditions, err)
+		}
+		if validateTaskMaterializationWriterForTask(writer, task, environmentID) != nil {
+			t.Fatalf("validate %s writer claim failed", taskType)
+		}
+		unexpected := taskMaterializationWriter(task, environmentID, &taskMaterializationAppliedPredecessor{})
+		if validateTaskMaterializationWriterForTask(unexpected, task, environmentID) == nil {
+			t.Fatalf("%s writer accepted unexpected Blueprint authority", taskType)
+		}
+	}
+	blueprint := TaskRecord{
+		ID: ids.NewAt(ids.KindTask, now, 13), Executor: TaskExecutorAgent,
+		Type: TaskUpdate, RenderGeneration: 1,
+		Owner:  TaskOwner{EnvironmentID: environmentID},
+		Params: map[string]string{TaskReleasePublicationParam: ids.NewULID()},
+	}
+	if validateTaskMaterializationWriterForTask(
+		taskMaterializationWriter(blueprint, environmentID, nil), blueprint, environmentID,
+	) == nil {
+		t.Fatal("Blueprint candidate writer accepted missing applied authority")
 	}
 }

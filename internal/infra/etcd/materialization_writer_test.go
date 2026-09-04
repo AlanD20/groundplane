@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -18,18 +19,22 @@ func TestTaskMaterializationWriterCodecIsStrict(t *testing.T) {
 	record := taskMaterializationWriterRecord{
 		EnvironmentID: ids.NewAt(ids.KindEnvironment, at, 710),
 		TaskID:        ids.NewAt(ids.KindTask, at, 711), RenderGeneration: 3,
+		BlueprintAppliedPredecessor: &taskMaterializationAppliedPredecessor{
+			Present: true, KeyRevision: 17,
+			RevisionID: ids.NewAt(ids.KindTask, at, 712), RenderGeneration: 2,
+		},
 	}
 	value, err := encodeTaskMaterializationWriter(record)
 	if err != nil {
 		t.Fatalf("encodeTaskMaterializationWriter() error = %v", err)
 	}
 	decoded, err := decodeTaskMaterializationWriter(value)
-	if err != nil || decoded != record {
+	if err != nil || !reflect.DeepEqual(decoded, record) {
 		t.Fatalf("decodeTaskMaterializationWriter() = %#v, %v", decoded, err)
 	}
 	for _, malformed := range [][]byte{
-		bytes.Replace(value, []byte(`"schema":1`), []byte(`"schema":1,"schema":1`), 1),
-		bytes.Replace(value, []byte(`"schema":1`), []byte(`"schema":1,"extra":true`), 1),
+		bytes.Replace(value, []byte(`"schema":2`), []byte(`"schema":2,"schema":2`), 1),
+		bytes.Replace(value, []byte(`"schema":2`), []byte(`"schema":2,"extra":true`), 1),
 	} {
 		if _, err := decodeTaskMaterializationWriter(malformed); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 			t.Fatalf("decodeTaskMaterializationWriter(malformed) error = %v", err)
@@ -83,12 +88,111 @@ func TestTaskRepositorySerializesMaterializationWithoutBlockingUnrelatedTasks(t 
 		t.Fatalf("AcknowledgeTask(first) error = %v", err)
 	}
 	assertTaskLifecycleValue(t, store, taskMaterializationWriterKey(environmentID), false)
+	applied := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+		EnvironmentID: environmentID, RevisionID: first.ID, RenderGeneration: 1,
+	})
+	appliedValue, err := encodeEnvironmentComposeProjection(applied)
+	if err != nil {
+		t.Fatal(err)
+	}
+	appliedTransaction, err := store.Transact(ctx, nil, []Mutation{{
+		Type: MutationPut, Key: environmentComposeProjectionKey(environmentID), Value: appliedValue,
+	}})
+	if err != nil || !appliedTransaction.Succeeded {
+		t.Fatalf("seed first applied projection = %#v, %v", appliedTransaction, err)
+	}
 
 	secondClaim, found, err := repository.ClaimNextTask(ctx, agentID, 4, at.Add(7*time.Second))
 	if err != nil || !found || secondClaim.Task.Record.ID != second.ID {
 		t.Fatalf("second ClaimNextTask() = %#v, %v, %v", secondClaim, found, err)
 	}
 	assertTaskLifecycleValue(t, store, taskMaterializationWriterKey(environmentID), true)
+}
+
+func TestTaskMaterializationWriterSealsExactAppliedPredecessor(t *testing.T) {
+	// Rationale: the live writer, rather than the desired-head seal, is the
+	// terminal CAS authority for the applied Compose predecessor.
+	ctx := context.Background()
+	store := newMemoryTaskStore()
+	repository, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := taskJournalTime().Add(48 * time.Hour)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 730)
+	predecessorTaskID := ids.NewAt(ids.KindTask, at, 731)
+	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+		EnvironmentID: environmentID, RevisionID: predecessorTaskID, RenderGeneration: 1,
+	})
+	value, err := encodeEnvironmentComposeProjection(projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seeded, err := store.Transact(ctx, nil, []Mutation{{
+		Type: MutationPut, Key: environmentComposeProjectionKey(environmentID), Value: value,
+	}})
+	if err != nil || !seeded.Succeeded {
+		t.Fatalf("seed applied predecessor = %#v, %v", seeded, err)
+	}
+	task := materializationLifecycleTask(at.Add(time.Second), environmentID, 3)
+	task.Params[TaskReleasePublicationParam] = ids.NewULID()
+	task.Params[EnvironmentDesiredRevisionParam] = task.ID
+	writer, conditions, err := repository.prepareTaskMaterializationWriter(ctx, task, environmentID, seeded.Revision)
+	if err != nil {
+		t.Fatalf("prepareTaskMaterializationWriter() error = %v", err)
+	}
+	if len(conditions) != 1 || conditions[0].ModRevision != seeded.Revision ||
+		writer.BlueprintAppliedPredecessor == nil ||
+		*writer.BlueprintAppliedPredecessor != (taskMaterializationAppliedPredecessor{
+			Present: true, KeyRevision: seeded.Revision,
+			RevisionID: predecessorTaskID, RenderGeneration: 1,
+		}) {
+		t.Fatalf("sealed writer = %#v, conditions = %#v", writer, conditions)
+	}
+	badGeneration := task
+	badGeneration.RenderGeneration = 1
+	if _, _, err := repository.prepareTaskMaterializationWriter(
+		ctx, badGeneration, environmentID, seeded.Revision,
+	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		t.Fatalf("bad generation error = %v", err)
+	}
+	rewritten, err := store.Transact(ctx, nil, []Mutation{{
+		Type: MutationPut, Key: environmentComposeProjectionKey(environmentID), Value: value,
+	}})
+	if err != nil || !rewritten.Succeeded {
+		t.Fatalf("rewrite applied predecessor = %#v, %v", rewritten, err)
+	}
+	encoded, err := encodeTaskMaterializationWriter(writer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim, err := store.Transact(ctx, conditions, []Mutation{{
+		Type: MutationPut, Key: taskMaterializationWriterKey(environmentID), Value: encoded,
+	}})
+	if err != nil || claim.Succeeded {
+		t.Fatalf("stale applied predecessor claim = %#v, %v", claim, err)
+	}
+}
+
+func TestTaskMaterializationWriterAllowsBlueprintAppliedAbsenceAfterEarlierFailure(t *testing.T) {
+	// Rationale: desired publication generation can advance while every earlier
+	// candidate compensated to runtime-applied absence.
+	ctx := context.Background()
+	store := newMemoryTaskStore()
+	repository, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := taskJournalTime().Add(72 * time.Hour)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 740)
+	task := materializationLifecycleTask(at, environmentID, 2)
+	task.Params[TaskReleasePublicationParam] = ids.NewULID()
+	task.Params[EnvironmentDesiredRevisionParam] = task.ID
+	writer, conditions, err := repository.prepareTaskMaterializationWriter(ctx, task, environmentID, 0)
+	if err != nil || len(conditions) != 1 || conditions[0].ModRevision != 0 ||
+		writer.BlueprintAppliedPredecessor == nil || writer.BlueprintAppliedPredecessor.Present {
+		t.Fatalf("generation-2 absence writer = %#v, %#v, %v", writer, conditions, err)
+	}
 }
 
 func TestTaskRepositoryScansPastAFullPageOfBlockedMaterializations(t *testing.T) {

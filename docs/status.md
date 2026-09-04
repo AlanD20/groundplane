@@ -616,6 +616,20 @@ applied Compose predecessor or absence authoritative until successful terminal
 Task acknowledgement. Exact reference-host Blueprint and Script acceptance
 remains pending.
 
+## Blueprint applied-predecessor authority (2026-09-04)
+
+Only a Blueprint candidate Environment update Task with release-publication
+authority now seals an independent nullable applied-Compose predecessor in its
+materialization writer. Generic Attach and Detach Tasks retain only the shared
+Environment writer fence and do not read or compare Blueprint generations. A
+candidate may validly observe applied absence at any positive desired generation;
+a present applied predecessor must carry a valid identity and a render generation
+strictly below the candidate, and its exact presence, key revision, identity, and
+generation are sealed before Agent effects. Unproven failure remains read-only,
+proven compensation terminalizes atomically, and retry chains retain the original
+predecessor authority without duplicate transaction compares. Focused etcd race
+proof passes; exact reference-host Blueprint acceptance remains pending.
+
 ## Script runner inherited image ownership evidence (2026-09-04)
 
 Script runner ownership validation now requires every sealed Environment value

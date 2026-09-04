@@ -747,14 +747,21 @@ func (repository *TaskRepository) claimNextTask(
 		}
 		var writerValue []byte
 		if candidate.writerKey != "" {
-			writerValue, err = encodeTaskMaterializationWriter(
-				taskMaterializationWriter(task, candidate.environmentID),
+			writer, writerConditions, writerErr := repository.prepareTaskMaterializationWriter(
+				ctx, task, candidate.environmentID, candidate.readRevision,
 			)
+			if writerErr != nil {
+				clear(runningValue)
+				clear(assignmentValue)
+				return TaskAssignment{}, false, writerErr
+			}
+			writerValue, err = encodeTaskMaterializationWriter(writer)
 			if err != nil {
 				clear(runningValue)
 				clear(assignmentValue)
 				return TaskAssignment{}, false, err
 			}
+			conditions = append(conditions, writerConditions...)
 			conditions = append(conditions, Condition{Key: candidate.writerKey})
 			mutations = append(mutations, Mutation{
 				Type: MutationPut, Key: candidate.writerKey, Value: writerValue,
@@ -1037,18 +1044,31 @@ func (repository *TaskRepository) ListAgentAssignments(
 			return nil, err
 		}
 		if materializes {
+			writerKeys := []string{taskMaterializationWriterKey(environmentID)}
+			if taskHasBlueprintCandidateAppliedAuthority(task) {
+				writerKeys = append(writerKeys, environmentComposeProjectionKey(environmentID))
+			}
 			writerRead, err := repository.store.GetMany(ctx, GetManyRequest{
-				Keys: []string{taskMaterializationWriterKey(environmentID)}, Revision: assignments.ReadRevision,
+				Keys: writerKeys, Revision: assignments.ReadRevision,
 			})
 			if err != nil {
 				return nil, err
 			}
-			if len(writerRead.Values) != 1 || writerRead.Values[0] == nil {
+			if len(writerRead.Values) != len(writerKeys) || writerRead.Values[0] == nil {
 				return nil, errs.New(errs.KindInternal, "assigned Task materialization writer is missing")
 			}
 			writer, err := decodeTaskMaterializationWriter(writerRead.Values[0].Value)
-			if err != nil || writer != taskMaterializationWriter(task, environmentID) {
+			if err != nil || validateTaskMaterializationWriterForTask(writer, task, environmentID) != nil {
 				return nil, corruptTaskMaterializationWriter()
+			}
+			if taskHasBlueprintCandidateAppliedAuthority(task) {
+				predecessor, predecessorErr := taskMaterializationAppliedPredecessorFromValue(
+					writerRead.Values[1], environmentID, task.RenderGeneration,
+				)
+				if predecessorErr != nil || writer.BlueprintAppliedPredecessor == nil ||
+					*writer.BlueprintAppliedPredecessor != predecessor {
+					return nil, corruptTaskMaterializationWriter()
+				}
 			}
 		}
 		result[index] = TaskAssignment{
@@ -1573,6 +1593,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			taskTimeoutIndexKey(task.ID, assignment.Deadline),
 		}
 		writerKey := ""
+		materializationWriter := taskMaterializationWriterRecord{}
 		if materializes {
 			writerKey = taskMaterializationWriterKey(materializationEnvironmentID)
 			companionKeys = append(companionKeys, writerKey)
@@ -1600,8 +1621,10 @@ func (repository *TaskRepository) acknowledgeTask(
 			if companions.Values[5] == nil {
 				return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task materialization writer is missing")
 			}
-			writer, err := decodeTaskMaterializationWriter(companions.Values[5].Value)
-			if err != nil || writer != taskMaterializationWriter(task, materializationEnvironmentID) {
+			materializationWriter, err = decodeTaskMaterializationWriter(companions.Values[5].Value)
+			if err != nil || validateTaskMaterializationWriterForTask(
+				materializationWriter, task, materializationEnvironmentID,
+			) != nil {
 				return Versioned[TaskRecord]{}, corruptTaskMaterializationWriter()
 			}
 		}
@@ -1661,7 +1684,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		blueprintCandidateChange := blueprintCandidateTerminalChange{}
 		if result != nil {
 			blueprintCandidateChange, err = repository.prepareBlueprintCandidateTerminalAcknowledgement(
-				ctx, task, assignment, terminalStatus, *result, agentID, terminalAt,
+				ctx, task, materializationWriter, assignment, terminalStatus, *result, agentID, terminalAt,
 				primaryAndAssignment.ReadRevision,
 			)
 			if err != nil {

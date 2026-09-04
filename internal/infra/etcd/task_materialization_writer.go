@@ -10,9 +10,17 @@ import (
 )
 
 type taskMaterializationWriterRecord struct {
-	EnvironmentID    string
-	TaskID           string
-	RenderGeneration int32
+	EnvironmentID               string
+	TaskID                      string
+	RenderGeneration            int32
+	BlueprintAppliedPredecessor *taskMaterializationAppliedPredecessor
+}
+
+type taskMaterializationAppliedPredecessor struct {
+	Present          bool   `json:"present"`
+	KeyRevision      int64  `json:"key_revision"`
+	RevisionID       string `json:"revision_id,omitempty"`
+	RenderGeneration uint64 `json:"render_generation"`
 }
 
 type taskMaterializationProjectionChange struct {
@@ -22,10 +30,128 @@ type taskMaterializationProjectionChange struct {
 }
 
 type taskMaterializationWriterJSON struct {
-	Schema           int    `json:"schema"`
-	EnvironmentID    string `json:"environment_id"`
-	TaskID           string `json:"task_id"`
-	RenderGeneration int32  `json:"render_generation"`
+	Schema                      int                                    `json:"schema"`
+	EnvironmentID               string                                 `json:"environment_id"`
+	TaskID                      string                                 `json:"task_id"`
+	RenderGeneration            int32                                  `json:"render_generation"`
+	BlueprintAppliedPredecessor *taskMaterializationAppliedPredecessor `json:"blueprint_applied_predecessor"`
+}
+
+func (repository *TaskRepository) prepareTaskMaterializationWriter(
+	ctx context.Context,
+	record TaskRecord,
+	environmentID string,
+	readRevision int64,
+) (taskMaterializationWriterRecord, []Condition, error) {
+	if !taskHasBlueprintCandidateAppliedAuthority(record) {
+		writer := taskMaterializationWriter(record, environmentID, nil)
+		if err := validateTaskMaterializationWriterForTask(writer, record, environmentID); err != nil {
+			return taskMaterializationWriterRecord{}, nil, err
+		}
+		return writer, nil, nil
+	}
+	predecessor, predecessorCondition, err := repository.readTaskMaterializationAppliedPredecessor(
+		ctx, environmentID, record.RenderGeneration, readRevision,
+	)
+	if err != nil {
+		return taskMaterializationWriterRecord{}, nil, err
+	}
+	conditions := []Condition{predecessorCondition}
+	if record.RetryOf != "" && record.Type == TaskUpdate && record.Params[TaskReleasePublicationParam] != "" {
+		authority, authorityCondition, authorityErr := repository.blueprintCandidateAttemptAuthority(
+			ctx, record, readRevision,
+		)
+		if authorityErr != nil {
+			return taskMaterializationWriterRecord{}, nil, authorityErr
+		}
+		if authority.AppliedPredecessor != predecessor {
+			return taskMaterializationWriterRecord{}, nil, errs.New(
+				errs.KindStateConflict,
+				"blueprint retry applied predecessor changed",
+			)
+		}
+		conditions = append(conditions, authorityCondition)
+	}
+	writer := taskMaterializationWriter(record, environmentID, &predecessor)
+	if err := validateTaskMaterializationWriterForTask(writer, record, environmentID); err != nil {
+		return taskMaterializationWriterRecord{}, nil, err
+	}
+	return writer, conditions, nil
+}
+
+func (repository *TaskRepository) readTaskMaterializationAppliedPredecessor(
+	ctx context.Context,
+	environmentID string,
+	candidateGeneration int32,
+	readRevision int64,
+) (taskMaterializationAppliedPredecessor, Condition, error) {
+	key := environmentComposeProjectionKey(environmentID)
+	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: readRevision})
+	if err != nil {
+		return taskMaterializationAppliedPredecessor{}, Condition{}, err
+	}
+	if read == nil || read.ReadRevision != readRevision || len(read.Values) != 1 {
+		return taskMaterializationAppliedPredecessor{}, Condition{}, errs.New(
+			errs.KindInternal,
+			"task applied predecessor read is incomplete",
+		)
+	}
+	predecessor, err := taskMaterializationAppliedPredecessorFromValue(
+		read.Values[0], environmentID, candidateGeneration,
+	)
+	if err != nil {
+		return taskMaterializationAppliedPredecessor{}, Condition{}, err
+	}
+	return predecessor, Condition{Key: key, ModRevision: keyValueRevision(read.Values[0])}, nil
+}
+
+func taskMaterializationAppliedPredecessorFromValue(
+	value *KeyValue,
+	environmentID string,
+	candidateGeneration int32,
+) (taskMaterializationAppliedPredecessor, error) {
+	if candidateGeneration <= 0 {
+		return taskMaterializationAppliedPredecessor{}, errs.New(
+			errs.KindStateConflict,
+			"task candidate render generation is invalid",
+		)
+	}
+	if value == nil {
+		return taskMaterializationAppliedPredecessor{}, nil
+	}
+	projection, err := decodeEnvironmentComposeProjection(value.Value)
+	if err != nil || projection.EnvironmentID != environmentID ||
+		validateStableID(ids.KindTask, projection.RevisionID) != nil ||
+		projection.RenderGeneration >= uint64(candidateGeneration) {
+		return taskMaterializationAppliedPredecessor{}, errs.New(
+			errs.KindStateConflict,
+			"task applied predecessor identity is invalid",
+		)
+	}
+	return taskMaterializationAppliedPredecessor{
+		Present: true, KeyRevision: value.ModRevision,
+		RevisionID: projection.RevisionID, RenderGeneration: projection.RenderGeneration,
+	}, nil
+}
+
+func validateTaskMaterializationWriterForTask(
+	writer taskMaterializationWriterRecord,
+	record TaskRecord,
+	environmentID string,
+) error {
+	if writer.EnvironmentID != environmentID || writer.TaskID != record.ID ||
+		writer.RenderGeneration != record.RenderGeneration {
+		return corruptTaskMaterializationWriter()
+	}
+	blueprintCandidate := taskHasBlueprintCandidateAppliedAuthority(record)
+	if blueprintCandidate != (writer.BlueprintAppliedPredecessor != nil) {
+		return corruptTaskMaterializationWriter()
+	}
+	return validateTaskMaterializationWriter(writer)
+}
+
+func taskHasBlueprintCandidateAppliedAuthority(record TaskRecord) bool {
+	return record.Type == TaskUpdate && record.Params[TaskReleasePublicationParam] != ""
 }
 
 func taskMaterializationEnvironment(record TaskRecord) (string, bool, error) {
@@ -184,9 +310,19 @@ func taskEnvironmentWriter(record TaskRecord) (string, bool, error) {
 	return mutationEnvironment, true, nil
 }
 
-func taskMaterializationWriter(record TaskRecord, environmentID string) taskMaterializationWriterRecord {
+func taskMaterializationWriter(
+	record TaskRecord,
+	environmentID string,
+	predecessor *taskMaterializationAppliedPredecessor,
+) taskMaterializationWriterRecord {
+	var sealedPredecessor *taskMaterializationAppliedPredecessor
+	if predecessor != nil {
+		sealed := *predecessor
+		sealedPredecessor = &sealed
+	}
 	return taskMaterializationWriterRecord{
 		EnvironmentID: environmentID, TaskID: record.ID, RenderGeneration: record.RenderGeneration,
+		BlueprintAppliedPredecessor: sealedPredecessor,
 	}
 }
 
@@ -195,8 +331,9 @@ func encodeTaskMaterializationWriter(record taskMaterializationWriterRecord) ([]
 		return nil, err
 	}
 	return json.Marshal(taskMaterializationWriterJSON{
-		Schema: 1, EnvironmentID: record.EnvironmentID,
+		Schema: 2, EnvironmentID: record.EnvironmentID,
 		TaskID: record.TaskID, RenderGeneration: record.RenderGeneration,
+		BlueprintAppliedPredecessor: record.BlueprintAppliedPredecessor,
 	})
 }
 
@@ -207,11 +344,12 @@ func decodeTaskMaterializationWriter(value []byte) (taskMaterializationWriterRec
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	decoder.DisallowUnknownFields()
 	var data taskMaterializationWriterJSON
-	if err := decoder.Decode(&data); err != nil || requireJSONEOF(decoder) != nil || data.Schema != 1 {
+	if err := decoder.Decode(&data); err != nil || requireJSONEOF(decoder) != nil || data.Schema != 2 {
 		return taskMaterializationWriterRecord{}, corruptTaskMaterializationWriter()
 	}
 	record := taskMaterializationWriterRecord{
 		EnvironmentID: data.EnvironmentID, TaskID: data.TaskID, RenderGeneration: data.RenderGeneration,
+		BlueprintAppliedPredecessor: data.BlueprintAppliedPredecessor,
 	}
 	if err := validateTaskMaterializationWriter(record); err != nil {
 		return taskMaterializationWriterRecord{}, corruptTaskMaterializationWriter()
@@ -222,6 +360,21 @@ func decodeTaskMaterializationWriter(value []byte) (taskMaterializationWriterRec
 func validateTaskMaterializationWriter(record taskMaterializationWriterRecord) error {
 	if validateStableID(ids.KindEnvironment, record.EnvironmentID) != nil ||
 		validateStableID(ids.KindTask, record.TaskID) != nil || record.RenderGeneration <= 0 {
+		return corruptTaskMaterializationWriter()
+	}
+	if record.BlueprintAppliedPredecessor == nil {
+		return nil
+	}
+	predecessor := *record.BlueprintAppliedPredecessor
+	if !predecessor.Present {
+		if predecessor.KeyRevision != 0 || predecessor.RevisionID != "" || predecessor.RenderGeneration != 0 {
+			return corruptTaskMaterializationWriter()
+		}
+		return nil
+	}
+	if !predecessor.Present || predecessor.KeyRevision <= 0 ||
+		validateStableID(ids.KindTask, predecessor.RevisionID) != nil ||
+		predecessor.RenderGeneration >= uint64(record.RenderGeneration) {
 		return corruptTaskMaterializationWriter()
 	}
 	return nil
