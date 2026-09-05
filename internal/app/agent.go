@@ -24,6 +24,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/docker/materializerrunner"
 	"github.com/AlanD20/groundplane/internal/infra/docker/scriptrunner"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	mobyclient "github.com/moby/moby/client"
 )
 
 const DefaultAgentConfigPath = agentprotocol.RuntimeConfigPath
@@ -66,6 +67,7 @@ type agentRuntimeResources struct {
 	hostResolution         *hostresolutionhelpercontainer.Executor
 	logs                   *containerlogs.Reader
 	scripts                *agent.DockerScriptRuntime
+	images                 *mobyclient.Client
 }
 
 type agentComposeResources struct {
@@ -258,6 +260,9 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 	if err := client.SetScriptRuntime(scripts); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
+	if err := configureAgentWorkloadImages(ctx, client, runtimeResources); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
 
 	return &Agent{Config: cfg, Logger: logger, Client: client, resources: runtimeResources}, nil
 }
@@ -275,6 +280,10 @@ func (resources *agentRuntimeResources) Close() error {
 		return nil
 	}
 	var logErr, scriptErr, hostResolutionErr, managedConfigErr, dnsObserverErr, materializerErr, directoryErr, composeErr error
+	var imageErr error
+	if resources.images != nil {
+		imageErr = resources.images.Close()
+	}
 	if resources.logs != nil {
 		logErr = resources.logs.Close()
 	}
@@ -300,6 +309,7 @@ func (resources *agentRuntimeResources) Close() error {
 		composeErr = resources.compose.Close()
 	}
 	if joined := errors.Join(
+		imageErr,
 		logErr,
 		scriptErr,
 		hostResolutionErr,
