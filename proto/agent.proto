@@ -46,6 +46,7 @@ message AgentMessage {
     LogEnd log_end = 8;
     LogReady log_ready = 9;
     ScriptCheckpointRequest script_checkpoint_request = 10;
+    WorkloadImageResolutionResult workload_image_resolution_result = 11;
     ExecutionStepResultRequest execution_step_result_request = 19;
   }
 }
@@ -56,6 +57,48 @@ message Ready {
   string operating_system = 3;
   string architecture = 4;
   string architecture_variant = 5;
+}
+
+// Ephemeral read-only image lookup; never an execution Task or pull request.
+message WorkloadImageSelector {
+  oneof selector {
+    string requested_reference = 1;
+    string local_image_id = 2;
+  }
+}
+
+message ResolveWorkloadImages {
+  string request_id = 1;
+  repeated WorkloadImageSelector selectors = 2;
+}
+
+message WorkloadImageResolution {
+  WorkloadImageSelector selector = 1;
+  string local_image_id = 2;
+}
+
+message WorkloadImageResolutions {
+  repeated WorkloadImageResolution resolutions = 1;
+}
+
+enum WorkloadImageResolutionFailureKind {
+  WORKLOAD_IMAGE_RESOLUTION_FAILURE_KIND_UNSPECIFIED = 0;
+  WORKLOAD_IMAGE_RESOLUTION_FAILURE_KIND_NOT_FOUND = 1;
+  WORKLOAD_IMAGE_RESOLUTION_FAILURE_KIND_IDENTITY_MISMATCH = 2;
+  WORKLOAD_IMAGE_RESOLUTION_FAILURE_KIND_OBSERVATION_FAILED = 3;
+}
+
+message WorkloadImageResolutionFailure {
+  optional uint32 selector_ordinal = 1;
+  WorkloadImageResolutionFailureKind kind = 2;
+}
+
+message WorkloadImageResolutionResult {
+  string request_id = 1;
+  oneof outcome {
+    WorkloadImageResolutions success = 2;
+    WorkloadImageResolutionFailure failure = 3;
+  }
 }
 
 message TaskEvent {
@@ -281,6 +324,7 @@ message ControllerMessage {
     LogCancel log_cancel = 9;
     ManagedConfigTransfer managed_config_transfer = 10;
     ScriptCheckpointAck script_checkpoint_ack = 11;
+    ResolveWorkloadImages resolve_workload_images = 12;
     ExecutionStepResultAck execution_step_result_ack = 21;
     TaskEventAck task_event_ack = 22;
   }

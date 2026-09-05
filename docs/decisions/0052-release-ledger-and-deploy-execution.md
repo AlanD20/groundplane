@@ -443,10 +443,11 @@ selectors. It is ephemeral machine coordination, not an operator capability,
 Task, durable preview, or new generic host-execution surface. The Controller
 does not read workload Docker state itself.
 
-The future protobuf change adds one `ResolveWorkloadImages` request and one
-`WorkloadImageResolutionResult` response to the existing stream envelopes;
-protobuf field numbers are allocated only with that implementation change, not
-by this ADR. The request carries `request_id` plus `selectors[]`. Each selector
+The protobuf contract defines one `ResolveWorkloadImages` request and one
+`WorkloadImageResolutionResult` response in the existing stream envelopes
+(Controller field 12 and Agent field 11). Stream dispatch and prepublication
+integration remain required before this exchange is operational.
+The request carries `request_id` plus `selectors[]`. Each selector
 is a closed union of exactly one `requested_reference` for a new candidate or
 one `local_image_id` for historical, prior, retry, and pre-mutation validation.
 The result repeats `request_id` and is a closed union of either ordered
@@ -454,7 +455,7 @@ The result repeats `request_id` and is a closed union of either ordered
 returns `local_image_id`. A failure carries a required zero-based
 `selector_ordinal` in `0..N-1` and exactly one of `not_found`,
 `identity_mismatch`, or `observation_failed`; it carries no partial successes.
-The future protobuf ordinal is an optional scalar whose presence is mandatory,
+The protobuf ordinal is an optional scalar whose presence is mandatory,
 so ordinal zero is distinguishable from an omitted field.
 
 `request_id` is exactly 32 lowercase hexadecimal ASCII characters encoding 16
