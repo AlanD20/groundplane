@@ -36,11 +36,15 @@ CLI, helper binaries, and managed images for both platforms. A platform may
 not be marked current until both variants pass their platform-specific release
 checks.
 
-### Bind one release to both image children
+### Bind one release to both supported image children
 
-A Groundplane-managed image reference uses an OCI index digest, not a mutable
-tag and not a platform child digest. The index contains exactly one runnable
-image manifest for each supported platform. Registry readback supplies every
+A Groundplane-published and controlled managed image index uses an OCI index
+digest, not a mutable tag and not a platform child digest. It contains exactly
+two runnable image manifests: one for each supported platform. This remains
+true whether Groundplane built those children or publishes unchanged vendor
+images. A missing, duplicate, ambiguous, or additional runnable child is a
+release error. Other non-runnable descriptors do not count as runnable
+children and never gain execution authority. Registry readback supplies every
 digest. Source documentation never predicts a post-push digest.
 
 Every managed-image release record contains this ordered array:
@@ -66,16 +70,48 @@ platforms: [
 ]
 ```
 
-The upstream authenticated descriptor decides whether the ARM64 variant is
-`"v8"` or `null`. Groundplane does not invent a variant. The release record
+The authenticated AMD64 descriptor has no variant. The authenticated ARM64
+descriptor decides whether its variant is `"v8"` or `null`. Every other
+variant is rejected. Groundplane does not invent a variant. The release record
 also binds the managed repository and the managed index digest. Its existing
 domain-separated release digest covers the complete two-item array.
 
 An AdapterRevision or another executable release identity binds the complete
 multi-platform release. It is not different per host architecture. At runtime,
 the Agent selects the entry that matches its compiled host architecture and
-verifies the selected child before execution. A missing, duplicate, or extra
-runnable platform child is a release error.
+verifies the selected child and config before execution.
+
+Compiled third-party images use the same two-platform execution authority but
+do not claim that Groundplane controls the contents of the vendor's pinned
+upstream index. Only that vendor-owned index may contain descriptors for
+unsupported platforms and non-runnable artifacts such as attestations without
+violating Groundplane's two-runnable-child publication rule. Those descriptors
+are ignored for selection. They do not authorize execution, become fallback
+candidates, or add platform support.
+
+For each compiled third-party image, the catalog binds exactly one
+`linux/amd64` child with no variant and exactly one `linux/arm64` child whose
+authenticated variant is either `"v8"` or absent, selected from the
+hash-verified upstream index. All other variants are rejected. Each binding
+contains the authenticated descriptor's variant and child digest. Registry
+readback then obtains the child manifest and the exact config blob it
+references, verifies the config blob bytes against that digest, and binds the
+verified config digest in the catalog. The config's operating system and
+architecture must agree with both the authenticated index descriptor and the
+catalog entry. The same child digest or config digest cannot satisfy both
+supported architectures.
+
+The immutable artifact reference remains the registry-readback index digest;
+the selected child manifest and its config blob are separate immutable
+identities.
+
+Selection fails closed when a supported platform descriptor is missing,
+duplicated, or ambiguous, or when the compiled repository, index digest,
+platform, variant, child digest, config digest, config bytes, or config
+operating system and architecture differs from registry readback. A platform
+mismatch, unsupported variant, or incompatible variant fails closed.
+Unsupported descriptors are never accepted as substitutes. There is no
+platform fallback or emulation.
 
 ### Keep one-host authority
 
@@ -110,5 +146,11 @@ schema with no compatibility reader.
 - Operators can install one Groundplane release on either supported host.
 - Managed images keep one immutable release identity across both platforms.
 - Release automation must build, push, read back, and test two image children.
+- Compiled third-party catalogs must bind and verify the two supported children
+  and their config digests without treating other upstream descriptors as
+  executable authority.
 - The MVP does not gain multi-host scheduling, emulation, or additional
   architectures.
+- The required compiled-catalog correction remains pending. This decision does
+  not claim that the correction is deployed or that dual-platform runtime
+  support has passed its required proof.
