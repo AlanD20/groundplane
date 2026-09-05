@@ -176,7 +176,7 @@ ci: console | $(BIN_DIR)
 	$(MAKE) tidy
 	git diff --exit-code go.mod go.sum go.work component-sdk/go.mod registered-components/go.mod
 	test -z "$$(gofmt -l .)"
-	test -z "$$(golines --max-len=120 --no-reformat-tags --list-files ./internal/ ./pkg/ ./cmd/ ./component-sdk/ ./registered-components/ ./console/)"
+	test -z "$$(go tool golines --max-len=120 --no-reformat-tags --list-files ./internal/ ./pkg/ ./cmd/ ./component-sdk/ ./registered-components/ ./console/)"
 	$(MAKE) architecture-check
 	$(MAKE) component-modules-verify
 	GOTOOLCHAIN=go1.26.0 go tool staticcheck -tags groundplane_console ./...

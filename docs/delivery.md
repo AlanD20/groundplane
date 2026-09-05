@@ -132,8 +132,9 @@ make ci
 
 `make ci` is the local mirror of GitHub Actions. It verifies exact Node
 `24.19.0` and npm `11.17.0`, runs `npm ci`, builds and verifies the Vite output,
-then runs tidy, formatting, `make architecture-check`, repository-pinned
-Staticcheck 2026.1, tagged vet and race tests, and the tagged production
+then runs tidy, formatting through module-pinned `golines`,
+`make architecture-check`, module-pinned Staticcheck 2026.1, tagged vet and
+race tests, and the tagged production
 Controller build. The architecture gate enforces ADR 0056's import direction,
 module placement, interface and conversion rules, generated provenance, and
 non-growing oversized-file baseline. Its final release smoke removes

@@ -14,13 +14,12 @@ Bootstrap a checkout from the repository root:
 
 ```sh
 go mod download
-go install github.com/segmentio/golines@v0.12.2
 cd console && npm ci
 ```
 
-Keep `$(go env GOPATH)/bin` on `PATH` so `make ci` can invoke the pinned
-`golines` binary. GitHub Actions installs the same version before running the
-identical gate.
+Go-backed repository tools are pinned by the root `go.mod` tool directives and
+run through `go tool`, including `golines` v0.12.2. Do not install global
+copies or rely on `PATH`; GitHub Actions uses the same main-module graph.
 
 Do not install `protoc-gen-go` or `protoc-gen-go-grpc` globally. Their exact
 versions are Go 1.26 tool dependencies in `go.mod`, and `make proto` resolves
