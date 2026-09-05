@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -244,6 +245,89 @@ func TestBlueprintFinalRecoveryAcknowledgementIsAtomicReplayableAndCleansAuthori
 		TaskStatusCompleted, changed, task.CreatedAt.Add(11*time.Minute),
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("mismatched final recovery replay error = %v", err)
+	}
+}
+
+// Rationale: recovery replay must reuse Task-result equality without weakening optional authority identity.
+func TestReleaseRecoveryAbsenceEvidenceEqualityUsesCanonicalTaskResultSemantics(t *testing.T) {
+	left := &TaskCandidateAbsenceEvidence{
+		AssignmentID: "assignment", PlanHash: strings.Repeat("a", 64), AuthoritySHA256: strings.Repeat("b", 64),
+		ComposeProjectName: "project", CandidateArtifactID: "artifact", AbsenceProven: true,
+	}
+	right := cloneTaskCandidateAbsenceEvidence(left)
+	right.Candidates = []TaskCandidateAbsenceCandidate{}
+	if !taskCandidateAbsenceEvidenceEqual(left, right) {
+		t.Fatal("canonical absence evidence equality distinguished nil and empty candidates")
+	}
+	if taskCandidateAbsenceEvidenceEqual(nil, right) {
+		t.Fatal("canonical absence evidence equality collapsed optional evidence presence")
+	}
+	right.AuthoritySHA256 = strings.Repeat("c", 64)
+	if taskCandidateAbsenceEvidenceEqual(left, right) {
+		t.Fatal("canonical absence evidence equality accepted changed authority")
+	}
+}
+
+// Rationale: completed Blueprint replay rejects every terminal or retention identity drift, including expiry.
+func TestBlueprintTerminalReplayTypedEqualityPreservesExactLedgerIdentity(t *testing.T) {
+	if sameBlueprintAttachStrings(nil, []string{}) ||
+		!sameBlueprintAttachStrings([]string{"first", "second"}, []string{"first", "second"}) ||
+		sameBlueprintAttachStrings([]string{"first", "second"}, []string{"second", "first"}) {
+		t.Fatal("terminal string equality did not preserve nil or ordered identity")
+	}
+	base := domain.RollbackMaterial{ReleaseID: "release", Status: domain.RetentionAvailable,
+		References: []string{"image@sha256:digest"}, Digest: "digest", Revision: 7}
+	tests := []struct {
+		name   string
+		mutate func(*domain.RollbackMaterial)
+	}{
+		{"release id", func(value *domain.RollbackMaterial) { value.ReleaseID = "changed" }},
+		{"status", func(value *domain.RollbackMaterial) { value.Status = domain.RetentionExpired }},
+		{"references", func(value *domain.RollbackMaterial) { value.References[0] = "changed" }},
+		{"digest", func(value *domain.RollbackMaterial) { value.Digest = "changed" }},
+		{"revision", func(value *domain.RollbackMaterial) { value.Revision++ }},
+	}
+	if !blueprintCompletedRollbackMaterialEqual(base, base) {
+		t.Fatal("identical completed rollback material was unequal")
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			changed := base
+			changed.References = slices.Clone(base.References)
+			test.mutate(&changed)
+			if blueprintCompletedRollbackMaterialEqual(base, changed) {
+				t.Fatalf("rollback material equality accepted drifted %s", test.name)
+			}
+		})
+	}
+	emptyReferences := base
+	emptyReferences.References = []string{}
+	nilReferences := emptyReferences
+	nilReferences.References = nil
+	if blueprintCompletedRollbackMaterialEqual(emptyReferences, nilReferences) {
+		t.Fatal("rollback material equality collapsed nil and empty references")
+	}
+	expiredUTC := time.Date(2026, time.September, 4, 12, 30, 0, 0, time.UTC)
+	expiredFixedZone := expiredUTC.In(time.FixedZone("UTC", 0))
+	withExpiry := func(expiredAt *time.Time) domain.RollbackMaterial {
+		value := base
+		value.ExpiredAt = expiredAt
+		return value
+	}
+	for _, test := range []struct {
+		name        string
+		left, right domain.RollbackMaterial
+	}{
+		{"left expiry", withExpiry(&expiredUTC), base},
+		{"right expiry", base, withExpiry(&expiredUTC)},
+		{"both same expiry", withExpiry(&expiredUTC), withExpiry(&expiredUTC)},
+		{"both separately allocated zones", withExpiry(&expiredUTC), withExpiry(&expiredFixedZone)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if blueprintCompletedRollbackMaterialEqual(test.left, test.right) {
+				t.Fatal("completed rollback material equality accepted non-null expiry")
+			}
+		})
 	}
 }
 

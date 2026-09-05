@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"reflect"
 	"slices"
 	"time"
 
@@ -111,10 +110,8 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 		return blueprintCandidateTerminalChange{}, corruptTaskMaterializationWriter()
 	}
 	if terminalStatus != TaskStatusCompleted && result.ReconciliationRequired {
-		return blueprintCandidateTerminalChange{}, errs.New(
-			errs.KindReleaseRecoveryRequired,
-			"Blueprint candidate restoration is not yet proven",
-		)
+		return blueprintCandidateTerminalChange{}, errs.New(errs.KindReleaseRecoveryRequired,
+			"Blueprint candidate restoration is not yet proven")
 	}
 	writerCondition, err := repository.blueprintCandidateLiveWriterAuthority(ctx, task, writer, revision)
 	if err != nil {
@@ -140,10 +137,8 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 		if result.FailedStepID == "" && result.Diagnostic == TaskResultDiagnosticTimeoutBeforeEffect {
 			compensationResult = nil
 		} else if result.FailedStepID == "" || !taskContainsStep(task, result.FailedStepID) {
-			return blueprintCandidateTerminalChange{}, errs.New(
-				errs.KindReleaseRecoveryRequired,
-				"Blueprint failure lacks an exact failed step",
-			)
+			return blueprintCandidateTerminalChange{}, errs.New(errs.KindReleaseRecoveryRequired,
+				"Blueprint failure lacks an exact failed step")
 		} else {
 			compensationResult = &result
 		}
@@ -428,8 +423,8 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 		}
 		if decodeErr != nil || retentionErr != nil || terminal.ReleaseID != intent.ID ||
 			terminal.Outcome != domain.StateCompleted || terminal.FinalServingReleaseID != intent.ID ||
-			!reflect.DeepEqual(terminal.EffectDigests, expectedEffectDigests) ||
-			!reflect.DeepEqual(terminal.AttemptIDs, expectedAttemptIDs) ||
+			!sameBlueprintAttachStrings(terminal.EffectDigests, expectedEffectDigests) ||
+			!sameBlueprintAttachStrings(terminal.AttemptIDs, expectedAttemptIDs) ||
 			terminal.RollbackMaterialDigest != retention.Digest ||
 			!terminal.CompletedAt.Equal(*task.FinishedAt) {
 			return corruptReleaseRecord()
@@ -474,7 +469,7 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 			}
 			expectedRetention.Digest, _ = domain.Digest(expectedRetention.References)
 		}
-		if !reflect.DeepEqual(retention, expectedRetention) {
+		if !blueprintCompletedRollbackMaterialEqual(retention, expectedRetention) {
 			return corruptReleaseRecord()
 		}
 	}
@@ -485,7 +480,11 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 	}
 	return nil
 }
-
+func blueprintCompletedRollbackMaterialEqual(left, right domain.RollbackMaterial) bool {
+	return left.ReleaseID == right.ReleaseID && left.Status == right.Status && left.Digest == right.Digest &&
+		left.Revision == right.Revision && sameBlueprintAttachStrings(left.References, right.References) &&
+		left.ExpiredAt == nil && right.ExpiredAt == nil
+}
 func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 	ctx context.Context,
 	source TaskRecord,

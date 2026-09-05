@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"math"
-	"reflect"
 	"slices"
 	"time"
 
@@ -478,7 +477,7 @@ func (repository *TaskRepository) normalizeReleaseRecoveryTerminalReplay(
 	if !slices.Equal(task.Result.RecreateEvidence, result.RecreateEvidence) {
 		return status, nil, true, errs.New(errs.KindStateConflict, "terminal release recovery replay recreate evidence changed")
 	}
-	if !reflect.DeepEqual(task.Result.CandidateAbsenceEvidence, result.CandidateAbsenceEvidence) {
+	if !taskCandidateAbsenceEvidenceEqual(task.Result.CandidateAbsenceEvidence, result.CandidateAbsenceEvidence) {
 		return status, nil, true, errs.New(errs.KindStateConflict, "terminal release recovery replay absence evidence changed")
 	}
 	keys := []string{releaseRecoveryKey(task.ID), taskActiveOperationKey(task.OperationID)}
