@@ -61,13 +61,9 @@ import { ActivityIcon } from '@/components/common/activity-icon'
 import { EnvironmentConnectorManager } from '@/features/connectors/environment-connector-manager'
 import { EnvironmentVolumeManager } from '@/features/volume/environment-volume-manager'
 import { ReleaseGroupsPanel } from '@/features/release-group/release-group-surface'
-import {
-  RemoveDesiredServiceButton,
-  ServiceOperationDialog,
-  ServiceRuntimeActions,
-  ServiceStateBadges,
-  type ServiceOperation,
-} from '@/features/service/service-runtime-actions'
+import { ServiceStateBadges } from '@/features/service/service-runtime-actions'
+import { ServiceDetailsDrawer, DetailRow } from './service-details-drawer'
+import { ServicesList } from './services-list'
 import { cn, newId } from '@/lib/utils'
 import type { ActivityEntry, Attach, BackupPolicyReplacement, BackupPolicySourceInput, BackupPolicySourceRecord, Environment, EnvironmentEntry, Route, Service, TaskJournalScope, TaskStep, Zone } from '@/lib/types'
 
@@ -814,20 +810,11 @@ function ServiceCard({ service, env }: { service: Service; env: Environment }) {
   const store = useStore()
   const attached = env.attaches.filter((a) => a.service === service.name)
   const [open, setOpen] = useState(false)
-	const [detailService, setDetailService] = useState(service)
-	const [detailError, setDetailError] = useState<string>()
   return (
     <>
       <button
         type="button"
-        onClick={() => {
-			setDetailService(service)
-			setDetailError(undefined)
-			setOpen(true)
-			void store.getService(service.id).then(setDetailService).catch((error: unknown) => {
-				setDetailError(error instanceof Error ? error.message : 'Unable to load Service details')
-			})
-		}}
+        onClick={() => setOpen(true)}
         title={`Edit ${service.name}`}
         className="flex items-start gap-2 rounded-lg border border-border bg-surface px-2 py-1.5 text-left transition-colors hover:border-ring"
       >
@@ -880,10 +867,9 @@ function ServiceCard({ service, env }: { service: Service; env: Environment }) {
           </div>
         </div>
       </button>
-		<ServiceCardDialog
+		<ServiceDetailsDrawer
 			env={env}
-			service={detailService}
-			detailError={detailError}
+			service={service}
 			open={open}
 			onOpenChange={setOpen}
 		/>
@@ -919,161 +905,9 @@ function ServicesPanel({ env }: { env: Environment }) {
           action={<ServiceFormDialog env={env} />}
         />
       ) : (
-        <div role="list" aria-label="Environment services" className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {env.services.map((service) => (
-            <div key={service.id} role="listitem" className="min-w-0 rounded-xl border border-border bg-card p-2">
-              <ServiceCard service={service} env={env} />
-              <p className="px-2 pb-1 pt-2 text-[11px] text-muted-foreground">
-                Select to inspect details or edit this service.
-              </p>
-            </div>
-          ))}
-        </div>
+        <ServicesList env={env} />
       )}
     </section>
-  )
-}
-
-// Click a service card: full spec, then Edit / Delete.
-function ServiceCardDialog({
-  env,
-  service,
-	detailError,
-  open,
-  onOpenChange,
-}: {
-  env: Environment
-  service: Service
-	detailError?: string
-  open: boolean
-  onOpenChange: (v: boolean) => void
-}) {
-  const params = useRequiredParams('tenant')
-  const [editing, setEditing] = useState(false)
-  const [operation, setOperation] = useState<ServiceOperation | null>(null)
-
-  return (
-    <>
-      <Dialog open={open && !editing && !operation} onOpenChange={(v) => onOpenChange(v)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex flex-wrap items-center gap-2">
-              <span className="font-mono">{service.name}</span>
-              <ServiceStateBadges service={service} />
-            </DialogTitle>
-          </DialogHeader>
-			{detailError ? <p role="alert" className="text-sm text-destructive">{detailError}</p> : null}
-          <div className="flex flex-col gap-1.5 text-sm">
-            <DetailRow label="Image" value={service.image} mono />
-            <DetailRow label="Note" value={service.role} />
-            <DetailRow label="Zones" value={service.zones.join(', ') || '—'} mono />
-            <DetailRow label="Strategy" value={`${service.strategy}${service.strategy === 'rolling' ? ' (deferred)' : ''}`} />
-            <DetailRow label="Env files" value={service.envFiles.join(', ') || '—'} mono />
-            <DetailRow
-              label="Healthcheck"
-              value={
-                service.healthcheck
-                  ? service.healthcheck.kind === 'http'
-                    ? `GET ${service.healthcheck.target} · every ${service.healthcheck.interval} · timeout ${service.healthcheck.timeout} · start ${service.healthcheck.startPeriod} · retries ${service.healthcheck.retries}`
-                    : service.healthcheck.kind === 'tcp'
-                      ? `TCP ${service.healthcheck.target} · every ${service.healthcheck.interval} · timeout ${service.healthcheck.timeout} · start ${service.healthcheck.startPeriod} · retries ${service.healthcheck.retries}`
-                      : `pgrep '${service.healthcheck.target}' · every ${service.healthcheck.interval} · timeout ${service.healthcheck.timeout} · start ${service.healthcheck.startPeriod} · retries ${service.healthcheck.retries}`
-                  : 'none'
-              }
-              mono
-            />
-            <DetailRow label="Resources" value={`${service.resources.mem} · ${service.resources.cpus} cpu`} mono />
-            <DetailRow
-              label="Environment"
-              value={service.environment.map((e) => `${e.key}=${e.value}`).join(' · ') || '—'}
-              mono
-            />
-            <DetailRow
-              label="Mounts"
-              value={
-                service.mounts
-                  .map((m) =>
-                    m.type === 'volume' ? `${m.volume} → ${m.mount}` : `${m.file} → ${m.mount} :ro`,
-                  )
-                  .join(' · ') || '—'
-              }
-              mono
-            />
-            {service.command && <DetailRow label="Command" value={service.command} mono />}
-            {service.aliases.length > 0 && <DetailRow label="Aliases" value={service.aliases.join(', ')} mono />}
-            {service.dependsOn.length > 0 && (
-              <DetailRow label="Depends on" value={service.dependsOn.map((d) => `${d} (service_healthy)`).join(', ')} mono />
-            )}
-            <DetailRow label="Expose" value={service.expose.join(', ') || '—'} mono />
-            <DetailRow label="Restart" value={service.restart} mono />
-            <DetailRow label="Replicas" value={String(service.replicas)} mono />
-            <DetailRow label="Runtime intent" value={service.runtimeIntent} mono />
-            <DetailRow label="Observed health" value={service.status} mono />
-            <DetailRow
-              label="Labels"
-              value={`com.groundplane.managed=true · com.groundplane.service-id=${service.id}`}
-              mono
-            />
-          </div>
-			{service.nativeCompose ? (
-				<div className="flex flex-col gap-2">
-					<p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Native Compose desired state</p>
-					<pre className="max-h-72 overflow-auto rounded-lg border border-border bg-muted p-3 font-mono text-xs whitespace-pre-wrap">
-						{service.nativeCompose}
-					</pre>
-				</div>
-			) : !detailError ? <p role="status" className="text-sm text-muted-foreground">Loading native Compose desired state...</p> : null}
-			<div className="flex flex-col gap-2">
-				<p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Release ledger</p>
-				{service.releaseLedger?.length ? (
-					<div className="overflow-hidden rounded-lg border border-border">
-						{service.releaseLedger.map((release) => (
-							<div key={release.id} className="flex items-center justify-between gap-3 border-b border-border px-3 py-2 last:border-b-0">
-								<div className="min-w-0">
-									<p className="truncate font-mono text-xs">{release.tag}</p>
-									<p className="truncate font-mono text-[10px] text-muted-foreground">{release.digest || release.id}</p>
-								</div>
-								<Badge variant={release.status === 'active' ? 'primary' : 'outline'}>{release.status}</Badge>
-							</div>
-						))}
-					</div>
-				) : service.releaseLedger ? (
-					<p className="text-sm text-muted-foreground">No releases yet.</p>
-				) : !detailError ? (
-					<p role="status" className="text-sm text-muted-foreground">Loading release ledger...</p>
-				) : null}
-			</div>
-          <ServiceRuntimeActions service={service} onAction={setOperation} />
-          <DialogFooter>
-            <RemoveDesiredServiceButton onClick={() => setOperation('remove')} />
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Close
-            </Button>
-            <Button onClick={() => setEditing(true)}>Edit</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Drawer open={open && editing} onOpenChange={(v) => onOpenChange(v)}>
-        <ServiceFormBody env={env} workspace={params.tenant} initial={service} onClose={() => onOpenChange(false)} />
-      </Drawer>
-      <ServiceOperationDialog
-        env={env}
-        service={service}
-        operation={operation}
-        workspace={params.tenant}
-        onOpenChange={(next) => { if (!next) setOperation(null) }}
-        onRemoved={() => { setOperation(null); onOpenChange(false) }}
-      />
-    </>
-  )
-}
-
-function DetailRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-3 border-b border-border py-1.5 text-sm last:border-0">
-      <span className="shrink-0 text-muted-foreground">{label}</span>
-      <span className={mono ? 'max-w-[65%] break-all text-right font-mono text-xs' : 'max-w-[65%] text-right text-xs'}>{value}</span>
-    </div>
   )
 }
 

@@ -1198,7 +1198,8 @@ tenants and one database.
   takes the **tag only, never the image name** (the image name comes from the
   service); the Controller combines those authored inputs as requested-reference
   provenance, while final Compose uses the resolved sealed local image id.
-  Clicking a service card (in the topology or any list) opens its full spec;
+  Clicking a topology service card or a Services-tab list row opens its full
+  spec in a right-side Service details drawer;
   edits save back to desired state and need a redeploy to apply.
 - **Rollback** - the per-service mirror of Deploy. It **tracks the previous
   tag automatically**: for the selected service, the rollback target is the
@@ -1514,7 +1515,11 @@ named Network Zones, not through published host ports.
 - Inside a tenant, **Projects -> environment tabs** (Render/Neon branch style):
   a project lists its environments, each environment being the topology page
   with the tab bar (Overview, Services, Blueprint, Router, Releases, Tasks, Backups,
-  Volumes, Environments, Scripts, Settings last). **Releases is the
+  Volumes, Environments, Scripts, Settings last). **Services is a responsive
+  list, not a card grid**; each row exposes service identity, runtime intent,
+  observed health, image, zones, resources, and backing connections, and opens
+  the right-side Service details drawer. Overview topology retains its cards.
+  **Releases is the
   per-Service release ledger** (immutable intents and execution summaries plus
   separate serving/current-successful projections — rollback selects exact
   history); **the Tasks tab is the environment's live task queue**
@@ -1525,12 +1530,14 @@ named Network Zones, not through published host ports.
   from anywhere, including the Secrets page) plus the project's
   Secrets page. Secrets resolve by fallback environment -> project -> platform;
   connectors never inherit because they exist only at environment scope.
-- **Forms open in right-side drawers; centered modals are used only for
-  confirmations and read-only views** — anything taking input (new tenant,
+- **Forms and Service details open in right-side drawers; centered modals are
+  used only for confirmations and other read-only views** — anything taking input (new tenant,
   project, environment, backing service, runner, secret, connector, zone,
   route, attach, backup policy, volume, env entry, script, rename, deploy,
   rollback) slides in from the right; remove/delete/destroy/restore/reveal
-  confirmations and spec views stay centered.
+  confirmations and other spec views stay centered. Service details use the
+  right-side drawer even when read-only; their destructive confirmations remain
+  centered.
 - The **Platform Overview** is a single management page: all tenants' projects,
   backing services, and platform activity.
 - A **dashboard** shows the whole platform at a glance: status, counts, projects
