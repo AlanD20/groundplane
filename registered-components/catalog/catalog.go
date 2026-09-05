@@ -12,6 +12,7 @@ import (
 
 type Catalog struct {
 	definitions             []component.Definition
+	images                  []registeredImage
 	managedConfigActions    []registeredManagedConfigAction
 	containerConfigActions  []registeredContainerConfigAction
 	dnsResolverObservations []registeredDNSResolverObservation
@@ -20,9 +21,15 @@ type Catalog struct {
 
 type Registration struct {
 	Definition              component.Definition
+	Images                  []component.OCIImage
 	ManagedConfigActions    []ManagedConfigActionRecipe
 	ContainerConfigActions  []ContainerConfigActionRecipe
 	DNSResolverObservations []DNSResolverObservationRecipe
+}
+
+type registeredImage struct {
+	implementation component.ImplementationKey
+	image          component.OCIImage
 }
 
 type ManagedConfigActionRecipe struct {
@@ -62,7 +69,7 @@ func NewDNSResolverObservationRecipe(
 	reloadMetric string,
 ) (DNSResolverObservationRecipe, error) {
 	if actionID == "" || !safeToken(serviceName) || !path.IsAbs(artifactTarget) ||
-		path.Clean(artifactTarget) != artifactTarget || !validOCIImage(image) ||
+		path.Clean(artifactTarget) != artifactTarget || image.Validate() != nil ||
 		listenEndpoint != "127.0.0.1:53" || metricsURL != "http://127.0.0.1:9153/metrics" ||
 		!safeToken(reloadMetric) {
 		return DNSResolverObservationRecipe{}, fmt.Errorf(
@@ -107,7 +114,7 @@ func NewManagedConfigActionRecipe(
 	image component.OCIImage,
 ) (ManagedConfigActionRecipe, error) {
 	if actionID == "" || !validManagedConfigRelativePath(relativePath) ||
-		!validContainerCommand(validateArgs) || !validOCIImage(image) {
+		!validContainerCommand(validateArgs) || image.Validate() != nil {
 		return ManagedConfigActionRecipe{}, fmt.Errorf("component catalog: managed-config action recipe is invalid")
 	}
 	return ManagedConfigActionRecipe{
@@ -143,7 +150,7 @@ func NewContainerConfigActionRecipe(
 	if actionID == "" || !validManagedConfigRelativePath(relativePath) ||
 		!path.IsAbs(containerPath) || path.Clean(containerPath) != containerPath ||
 		!validContainerCommand(validateArgs) || !validContainerCommand(activateArgs) ||
-		!validOCIImage(image) {
+		image.Validate() != nil {
 		return ContainerConfigActionRecipe{}, fmt.Errorf("component catalog: container-config action recipe is invalid")
 	}
 	return ContainerConfigActionRecipe{
@@ -183,18 +190,31 @@ func NewRegistered(registrations ...Registration) (Catalog, error) {
 	actions := make([]registeredManagedConfigAction, 0)
 	containerActions := make([]registeredContainerConfigAction, 0)
 	observations := make([]registeredDNSResolverObservation, 0)
+	images := make([]registeredImage, 0)
 	for index, registration := range registrations {
 		definition := registration.Definition
 		if err := definition.Validate(); err != nil {
 			return Catalog{}, fmt.Errorf("component catalog: %w", err)
 		}
 		canonical[index] = definition
+		imageRepositories := make(map[string]struct{}, len(registration.Images))
+		for _, image := range registration.Images {
+			if image.Validate() != nil {
+				return Catalog{}, fmt.Errorf("component catalog: invalid image for %q", definition.Implementation())
+			}
+			if _, duplicate := imageRepositories[image.Repository]; duplicate {
+				return Catalog{}, fmt.Errorf("component catalog: repeated image repository %q for %q", image.Repository, definition.Implementation())
+			}
+			imageRepositories[image.Repository] = struct{}{}
+			images = append(images, registeredImage{implementation: definition.Implementation(), image: cloneOCIImage(image)})
+		}
 		for _, recipe := range registration.ManagedConfigActions {
 			action, found := definition.FindAction(recipe.actionID)
 			if !found || action.Capability() != component.CapabilityManagedConfig ||
 				action.Operation() != component.OperationActivate ||
 				!validManagedConfigRelativePath(recipe.relativePath) ||
-				!validContainerCommand(recipe.validateArgs) || !validOCIImage(recipe.image) {
+				!validContainerCommand(recipe.validateArgs) || recipe.image.Validate() != nil ||
+				!registeredImageMatches(images, definition.Implementation(), recipe.image) {
 				return Catalog{}, fmt.Errorf(
 					"component catalog: invalid managed-config recipe for %q",
 					definition.Implementation(),
@@ -211,7 +231,8 @@ func NewRegistered(registrations ...Registration) (Catalog, error) {
 				!validManagedConfigRelativePath(recipe.relativePath) ||
 				!path.IsAbs(recipe.containerPath) || path.Clean(recipe.containerPath) != recipe.containerPath ||
 				!validContainerCommand(recipe.validateArgs) || !validContainerCommand(recipe.activateArgs) ||
-				!validOCIImage(recipe.image) {
+				recipe.image.Validate() != nil ||
+				!registeredImageMatches(images, definition.Implementation(), recipe.image) {
 				return Catalog{}, fmt.Errorf(
 					"component catalog: invalid container-config recipe for %q",
 					definition.Implementation(),
@@ -226,7 +247,8 @@ func NewRegistered(registrations ...Registration) (Catalog, error) {
 			if !found || action.Capability() != component.CapabilityHostResolution ||
 				action.Operation() != component.OperationObserve || !safeToken(recipe.serviceName) ||
 				!path.IsAbs(recipe.artifactTarget) || path.Clean(recipe.artifactTarget) != recipe.artifactTarget ||
-				!validOCIImage(recipe.image) || recipe.listenEndpoint != "127.0.0.1:53" ||
+				recipe.image.Validate() != nil || !registeredImageMatches(images, definition.Implementation(), recipe.image) ||
+				recipe.listenEndpoint != "127.0.0.1:53" ||
 				recipe.metricsURL != "http://127.0.0.1:9153/metrics" || !safeToken(recipe.reloadMetric) {
 				return Catalog{}, fmt.Errorf(
 					"component catalog: invalid DNS resolver observation recipe for %q",
@@ -240,6 +262,12 @@ func NewRegistered(registrations ...Registration) (Catalog, error) {
 	}
 	sort.Slice(canonical, func(i, j int) bool {
 		return canonical[i].Implementation() < canonical[j].Implementation()
+	})
+	sort.Slice(images, func(left, right int) bool {
+		if images[left].implementation != images[right].implementation {
+			return images[left].implementation < images[right].implementation
+		}
+		return images[left].image.Repository < images[right].image.Repository
 	})
 	for index := 1; index < len(canonical); index++ {
 		if canonical[index].Implementation() == canonical[index-1].Implementation() {
@@ -299,12 +327,28 @@ func NewRegistered(registrations ...Registration) (Catalog, error) {
 	}
 	catalog := Catalog{
 		definitions:             canonical,
+		images:                  images,
 		managedConfigActions:    actions,
 		containerConfigActions:  containerActions,
 		dnsResolverObservations: observations,
 	}
-	catalog.digest = catalogDigest(canonical, actions, containerActions, observations)
+	catalog.digest = catalogDigest(canonical, images, actions, containerActions, observations)
 	return catalog, nil
+}
+
+func (c Catalog) ValidateEnvironmentPlanImages(
+	implementation component.ImplementationKey,
+	plan component.EnvironmentPlan,
+) error {
+	if _, found := c.Find(implementation); !found {
+		return fmt.Errorf("component catalog: implementation %q is not registered", implementation)
+	}
+	for _, service := range plan.Services {
+		if service.Image.Validate() != nil || !registeredImageMatches(c.images, implementation, service.Image) {
+			return fmt.Errorf("component catalog: planner emitted an unregistered managed image for %q", implementation)
+		}
+	}
+	return nil
 }
 
 func (c Catalog) Definitions() []component.Definition {
@@ -458,27 +502,17 @@ func cloneOCIImage(image component.OCIImage) component.OCIImage {
 	return image
 }
 
-func validOCIImage(image component.OCIImage) bool {
-	if image.Repository == "" || strings.ContainsAny(image.Repository, "@ ") ||
-		!validSHA256Hex(image.IndexDigest) || len(image.Platforms) != 2 {
-		return false
-	}
-	amd64, arm64 := image.Platforms[0], image.Platforms[1]
-	return amd64.OS == "linux" && amd64.Architecture == "amd64" && amd64.Variant == "" &&
-		validSHA256Hex(amd64.ChildDigest) && arm64.OS == "linux" && arm64.Architecture == "arm64" &&
-		arm64.Variant == "v8" && validSHA256Hex(arm64.ChildDigest)
-}
-
-func validSHA256Hex(value string) bool {
-	if len(value) != sha256.Size*2 {
-		return false
-	}
-	for _, character := range value {
-		if !(character >= '0' && character <= '9' || character >= 'a' && character <= 'f') {
-			return false
+func registeredImageMatches(
+	images []registeredImage,
+	implementation component.ImplementationKey,
+	image component.OCIImage,
+) bool {
+	for _, registered := range images {
+		if registered.implementation == implementation && registered.image.Equal(image) {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 func validImmutableImageReference(value string) bool {

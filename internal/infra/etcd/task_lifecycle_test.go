@@ -83,6 +83,7 @@ func TestTaskResultsEqualComparesDNSResolverEvidenceExactly(t *testing.T) {
 		RenderGeneration:        1,
 		ImageReference:          "coredns/coredns@sha256:image",
 		VerifiedImageDigest:     "image-digest",
+		ImageConfigDigest:       "config-digest",
 		ListenEndpoint:          "127.0.0.1:53",
 		ReloadSHA512:            "reload-sha",
 		ObservedAt:              observedAt,

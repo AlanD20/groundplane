@@ -375,6 +375,7 @@ func dnsResolverProofMatches(
 		evidence.GetImageReference() == service.GetImageReference() &&
 		evidence.GetImageRepository() == service.GetImageRepository() &&
 		bytes.Equal(evidence.GetImageIndexDigest(), service.GetImageIndexDigest()) &&
+		bytes.Equal(evidence.GetImageConfigDigest(), service.GetImageConfigDigest()) &&
 		bytes.Equal(evidence.GetVerifiedImageDigest(), service.GetImageChildDigest()) &&
 		evidence.GetImageOs() == service.GetImageOs() &&
 		evidence.GetImageArchitecture() == service.GetImageArchitecture() &&

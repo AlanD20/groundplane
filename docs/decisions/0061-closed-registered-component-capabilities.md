@@ -91,6 +91,8 @@ Agent, not microservices or runtime plugins.
 Each registration declares:
 
 - an immutable implementation key and definition digest;
+- its immutable managed OCI images, including the complete canonical
+  two-platform index, child, config, and authenticated variant identity;
 - the typed configuration variant it accepts;
 - capabilities it provides;
 - exact capabilities and operations it may consume;
@@ -114,6 +116,13 @@ catalog, grants, owner scope, authorization, revisions, limits, idempotency,
 and cross-resource invariants. The owning capability modules then contribute
 their existing persistence and Task-publication fragments to one atomic
 commit. The plugin never runs inside the transaction.
+
+Every managed image emitted by a planner must exactly match an image declared
+by that implementation's compiled registration. Catalog action recipes may
+reuse those declared images but cannot introduce another image authority; the
+catalog digest binds each full declared image once and binds each recipe to its
+declared repository. Missing, duplicate, extra-platform, malformed, or
+unregistered images are rejected before Controller projection.
 
 ### Ownership, authorization, and secrets
 

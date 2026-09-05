@@ -68,11 +68,13 @@ func newRegisteredActionCatalog() (registeredActionCatalog, error) {
 	compiled, err := registeredcatalog.NewRegistered(
 		registeredcatalog.Registration{
 			Definition:             caddy,
+			Images:                 []componentsdk.OCIImage{registeredcaddy.Image},
 			ContainerConfigActions: []registeredcatalog.ContainerConfigActionRecipe{caddyActivate},
 		},
-		registeredcatalog.Registration{Definition: tunnel},
+		registeredcatalog.Registration{Definition: tunnel, Images: []componentsdk.OCIImage{registeredtunnel.Image}},
 		registeredcatalog.Registration{
 			Definition:              coreDNS,
+			Images:                  []componentsdk.OCIImage{registeredcoredns.Image},
 			ManagedConfigActions:    []registeredcatalog.ManagedConfigActionRecipe{coreDNSActivate},
 			DNSResolverObservations: []registeredcatalog.DNSResolverObservationRecipe{coreDNSObservation},
 		},
@@ -133,7 +135,14 @@ func (catalog registeredActionCatalog) Plan(
 			"registered Component implementation is not compiled into the catalog",
 		)
 	}
-	return planner(serviceID, input)
+	plan, err := planner(serviceID, input)
+	if err != nil {
+		return componentsdk.EnvironmentPlan{}, err
+	}
+	if err := catalog.catalog.ValidateEnvironmentPlanImages(implementation, plan); err != nil {
+		return componentsdk.EnvironmentPlan{}, errs.Wrap(errs.KindInternal, err)
+	}
+	return plan, nil
 }
 
 func (catalog registeredActionCatalog) ResolveManagedConfigActionEnvelope(
@@ -199,11 +208,11 @@ func registeredEnvironmentComponentCatalog() ([]controller.EnvironmentComponentR
 	if err != nil {
 		return nil, err
 	}
-	caddy, err := registeredCaddyEnvironmentComponent(actionCatalog.Digest())
+	caddy, err := registeredCaddyEnvironmentComponent(actionCatalog)
 	if err != nil {
 		return nil, err
 	}
-	cloudflareTunnel, err := registeredCloudflareTunnelEnvironmentComponent(actionCatalog.Digest())
+	cloudflareTunnel, err := registeredCloudflareTunnelEnvironmentComponent(actionCatalog)
 	if err != nil {
 		return nil, err
 	}

@@ -251,6 +251,7 @@ func validateComponentObservation(record ComponentObservationRecord) error {
 			record.ComposeArtifact,
 			record.ComposeArtifactID,
 			record.ServiceID,
+			record.DNSResolverProof.ImageConfigDigest,
 		) {
 			return errs.New(errs.KindValidationFailed, "enabled Component observation digests are invalid")
 		}

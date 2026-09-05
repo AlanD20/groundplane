@@ -2954,30 +2954,6 @@ func taskCandidateAbsenceEvidenceEqual(left, right *TaskCandidateAbsenceEvidence
 		slices.Equal(left.Candidates, right.Candidates)
 }
 
-func taskDNSResolverEvidenceEqual(
-	left *TaskDNSResolverObservationEvidence,
-	right *TaskDNSResolverObservationEvidence,
-) bool {
-	if (left == nil) != (right == nil) {
-		return false
-	}
-	if left == nil {
-		return true
-	}
-	return left.ComponentID == right.ComponentID && left.ServiceID == right.ServiceID &&
-		left.ArtifactID == right.ArtifactID && left.ArtifactSHA256 == right.ArtifactSHA256 &&
-		left.RenderGeneration == right.RenderGeneration && left.ImageReference == right.ImageReference &&
-		left.VerifiedImageDigest == right.VerifiedImageDigest && left.ListenEndpoint == right.ListenEndpoint &&
-		left.ReloadSHA512 == right.ReloadSHA512 && left.ObservedAt == right.ObservedAt &&
-		left.StaticQueryPresent == right.StaticQueryPresent && left.StaticQueryName == right.StaticQueryName &&
-		left.StaticQueryIPv4 == right.StaticQueryIPv4 && left.StaticQuerySucceeded == right.StaticQuerySucceeded &&
-		left.RecursiveQuerySucceeded == right.RecursiveQuerySucceeded &&
-		left.ForwarderQueryCount == right.ForwarderQueryCount &&
-		left.ForwarderSuccessCount == right.ForwarderSuccessCount && left.ProofSHA256 == right.ProofSHA256 &&
-		(left.CanonicalEvidence == nil) == (right.CanonicalEvidence == nil) &&
-		bytes.Equal(left.CanonicalEvidence, right.CanonicalEvidence)
-}
-
 // AbortPendingTask wins only while the Task is still queued. If assignment
 // wins the CAS first, the caller receives a state conflict and must use the
 // Agent abort path for the now-running Task.

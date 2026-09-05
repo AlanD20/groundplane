@@ -43,7 +43,8 @@ func Verify(evidence *agentpb.DNSResolverObservationEvidence) error {
 }
 
 func validateSemantics(evidence *agentpb.DNSResolverObservationEvidence) error {
-	if evidence == nil || !validForwardQuery(evidence.GetCatchAllQuery(), true) ||
+	if evidence == nil || !validConfigDigest(evidence.GetImageConfigDigest()) ||
+		!validForwardQuery(evidence.GetCatchAllQuery(), true) ||
 		len(evidence.GetForwarderQueries()) > 8 {
 		return errs.New(errs.KindValidationFailed, "DNS resolver observation proof semantics are invalid")
 	}
@@ -61,6 +62,17 @@ func validateSemantics(evidence *agentpb.DNSResolverObservationEvidence) error {
 		seen[proof.GetName()] = struct{}{}
 	}
 	return nil
+}
+
+func validConfigDigest(value []byte) bool {
+	if len(value) != sha256.Size {
+		return false
+	}
+	var nonzero byte
+	for _, part := range value {
+		nonzero |= part
+	}
+	return nonzero != 0
 }
 
 func validStaticQuery(proof *agentpb.DNSQueryProof) bool {

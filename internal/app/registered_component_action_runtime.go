@@ -330,7 +330,17 @@ func dnsResolverObservationRequest(
 		)
 	}
 	service := artifact.GetServices()[0]
-	if service.GetComposeName() != recipe.ServiceName() || service.GetServiceId() == "" {
+	image := recipe.Image()
+	selectedPlatform, imageReference, selected := image.Select(runtime.GOOS, runtime.GOARCH)
+	if service.GetComposeName() != recipe.ServiceName() || service.GetServiceId() == "" || !selected ||
+		len(service.GetImageIndexDigest()) != sha256.Size || len(service.GetImageChildDigest()) != sha256.Size ||
+		len(service.GetImageConfigDigest()) != sha256.Size || service.GetImageReference() != imageReference ||
+		service.GetImageRepository() != image.Repository ||
+		hex.EncodeToString(service.GetImageIndexDigest()) != image.IndexDigest ||
+		hex.EncodeToString(service.GetImageChildDigest()) != selectedPlatform.ChildDigest ||
+		hex.EncodeToString(service.GetImageConfigDigest()) != selectedPlatform.ConfigDigest ||
+		service.GetImageOs() != selectedPlatform.OS ||
+		service.GetImageArchitecture() != selectedPlatform.Architecture || service.GetImageVariant() != selectedPlatform.Variant {
 		return dnsresolverobserver.Request{}, errs.New(
 			errs.KindValidationFailed,
 			"agent: DNS resolver observation Service is invalid",
@@ -350,13 +360,16 @@ func dnsResolverObservationRequest(
 	copy(digest[:], action.GetArtifactDigest())
 	var imageIndexDigest [sha256.Size]byte
 	copy(imageIndexDigest[:], service.GetImageIndexDigest())
+	var imageConfigDigest [sha256.Size]byte
+	copy(imageConfigDigest[:], service.GetImageConfigDigest())
 	return dnsresolverobserver.Request{
 		ComponentID: action.GetComponentId(), ServiceID: service.GetServiceId(), ArtifactID: action.GetArtifactId(),
 		ArtifactSHA256: digest, RenderGeneration: action.GetGeneration(), ProjectName: artifact.GetProjectName(),
 		ServiceName: recipe.ServiceName(), ArtifactTarget: recipe.ArtifactTarget(),
-		ImageReference: selectedImageReference(recipe.Image()), ListenEndpoint: recipe.ListenEndpoint(),
+		ImageReference: imageReference, ListenEndpoint: recipe.ListenEndpoint(),
 		ImageRepository: service.GetImageRepository(), ImageIndexDigest: imageIndexDigest,
-		ImageOS: service.GetImageOs(), ImageArchitecture: service.GetImageArchitecture(),
+		ImageConfigDigest: imageConfigDigest,
+		ImageOS:           service.GetImageOs(), ImageArchitecture: service.GetImageArchitecture(),
 		ImageVariant: service.GetImageVariant(),
 		MetricsURL:   recipe.MetricsURL(), ReloadMetric: recipe.ReloadMetric(), ExpectedLabels: labels,
 	}, nil
@@ -385,11 +398,7 @@ func componentObservationComposeArtifact(plan *agentpb.ExecutionPlan) *agentpb.C
 }
 
 func selectedImageReference(image component.OCIImage) string {
-	variant := ""
-	if runtime.GOARCH == "arm64" {
-		variant = "v8"
-	}
-	_, reference, _ := image.Select(runtime.GOOS, runtime.GOARCH, variant)
+	_, reference, _ := image.Select(runtime.GOOS, runtime.GOARCH)
 	return reference
 }
 

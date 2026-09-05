@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"encoding/hex"
 
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -240,9 +241,11 @@ func validatePlatformComponentObservation(
 	}
 	if evidence.ComponentID != input.ComponentID || evidence.ServiceID != input.GeneratedServiceID ||
 		evidence.ArtifactID != input.ArtifactID || evidence.ArtifactSHA256 != input.ArtifactSHA256 ||
+		evidence.ImageConfigDigest != input.ImageConfigDigest ||
 		evidence.RenderGeneration != renderGeneration || !evidence.RecursiveQuerySucceeded ||
 		evidence.ForwarderSuccessCount != evidence.ForwarderQueryCount || evidence.ObservedAt.IsZero() ||
-		canonical.GetComponentId() != input.ComponentID || canonical.GetArtifactId() != input.ArtifactID {
+		canonical.GetComponentId() != input.ComponentID || canonical.GetArtifactId() != input.ArtifactID ||
+		hex.EncodeToString(canonical.GetImageConfigDigest()) != input.ImageConfigDigest {
 		return errs.New(
 			errs.KindStateConflict,
 			"platform Component full observation proof does not match its candidate",

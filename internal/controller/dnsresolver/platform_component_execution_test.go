@@ -75,17 +75,12 @@ func TestPlatformExecutionDisableReusesSealedPredecessorOwnership(t *testing.T) 
 		t.Fatalf("PlatformComponentDesiredDigest() error = %v", err)
 	}
 	registeredPlan := executionPlanFixture(serviceID, "example/resolver@sha256:"+strings.Repeat("1", 64))
-	variant := ""
-	if runtime.GOARCH == "arm64" {
-		variant = "v8"
-	}
 	selectedPlatform, selectedReference, selected := registeredPlan.Services[0].Image.Select(
 		runtime.GOOS,
 		runtime.GOARCH,
-		variant,
 	)
 	if !selected {
-		t.Fatalf("execution fixture does not support %s/%s/%s", runtime.GOOS, runtime.GOARCH, variant)
+		t.Fatalf("execution fixture does not support %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
 	artifactDigest := sha256.Sum256(registeredPlan.Files[0].Content)
 	registeredPlanDigest := componentsdk.DigestEnvironmentPlan(registeredPlan)
@@ -120,6 +115,7 @@ func TestPlatformExecutionDisableReusesSealedPredecessorOwnership(t *testing.T) 
 		ImageArchitecture:              selectedPlatform.Architecture,
 		ImageVariant:                   selectedPlatform.Variant,
 		ImageChildDigest:               selectedPlatform.ChildDigest,
+		ImageConfigDigest:              selectedPlatform.ConfigDigest,
 		ImageReference:                 selectedReference,
 		ArtifactSHA256:                 hex.EncodeToString(artifactDigest[:]),
 		ArtifactLength:                 uint64(len(registeredPlan.Files[0].Content)),
@@ -149,7 +145,8 @@ func TestPlatformExecutionDisableReusesSealedPredecessorOwnership(t *testing.T) 
 			ArtifactID:       input.ComposeArtifactID, Plan: registeredPlan,
 			ImageRepository: input.ImageRepository, ImageIndexDigest: input.ImageIndexDigest,
 			ImageChildDigest: input.ImageChildDigest, ImageReference: input.ImageReference,
-			ImageOS: input.ImageOS, ImageArchitecture: input.ImageArchitecture, ImageVariant: input.ImageVariant,
+			ImageConfigDigest: input.ImageConfigDigest,
+			ImageOS:           input.ImageOS, ImageArchitecture: input.ImageArchitecture, ImageVariant: input.ImageVariant,
 		},
 	)
 	if err != nil {
@@ -235,17 +232,12 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 	}
 	firstPlan := executionPlanFixture(serviceID, "example/resolver@sha256:"+strings.Repeat("1", 64))
 	secondPlan := executionPlanFixture(serviceID, "example/resolver@sha256:"+strings.Repeat("2", 64))
-	variant := ""
-	if runtime.GOARCH == "arm64" {
-		variant = "v8"
-	}
 	selectedPlatform, selectedReference, selected := firstPlan.Services[0].Image.Select(
 		runtime.GOOS,
 		runtime.GOARCH,
-		variant,
 	)
 	if !selected {
-		t.Fatalf("execution fixture does not support %s/%s/%s", runtime.GOOS, runtime.GOARCH, variant)
+		t.Fatalf("execution fixture does not support %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
 	artifactDigest := sha256.Sum256(firstPlan.Files[0].Content)
 	registeredPlanDigest := componentsdk.DigestEnvironmentPlan(firstPlan)
@@ -279,6 +271,7 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 		ImageArchitecture:              selectedPlatform.Architecture,
 		ImageVariant:                   selectedPlatform.Variant,
 		ImageChildDigest:               selectedPlatform.ChildDigest,
+		ImageConfigDigest:              selectedPlatform.ConfigDigest,
 		ImageReference:                 selectedReference,
 		ArtifactSHA256:                 hex.EncodeToString(artifactDigest[:]),
 		ArtifactLength:                 uint64(len(firstPlan.Files[0].Content)),
@@ -305,7 +298,8 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 			ArtifactID:       input.ComposeArtifactID, Plan: firstPlan,
 			ImageRepository: input.ImageRepository, ImageIndexDigest: input.ImageIndexDigest,
 			ImageChildDigest: input.ImageChildDigest, ImageReference: input.ImageReference,
-			ImageOS: input.ImageOS, ImageArchitecture: input.ImageArchitecture, ImageVariant: input.ImageVariant,
+			ImageConfigDigest: input.ImageConfigDigest,
+			ImageOS:           input.ImageOS, ImageArchitecture: input.ImageArchitecture, ImageVariant: input.ImageVariant,
 		},
 	)
 	if err != nil {

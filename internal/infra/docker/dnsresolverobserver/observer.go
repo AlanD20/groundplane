@@ -39,6 +39,7 @@ type Request struct {
 	ImageReference    string
 	ImageRepository   string
 	ImageIndexDigest  [sha256.Size]byte
+	ImageConfigDigest [sha256.Size]byte
 	ImageOS           string
 	ImageArchitecture string
 	ImageVariant      string
@@ -49,9 +50,10 @@ type Request struct {
 }
 
 type runtimeEvidence struct {
-	artifact            []byte
-	logs                []byte
-	verifiedImageDigest [sha256.Size]byte
+	artifact                  []byte
+	logs                      []byte
+	verifiedImageDigest       [sha256.Size]byte
+	verifiedImageConfigDigest [sha256.Size]byte
 }
 
 type runtimeInspector interface {
@@ -145,6 +147,7 @@ func (executor *Executor) Observe(
 		ObservedAt: timestamppb.New(executor.now().UTC()), ImageRepository: request.ImageRepository,
 		ImageIndexDigest: append([]byte(nil), request.ImageIndexDigest[:]...), ImageOs: request.ImageOS,
 		ImageArchitecture: request.ImageArchitecture, ImageVariant: request.ImageVariant,
+		ImageConfigDigest: append([]byte(nil), runtime.verifiedImageConfigDigest[:]...),
 	}
 	if parsed.staticName != "" {
 		evidence.StaticQuery, err = executor.observeStatic(proofCtx, request, parsed)

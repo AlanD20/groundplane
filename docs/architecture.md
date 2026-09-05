@@ -989,7 +989,12 @@ pipeline.
 A registered Component is pure translation between one typed implementation
 configuration and Groundplane-owned capabilities. Registration declares its
 provided capabilities, grants, allowed owner scopes, definition digest, typed
-planner, and generic managed-configuration requirements.
+planner, immutable canonical managed-image collection, and generic
+managed-configuration requirements. Each planner-emitted managed image must
+exactly match its implementation's declared collection before projection.
+Catalog recipes reference those same declared images; the catalog digest binds
+each complete image once and binds each recipe to its image repository rather
+than creating a second image authority.
 
 Implementation configuration may include an operator-authored managed-file
 template as a durable decision. CoreDNS carries the required full Corefile

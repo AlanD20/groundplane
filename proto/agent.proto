@@ -213,6 +213,7 @@ message DNSResolverObservationEvidence {
   string image_architecture = 17;
   bytes proof_sha256 = 18;
   string image_variant = 19;
+  bytes image_config_digest = 20;
 }
 
 enum DNSQueryType {
@@ -755,6 +756,7 @@ message ComposeService {
   string image_os = 15;
   string image_architecture = 16;
   string image_variant = 17;
+  bytes image_config_digest = 18;
 }
 
 enum ComposeServiceRole {

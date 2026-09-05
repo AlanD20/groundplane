@@ -1,7 +1,6 @@
 package app
 
 import (
-	"crypto/sha256"
 	"net/netip"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
@@ -13,13 +12,13 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func registeredCaddyEnvironmentComponent(catalogDigest [sha256.Size]byte) (controller.EnvironmentComponentRegistration, error) {
+func registeredCaddyEnvironmentComponent(actionCatalog registeredActionCatalog) (controller.EnvironmentComponentRegistration, error) {
 	definition, err := registeredcaddy.Definition()
 	if err != nil {
 		return controller.EnvironmentComponentRegistration{}, errs.Wrap(errs.KindInternal, err)
 	}
 	return controller.EnvironmentComponentRegistration{
-		Kind: core.ComponentKindIngressCaddy, Definition: definition, CatalogDigest: catalogDigest,
+		Kind: core.ComponentKindIngressCaddy, Definition: definition, CatalogDigest: actionCatalog.Digest(),
 		ManagedConfiguration: &controller.EnvironmentManagedConfigurationRegistration{
 			SourcePath: registeredcaddy.CaddyfileSource,
 			ActionID:   registeredcaddy.ActivateConfigAction,
@@ -32,6 +31,9 @@ func registeredCaddyEnvironmentComponent(catalogDigest [sha256.Size]byte) (contr
 			plan, err := registeredcaddy.Plan(input, config)
 			if err != nil {
 				return componentsdk.EnvironmentPlan{}, errs.Wrap(errs.KindValidationFailed, err)
+			}
+			if err := actionCatalog.catalog.ValidateEnvironmentPlanImages(definition.Implementation(), plan); err != nil {
+				return componentsdk.EnvironmentPlan{}, errs.Wrap(errs.KindInternal, err)
 			}
 			return plan, nil
 		},
@@ -48,6 +50,9 @@ func registeredCaddyEnvironmentComponent(catalogDigest [sha256.Size]byte) (contr
 			})
 			if err != nil {
 				return componentsdk.EnvironmentPlan{}, errs.Wrap(errs.KindValidationFailed, err)
+			}
+			if err := actionCatalog.catalog.ValidateEnvironmentPlanImages(definition.Implementation(), plan); err != nil {
+				return componentsdk.EnvironmentPlan{}, errs.Wrap(errs.KindInternal, err)
 			}
 			return plan, nil
 		},

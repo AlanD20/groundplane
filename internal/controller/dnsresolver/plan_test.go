@@ -45,11 +45,13 @@ func testPlatformImage(identity string) componentsdk.OCIImage {
 	index := sha256.Sum256([]byte(identity + "/index"))
 	amd64 := sha256.Sum256([]byte(identity + "/linux/amd64"))
 	arm64 := sha256.Sum256([]byte(identity + "/linux/arm64/v8"))
+	amd64Config := sha256.Sum256([]byte(identity + "/linux/amd64/config"))
+	arm64Config := sha256.Sum256([]byte(identity + "/linux/arm64/config"))
 	return componentsdk.OCIImage{
 		Repository: identity, IndexDigest: hex.EncodeToString(index[:]),
 		Platforms: []componentsdk.OCIPlatform{
-			{OS: "linux", Architecture: "amd64", ChildDigest: hex.EncodeToString(amd64[:])},
-			{OS: "linux", Architecture: "arm64", Variant: "v8", ChildDigest: hex.EncodeToString(arm64[:])},
+			{OS: "linux", Architecture: "amd64", ChildDigest: hex.EncodeToString(amd64[:]), ConfigDigest: hex.EncodeToString(amd64Config[:])},
+			{OS: "linux", Architecture: "arm64", Variant: "v8", ChildDigest: hex.EncodeToString(arm64[:]), ConfigDigest: hex.EncodeToString(arm64Config[:])},
 		},
 	}
 }

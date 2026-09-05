@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"net"
 	"net/netip"
@@ -57,6 +58,7 @@ type PlatformComponentTaskRenderInput struct {
 	ExpectedPreviousGeneration     uint64                      `json:"expected_previous_generation,omitempty"`
 	ImageRepository                string                      `json:"image_repository"`
 	ImageIndexDigest               string                      `json:"image_index_digest"`
+	ImageConfigDigest              string                      `json:"image_config_digest"`
 	ImageOS                        string                      `json:"image_os"`
 	ImageArchitecture              string                      `json:"image_architecture"`
 	ImageVariant                   string                      `json:"image_variant,omitempty"`
@@ -145,7 +147,9 @@ func validatePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderI
 		!validSHA256(input.DefinitionSHA256) || !validSHA256(input.CatalogSHA256) ||
 		!validSHA256(input.ArtifactSHA256) || input.ArtifactLength == 0 ||
 		!validSHA256(input.PlanSHA256) || !validSHA256(input.ExecutionPlanSHA256) ||
-		!validSHA256(input.ImageIndexDigest) ||
+		!validSHA256(input.ImageIndexDigest) || !validNonZeroSHA256(input.ImageConfigDigest) ||
+		input.ImageConfigDigest == input.ImageIndexDigest || input.ImageConfigDigest == input.ImageChildDigest ||
+		input.ImageIndexDigest == input.ImageChildDigest ||
 		!validSHA256(input.ImageChildDigest) || !validSelectedPlatform(input) ||
 		input.ArtifactLength > managedconfig.MaximumArtifactBytes || !validComponentActionToken(input.ActionID) ||
 		input.EnsureService && input.DisableService {
@@ -155,6 +159,7 @@ func validatePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderI
 		input.ComposeArtifact,
 		input.ComposeArtifactID,
 		input.GeneratedServiceID,
+		input.ImageConfigDigest,
 	) {
 		return errs.New(errs.KindValidationFailed, "platform Component Compose artifact is invalid")
 	}
@@ -165,6 +170,7 @@ func validatePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderI
 			input.RollbackComposeArtifact,
 			input.RollbackComposeArtifact.GetArtifactId(),
 			input.GeneratedServiceID,
+			"",
 		)) {
 		return errs.New(errs.KindValidationFailed, "platform Component rollback Compose artifact is invalid")
 	}
@@ -199,13 +205,17 @@ func validatePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderI
 	return nil
 }
 
+func validNonZeroSHA256(value string) bool {
+	return validSHA256(value) && value != strings.Repeat("0", sha256.Size*2)
+}
+
 func validSelectedPlatform(input PlatformComponentTaskRenderInput) bool {
 	if input.ImageRepository == "" || strings.ContainsAny(input.ImageRepository, "@ ") ||
 		input.ImageOS != "linux" || input.ImageReference != input.ImageRepository+"@sha256:"+input.ImageChildDigest {
 		return false
 	}
 	return input.ImageArchitecture == "amd64" && input.ImageVariant == "" ||
-		input.ImageArchitecture == "arm64" && input.ImageVariant == "v8"
+		input.ImageArchitecture == "arm64" && (input.ImageVariant == "" || input.ImageVariant == "v8")
 }
 
 func validComponentActionToken(value string) bool {
@@ -257,11 +267,32 @@ func clonePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderInpu
 	return clone
 }
 
-func platformComponentArtifactMatches(artifact *agentpb.ComposeArtifact, artifactID string, serviceID string) bool {
-	return artifact != nil && artifact.GetArtifactId() == artifactID &&
-		artifact.GetOwnerKind() == agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM &&
-		artifact.GetOwnerId() == "" && artifact.GetProjectName() == "groundplane-infra" &&
-		len(artifact.GetServices()) == 1 && artifact.GetServices()[0].GetServiceId() == serviceID
+func platformComponentArtifactMatches(
+	artifact *agentpb.ComposeArtifact,
+	artifactID string,
+	serviceID string,
+	imageConfigDigest string,
+) bool {
+	if artifact == nil || artifact.GetArtifactId() != artifactID ||
+		artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM || artifact.GetOwnerId() != "" ||
+		artifact.GetProjectName() != "groundplane-infra" || len(artifact.GetServices()) != 1 ||
+		artifact.GetServices()[0].GetServiceId() != serviceID ||
+		!validNonZeroDigestBytes(artifact.GetServices()[0].GetImageConfigDigest()) {
+		return false
+	}
+	return imageConfigDigest == "" ||
+		hex.EncodeToString(artifact.GetServices()[0].GetImageConfigDigest()) == imageConfigDigest
+}
+
+func validNonZeroDigestBytes(value []byte) bool {
+	if len(value) != sha256.Size {
+		return false
+	}
+	var nonzero byte
+	for _, part := range value {
+		nonzero |= part
+	}
+	return nonzero != 0
 }
 
 func canonicalPlatformDNSHosts(hosts []PlatformDNSHost) []PlatformDNSHost {

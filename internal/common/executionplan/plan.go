@@ -40,21 +40,22 @@ const (
 )
 
 const (
-	labelEnvironmentID    = "com.groundplane.environment-id"
-	labelComponentID      = "com.groundplane.component-id"
-	labelKind             = "com.groundplane.kind"
-	labelManaged          = "com.groundplane.managed"
-	labelPlanID           = "com.groundplane.plan-id"
-	labelProjectID        = "com.groundplane.project-id"
-	labelReleaseID        = "com.groundplane.release-id"
-	labelRenderGen        = "com.groundplane.render-generation"
-	labelRuntimeRole      = "com.groundplane.runtime-role"
-	labelServiceID        = "com.groundplane.service-id"
-	labelSlot             = "com.groundplane.slot"
-	labelTenantID         = "com.groundplane.tenant-id"
-	labelImageChildDigest = "com.groundplane.image-child-digest"
-	labelImageIndexDigest = "com.groundplane.image-index-digest"
-	labelImagePlatform    = "com.groundplane.image-platform"
+	labelEnvironmentID     = "com.groundplane.environment-id"
+	labelComponentID       = "com.groundplane.component-id"
+	labelKind              = "com.groundplane.kind"
+	labelManaged           = "com.groundplane.managed"
+	labelPlanID            = "com.groundplane.plan-id"
+	labelProjectID         = "com.groundplane.project-id"
+	labelReleaseID         = "com.groundplane.release-id"
+	labelRenderGen         = "com.groundplane.render-generation"
+	labelRuntimeRole       = "com.groundplane.runtime-role"
+	labelServiceID         = "com.groundplane.service-id"
+	labelSlot              = "com.groundplane.slot"
+	labelTenantID          = "com.groundplane.tenant-id"
+	labelImageChildDigest  = "com.groundplane.image-child-digest"
+	labelImageConfigDigest = "com.groundplane.image-config-digest"
+	labelImageIndexDigest  = "com.groundplane.image-index-digest"
+	labelImagePlatform     = "com.groundplane.image-platform"
 )
 
 // Seal validates an unhashed plan, computes its canonical digest, and returns
@@ -519,66 +520,6 @@ func validateArtifact(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArti
 		return err
 	}
 	return validateVolumes(plan, artifact)
-}
-
-func validateServices(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArtifact) error {
-	previous := ""
-	for _, service := range artifact.Services {
-		if service == nil || (validateID(ids.KindService, service.ServiceId) != nil &&
-			validateID(ids.KindComponent, service.ServiceId) != nil) {
-			return errs.New(errs.KindValidationFailed, "Compose artifact service id is invalid")
-		}
-		identity := service.ServiceId + "\x00" + service.ComposeName
-		if previous >= identity {
-			return errs.New(
-				errs.KindValidationFailed,
-				"Compose artifact services must be uniquely sorted by id and name",
-			)
-		}
-		previous = identity
-		if err := validateComposeName(service.ComposeName); err != nil {
-			return err
-		}
-		if err := validateLabels(plan, artifact, "service", service.ServiceId, service.ExpectedLabels); err != nil {
-			return err
-		}
-		componentLabel := ""
-		for _, label := range service.ExpectedLabels {
-			if label.GetKey() == labelComponentID {
-				componentLabel = label.GetValue()
-				break
-			}
-		}
-		if service.GetOwnerComponentId() != componentLabel ||
-			(service.GetOwnerComponentId() != "" && validateID(ids.KindComponent, service.GetOwnerComponentId()) != nil) {
-			return errs.New(errs.KindValidationFailed, "Compose artifact service Component ownership is invalid")
-		}
-		switch service.Role {
-		case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_UNSPECIFIED:
-			if service.Slot != "" || len(service.ProxyConfigJson) != 0 || len(service.ProxyConfigSha256) != 0 {
-				return errs.New(errs.KindValidationFailed, "ordinary Compose service carries release runtime metadata")
-			}
-		case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT:
-			if service.Slot != "blue" && service.Slot != "green" || len(service.ProxyConfigJson) != 0 ||
-				len(service.ProxyConfigSha256) != 0 {
-				return errs.New(errs.KindValidationFailed, "workload slot service metadata is invalid")
-			}
-		case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON:
-			if service.Slot != "" || len(service.ProxyConfigJson) != 0 || len(service.ProxyConfigSha256) != 0 {
-				return errs.New(errs.KindValidationFailed, "recreate singleton service metadata is invalid")
-			}
-		case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY:
-			digest := sha256.Sum256(service.ProxyConfigJson)
-			if service.Slot != "" || len(service.ProxyConfigJson) == 0 ||
-				len(service.ProxyConfigSha256) != sha256.Size ||
-				subtle.ConstantTimeCompare(service.ProxyConfigSha256, digest[:]) != 1 {
-				return errs.New(errs.KindValidationFailed, "stable proxy service metadata is invalid")
-			}
-		default:
-			return errs.New(errs.KindValidationFailed, "Compose service runtime role is unsupported")
-		}
-	}
-	return nil
 }
 
 func validateNetworks(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArtifact) error {
@@ -1656,7 +1597,8 @@ func validOperation(operation agentpb.PlanOperation) bool {
 
 func validLabelKey(key string) bool {
 	switch key {
-	case labelComponentID, labelEnvironmentID, labelImageChildDigest, labelImageIndexDigest, labelImagePlatform,
+	case labelComponentID, labelEnvironmentID, labelImageChildDigest, labelImageConfigDigest, labelImageIndexDigest,
+		labelImagePlatform,
 		labelKind, labelManaged, labelPlanID, labelProjectID,
 		labelReleaseID, labelRenderGen, labelRuntimeRole, labelServiceID, labelSlot, labelTenantID:
 		return true

@@ -86,7 +86,8 @@ func (planner *PlatformExecutionPlanner) ResolveComponentExecutionPlan(
 			RenderGeneration: ownershipGeneration,
 			ArtifactID:       resolved.input.ComposeArtifactID, Plan: resolved.plan,
 			ImageRepository: resolved.input.ImageRepository, ImageIndexDigest: resolved.input.ImageIndexDigest,
-			ImageChildDigest: resolved.input.ImageChildDigest, ImageReference: resolved.input.ImageReference,
+			ImageConfigDigest: resolved.input.ImageConfigDigest,
+			ImageChildDigest:  resolved.input.ImageChildDigest, ImageReference: resolved.input.ImageReference,
 			ImageOS: resolved.input.ImageOS, ImageArchitecture: resolved.input.ImageArchitecture,
 			ImageVariant: resolved.input.ImageVariant,
 		},
@@ -313,10 +314,9 @@ func (planner *PlatformExecutionPlanner) resolve(
 		clearPlatformComponentPlan(registeredPlan)
 		return resolvedPlatformComponent{}, errs.New(errs.KindInternal, "registered Component service changed")
 	}
-	platform, reference, found := registeredPlan.Services[0].Image.Select(
-		input.ImageOS, input.ImageArchitecture, input.ImageVariant,
-	)
+	platform, reference, found := registeredPlan.Services[0].Image.Select(input.ImageOS, input.ImageArchitecture)
 	if !found || reference != input.ImageReference || platform.ChildDigest != input.ImageChildDigest ||
+		platform.ConfigDigest != input.ImageConfigDigest || platform.Variant != input.ImageVariant ||
 		registeredPlan.Services[0].Image.Repository != input.ImageRepository ||
 		registeredPlan.Services[0].Image.IndexDigest != input.ImageIndexDigest {
 		clearPlatformComponentPlan(registeredPlan)

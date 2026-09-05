@@ -22,6 +22,13 @@ func TestDNSResolverResultShapeMatchesCompletedComponentLifecycle(t *testing.T) 
 	if err := validateDNSResolverResultShape(acknowledgement, plan); err != nil {
 		t.Fatalf("validateDNSResolverResultShape() error = %v", err)
 	}
+	wrongConfig := proto.Clone(candidate).(*agentpb.DNSResolverObservationEvidence)
+	wrongConfig.ImageConfigDigest = bytes.Repeat([]byte{9}, sha256.Size)
+	if err := validateDNSResolverResultShape(
+		dnsResolverShapeAck(agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED, "", wrongConfig, nil), plan,
+	); err == nil {
+		t.Fatal("completed update accepted a config digest different from its sealed Service")
+	}
 	acknowledgement.GetComposeResult().DnsResolverCandidateObservation = nil
 	if err := validateDNSResolverResultShape(acknowledgement, plan); err == nil {
 		t.Fatal("completed update accepted missing candidate proof")
@@ -140,6 +147,7 @@ func TestDNSResolverResultShapeUsesDistinctRollbackServiceImage(t *testing.T) {
 	previousService.ImageRepository = "image-previous"
 	previousService.ImageIndexDigest = bytes.Repeat([]byte{5}, sha256.Size)
 	previousService.ImageChildDigest = bytes.Repeat([]byte{6}, sha256.Size)
+	previousService.ImageConfigDigest = bytes.Repeat([]byte{7}, sha256.Size)
 	plan.Artifacts = append(plan.Artifacts, rollbackArtifact)
 	plan.Steps = []*agentpb.ExecutionStep{
 		plan.Steps[0],
@@ -152,6 +160,7 @@ func TestDNSResolverResultShapeUsesDistinctRollbackServiceImage(t *testing.T) {
 	rollback.ImageRepository = previousService.GetImageRepository()
 	rollback.ImageIndexDigest = previousService.GetImageIndexDigest()
 	rollback.VerifiedImageDigest = previousService.GetImageChildDigest()
+	rollback.ImageConfigDigest = previousService.GetImageConfigDigest()
 	if err := validateDNSResolverResultShape(
 		dnsResolverShapeAck(agentpb.TaskTerminal_TASK_TERMINAL_FAILED, "observe", nil, rollback), plan,
 	); err != nil {
@@ -163,6 +172,7 @@ func TestDNSResolverResultShapeUsesDistinctRollbackServiceImage(t *testing.T) {
 	wrong.ImageRepository = candidateService.GetImageRepository()
 	wrong.ImageIndexDigest = candidateService.GetImageIndexDigest()
 	wrong.VerifiedImageDigest = candidateService.GetImageChildDigest()
+	wrong.ImageConfigDigest = candidateService.GetImageConfigDigest()
 	if err := validateDNSResolverResultShape(
 		dnsResolverShapeAck(agentpb.TaskTerminal_TASK_TERMINAL_FAILED, "observe", nil, wrong), plan,
 	); err == nil {
@@ -208,7 +218,8 @@ func validComposeDNSProof(t *testing.T) *agentpb.DNSResolverObservationEvidence 
 		ImageReference:  "registry.example/resolver@sha256:" + hex.EncodeToString(childDigest),
 		ImageRepository: "registry.example/resolver", ImageIndexDigest: bytes.Repeat([]byte{3}, sha256.Size),
 		VerifiedImageDigest: childDigest, ImageOs: "linux", ImageArchitecture: "amd64",
-		ListenEndpoint: "127.0.0.1:53", ReloadSha512: make([]byte, 64),
+		ImageConfigDigest: bytes.Repeat([]byte{5}, sha256.Size),
+		ListenEndpoint:    "127.0.0.1:53", ReloadSha512: make([]byte, 64),
 		ObservedAt: timestamppb.New(time.Unix(1, 0).UTC()),
 		CatchAllQuery: &agentpb.DNSQueryProof{
 			Name: ".", Type: agentpb.DNSQueryType_DNS_QUERY_TYPE_NS, RecursionAvailable: true,
@@ -235,8 +246,9 @@ func dnsResolverShapePlan(
 	previousDigest := bytes.Repeat([]byte{2}, sha256.Size)
 	service := &agentpb.ComposeService{
 		ServiceId: "svc_exact", ImageReference: "image@sha256:exact", ImageRepository: "image",
-		ImageIndexDigest: bytes.Repeat([]byte{3}, sha256.Size),
-		ImageChildDigest: bytes.Repeat([]byte{4}, sha256.Size), ImageOs: "linux", ImageArchitecture: "amd64",
+		ImageIndexDigest:  bytes.Repeat([]byte{3}, sha256.Size),
+		ImageConfigDigest: bytes.Repeat([]byte{5}, sha256.Size),
+		ImageChildDigest:  bytes.Repeat([]byte{4}, sha256.Size), ImageOs: "linux", ImageArchitecture: "amd64",
 	}
 	managed := &agentpb.ComponentApply{
 		ComponentId: "cmp_exact", ArtifactId: "cfg_exact", ArtifactDigest: candidateDigest,
@@ -260,7 +272,8 @@ func dnsResolverShapePlan(
 			ArtifactSha256: digest, RenderGeneration: 7,
 			ImageReference: service.GetImageReference(), ImageRepository: service.GetImageRepository(),
 			ImageIndexDigest: service.GetImageIndexDigest(), VerifiedImageDigest: service.GetImageChildDigest(),
-			ImageOs: service.GetImageOs(), ImageArchitecture: service.GetImageArchitecture(),
+			ImageConfigDigest: service.GetImageConfigDigest(),
+			ImageOs:           service.GetImageOs(), ImageArchitecture: service.GetImageArchitecture(),
 		}
 	}
 	rollback := proof(previousDigest)
@@ -288,8 +301,9 @@ func dnsResolverDisableShapePlan() (*agentpb.ExecutionPlan, *agentpb.DNSResolver
 	digest := bytes.Repeat([]byte{2}, sha256.Size)
 	service := &agentpb.ComposeService{
 		ServiceId: "svc_exact", ImageReference: "image@sha256:exact", ImageRepository: "image",
-		ImageIndexDigest: bytes.Repeat([]byte{3}, sha256.Size),
-		ImageChildDigest: bytes.Repeat([]byte{4}, sha256.Size), ImageOs: "linux", ImageArchitecture: "amd64",
+		ImageIndexDigest:  bytes.Repeat([]byte{3}, sha256.Size),
+		ImageConfigDigest: bytes.Repeat([]byte{5}, sha256.Size),
+		ImageChildDigest:  bytes.Repeat([]byte{4}, sha256.Size), ImageOs: "linux", ImageArchitecture: "amd64",
 	}
 	action := &agentpb.ComponentApply{
 		ComponentId: "cmp_exact", ArtifactId: "cfg_exact", ArtifactDigest: digest, Generation: 7,
@@ -306,6 +320,7 @@ func dnsResolverDisableShapePlan() (*agentpb.ExecutionPlan, *agentpb.DNSResolver
 		ArtifactSha256: digest, RenderGeneration: action.GetGeneration(),
 		ImageReference: service.GetImageReference(), ImageRepository: service.GetImageRepository(),
 		ImageIndexDigest: service.GetImageIndexDigest(), VerifiedImageDigest: service.GetImageChildDigest(),
-		ImageOs: service.GetImageOs(), ImageArchitecture: service.GetImageArchitecture(),
+		ImageConfigDigest: service.GetImageConfigDigest(),
+		ImageOs:           service.GetImageOs(), ImageArchitecture: service.GetImageArchitecture(),
 	}
 }

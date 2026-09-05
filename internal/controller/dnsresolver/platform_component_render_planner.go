@@ -261,11 +261,8 @@ func (planner *PlatformRenderPlanner) prepareConfigTask(
 		)
 	}
 	image := selectedPlan.Services[0].Image
-	selectedOS, selectedArch, selectedVariant := runtime.GOOS, runtime.GOARCH, ""
-	if selectedArch == "arm64" {
-		selectedVariant = "v8"
-	}
-	selectedPlatform, selectedReference, selected := image.Select(selectedOS, selectedArch, selectedVariant)
+	selectedOS, selectedArch := runtime.GOOS, runtime.GOARCH
+	selectedPlatform, selectedReference, selected := image.Select(selectedOS, selectedArch)
 	defer clearEnvironmentPlan(selectedPlan)
 	if !selected || selectedOS != "linux" {
 		return etcd.PlatformComponentTaskRenderInput{}, errs.New(
@@ -325,7 +322,8 @@ func (planner *PlatformRenderPlanner) prepareConfigTask(
 			ComponentID: desired.ID, PlanID: ownershipPlanID, RenderGeneration: ownershipGeneration,
 			ArtifactID: composeArtifactID, Plan: selectedPlan,
 			ImageRepository: image.Repository, ImageIndexDigest: image.IndexDigest,
-			ImageChildDigest: selectedPlatform.ChildDigest, ImageReference: selectedReference,
+			ImageConfigDigest: selectedPlatform.ConfigDigest,
+			ImageChildDigest:  selectedPlatform.ChildDigest, ImageReference: selectedReference,
 			ImageOS: selectedPlatform.OS, ImageArchitecture: selectedPlatform.Architecture,
 			ImageVariant: selectedPlatform.Variant,
 		},
@@ -363,7 +361,8 @@ func (planner *PlatformRenderPlanner) prepareConfigTask(
 		ExpectedPreviousArtifactID:     expectedPreviousArtifactID,
 		ExpectedPreviousGeneration:     expectedPreviousGeneration,
 		ImageRepository:                image.Repository, ImageIndexDigest: image.IndexDigest,
-		ImageOS: selectedPlatform.OS, ImageArchitecture: selectedPlatform.Architecture,
+		ImageConfigDigest: selectedPlatform.ConfigDigest,
+		ImageOS:           selectedPlatform.OS, ImageArchitecture: selectedPlatform.Architecture,
 		ImageVariant: selectedPlatform.Variant, ImageChildDigest: selectedPlatform.ChildDigest,
 		ImageReference: selectedReference,
 		ArtifactSHA256: hex.EncodeToString(intent.ArtifactSHA256[:]),

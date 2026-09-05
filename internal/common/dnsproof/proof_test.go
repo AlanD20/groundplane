@@ -1,6 +1,8 @@
 package dnsproof
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"sync"
 	"testing"
 
@@ -51,6 +53,12 @@ func TestCanonicalProofRejectsSelfHashedInvalidSemantics(t *testing.T) {
 		"unbounded attempts": func(evidence *agentpb.DNSResolverObservationEvidence) {
 			evidence.CatchAllQuery.Attempts = 4
 		},
+		"missing image config digest": func(evidence *agentpb.DNSResolverObservationEvidence) {
+			evidence.ImageConfigDigest = nil
+		},
+		"zero image config digest": func(evidence *agentpb.DNSResolverObservationEvidence) {
+			evidence.ImageConfigDigest = make([]byte, sha256.Size)
+		},
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -70,7 +78,8 @@ func TestCanonicalProofRejectsSelfHashedInvalidSemantics(t *testing.T) {
 
 func validEvidence() *agentpb.DNSResolverObservationEvidence {
 	return &agentpb.DNSResolverObservationEvidence{
-		ComponentId: "cmp_exact",
+		ComponentId:       "cmp_exact",
+		ImageConfigDigest: bytes.Repeat([]byte{7}, sha256.Size),
 		CatchAllQuery: &agentpb.DNSQueryProof{
 			Name: ".", Type: agentpb.DNSQueryType_DNS_QUERY_TYPE_NS, LocalRcode: 0,
 			RecursionAvailable: true, SelectedUpstream: "1.1.1.1:53", DirectRcode: 0, Attempts: 1,

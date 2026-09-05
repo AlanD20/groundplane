@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"encoding/hex"
 	"strings"
 	"testing"
 	"time"
@@ -10,13 +11,23 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func testPlatformComponentComposeArtifact(artifactID string, serviceID string) *agentpb.ComposeArtifact {
+func testPlatformComponentComposeArtifact(artifactID string, serviceID string, configDigest string) *agentpb.ComposeArtifact {
 	return &agentpb.ComposeArtifact{
 		ArtifactId:  artifactID,
 		OwnerKind:   agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM,
 		ProjectName: "groundplane-infra",
-		Services:    []*agentpb.ComposeService{{ServiceId: serviceID}},
+		Services: []*agentpb.ComposeService{{
+			ServiceId: serviceID, ImageConfigDigest: mustDecodeTestDigest(configDigest),
+		}},
 	}
+}
+
+func mustDecodeTestDigest(value string) []byte {
+	decoded, err := hex.DecodeString(value)
+	if err != nil {
+		panic(err)
+	}
+	return decoded
 }
 
 func TestPlatformComponentAcknowledgementIgnoresNilControllerResult(t *testing.T) {
@@ -43,6 +54,7 @@ func TestPlatformComponentObservationBindsPromotionToExactAgentProof(t *testing.
 		ComponentID:        ids.NewAt(ids.KindComponent, now, 1),
 		GeneratedServiceID: ids.NewAt(ids.KindService, now, 2),
 		ArtifactID:         ids.NewAt(ids.KindConfig, now, 3), ArtifactSHA256: strings.Repeat("1", 64),
+		ImageConfigDigest: strings.Repeat("9", 64),
 	}
 	valid := platformDNSProof(input, 7, now)
 	if err := validatePlatformComponentObservation(input, 7, valid); err != nil {
@@ -59,6 +71,13 @@ func TestPlatformComponentObservationBindsPromotionToExactAgentProof(t *testing.
 	wrongGeneration.DNSResolverCandidateObservation = &wrongEvidence
 	if err := validatePlatformComponentObservation(input, 7, wrongGeneration); err == nil {
 		t.Fatal("validatePlatformComponentObservation() accepted another render generation")
+	}
+	wrongConfig := valid
+	wrongConfigEvidence := *valid.DNSResolverCandidateObservation
+	wrongConfigEvidence.ImageConfigDigest = strings.Repeat("8", 64)
+	wrongConfig.DNSResolverCandidateObservation = &wrongConfigEvidence
+	if err := validatePlatformComponentObservation(input, 7, wrongConfig); err == nil {
+		t.Fatal("validatePlatformComponentObservation() accepted another image config digest")
 	}
 }
 
@@ -103,12 +122,22 @@ func TestPlatformComponentAcknowledgementAtomicallyPublishesObservation(t *testi
 		ActionID: "activate-config", ArtifactID: ids.NewAt(ids.KindConfig, now, 5),
 		ComposeArtifactID: ids.NewAt(ids.KindConfig, now, 6), OwnershipPlanID: planID, OwnershipGeneration: 1,
 		ImageRepository: "coredns/coredns", ImageIndexDigest: strings.Repeat("7", 64),
-		ImageChildDigest: strings.Repeat("8", 64), ImageReference: "coredns/coredns@sha256:" + strings.Repeat("8", 64),
+		ImageConfigDigest: strings.Repeat("9", 64),
+		ImageChildDigest:  strings.Repeat("8", 64), ImageReference: "coredns/coredns@sha256:" + strings.Repeat("8", 64),
 		ImageOS: "linux", ImageArchitecture: "amd64",
 		ArtifactSHA256: strings.Repeat("5", 64), ArtifactLength: 1, PlanSHA256: strings.Repeat("6", 64),
 		ExecutionPlanSHA256: strings.Repeat("7", 64),
 	}
-	input.ComposeArtifact = testPlatformComponentComposeArtifact(input.ComposeArtifactID, input.GeneratedServiceID)
+	input.ComposeArtifact = testPlatformComponentComposeArtifact(
+		input.ComposeArtifactID, input.GeneratedServiceID, input.ImageConfigDigest,
+	)
+	for name, digest := range map[string]string{"missing": "", "zero": strings.Repeat("0", 64)} {
+		invalid := input
+		invalid.ImageConfigDigest = digest
+		if _, err := encodePlatformComponentTaskRenderInput(invalid); err == nil {
+			t.Fatalf("encodePlatformComponentTaskRenderInput() accepted %s image config identity", name)
+		}
+	}
 	renderValue, err := encodePlatformComponentTaskRenderInput(input)
 	if err != nil {
 		t.Fatalf("encodePlatformComponentTaskRenderInput() error = %v", err)
@@ -224,7 +253,8 @@ func TestPlatformComponentDisableAcknowledgementReplayAcceptsEmptyDigests(t *tes
 		ArtifactLength: 1, DisableService: true, PlanSHA256: strings.Repeat("7", 64),
 		ExecutionPlanSHA256: strings.Repeat("a", 64),
 		ImageRepository:     "coredns/coredns", ImageIndexDigest: strings.Repeat("8", 64),
-		ImageChildDigest: strings.Repeat("9", 64), ImageReference: "coredns/coredns@sha256:" + strings.Repeat("9", 64),
+		ImageConfigDigest: strings.Repeat("b", 64),
+		ImageChildDigest:  strings.Repeat("9", 64), ImageReference: "coredns/coredns@sha256:" + strings.Repeat("9", 64),
 		ImageOS: "linux", ImageArchitecture: "amd64",
 	}
 	renderValue, err := encodePlatformComponentTaskRenderInput(input)

@@ -47,8 +47,9 @@ func (inspector *dockerRuntimeInspector) Inspect(ctx context.Context, request Re
 		return runtimeEvidence{}, errs.Wrap(errs.KindInternal, err)
 	}
 	container := inspected.Container
+	expectedImageID := "sha256:" + hex.EncodeToString(request.ImageConfigDigest[:])
 	if container.Config == nil || container.State == nil || !container.State.Running ||
-		container.Config.Image != request.ImageReference {
+		container.Config.Image != request.ImageReference || container.Image != expectedImageID {
 		return runtimeEvidence{}, errs.New(errs.KindStateConflict, "DNS resolver runtime identity is invalid")
 	}
 	for key, value := range request.ExpectedLabels {
@@ -104,7 +105,35 @@ func (inspector *dockerRuntimeInspector) Inspect(ctx context.Context, request Re
 		clear(logs)
 		return runtimeEvidence{}, err
 	}
-	return runtimeEvidence{artifact: artifact, logs: logs, verifiedImageDigest: digest}, nil
+	actualConfigDigest, err := verifiedImageConfigDigest(container.Image, image.ID, request.ImageConfigDigest)
+	if err != nil {
+		clear(artifact)
+		clear(logs)
+		return runtimeEvidence{}, err
+	}
+	return runtimeEvidence{
+		artifact: artifact, logs: logs, verifiedImageDigest: digest,
+		verifiedImageConfigDigest: actualConfigDigest,
+	}, nil
+}
+
+func verifiedImageConfigDigest(
+	containerImageID string,
+	inspectedImageID string,
+	expected [sha256.Size]byte,
+) ([sha256.Size]byte, error) {
+	if containerImageID != "sha256:"+hex.EncodeToString(expected[:]) || inspectedImageID != containerImageID {
+		return [sha256.Size]byte{}, errs.New(errs.KindStateConflict, "DNS resolver image config digest changed")
+	}
+	const prefix = "sha256:"
+	decoded, err := hex.DecodeString(strings.TrimPrefix(containerImageID, prefix))
+	if err != nil || !strings.HasPrefix(containerImageID, prefix) || len(decoded) != sha256.Size ||
+		containerImageID != prefix+hex.EncodeToString(decoded) {
+		return [sha256.Size]byte{}, errs.New(errs.KindStateConflict, "DNS resolver image config digest is invalid")
+	}
+	var result [sha256.Size]byte
+	copy(result[:], decoded)
+	return result, nil
 }
 
 func readBoundedContainerLogs(content io.ReadCloser, tty bool) ([]byte, error) {

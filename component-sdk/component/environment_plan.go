@@ -116,6 +116,7 @@ type OCIPlatform struct {
 	Architecture string
 	Variant      string
 	ChildDigest  string
+	ConfigDigest string
 }
 
 // OCIImage is the complete compiled image authority. Runtime code selects one
@@ -130,13 +131,60 @@ func (image OCIImage) IndexReference() string {
 	return image.Repository + "@sha256:" + image.IndexDigest
 }
 
-func (image OCIImage) Select(osName, architecture, variant string) (OCIPlatform, string, bool) {
+func (image OCIImage) Validate() error {
+	if image.Repository == "" || strings.ContainsAny(image.Repository, "@ ") ||
+		!validOCIImageSHA256(image.IndexDigest) || len(image.Platforms) != 2 {
+		return fmt.Errorf("component: OCI image authority is invalid")
+	}
+	amd64, arm64 := image.Platforms[0], image.Platforms[1]
+	if amd64.OS != "linux" || amd64.Architecture != "amd64" || amd64.Variant != "" ||
+		!validOCIImageSHA256(amd64.ChildDigest) || !validOCIImageSHA256(amd64.ConfigDigest) ||
+		arm64.OS != "linux" || arm64.Architecture != "arm64" ||
+		arm64.Variant != "" && arm64.Variant != "v8" ||
+		!validOCIImageSHA256(arm64.ChildDigest) || !validOCIImageSHA256(arm64.ConfigDigest) ||
+		amd64.ChildDigest == arm64.ChildDigest || amd64.ConfigDigest == arm64.ConfigDigest {
+		return fmt.Errorf("component: OCI image authority is invalid")
+	}
+	return nil
+}
+
+func (image OCIImage) Equal(other OCIImage) bool {
+	if image.Repository != other.Repository || image.IndexDigest != other.IndexDigest ||
+		len(image.Platforms) != len(other.Platforms) {
+		return false
+	}
+	for index := range image.Platforms {
+		if image.Platforms[index] != other.Platforms[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func (image OCIImage) Select(osName, architecture string) (OCIPlatform, string, bool) {
+	if image.Validate() != nil {
+		return OCIPlatform{}, "", false
+	}
 	for _, platform := range image.Platforms {
-		if platform.OS == osName && platform.Architecture == architecture && platform.Variant == variant {
+		if platform.OS == osName && platform.Architecture == architecture {
 			return platform, image.Repository + "@sha256:" + platform.ChildDigest, true
 		}
 	}
 	return OCIPlatform{}, "", false
+}
+
+func validOCIImageSHA256(value string) bool {
+	if len(value) != sha256.Size*2 {
+		return false
+	}
+	nonzero := false
+	for _, character := range value {
+		if character < '0' || character > '9' && character < 'a' || character > 'f' {
+			return false
+		}
+		nonzero = nonzero || character != '0'
+	}
+	return nonzero
 }
 
 type ManagedMountKind string
@@ -222,7 +270,7 @@ func DigestEnvironmentPlan(plan EnvironmentPlan) [sha256.Size]byte {
 		return normalized.Files[left].Path < normalized.Files[right].Path
 	})
 	encoded := make([]byte, 0, 1024)
-	encoded = appendPlanString(encoded, "environment-plan-v4")
+	encoded = appendPlanString(encoded, "environment-plan-v5")
 	encoded = appendPlanCount(encoded, len(normalized.Services))
 	for _, service := range normalized.Services {
 		encoded = appendPlanString(encoded, service.ID)
@@ -275,6 +323,7 @@ func appendOCIImage(encoded []byte, image OCIImage) []byte {
 		encoded = appendPlanString(encoded, platform.Architecture)
 		encoded = appendPlanString(encoded, platform.Variant)
 		encoded = appendPlanString(encoded, platform.ChildDigest)
+		encoded = appendPlanString(encoded, platform.ConfigDigest)
 	}
 	return encoded
 }

@@ -45,6 +45,14 @@ func TestTaskResultRecordRoundTripsAsBoundedSummary(t *testing.T) {
 	if !reflect.DeepEqual(decoded.Result, record.Result) {
 		t.Fatalf("decoded result = %#v, want %#v", decoded.Result, record.Result)
 	}
+	for name, digest := range map[string]string{"missing": "", "zero": strings.Repeat("0", 64)} {
+		invalid := record
+		invalid.Result = cloneTaskResult(record.Result)
+		invalid.Result.DNSResolverCandidateObservation.ImageConfigDigest = digest
+		if _, err := encodeTaskRecord(invalid); err == nil {
+			t.Fatalf("encodeTaskRecord() accepted %s DNS resolver image config digest", name)
+		}
+	}
 	cloned := cloneTaskResult(record.Result)
 	cloned.DNSResolverCandidateObservation.ProofSHA256 = strings.Repeat("5", 64)
 	if record.Result.DNSResolverCandidateObservation.ProofSHA256 == cloned.DNSResolverCandidateObservation.ProofSHA256 {
@@ -60,13 +68,15 @@ func testDurableDNSProof(
 ) *TaskDNSResolverObservationEvidence {
 	artifact, _ := hex.DecodeString(artifactSHA)
 	image, _ := hex.DecodeString(strings.Repeat("2", 64))
+	config, _ := hex.DecodeString(strings.Repeat("9", 64))
 	reload, _ := hex.DecodeString(strings.Repeat("3", 128))
 	evidence := &agentpb.DNSResolverObservationEvidence{
 		ComponentId: componentID, ServiceId: serviceID, ArtifactId: artifactID,
 		ArtifactSha256: artifact, RenderGeneration: generation,
 		ImageReference:      "coredns/coredns@sha256:" + strings.Repeat("2", 64),
 		VerifiedImageDigest: image, ListenEndpoint: "127.0.0.1:53", ReloadSha512: reload,
-		ObservedAt: timestamppb.New(observedAt),
+		ImageConfigDigest: config,
+		ObservedAt:        timestamppb.New(observedAt),
 		CatchAllQuery: &agentpb.DNSQueryProof{
 			Name: ".", Type: agentpb.DNSQueryType_DNS_QUERY_TYPE_NS, RecursionAvailable: true,
 			SelectedUpstream: "1.1.1.1:53", Attempts: 1,
@@ -103,6 +113,7 @@ func testDurableDNSProof(
 		RenderGeneration:        generation,
 		ImageReference:          evidence.ImageReference,
 		VerifiedImageDigest:     strings.Repeat("2", 64),
+		ImageConfigDigest:       strings.Repeat("9", 64),
 		ListenEndpoint:          "127.0.0.1:53",
 		ReloadSHA512:            strings.Repeat("3", 128),
 		ObservedAt:              observedAt,

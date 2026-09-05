@@ -15,12 +15,14 @@ func controllerTestOCIImage(repository string) componentsdk.OCIImage {
 				OS:           "linux",
 				Architecture: "amd64",
 				ChildDigest:  "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+				ConfigDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
 			},
 			{
 				OS:           "linux",
 				Architecture: "arm64",
 				Variant:      "v8",
 				ChildDigest:  "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+				ConfigDigest: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
 			},
 		},
 	}
@@ -28,11 +30,7 @@ func controllerTestOCIImage(repository string) componentsdk.OCIImage {
 
 func controllerTestOCIPlatform(repository string) (componentsdk.OCIImage, componentsdk.OCIPlatform, string) {
 	image := controllerTestOCIImage(repository)
-	variant := ""
-	if runtime.GOARCH == "arm64" {
-		variant = "v8"
-	}
-	platform, reference, selected := image.Select(runtime.GOOS, runtime.GOARCH, variant)
+	platform, reference, selected := image.Select(runtime.GOOS, runtime.GOARCH)
 	if !selected {
 		panic("controller test OCI image does not support the current platform")
 	}

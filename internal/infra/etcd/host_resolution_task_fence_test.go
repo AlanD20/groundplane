@@ -123,12 +123,14 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 			ComposeArtifact: testPlatformComponentComposeArtifact(
 				ids.NewAt(ids.KindConfig, now, 3),
 				serviceID,
+				strings.Repeat("9", 64),
 			),
 			ArtifactSHA256:      strings.Repeat("d", 64),
 			OwnershipPlanID:     task.PlanID,
 			OwnershipGeneration: 1,
 			ImageRepository:     "coredns/coredns",
 			ImageIndexDigest:    strings.Repeat("7", 64),
+			ImageConfigDigest:   strings.Repeat("9", 64),
 			ImageChildDigest: strings.Repeat(
 				"8",
 				64,
@@ -324,6 +326,7 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 		ComposeArtifact: testPlatformComponentComposeArtifact(
 			secondInput.ComposeArtifactID,
 			secondInput.GeneratedServiceID,
+			secondInput.ImageConfigDigest,
 		),
 	}
 	observationValue, err := encodeComponentObservation(predecessorObservation)

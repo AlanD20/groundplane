@@ -28,6 +28,7 @@ func TestDurableComposeTaskResultPreservesDNSResolverObservation(t *testing.T) {
 		RenderGeneration:    12,
 		ImageReference:      "coredns/coredns@sha256:" + strings.Repeat("a", 64),
 		VerifiedImageDigest: bytes.Repeat([]byte{0xaa}, sha256.Size),
+		ImageConfigDigest:   bytes.Repeat([]byte{0xbb}, sha256.Size),
 		ListenEndpoint:      "127.0.0.1:53", ReloadSha512: reload[:], ObservedAt: timestamppb.New(now),
 		CatchAllQuery: &agentpb.DNSQueryProof{
 			Name: ".", Type: agentpb.DNSQueryType_DNS_QUERY_TYPE_NS, RecursionAvailable: true,
@@ -85,6 +86,7 @@ func TestDurableComposeTaskResultPreservesDNSResolverObservation(t *testing.T) {
 		durable.DNSResolverCandidateObservation.ComponentID != evidence.GetComponentId() ||
 		durable.DNSResolverCandidateObservation.ArtifactSHA256 != hex.EncodeToString(artifact[:]) ||
 		durable.DNSResolverCandidateObservation.ReloadSHA512 != hex.EncodeToString(reload[:]) ||
+		durable.DNSResolverCandidateObservation.ImageConfigDigest != strings.Repeat("bb", sha256.Size) ||
 		durable.DNSResolverCandidateObservation.ProofSHA256 != hex.EncodeToString(evidence.GetProofSha256()) ||
 		!durable.DNSResolverCandidateObservation.ObservedAt.Equal(now) {
 		t.Fatalf("durable DNS resolver evidence = %#v", durable.DNSResolverCandidateObservation)

@@ -1,6 +1,7 @@
 package executionplan
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"errors"
 	"strings"
@@ -120,6 +121,38 @@ func TestSealBindsRemoveComponentActionToSelectedServiceGeneration(t *testing.T)
 func TestSealAcceptsComponentDisableRestoreBeforeRemove(t *testing.T) {
 	if _, err := Seal(validComponentDisablePlan()); err != nil {
 		t.Fatalf("Seal(restore-before-remove Component disable) error = %v", err)
+	}
+}
+
+// Rationale: old Component artifacts without a config identity must fail
+// closed instead of being repaired from the current registered catalog.
+func TestSealRejectsComponentMissingImageConfigDigest(t *testing.T) {
+	for name, digest := range map[string][]byte{"missing": nil, "zero": make([]byte, sha256.Size)} {
+		plan := validComponentDisablePlan()
+		plan.Artifacts[0].Services[0].ImageConfigDigest = digest
+		if _, err := Seal(plan); err == nil {
+			t.Fatalf("Seal() accepted a Component artifact with %s image config identity", name)
+		}
+	}
+}
+
+// Rationale: the immutable execution-plan receipt must change when only the
+// selected image config identity changes with its matching Compose label.
+func TestPlanHashBindsComponentImageConfigDigest(t *testing.T) {
+	base, err := Seal(validComponentDisablePlan())
+	if err != nil {
+		t.Fatal(err)
+	}
+	changedPlan := validComponentDisablePlan()
+	changedService := changedPlan.Artifacts[0].Services[0]
+	changedService.ImageConfigDigest = bytes.Repeat([]byte{4}, sha256.Size)
+	changedService.ExpectedLabels[0].Value = "sha256:" + strings.Repeat("04", sha256.Size)
+	changed, err := Seal(changedPlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(base.GetPlanHash(), changed.GetPlanHash()) {
+		t.Fatal("Seal() plan hash ignored changed image config identity")
 	}
 }
 
@@ -277,6 +310,7 @@ func validPlan() *agentpb.ExecutionPlan {
 
 func validComponentDisablePlan() *agentpb.ExecutionPlan {
 	plan := validPlan()
+	bindTestComponentImageIdentity(plan.Artifacts[0].Services[0])
 	componentID := "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	removeStepID := "step_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 	plan.Operation = agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY
@@ -307,11 +341,21 @@ func validComponentDisablePlan() *agentpb.ExecutionPlan {
 	return plan
 }
 
+func bindTestComponentImageIdentity(service *agentpb.ComposeService) {
+	service.ImageIndexDigest = bytes.Repeat([]byte{1}, sha256.Size)
+	service.ImageChildDigest = bytes.Repeat([]byte{2}, sha256.Size)
+	service.ImageConfigDigest = bytes.Repeat([]byte{3}, sha256.Size)
+	service.ExpectedLabels = append([]*agentpb.LabelPair{{
+		Key: labelImageConfigDigest, Value: "sha256:" + strings.Repeat("03", sha256.Size),
+	}}, service.ExpectedLabels...)
+}
+
 func validComponentServiceEnsurePlan(
 	mode agentpb.ComponentLifecycleMode,
 	predecessor bool,
 ) *agentpb.ExecutionPlan {
 	plan := validPlan()
+	bindTestComponentImageIdentity(plan.Artifacts[0].Services[0])
 	componentID := "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	digest := sha256.Sum256([]byte("resolver artifact"))
 	plan.Operation = agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY

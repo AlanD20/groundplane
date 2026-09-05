@@ -37,12 +37,13 @@ var Image = component.OCIImage{
 			OS:           "linux",
 			Architecture: "amd64",
 			ChildDigest:  "f0b8c589314ed010a0c326e987a52b50801f0145ac9b75423af1b5c66dbd6d50",
+			ConfigDigest: "c69fa2e9cbf5f42dc48af631e956d3f95724c13f91596bc567591790e5e36db6",
 		},
 		{
 			OS:           "linux",
 			Architecture: "arm64",
-			Variant:      "v8",
 			ChildDigest:  "31440a2bef59e2f1ffb600113b557103740ff851e27b0aef5b849f6e3ab994a6",
+			ConfigDigest: "2f6c962e7b8311337352d9fdea917da2184d9919f4da7695bc2a6517cf392fe4",
 		},
 	},
 }

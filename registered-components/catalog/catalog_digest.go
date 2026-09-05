@@ -9,12 +9,13 @@ import (
 
 func catalogDigest(
 	definitions []component.Definition,
+	images []registeredImage,
 	actions []registeredManagedConfigAction,
 	containerActions []registeredContainerConfigAction,
 	observations []registeredDNSResolverObservation,
 ) [sha256.Size]byte {
-	encoded := appendLength(nil, len("groundplane-component-catalog-v8"))
-	encoded = append(encoded, "groundplane-component-catalog-v8"...)
+	encoded := appendLength(nil, len("groundplane-component-catalog-v10"))
+	encoded = append(encoded, "groundplane-component-catalog-v10"...)
 	encoded = appendLength(encoded, len(definitions))
 	for _, definition := range definitions {
 		implementation := string(definition.Implementation())
@@ -22,6 +23,13 @@ func catalogDigest(
 		encoded = append(encoded, implementation...)
 		digest := definition.Digest()
 		encoded = append(encoded, digest[:]...)
+	}
+	encoded = appendLength(encoded, len(images))
+	for _, registered := range images {
+		implementation := string(registered.implementation)
+		encoded = appendLength(encoded, len(implementation))
+		encoded = append(encoded, implementation...)
+		encoded = appendCatalogOCIImage(encoded, registered.image)
 	}
 	encoded = appendLength(encoded, len(actions))
 	for _, action := range actions {
@@ -33,7 +41,8 @@ func catalogDigest(
 		encoded = append(encoded, actionID...)
 		encoded = appendLength(encoded, len(action.recipe.relativePath))
 		encoded = append(encoded, action.recipe.relativePath...)
-		encoded = appendCatalogOCIImage(encoded, action.recipe.image)
+		encoded = appendLength(encoded, len(action.recipe.image.Repository))
+		encoded = append(encoded, action.recipe.image.Repository...)
 		encoded = appendLength(encoded, len(action.recipe.validateArgs))
 		for _, argument := range action.recipe.validateArgs {
 			encoded = appendLength(encoded, len(argument))
@@ -52,7 +61,8 @@ func catalogDigest(
 			encoded = appendLength(encoded, len(value))
 			encoded = append(encoded, value...)
 		}
-		encoded = appendCatalogOCIImage(encoded, action.recipe.image)
+		encoded = appendLength(encoded, len(action.recipe.image.Repository))
+		encoded = append(encoded, action.recipe.image.Repository...)
 		for _, command := range [][]string{action.recipe.validateArgs, action.recipe.activateArgs} {
 			encoded = appendLength(encoded, len(command))
 			for _, argument := range command {
@@ -77,7 +87,8 @@ func catalogDigest(
 			encoded = appendLength(encoded, len(value))
 			encoded = append(encoded, value...)
 		}
-		encoded = appendCatalogOCIImage(encoded, observation.recipe.image)
+		encoded = appendLength(encoded, len(observation.recipe.image.Repository))
+		encoded = append(encoded, observation.recipe.image.Repository...)
 	}
 	return sha256.Sum256(encoded)
 }
@@ -89,7 +100,9 @@ func appendCatalogOCIImage(encoded []byte, image component.OCIImage) []byte {
 	}
 	encoded = appendLength(encoded, len(image.Platforms))
 	for _, platform := range image.Platforms {
-		for _, value := range []string{platform.OS, platform.Architecture, platform.Variant, platform.ChildDigest} {
+		for _, value := range []string{
+			platform.OS, platform.Architecture, platform.Variant, platform.ChildDigest, platform.ConfigDigest,
+		} {
 			encoded = appendLength(encoded, len(value))
 			encoded = append(encoded, value...)
 		}

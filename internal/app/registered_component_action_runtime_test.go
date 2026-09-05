@@ -8,11 +8,29 @@ import (
 	"runtime"
 	"testing"
 
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	registeredcoredns "github.com/AlanD20/groundplane-registered-components/coredns"
 	"github.com/AlanD20/groundplane/internal/agent"
 	"github.com/AlanD20/groundplane/internal/infra/docker/dnsresolverobserver"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
+
+func TestRegisteredPlannerRejectsUnregisteredValidImage(t *testing.T) {
+	catalog, err := newRegisteredActionCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	unknown := registeredcoredns.Image
+	unknown.Platforms = append([]componentsdk.OCIPlatform(nil), unknown.Platforms...)
+	unknown.Repository = "example/unknown-resolver"
+	catalog.planners["coredns"] = func(string, componentdns.RenderInput) (componentsdk.EnvironmentPlan, error) {
+		return componentsdk.EnvironmentPlan{Services: []componentsdk.ManagedService{{Image: unknown}}}, nil
+	}
+	if _, err := catalog.Plan("coredns", "svc_test", componentdns.RenderInput{}); err == nil {
+		t.Fatal("Plan() accepted an unregistered valid managed image")
+	}
+}
 
 type componentActionManagedExecutorStub struct{}
 
@@ -84,11 +102,7 @@ func TestRegisteredComponentActionRuntimeObservesDNSResolverWithoutManagedConten
 	digest := sha256.Sum256([]byte("candidate Corefile"))
 	definitionDigest := definition.Digest()
 	catalogDigest := catalog.Digest()
-	variant := ""
-	if runtime.GOARCH == "arm64" {
-		variant = "v8"
-	}
-	platform, imageReference, selected := registeredcoredns.Image.Select(runtime.GOOS, runtime.GOARCH, variant)
+	platform, imageReference, selected := registeredcoredns.Image.Select(runtime.GOOS, runtime.GOARCH)
 	if !selected {
 		t.Fatal("test platform is absent from the CoreDNS catalog")
 	}
@@ -123,10 +137,11 @@ func TestRegisteredComponentActionRuntimeObservesDNSResolverWithoutManagedConten
 					ProjectName: "groundplane-infra",
 					Services: []*agentpb.ComposeService{{
 						ServiceId: "svc_exact", ComposeName: registeredcoredns.ServiceName,
-						ImageRepository:  registeredcoredns.Image.Repository,
-						ImageIndexDigest: componentActionTestDigest(t, registeredcoredns.Image.IndexDigest),
-						ImageChildDigest: componentActionTestDigest(t, platform.ChildDigest),
-						ImageReference:   imageReference, ImageOs: platform.OS,
+						ImageRepository:   registeredcoredns.Image.Repository,
+						ImageIndexDigest:  componentActionTestDigest(t, registeredcoredns.Image.IndexDigest),
+						ImageConfigDigest: componentActionTestDigest(t, platform.ConfigDigest),
+						ImageChildDigest:  componentActionTestDigest(t, platform.ChildDigest),
+						ImageReference:    imageReference, ImageOs: platform.OS,
 						ImageArchitecture: platform.Architecture, ImageVariant: platform.Variant,
 					}},
 				}},

@@ -26,7 +26,7 @@ func validateRequest(request Request) error {
 		(request.ImageArchitecture != "amd64" && request.ImageArchitecture != "arm64") ||
 		request.MetricsURL != "http://127.0.0.1:9153/metrics" ||
 		request.ReloadMetric == "" ||
-		len(request.ExpectedLabels) == 0 {
+		len(request.ExpectedLabels) == 0 || request.ImageConfigDigest == ([sha256.Size]byte{}) {
 		return errs.New(errs.KindValidationFailed, "DNS resolver observation identity is invalid")
 	}
 	return nil

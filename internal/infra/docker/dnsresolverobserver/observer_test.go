@@ -71,7 +71,7 @@ func (dns *observerDNSStub) Query(
 	dns.mu.Unlock()
 	proof := &agentpb.DNSQueryProof{Name: name, Type: queryType, LocalRcode: 0, RecursionAvailable: true}
 	if name == "app.internal." {
-		proof.Answers = []*agentpb.DNSAnswerRecord{{OwnerName: name, Type: queryType, Ipv4: []byte{10, 20, 0, 2}}}
+		proof.Answers = []*agentpb.DNSAnswerRecord{{OwnerName: name, Type: queryType, Ipv4: []byte{10, 200, 0, 2}}}
 	}
 	if name == "." {
 		proof.Answers = []*agentpb.DNSAnswerRecord{{OwnerName: ".", Type: queryType, NameServer: "a.root-servers.net."}}
@@ -89,6 +89,7 @@ func TestObserveReturnsTypedExactCandidateEvidence(t *testing.T) {
 	artifactSHA256 := sha256.Sum256(artifact)
 	reloadSHA512 := testEffectiveConfigSHA512(t, "/etc/coredns/Corefile", artifact)
 	imageDigest := sha256.Sum256([]byte("verified child image"))
+	imageConfigDigest := sha256.Sum256([]byte("verified image config"))
 	dns := &observerDNSStub{}
 	baseCounters := forwardMetrics(nil, 4, 9)
 	catchCounters := forwardMetrics(nil, 4, 10)
@@ -96,7 +97,7 @@ func TestObserveReturnsTypedExactCandidateEvidence(t *testing.T) {
 	executor := &Executor{
 		runtime: observerRuntimeStub{evidence: runtimeEvidence{
 			artifact: append([]byte(nil), artifact...), logs: reloadLog(reloadSHA512),
-			verifiedImageDigest: imageDigest,
+			verifiedImageDigest: imageDigest, verifiedImageConfigDigest: imageConfigDigest,
 		}},
 		metrics: &observerMetricsStub{values: [][]byte{
 			baseCounters, baseCounters, baseCounters,
@@ -117,6 +118,7 @@ func TestObserveReturnsTypedExactCandidateEvidence(t *testing.T) {
 		ImageReference:    "coredns/coredns@sha256:" + strings.Repeat("a", 64),
 		ImageRepository:   "coredns/coredns",
 		ImageIndexDigest:  artifactSHA256,
+		ImageConfigDigest: imageConfigDigest,
 		ImageOS:           "linux",
 		ImageArchitecture: "amd64",
 		ListenEndpoint:    "127.0.0.1:53",
@@ -130,6 +132,7 @@ func TestObserveReturnsTypedExactCandidateEvidence(t *testing.T) {
 	if hex.EncodeToString(evidence.GetArtifactSha256()) != hex.EncodeToString(artifactSHA256[:]) ||
 		hex.EncodeToString(evidence.GetReloadSha512()) != hex.EncodeToString(reloadSHA512[:]) ||
 		hex.EncodeToString(evidence.GetVerifiedImageDigest()) != hex.EncodeToString(imageDigest[:]) ||
+		hex.EncodeToString(evidence.GetImageConfigDigest()) != hex.EncodeToString(imageConfigDigest[:]) ||
 		evidence.GetRenderGeneration() != 9 || evidence.GetStaticQuery().GetName() != "app.internal." ||
 		len(evidence.GetStaticQuery().GetAnswers()) != 1 || evidence.GetCatchAllQuery() == nil ||
 		len(evidence.GetForwarderQueries()) != 1 || evidence.GetCatchAllQuery().GetSelectedUpstream() != "1.1.1.1:53" ||
@@ -152,7 +155,8 @@ func TestObserveRejectsInvalidEffectiveConfigurationEvidence(t *testing.T) {
 		ProjectName: "gp-platform", ServiceName: "coredns", ArtifactTarget: "/etc/coredns/Corefile",
 		ImageReference:  "coredns/coredns@sha256:" + strings.Repeat("a", 64),
 		ImageRepository: "coredns/coredns", ImageIndexDigest: digest,
-		ImageOS: "linux", ImageArchitecture: "amd64",
+		ImageConfigDigest: digest,
+		ImageOS:           "linux", ImageArchitecture: "amd64",
 		ListenEndpoint: "127.0.0.1:53", MetricsURL: "http://127.0.0.1:9153/metrics",
 		ReloadMetric: "coredns_reload_version_info", ExpectedLabels: map[string]string{"owned": "true"},
 	}

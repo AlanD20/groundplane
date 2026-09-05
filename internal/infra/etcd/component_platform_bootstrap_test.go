@@ -54,10 +54,13 @@ func TestPlatformResolverBootstrapTaskIsClaimable(t *testing.T) {
 		DefinitionSHA256: strings.Repeat("b", 64), CatalogSHA256: strings.Repeat("c", 64),
 		ActionID: "activate-config", ArtifactID: ids.NewAt(ids.KindConfig, now, 3),
 		ComposeArtifactID: composeArtifactID,
-		ComposeArtifact:   testPlatformComponentComposeArtifact(composeArtifactID, serviceID),
-		ArtifactSHA256:    strings.Repeat("d", 64), OwnershipPlanID: task.PlanID, OwnershipGeneration: 1,
+		ComposeArtifact: testPlatformComponentComposeArtifact(
+			composeArtifactID, serviceID, strings.Repeat("9", 64),
+		),
+		ArtifactSHA256: strings.Repeat("d", 64), OwnershipPlanID: task.PlanID, OwnershipGeneration: 1,
 		ImageRepository: "coredns/coredns", ImageIndexDigest: strings.Repeat("7", 64),
-		ImageChildDigest: strings.Repeat("8", 64), ImageReference: "coredns/coredns@sha256:" + strings.Repeat("8", 64),
+		ImageConfigDigest: strings.Repeat("9", 64),
+		ImageChildDigest:  strings.Repeat("8", 64), ImageReference: "coredns/coredns@sha256:" + strings.Repeat("8", 64),
 		ImageOS: "linux", ImageArchitecture: "amd64", ArtifactLength: 1,
 		PlanSHA256: strings.Repeat("e", 64), ExecutionPlanSHA256: strings.Repeat("f", 64),
 	}

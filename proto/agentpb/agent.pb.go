@@ -3188,6 +3188,7 @@ type DNSResolverObservationEvidence struct {
 	ImageArchitecture   string                 `protobuf:"bytes,17,opt,name=image_architecture,json=imageArchitecture,proto3" json:"image_architecture,omitempty"`
 	ProofSha256         []byte                 `protobuf:"bytes,18,opt,name=proof_sha256,json=proofSha256,proto3" json:"proof_sha256,omitempty"`
 	ImageVariant        string                 `protobuf:"bytes,19,opt,name=image_variant,json=imageVariant,proto3" json:"image_variant,omitempty"`
+	ImageConfigDigest   []byte                 `protobuf:"bytes,20,opt,name=image_config_digest,json=imageConfigDigest,proto3" json:"image_config_digest,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -3353,6 +3354,13 @@ func (x *DNSResolverObservationEvidence) GetImageVariant() string {
 		return x.ImageVariant
 	}
 	return ""
+}
+
+func (x *DNSResolverObservationEvidence) GetImageConfigDigest() []byte {
+	if x != nil {
+		return x.ImageConfigDigest
+	}
+	return nil
 }
 
 type DNSAnswerRecord struct {
@@ -7341,6 +7349,7 @@ type ComposeService struct {
 	ImageOs           string                 `protobuf:"bytes,15,opt,name=image_os,json=imageOs,proto3" json:"image_os,omitempty"`
 	ImageArchitecture string                 `protobuf:"bytes,16,opt,name=image_architecture,json=imageArchitecture,proto3" json:"image_architecture,omitempty"`
 	ImageVariant      string                 `protobuf:"bytes,17,opt,name=image_variant,json=imageVariant,proto3" json:"image_variant,omitempty"`
+	ImageConfigDigest []byte                 `protobuf:"bytes,18,opt,name=image_config_digest,json=imageConfigDigest,proto3" json:"image_config_digest,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -7492,6 +7501,13 @@ func (x *ComposeService) GetImageVariant() string {
 		return x.ImageVariant
 	}
 	return ""
+}
+
+func (x *ComposeService) GetImageConfigDigest() []byte {
+	if x != nil {
+		return x.ImageConfigDigest
+	}
+	return nil
 }
 
 type ComposeNetwork struct {
@@ -15321,7 +15337,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\n" +
 	"candidates\x18\x06 \x03(\v2-.groundplane.agent.v1.CandidateReleaseServiceR\n" +
 	"candidates\x12%\n" +
-	"\x0eabsence_proven\x18\a \x01(\bR\rabsenceProven\"\x93\a\n" +
+	"\x0eabsence_proven\x18\a \x01(\bR\rabsenceProven\"\xc3\a\n" +
 	"\x1eDNSResolverObservationEvidence\x12!\n" +
 	"\fcomponent_id\x18\x01 \x01(\tR\vcomponentId\x12\x1d\n" +
 	"\n" +
@@ -15345,7 +15361,8 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\bimage_os\x18\x10 \x01(\tR\aimageOs\x12-\n" +
 	"\x12image_architecture\x18\x11 \x01(\tR\x11imageArchitecture\x12!\n" +
 	"\fproof_sha256\x18\x12 \x01(\fR\vproofSha256\x12#\n" +
-	"\rimage_variant\x18\x13 \x01(\tR\fimageVariant\"\x9d\x01\n" +
+	"\rimage_variant\x18\x13 \x01(\tR\fimageVariant\x12.\n" +
+	"\x13image_config_digest\x18\x14 \x01(\fR\x11imageConfigDigest\"\x9d\x01\n" +
 	"\x0fDNSAnswerRecord\x12\x1d\n" +
 	"\n" +
 	"owner_name\x18\x01 \x01(\tR\townerName\x126\n" +
@@ -15706,7 +15723,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\bservices\x18\b \x03(\v2$.groundplane.agent.v1.ComposeServiceR\bservices\x12@\n" +
 	"\bnetworks\x18\t \x03(\v2$.groundplane.agent.v1.ComposeNetworkR\bnetworks\x12=\n" +
 	"\avolumes\x18\n" +
-	" \x03(\v2#.groundplane.agent.v1.ComposeVolumeR\avolumes\"\xed\x05\n" +
+	" \x03(\v2#.groundplane.agent.v1.ComposeVolumeR\avolumes\"\x9d\x06\n" +
 	"\x0eComposeService\x12\x1d\n" +
 	"\n" +
 	"service_id\x18\x01 \x01(\tR\tserviceId\x12!\n" +
@@ -15726,7 +15743,8 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x12image_child_digest\x18\x0e \x01(\fR\x10imageChildDigest\x12\x19\n" +
 	"\bimage_os\x18\x0f \x01(\tR\aimageOs\x12-\n" +
 	"\x12image_architecture\x18\x10 \x01(\tR\x11imageArchitecture\x12#\n" +
-	"\rimage_variant\x18\x11 \x01(\tR\fimageVariant\"\xbd\x01\n" +
+	"\rimage_variant\x18\x11 \x01(\tR\fimageVariant\x12.\n" +
+	"\x13image_config_digest\x18\x12 \x01(\fR\x11imageConfigDigest\"\xbd\x01\n" +
 	"\x0eComposeNetwork\x12\x1d\n" +
 	"\n" +
 	"network_id\x18\x01 \x01(\tR\tnetworkId\x12!\n" +

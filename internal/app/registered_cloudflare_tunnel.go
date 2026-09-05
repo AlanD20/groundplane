@@ -1,8 +1,6 @@
 package app
 
 import (
-	"crypto/sha256"
-
 	"github.com/AlanD20/groundplane-component-sdk/component"
 	registeredtunnel "github.com/AlanD20/groundplane-registered-components/cloudflaretunnel"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -12,16 +10,23 @@ import (
 )
 
 func registeredCloudflareTunnelEnvironmentComponent(
-	catalogDigest [sha256.Size]byte,
+	actionCatalog registeredActionCatalog,
 ) (controller.EnvironmentComponentRegistration, error) {
 	definition, err := registeredtunnel.Definition()
 	if err != nil {
 		return controller.EnvironmentComponentRegistration{}, errs.Wrap(errs.KindInternal, err)
 	}
 	return controller.EnvironmentComponentRegistration{
-		Kind: core.ComponentKindEdgeCloudflare, Definition: definition, CatalogDigest: catalogDigest,
+		Kind: core.ComponentKindEdgeCloudflare, Definition: definition, CatalogDigest: actionCatalog.Digest(),
 		Plan: func(environment core.Environment, instance core.Component) (component.EnvironmentPlan, error) {
-			return planRegisteredCloudflareTunnel(environment, instance)
+			plan, err := planRegisteredCloudflareTunnel(environment, instance)
+			if err != nil {
+				return component.EnvironmentPlan{}, err
+			}
+			if err := actionCatalog.catalog.ValidateEnvironmentPlanImages(definition.Implementation(), plan); err != nil {
+				return component.EnvironmentPlan{}, errs.Wrap(errs.KindInternal, err)
+			}
+			return plan, nil
 		},
 	}, nil
 }

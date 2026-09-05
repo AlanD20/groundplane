@@ -59,7 +59,8 @@ func TestBuildComponentDisableExecutionPlanRestoresHostBeforeRemovingService(t *
 		ComponentID: componentID, PlanID: planID, RenderGeneration: 7,
 		ArtifactID:      "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		ImageRepository: image.Repository, ImageIndexDigest: image.IndexDigest,
-		ImageChildDigest: platform.ChildDigest, ImageReference: imageReference,
+		ImageConfigDigest: platform.ConfigDigest,
+		ImageChildDigest:  platform.ChildDigest, ImageReference: imageReference,
 		ImageOS: platform.OS, ImageArchitecture: platform.Architecture, ImageVariant: platform.Variant,
 		Plan: componentsdk.EnvironmentPlan{Services: []componentsdk.ManagedService{{
 			ID: serviceID, Name: "resolver",

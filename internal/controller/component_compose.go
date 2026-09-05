@@ -238,10 +238,6 @@ func projectEnvironmentComponentService(
 }
 
 func environmentComponentImageReference(image componentsdk.OCIImage) (string, bool) {
-	variant := ""
-	if runtime.GOARCH == "arm64" {
-		variant = "v8"
-	}
-	_, reference, selected := image.Select(runtime.GOOS, runtime.GOARCH, variant)
+	_, reference, selected := image.Select(runtime.GOOS, runtime.GOARCH)
 	return reference, selected
 }

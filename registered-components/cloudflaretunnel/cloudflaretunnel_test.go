@@ -23,6 +23,7 @@ func TestPlanBuildsSecretBoundTunnelConnector(t *testing.T) {
 	}
 	service := plan.Services[0]
 	if service.Name != ServiceName || service.NetworkMode != component.ManagedNetworkModeDefault ||
+		!service.Image.Equal(Image) ||
 		len(service.Networks) != 0 || !slices.Equal(service.Command, []string{"tunnel", "--no-autoupdate", "run"}) ||
 		len(service.Dependencies) != 0 ||
 		len(service.SecretEnvironment) != 1 || service.SecretEnvironment[0].Name != tokenName ||

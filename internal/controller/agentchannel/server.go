@@ -11,7 +11,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"net/netip"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
@@ -1449,33 +1448,6 @@ func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) etcd.TaskResultR
 	return durable
 }
 
-func durableDNSResolverObservation(
-	evidence *agentpb.DNSResolverObservationEvidence,
-) *etcd.TaskDNSResolverObservationEvidence {
-	canonicalEvidence, _ := dnsproof.Marshal(evidence)
-	static := evidence.GetStaticQuery()
-	staticIPv4 := ""
-	for _, answer := range static.GetAnswers() {
-		if len(answer.GetIpv4()) == 4 {
-			staticIPv4 = netip.AddrFrom4([4]byte(answer.GetIpv4())).String()
-			break
-		}
-	}
-	return &etcd.TaskDNSResolverObservationEvidence{
-		ComponentID: evidence.GetComponentId(), ServiceID: evidence.GetServiceId(),
-		ArtifactID: evidence.GetArtifactId(), ArtifactSHA256: hex.EncodeToString(evidence.GetArtifactSha256()),
-		RenderGeneration: evidence.GetRenderGeneration(), ImageReference: evidence.GetImageReference(),
-		VerifiedImageDigest: hex.EncodeToString(evidence.GetVerifiedImageDigest()),
-		ListenEndpoint:      evidence.GetListenEndpoint(), ReloadSHA512: hex.EncodeToString(evidence.GetReloadSha512()),
-		ObservedAt: evidence.GetObservedAt().AsTime().UTC(), StaticQueryPresent: static != nil,
-		StaticQueryName: static.GetName(), StaticQueryIPv4: staticIPv4, StaticQuerySucceeded: static != nil,
-		RecursiveQuerySucceeded: evidence.GetCatchAllQuery() != nil,
-		ForwarderQueryCount:     uint32(len(evidence.GetForwarderQueries())),
-		ForwarderSuccessCount:   uint32(len(evidence.GetForwarderQueries())),
-		ProofSHA256:             hex.EncodeToString(evidence.GetProofSha256()), CanonicalEvidence: canonicalEvidence,
-	}
-}
-
 func validateComposeTaskResult(acknowledgement *agentpb.TaskAck) error {
 	result := acknowledgement.GetComposeResult()
 	if result == nil || len(result.GetProjects()) > 64 || len(result.GetProxyEvidence()) > 32 ||
@@ -1575,6 +1547,7 @@ func validateComposeTaskResult(acknowledgement *agentpb.TaskAck) error {
 			!imageref.IsDigestPinned(
 				evidence.GetImageReference(),
 			) || len(evidence.GetVerifiedImageDigest()) != sha256.Size ||
+			len(evidence.GetImageConfigDigest()) != sha256.Size ||
 			evidence.GetListenEndpoint() != "127.0.0.1:53" || len(evidence.GetReloadSha512()) != sha512.Size ||
 			evidence.GetObservedAt() == nil || evidence.GetObservedAt().CheckValid() != nil || !staticValid ||
 			evidence.GetCatchAllQuery() == nil || len(evidence.GetForwarderQueries()) > 8 ||
