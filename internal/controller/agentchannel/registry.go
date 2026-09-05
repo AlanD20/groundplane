@@ -44,28 +44,6 @@ type lifecycleFence struct {
 	revokedThrough  uint64
 }
 
-type sessionState struct {
-	generation         uint64
-	fence              uint64
-	online             bool
-	assignmentsStopped bool
-	revoked            bool
-	lastReady          time.Time
-	readyReported      bool
-	capacity           int32
-	version            string
-	cancel             context.CancelFunc
-	dispatchWake       chan struct{}
-	sendPermit         chan struct{}
-	sendFence          chan struct{}
-	sendFenced         bool
-	done               <-chan struct{}
-	aborts             chan taskAbortCommand
-	logCommands        chan logCommand
-	offline            chan struct{}
-	offlineOnce        sync.Once
-}
-
 type taskAbortCommand struct {
 	taskID       string
 	assignmentID string
@@ -240,6 +218,8 @@ func (r *Registry) Open(parent context.Context, agentID string, generation uint6
 			done:               ctx.Done(),
 			aborts:             make(chan taskAbortCommand),
 			logCommands:        make(chan logCommand),
+			imageCommands:      make(chan *imageCommand),
+			imageCounter:       ids.NewImageCorrelationCounter(),
 			offline:            make(chan struct{}),
 		}
 		if state.assignmentsStopped {

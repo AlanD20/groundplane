@@ -625,19 +625,38 @@ not an operator action or Task. The Controller never reads workload Docker
 state. Resolution never builds, pulls, or pushes and never requires
 `RepoDigests`, so a locally built image remains valid.
 
-ADR 0052 owns the exact machine bounds. In summary, the correlation id is the
-32-character lowercase-hex encoding of 16 nonzero random bytes, is fresh within
-the authenticated connection, and is discarded with that connection or active
-request. Requested-reference selectors are explicitly tagged or
-digest-qualified Docker named references of at most 512 ASCII bytes; local-id
-selectors are exactly `sha256:` plus 64 lowercase hex characters. Request and
-result envelopes are each at most 65,536 bytes, both peers enforce the 1..64
-unique-selector and string bounds before Docker inspection, and success returns
-one result per selector in order. A closed failure names a present zero-based
-ordinal and returns no partial success. Each peer caps the complete exchange at
-30 seconds; timeout, disconnect, late response, or malformed active response
-provides no usable identity and prevents staging and publication without
-automatic re-resolution.
+The 64-selector limit covers the complete unique candidate-and-prior set for
+one publication, not one chunk. A Blueprint over that limit is rejected with
+`validation.failed` and HTTP 422 before desired-revision, Release-ledger, or
+private-source staging, idempotency or Task publication, and host effects; it is
+never split across Agent exchanges.
+
+ADR 0052 owns the exact machine bounds. After authentication, each connection
+uses one CSPRNG read for a nonzero unsigned big-endian 128-bit seed. The seed is
+the first correlation id; allocation under the Agent-session Registry mutex
+increments it and emits exactly 32 lowercase hexadecimal characters. The
+maximum value is emitted once, then resolution is exhausted without wrapping or
+reuse. An entropy failure or zero seed disables only resolution, not the stream
+or Task traffic. The connection retains constant counter state and one active
+resolution, never an id history; the id is not authentication, and result
+correlation also requires the exact session state and Agent generation fence.
+
+Requested-reference selectors are explicitly tagged or digest-qualified Docker
+named references of at most 512 ASCII bytes; local-id selectors are exactly
+`sha256:` plus 64 lowercase hex characters. Request and result envelopes are
+each at most 65,536 bytes, both peers enforce the 1..64 unique-selector and
+string bounds before Docker inspection, and success returns one result per
+selector in order. A closed failure names a present zero-based ordinal and
+returns no partial success. One connection admits one active resolution. A
+second new publication preflight returns HTTP 409
+`workload.image_resolution_busy`; unavailable seed or exhausted allocation
+returns HTTP 503 `workload.image_resolution_unavailable`. Both fail before
+staging without closing the stream or automatic retry. An accepted idempotency
+replay bypasses resolution and returns its stored response. Each peer caps the
+complete exchange at 30 seconds; timeout, disconnect, late response, or
+malformed active response provides no usable identity and prevents staging and
+publication without automatic re-resolution. Release prepublication integration
+and full hosting proof remain pending.
 
 Rollback copies the complete candidate seal from the Controller-selected
 historical Release input. Prior topology and compensation copy the complete

@@ -38,8 +38,10 @@ const (
 	CodeIdempotencyInProgress Code = "idempotency.in_progress"
 
 	// --- malformed intent / retryable storage ---
-	CodeIdempotencyMismatch Code = "idempotency.mismatch"
-	CodeStorageUnavailable  Code = "storage.unavailable"
+	CodeIdempotencyMismatch                Code = "idempotency.mismatch"
+	CodeStorageUnavailable                 Code = "storage.unavailable"
+	CodeWorkloadImageResolutionBusy        Code = "workload.image_resolution_busy"
+	CodeWorkloadImageResolutionUnavailable Code = "workload.image_resolution_unavailable"
 
 	// --- not-found additions required by the durable record catalog ---
 	CodeZoneNotFound              Code = "zone.not_found"
@@ -117,6 +119,8 @@ const (
 	KindIdempotencyInProgress
 	KindIdempotencyMismatch
 	KindStorageUnavailable
+	KindWorkloadImageResolutionBusy
+	KindWorkloadImageResolutionUnavailable
 	KindZoneNotFound
 	KindRouteNotFound
 	KindVolumeNotFound
@@ -157,64 +161,66 @@ type descriptor struct {
 }
 
 var kindDescriptors = [kindLimit]descriptor{
-	KindTenantNotFound:              {CodeTenantNotFound, ClassNotFound, 404},
-	KindProjectNotFound:             {CodeProjectNotFound, ClassNotFound, 404},
-	KindEnvironmentNotFound:         {CodeEnvironmentNotFound, ClassNotFound, 404},
-	KindServiceNotFound:             {CodeServiceNotFound, ClassNotFound, 404},
-	KindBackingServiceNotFound:      {CodeBackingServiceNotFound, ClassNotFound, 404},
-	KindAttachNotFound:              {CodeAttachNotFound, ClassNotFound, 404},
-	KindTaskNotFound:                {CodeTaskNotFound, ClassNotFound, 404},
-	KindTaskTimedOut:                {CodeTaskTimedOut, ClassRetryable, 503},
-	KindSecretNotFound:              {CodeSecretNotFound, ClassNotFound, 404},
-	KindConnectorNotFound:           {CodeConnectorNotFound, ClassNotFound, 404},
-	KindRunnerNotFound:              {CodeRunnerNotFound, ClassNotFound, 404},
-	KindRunnerSlugConflict:          {CodeRunnerSlugConflict, ClassConflict, 409},
-	KindAgentNotFound:               {CodeAgentNotFound, ClassNotFound, 404},
-	KindReleaseGroupNotFound:        {CodeReleaseGroupNotFound, ClassNotFound, 404},
-	KindComponentNotFound:           {CodeComponentNotFound, ClassNotFound, 404},
-	KindRecoveryPointNotFound:       {CodeRecoveryPointNotFound, ClassNotFound, 404},
-	KindDeployInFlight:              {CodeDeployInFlight, ClassConflict, 409},
-	KindTaskNotRetryable:            {CodeTaskNotRetryable, ClassConflict, 409},
-	KindTaskNotAbortable:            {CodeTaskNotAbortable, ClassConflict, 409},
-	KindTaskRetryInFlight:           {CodeTaskRetryInFlight, ClassConflict, 409},
-	KindSlugConflict:                {CodeSlugConflict, ClassConflict, 409},
-	KindNameConflict:                {CodeNameConflict, ClassConflict, 409},
-	KindStateConflict:               {CodeStateConflict, ClassConflict, 409},
-	KindResourceInUse:               {CodeResourceInUse, ClassConflict, 409},
-	KindCursorExpired:               {CodeCursorExpired, ClassConflict, 409},
-	KindIdempotencyInProgress:       {CodeIdempotencyInProgress, ClassConflict, 409},
-	KindIdempotencyMismatch:         {CodeIdempotencyMismatch, ClassBadRequest, 400},
-	KindStorageUnavailable:          {CodeStorageUnavailable, ClassRetryable, 503},
-	KindZoneNotFound:                {CodeZoneNotFound, ClassNotFound, 404},
-	KindRouteNotFound:               {CodeRouteNotFound, ClassNotFound, 404},
-	KindVolumeNotFound:              {CodeVolumeNotFound, ClassNotFound, 404},
-	KindEntryNotFound:               {CodeEntryNotFound, ClassNotFound, 404},
-	KindScriptNotFound:              {CodeScriptNotFound, ClassNotFound, 404},
-	KindScriptRetryUnsafe:           {CodeScriptRetryUnsafe, ClassConflict, 409},
-	KindReleaseNotFound:             {CodeReleaseNotFound, ClassNotFound, 404},
-	KindReleaseRecoveryRequired:     {CodeReleaseRecoveryRequired, ClassConflict, 409},
-	KindReleaseDeadlineTooShort:     {CodeReleaseDeadlineTooShort, ClassValidation, 422},
-	KindReleasePlanTooLarge:         {CodeReleasePlanTooLarge, ClassValidation, 422},
-	KindReleaseGroupTagRequired:     {CodeReleaseGroupTagRequired, ClassValidation, 422},
-	KindRollbackNoPreviousRelease:   {CodeRollbackNoPreviousRelease, ClassConflict, 409},
-	KindRollbackSourceExpired:       {CodeRollbackSourceExpired, ClassConflict, 409},
-	KindBackupSourceNotFound:        {CodeBackupSourceNotFound, ClassNotFound, 404},
-	KindStrategyNotImplemented:      {CodeStrategyNotImplemented, ClassValidation, 422},
-	KindRotationNotImplemented:      {CodeRotationNotImplemented, ClassValidation, 422},
-	KindAdapterManualOnly:           {CodeAdapterManualOnly, ClassValidation, 422},
-	KindValidationFailed:            {CodeValidationFailed, ClassValidation, 422},
-	KindMalformedRequest:            {CodeValidationFailed, ClassBadRequest, 400},
-	KindScopeUnauthorized:           {CodeScopeUnauthorized, ClassValidation, 422},
-	KindConnectorScopeInvalid:       {CodeConnectorScopeInvalid, ClassValidation, 422},
-	KindRequestNotFound:             {CodeRequestNotFound, ClassNotFound, 404},
-	KindRequestMethodNotAllowed:     {CodeRequestMethodNotAllowed, ClassMethodNotAllowed, 405},
-	KindRequestNotAcceptable:        {CodeRequestNotAcceptable, ClassNotAcceptable, 406},
-	KindRequestUnsupportedMediaType: {CodeRequestUnsupportedMediaType, ClassUnsupportedMediaType, 415},
-	KindRequestTooLarge:             {CodeRequestFailed, ClassBadRequest, 413},
-	KindRequestUnavailable:          {CodeRequestFailed, ClassRetryable, 503},
-	KindRequestFailed:               {CodeRequestFailed, ClassInternal, 500},
-	KindNotImplemented:              {CodeNotImplemented, ClassInternal, 501},
-	KindInternal:                    {CodeInternal, ClassInternal, 500},
+	KindTenantNotFound:                     {CodeTenantNotFound, ClassNotFound, 404},
+	KindProjectNotFound:                    {CodeProjectNotFound, ClassNotFound, 404},
+	KindEnvironmentNotFound:                {CodeEnvironmentNotFound, ClassNotFound, 404},
+	KindServiceNotFound:                    {CodeServiceNotFound, ClassNotFound, 404},
+	KindBackingServiceNotFound:             {CodeBackingServiceNotFound, ClassNotFound, 404},
+	KindAttachNotFound:                     {CodeAttachNotFound, ClassNotFound, 404},
+	KindTaskNotFound:                       {CodeTaskNotFound, ClassNotFound, 404},
+	KindTaskTimedOut:                       {CodeTaskTimedOut, ClassRetryable, 503},
+	KindSecretNotFound:                     {CodeSecretNotFound, ClassNotFound, 404},
+	KindConnectorNotFound:                  {CodeConnectorNotFound, ClassNotFound, 404},
+	KindRunnerNotFound:                     {CodeRunnerNotFound, ClassNotFound, 404},
+	KindRunnerSlugConflict:                 {CodeRunnerSlugConflict, ClassConflict, 409},
+	KindAgentNotFound:                      {CodeAgentNotFound, ClassNotFound, 404},
+	KindReleaseGroupNotFound:               {CodeReleaseGroupNotFound, ClassNotFound, 404},
+	KindComponentNotFound:                  {CodeComponentNotFound, ClassNotFound, 404},
+	KindRecoveryPointNotFound:              {CodeRecoveryPointNotFound, ClassNotFound, 404},
+	KindDeployInFlight:                     {CodeDeployInFlight, ClassConflict, 409},
+	KindTaskNotRetryable:                   {CodeTaskNotRetryable, ClassConflict, 409},
+	KindTaskNotAbortable:                   {CodeTaskNotAbortable, ClassConflict, 409},
+	KindTaskRetryInFlight:                  {CodeTaskRetryInFlight, ClassConflict, 409},
+	KindSlugConflict:                       {CodeSlugConflict, ClassConflict, 409},
+	KindNameConflict:                       {CodeNameConflict, ClassConflict, 409},
+	KindStateConflict:                      {CodeStateConflict, ClassConflict, 409},
+	KindResourceInUse:                      {CodeResourceInUse, ClassConflict, 409},
+	KindCursorExpired:                      {CodeCursorExpired, ClassConflict, 409},
+	KindIdempotencyInProgress:              {CodeIdempotencyInProgress, ClassConflict, 409},
+	KindIdempotencyMismatch:                {CodeIdempotencyMismatch, ClassBadRequest, 400},
+	KindStorageUnavailable:                 {CodeStorageUnavailable, ClassRetryable, 503},
+	KindWorkloadImageResolutionBusy:        {CodeWorkloadImageResolutionBusy, ClassConflict, 409},
+	KindWorkloadImageResolutionUnavailable: {CodeWorkloadImageResolutionUnavailable, ClassRetryable, 503},
+	KindZoneNotFound:                       {CodeZoneNotFound, ClassNotFound, 404},
+	KindRouteNotFound:                      {CodeRouteNotFound, ClassNotFound, 404},
+	KindVolumeNotFound:                     {CodeVolumeNotFound, ClassNotFound, 404},
+	KindEntryNotFound:                      {CodeEntryNotFound, ClassNotFound, 404},
+	KindScriptNotFound:                     {CodeScriptNotFound, ClassNotFound, 404},
+	KindScriptRetryUnsafe:                  {CodeScriptRetryUnsafe, ClassConflict, 409},
+	KindReleaseNotFound:                    {CodeReleaseNotFound, ClassNotFound, 404},
+	KindReleaseRecoveryRequired:            {CodeReleaseRecoveryRequired, ClassConflict, 409},
+	KindReleaseDeadlineTooShort:            {CodeReleaseDeadlineTooShort, ClassValidation, 422},
+	KindReleasePlanTooLarge:                {CodeReleasePlanTooLarge, ClassValidation, 422},
+	KindReleaseGroupTagRequired:            {CodeReleaseGroupTagRequired, ClassValidation, 422},
+	KindRollbackNoPreviousRelease:          {CodeRollbackNoPreviousRelease, ClassConflict, 409},
+	KindRollbackSourceExpired:              {CodeRollbackSourceExpired, ClassConflict, 409},
+	KindBackupSourceNotFound:               {CodeBackupSourceNotFound, ClassNotFound, 404},
+	KindStrategyNotImplemented:             {CodeStrategyNotImplemented, ClassValidation, 422},
+	KindRotationNotImplemented:             {CodeRotationNotImplemented, ClassValidation, 422},
+	KindAdapterManualOnly:                  {CodeAdapterManualOnly, ClassValidation, 422},
+	KindValidationFailed:                   {CodeValidationFailed, ClassValidation, 422},
+	KindMalformedRequest:                   {CodeValidationFailed, ClassBadRequest, 400},
+	KindScopeUnauthorized:                  {CodeScopeUnauthorized, ClassValidation, 422},
+	KindConnectorScopeInvalid:              {CodeConnectorScopeInvalid, ClassValidation, 422},
+	KindRequestNotFound:                    {CodeRequestNotFound, ClassNotFound, 404},
+	KindRequestMethodNotAllowed:            {CodeRequestMethodNotAllowed, ClassMethodNotAllowed, 405},
+	KindRequestNotAcceptable:               {CodeRequestNotAcceptable, ClassNotAcceptable, 406},
+	KindRequestUnsupportedMediaType:        {CodeRequestUnsupportedMediaType, ClassUnsupportedMediaType, 415},
+	KindRequestTooLarge:                    {CodeRequestFailed, ClassBadRequest, 413},
+	KindRequestUnavailable:                 {CodeRequestFailed, ClassRetryable, 503},
+	KindRequestFailed:                      {CodeRequestFailed, ClassInternal, 500},
+	KindNotImplemented:                     {CodeNotImplemented, ClassInternal, 501},
+	KindInternal:                           {CodeInternal, ClassInternal, 500},
 }
 
 func descriptorFor(kind Kind) (descriptor, bool) {

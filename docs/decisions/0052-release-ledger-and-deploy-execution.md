@@ -443,10 +443,17 @@ selectors. It is ephemeral machine coordination, not an operator capability,
 Task, durable preview, or new generic host-execution surface. The Controller
 does not read workload Docker state itself.
 
+One publication uses one request for its complete unique candidate-and-prior
+selector set; it is never chunked into multiple exchanges. A Blueprint whose
+complete set exceeds 64 returns `validation.failed` with HTTP 422 before any
+desired-revision, Release-ledger, or private-source staging, idempotency
+publication, Task publication, or host effect.
+
 The protobuf contract defines one `ResolveWorkloadImages` request and one
 `WorkloadImageResolutionResult` response in the existing stream envelopes
-(Controller field 12 and Agent field 11). Stream dispatch and prepublication
-integration remain required before this exchange is operational.
+(Controller field 12 and Agent field 11). Both stream dispatchers implement the
+exchange; Release prepublication integration remains required before deployment
+can depend on it.
 The request carries `request_id` plus `selectors[]`. Each selector
 is a closed union of exactly one `requested_reference` for a new candidate or
 one `local_image_id` for historical, prior, retry, and pre-mutation validation.
@@ -458,18 +465,40 @@ returns `local_image_id`. A failure carries a required zero-based
 The protobuf ordinal is an optional scalar whose presence is mandatory,
 so ordinal zero is distinguishable from an omitted field.
 
-`request_id` is exactly 32 lowercase hexadecimal ASCII characters encoding 16
-nonzero random bytes. It is fresh for every request and is never reused within
-one authenticated connection. Correlation includes that connection identity:
+After authentication, each connection reads exactly 16 bytes from the operating
+system CSPRNG once and interprets them as one unsigned big-endian 128-bit seed.
+An entropy failure or all-zero seed disables only workload-image resolution for
+that connection; it does not reject or tear down the authenticated stream, fence
+Task dispatch, or affect active Task traffic.
+
+The first `request_id` is the seed encoded as exactly 32 lowercase hexadecimal
+ASCII characters. Under the Agent-session Registry mutex, each later allocation
+increments that 128-bit value and emits the same fixed-width encoding. The
+maximum value is emitted once, after which allocation is exhausted and fails
+closed; the counter never wraps to zero or reuses a value. The connection keeps
+only its next counter value, exhaustion state, and one active resolution, not a
+request-id history map. The id is correlation, not authentication. Correlation
+also requires the exact authenticated session state and Agent generation fence:
 a late result, a result from another connection, or a result for a request that
 is no longer active is discarded and cannot satisfy a newer request. A
 malformed result for the active request rejects the whole batch.
+
+One connection permits exactly one active workload-image resolution. A second
+new publication preflight while it is active returns HTTP 409
+`workload.image_resolution_busy` before staging or publication and is never
+retried automatically; the operator may explicitly retry after the active
+exchange completes. An already accepted idempotency replay returns its exact
+stored response without acquiring the resolution slot or resolving an image,
+so only a new publication preflight competes. A connection whose seed is
+unavailable or whose counter is exhausted returns HTTP 503
+`workload.image_resolution_unavailable` before staging or publication and keeps
+the authenticated stream and Task traffic available.
 
 A request contains 1 through 64 unique typed selectors and the complete encoded
 protobuf envelope is at most 65,536 bytes. A `requested_reference` is at most
 512 ASCII bytes and is an explicitly tagged or digest-qualified valid Docker
 named reference. A `local_image_id` is exactly `sha256:` followed by 64
-lowercase hexadecimal characters. Both peers enforce the request nonce,
+lowercase hexadecimal characters. Both peers enforce the correlation-id shape,
 selector-kind, string, uniqueness, count, and envelope bounds before the Agent
 calls Docker. Before consuming any resolution, the Controller enforces result
 correlation, envelope, outcome, cardinality, order, selector echo, local-id, and
@@ -483,6 +512,7 @@ seconds. Timeout, disconnect, or an invalid response yields no usable
 resolution and prevents staging and publication; it never triggers automatic
 tag re-resolution. The exchange remains ephemeral and read-only and creates no
 operator API, durable request record, Task, or generic Docker capability.
+The exchange alone does not prove Release prepublication integration.
 
 A rollback candidate copies its complete `WorkloadSeal` from the selected
 historical Release input. A prior workload used for topology transition or
@@ -1321,16 +1351,17 @@ set introduced or selected by these operations is:
 | `401` | `auth.unauthenticated` |
 | `403` | `auth.forbidden` |
 | `404` | `environment.not_found`, `service.not_found`, `release.not_found`, `release_group.not_found`, `task.not_found` |
-| `409` | `resource.in_use`, `state.conflict`, `task.not_abortable`, `release.recovery_required`, `rollback.no_previous_release`, `rollback.source_expired`, `script.retry_unsafe`, `idempotency.in_progress` |
+| `409` | `resource.in_use`, `state.conflict`, `task.not_abortable`, `release.recovery_required`, `rollback.no_previous_release`, `rollback.source_expired`, `script.retry_unsafe`, `workload.image_resolution_busy`, `idempotency.in_progress` |
 | `413` | `request.too_large` |
 | `422` | `strategy.not_implemented`, `release.deadline_too_short`, `release.plan_too_large`, `release_group.invalid_members`, `release_group.invalid_order`, `release_group.tag_required` |
+| `503` | `workload.image_resolution_unavailable` |
 
 The exact error set per operation is:
 
 | Operation id | HTTP errors |
 |---|---|
-| `service.deploy` | `400 request.invalid`, `422 strategy.not_implemented`, `422 release.deadline_too_short`, `422 release.plan_too_large`, `400 idempotency.mismatch`, `401 auth.unauthenticated`, `403 auth.forbidden`, `404 environment.not_found`, `404 service.not_found`, `409 resource.in_use`, `409 state.conflict`, `409 release.recovery_required`, `409 idempotency.in_progress`, `413 request.too_large` |
-| `service.rollback` | `400 request.invalid`, `422 release.deadline_too_short`, `422 release.plan_too_large`, `400 idempotency.mismatch`, `401 auth.unauthenticated`, `403 auth.forbidden`, `404 environment.not_found`, `404 service.not_found`, `409 resource.in_use`, `409 state.conflict`, `409 release.recovery_required`, `409 rollback.no_previous_release`, `409 rollback.source_expired`, `409 idempotency.in_progress`, `413 request.too_large` |
+| `service.deploy` | `400 request.invalid`, `422 strategy.not_implemented`, `422 release.deadline_too_short`, `422 release.plan_too_large`, `400 idempotency.mismatch`, `401 auth.unauthenticated`, `403 auth.forbidden`, `404 environment.not_found`, `404 service.not_found`, `409 resource.in_use`, `409 state.conflict`, `409 release.recovery_required`, `409 workload.image_resolution_busy`, `409 idempotency.in_progress`, `413 request.too_large`, `503 workload.image_resolution_unavailable` |
+| `service.rollback` | `400 request.invalid`, `422 release.deadline_too_short`, `422 release.plan_too_large`, `400 idempotency.mismatch`, `401 auth.unauthenticated`, `403 auth.forbidden`, `404 environment.not_found`, `404 service.not_found`, `409 resource.in_use`, `409 state.conflict`, `409 release.recovery_required`, `409 rollback.no_previous_release`, `409 rollback.source_expired`, `409 workload.image_resolution_busy`, `409 idempotency.in_progress`, `413 request.too_large`, `503 workload.image_resolution_unavailable` |
 | `task.abort` | `400 request.invalid`, `401 auth.unauthenticated`, `403 auth.forbidden`, `404 environment.not_found`, `404 task.not_found`, `409 task.not_abortable` |
 | `task.retry` | `400 request.invalid`, `400 idempotency.mismatch`, `401 auth.unauthenticated`, `403 auth.forbidden`, `404 environment.not_found`, `404 task.not_found`, `409 resource.in_use`, `409 state.conflict`, `409 script.retry_unsafe`, `409 idempotency.in_progress` |
 | `release.list` | `400 request.invalid`, `400 pagination.invalid_cursor`, `400 pagination.invalid_limit`, `401 auth.unauthenticated`, `403 auth.forbidden`, `404 environment.not_found`, `404 service.not_found` |
@@ -1340,9 +1371,9 @@ The exact error set per operation is:
 | `release-group.add` | `400 request.invalid`, `422 release_group.invalid_members`, `422 release_group.invalid_order`, `400 idempotency.mismatch`, `401 auth.unauthenticated`, `403 auth.forbidden`, `404 environment.not_found`, `404 service.not_found`, `409 resource.in_use`, `409 state.conflict`, `409 idempotency.in_progress`, `413 request.too_large` |
 | `release-group.edit` | `400 request.invalid`, `422 release_group.invalid_members`, `422 release_group.invalid_order`, `400 idempotency.mismatch`, `401 auth.unauthenticated`, `403 auth.forbidden`, `404 environment.not_found`, `404 service.not_found`, `404 release_group.not_found`, `409 resource.in_use`, `409 state.conflict`, `409 idempotency.in_progress`, `413 request.too_large` |
 | `release-group.remove` | `400 request.invalid`, `400 idempotency.mismatch`, `401 auth.unauthenticated`, `403 auth.forbidden`, `404 environment.not_found`, `404 release_group.not_found`, `409 resource.in_use`, `409 state.conflict`, `409 idempotency.in_progress` |
-| `release-group.deploy` | `400 request.invalid`, `422 strategy.not_implemented`, `422 release.deadline_too_short`, `422 release.plan_too_large`, `422 release_group.tag_required`, `400 idempotency.mismatch`, `401 auth.unauthenticated`, `403 auth.forbidden`, `404 environment.not_found`, `404 service.not_found`, `404 release_group.not_found`, `409 resource.in_use`, `409 state.conflict`, `409 release.recovery_required`, `409 idempotency.in_progress`, `413 request.too_large` |
+| `release-group.deploy` | `400 request.invalid`, `422 strategy.not_implemented`, `422 release.deadline_too_short`, `422 release.plan_too_large`, `422 release_group.tag_required`, `400 idempotency.mismatch`, `401 auth.unauthenticated`, `403 auth.forbidden`, `404 environment.not_found`, `404 service.not_found`, `404 release_group.not_found`, `409 resource.in_use`, `409 state.conflict`, `409 release.recovery_required`, `409 workload.image_resolution_busy`, `409 idempotency.in_progress`, `413 request.too_large`, `503 workload.image_resolution_unavailable` |
 | `release-group.rollback-preview` | `400 request.invalid`, `401 auth.unauthenticated`, `403 auth.forbidden`, `404 environment.not_found`, `404 service.not_found`, `404 release_group.not_found`, `409 state.conflict`, `409 rollback.no_previous_release`, `409 rollback.source_expired` |
-| `release-group.rollback` | `400 request.invalid`, `422 release.deadline_too_short`, `422 release.plan_too_large`, `400 idempotency.mismatch`, `401 auth.unauthenticated`, `403 auth.forbidden`, `404 environment.not_found`, `404 service.not_found`, `404 release_group.not_found`, `409 resource.in_use`, `409 state.conflict`, `409 release.recovery_required`, `409 rollback.no_previous_release`, `409 rollback.source_expired`, `409 idempotency.in_progress` |
+| `release-group.rollback` | `400 request.invalid`, `422 release.deadline_too_short`, `422 release.plan_too_large`, `400 idempotency.mismatch`, `401 auth.unauthenticated`, `403 auth.forbidden`, `404 environment.not_found`, `404 service.not_found`, `404 release_group.not_found`, `409 resource.in_use`, `409 state.conflict`, `409 release.recovery_required`, `409 rollback.no_previous_release`, `409 rollback.source_expired`, `409 workload.image_resolution_busy`, `409 idempotency.in_progress`, `503 workload.image_resolution_unavailable` |
 
 `release.recovery_incomplete` is not an HTTP dispatch error. It is the terminal
 Task error for an accepted recovery attempt whose probe or compensation remains

@@ -308,10 +308,20 @@ Conventions:
   host Docker daemon and pin its exact local identity before mutation. They do
   not build, pull, or push. Groundplane-managed pinned Agent, etcd, Component,
   and backing images are release/installation assets and do not create an
-  operator registry-integration contract.
+  operator registry-integration contract. One complete publication may resolve
+  at most 64 unique typed candidate-and-prior selectors in one all-or-nothing
+  exchange. A second new publication preflight while that connection already
+  has an active exchange returns `workload.image_resolution_busy` (409) before
+  staging, publishes no Task, and is not retried automatically; an explicit
+  operator retry may try again after the active exchange completes. CSPRNG seed
+  failure or correlation-counter exhaustion returns
+  `workload.image_resolution_unavailable` (503) before staging, publishes no
+  Task, and does not tear down the authenticated Agent stream or affect Task
+  traffic. These are prepublication failures, not a new operator action.
 - **Every mutation is idempotent at the human API boundary.** Every `POST`,
-  `PUT`, `PATCH`, and `DELETE` requires `Idempotency-Key` except the bodyless,
-  read-like `POST /environments/{id}/export-key`, which persists neither marker
+  `PUT`, `PATCH`, and `DELETE` requires `Idempotency-Key` except the read-only
+  `POST /environments/{id}/export-key` and
+  `POST /environments/{id}/blueprint/validate`, which persist neither marker
   nor response. Console and CLI
   generate one ULID per user intent and reuse it only for transport retry. A
   key is 16–128 ASCII characters matching `[A-Za-z0-9._:-]+`. An identical
@@ -320,7 +330,10 @@ Conventions:
   returns `idempotency.in_progress` (409). Reuse for a different canonical
   request returns `idempotency.mismatch` (400). Schema, reference, and domain
   failures discovered before the atomic claim write no marker. There is no
-  optional or compatibility mode. Accepted Volume DELETE is the bounded
+  optional or compatibility mode. An already accepted image-resolving
+  publication replay returns its exact stored response without acquiring an
+  Agent image-resolution slot or resolving an image; only a new publication
+  preflight competes for that slot. Accepted Volume DELETE is the bounded
   operation-scoped exception: an equal request always replays its original
   `202` root Task response while removal state is retained, including between
   failed attempts. Retry appends a successor Task but never replaces the
@@ -699,6 +712,12 @@ After logical bundle validation, the Controller derives a lossless normalized
 projection. Its complete durable schema and framing must fit exactly 2 MiB.
 Exceeding that limit returns `validation.failed` with HTTP 422 before private
 staging, Task publication, idempotency authority, or any host effect.
+
+The candidate-and-prior workload selection for one Blueprint operation must
+also contain at most 64 unique typed image selectors in total. A larger set is
+not chunked or split across exchanges: it returns `validation.failed` with HTTP
+422 before desired-revision, Release-ledger, or private-source staging,
+idempotency publication, Task publication, or any host effect.
 
 A deletion-impact cursor is at most 4 KiB and binds the Volume, fixed MVCC
 revision, Environment head, next stable item, count, and rolling digest. Each

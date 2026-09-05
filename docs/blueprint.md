@@ -680,6 +680,13 @@ exact local Docker image id. Final workload Compose uses only that sealed local
 id; a mutable name or tag and optional registry metadata are never runtime
 authority.
 
+One Blueprint operation may select at most 64 unique typed workload-image
+selectors across its complete candidate and prior set. The Controller counts
+the whole set before any desired-revision, Release-ledger, or private-source
+staging and before idempotency or Task publication. A larger set returns
+`validation.failed` with HTTP 422 and publishes or stages nothing; it is never
+chunked into multiple Agent exchanges.
+
 The release ledger is per logical service, never one environment-wide
 `release` field. Conceptually, its immutable intent, separate execution
 summary, and Service projections contain:
