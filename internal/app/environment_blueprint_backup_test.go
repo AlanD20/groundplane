@@ -357,6 +357,7 @@ func TestEnvironmentBlueprintBackupValidationResolvesFixedRevisionDependencies(t
 		blueprintparser.AuthoringDocument{Backup: &core.BackupSpec{}},
 		blueprintparser.Result{Project: &composetypes.Project{}, Extensions: blueprintparser.Extensions{}},
 		true,
+		etcd.EnvironmentComposeProjection{},
 	)
 	found := false
 	for _, change := range changes {

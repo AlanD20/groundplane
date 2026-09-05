@@ -118,7 +118,7 @@ func (service *environmentBlueprintService) ValidateBlueprint(
 	}
 	return apiTypes.EnvironmentBlueprintValidation{
 		Revision: revision,
-		Changes:  environmentBlueprintChanges(current, parsed, snapshot.hasHead),
+		Changes:  environmentBlueprintChanges(current, parsed, snapshot.hasHead, snapshot.projection.Record),
 	}, nil
 }
 
@@ -420,11 +420,21 @@ func environmentBlueprintChanges(
 	current blueprintparser.AuthoringDocument,
 	candidate blueprintparser.Result,
 	hasCurrent bool,
+	projection etcd.EnvironmentComposeProjection,
 ) []apiTypes.EnvironmentBlueprintChange {
 	currentKeys := make(map[string]map[string]struct{})
 	candidateKeys := make(map[string]map[string]struct{})
 	if hasCurrent {
 		addBlueprintResourceKey(currentKeys, "compose", "root")
+		for _, service := range projection.DesiredServices {
+			addBlueprintResourceKey(currentKeys, "service", service.Desired.Name)
+		}
+		for _, zone := range projection.DesiredZones {
+			addBlueprintResourceKey(currentKeys, "zone", zone.Desired.Name)
+		}
+		for _, volume := range projection.Volumes {
+			addBlueprintResourceKey(currentKeys, "volume", volume.Key)
+		}
 	}
 	addBlueprintResourceKey(candidateKeys, "compose", "root")
 	if current.Backup != nil {
