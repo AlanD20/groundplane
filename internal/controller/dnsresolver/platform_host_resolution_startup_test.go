@@ -8,7 +8,6 @@ import (
 	"time"
 
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
-	registeredcoredns "github.com/AlanD20/groundplane-registered-components/coredns"
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -80,10 +79,7 @@ func TestStartupResolverTaskPersistsResolvedExecutionPlanHash(t *testing.T) {
 	baseline := etcd.HostResolverBaselineRecord{
 		Generation: 1, Content: baselineContent, SHA256: hex.EncodeToString(baselineDigest[:]), CapturedAt: now,
 	}
-	definition, err := registeredcoredns.Definition()
-	if err != nil {
-		t.Fatalf("registeredcoredns.Definition() error = %v", err)
-	}
+	definition := testResolverDefinition(t)
 	environmentPlanner := renderPlannerEnvironmentPlanner{}
 	renderPlanner, err := NewPlatformRenderPlanner(
 		fixedProjectionReader{record: projection}, renderPlannerBaselineRepository{record: baseline},
