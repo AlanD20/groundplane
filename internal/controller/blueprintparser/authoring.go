@@ -63,24 +63,44 @@ func MarshalAuthoringDocument(input AuthoringDocument) ([]byte, error) {
 		}
 		root.Content = append(root.Content, native.Content[index], native.Content[index+1])
 	}
-	for _, field := range []struct {
-		name  string
-		value any
-		emit  bool
-	}{
-		{"x-gp-requires", input.Requires, len(input.Requires) != 0},
-		{"x-gp-attachments", input.Attachments, len(input.Attachments) != 0},
-		{"x-gp-entry", input.Entries, len(input.Entries) != 0},
-		{"x-gp-routes", input.Routes, len(input.Routes) != 0},
-		{"x-gp-scripts", input.Scripts, len(input.Scripts) != 0},
-		{"x-gp-components", input.Components, len(input.Components) != 0},
-		{"x-gp-backup", input.Backup, input.Backup != nil},
-		{"x-gp-release-groups", input.ReleaseGroups, len(input.ReleaseGroups) != 0},
-	} {
-		if field.emit {
-			if err := appendAuthoringField(root, field.name, field.value); err != nil {
-				return nil, err
-			}
+	if len(input.Requires) != 0 {
+		if err := appendAuthoringField(root, "x-gp-requires", input.Requires); err != nil {
+			return nil, err
+		}
+	}
+	if len(input.Attachments) != 0 {
+		if err := appendAuthoringField(root, "x-gp-attachments", input.Attachments); err != nil {
+			return nil, err
+		}
+	}
+	if len(input.Entries) != 0 {
+		if err := appendAuthoringField(root, "x-gp-entry", input.Entries); err != nil {
+			return nil, err
+		}
+	}
+	if len(input.Routes) != 0 {
+		if err := appendAuthoringField(root, "x-gp-routes", input.Routes); err != nil {
+			return nil, err
+		}
+	}
+	if len(input.Scripts) != 0 {
+		if err := appendAuthoringField(root, "x-gp-scripts", input.Scripts); err != nil {
+			return nil, err
+		}
+	}
+	if len(input.Components) != 0 {
+		if err := appendAuthoringField(root, "x-gp-components", input.Components); err != nil {
+			return nil, err
+		}
+	}
+	if input.Backup != nil {
+		if err := appendAuthoringField(root, "x-gp-backup", input.Backup); err != nil {
+			return nil, err
+		}
+	}
+	if len(input.ReleaseGroups) != 0 {
+		if err := appendAuthoringField(root, "x-gp-release-groups", input.ReleaseGroups); err != nil {
+			return nil, err
 		}
 	}
 	markScriptBodiesLiteral(root)
@@ -91,7 +111,7 @@ func MarshalAuthoringDocument(input AuthoringDocument) ([]byte, error) {
 	return encoded, nil
 }
 
-func appendAuthoringField(root *yaml.Node, name string, value any) error {
+func appendAuthoringField[T any](root *yaml.Node, name string, value T) error {
 	node := &yaml.Node{}
 	if err := node.Encode(value); err != nil {
 		return errs.New(errs.KindInternal, "Environment Blueprint authoring value is invalid")
