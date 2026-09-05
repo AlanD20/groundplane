@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"net/url"
 	"strings"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -180,7 +181,8 @@ func newReleaseGroupCmd() *cobra.Command {
 	deploy.Flags().StringVar(&deployTag, "tag", "", "immutable image tag applied to every member")
 	cmd.AddCommand(deploy)
 
-	cmd.AddCommand(&cobra.Command{
+	var rollbackTag string
+	rollback := &cobra.Command{
 		Use:   "rollback <name>",
 		Short: "Roll back every member service under one task lock",
 		Args:  cobra.ExactArgs(1),
@@ -189,9 +191,41 @@ func newReleaseGroupCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runAction(cmd, "/api/v1/release-groups/"+groupID+"/rollback", nil)
+			path := "/api/v1/release-groups/" + groupID + "/rollback"
+			if !cmd.Flags().Changed("tag") {
+				return runAction(cmd, path, nil)
+			}
+			if rollbackTag == "" || strings.TrimSpace(rollbackTag) != rollbackTag {
+				return errs.New(errs.KindValidationFailed, "rollback tag is invalid")
+			}
+			return runAction(cmd, path, map[string]string{"tag": rollbackTag})
 		},
-	})
+	}
+	rollback.Flags().StringVar(&rollbackTag, "tag", "", "explicit tag applied to every member")
+	cmd.AddCommand(rollback)
+
+	var previewTag string
+	preview := &cobra.Command{
+		Use:   "rollback-preview <name>",
+		Short: "Preview Controller-selected rollback sources for every member",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			groupID, err := resolveReleaseGroupTarget(cmd, args[0])
+			if err != nil {
+				return err
+			}
+			path := "/api/v1/release-groups/" + groupID + "/rollback-preview"
+			if cmd.Flags().Changed("tag") {
+				if previewTag == "" || strings.TrimSpace(previewTag) != previewTag {
+					return errs.New(errs.KindValidationFailed, "rollback tag is invalid")
+				}
+				path += "?tag=" + url.QueryEscape(previewTag)
+			}
+			return runShow(cmd, path)
+		},
+	}
+	preview.Flags().StringVar(&previewTag, "tag", "", "exact historical tag required for every member")
+	cmd.AddCommand(preview)
 
 	return cmd
 }

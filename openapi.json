@@ -3310,6 +3310,84 @@
         ],
         "type": "object"
       },
+      "ReleaseGroupRollbackPreview": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ReleaseGroupRollbackPreview.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "release_group_id": {
+            "type": "string"
+          },
+          "revision": {
+            "pattern": "^[1-9][0-9]*$",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/ReleaseGroupRollbackSource"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "release_group_id",
+          "revision",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "ReleaseGroupRollbackRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ReleaseGroupRollbackRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "preview_revision": {
+            "pattern": "^[1-9][0-9]*$",
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ReleaseGroupRollbackSource": {
+        "additionalProperties": false,
+        "properties": {
+          "release_id": {
+            "type": "string"
+          },
+          "service_id": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "service_id",
+          "release_id",
+          "tag"
+        ],
+        "type": "object"
+      },
       "ReleaseGroupTaskAccepted": {
         "additionalProperties": false,
         "properties": {
@@ -9455,6 +9533,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseGroupRollbackRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -9485,6 +9572,56 @@
           }
         },
         "summary": "Roll back a release group",
+        "tags": [
+          "Release Group"
+        ]
+      }
+    },
+    "/release-groups/{id}/rollback-preview": {
+      "get": {
+        "operationId": "release-group.rollback-preview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^rg_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "tag",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseGroupRollbackPreview"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Preview a release group rollback",
         "tags": [
           "Release Group"
         ]

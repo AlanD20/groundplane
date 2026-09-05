@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -115,7 +116,7 @@ func (s *Server) deployService(ctx context.Context, input *releaseServiceDeployI
 	if s.releaseOperations == nil {
 		return nil, errs.New(errs.KindInternal, "release operator is not configured")
 	}
-	response, err := s.releaseOperations.DeployService(ctx, input.ID, input.Body, input.IdempotencyKey)
+	response, err := s.releaseOperations.DeployService(ctx, input.ID, domain.ServiceDeployInput{Tag: input.Body.Tag, Strategy: domain.Strategy(input.Body.Strategy), OnFailure: domain.OnFailure(input.Body.OnFailure)}, input.IdempotencyKey)
 	if err != nil {
 		if s.Logger != nil {
 			s.Logger.Error(
@@ -133,7 +134,7 @@ func (s *Server) rollbackService(ctx context.Context, input *releaseServiceRollb
 	if s.releaseOperations == nil {
 		return nil, errs.New(errs.KindInternal, "release operator is not configured")
 	}
-	response, err := s.releaseOperations.RollbackService(ctx, input.ID, input.Body, input.IdempotencyKey)
+	response, err := s.releaseOperations.RollbackService(ctx, input.ID, domain.ServiceRollbackInput{Tag: input.Body.Tag}, input.IdempotencyKey)
 	if err != nil {
 		if s.Logger != nil {
 			s.Logger.Error(

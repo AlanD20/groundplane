@@ -40,10 +40,42 @@ func (ledger *ReleaseLedger) LoadPlanningScope(
 	ctx context.Context,
 	environmentID string,
 ) (ReleasePlanningScope, error) {
+	return ledger.loadPlanningScope(ctx, environmentID, 0)
+}
+
+func (ledger *ReleaseLedger) LoadPlanningScopeAtRevision(
+	ctx context.Context,
+	environmentID string,
+	revision int64,
+) (ReleasePlanningScope, error) {
+	if revision <= 0 {
+		return ReleasePlanningScope{}, errs.New(errs.KindValidationFailed, "release planning revision is invalid")
+	}
+	return ledger.loadPlanningScope(ctx, environmentID, revision)
+}
+
+func (ledger *ReleaseLedger) loadPlanningScope(
+	ctx context.Context,
+	environmentID string,
+	revision int64,
+) (ReleasePlanningScope, error) {
 	if ctx == nil || ledger == nil || ledger.store == nil || ids.Validate(ids.KindEnvironment, environmentID) != nil {
 		return ReleasePlanningScope{}, errs.New(errs.KindValidationFailed, "release planning environment is invalid")
 	}
-	initial, err := ledger.store.Get(ctx, environmentKey(environmentID))
+	var initial *GetResult
+	var err error
+	if revision == 0 {
+		initial, err = ledger.store.Get(ctx, environmentKey(environmentID))
+	} else {
+		loaded, loadErr := ledger.store.GetMany(ctx, GetManyRequest{Keys: []string{environmentKey(environmentID)}, Revision: revision})
+		if loadErr != nil {
+			return ReleasePlanningScope{}, loadErr
+		}
+		if loaded == nil || loaded.ReadRevision != revision || len(loaded.Values) != 1 {
+			return ReleasePlanningScope{}, corruptReleaseRecord()
+		}
+		initial = &GetResult{Entry: loaded.Values[0], ReadRevision: loaded.ReadRevision}
+	}
 	if err != nil {
 		return ReleasePlanningScope{}, err
 	}

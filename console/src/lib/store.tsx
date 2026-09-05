@@ -4,7 +4,6 @@ import { assertOptionalBackupPolicyKeep } from '@/lib/backup-policy-contract'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { operations } from './api.generated'
 import { watchTransientLogs, type LogTarget, type TransientLogEvent } from './transient-logs'
-
 type BackingServiceCreateRequest = operations['backing-service.create']['requestBody']['content']['application/json']
 type BackingServiceCreatedResponse = operations['backing-service.create']['responses'][201]['content']['application/json']
 import { hydratePlatformComponents } from './platform-component-hydration'
@@ -194,14 +193,13 @@ type ComponentResponse = NonNullable<ComponentPageResponse['items']>[number]
 type ComponentTaskAccepted = operations['component.enable']['responses'][202]['content']['application/json']
 type ComponentConfigResponse = operations['component-config.show']['responses'][200]['content']['application/json']
 type ComponentConfigMutationResponse = operations['component-config.set']['responses'][200]['content']['application/json']
-
 type ReleaseGroupMutationAccepted = operations['release-group.remove']['responses'][202]['content']['application/json']
 type ReleaseGroupTaskAccepted = operations['release-group.deploy']['responses'][202]['content']['application/json']
 type ReleaseGroupPageResponse = operations['release-group.list']['responses'][200]['content']['application/json']
 type ReleaseGroupResponse = operations['release-group.show']['responses'][200]['content']['application/json']
+export type ReleaseGroupRollbackPreviewResponse = operations['release-group.rollback-preview']['responses'][200]['content']['application/json']
 type ReleasePageResponse = operations['release.list']['responses'][200]['content']['application/json']
 export type ReleaseDetailResponse = operations['release.show']['responses'][200]['content']['application/json']
-
 type ReusableSecretCreateInput = {
   key: string
   kind: SecretKind
@@ -1593,7 +1591,8 @@ type StoreContext = State & {
   updateReleaseGroup: (envId: string, groupId: string, patch: Pick<ReleaseGroup, 'name' | 'services' | 'order' | 'onFailure'>) => Promise<ReleaseGroup>
   removeReleaseGroup: (envId: string, groupId: string) => Promise<string>
   deployReleaseGroup: (envId: string, groupId: string, tag?: string) => Promise<string>
-  rollbackReleaseGroup: (envId: string, groupId: string) => Promise<string>
+  previewReleaseGroupRollback: (envId: string, groupId: string, tag?: string) => Promise<ReleaseGroupRollbackPreviewResponse>
+  rollbackReleaseGroup: (envId: string, groupId: string, tag: string | undefined, previewRevision: string) => Promise<string>
   addTenant: (t: { slug: string; name: string; description: string }) => Promise<Tenant>
   updateTenant: (slug: string, patch: { name: string; description: string }) => Promise<Tenant>
   renameTenant: (slug: string, nextSlug: string) => Promise<Tenant>
@@ -3482,9 +3481,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const response = await tenantRequest<ReleaseGroupTaskAccepted>(`/release-groups/${encodeURIComponent(groupId)}/deploy`, 202, { method: 'POST', body })
         return requireTaskId(response, 'Release group deploy')
       },
-      rollbackReleaseGroup: async (_envId, groupId) => {
+      previewReleaseGroupRollback: async (_envId, groupId, tag) => tenantRequest<ReleaseGroupRollbackPreviewResponse>(`/release-groups/${encodeURIComponent(groupId)}/rollback-preview${tag === undefined ? '' : `?tag=${encodeURIComponent(tag)}`}`, 200),
+      rollbackReleaseGroup: async (_envId, groupId, tag, previewRevision) => {
         assertEnvironmentMutable(_envId, 'Release group mutation')
-        const response = await tenantRequest<ReleaseGroupTaskAccepted>(`/release-groups/${encodeURIComponent(groupId)}/rollback`, 202, { method: 'POST' })
+        const response = await tenantRequest<ReleaseGroupTaskAccepted>(`/release-groups/${encodeURIComponent(groupId)}/rollback`, 202, { method: 'POST', body: { ...(tag === undefined ? {} : { tag }), preview_revision: previewRevision } })
         return requireTaskId(response, 'Release group rollback')
       },
       addAttach: async (_envId, input) => {

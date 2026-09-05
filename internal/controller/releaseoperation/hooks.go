@@ -1,4 +1,4 @@
-package app
+package releaseoperation
 
 import (
 	"context"
@@ -19,7 +19,7 @@ type preparedReleaseHooks struct {
 	executions int
 }
 
-func (service *releaseOperationService) prepareReleaseHooks(
+func (service *Service) prepareReleaseHooks(
 	ctx context.Context,
 	scope etcd.ReleasePlanningScope,
 	revision int64,

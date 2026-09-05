@@ -29,6 +29,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
+	releaseoperation "github.com/AlanD20/groundplane/internal/controller/releaseoperation"
 	runnercapability "github.com/AlanD20/groundplane/internal/controller/runner"
 	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
@@ -631,7 +632,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize release execution timeout: %w", err)
 	}
-	releaseOperations, err := newReleaseOperationService(
+	releaseOperations, err := releaseoperation.NewService(
 		releaseLedger, serviceRecords, releaseGroups, idempotency, intentCoordinator,
 		planResolver, scriptRecords, scriptArtifacts, releaseExecutionTimeout,
 	)

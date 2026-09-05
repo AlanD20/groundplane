@@ -59,3 +59,44 @@ func TestReleaseGroupOnFailureRejectsInvalidValue(t *testing.T) {
 		t.Fatalf("releaseGroupOnFailure() error = %v, want %q", err, errs.CodeValidationFailed)
 	}
 }
+
+func TestReleaseGroupRollbackSendsOptionalTag(t *testing.T) {
+	// Rationale: rollback's tag is an operator override for every member, while
+	// omission must remain a bodyless request that preserves automatic selection.
+	t.Parallel()
+	groupID := "rg_01J00000000000000000000000"
+	for _, test := range []struct {
+		name string
+		args []string
+		body string
+	}{
+		{name: "omitted", args: []string{"rollback", groupID}},
+		{name: "explicit", args: []string{"rollback", groupID, "--tag", "release-2026-09-04"}, body: `{"tag":"release-2026-09-04"}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := exactRequestServer(t, http.MethodPost, "/api/v1/release-groups/"+groupID+"/rollback", test.body,
+				http.StatusAccepted, `{"task_id":"task_group_rollback"}`)
+			defer server.Close()
+
+			executeNoun(t, newReleaseGroupCmd(), server.URL, Scope{AsID: true}, test.args...)
+		})
+	}
+}
+
+func TestReleaseGroupRollbackPreviewSendsExactOptionalTag(t *testing.T) {
+	t.Parallel()
+	groupID := "rg_01J00000000000000000000000"
+	server := exactRequestServer(t, http.MethodGet, "/api/v1/release-groups/"+groupID+"/rollback-preview?tag=release-2026-09-04", "", http.StatusOK, `{"release_group_id":"`+groupID+`","revision":"42","sources":[]}`)
+	defer server.Close()
+	executeNoun(t, newReleaseGroupCmd(), server.URL, Scope{AsID: true}, "rollback-preview", groupID, "--tag", "release-2026-09-04")
+}
+
+func TestReleaseGroupRollbackRejectsExplicitBlankTag(t *testing.T) {
+	t.Parallel()
+	command := newReleaseGroupCmd()
+	command.SetContext(context.WithValue(context.Background(), appKey{}, &App{Scope: Scope{AsID: true}}))
+	command.SetArgs([]string{"rollback", "rg_01J00000000000000000000000", "--tag", " "})
+	if err := command.Execute(); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("Execute() error = %v, want validation failure", err)
+	}
+}

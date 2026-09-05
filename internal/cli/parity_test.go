@@ -581,7 +581,7 @@ func TestReleaseGroupCommandTreeUsesLockedVerbs(t *testing.T) {
 	command := newReleaseGroupCmd()
 	want := map[string]bool{
 		"list": true, "show": true, "add": true, "edit": true,
-		"remove": true, "deploy": true, "rollback": true,
+		"remove": true, "deploy": true, "rollback": true, "rollback-preview": true,
 	}
 	if len(command.Commands()) != len(want) {
 		t.Fatalf("subcommand count = %d, want %d", len(command.Commands()), len(want))
@@ -596,6 +596,9 @@ func TestReleaseGroupCommandTreeUsesLockedVerbs(t *testing.T) {
 		}
 		if child.Name() == "remove" && (len(child.Aliases) != 1 || child.Aliases[0] != "delete") {
 			t.Errorf("remove aliases = %q, want [delete]", child.Aliases)
+		}
+		if child.Name() == "rollback" && child.Flags().Lookup("tag") == nil {
+			t.Error("rollback is missing the optional --tag flag")
 		}
 	}
 }

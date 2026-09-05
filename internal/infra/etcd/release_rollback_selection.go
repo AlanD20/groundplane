@@ -59,6 +59,9 @@ func (ledger *ReleaseLedger) SelectRollback(
 		if err != nil {
 			return ReleaseRollbackSelection{}, err
 		}
+		if !rollbackIntentMatches(serving, environmentID, serviceID) {
+			return ReleaseRollbackSelection{}, corruptReleaseRecord()
+		}
 		servingTag = serving.Intent.Tag
 	}
 	prefix := releaseServiceIndexScope(environmentID, serviceID)
@@ -85,6 +88,9 @@ func (ledger *ReleaseLedger) SelectRollback(
 			if err != nil {
 				return ReleaseRollbackSelection{}, err
 			}
+			if !rollbackIntentMatches(view, environmentID, serviceID) {
+				return ReleaseRollbackSelection{}, corruptReleaseRecord()
+			}
 			if releaseID == projection.ServingReleaseID || view.Intent.Tag == servingTag ||
 				explicitTag != "" && view.Intent.Tag != explicitTag || view.Checkpoint.State != domain.StateCompleted ||
 				view.Terminal == nil || view.Terminal.Outcome != domain.StateCompleted ||
@@ -107,4 +113,8 @@ func (ledger *ReleaseLedger) SelectRollback(
 		return ReleaseRollbackSelection{}, errs.New(errs.KindRollbackSourceExpired, "rollback source material is expired")
 	}
 	return ReleaseRollbackSelection{}, errs.New(errs.KindRollbackNoPreviousRelease, "no eligible previous release exists")
+}
+
+func rollbackIntentMatches(view ReleaseView, environmentID, serviceID string) bool {
+	return view.Intent.EnvironmentID == environmentID && view.Intent.ServiceID == serviceID
 }

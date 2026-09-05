@@ -1692,6 +1692,34 @@ type ReleaseGroupMutationAccepted struct {
 	TaskId         string  `json:"task_id"`
 }
 
+// ReleaseGroupRollbackPreview defines model for ReleaseGroupRollbackPreview.
+type ReleaseGroupRollbackPreview struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ReleaseGroupRollbackPreview.json
+	Schema         *string                       `json:"$schema,omitempty"`
+	ReleaseGroupId string                        `json:"release_group_id"`
+	Revision       string                        `json:"revision"`
+	Sources        *[]ReleaseGroupRollbackSource `json:"sources"`
+}
+
+// ReleaseGroupRollbackRequest defines model for ReleaseGroupRollbackRequest.
+type ReleaseGroupRollbackRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ReleaseGroupRollbackRequest.json
+	Schema          *string `json:"$schema,omitempty"`
+	PreviewRevision *string `json:"preview_revision,omitempty"`
+	Tag             *string `json:"tag,omitempty"`
+}
+
+// ReleaseGroupRollbackSource defines model for ReleaseGroupRollbackSource.
+type ReleaseGroupRollbackSource struct {
+	ReleaseId string `json:"release_id"`
+	ServiceId string `json:"service_id"`
+	Tag       string `json:"tag"`
+}
+
 // ReleaseGroupTaskAccepted defines model for ReleaseGroupTaskAccepted.
 type ReleaseGroupTaskAccepted struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -2674,6 +2702,11 @@ type ReleaseGroupRollbackParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// ReleaseGroupRollbackPreviewParams defines parameters for ReleaseGroupRollbackPreview.
+type ReleaseGroupRollbackPreviewParams struct {
+	Tag *string `form:"tag,omitempty" json:"tag,omitempty"`
+}
+
 // ReleaseListParams defines parameters for ReleaseList.
 type ReleaseListParams struct {
 	EnvironmentId string  `form:"environment_id" json:"environment_id"`
@@ -2994,6 +3027,9 @@ type ReleaseGroupEditJSONRequestBody = ReleaseGroupEditRequest
 
 // ReleaseGroupDeployJSONRequestBody defines body for ReleaseGroupDeploy for application/json ContentType.
 type ReleaseGroupDeployJSONRequestBody = ReleaseGroupDeployRequest
+
+// ReleaseGroupRollbackJSONRequestBody defines body for ReleaseGroupRollback for application/json ContentType.
+type ReleaseGroupRollbackJSONRequestBody = ReleaseGroupRollbackRequest
 
 // RouteCreateJSONRequestBody defines body for RouteCreate for application/json ContentType.
 type RouteCreateJSONRequestBody = RouteCreate
@@ -4147,10 +4183,24 @@ type ClientInterface interface {
 	// Corresponds with POST /release-groups/{id}/deploy (the `ReleaseGroupDeploy` operationId).
 	ReleaseGroupDeploy(ctx context.Context, id string, params *ReleaseGroupDeployParams, body ReleaseGroupDeployJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ReleaseGroupRollback Roll back a release group
+	// ReleaseGroupRollbackWithBody Roll back a release group
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /release-groups/{id}/rollback (the `ReleaseGroupRollback` operationId).
-	ReleaseGroupRollback(ctx context.Context, id string, params *ReleaseGroupRollbackParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ReleaseGroupRollbackWithBody(ctx context.Context, id string, params *ReleaseGroupRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReleaseGroupRollback Roll back a release group
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /release-groups/{id}/rollback (the `ReleaseGroupRollback` operationId).
+	ReleaseGroupRollback(ctx context.Context, id string, params *ReleaseGroupRollbackParams, body ReleaseGroupRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReleaseGroupRollbackPreview Preview a release group rollback
+	//
+	// Corresponds with GET /release-groups/{id}/rollback-preview (the `ReleaseGroupRollbackPreview` operationId).
+	ReleaseGroupRollbackPreview(ctx context.Context, id string, params *ReleaseGroupRollbackPreviewParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ReleaseList List releases
 	//
@@ -6021,11 +6071,45 @@ func (c *Client) ReleaseGroupDeploy(ctx context.Context, id string, params *Rele
 	return c.Client.Do(req)
 }
 
-// ReleaseGroupRollback Roll back a release group
+// ReleaseGroupRollbackWithBody Roll back a release group
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with POST /release-groups/{id}/rollback (the `ReleaseGroupRollback` operationId).
-func (c *Client) ReleaseGroupRollback(ctx context.Context, id string, params *ReleaseGroupRollbackParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewReleaseGroupRollbackRequest(c.Server, id, params)
+func (c *Client) ReleaseGroupRollbackWithBody(ctx context.Context, id string, params *ReleaseGroupRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReleaseGroupRollbackRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReleaseGroupRollback Roll back a release group
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /release-groups/{id}/rollback (the `ReleaseGroupRollback` operationId).
+func (c *Client) ReleaseGroupRollback(ctx context.Context, id string, params *ReleaseGroupRollbackParams, body ReleaseGroupRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReleaseGroupRollbackRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReleaseGroupRollbackPreview Preview a release group rollback
+//
+// Corresponds with GET /release-groups/{id}/rollback-preview (the `ReleaseGroupRollbackPreview` operationId).
+func (c *Client) ReleaseGroupRollbackPreview(ctx context.Context, id string, params *ReleaseGroupRollbackPreviewParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReleaseGroupRollbackPreviewRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -10856,8 +10940,19 @@ func NewReleaseGroupDeployRequestWithBody(server string, id string, params *Rele
 	return req, nil
 }
 
-// NewReleaseGroupRollbackRequest constructs an http.Request for the ReleaseGroupRollback method
-func NewReleaseGroupRollbackRequest(server string, id string, params *ReleaseGroupRollbackParams) (*http.Request, error) {
+// NewReleaseGroupRollbackRequest calls the generic ReleaseGroupRollback builder with application/json body
+func NewReleaseGroupRollbackRequest(server string, id string, params *ReleaseGroupRollbackParams, body ReleaseGroupRollbackJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewReleaseGroupRollbackRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewReleaseGroupRollbackRequestWithBody constructs an http.Request for the ReleaseGroupRollback method, with any body, and a specified content type
+func NewReleaseGroupRollbackRequestWithBody(server string, id string, params *ReleaseGroupRollbackParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -10882,10 +10977,12 @@ func NewReleaseGroupRollbackRequest(server string, id string, params *ReleaseGro
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -10898,6 +10995,67 @@ func NewReleaseGroupRollbackRequest(server string, id string, params *ReleaseGro
 
 		req.Header.Set("Idempotency-Key", headerParam0)
 
+	}
+
+	return req, nil
+}
+
+// NewReleaseGroupRollbackPreviewRequest constructs an http.Request for the ReleaseGroupRollbackPreview method
+func NewReleaseGroupRollbackPreviewRequest(server string, id string, params *ReleaseGroupRollbackPreviewParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/release-groups/%s/rollback-preview", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Tag != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "tag", *params.Tag, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -14717,12 +14875,26 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /release-groups/{id}/deploy (the `ReleaseGroupDeploy` operationId).
 	ReleaseGroupDeployWithResponse(ctx context.Context, id string, params *ReleaseGroupDeployParams, body ReleaseGroupDeployJSONRequestBody, reqEditors ...RequestEditorFn) (*ReleaseGroupDeployResponse, error)
 
+	// ReleaseGroupRollbackWithBodyWithResponse Roll back a release group
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /release-groups/{id}/rollback (the `ReleaseGroupRollback` operationId).
+	ReleaseGroupRollbackWithBodyWithResponse(ctx context.Context, id string, params *ReleaseGroupRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReleaseGroupRollbackResponse, error)
+
 	// ReleaseGroupRollbackWithResponse Roll back a release group
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /release-groups/{id}/rollback (the `ReleaseGroupRollback` operationId).
+	ReleaseGroupRollbackWithResponse(ctx context.Context, id string, params *ReleaseGroupRollbackParams, body ReleaseGroupRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*ReleaseGroupRollbackResponse, error)
+
+	// ReleaseGroupRollbackPreviewWithResponse Preview a release group rollback
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with POST /release-groups/{id}/rollback (the `ReleaseGroupRollback` operationId).
-	ReleaseGroupRollbackWithResponse(ctx context.Context, id string, params *ReleaseGroupRollbackParams, reqEditors ...RequestEditorFn) (*ReleaseGroupRollbackResponse, error)
+	// Corresponds with GET /release-groups/{id}/rollback-preview (the `ReleaseGroupRollbackPreview` operationId).
+	ReleaseGroupRollbackPreviewWithResponse(ctx context.Context, id string, params *ReleaseGroupRollbackPreviewParams, reqEditors ...RequestEditorFn) (*ReleaseGroupRollbackPreviewResponse, error)
 
 	// ReleaseListWithResponse List releases
 	//
@@ -18859,6 +19031,54 @@ func (r ReleaseGroupRollbackResponse) ContentType() string {
 	return ""
 }
 
+type ReleaseGroupRollbackPreviewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ReleaseGroupRollbackPreview
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReleaseGroupRollbackPreviewResponse) GetJSON200() *ReleaseGroupRollbackPreview {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ReleaseGroupRollbackPreviewResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ReleaseGroupRollbackPreviewResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReleaseGroupRollbackPreviewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReleaseGroupRollbackPreviewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReleaseGroupRollbackPreviewResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ReleaseListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -22971,17 +23191,43 @@ func (c *ClientWithResponses) ReleaseGroupDeployWithResponse(ctx context.Context
 	return ParseReleaseGroupDeployResponse(rsp)
 }
 
-// ReleaseGroupRollbackWithResponse Roll back a release group
+// ReleaseGroupRollbackWithBodyWithResponse Roll back a release group
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /release-groups/{id}/rollback (the `ReleaseGroupRollback` operationId).
-func (c *ClientWithResponses) ReleaseGroupRollbackWithResponse(ctx context.Context, id string, params *ReleaseGroupRollbackParams, reqEditors ...RequestEditorFn) (*ReleaseGroupRollbackResponse, error) {
-	rsp, err := c.ReleaseGroupRollback(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) ReleaseGroupRollbackWithBodyWithResponse(ctx context.Context, id string, params *ReleaseGroupRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReleaseGroupRollbackResponse, error) {
+	rsp, err := c.ReleaseGroupRollbackWithBody(ctx, id, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseReleaseGroupRollbackResponse(rsp)
+}
+
+// ReleaseGroupRollbackWithResponse Roll back a release group
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /release-groups/{id}/rollback (the `ReleaseGroupRollback` operationId).
+func (c *ClientWithResponses) ReleaseGroupRollbackWithResponse(ctx context.Context, id string, params *ReleaseGroupRollbackParams, body ReleaseGroupRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*ReleaseGroupRollbackResponse, error) {
+	rsp, err := c.ReleaseGroupRollback(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReleaseGroupRollbackResponse(rsp)
+}
+
+// ReleaseGroupRollbackPreviewWithResponse Preview a release group rollback
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /release-groups/{id}/rollback-preview (the `ReleaseGroupRollbackPreview` operationId).
+func (c *ClientWithResponses) ReleaseGroupRollbackPreviewWithResponse(ctx context.Context, id string, params *ReleaseGroupRollbackPreviewParams, reqEditors ...RequestEditorFn) (*ReleaseGroupRollbackPreviewResponse, error) {
+	rsp, err := c.ReleaseGroupRollbackPreview(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReleaseGroupRollbackPreviewResponse(rsp)
 }
 
 // ReleaseListWithResponse List releases
@@ -26747,6 +26993,39 @@ func ParseReleaseGroupRollbackResponse(rsp *http.Response) (*ReleaseGroupRollbac
 			headers.ContentType = &value
 		}
 		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseReleaseGroupRollbackPreviewResponse parses an HTTP response from a ReleaseGroupRollbackPreviewWithResponse call
+func ParseReleaseGroupRollbackPreviewResponse(rsp *http.Response) (*ReleaseGroupRollbackPreviewResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReleaseGroupRollbackPreviewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ReleaseGroupRollbackPreview
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil

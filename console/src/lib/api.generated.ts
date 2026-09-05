@@ -826,6 +826,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/release-groups/{id}/rollback-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preview a release group rollback */
+        get: operations["release-group.rollback-preview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/releases": {
         parameters: {
             query?: never;
@@ -2482,6 +2499,32 @@ export interface components {
             readonly $schema?: string;
             release_group_id: string;
             task_id: string;
+        };
+        ReleaseGroupRollbackPreview: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/ReleaseGroupRollbackPreview.json
+             */
+            readonly $schema?: string;
+            release_group_id: string;
+            revision: string;
+            sources: components["schemas"]["ReleaseGroupRollbackSource"][] | null;
+        };
+        ReleaseGroupRollbackRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/ReleaseGroupRollbackRequest.json
+             */
+            readonly $schema?: string;
+            preview_revision?: string;
+            tag?: string;
+        };
+        ReleaseGroupRollbackSource: {
+            release_id: string;
+            service_id: string;
+            tag: string;
         };
         ReleaseGroupTaskAccepted: {
             /**
@@ -5530,7 +5573,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ReleaseGroupRollbackRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {
@@ -5540,6 +5587,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReleaseGroupTaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "release-group.rollback-preview": {
+        parameters: {
+            query?: {
+                tag?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseGroupRollbackPreview"];
                 };
             };
             /** @description Error */
