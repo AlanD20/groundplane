@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 func (s *Server) acknowledge(
@@ -249,13 +250,13 @@ func validateDNSResolverResultShape(acknowledgement *agentpb.TaskAck, plan *agen
 	if mode == agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_ENABLE && rollback != nil {
 		return errs.New(errs.KindValidationFailed, "failed Component enable returned serving rollback evidence")
 	}
-	rollbackAction := *observation
+	rollbackAction := proto.CloneOf(observation)
 	rollbackAction.ArtifactId = managed.GetExpectedPreviousArtifactId()
 	rollbackAction.ArtifactDigest = append([]byte(nil), managed.GetExpectedPreviousArtifactDigest()...)
 	rollbackAction.Generation = managed.GetExpectedPreviousGeneration()
 	if rollback != nil && !dnsResolverProofMatches(
 		rollback,
-		&rollbackAction,
+		rollbackAction,
 		rollbackService,
 		managed.GetExpectedPreviousArtifactDigest(),
 	) {

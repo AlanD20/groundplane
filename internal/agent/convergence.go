@@ -6,6 +6,7 @@ import (
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type composeConvergence struct {
@@ -112,9 +113,9 @@ func evaluateReleaseWorkloadConvergence(
 	if observed == nil {
 		return composeConvergence{}, errs.New(errs.KindInternal, "compose convergence input is incomplete")
 	}
-	scoped := *observed
+	scoped := proto.CloneOf(observed)
 	scoped.Collisions = nil
-	return evaluateSelectedComposeConvergence(artifact, &scoped, selectedServices, false)
+	return evaluateSelectedComposeConvergence(artifact, scoped, selectedServices, false)
 }
 
 func convergenceServices(

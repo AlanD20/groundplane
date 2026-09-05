@@ -510,9 +510,9 @@ func TestWorkerPoolAcceptsReceiptForNonBlockingTaskEventAndRejectsReplay(t *test
 	if err := pool.AcceptTaskEventAck(context.Background(), ack); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("AcceptTaskEventAck(replay) error = %v, want state conflict", err)
 	}
-	changed := *ack
+	changed := proto.CloneOf(ack)
 	changed.Ordinal++
-	if err := pool.AcceptTaskEventAck(context.Background(), &changed); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+	if err := pool.AcceptTaskEventAck(context.Background(), changed); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("AcceptTaskEventAck(changed identity) error = %v, want state conflict", err)
 	}
 }

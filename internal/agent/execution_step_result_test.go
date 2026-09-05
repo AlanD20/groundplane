@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestScriptProjectionRequiresAcknowledgedProcedureImageResultBeforeStart(t *testing.T) {
@@ -52,13 +53,13 @@ func TestScriptProjectionRequiresAcknowledgedProcedureImageResultBeforeStart(t *
 		projection.GetImage() != authority.RequestedReference {
 		t.Fatalf("resolved/original image = %q/%q", resolved.GetImage(), projection.GetImage())
 	}
-	conflict := *result
+	conflict := proto.CloneOf(result)
 	conflict.Result = &agentpb.ExecutionStepResult_ProcedureServiceImage{
 		ProcedureServiceImage: &agentpb.ProcedureServiceImageResult{
 			ServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW",
 		},
 	}
-	assignment.AcknowledgedStepResults = []*agentpb.ExecutionStepResult{&conflict}
+	assignment.AcknowledgedStepResults = []*agentpb.ExecutionStepResult{conflict}
 	if _, err := acknowledgedScriptRunnerProjection(assignment, snapshot, projection); !errors.Is(
 		err, errs.New(errs.KindStateConflict, ""),
 	) {
