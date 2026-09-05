@@ -5,9 +5,6 @@ package network
 import (
 	"context"
 	"errors"
-	"fmt"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
