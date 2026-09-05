@@ -119,36 +119,10 @@ func (service *PlatformMutationService) mutatePlatformComponentLifecycle(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	ensureService := false
-	disableService := false
-	switch action {
-	case "enable":
-		if desired.Config.CoreDNS == nil {
-			return etcd.IdempotencyResponse{}, errs.New(
-				errs.KindStateConflict,
-				"CoreDNS must be configured before enable",
-			)
-		}
-		desired.Enabled = true
-		ensureService = true
-	case "disable":
-		if !desired.Enabled {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "CoreDNS is already disabled")
-		}
-		desired.Enabled = false
-		disableService = true
-	case "update":
-		if !desired.Enabled || desired.Config.CoreDNS == nil {
-			return etcd.IdempotencyResponse{}, errs.New(
-				errs.KindStateConflict,
-				"CoreDNS must be enabled and configured before update",
-			)
-		}
-		ensureService = true
-	default:
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "CoreDNS lifecycle action is invalid")
+	desired, ensureService, disableService, err := platformComponentLifecycleCandidate(desired, action)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
 	}
-	desired.Healthy = false
 	if err := ValidateComponent(service.renderer, desired); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -309,8 +283,7 @@ func (service *PlatformMutationService) ReplacePlatformComponentConfig(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	desired.Config = core.ComponentConfig{CoreDNS: &config}
-	desired.Healthy = false
+	desired = platformComponentConfigCandidate(desired, config)
 	if err := ValidateComponent(service.renderer, desired); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
