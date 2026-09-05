@@ -494,7 +494,8 @@ The initial extension families include:
 - `x-gp-resource` for stable ids and ownership;
 - `x-gp-slug` for the mutable public slug of a Volume while its Compose key remains
   immutable;
-- `x-gp-release` for image/tag/digest/slot projections;
+- `x-gp-release` for authored release defaults; runtime image and slot authority
+  comes only from immutable Release records and serving projections;
 - `x-gp-release-groups` for a map of explicit coordinated multi-service
   releases declared only at the document root, keyed by canonical group
   name, whose services must exist in the resolved enabled Compose project;
@@ -562,7 +563,7 @@ The Controller keeps five distinct categories of state:
 | durable records | ids, Volume and Service runtime projections, generated credentials/facts, releases, recovery points | Controller in etcd |
 | compiled execution | canonical metadata, plan digest, artifact identities, and reconstructable non-secret inputs | Controller in etcd while replay authority is required |
 | transient execution material | secret bytes, rendered secret files, streaming logs, helper frames | bounded memory or constrained runtime files only |
-| observed | containers, health, image digests, networks, files | Agent reports |
+| observed | containers, health, local image ids, networks, files | Agent reports |
 | task | lifecycle, step progress, result, timeout, abort | Controller journal |
 
 The canonical environment env file is generated as
@@ -608,15 +609,51 @@ those primitives. Compose labels use the `com.groundplane.*` namespace;
 Compose's reserved `com.docker.compose.*` labels and local `deploy.labels`
 are not used as the ownership contract.
 
-Generated Compose carries the current per-service image name and tag. The
-source of that tag is the service's durable release ledger, not one global
-environment release field. Before mutation, workload release resolution pins
-the exact identity of an image already present in the host Docker daemon; it
-never builds, pulls, or pushes implicitly. Pinned Groundplane-managed Agent,
-etcd, Component, and backing images remain release/installation assets outside
-operator registry integration. A rollback changes the release projection and
-causes the renderer to regenerate image references, slot aliases, router
-targets, and labels.
+Each immutable candidate Release owns one `WorkloadSeal` value:
+`{requested_reference, local_image_id, replica_count}`. The requested reference
+is provenance and tag selection; generated workload Compose and execution use
+the exact sealed `sha256:<64-hex>` host-local Docker image id. Optional registry
+or manifest metadata is display-only and never workload authority.
+
+For a newly authored requested reference, the Controller makes one ephemeral,
+bounded, correlated read-only request over the existing authenticated Agent
+channel before publication. The Agent alone reads workload Docker state, uses
+`ImageInspect`, and returns one all-or-nothing validated result for at most 64
+unique selectors. The request selects either a new requested reference or an
+already sealed local image id; it exposes no arbitrary Docker operation and is
+not an operator action or Task. The Controller never reads workload Docker
+state. Resolution never builds, pulls, or pushes and never requires
+`RepoDigests`, so a locally built image remains valid.
+
+ADR 0052 owns the exact machine bounds. In summary, the correlation id is the
+32-character lowercase-hex encoding of 16 nonzero random bytes, is fresh within
+the authenticated connection, and is discarded with that connection or active
+request. Requested-reference selectors are explicitly tagged or
+digest-qualified Docker named references of at most 512 ASCII bytes; local-id
+selectors are exactly `sha256:` plus 64 lowercase hex characters. Request and
+result envelopes are each at most 65,536 bytes, both peers enforce the 1..64
+unique-selector and string bounds before Docker inspection, and success returns
+one result per selector in order. A closed failure names a present zero-based
+ordinal and returns no partial success. Each peer caps the complete exchange at
+30 seconds; timeout, disconnect, late response, or malformed active response
+provides no usable identity and prevents staging and publication without
+automatic re-resolution.
+
+Rollback copies the complete candidate seal from the Controller-selected
+historical Release input. Prior topology and compensation copy the complete
+seal from the exact currently serving Release input. Retry and recovery reuse
+those same seals. Historical, prior, retry, and immediate pre-mutation checks
+inspect the sealed local id directly, never the mutable requested reference.
+Retagging cannot change selected bytes or invalidate an old image that remains
+present; a missing sealed id fails before any workload mutation. No path derives
+a missing image id or replica count from current desired state, a projection,
+containers, or a mutable tag.
+
+Pinned Groundplane-managed Agent, etcd, Component, and backing images remain
+release/installation assets outside operator registry integration. Their image
+authority is separate from `WorkloadSeal`. A rollback changes the Release
+projection and causes the renderer to regenerate sealed local image ids, slot
+aliases, router targets, and labels from exact immutable Release inputs.
 
 Workload Services expose no host ports in the accepted MVP contract. A narrow
 loopback-only mapping for an operator-owned recreate Service is merely a
@@ -625,31 +662,45 @@ renderer, or runtime implementation.
 
 Release execution does not move a mutable Compose network alias. Blue-green
 renders two physical slot workloads and one stable Controller-owned Caddy proxy
-endpoint and is limited to `deploy.replicas == 1`. Recreate renders the exact
-authored replica count `N >= 1`; an addressable
+endpoint and is limited to sealed `replica_count == 1` for both candidate and
+prior sets. Native Compose omission of `deploy.replicas` normalizes to the
+explicit count one only at the authored-input boundary. Every durable Release
+seal contains a positive explicit count; absent or zero durable counts are
+invalid and never default to one. Recreate renders the exact sealed count
+`N >= 1`; an addressable
 recreate may retain the stable proxy, but never retains the slot pair. Internal
 consumers and the Environment router target the stable endpoint when present.
-The immutable render input seals candidate and prior logical workload sets,
-their exact expected counts, the internal `singleton`, `blue`, or `green` slot
-labels, proxy JSON and digests, generations, and Release ids. The `singleton`
-label names the recreate slot; it does not imply one physical replica.
+The immutable render input contains the candidate `WorkloadSeal` and optional
+prior `WorkloadSeal` as separate exact logical sets; it does not duplicate their
+members as image, prior-image, replica, or workload-manifest-digest authority.
+It also seals the internal `singleton`, `blue`, or `green` slot labels, proxy
+JSON and digests, generations, and Release ids. The `singleton` label names the
+recreate slot; it does not imply one physical replica.
 Blue-green to recreate removes the exact sealed prior workload set before
 applying the exact-count candidate set. Recreate to blue-green creates and
 health-proves the candidate slot set, atomically switches the proxy, then
 removes the obsolete prior workload set. Any transition to or from blue-green
 requires both the prior/current serving Release and candidate/destination
-Release to have `replicas == 1` before mutation. `switch_back` restores and proves the exact prior topology
+Release seals to have `replica_count == 1` before mutation. `switch_back`
+restores and proves the exact prior topology
 before candidate cleanup. Recovery retries use the same fixed-revision input
 and run probes plus enabled compensation only.
+
+The managed stable proxy's compiled OCI index reference, Agent-selected host
+platform child manifest, and local Docker image/config id are distinct identities.
+Their preparation and historical-retention authority is separate from the
+workload seal, and current compiled catalog authority never substitutes for a
+sealed historical proxy identity.
 
 A Release Group is one ordered coordinated action over 2 through 32 logical
 Services, not a simultaneous or atomic switch. For group deploy, a request tag
 overrides the persisted group tag; absence of both is invalid. The selected
-deploy tag resolves against each member's declared image and pins its exact
-immutable host-local Docker image identity before workload mutation; registry
-or manifest digest metadata is optional and never substitutes for that local
-identity. Each member keeps its own ledger. Group rollback never consults the
-persisted default.
+deploy tag resolves once against each member's declared image in one
+all-or-nothing Agent batch before publication and seals each exact local Docker
+image id; registry or manifest metadata is optional and never substitutes for
+that id. Each member keeps its own ledger. Group rollback never consults the
+persisted default and copies each selected historical member seal rather than
+resolving its tag again.
 An optional rollback request tag independently filters each member's eligible
 history and selects its newest Release that completed successfully and reached
 serving with that exact tag and a tag different from its current serving

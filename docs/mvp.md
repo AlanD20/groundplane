@@ -662,8 +662,14 @@ the Agent is simply another client of it.
 
 **Images (locked).** Workload deployments use only images already present in the
 host Docker daemon, including preloaded third-party workload images. The
-Controller resolves and pins the exact local image identity for the accepted
-release; a missing image fails before any workload mutation. Deploy has no
+Controller asks the Agent to resolve each newly selected requested reference
+once before publication and seals its exact local Docker image id with the
+Release. Requested reference remains provenance; optional registry or manifest
+metadata never substitutes for the local id. Rollback, prior restoration,
+retry, and immediate pre-mutation validation inspect their already sealed local
+id directly rather than resolving a mutable tag again. Retagging therefore does
+not replace historical bytes; a missing sealed image fails before any workload
+mutation. Locally built images with no `RepoDigests` are valid. Deploy has no
 registry pull or image build side effect. Pinned Groundplane-managed Agent,
 etcd, Component, and backing-service images remain release or installation
 assets, not operator registry integration. Public/private registry integration,
@@ -1152,8 +1158,11 @@ tenants and one database.
   default for this release only (see Release strategy rules). The Deploy
   task's typed parameters are `{ service, tag, strategy, on_failure }`, where
   `on_failure` defaults to `switch_back` and may be set to `leave_active` for
-  this release. The accepted Release captures the Service's desired
-  `deploy.replicas` count. For blue-green with N==1, the generated Compose
+  this release. Native omission of `deploy.replicas` means one and normalizes
+  once at the authored-input boundary. The accepted Release then captures a
+  positive explicit count; a missing or zero durable count is invalid and is
+  never defaulted or reconstructed from current desired state. For blue-green
+  with N==1, the generated Compose
   project contains two physical singleton slot workloads and one stable
   Controller-owned Caddy proxy for the logical service. Routed Caddy and
   internal consumers target only that stable proxy. The Controller starts the
@@ -1167,8 +1176,10 @@ tenants and one database.
   only the desired set. The Controller seals candidate and prior Compose
   artifacts, proves the full desired set healthy, and can restore and prove the
   exact prior artifact and captured count under `switch_back`. Blue-green to
-  recreate removes the sealed slot topology before applying the desired set.
-  Recreate to blue-green is allowed only when both releases have N==1. Restart
+  recreate and recreate to blue-green are both rejected before mutation unless
+  the sealed prior and candidate workload counts are each exactly one. An
+  accepted blue-green-to-recreate transition removes the sealed slot topology
+  before applying the desired set. Restart
   and retry use only the same sealed artifacts and converge idempotently. Start,
   Stop, Destroy, and reconciliation operate on the full logical set. The Agent
   applies the procedure, health and proxy configuration are observed, and the
@@ -1177,11 +1188,15 @@ tenants and one database.
   status`), so every service's history is independently traceable. The tag
   **defaults to the service's current tag**: redeploying the same tag is the
   common case — it re-applies spec, env-file, secret, and healthcheck changes
-  without a new image — and an explicit new tag is entered only when releasing
-  a build. The Deploy dialog takes the **tag only, never the image name** (the
-  image name comes from the service); a deploy rewrites the service's image to
-  `name:tag`. Clicking a service card (in the topology or any list) opens its
-  full spec; edits save back to desired state and need a redeploy to apply.
+  while resolving that newly selected requested reference exactly once. The
+  same tag may therefore pin new local bytes after an external retag; it does
+  not promise reuse of the preceding Release's image id. An explicit new tag is
+  entered only when releasing a differently tagged build. The Deploy dialog
+  takes the **tag only, never the image name** (the image name comes from the
+  service); the Controller combines those authored inputs as requested-reference
+  provenance, while final Compose uses the resolved sealed local image id.
+  Clicking a service card (in the topology or any list) opens its full spec;
+  edits save back to desired state and need a redeploy to apply.
 - **Rollback** - the per-service mirror of Deploy. It **tracks the previous
   tag automatically**: for the selected service, the rollback target is the
   **most recent successful deploy whose tag differs from the current tag**
@@ -1190,7 +1205,10 @@ tenants and one database.
   returns to a tag that actually served) and it is **pre-selected** by
   default; an explicit tag may be entered
   instead. It is a traffic switch through the same strategy as the original
-  deployment, never a cold start, and it never reverses migrations.
+  deployment, never a cold start, and it never reverses migrations. The new
+  rollback Release copies the selected historical Release's requested
+  reference, local Docker image id, and replica count; it never resolves that
+  tag to current bytes or derives missing historical authority.
 - **Release group** - one operator action for an explicit ordered set of 2 through 32 logical services with one group-level
   `on_failure: switch_back | leave_active` policy. The default is
   `switch_back`. Each service retains its own release record; the group policy
@@ -1200,10 +1218,10 @@ tenants and one database.
   atomic distributed switch. For a group deploy, a request `tag` overrides the
   persisted group tag; if both are empty the deploy is rejected, with no
   member-current fallback. The chosen deploy tag resolves separately against
-  each member's image and pins its exact immutable host-local Docker image
-  identity before workload mutation; registry or manifest digest metadata is
-  optional and never substitutes for that local identity. Each member records
-  its release history independently.
+  each member's image once in one all-or-nothing Agent batch before publication
+  and pins its exact host-local Docker image id; registry or manifest metadata
+  is optional and never substitutes for that local id. Each member records its
+  release history independently.
   Group rollback never consults the persisted group tag. An optional rollback
   request tag makes each member independently select its newest eligible
   historical Release that completed successfully and reached serving with that
@@ -1243,9 +1261,9 @@ tenants and one database.
   are frozen at the same revision; publication rejects a group whose declared
   order places a selected Service before its selected prerequisite and never
   silently reorders the group. A retry preserves the same candidate ids,
-  slots, tags, digests, render inputs, and order, probes the sealed proxy state,
-  and runs only the required physical compensation. It never replays forward
-  switches.
+  slots, requested-reference provenance, workload seals, proxy/render digests,
+  render inputs, and order, probes the sealed proxy state, and runs only the
+  required physical compensation. It never replays forward switches.
   Release execution includes the Script lifecycle hooks selected by ADR 0040.
   A migration Script binds once to its designated logical member (for example,
   the API), while every selected Script targets its logical Service and executes
@@ -1494,8 +1512,9 @@ named Network Zones, not through published host ports.
   a project lists its environments, each environment being the topology page
   with the tab bar (Overview, Services, Blueprint, Router, Releases, Tasks, Backups,
   Volumes, Environments, Scripts, Settings last). **Releases is the
-  per-service release ledger** (active/superseded records — the state
-  rollback reads); **the Tasks tab is the environment's live task queue**
+  per-Service release ledger** (immutable intents and execution summaries plus
+  separate serving/current-successful projections — rollback selects exact
+  history); **the Tasks tab is the environment's live task queue**
   (pending → running → completed|failed|timed_out|aborted, per-task steps,
   abort for in-flight work) — tasks are environment-scoped, and this tab is
   the Console surface the `task` CLI noun maps to. The **breadcrumb's project
@@ -1707,7 +1726,7 @@ An environment document and its mapping to Compose:
 | services.<name>.expose | internal ports reachable on the zone (`cms:3000`, `websocket:8080`) |
 | services.<name>.restart | restart policy (`unless-stopped` / `always` / `no`) |
 | services.<name>.logging | json-file log limits (`maxSize` / `maxFile`) |
-| services.<name>.deploy.replicas | native Compose instance count (WebSocket horizontal scaling); the Controller persists the desired count and reconciles Compose's ordinary containers |
+| services.<name>.deploy.replicas | native Compose instance count (WebSocket horizontal scaling); omission normalizes once to one, then every durable Release carries a positive explicit sealed count that the Controller persists and reconciles against Compose's ordinary containers |
 | services.<name>.labels / annotations | native container identity and supplemental metadata; Groundplane emits `com.groundplane.*` labels and does not use `deploy.labels` for local ownership |
 | environment.volume_dir | the environment's controller-managed volume folder; generated from stable ids |
 | `x-gp-entry` | authored environment variables/files with `exposure: [all]` or a service list; the Controller renders all-services entries into the canonical env file and service entries into native `environment`/`env_file` |
@@ -2054,7 +2073,7 @@ The extension families are:
 | Extension | Controller meaning | Execution result |
 | --- | --- | --- |
 | `x-gp-resource` | stable resource identity and ownership | Docker labels and task context |
-| `x-gp-release` | image, tag, digest, slot, strategy | rendered image, aliases, release record |
+| `x-gp-release` | authored default strategy and failure policy | immutable candidate Release, sealed local image id, aliases, and serving/current-successful projections |
 | `x-gp-release-groups` | named explicit coordinated releases with exact service membership, order, and failure policy | one task, lock, and per-service release records for the group |
 | `x-gp-network` | stable network identity and ownership | native Compose network definition or external join |
 | `x-gp-attach` | backing project, attach, grant, and fact references | external network join and adapter tasks |
@@ -2091,7 +2110,7 @@ The Controller translates the documents into these state categories:
 | desired | lossless normalized services, networks, volumes, entries, routes, attaches, and policies | the immutable revision selected by the Environment desired head in etcd |
 | durable records | ids, service `runtime_intent`, generated credentials, facts, releases, recovery points | Controller records in etcd |
 | render plan | Compose files, env files, network joins, router files, task DAG | ephemeral Controller output |
-| observed | containers, image digests, health, networks, files, router state | Agent reports |
+| observed | containers, local image ids, health, networks, files, router state | Agent reports |
 | task | pending, running, completed, failed, timed out, aborted | task journal in etcd |
 
 Task progress is a bounded durable journal, not an output stream. Every public
@@ -2105,11 +2124,13 @@ at one authoritative revision before the stream closes. The Console may use
 events to refresh promptly, but the Task detail snapshot remains the source of
 truth for displayed state.
 
-The final Compose `image` includes the current image name and tag. A deploy
-or rollback updates the per-service release record; the renderer then
-regenerates the Compose image, slot aliases, labels, and router targets. The
-environment never has one global release state: release history and current
-release are per service.
+The final workload Compose `image` is the exact local Docker image id from the
+Release selected by `serving_release_id`. A deploy or rollback publishes a new
+per-service Release; the renderer regenerates the sealed local image id, slot
+aliases, labels, and router targets. Requested image name and tag remain Release
+provenance, not runtime authority. The environment never has one global Release
+state: Release history and serving/current-successful projections are per
+Service.
 
 Attach state is also split. Desired state contains the Backing Service, Attach
 name, one consumer Service, credential mode and source, and owner-only grants.

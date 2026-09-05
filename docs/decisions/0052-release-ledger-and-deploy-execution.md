@@ -108,10 +108,12 @@ intent is immutable and contains at least:
 - `operation_kind`: `deploy` or `rollback`
 - `group_operation_id`, when applicable
 - `group_member_ordinal`, when applicable
-- `image`
+- `candidate_workload`: one sealed value containing the selected
+  `requested_reference`, exact host-local Docker `local_image_id`, and positive
+  `replica_count`
 - `tag`
-- optional registry or manifest `digest` metadata, when available; it never
-  substitutes for the host-local identity
+- optional registry or manifest metadata, when available for display; it is not
+  workload execution authority and never substitutes for `local_image_id`
 - `strategy`: `blue-green` or `recreate`
 - `slot`, when the strategy uses a slot
 - `on_failure`: `switch_back` or `leave_active`
@@ -123,6 +125,13 @@ intent is immutable and contains at least:
 - `created_at`
 - requesting actor identity and workspace tuple
 - originating Task id
+
+The concrete domain value is `WorkloadSeal{RequestedReference, LocalImageID,
+ReplicaCount}`. It is stored as `Intent.CandidateWorkload` and repeated exactly
+as `ReleaseRenderInput.CandidateWorkload`; the render input additionally owns
+optional `PriorWorkload *WorkloadSeal`. Public Release image provenance is the
+candidate's requested reference. Registry or manifest metadata is never
+required.
 
 The Release id denotes the candidate, not the Task attempt. The originating
 Task id remains an audit value even if that Task is later pruned. A retry records
@@ -228,8 +237,9 @@ needed to reproduce execution:
 - Environment desired and applied projection revisions
 - Service desired record and release projection revision
 - resolved Compose project and Service identity
-- image, tag, optional registry or manifest digest metadata, strategy, slot,
-  and failure policy
+- candidate `WorkloadSeal`, optional prior `WorkloadSeal`, tag provenance,
+  strategy, slot, and failure policy; optional registry or manifest metadata is
+  display-only
 - route and Caddy input revisions and digests
 - Secret version references, never plaintext values
 - selected Script generation references, when hooks apply
@@ -415,13 +425,84 @@ Controller's canonical slot ordering and sealed in the render input. A
 blue-green Service must expose at least one addressable internal TCP port;
 publication rejects blue-green for a portless worker or scheduler.
 
-The operator-authored `deploy.replicas` count is mandatory, is at least one,
-and is captured in every candidate Release. No later than the pre-mutation
-gate, the Controller resolves the selected image and tag against the host
-Docker daemon and seals its exact immutable local image identity. That identity
-does not depend on `RepoDigests`; locally built images remain eligible. A
-missing or changed local identity stops the operation before workload mutation.
-Deploy and rollback never build, pull, or push an image.
+Native Compose omission of `deploy.replicas` means one and is normalized to the
+explicit value `1` exactly once at the Blueprint or direct-input boundary.
+Every durable Release thereafter contains one positive explicit replica count;
+an absent or zero count in a durable or historical Release is invalid and is
+never defaulted or reconstructed from a current projection. Thus the count is
+mandatory in the sealed Release, not mandatory in authored Compose YAML.
+
+Before publishing a newly authored candidate Release, the Controller sends one
+bounded correlated read-only request over the existing authenticated Agent
+channel. The request selects the new `requested_reference`; the Agent performs
+Docker `ImageInspect`, returns the exact `sha256:<64-hex>` local Docker image
+id, and the Controller seals the resulting
+`{requested_reference, local_image_id, replica_count}` as the candidate's one
+`WorkloadSeal` value. The all-or-nothing request contains at most 64 unique
+selectors. It is ephemeral machine coordination, not an operator capability,
+Task, durable preview, or new generic host-execution surface. The Controller
+does not read workload Docker state itself.
+
+The future protobuf change adds one `ResolveWorkloadImages` request and one
+`WorkloadImageResolutionResult` response to the existing stream envelopes;
+protobuf field numbers are allocated only with that implementation change, not
+by this ADR. The request carries `request_id` plus `selectors[]`. Each selector
+is a closed union of exactly one `requested_reference` for a new candidate or
+one `local_image_id` for historical, prior, retry, and pre-mutation validation.
+The result repeats `request_id` and is a closed union of either ordered
+`resolutions[]` or one failure. A resolution echoes its typed selector and
+returns `local_image_id`. A failure carries a required zero-based
+`selector_ordinal` in `0..N-1` and exactly one of `not_found`,
+`identity_mismatch`, or `observation_failed`; it carries no partial successes.
+The future protobuf ordinal is an optional scalar whose presence is mandatory,
+so ordinal zero is distinguishable from an omitted field.
+
+`request_id` is exactly 32 lowercase hexadecimal ASCII characters encoding 16
+nonzero random bytes. It is fresh for every request and is never reused within
+one authenticated connection. Correlation includes that connection identity:
+a late result, a result from another connection, or a result for a request that
+is no longer active is discarded and cannot satisfy a newer request. A
+malformed result for the active request rejects the whole batch.
+
+A request contains 1 through 64 unique typed selectors and the complete encoded
+protobuf envelope is at most 65,536 bytes. A `requested_reference` is at most
+512 ASCII bytes and is an explicitly tagged or digest-qualified valid Docker
+named reference. A `local_image_id` is exactly `sha256:` followed by 64
+lowercase hexadecimal characters. Both peers enforce the request nonce,
+selector-kind, string, uniqueness, count, and envelope bounds before the Agent
+calls Docker. Before consuming any resolution, the Controller enforces result
+correlation, envelope, outcome, cardinality, order, selector echo, local-id, and
+failure-ordinal bounds. A successful response contains exactly one validated
+resolution per selector in request order. Requested-reference resolution
+returns Docker's exact local id; local-id validation requires
+`ImageInspect(local_image_id)` to return that identical id.
+
+The Controller and Agent each cap the complete resolution exchange at 30
+seconds. Timeout, disconnect, or an invalid response yields no usable
+resolution and prevents staging and publication; it never triggers automatic
+tag re-resolution. The exchange remains ephemeral and read-only and creates no
+operator API, durable request record, Task, or generic Docker capability.
+
+A rollback candidate copies its complete `WorkloadSeal` from the selected
+historical Release input. A prior workload used for topology transition or
+compensation copies the complete seal from the exact currently serving Release
+input. Retry and recovery reuse those same values. They never resolve a
+historical `requested_reference` again, derive a missing count or image id from
+current desired state or a projection, or replace selected historical bytes
+with the image now named by a mutable tag. For historical, prior, retry, and
+pre-mutation checks, the Agent request selects the sealed `local_image_id`
+directly. Retagging therefore preserves an available historical image for exact
+rollback, while a missing sealed id fails before any workload mutation.
+
+The immutable render input contains the candidate `WorkloadSeal` and an
+optional prior `WorkloadSeal`; it does not duplicate their members as separate
+image, prior-image, replica, or workload-manifest-digest authority. Compose and
+execution select the sealed local Docker id, while the requested reference
+remains provenance. Resolution and validation do not depend on `RepoDigests`,
+so locally built images with no repository digest remain eligible. Deploy and
+rollback never build, pull, or push a workload image. Release Script execution
+and applied-image evidence consume the sealed local Docker id and must not
+fabricate a repository or manifest digest for an image that has none.
 
 For recreate, the durable Release `slot` field is absent and the renderer
 creates the exact captured logical workload set of N replicas. An addressable
@@ -439,6 +520,11 @@ Internal consumers and routed Caddy target the stable proxy, never a mutable
 slot alias. The immutable render input seals both slot identities, the prior
 and candidate proxy generations, the exact canonical proxy JSON and digest,
 and the prior and candidate Release ids.
+The managed proxy's compiled OCI index reference, Agent-selected platform child
+manifest, and host-local Docker image/config id remain three distinct identities.
+Their preparation and historical-retention contract is separate from
+`WorkloadSeal`; current catalog authority never substitutes for a sealed
+historical proxy identity.
 
 ### 9. Blue-green checkpoints
 
@@ -481,8 +567,9 @@ removes the prior slot pair before applying the exact captured recreate set.
 Recreate to blue-green creates and health-proves the candidate slot, switches
 the stable proxy, and only then removes the obsolete recreate set. Any
 transition to or from blue-green is rejected before mutation unless both the
-prior/current serving Release and candidate/destination Release captured
-`replicas == 1`. Replaying recovery probes or compensation after interruption
+prior/current serving Release's seal and candidate/destination Release's seal
+captured `replica_count == 1`. Replaying recovery probes or compensation after
+interruption
 is idempotent because each step accepts only the immutable candidate and prior
 artifacts, replica counts, and exact workload targets.
 
@@ -566,11 +653,12 @@ tag, descending selection may continue to the next older available Release
 that satisfies the common predicate.
 
 Selection records the source Release id in `rollback_source_release_id`. The
-Controller creates a new candidate Release id and copies the source image,
-tag, optional registry or manifest digest metadata, strategy, and reproducible
-render inputs into a new revision-owned render input. The strategy is the
-source Release's original strategy, not the Service's current default.
-Rollback never runs migrations.
+Controller creates a new candidate Release id and copies the source's complete
+candidate `WorkloadSeal`, tag provenance, strategy, and reproducible render
+inputs into a new revision-owned render input. It validates the copied sealed
+local id directly and never resolves the historical requested reference. The
+strategy is the source Release's original strategy, not the Service's current
+default. Rollback never runs migrations.
 
 The new Release executes the normal checkpoints and failure policy. On success,
 both Service projection ids point to the new Release, not to the historical
@@ -820,9 +908,12 @@ A group deploy accepts an optional tag. Omission uses the group's desired
 default tag; if both are absent, publication is rejected. Every member receives
 the same selected tag and its own strategy selected from that Service's fixed-
 revision desired state. Each member pins its exact immutable host-local Docker
-image identity before workload mutation and retains independent Release
-history. Registry or manifest digest metadata is optional and never substitutes
-for that local identity. The persisted group default applies only to deploy.
+image id through the single all-or-nothing Agent resolution batch before
+publication and retains independent Release history. Registry or manifest
+metadata is optional and never substitutes for that local id. A group rollback
+copies each selected source's complete historical `WorkloadSeal`; it never
+resolves the selected tag to current bytes. The persisted group default applies
+only to deploy.
 
 A group rollback accepts an optional request tag. When supplied, each member
 independently selects its newest eligible historical Release that completed
@@ -1280,8 +1371,8 @@ Publication rejects before visible state when:
   requester's workspace
 - a required Service or Environment/group fence is owned
 - strategy is not `blue-green` or `recreate`
-- tag, route, health, Secret version, digest, or Script reference cannot be
-  sealed reproducibly
+- tag or requested-reference provenance, route, health, Secret version,
+  render-input digest, or Script reference cannot be sealed reproducibly
 - a Release Group has fewer than 2 or more than 32 members
 - group members are not unique or are outside one enabled Compose project
 - explicit order is not an exact permutation of members
@@ -1308,6 +1399,25 @@ Expected conflict codes include:
 
 Validation must identify the group member when a member-specific failure
 prevents publication.
+
+## Earliest executable proof
+
+The first focused contract proof uses a locally built image with no
+`RepoDigests` and covers all four identity/count boundaries:
+
+1. authored Compose omission normalizes once to candidate count one, while an
+   absent or zero count in a durable Release input is rejected;
+2. a two-replica candidate and a differently sized prior Release render and
+   reconcile their exact independently sealed counts;
+3. retagging the requested reference after publication leaves an available
+   old local id valid for exact rollback and never selects the tag's new bytes;
+4. removing a sealed candidate or prior local id fails validation before the
+   first stop, apply, proxy, Script, or compensation workload effect.
+
+The earliest disposable-host proof repeats those cases through Blueprint,
+single-Service Deploy/Rollback, Release Group, retry, and compensation. It also
+proves that Script image authority and applied-image evidence use the sealed
+Docker id without inventing a repository digest.
 
 ## Consequences
 

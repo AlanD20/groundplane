@@ -496,12 +496,17 @@ configs:
     file: /var/lib/groundplane/materialized/cfg_01J...
 ```
 
-`deploy.replicas` is the native desired replica count. The Agent invokes
-Compose with that model; Compose apply does not intrinsically wait for running
-or healthy state. A typed plan adds `WaitHealthy` when readiness is required.
-The Controller still stores the desired count, observes each replica, and
-reconciles out-of-band removal because local Compose only converges when
-invoked; it is not a long-running replica controller.
+`deploy.replicas` is the native desired replica count. Omission retains native
+Compose meaning and normalizes to the explicit value `1` exactly once when the
+authored input becomes Controller desired state. Every candidate Release then
+seals a positive explicit count; a missing or zero count in durable Release
+state is invalid and is never defaulted from current desired state or a Compose
+projection. The Agent invokes Compose with the sealed count; Compose apply does
+not intrinsically wait for running or healthy state. A typed plan adds
+`WaitHealthy` when readiness is required. The Controller still stores the
+desired count, observes each replica, and reconciles out-of-band removal because
+local Compose only converges when invoked; it is not a long-running replica
+controller.
 
 Every replica receives service `labels`. Groundplane uses its own
 `com.groundplane.*` namespace for managed identity, logical service, slot,
@@ -542,7 +547,7 @@ The initial extension families are:
 | --- | --- | --- |
 | `x-gp-resource` | stable resource kind/id and ownership | Docker labels and task context |
 | `x-gp-slug` | mutable public slug on a top-level Volume | normalized Volume identity; no Compose runtime field |
-| `x-gp-release` | default strategy and current image/tag/slot projection | Compose image, aliases, labels, deploy records |
+| `x-gp-release` | authored default strategy and failure policy only | immutable candidate Release intent, execution summary, and separate serving/current-successful projections |
 | `x-gp-release-groups` | named explicit coordinated releases of multiple logical services | one task and lock with per-service release records |
 | `x-gp-adapter` | backing-service adapter contract and provisioning knowledge | adapter tasks and fact records |
 | `x-gp-network` | stable network identity and ownership | native Compose network definition or external join |
@@ -562,8 +567,9 @@ The initial extension families are:
 ### Concrete extension fields
 
 These are the initial field contracts. The authored form contains decisions
-and references; the Controller-generated form may add stable ids, resolved
-names, current releases, and execution metadata.
+and references; Controller-generated execution artifacts carry stable ids and
+sealed Release authority separately rather than adding mutable runtime state to
+the authored extensions.
 
 `x-gp-scripts` is an Environment-level map whose key is the immutable authored
 reconciliation key. Duplicate YAML keys are invalid. Reconciliation keys and
@@ -631,55 +637,67 @@ reference the mutable slug. Omitting an existing Volume is non-destructive and
 cannot remove its data. The operator must use the explicit Volume removal
 workflow first.
 
-`x-gp-release` carries the service's declared default and the Controller's
-current projection:
+`x-gp-release` carries only the Service's authored defaults:
 
 ```yaml
 x-gp-release:
   default_strategy: blue-green       # authored: blue-green | recreate
   on_failure: switch_back            # authored default: switch_back | leave_active
-  current:                            # generated from the release ledger
-    deployment_id: dep_01J...
-    image: storefront-app
-    tag: sha-9f3c1ad
-    digest: sha256:...
-    slot: blue
 ```
 
-The standard Compose `image` field is rendered as `image:tag` (or the
-resolved digest). The tag is owned by the per-service release ledger; a
-deploy or rollback changes the ledger and regenerates the Compose projection.
+The authored standard Compose `image` field supplies the image name and initial
+tag or digest-qualified requested reference. A Deploy-selected tag combines
+with that authored name as provenance for a new candidate Release. Before
+publication, the Agent resolves that candidate requested reference once to an
+exact local Docker image id. Final workload Compose uses only that sealed local
+id; a mutable name or tag and optional registry metadata are never runtime
+authority.
 
 The release ledger is per logical service, never one environment-wide
-`release` field. A record contains:
+`release` field. Conceptually, its immutable intent, separate execution
+summary, and Service projections contain:
 
 ```yaml
-deployment_id: dep_01J...
-service_id: svc_01J...
-image: storefront-app
-tag: sha-9f3c1ad
-digest: sha256:...
-strategy: blue-green
-slot: green
-on_failure: switch_back
-task_id: task_01J...
-status: active
-started_at: 2026-08-16T03:15:00Z
-completed_at: 2026-08-16T03:16:12Z
+intent:
+  id: dep_01J...
+  service_id: svc_01J...
+  candidate_workload:
+    requested_reference: docker.io/example/storefront-app:sha-9f3c1ad
+    local_image_id: sha256:<64-lowercase-hex>
+    replica_count: 1
+  tag: sha-9f3c1ad
+  strategy: blue-green
+  slot: green
+  on_failure: switch_back
+  originating_task_id: task_01J...
+execution_summary:
+  release_id: dep_01J...
+  outcome: completed
+  final_serving_release_id: dep_01J...
+service_projection:
+  serving_release_id: dep_01J...
+  current_successful_release_id: dep_01J...
 ```
 
-The status transition is task-driven:
+The checkpoint transition is Task-driven:
 
 ```text
-pending -> running -> candidate_healthy -> switching -> active
-                         |                    |
-                         v                    v
-                      failed       failed -> switch_back or leave_active
+pending -> running -> candidate_healthy -> switching -> serving -> post_hooks -> completed
+             |              |             |          |             |
+             +--------------+-------------+----------+-------------+-> failed / timed_out / aborted
+                                              |
+                                              +-> compensating / recovery_required -> recovering
 ```
 
-`superseded`, `aborted`, and `timed_out` are terminal ledger outcomes. The
-Controller writes `active` only after the Agent acknowledges the health gate
-and slot switch. A failed or timed-out task never becomes the current release.
+There is no stored `active` or `superseded` Release status. Runtime evidence
+advances `serving_release_id`; successful completion separately advances
+`current_successful_release_id`. Under `leave_active`, a failed candidate may
+remain the serving Release while the older completed Release remains current
+successful. Steady-state rendering therefore follows `serving_release_id`, not
+an assumption that current-successful always serves. Rollback creates a new
+Release whose candidate workload seal is copied from the Controller-selected
+historical Release; it never mutates history or resolves the historical tag to
+current bytes.
 
 Tasks have immutable attempt ids and a stable operation identity:
 
@@ -726,11 +744,13 @@ leave_active`, which defaults to `switch_back`; members execute serially, not as
 a simultaneous or atomic distributed switch. A request `tag` overrides the
 persisted group tag for deploy; if both are empty publication rejects the group
 deploy, with no member-current fallback. The selected deploy tag resolves
-separately against each member image and pins its exact immutable host-local
-Docker image identity before workload mutation; registry or manifest digest
-metadata is optional and never substitutes for that local identity. Each
-member preserves its release history independently. Group rollback never uses
-the persisted default. An optional rollback request tag independently selects
+once against each member image in one all-or-nothing Agent batch before
+publication and pins its exact host-local Docker image id; registry or manifest
+metadata is optional and never substitutes for that local id. Each member
+preserves its release history independently. Group rollback never uses the
+persisted default and copies each selected historical Release's complete
+workload seal instead of resolving its tag again. An optional rollback request
+tag independently selects
 each member's newest eligible historical Release that completed successfully and
 reached serving with that exact tag and a tag different from its current
 serving Release; omission selects the newest such eligible different-tag
@@ -757,14 +777,18 @@ slot workloads and one stable Controller-owned proxy for the logical service:
 ```yaml
 services:
   api:
-    image: caddy:2
+    # Separate managed authority: compiled OCI index reference. The Agent
+    # verifies its selected host-platform child manifest and local Docker
+    # image/config id independently; neither is a workload seal.
+    image: docker.io/library/caddy@sha256:<compiled-oci-index-digest>
     networks: [frontend, backend]
     x-gp-resource:
       kind: service-proxy
       logical_service_id: svc_01J...
 
   api--blue:
-    image: storefront-app:sha-old
+    # Requested-reference provenance: storefront-app:sha-old
+    image: sha256:<sealed-old-local-image-id>
     networks:
       frontend: {}
       backend: {}
@@ -774,7 +798,8 @@ services:
       slot: blue
 
   api--green:
-    image: storefront-app:sha-new
+    # Requested-reference provenance: storefront-app:sha-new
+    image: sha256:<sealed-new-local-image-id>
     networks:
       frontend: {}
       backend: {}
@@ -799,12 +824,14 @@ prior topology artifacts, stops and removes the prior set before replacement,
 and proves the exact desired set healthy. There is explicit downtime and no
 duplicate Script execution per replica.
 
-Changing strategy is an explicit topology transition. Blue-green with N greater
-than one is rejected before mutation in the MVP. Blue-green to recreate removes
-the sealed prior slot topology before applying the desired set and proving the
-new serving state. Recreate to blue-green is allowed only for N==1, creates the
-candidate slot topology, proves candidate health, atomically switches the stable
-proxy, then removes the obsolete set. Retries probe and compensate only against
+Changing strategy is an explicit topology transition. Any transition to or
+from blue-green is rejected before mutation unless the sealed prior and
+candidate workload counts are both exactly one. An accepted transition from
+blue-green to recreate removes the sealed prior slot topology before applying
+the desired set and proving the new serving state. An accepted transition from
+recreate to blue-green creates the candidate slot topology, proves candidate health,
+atomically switches the stable proxy, then removes the obsolete set. Retries
+probe and compensate only against
 the same sealed candidate and prior artifacts, so interruption at any boundary
 converges idempotently instead of stranding both topologies. A Service with no
 internal TCP port cannot safely select `blue-green`; publication rejects that
@@ -812,7 +839,7 @@ combination.
 
 The blue-green deploy procedure is:
 
-1. Select the inactive slot and render its candidate image/tag.
+1. Select the inactive slot and render its candidate sealed local image id.
 2. Start or recreate only that slot.
 3. Run matching `post-deploy` Scripts through the typed Release hook executor.
 4. Observe its exact Release labels and pass its sealed healthcheck.
@@ -1393,19 +1420,21 @@ The Controller translates every Blueprint into five state categories:
 | desired | lossless normalized services, networks, volumes, env entries, routes, attaches, and backup policy | immutable revision selected by the Environment desired head in etcd |
 | durable records | ids, generated credentials, facts, release history, recovery points | etcd |
 | render plan | Compose projects, network joins, env files, router files, task DAG | ephemeral |
-| observed | containers, image digests, health, networks, files, router state | Agent reports + journal |
+| observed | containers, local image ids, health, networks, files, router state | Agent reports + journal |
 | task state | pending, running, completed, failed, timed out, aborted | etcd/journal |
 
-For each service, the Controller combines the desired service definition with
-the current successful release record. The final Compose `image` is therefore
-the current image name and tag, even when a deploy or rollback changed it.
-The release record remains the source used to render it.
+For each Service, the Controller combines the desired Service definition with
+the immutable Release selected by `serving_release_id`. The final workload
+Compose `image` is that Release's sealed local Docker image id. Requested image
+name and tag remain provenance, not runtime authority. A failed candidate kept
+serving by `leave_active` is therefore rendered even while
+`current_successful_release_id` still names an older completed Release.
 
 This is the steady-state rule. An active Deploy, Rollback, or Blueprint apply
 uses only its exact sealed candidate or predecessor Release and projection
 until terminal promotion; it never recomputes a plan from a moving current
-pointer. Successful or serving authority changes only in that terminal
-promotion.
+pointer. Serving and successful authority advance independently from their
+respective proved checkpoints.
 
 A Service first introduced by a bundle starts with the Controller-owned
 `runtime_intent` `running`. Reconciliation replaces only the desired Service
@@ -1557,7 +1586,8 @@ x-gp-requires:
 
 services:
   api:
-    image: storefront-app:sha-9f3c1ad
+    # Requested-reference provenance: storefront-app:sha-9f3c1ad
+    image: sha256:<sealed-serving-local-image-id>
     networks: [frontend, backend]
     env_file:
       - /var/lib/groundplane/secrets/.env.env_01J...
@@ -1573,10 +1603,6 @@ services:
     x-gp-release:
       default_strategy: blue-green
       on_failure: switch_back
-      current:
-        deployment_id: dep_01J...
-        tag: sha-9f3c1ad
-        slot: blue
     x-gp-depends_on:
       migrate:
         condition: service_completed_successfully
