@@ -18,6 +18,34 @@ type recordingEnvironmentBlueprintMutator struct {
 	bundle           core.BlueprintBundle
 }
 
+// Rationale: validation is read-only and must work through the production
+// middleware without a mutation idempotency key; apply must still require one.
+func TestBlueprintValidationDoesNotRequireMutationKey(t *testing.T) {
+	t.Parallel()
+	for _, validation := range []bool{true, false} {
+		content := []byte("services: {}\n")
+		request := blueprintMultipartTestRequest(t, blueprintTestManifest(content), []blueprintTestPart{{
+			name: "file-000001", contentType: "application/octet-stream", content: content,
+		}})
+		request.URL.Path = "/api/v1/environments/env_01ARZ3NDEKTSV4RRFFQ69G5FAV/blueprint"
+		request.Method = http.MethodPut
+		want := http.StatusUnprocessableEntity
+		if validation {
+			request.Method = http.MethodPost
+			request.URL.Path += "/validate"
+			want = http.StatusOK
+		}
+		request.Header.Set("If-Match", "\"0\"")
+		request.Header.Del(idempotencyKeyHeader)
+		server := New(nil, nil, Options{EnvironmentBlueprints: &recordingEnvironmentBlueprintMutator{}})
+		response := httptest.NewRecorder()
+		server.requestHandler().ServeHTTP(response, request)
+		if response.Code != want {
+			t.Fatalf("validation=%t: status=%d, want %d: %s", validation, response.Code, want, response.Body.String())
+		}
+	}
+}
+
 func (mutator *recordingEnvironmentBlueprintMutator) GetBlueprint(
 	_ context.Context,
 	environmentID string,

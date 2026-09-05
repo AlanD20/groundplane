@@ -12,6 +12,29 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// Rationale: only exact read-only POST operations may bypass mutation-key
+// enforcement, never adjacent paths or other mutation methods.
+func TestReadOnlyEnvironmentPostIdempotencyBoundary(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		method string
+		path   string
+		want   bool
+	}{
+		{http.MethodPost, "/api/v1/environments/env_1/blueprint/validate", false},
+		{http.MethodPost, "/api/v1/environments/env_1/export-key", false},
+		{http.MethodPut, "/api/v1/environments/env_1/blueprint/validate", true},
+		{http.MethodPost, "/api/v1/environments/env_1/blueprint/validate/extra", true},
+		{http.MethodPost, "/api/v1/environments//blueprint/validate", true},
+		{http.MethodPost, "/api/v1/projects/env_1/blueprint/validate", true},
+		{http.MethodPut, "/api/v1/environments/env_1/blueprint", true},
+	} {
+		if got := requiresIdempotencyKey(httptest.NewRequest(test.method, test.path, nil)); got != test.want {
+			t.Errorf("%s %s: requires key = %t, want %t", test.method, test.path, got, test.want)
+		}
+	}
+}
+
 func TestMutationIdempotencyKeyBoundaryRejectsMissingAndInvalidHeaders(t *testing.T) {
 	t.Parallel()
 

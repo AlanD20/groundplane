@@ -78,7 +78,7 @@ func requiresIdempotencyKey(r *http.Request) bool {
 	}
 	switch r.Method {
 	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
-		if r.Method == http.MethodPost && isBackupKeyExportPath(r.URL.Path) {
+		if r.Method == http.MethodPost && isReadOnlyEnvironmentPostPath(r.URL.Path) {
 			return false
 		}
 		return true
@@ -87,14 +87,14 @@ func requiresIdempotencyKey(r *http.Request) bool {
 	}
 }
 
-func isBackupKeyExportPath(path string) bool {
+func isReadOnlyEnvironmentPostPath(path string) bool {
 	const prefix = "/api/v1/environments/"
 	if !strings.HasPrefix(path, prefix) {
 		return false
 	}
 	remainder := strings.TrimPrefix(path, prefix)
 	environmentID, action, found := strings.Cut(remainder, "/")
-	return found && environmentID != "" && action == "export-key"
+	return found && environmentID != "" && (action == "export-key" || action == "blueprint/validate")
 }
 
 func hasValidIdempotencyKey(values []string) bool {
