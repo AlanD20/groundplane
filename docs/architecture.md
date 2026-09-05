@@ -714,6 +714,40 @@ Each selected Script execution receives one task-scoped runner even when its
 target is replicated; no runner is created merely because a logical Service is
 a group member.
 
+An initial Blueprint apply implicitly selects both `pre-deploy` and
+`post-deploy` Scripts for each newly introduced or materially changed,
+effectively running logical Service that is not a Release Group member. Its
+candidate requested references resolve once through the Agent before
+publication, and every runner consumes the applicable Release's sealed
+host-local Docker image id; there is no deferred Compose-result image authority.
+Exact reapply and an apply with no selected changed candidate run no hooks. The
+single assignment materializes Entries and files; ensures Volumes; performs
+required Attach adapter provisioning and grants plus Network resource
+preparation without applying consumer Compose memberships; and runs all pre
+hooks in sealed dependency-topology/current-Service-slug/current-Script-slug
+order with cleanup after each. Only after that barrier does the candidate
+workload phase apply each targeted consumer's prepared Network membership and
+apply/start the candidate. No hidden consumer Compose start or recreate may
+precede the barrier. It next runs post hooks with the same cleanup barrier,
+waits for health, runs Component actions, and reaches Controller-only atomic
+promotion. This Blueprint-only ordering does not change standalone Attach or
+Detach execution. The existing total cap of 16 executions and
+1 MiB of body bytes spans pre, post, and possible `on-failure` execution rather
+than resetting by phase; the fixed 900 seconds applies to each execution. All
+bounds are validated before publication.
+
+A pre-hook failure leaves serving and current-successful projections unchanged
+and cleans its runner before `on-failure`; earlier materialization, Volume,
+Attach, or Network changes remain accounted effects. Retry never crosses a
+Script `start_authorized` or unknown-state barrier and never automatically
+starts a replacement. TLS-first setup is an ordinary project-authored
+pre-deploy Script using `/bin/sh` and externally supplied `openssl` from its
+selected workload image, a sealed numeric Service user, a declared read-write
+Volume, and read-only consumer mounts. Entries cannot own its output subtree;
+the author owns idempotent stage, validation, ownership/mode, and atomic publish
+logic. No generic PKI capability, tool guarantee, arbitrary-output atomicity,
+or live automatic certificate rotation is introduced.
+
 Recreate deploy, rollback, restart, and exact reapply preserve the authored
 replica count. The addressable renderer and health model support exact `N`, but
 lifting remaining singleton execution guards and proving DNS, WebSocket/Valkey
@@ -1128,6 +1162,12 @@ create-only `sec_` id is also its sole MVP value-generation id.
   consumer detachment, bounded recursive removal, retry replay, and Backup
   source consequences.
 - System tests drive the CLI against a real Controller+Agent on a host.
+- The earliest TLS-first proof is a clean initial Blueprint apply showing the
+  selected host-local image identity is sealed before publication, every
+  matching pre hook completes and cleans up in deterministic order, a valid
+  author-published bundle exists in the declared Volume, and no selected
+  application workload starts before that proof. This contract is not a
+  production claim until that end-to-end test passes.
 - The Console store is the API contract: the fixture store mirrors what the
   Controller holds in etcd, and the acceptance test stays — every
   operational step must work from the CLI with no Console session.

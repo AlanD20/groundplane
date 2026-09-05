@@ -144,13 +144,14 @@ preparation name the same candidate. Activation validates the candidate
 identity and requires one byte-identical final put for every staged source.
 Reusable Secret values and materialization proofs cannot use staged evidence.
 
-Candidate post-deploy Network and Volume memberships use existing evidence over
-the already-prepared immutable runner snapshot. Each names that snapshot's exact
-key, positive prepared `ModRevision`, and canonical payload SHA-256. Validation
-decodes the stored snapshot, proves its execution, snapshot, and Environment
-identity, and requires exact Network id or Volume source id membership. The
-Environment applied Compose projection is never their source and is never a
-Blueprint final-publication mutation.
+Candidate pre-deploy and post-deploy Network and Volume memberships use existing
+evidence over the already-prepared immutable runner snapshot. Each names that
+snapshot's exact key, positive prepared `ModRevision`, and canonical payload
+SHA-256. Validation decodes the stored snapshot, proves its execution, snapshot,
+and Environment identity, and requires exact Network id or Volume source id
+membership. The Environment applied Compose projection is never their source
+and is never a Blueprint final-publication mutation. This exception does not
+add either membership kind to the staged-source union above.
 
 `ScriptSourceCount` is:
 

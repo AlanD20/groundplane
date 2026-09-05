@@ -224,14 +224,14 @@ idempotency key for the same intent returns the original Task; reusing it for a
 different intent is rejected.
 
 Manual publication requires the target Service to have a non-empty
-`current_successful_release_id` whose release record and immutable image digest
-still exist. Absence of any of those three facts returns `409` with
-`script.no_successful_release`; it creates no Task, operation, execution,
+`serving_release_id` whose immutable Release and complete `WorkloadSeal` still
+exist. Absence of any of those facts returns `409` with
+`script.no_serving_release`; it creates no Task, operation, execution,
 reference, or successful idempotency result. Desired Blueprint image text,
-observed containers, a failed release, and an in-progress candidate are not
-fallbacks. The publication transaction compares the successful-release pointer
-and release revision, so a concurrent first deploy either commits first and is
-captured or the manual run fails this precondition.
+`current_successful_release_id`, observed containers, and an in-progress
+candidate are not fallbacks. The publication transaction compares the serving
+pointer and Release revision, so a concurrent first deploy either commits first
+and is captured or the manual run fails this precondition.
 
 The three run surfaces are exactly:
 
@@ -279,11 +279,11 @@ runner_snapshot_sha256
 ```
 
 `script_execution_id` is stable for this selected execution across a permitted
-Task retry and recovery. `release_id` identifies the sealed applicable release;
-manual execution resolves the current successful release, pre/post execution
-uses the candidate release, and `on-failure` selects one of the sealed candidate
-or previous release definitions from the final serving checkpoint. The plan
-hash covers this payload, the complete derived runner definition, the immutable
+Task retry and recovery. `release_id` identifies the sealed applicable Release;
+manual execution selects the serving Release, pre/post execution uses the
+candidate Release, and `on-failure` selects one of the sealed candidate or
+prior Release definitions from the final serving checkpoint. The plan hash
+covers this payload, the complete derived runner definition, the immutable
 runner-snapshot projection, and every private artifact digest.
 
 ### Atomic runner snapshot and source fences
@@ -298,7 +298,8 @@ tenant_id, tenant_mod_revision
 project_id, project_mod_revision
 environment_id, environment_mod_revision
 service_id, service_mod_revision, service_definition_sha256
-release_id, release_mod_revision, image_reference, image_digest
+release_id, release_mod_revision
+workload_seal: requested_reference, local_image_id, replica_count
 blueprint_bundle_generation, render_generation
 network_topology_revision
 networks[]: network_id, network_mod_revision, rendered_attachment
@@ -308,9 +309,18 @@ secret_values[]: owning resource id, immutable value generation id, digest
 runner_projection_sha256
 ```
 
-Image authority is a closed union. Manual, pre-deploy, and failure runners carry the already verified digest-pinned Release image. A Blueprint post-deploy runner for a tag-authored candidate instead carries only a `procedure_service` authority naming the earlier sealed `ComposeApply` step, artifact, Service, candidate Release, and requested image reference. It never contains a fabricated digest. After that step, the Agent proves the selected owned candidate container through ContainerInspect and ImageInspect, submits one typed immutable execution-step result, and waits for Controller acknowledgement before `RunScript` can receive `start_authorized`.
-
-The Controller persists that result create-only by operation, plan hash, and step. Exact replay receives the same acknowledgement; different evidence is a state conflict and never replaces the first result. Reconnect and permitted retry reuse the acknowledged immutable reference, digest, and local image id instead of resolving the tag again. The resolved image becomes Release aggregate evidence without mutating the immutable Release intent.
+Every runner image comes from the applicable immutable Release's one
+`WorkloadSeal`. Before publication, a newly authored candidate requested
+reference is resolved once through ADR 0052's bounded read-only Agent request
+and the resulting host-local Docker `local_image_id` is sealed in that Release.
+Manual runners use the serving Release's sealed local id; pre/post runners use
+the candidate Release's sealed local id; historical, retry, recovery, and
+`on-failure` runners validate their selected Release's stored local id directly.
+No Script runner resolves a mutable requested reference after publication, and
+there is no deferred Compose-apply image result, observed-container discovery,
+fabricated repository digest, or second image authority.
+Missing or mismatched sealed local identity fails before Script or workload
+mutation.
 
 The Service, network-topology, applied-Environment, per-Network, and per-mount
 revision members above are represented on schema 1 by one closed
@@ -330,14 +340,15 @@ Environment projection when their exposure is `all` or the target Service
 name. The snapshot also records that projection's immutable revision id,
 render generation, and etcd mod revision.
 
-Steady-state rendering uses the current successful Release as the image and
-normalized Service-definition authority. An active Deploy, Rollback, or
-Blueprint apply instead uses only its exact sealed candidate or predecessor
+Steady-state rendering uses the Release selected by `serving_release_id` as the
+image and normalized Service-definition authority. An active Deploy, Rollback,
+or Blueprint apply instead uses only its exact sealed candidate or predecessor
 Release and candidate or applied projection until terminal promotion. Script
-snapshots bind to that applicable sealed Release and projection; no successful
-or serving authority changes before promotion. Publication reads the required
-inputs at one fixed MVCC revision and compares every pointer and source
-revision; it never substitutes desired-head or current-generation values later.
+snapshots bind to that applicable sealed Release and projection. Publication
+reads the required inputs at one fixed MVCC revision and compares the selected
+serving or candidate Release pointer and Release revision plus every source
+revision; it never substitutes `current_successful_release_id`, desired-head,
+or current-generation values later.
 
 Arrays use stable-id byte order. `rendered_attachment`, `rendered_mount`, and
 the runner projection are deterministic closed protobuf values, not YAML or
@@ -347,8 +358,8 @@ generation.
 
 Task publication is one compare-and-swap transaction that reads and compares
 the Script primary and body generation, complete Tenant/Project/Environment
-hierarchy and revisions, Service primary revision, successful or candidate
-release pointer and release revision, immutable Blueprint bundle generation,
+hierarchy and revisions, Service primary revision, selected serving or candidate
+Release pointer and Release revision, immutable Blueprint bundle generation,
 render generation, network-topology revision and each selected Network
 revision, every mount source revision, every materialization current-generation
 pointer, and every reusable-secret current-generation pointer. It then creates
@@ -407,8 +418,8 @@ Task state.
 ### One-off runner through ADR 0022's helper boundary
 
 Docker exec is not part of the Script contract. Every Script execution creates
-one task-scoped one-off container through ADR 0022's digest-pinned, framed,
-fixed-environment task helper, using the sealed applicable Service/release
+one task-scoped one-off container through ADR 0022's sealed-local-image-id,
+framed, fixed-environment task helper, using the applicable Service/Release
 definition. This rule applies equally to manual, pre, post, and `on-failure`
 Scripts; no Script enters a serving container.
 
@@ -426,7 +437,7 @@ The runner projection is closed. For the pinned `compose-go/v2` v2.14.0
 `ServiceConfig`, every field, including normalization-only fields, has exactly
 one disposition:
 
-- copied exactly: digest-pinned `image`, `platform`, sealed numeric `user`,
+- copied exactly: sealed local-Docker-id `image`, `platform`, sealed numeric `user`,
   `working_dir`, fully resolved `environment` and `env_file` result, `dns`,
   `dns_search`, `dns_opt`, `extra_hosts`, `sysctls`, `ulimits`,
   `oom_kill_disable`, `oom_score_adj`, `pids_limit`, `shm_size`, `init`,
@@ -528,7 +539,7 @@ There is one recovery-only exception before an immutable container id has been
 checkpointed. At `body_prepared`, the Agent may issue one direct Docker inspect
 for the exact deterministic name `gp-script-<lowercase-script-execution-id>`.
 It may not list or search containers. The inspected container must be stopped
-in `created` state and match the sealed name, digest-pinned image, numeric user,
+in `created` state and match the sealed name, local Docker image id, numeric user,
 entrypoint, command, logging mode, complete closed label set, and exact private
 body mount. The Agent then captures its immutable id and every later operation
 uses only that id. Absence permits one create. Any mismatch, running or exited
@@ -827,31 +838,62 @@ one-off runners from the sealed candidate release definition. This ordering
 permits a healthcheck to depend on a post-deploy migration without deadlocking
 the Release.
 
-Blueprint apply publishes Script desired state and executes matching
-`post-deploy` hooks only for a newly introduced or materially changed logical
-Service whose effective `runtime_intent` is `running`, regardless of replica
-count. Stopped or absent existing Services retain their desired changes for a
-later explicit Release action and are not implicitly applied or hooked. Release Group members are excluded from implicit candidate
-Release and hook execution; Blueprint publishes their desired change only,
-while explicit group Deploy/Rollback retains declared serial order and
-`on_failure` policy. Candidate Releases come only from the sealed candidate
-projection. The one Environment update Task owns one operation id and one
-Agent assignment; it creates no child Deploy Task or hidden Deploy request.
+Blueprint apply publishes Script desired state and selects matching
+`pre-deploy` and `post-deploy` hooks only for a newly introduced or materially
+changed logical Service whose effective `runtime_intent` is `running`,
+regardless of replica count. Stopped or absent existing Services retain their
+desired changes for a later explicit Release action and are not implicitly
+applied or hooked. An exact reapply, or an apply with no selected changed
+candidate, executes no hooks. Release Group members are excluded from implicit
+candidate Release and hook execution; Blueprint publishes their desired change
+only, while explicit group Deploy/Rollback retains declared serial order and
+`on_failure` policy. Candidate Releases and runner images come only from the
+sealed candidate projection and its `WorkloadSeal`. The one Environment update
+Task owns one operation id and one Agent assignment; it creates no child Deploy
+Task or hidden Deploy request.
 
-Services are ordered by dependency topology then slug bytes, and each
-Service's hooks by slug bytes. The complete apply selection is limited to 16
-hook executions and 1,048,576 aggregate UTF-8 body bytes, rejected before Task
-publication. The sealed plan runs materialization, managed Volume ensure,
-Attach procedures, candidate workload apply/start without readiness,
-`RunScript`, `WaitHealthy`, then Component actions. Compose apply does not
-intrinsically wait. Controller-only terminal publication atomically promotes
-Releases, the applied projection, Components, and Routes. Failure preserves the
-desired head and is accepted only with proven predecessor restoration or
-first-candidate absence, so no failed candidate becomes a serving Release or
-served Route. Manual Scripts do not execute during apply. Retry transfers only
-while every selected execution is durably `not_started`; `start_authorized` or
-an unknown state returns `script.retry_unsafe` and recovery continues the
-authorized execution.
+Within each phase, Services are ordered by sealed dependency topology then
+current Service slug bytes, and each Service's hooks by current Script slug
+bytes. The 16-execution and 1,048,576-byte limits apply once across pre, post,
+and possible `on-failure` execution and are rejected before Task publication.
+The sealed assignment runs: materialize Entries and files; ensure Volumes;
+perform required Attach adapter provisioning and grants plus Network resource
+preparation without applying consumer Compose memberships; run every selected
+pre hook in that order, requiring each runner's `cleanup_proven` checkpoint
+before the next hook; only then apply each targeted consumer's prepared Network
+membership as part of candidate workload Compose apply/start; run selected post
+hooks with the same per-hook cleanup barrier; `WaitHealthy`; then Component
+actions. No hidden consumer Compose start or recreate may precede the pre-hook
+barrier. This Blueprint-only split leaves standalone Attach and Detach ordering
+unchanged. Compose apply does not intrinsically wait. Controller-only terminal
+publication atomically promotes Releases, the applied projection, Components,
+and Routes.
+
+A pre-hook failure cannot have mutated any application candidate workload. It
+leaves `serving_release_id` and `current_successful_release_id` unchanged,
+proves runner cleanup before `on-failure`, and follows the existing failure
+policy. Earlier materialization, Volume, Attach, or Network effects remain
+durably accounted resource effects; the operation must not report that the
+whole assignment made no mutation. Other failures preserve the desired head
+and are accepted only with proven predecessor restoration or first-candidate
+absence, so no failed candidate becomes a serving Release or served Route.
+Manual Scripts do not execute during apply. Retry transfers only while every
+selected execution is durably `not_started`; `start_authorized` or an unknown
+state returns `script.retry_unsafe` and recovery continues the authorized
+execution without an automatic replacement.
+
+TLS-first setup is one ordinary project-authored `pre-deploy` Script, not a new
+Script condition or PKI capability. It uses `/bin/sh` and `openssl` from its
+target Service's externally built, selected host-local image, runs as the
+Service's sealed numeric user, and writes through a declared read-write Volume;
+consuming Services mount that Volume read-only. Entries must not own the same
+output subtree. The Script author owns staging, validation, ownership and mode
+setting, idempotent no-op when an existing bundle is valid, and atomic
+publication of the bundle. Groundplane guarantees the ordinary runner and
+cleanup contract, not arbitrary output atomicity or PKI validity, and assumes
+neither `openssl` nor another tool exists in every workload image. Live
+automatic certificate rotation is absent; any future rotation is an explicit
+operation and separate contract.
 
 ADR 0064 owns candidate Release restoration around this Script boundary. A
 durably accepted candidate mutation event or Script `start_authorized`
@@ -882,12 +924,12 @@ before `on-failure`; a pre-activation or `leave_active` failure needs no switch.
 serving checkpoint. A missing or ambiguous serving identity blocks
 `on-failure` with `recovery_required` rather than selecting a guess.
 
-On an initial release with no previous successful release, a pre-activation
+On an initial release with no previous serving Release, a pre-activation
 failure has no serving definition. Its selected `on-failure` executions move
 to `outcome_recorded(reason=no_serving_release)` without start
 authorization and then `cleanup_proven` from fenced absence; the original
 failure remains primary. Once the candidate is the proven serving release, it
-is the eligible definition even if no older successful release exists. This is
+is the eligible definition even if no prior serving Release exists. This is
 not a fallback to desired image text or an observed container.
 
 `on-failure` follows the same slug ordering, ownership, checkpoint, timeout,
@@ -924,6 +966,10 @@ older execution path as a compatibility fallback.
   metadata and never creates a partially replayable human-output channel.
 - Generic retry remains safe by refusing to cross an arbitrary-effect start
   barrier whose non-execution cannot be proven.
+- The initial-Blueprint pre-hook path remains pending runtime composition and
+  its earliest acceptance proof: on a clean first apply, TLS publication must
+  complete before any selected application candidate starts. This decision is
+  not production evidence.
 - This ADR is Accepted; implementation evidence is tracked by C09 and S12.
 - Acceptance requires synchronized replacement in the MVP, Blueprint,
   ADR 0022, REST/OpenAPI, protobuf, Controller, Agent, CLI, and Console; no

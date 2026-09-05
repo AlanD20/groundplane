@@ -407,8 +407,11 @@ There is no advertised zero-downtime replicated recreate. A single ordered
 Release Group action covers migration once and the selected service releases.
 Health, logs, Tasks, rollback, restart, and exact reapply are included.
 TLS first-provision workflow and exact Caddy policy rendering are named proof
-gates. Gate A is disposable acceptance only; production cutover requires Gate B
-and its backup/restore/retention proof.
+gates. The generic initial-Blueprint pre-hook contract below is pending runtime
+alignment and must first prove TLS material is validly published before any
+selected application candidate starts; this document makes no production
+claim. Gate A is disposable acceptance only; production cutover requires Gate
+B and its backup/restore/retention proof.
 
 **Gate B — production MVP operations acceptance.** Every actual persistent source has a
 proven backup, restore, and retention path with existing per-source safety and
@@ -1613,23 +1616,31 @@ implicit Blueprint candidate Release and hook execution; Blueprint publishes
 its desired change only, while explicit group Deploy/Rollback retains its
 declared serial order and `on_failure` policy.
 
-Matching `post-deploy` Scripts are selected against the sealed candidate
-Service and applicable Release inputs. Within the selected set, Services
+Matching `pre-deploy` and `post-deploy` Scripts are selected against the sealed
+candidate Service and applicable Release inputs. Within each phase, Services
 follow the sealed dependency topology with current Service slug bytes as the
 tie-break, and Scripts for each Service follow current Script slug bytes.
-Manual Scripts never execute during apply. The complete apply selection is
-limited to 16 hook executions and 1,048,576 aggregate UTF-8 body bytes; a
-violation is rejected before Task publication.
+Manual Scripts never execute during apply. Exact reapply, or an apply with no
+selected changed candidate, executes no hooks. The complete selection across
+pre-deploy, post-deploy, and possible `on-failure` execution is limited to 16
+hooks and 1,048,576 aggregate UTF-8 body bytes; phases do not receive separate
+budgets, and a violation is rejected before Task publication.
 
 The one Agent assignment executes these phases in order:
 
 1. materialize the sealed environment files and file entries;
-2. ensure the candidate Volume leaves;
-3. provision or reconcile Attach resources and external network joins;
-4. apply and start candidate workloads without a readiness gate;
-5. execute each selected `RunScript` step;
+2. ensure the candidate Volume leaves, perform required Attach adapter
+   provisioning and grants, and prepare Network resources, without applying
+   those memberships to a consumer Compose Service;
+3. execute all selected pre-deploy `RunScript` steps, requiring
+   `cleanup_proven` after each before the next starts;
+4. only then apply each targeted consumer's prepared Network memberships as
+   part of the candidate workload Compose apply and start that candidate,
+   without a readiness gate or an earlier hidden consumer start or recreate;
+5. execute all selected post-deploy `RunScript` steps with the same cleanup
+   barrier;
 6. execute `WaitHealthy` for each candidate;
-7. execute the sealed registered Component action.
+7. execute the sealed registered Component actions.
 
 Compose apply does not intrinsically wait; readiness occurs only when the
 typed plan reaches its `WaitHealthy` step. Only after the assignment succeeds
@@ -1642,6 +1653,12 @@ rolled back, and no failed or unproven candidate may be published as a serving
 Release or Route. If the proof is not available, the Task remains
 nonterminal/recovery-required rather than claiming success or false serving
 state.
+
+A pre-deploy hook failure therefore performs no application candidate workload
+mutation and leaves the serving and current-successful projections unchanged.
+Its runner cleanup is proven before `on-failure` begins. Earlier file
+materialization, Volume, Attach, and Network effects remain accounted resource
+effects; the Task must not claim the whole assignment made no mutation.
 
 Retry transfers the same operation only while every selected Script execution
 is durably `not_started`. If any Script reaches `start_authorized` or later, or
@@ -1759,18 +1776,28 @@ later explicit Release action and are not implicitly applied or hooked. Release
 Group members are excluded from implicit candidate Release and hook execution;
 explicit group Deploy/Rollback retains declared serial order and `on_failure`.
 For the remaining selected Services, the apply creates candidate Releases from
-the sealed candidate projection and executes matching `post-deploy` Scripts in
-the same Environment update Task, operation id, and Agent assignment. Services
-run in dependency-topological order with slug-byte ordering as the tie breaker;
-  each Service's Scripts run in slug-byte order, once per selected logical
-  Service Release rather than once per replica. Manual Scripts do not execute
-during apply. The complete apply selection is limited to 16 hook executions and
-  1,048,576 aggregate UTF-8 body bytes, rejected before Task publication; these
-  bounds count logical hooks, not replicas.
+the sealed candidate projection and executes matching `pre-deploy` and
+`post-deploy` Scripts in the same Environment update Task, operation id, and
+Agent assignment. Within each phase Services run in dependency-topological
+order with slug-byte ordering as the tie breaker; each Service's Scripts run in
+slug-byte order, once per selected logical Service Release rather than once per
+replica. Exact reapply, or an apply with no selected changed candidate, runs no
+hooks. Manual Scripts do not execute during apply. The complete selection
+across pre-deploy, post-deploy, and possible `on-failure` execution is limited
+to 16 hooks and 1,048,576 aggregate UTF-8 body bytes, rejected before Task
+publication; phases do not receive separate budgets, and the bounds count
+logical hooks, not replicas.
 
-The sealed Blueprint plan orders materialization, managed-Volume ensure, Attach
-procedures, candidate workload apply/start without readiness, `RunScript`,
-`WaitHealthy`, and Component actions. Success atomically promotes the candidate
+The sealed Blueprint plan orders materialization; managed-Volume ensure; Attach
+adapter provisioning and grants plus Network resource preparation without
+consumer Compose membership application; all pre-deploy `RunScript` steps with
+a cleanup barrier after each; then targeted consumer Network-membership and
+candidate workload Compose apply/start without readiness; all post-deploy
+`RunScript` steps with the same barrier; `WaitHealthy`; and Component actions.
+There is no hidden consumer Compose start or recreate before the barrier, and no
+candidate workload mutates before every selected pre hook is clean. This
+Blueprint-only split does not change standalone Attach or Detach ordering.
+Success atomically promotes the candidate
 Releases, applied projection, Components, and Route observations. Failure never
 rolls back the desired head and is accepted only after proving exact predecessor
 restoration or first-candidate absence; it never publishes a false serving
@@ -1781,6 +1808,17 @@ transfer the operation only while every selected execution is durably
 `script.retry_unsafe`. ADR 0040 owns execution, cleanup, and retry. ADR 0062
 owns prepared immutable-input reference generations and their bounded release.
 
+TLS-first setup uses this generic contract: a project-authored `pre-deploy`
+Script runs `/bin/sh` plus `openssl` from its target Service's externally built,
+selected host-local image as the sealed numeric Service user. It stages,
+validates, sets ownership and modes, and atomically publishes a certificate
+bundle into a declared read-write Volume; consumers mount that Volume read-only,
+and Entries do not own the same output subtree. An existing valid bundle is an
+author-owned idempotent no-op. Groundplane does not supply tools, assume they
+exist in every image, validate PKI policy, or guarantee arbitrary Script output
+atomicity. Live automatic certificate rotation is absent; a future rotation
+requires an explicit operation and separate contract.
+
 Every prepared, active, retry-open, or releasing Script execution holds exact
 references to its body, runner snapshot, Service, Release, Networks, Volumes,
 Entry value generations, reusable Secret values, and materialization proof
@@ -1789,12 +1827,16 @@ may publish a new immutable generation but never overwrites or prunes the
 referenced generation. This active-operation fence is distinct from an ordinary
 late-bound desired Secret reference, which remains non-blocking.
 
-Every Script runner consumes the applicable sealed Release's immutable image
-and Service definition plus typed env/file Entry bindings from one fixed-
-revision projection. Manual runs use the current successful Release; active
+Every Script runner consumes the applicable sealed Release's exact
+`local_image_id` and Service definition plus typed env/file Entry bindings from
+one fixed-revision projection. A newly authored candidate requested reference
+is resolved through the Agent once before publication. Manual runs use the
+Release selected by `serving_release_id`; active
 Deploy, Rollback, and Blueprint apply plans use their exact sealed candidate or
 predecessor Release and candidate or applied projection. Private assignment
-artifacts carry the exact pinned Entry-generation bytes. The Controller
+artifacts carry the exact pinned Entry-generation bytes. Historical, retry,
+recovery, and failure paths validate their stored local id directly; no runner
+re-resolves a tag or discovers identity from a Compose result. The Controller
 durably acknowledges
 `start_authorized`, `body_prepared`, `container_created`, `outcome_recorded`,
 and `cleanup_proven`; an Agent reconnect resumes that execution rather than

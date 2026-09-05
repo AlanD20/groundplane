@@ -401,19 +401,28 @@ Release Group member is excluded from implicit Blueprint candidate Release and
 hook execution; Blueprint publishes its desired change only, while explicit
 group Deploy/Rollback retains declared serial order and `on_failure` policy.
 
-Matching `post-deploy` Scripts are selected from the same sealed Service and
-Release inputs. Services execute in sealed dependency-topology order, breaking
-incomparable ties by current Service slug bytes; Scripts for each Service
-execute by current Script slug bytes. Manual Scripts never execute during
-Blueprint apply. The complete apply selection is limited to 16 hook executions
-and 1,048,576 aggregate UTF-8 body bytes; a violation is rejected before Task
-publication.
+Matching `pre-deploy` and `post-deploy` Scripts are selected from the same
+sealed Service and Release inputs. Within each phase, Services execute in
+sealed dependency-topology order, breaking incomparable ties by current Service
+slug bytes; Scripts for each Service execute by current Script slug bytes.
+Manual Scripts never execute during Blueprint apply. Exact reapply, or an apply
+with no selected changed candidate, executes no hooks. The complete selection
+across pre-deploy, post-deploy, and possible `on-failure` execution is limited
+to 16 hooks and 1,048,576 aggregate UTF-8 body bytes; phases do not receive
+separate budgets, and a violation is rejected before Task publication.
 
 The single Agent assignment carries these phases in order: materialize sealed
-files and entries; ensure candidate Volume leaves; provision or reconcile
-Attaches and external network joins; apply and start candidate workloads
-without readiness; execute `RunScript`; execute `WaitHealthy`; and execute the
-sealed registered Component action. Compose apply does not intrinsically wait.
+files and Entries; ensure candidate Volume leaves, perform required Attach
+adapter provisioning and grants, and prepare Network resources without applying
+those memberships to a consumer Compose Service; execute all selected
+pre-deploy `RunScript` steps, with each runner reaching `cleanup_proven` before
+the next; only then apply each targeted consumer's prepared Network memberships
+as part of the candidate workload Compose apply and start that candidate without
+readiness; execute all selected post-deploy `RunScript` steps with the same
+cleanup barrier; execute `WaitHealthy`; and execute the sealed registered
+Component actions. There is no hidden consumer Compose start or recreate before
+the pre-hook barrier. This Blueprint-only split does not change standalone
+Attach or Detach ordering. Compose apply does not intrinsically wait.
 
 Only after the assignment succeeds does the Controller perform the
 Controller-only atomic promotion of candidate Releases, the applied projection,
@@ -425,6 +434,12 @@ Retry transfers the operation only when every selected Script execution is
 durably `not_started`; `start_authorized` or later, or unknown Script state,
 returns `script.retry_unsafe` through the existing retry action and recovery
 continues the authorized execution.
+
+A pre-deploy hook failure cannot have mutated an application candidate
+workload. It leaves the serving and current-successful projections unchanged,
+and runner cleanup completes before `on-failure`. Earlier materialization,
+Volume, Attach, or Network effects remain durably accounted; their existence is
+not permission to report the whole assignment as mutation-free.
 
 The plan seals one immutable candidate Release procedure for each selected
 Service. It declares the exact forward mutation anchors and the complete lawful
@@ -598,6 +613,18 @@ There are no authored parameters, arguments, timeout, interpreter, user,
 working-directory, or environment overrides, and literal secret values are
 invalid. `x-gp-scripts` clean-replaces the superseded `scripts.<name>` and
 task-hook Script forms; neither superseded form is accepted.
+
+TLS-first provisioning needs no additional grammar. A project may target an
+ordinary Service with a `pre-deploy` Script that invokes `/bin/sh` and
+`openssl` from that Service's externally built, selected host-local image and
+runs as its sealed numeric user. The Script owns staging, validation, ownership
+and modes, idempotent no-op for an existing valid bundle, and atomic publication
+into a declared read-write Volume. Consumer mounts of that Volume are
+read-only, and `x-gp-entry` must not own the same output subtree. Groundplane
+does not supply the tools, assume they exist in every image, validate PKI
+policy, or guarantee arbitrary Script output atomicity. Live automatic
+certificate rotation is absent; any future rotation is a separate explicit
+operation contract.
 
 `x-gp-resource` is generated metadata and is never required in an authored
 Blueprint:
@@ -840,13 +867,16 @@ combination.
 The blue-green deploy procedure is:
 
 1. Select the inactive slot and render its candidate sealed local image id.
-2. Start or recreate only that slot.
-3. Run matching `post-deploy` Scripts through the typed Release hook executor.
-4. Observe its exact Release labels and pass its sealed healthcheck.
-5. Atomically reload the stable proxy to the healthy slot and prove the sealed
+2. Run matching `pre-deploy` Scripts through the typed Release hook executor,
+   with cleanup proven after each.
+3. Start or recreate only that slot.
+4. Run matching `post-deploy` Scripts through the same executor and cleanup
+   barrier.
+5. Observe its exact Release labels and pass its sealed healthcheck.
+6. Atomically reload the stable proxy to the healthy slot and prove the sealed
    config digest, generation, Release id, and upstream.
-6. Record the candidate as serving, then completed, for the logical Service.
-7. Retain the old healthy slot for rollback.
+7. Record the candidate as serving, then completed, for the logical Service.
+8. Retain the old healthy slot for rollback.
 
 If a pre-switch step fails, the stable proxy remains on the prior slot. If a
 later member or post-switch checkpoint fails, the release's `on_failure`
@@ -854,12 +884,16 @@ policy decides whether the Agent atomically reloads each already-switched
 proxy to its exact prior healthy slot in reverse order or leaves the new slot
 active for an explicit rollback. The default is
 `switch_back`. Either outcome preserves the failed release record. Rollback
-uses the same procedure with the previous successful tag. No policy reverses
+uses the same procedure with the Controller-selected historical Release's
+stored `local_image_id`; it never resolves that Release's requested reference.
+No policy reverses
 database migrations automatically. Recreate uses the same hook boundary:
-remove the prior workload, apply and start the candidate, run matching
+run matching pre-deploy Scripts before candidate mutation, remove the prior
+workload, apply and start the candidate, run matching
 `post-deploy` Scripts, observe readiness, then acknowledge the recreate.
 Blueprint apply uses the Apply execution contract above. The plan applies and
-starts each candidate without readiness, runs matching `post-deploy` Scripts,
+starts candidates only after all selected pre-deploy Scripts have cleaned up,
+runs matching `post-deploy` Scripts,
 waits for health only at `WaitHealthy`, then performs Component actions before
 Controller-only atomic promotion. Explicit Deploy and Rollback retain their
 typed hook paths, and explicit group Deploy/Rollback retain declared serial
@@ -1231,9 +1265,10 @@ Backup Policy replacement retains ADR 0046's source pre-ensure behavior;
 Blueprint creates no source record before its final publication transaction.
 The applied Environment Compose projection is not in this envelope: it retains
 its exact predecessor or absence until successful terminal Task acknowledgement.
-Post-deploy Script Network and Volume retention uses the already-prepared
-immutable runner snapshot's key, positive revision, canonical digest, and exact
-member ids instead of treating the candidate projection as a staged source.
+Pre-deploy and post-deploy Script Network and Volume memberships use the
+already-prepared immutable runner snapshot's key, positive revision, canonical
+digest, and exact member ids instead of treating the candidate projection as a
+staged source.
 
 The exact legal operation shapes are:
 
