@@ -58,8 +58,11 @@ func TestEntryScriptAbsenceRequiresBothCountAndMembership(t *testing.T) {
 			}
 			switch state {
 			case "absent":
-				if err != nil || len(conditions) != 2 || conditions[0].Key != scriptSourceCountPrefix+"entry-value/"+source.EntryID+"/" || !conditions[0].Prefix ||
-					!conditions[1].Prefix || conditions[0].ModRevision != 0 ||
+				if err != nil || len(conditions) != 2 ||
+					conditions[0].Key != scriptSourceCountPrefix+"entry-value/"+source.EntryID+"/" ||
+					!conditions[0].Prefix ||
+					!conditions[1].Prefix ||
+					conditions[0].ModRevision != 0 ||
 					conditions[1].ModRevision != 0 {
 					t.Fatalf("absence did not retain both transactional fences: %v", err)
 				}

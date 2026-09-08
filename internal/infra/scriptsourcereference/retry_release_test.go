@@ -68,7 +68,8 @@ func TestRetryExpiryDrainsBoundedPagesAcrossUnknownCommit(t *testing.T) {
 		}
 	}
 	root, err := decodeRoot(store.values[RootKey(operationID)].Value)
-	if err != nil || root.ReleasePath != sourceReleasePathRetryExpiry || root.RetryDisposition != RetryDispositionExpired ||
+	if err != nil || root.ReleasePath != sourceReleasePathRetryExpiry ||
+		root.RetryDisposition != RetryDispositionExpired ||
 		root.RetryExpiresAt == nil ||
 		!root.RetryExpiresAt.Equal(deadline) {
 		t.Fatalf("expiry restart changed its recorded path/deadline: %v", err)

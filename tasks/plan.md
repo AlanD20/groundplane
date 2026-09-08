@@ -1,7 +1,7 @@
 # Floor MVP: Volume removal integration plan
 
-Status: owner approved; first consolidate the existing uncommitted changes into
-verified, focused commits, then implement this cutover.
+Status: owner approved; existing work is consolidated into verified commits.
+This cutover is the next implementation task.
 
 This is one remaining floor-MVP slice, not a redefinition of the overall goal.
 Manual Script completion, remaining source-family guards, retained-runtime
@@ -108,4 +108,4 @@ remaining floor-MVP or live acceptance requirements.
 - Backup policy integration requiring authority outside the current pause.
 
 The owner approved this cutover after reviewing the plan. Backup/restore and
-deployment remain paused. Consolidating the existing work is the next checkpoint.
+deployment remain paused. Start with task 1; no further plan approval is required.
