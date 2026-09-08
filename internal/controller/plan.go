@@ -904,6 +904,14 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactForPhaseWithRel
 	if err != nil {
 		return nil, err
 	}
+	if len(projection.Components) != 0 {
+		managed, err := projectPinnedEnvironmentComponents(project, nil, identity, projection,
+			nil, nil, projectedEnvironmentEntries(projection.Entries), resolver.componentCatalog)
+		if err != nil {
+			return nil, err
+		}
+		project = managed.Project
+	}
 	if err := applyProjectedServiceDependencyPhase(project, projection.ServiceDependencyPlans, phase); err != nil {
 		return nil, err
 	}
@@ -1073,17 +1081,16 @@ func ComposeIdentitySnapshotFromProjection(
 			if !generated {
 				continue
 			}
-			desiredName, desired := desiredServiceNames[service.GetServiceId()]
-			if !desired {
-				return ComposeIdentitySnapshot{}, errs.New(
-					errs.KindInternal, "Component generated Service is absent from desired projection",
-				)
-			}
-			if service.GetComposeName() == "" || service.GetComposeName() != desiredName {
+			// Generated Services are owned by the Component and its pinned
+			// artifact, not the native desired-Service collection.
+			if ids.Validate(ids.KindService, service.GetServiceId()) != nil || service.GetComposeName() == "" {
 				return ComposeIdentitySnapshot{}, errs.New(
 					errs.KindInternal,
 					"Component generated Service render name is missing",
 				)
+			}
+			if desiredName, present := desiredServiceNames[service.GetServiceId()]; present && desiredName != service.GetComposeName() {
+				return ComposeIdentitySnapshot{}, errs.New(errs.KindInternal, "Component generated Service render name diverges")
 			}
 			_, duplicateID := usedServiceIDs[service.GetServiceId()]
 			_, duplicateName := usedServiceNames[service.GetComposeName()]
@@ -1101,11 +1108,6 @@ func ComposeIdentitySnapshotFromProjection(
 			services = append(services, identity)
 		}
 		for serviceID := range componentOwners {
-			if _, desired := desiredServiceNames[serviceID]; !desired {
-				return ComposeIdentitySnapshot{}, errs.New(
-					errs.KindInternal, "Component generated Service is absent from desired projection",
-				)
-			}
 			if _, found := usedServiceIDs[serviceID]; !found {
 				return ComposeIdentitySnapshot{}, errs.New(
 					errs.KindInternal,
