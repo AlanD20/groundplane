@@ -900,7 +900,7 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactForPhaseWithRel
 	if projection.RevisionID != revisionID || projection.EnvironmentID != identity.EnvironmentID {
 		return nil, errs.New(errs.KindInternal, "pinned Environment normalized projection changed")
 	}
-	project, err := loadNormalizedEnvironmentProject(ctx, projection)
+	project, err := loadPinnedEnvironmentProject(ctx, projection, identity.AuthorizedVolumeDir, releases)
 	if err != nil {
 		return nil, err
 	}
