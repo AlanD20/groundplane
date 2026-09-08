@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"testing"
 	"time"
@@ -14,6 +15,66 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+func TestAttachFactServiceSealsExplicitValkeyAuthenticationIdentity(t *testing.T) {
+	t.Parallel()
+	crypt := attachFactTestCrypt{}
+	protector, err := secretvalue.NewProtector(crypt, crypt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := NewAttachFactService(&attachFactTestRepository{}, protector)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name           string
+		authentication core.BackingAuthentication
+		role           string
+		password       []byte
+		factCount      int
+		secretCount    int
+	}{
+		{name: "password", authentication: core.BackingAuthenticationPassword, role: "default", password: []byte("owner-password"), factCount: 4, secretCount: 2},
+		{name: "none", authentication: core.BackingAuthenticationNone, factCount: 3},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			attachID := ids.New(ids.KindAttach)
+			metadata, encrypted, sealErr := service.SealFactSets(
+				context.Background(), attachID, attachFactModeTestAdapter{},
+				adapters.FactParams{
+					Authentication: test.authentication, Host: "valkey", Port: "6379",
+					Role: test.role, Password: test.password,
+				}, nil,
+			)
+			if sealErr != nil {
+				t.Fatalf("SealFactSets() error = %v", sealErr)
+			}
+			defer clear(encrypted.Ciphertext)
+			if len(metadata) != 1 || len(metadata[0].Facts) != test.factCount {
+				t.Fatalf("SealFactSets() metadata = %#v", metadata)
+			}
+			secretCount := 0
+			for _, fact := range metadata[0].Facts {
+				if fact.Secret {
+					secretCount++
+				}
+			}
+			if secretCount != test.secretCount {
+				t.Fatalf("secret fact count = %d, want %d", secretCount, test.secretCount)
+			}
+			var bundle attachFactBundle
+			if err := json.Unmarshal(encrypted.Ciphertext, &bundle); err != nil {
+				t.Fatalf("unmarshal sealed identity: %v", err)
+			}
+			defer bundle.clear()
+			if bundle.Version != 3 || bundle.Identity.Authentication != test.authentication ||
+				bundle.Identity.Role != test.role || !slices.Equal(bundle.Identity.Password, test.password) {
+				t.Fatalf("sealed identity = %#v", bundle.Identity)
+			}
+		})
+	}
+}
 
 // Rationale: sealing must bind sorted public facts and private retry identity
 // to one opaque envelope without retaining caller passwords.
@@ -47,7 +108,8 @@ func TestAttachFactServiceSealsAndResolvesGrantFacts(t *testing.T) {
 		ownerID,
 		attachFactTestAdapter{},
 		adapters.FactParams{
-			Host: "postgres", Port: "5432", Database: "appdb", Role: "app", Password: password,
+			Authentication: "",
+			Host:           "postgres", Port: "5432", Database: "appdb", Role: "app", Password: password,
 		},
 		[]AttachGrantFactParams{{
 			AttachID: grantID,
@@ -277,20 +339,38 @@ func (attachFactTestCrypt) Open(_ context.Context, ciphertext []byte) ([]byte, e
 
 type attachFactTestAdapter struct{}
 
-func (attachFactTestAdapter) Key() string          { return "test:1" }
-func (attachFactTestAdapter) Label() string        { return "Test" }
-func (attachFactTestAdapter) DefaultImage() string { return "test:1" }
-func (attachFactTestAdapter) FactsPrefix() string  { return "test_" }
-func (attachFactTestAdapter) URLScheme() string    { return "pgsql://" }
-func (attachFactTestAdapter) Port() string         { return "5432" }
-func (attachFactTestAdapter) Manual() bool         { return false }
-func (attachFactTestAdapter) SupportsGrants() bool { return true }
-func (attachFactTestAdapter) FactSchema() []adapters.FactDefinition {
+func (attachFactTestAdapter) Key() string                       { return "test:1" }
+func (attachFactTestAdapter) Label() string                     { return "Test" }
+func (attachFactTestAdapter) DefaultImage() string              { return "test:1" }
+func (attachFactTestAdapter) FactsPrefix() string               { return "test_" }
+func (attachFactTestAdapter) URLScheme() string                 { return "pgsql://" }
+func (attachFactTestAdapter) Port() string                      { return "5432" }
+func (attachFactTestAdapter) Manual() bool                      { return false }
+func (attachFactTestAdapter) SupportsGrants() bool              { return true }
+func (attachFactTestAdapter) SupportsAuthenticationModes() bool { return false }
+func (attachFactTestAdapter) FactSchema(core.BackingAuthentication) []adapters.FactDefinition {
 	return []adapters.FactDefinition{
 		{Field: adapters.FactDatabase},
 		{Field: adapters.FactPassword, Secret: true},
 		{Field: adapters.FactURL, Secret: true},
 	}
+}
+
+type attachFactModeTestAdapter struct{ attachFactTestAdapter }
+
+func (attachFactModeTestAdapter) SupportsAuthenticationModes() bool { return true }
+func (attachFactModeTestAdapter) URLScheme() string                 { return "redis://" }
+func (attachFactModeTestAdapter) Port() string                      { return "6379" }
+func (attachFactModeTestAdapter) FactSchema(authentication core.BackingAuthentication) []adapters.FactDefinition {
+	facts := []adapters.FactDefinition{
+		{Field: adapters.FactURL, Secret: authentication != core.BackingAuthenticationNone},
+		{Field: adapters.FactHost},
+		{Field: adapters.FactPort},
+	}
+	if authentication == core.BackingAuthenticationNone {
+		return facts
+	}
+	return append(facts, adapters.FactDefinition{Field: adapters.FactPassword, Secret: true})
 }
 func (attachFactTestAdapter) ProvisionSteps(adapters.ProvisionParams) []adapters.Step { return nil }
 func (attachFactTestAdapter) GrantSteps(adapters.ProvisionParams) []adapters.Step     { return nil }

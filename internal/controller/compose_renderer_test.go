@@ -17,11 +17,16 @@ import (
 
 func TestRenderComposePortlessRecreateGroupMemberIsSingleton(t *testing.T) {
 	serviceID := composeIdentityTestID(ids.KindService, 31)
-	project := &composetypes.Project{Services: composetypes.Services{"worker": composetypes.ServiceConfig{Image: "example/worker:previous"}}}
+	project := &composetypes.Project{
+		Services: composetypes.Services{"worker": composetypes.ServiceConfig{Image: "example/worker:previous"}},
+	}
 	input := composeRenderTestInput(project)
 	input.Identities.Services = []ComposeResourceIdentity{{ID: serviceID, Name: "worker"}}
 	input.Releases = map[string]ComposeReleaseIdentity{serviceID: {
-		ReleaseID: composeIdentityTestID(ids.KindDeployment, 32), Image: "example/worker:next", Strategy: domain.StrategyRecreate,
+		ReleaseID: composeIdentityTestID(
+			ids.KindDeployment,
+			32,
+		), Image: "example/worker:next", Strategy: domain.StrategyRecreate,
 		Target: domain.WorkloadSingleton, ServingTarget: domain.WorkloadSingleton,
 		ServingReleaseID: "baseline", ServingProxyGeneration: 1,
 	}}
@@ -35,19 +40,28 @@ func TestRenderComposePortlessRecreateGroupMemberIsSingleton(t *testing.T) {
 		t.Fatalf("portless recreate services = %#v, want one singleton", artifact.Services)
 	}
 	labels := labelPairMap(artifact.Services[0].ExpectedLabels)
-	if labels[composeLabelRuntimeRole] != "singleton" || labels[composeLabelReleaseID] != input.Releases[serviceID].ReleaseID {
+	if labels[composeLabelRuntimeRole] != "singleton" ||
+		labels[composeLabelReleaseID] != input.Releases[serviceID].ReleaseID {
 		t.Fatalf("portless recreate labels = %#v", labels)
 	}
 }
 
 func TestRenderComposeAddressableRecreateHasOneWorkloadAndStableProxy(t *testing.T) {
 	serviceID := composeIdentityTestID(ids.KindService, 33)
-	project := &composetypes.Project{Services: composetypes.Services{"api": composetypes.ServiceConfig{Image: "example/api:previous", Expose: []string{"8080"}}}}
+	project := &composetypes.Project{
+		Services: composetypes.Services{
+			"api": composetypes.ServiceConfig{Image: "example/api:previous", Expose: []string{"8080"}},
+		},
+	}
 	input := composeRenderTestInput(project)
 	input.Identities.Services = []ComposeResourceIdentity{{ID: serviceID, Name: "api"}}
 	input.Releases = map[string]ComposeReleaseIdentity{serviceID: {
-		ReleaseID: composeIdentityTestID(ids.KindDeployment, 34), Image: "example/api:next", Strategy: domain.StrategyRecreate,
-		Target: domain.WorkloadSingleton, ServingTarget: domain.WorkloadBlue,
+		ReleaseID: composeIdentityTestID(
+			ids.KindDeployment,
+			34,
+		), Image: "example/api:next", Strategy: domain.StrategyRecreate,
+		ProxyImage: testServiceProxyImage(),
+		Target:     domain.WorkloadSingleton, ServingTarget: domain.WorkloadBlue,
 		ServingReleaseID: "baseline", ServingProxyGeneration: 1,
 	}}
 	artifact, err := RenderCompose(input)
@@ -92,7 +106,8 @@ func TestRenderComposeSealsBlueGreenWorkloadImages(t *testing.T) {
 	input.Identities.Services = []ComposeResourceIdentity{{ID: serviceID, Name: "api"}}
 	input.Releases = map[string]ComposeReleaseIdentity{serviceID: {
 		ReleaseID: composeIdentityTestID(ids.KindDeployment, 40), Image: "example/api:next",
-		Strategy: domain.StrategyBlueGreen, Target: domain.WorkloadBlue,
+		ProxyImage: testServiceProxyImage(),
+		Strategy:   domain.StrategyBlueGreen, Target: domain.WorkloadBlue,
 		ServingTarget: domain.WorkloadGreen, ServingReleaseID: composeIdentityTestID(ids.KindDeployment, 41),
 		ServingProxyGeneration: 1,
 	}}
@@ -275,11 +290,12 @@ func TestRenderComposeIsDeterministic(t *testing.T) {
 func TestRenderComposeProjectsComponentServiceOwnership(t *testing.T) {
 	serviceID := composeIdentityTestID(ids.KindService, 27)
 	componentID := composeIdentityTestID(ids.KindComponent, 28)
+	image := testSelectedComponentImage("example/router")
 	input := composeRenderTestInput(&composetypes.Project{Services: composetypes.Services{
-		"router": {Image: "example/router:1"},
+		"router": {Image: controllerTestOCIImageReference("example/router")},
 	}})
 	input.Identities.Services = []ComposeResourceIdentity{{
-		ID: serviceID, Name: "router", ComponentID: componentID,
+		ID: serviceID, Name: "router", ComponentID: componentID, ComponentImage: &image,
 	}}
 
 	artifact, err := RenderCompose(input)

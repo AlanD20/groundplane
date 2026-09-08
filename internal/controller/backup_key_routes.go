@@ -56,7 +56,9 @@ func (s *Server) registerBackupKeyRoutes() {
 		Summary: "Export the current backup age identity without storing it", Tags: []string{"Backup"}, DefaultStatus: http.StatusOK,
 		Middlewares: huma.Middlewares{s.rejectTaskMutationBody, s.rejectTaskMutationQuery},
 		Responses: map[string]*huma.Response{"200": {
-			Description: http.StatusText(http.StatusOK), Content: map[string]*huma.MediaType{"text/plain": {Schema: &huma.Schema{Type: huma.TypeString}}},
+			Description: http.StatusText(
+				http.StatusOK,
+			), Content: map[string]*huma.MediaType{"text/plain": {Schema: &huma.Schema{Type: huma.TypeString}}},
 		}},
 	}, s.exportBackupKey)
 	s.setRoutePolicy("POST /api/v1/environments/{id}/rotate-key", routePolicy{body: bodyless})
@@ -73,13 +75,17 @@ func (s *Server) rotateBackupKey(ctx context.Context, request *backupKeyRotateIn
 	}
 	body := append([]byte(nil), response.Body...)
 	clear(response.Body)
-	return &backupKeyMutationOutput{Status: response.Status, ContentType: response.ContentKind, Body: func(ctx huma.Context) {
-		defer clear(body)
-		ctx.SetStatus(response.Status)
-		if _, writeErr := ctx.BodyWriter().Write(body); writeErr != nil && s.Logger != nil {
-			s.Logger.Error("controller: write Backup key rotation response", slog.Any("error", writeErr))
-		}
-	}}, nil
+	return &backupKeyMutationOutput{
+		Status:      response.Status,
+		ContentType: response.ContentKind,
+		Body: func(ctx huma.Context) {
+			defer clear(body)
+			ctx.SetStatus(response.Status)
+			if _, writeErr := ctx.BodyWriter().Write(body); writeErr != nil && s.Logger != nil {
+				s.Logger.Error("controller: write Backup key rotation response", slog.Any("error", writeErr))
+			}
+		},
+	}, nil
 }
 
 func (s *Server) exportBackupKey(ctx context.Context, request *backupKeyExportInput) (*backupKeyExportOutput, error) {
@@ -93,9 +99,11 @@ func (s *Server) exportBackupKey(ctx context.Context, request *backupKeyExportIn
 	defer clear(result.Identity)
 	identity := append([]byte(nil), result.Identity...)
 	return &backupKeyExportOutput{
-		ContentType:        "text/plain; charset=utf-8",
-		ContentDisposition: "attachment; filename=\"groundplane-" + request.ID + "-age-era-" + formatEra(result.Era) + "-identity.txt\"",
-		CacheControl:       "no-store",
+		ContentType: "text/plain; charset=utf-8",
+		ContentDisposition: "attachment; filename=\"groundplane-" + request.ID + "-age-era-" + formatEra(
+			result.Era,
+		) + "-identity.txt\"",
+		CacheControl: "no-store",
 		Body: func(ctx huma.Context) {
 			defer clear(identity)
 			ctx.SetStatus(http.StatusOK)

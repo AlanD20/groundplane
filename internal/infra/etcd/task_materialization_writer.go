@@ -212,6 +212,14 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 			"task desired revision is unavailable",
 		)
 	}
+	// A configuration-only Blueprint did not execute the desired workload
+	// artifact. Preserve the complete prior acknowledged projection and revision.
+	if record.Type == TaskUpdate && !taskHasBlueprintCandidateAppliedAuthority(record) && state.Values[1] != nil {
+		if _, err := decodeEnvironmentComposeProjection(state.Values[1].Value); err != nil {
+			return taskMaterializationProjectionChange{}, err
+		}
+		return taskMaterializationProjectionChange{}, nil
+	}
 	seal, err := decodeEnvironmentBlueprintSeal(state.Values[0].Value)
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
 		return taskMaterializationProjectionChange{}, corruptEnvironmentComposeProjection()
@@ -268,13 +276,28 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 		}
 		projectionRevisionCondition = state.Values[1].ModRevision
 	}
+	conditions := []Condition{
+		{Key: rootKey, ModRevision: state.Values[0].ModRevision},
+		{Key: projectionKey, ModRevision: projectionRevisionCondition},
+	}
+	if taskHasBlueprintCandidateAppliedAuthority(record) {
+		artifact, authority, err := repository.blueprintAcknowledgedArtifact(ctx, record, readRevision)
+		if err != nil {
+			clear(projectionValue)
+			return taskMaterializationProjectionChange{}, err
+		}
+		projection.ComposeArtifact = artifact
+		clear(projectionValue)
+		projectionValue, err = encodeEnvironmentComposeProjection(projection)
+		if err != nil {
+			return taskMaterializationProjectionChange{}, err
+		}
+		conditions = append(conditions, authority)
+	}
 	return taskMaterializationProjectionChange{
-		applies: true,
-		conditions: []Condition{
-			{Key: rootKey, ModRevision: state.Values[0].ModRevision},
-			{Key: projectionKey, ModRevision: projectionRevisionCondition},
-		},
-		mutations: []Mutation{{Type: MutationPut, Key: projectionKey, Value: projectionValue}},
+		applies:    true,
+		conditions: conditions,
+		mutations:  []Mutation{{Type: MutationPut, Key: projectionKey, Value: projectionValue}},
 	}, nil
 }
 

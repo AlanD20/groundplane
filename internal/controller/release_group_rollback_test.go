@@ -22,10 +22,24 @@ type fakeReleaseGroupRollbackOperator struct {
 	idempotencyKey string
 }
 
-func (fake *fakeReleaseGroupRollbackOperator) PreviewReleaseGroupRollback(_ context.Context, groupID string, input domain.GroupRollbackPreviewInput) (domain.GroupRollbackPreview, error) {
+func (fake *fakeReleaseGroupRollbackOperator) PreviewReleaseGroupRollback(
+	_ context.Context,
+	groupID string,
+	input domain.GroupRollbackPreviewInput,
+) (domain.GroupRollbackPreview, error) {
 	fake.groupID = groupID
 	fake.request.Tag = input.Tag
-	return domain.GroupRollbackPreview{GroupID: groupID, Revision: 42, Sources: []domain.RollbackSource{{ServiceID: "svc_01J00000000000000000000000", ReleaseID: "dep_01J00000000000000000000000", Tag: "release-1"}}}, nil
+	return domain.GroupRollbackPreview{
+		GroupID:  groupID,
+		Revision: 42,
+		Sources: []domain.RollbackSource{
+			{
+				ServiceID: "svc_01J00000000000000000000000",
+				ReleaseID: "dep_01J00000000000000000000000",
+				Tag:       "release-1",
+			},
+		},
+	}, nil
 }
 
 func (fake *fakeReleaseGroupRollbackOperator) RollbackReleaseGroup(
@@ -46,10 +60,15 @@ func TestReleaseGroupRollbackPreviewReturnsControllerSelection(t *testing.T) {
 	groupID := ids.NewAt(ids.KindReleaseGroup, time.Date(2026, time.September, 4, 0, 0, 0, 0, time.UTC), 1)
 	operator := &fakeReleaseGroupRollbackOperator{}
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{ReleaseOperations: operator})
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/release-groups/"+groupID+"/rollback-preview?tag=release-1", nil)
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/release-groups/"+groupID+"/rollback-preview?tag=release-1",
+		nil,
+	)
 	response := httptest.NewRecorder()
 	server.HTTPHandler().ServeHTTP(response, request)
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"revision":"42"`) || !strings.Contains(response.Body.String(), `"release_id":"dep_`) {
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"revision":"42"`) ||
+		!strings.Contains(response.Body.String(), `"release_id":"dep_`) {
 		t.Fatalf("response = %d %s", response.Code, response.Body.String())
 	}
 	if operator.request.Tag == nil || *operator.request.Tag != "release-1" {
@@ -59,7 +78,11 @@ func TestReleaseGroupRollbackPreviewReturnsControllerSelection(t *testing.T) {
 
 func TestReleaseGroupRollbackRejectsExplicitBlankTag(t *testing.T) {
 	groupID := ids.NewAt(ids.KindReleaseGroup, time.Date(2026, time.September, 4, 0, 0, 0, 0, time.UTC), 1)
-	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{ReleaseOperations: &fakeReleaseGroupRollbackOperator{}})
+	server := New(
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Options{ReleaseOperations: &fakeReleaseGroupRollbackOperator{}},
+	)
 	for _, target := range []string{"/api/v1/release-groups/" + groupID + "/rollback", "/api/v1/release-groups/" + groupID + "/rollback-preview?tag=%20"} {
 		method, body := http.MethodGet, ""
 		wantStatus := http.StatusBadRequest
@@ -98,7 +121,11 @@ func TestReleaseGroupRollbackAcceptsOptionalTagBody(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			operator := &fakeReleaseGroupRollbackOperator{}
 			server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{ReleaseOperations: operator})
-			request := httptest.NewRequest(http.MethodPost, "/api/v1/release-groups/"+groupID+"/rollback", strings.NewReader(test.body))
+			request := httptest.NewRequest(
+				http.MethodPost,
+				"/api/v1/release-groups/"+groupID+"/rollback",
+				strings.NewReader(test.body),
+			)
 			request.Header.Set(idempotencyKeyHeader, "release-group-rollback-key")
 			if test.body != "" {
 				request.Header.Set("Content-Type", "application/json")

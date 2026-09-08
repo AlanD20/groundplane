@@ -36,7 +36,10 @@ func TestHierarchyCreationPublishesDeletionCoordination(t *testing.T) {
 	environment := EnvironmentRecord{
 		ID: hierarchyTestID(ids.KindEnvironment, 193), ProjectID: project.ID,
 		Name: "deletion", NetworkPool: "10.120.253.0/24",
-		VolumeDir:         "/var/lib/groundplane/vol/" + tenant.ID + "/" + project.ID + "/" + hierarchyTestID(ids.KindEnvironment, 193),
+		VolumeDir: "/var/lib/groundplane/vol/" + tenant.ID + "/" + project.ID + "/" + hierarchyTestID(
+			ids.KindEnvironment,
+			193,
+		),
 		ProvisioningState: EnvironmentProvisioningReady,
 		CreateTaskID:      ids.NewAt(ids.KindTask, now, 194),
 		CreatedAt:         now,
@@ -127,7 +130,13 @@ func TestHierarchyCreateTenantIdempotentCommitsResourceIndexesAndMarker(t *testi
 	if err != nil || stored.Record != record {
 		t.Fatalf("GetTenant() = %#v, %v", stored, err)
 	}
-	assertHierarchyCoordinationRecord(t, repository.store.(*memoryHierarchyStore), HierarchyDeletionTargetTenant, record.ID, stored.Revision)
+	assertHierarchyCoordinationRecord(
+		t,
+		repository.store.(*memoryHierarchyStore),
+		HierarchyDeletionTargetTenant,
+		record.ID,
+		stored.Revision,
+	)
 	replayed, err := repository.CreateTenantIdempotent(context.Background(), record, marker)
 	if err != nil || replayed.kind != idempotencyTransactionExisting {
 		t.Fatalf("CreateTenantIdempotent(replay) = %#v, %v", replayed, err)

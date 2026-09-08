@@ -32,8 +32,14 @@ type zoneDeletionRepository interface {
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
 	GetEnvironmentZoneRemovalAuthorities(context.Context, string) (etcd.EnvironmentZoneRemovalAuthorities, bool, error)
-	ClaimEnvironmentBlueprintStage(context.Context, etcd.EnvironmentBlueprintStageClaimRequest) (etcd.EnvironmentBlueprintStageClaim, error)
-	StageEnvironmentBlueprintRevision(context.Context, etcd.EnvironmentBlueprintStageRequest) (etcd.EnvironmentBlueprintSeal, error)
+	ClaimEnvironmentBlueprintStage(
+		context.Context,
+		etcd.EnvironmentBlueprintStageClaimRequest,
+	) (etcd.EnvironmentBlueprintStageClaim, error)
+	StageEnvironmentBlueprintRevision(
+		context.Context,
+		etcd.EnvironmentBlueprintStageRequest,
+	) (etcd.EnvironmentBlueprintSeal, error)
 	BeginZoneDeletionWithTask(
 		context.Context,
 		etcd.Versioned[etcd.EnvironmentRecord],
@@ -177,7 +183,12 @@ func (service *durableZoneDeletionIdempotency) MatchesStaged(
 
 type zoneDeletionPlanResolver interface {
 	ResolveExecutionPlan(context.Context, etcd.TaskRecord) (*controller.ExecutionPlan, error)
-	PrepareZoneRemovalTask(context.Context, etcd.TaskRecord, etcd.ZoneRemovalIntent, controller.ZoneRemovalTaskProcedureIDs) (etcd.TaskRecord, error)
+	PrepareZoneRemovalTask(
+		context.Context,
+		etcd.TaskRecord,
+		etcd.ZoneRemovalIntent,
+		controller.ZoneRemovalTaskProcedureIDs,
+	) (etcd.TaskRecord, error)
 }
 
 type zoneDeletionService struct {
@@ -374,7 +385,10 @@ func (service *zoneDeletionService) removeZoneOnce(
 			return etcd.IdempotencyResponse{}, matchErr
 		}
 		if !matched {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindIdempotencyMismatch, "idempotency key was used for another Zone removal")
+			return etcd.IdempotencyResponse{}, errs.New(
+				errs.KindIdempotencyMismatch,
+				"idempotency key was used for another Zone removal",
+			)
 		}
 		candidate, affected, err = buildZoneRemovalProjection(
 			projection.Record, zone.Record.Desired.ID, zone.Record.Desired.Name,
@@ -440,7 +454,10 @@ func (service *zoneDeletionService) removeZoneOnce(
 		}
 	}
 	if candidate.RenderGeneration > math.MaxInt32 {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Zone render generation exceeds Task limits")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict,
+			"Zone render generation exceeds Task limits",
+		)
 	}
 	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, etcd.EnvironmentBlueprintStageRequest{
 		Claim: claim,

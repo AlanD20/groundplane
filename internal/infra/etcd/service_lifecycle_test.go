@@ -7,6 +7,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -22,14 +23,26 @@ func TestServiceLifecycleRenderInputPinsAppliedProjection(t *testing.T) {
 	}
 	projection := serviceRecordTestProjection(t, ids.NewAt(ids.KindEnvironment, at, 5), desired)
 	projection.RenderGeneration = 9
+	current := portlessReleaseRenderInput(domain.StrategyRecreate)
+	current.ServiceID, current.ServiceName = serviceID, desired.Name
+	current.TenantID, current.TenantSlug = ids.NewAt(ids.KindTenant, at, 3), "acme"
+	current.ProjectID, current.ProjectSlug = ids.NewAt(ids.KindProject, at, 4), "shop"
+	current.EnvironmentID, current.EnvironmentName = projection.EnvironmentID, "production"
+	current.AuthorizedVolumeDir = "/var/lib/groundplane/vol/test"
+	current.Projection = projection
+	current.ServiceDependencyPlans = projection.ServiceDependencyPlans.Clone()
 	input := ServiceLifecycleRenderInput{
 		PlanID: ids.NewAt(ids.KindPlan, at, 2), ServiceID: serviceID,
-		TenantID: ids.NewAt(ids.KindTenant, at, 3), TenantSlug: "acme",
-		ProjectID: ids.NewAt(ids.KindProject, at, 4), ProjectSlug: "shop",
+		TenantID: current.TenantID, TenantSlug: "acme",
+		ProjectID: current.ProjectID, ProjectSlug: "shop",
 		EnvironmentID: ids.NewAt(ids.KindEnvironment, at, 5), EnvironmentName: "production",
 		AuthorizedVolumeDir: "/var/lib/groundplane/vol/test",
-		ArtifactID:          ids.NewAt(ids.KindConfig, at, 6),
-		Projection:          projection,
+		ArtifactID:          current.ArtifactID,
+		Projection:          projection, AppliedProjectionRevision: 20,
+		Release: ServiceLifecycleRelease{
+			ServingReleaseID: current.ReleaseID, ProjectionRevision: 21, IntentRevision: 22,
+			RenderRevision: 23, Current: current,
+		},
 	}
 	value, err := encodeServiceLifecycleRenderInput(input)
 	if err != nil {
@@ -45,9 +58,9 @@ func TestServiceLifecycleRenderInputPinsAppliedProjection(t *testing.T) {
 	}
 }
 
-func TestServiceLifecycleProjectionFenceUsesDesiredBlueprintHead(t *testing.T) {
-	// Rationale: lifecycle render input comes from the desired Blueprint head,
-	// whose revision cannot be compared with the independently written applied projection.
+func TestServiceLifecycleProjectionFenceUsesAppliedProjection(t *testing.T) {
+	// Rationale: lifecycle runtime authority is the independently mutable
+	// projection last acknowledged by the Agent, never the desired head.
 	t.Parallel()
 	environmentID := ids.NewAt(
 		ids.KindEnvironment,
@@ -55,11 +68,11 @@ func TestServiceLifecycleProjectionFenceUsesDesiredBlueprintHead(t *testing.T) {
 		1,
 	)
 	got := serviceLifecycleProjectionFenceKey(environmentID)
-	if want := environmentBlueprintHeadKey(environmentID); got != want {
+	if want := environmentComposeProjectionKey(environmentID); got != want {
 		t.Fatalf("serviceLifecycleProjectionFenceKey() = %q, want %q", got, want)
 	}
-	if got == environmentComposeProjectionKey(environmentID) {
-		t.Fatalf("Service lifecycle fence still selects the applied projection: %q", got)
+	if got == environmentBlueprintHeadKey(environmentID) {
+		t.Fatalf("Service lifecycle fence still selects desired state: %q", got)
 	}
 }
 

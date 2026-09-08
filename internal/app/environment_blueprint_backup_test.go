@@ -117,7 +117,12 @@ func TestEnvironmentBlueprintBackupOmissionAndPresentLabelResolution(t *testing.
 		Volumes: []etcd.EnvironmentVolumeIdentity{{ID: volumeID, Slug: "archive", Key: "archive"}},
 	}
 	attaches := preparedBlueprintAttaches{effective: []etcd.Versioned[etcd.AttachRecord]{{
-		Record: etcd.AttachRecord{ID: attachID, EnvironmentID: environmentID, Name: "database", CredentialAttachID: attachID},
+		Record: etcd.AttachRecord{
+			ID:                 attachID,
+			EnvironmentID:      environmentID,
+			Name:               "database",
+			CredentialAttachID: attachID,
+		},
 	}}}
 	_, _, err = service.prepareEnvironmentBlueprintBackup(
 		context.Background(), environmentID, taskID, 19,
@@ -198,6 +203,10 @@ func TestEnvironmentBlueprintAttachPreparationUsesRetainedCredentialOwner(t *tes
 		environmentID,
 		taskID,
 		map[string]core.AttachmentSpec{
+			"database-owner": {
+				BackingProject: "database", BackingService: "postgres", Service: "worker",
+				Credential: core.AttachmentCredentialSpec{Mode: "new"},
+			},
 			"worker-database": {
 				BackingProject: "database", BackingService: "postgres", Service: "worker",
 				Credential: core.AttachmentCredentialSpec{Mode: "existing", Attach: "database-owner"},
@@ -217,8 +226,17 @@ func TestEnvironmentBlueprintAttachPreparationUsesRetainedCredentialOwner(t *tes
 	defer prepared.clear()
 	if len(prepared.publication.Intent.Candidates) != 1 ||
 		prepared.publication.Intent.Candidates[0].CredentialAttachID != ownerID ||
-		len(prepared.effective) != 2 || prepared.effective[1].Record.ID != candidateID {
+		len(prepared.effective) != 2 || prepared.effective[1].Record.ID != candidateID ||
+		prepared.effective[0].Revision != 31 || prepared.effective[0].Record.ID != ownerID {
 		t.Fatalf("retained credential owner preparation = %#v / %#v", prepared.publication.Intent, prepared.effective)
+	}
+	joins, err := resolveAttachNetworkJoins(environmentID, etcd.EnvironmentComposeProjection{
+		EnvironmentID: environmentID, DesiredServices: []etcd.EnvironmentServiceProjection{
+			{Desired: core.Service{ID: consumerID, Name: "worker"}},
+		},
+	}, prepared.effective, "")
+	if err != nil || len(joins) != 1 || joins[0].NetworkID != backingNetworkID {
+		t.Fatalf("cumulative retained Attach network union: %v, %v", joins, err)
 	}
 }
 
@@ -306,8 +324,18 @@ func TestEnvironmentBlueprintAttachPreparationUsesRetainedGrantTarget(t *testing
 			},
 		},
 		[]etcd.EnvironmentBlueprintServiceChange{
-			{Record: etcd.ServiceRecord{EnvironmentID: environmentID, Desired: core.Service{ID: apiServiceID, Name: "api"}}},
-			{Record: etcd.ServiceRecord{EnvironmentID: environmentID, Desired: core.Service{ID: grantServiceID, Name: "reporting-service"}}},
+			{
+				Record: etcd.ServiceRecord{
+					EnvironmentID: environmentID,
+					Desired:       core.Service{ID: apiServiceID, Name: "api"},
+				},
+			},
+			{
+				Record: etcd.ServiceRecord{
+					EnvironmentID: environmentID,
+					Desired:       core.Service{ID: grantServiceID, Name: "reporting-service"},
+				},
+			},
 		},
 		[]etcd.Versioned[etcd.AttachRecord]{{Record: grant, Revision: 31, ReadRevision: 41}},
 		func(ids.Kind, string) string { return candidateID },
@@ -322,7 +350,11 @@ func TestEnvironmentBlueprintAttachPreparationUsesRetainedGrantTarget(t *testing
 		len(prepared.publication.Intent.Candidates[0].GrantAttachIDs) != 1 ||
 		prepared.publication.Intent.Candidates[0].GrantAttachIDs[0] != grantID ||
 		factRepository.factReads != 1 {
-		t.Fatalf("retained grant preparation = %#v, fact reads = %d", prepared.publication.Intent, factRepository.factReads)
+		t.Fatalf(
+			"retained grant preparation = %#v, fact reads = %d",
+			prepared.publication.Intent,
+			factRepository.factReads,
+		)
 	}
 }
 
@@ -429,7 +461,8 @@ func TestEnvironmentBlueprintBackupAuthoringUsesLabelsAndHidesDeletedDisabledCon
 		RootPath: "compose.yaml", ComposeSources: []string{"compose.yaml"},
 		Files: []core.BlueprintFile{{Path: "compose.yaml", Content: document}},
 	})
-	if err != nil || parsed.Extensions.Backup == nil || parsed.Extensions.Backup.Keep != 4 || len(parsed.Extensions.Backup.Sources) != 2 {
+	if err != nil || parsed.Extensions.Backup == nil || parsed.Extensions.Backup.Keep != 4 ||
+		len(parsed.Extensions.Backup.Sources) != 2 {
 		t.Fatalf("canonical disabled Backup reparse = %#v, %v", parsed.Extensions.Backup, err)
 	}
 	stub.snapshot.policy.Enabled = true

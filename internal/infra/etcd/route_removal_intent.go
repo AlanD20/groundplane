@@ -32,8 +32,20 @@ type RouteRemovalTaskPreparation struct {
 	Task   TaskRecord
 }
 
-func NewRouteRemovalIntent(taskID, environmentID, routeID string, routeRevision int64, projection *Versioned[EnvironmentComposeProjection], createdAt time.Time) (RouteRemovalIntent, error) {
-	intent := RouteRemovalIntent{TaskID: taskID, EnvironmentID: environmentID, RouteID: routeID, RouteRevision: routeRevision, Status: TaskStatusPending, CreatedAt: createdAt}
+func NewRouteRemovalIntent(
+	taskID, environmentID, routeID string,
+	routeRevision int64,
+	projection *Versioned[EnvironmentComposeProjection],
+	createdAt time.Time,
+) (RouteRemovalIntent, error) {
+	intent := RouteRemovalIntent{
+		TaskID:        taskID,
+		EnvironmentID: environmentID,
+		RouteID:       routeID,
+		RouteRevision: routeRevision,
+		Status:        TaskStatusPending,
+		CreatedAt:     createdAt,
+	}
 	if projection != nil {
 		candidate, changed, err := removeEnvironmentDesiredRoute(projection.Record, routeID)
 		if err != nil {
@@ -55,12 +67,18 @@ func NewRouteRemovalIntent(taskID, environmentID, routeID string, routeRevision 
 
 func routeRemovalIntentKey(taskID string) string { return routeRemovalIntentPrefix + taskID }
 
-func (repository *HierarchyRepository) GetRouteRemovalIntent(ctx context.Context, taskID string) (Versioned[RouteRemovalIntent], bool, error) {
+func (repository *HierarchyRepository) GetRouteRemovalIntent(
+	ctx context.Context,
+	taskID string,
+) (Versioned[RouteRemovalIntent], bool, error) {
 	if err := validateContext(ctx); err != nil {
 		return Versioned[RouteRemovalIntent]{}, false, err
 	}
 	if validateStableID(ids.KindTask, taskID) != nil {
-		return Versioned[RouteRemovalIntent]{}, false, errs.New(errs.KindValidationFailed, "Route removal intent Task id is invalid")
+		return Versioned[RouteRemovalIntent]{}, false, errs.New(
+			errs.KindValidationFailed,
+			"Route removal intent Task id is invalid",
+		)
 	}
 	result, err := repository.store.Get(ctx, routeRemovalIntentKey(taskID))
 	if err != nil {
@@ -76,10 +94,18 @@ func (repository *HierarchyRepository) GetRouteRemovalIntent(ctx context.Context
 	if err != nil || intent.TaskID != taskID {
 		return Versioned[RouteRemovalIntent]{}, false, corruptRouteRemovalIntent()
 	}
-	return Versioned[RouteRemovalIntent]{Record: intent, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision}, true, nil
+	return Versioned[RouteRemovalIntent]{
+		Record:       intent,
+		Revision:     result.Entry.ModRevision,
+		ReadRevision: result.ReadRevision,
+	}, true, nil
 }
 
-func terminalRouteRemovalIntent(intent RouteRemovalIntent, status TaskStatus, terminalAt time.Time) (RouteRemovalIntent, error) {
+func terminalRouteRemovalIntent(
+	intent RouteRemovalIntent,
+	status TaskStatus,
+	terminalAt time.Time,
+) (RouteRemovalIntent, error) {
 	if intent.Status != TaskStatusPending || !isTerminalTaskStatus(status) {
 		return RouteRemovalIntent{}, errs.New(errs.KindStateConflict, "Route removal intent is not pending")
 	}
@@ -111,7 +137,10 @@ func decodeRouteRemovalIntent(value []byte) (RouteRemovalIntent, error) {
 }
 
 func validateRouteRemovalIntent(intent RouteRemovalIntent) error {
-	if validateStableID(ids.KindTask, intent.TaskID) != nil || validateStableID(ids.KindEnvironment, intent.EnvironmentID) != nil || validateStableID(ids.KindRoute, intent.RouteID) != nil || intent.RouteRevision <= 0 {
+	if validateStableID(ids.KindTask, intent.TaskID) != nil ||
+		validateStableID(ids.KindEnvironment, intent.EnvironmentID) != nil ||
+		validateStableID(ids.KindRoute, intent.RouteID) != nil ||
+		intent.RouteRevision <= 0 {
 		return errs.New(errs.KindValidationFailed, "Route removal intent identity is invalid")
 	}
 	if err := validateTimestamp("Route removal intent created_at", intent.CreatedAt); err != nil {
@@ -127,7 +156,9 @@ func validateRouteRemovalIntent(intent RouteRemovalIntent) error {
 		return err
 	}
 	if intent.CurrentProjection == nil || intent.CandidateProjection == nil {
-		if intent.CurrentProjection != nil || intent.CandidateProjection != nil || intent.CurrentProjectionRevision != 0 || intent.Provider != nil {
+		if intent.CurrentProjection != nil || intent.CandidateProjection != nil ||
+			intent.CurrentProjectionRevision != 0 ||
+			intent.Provider != nil {
 			return errs.New(errs.KindValidationFailed, "Route removal intent projection state is incomplete")
 		}
 		return nil
@@ -195,7 +226,9 @@ func removeEnvironmentDesiredRoute(
 func validateRouteRemovalDesiredProjection(projection EnvironmentComposeProjection) error {
 	if validateStableID(ids.KindEnvironment, projection.EnvironmentID) != nil ||
 		validateStableID(ids.KindTask, projection.RevisionID) != nil || projection.RenderGeneration == 0 ||
-		len(projection.ComposeArtifact) == 0 || validateEnvironmentNormalizedCompose(projection.NormalizedCompose) != nil {
+		len(
+			projection.ComposeArtifact,
+		) == 0 || validateEnvironmentNormalizedCompose(projection.NormalizedCompose) != nil {
 		return errs.New(errs.KindValidationFailed, "Route removal desired projection is invalid")
 	}
 	previousMatch := ""

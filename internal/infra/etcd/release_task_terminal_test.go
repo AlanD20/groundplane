@@ -49,7 +49,9 @@ func TestReleaseTerminalizationBatchesMaximumGroupBelowTransactionCeiling(t *tes
 			ID: releaseID, EnvironmentID: environmentID, ServiceID: serviceID,
 			OperationID: operationID, OperationKind: domain.OperationDeploy,
 			GroupOperationID: operationID, GroupMemberOrdinal: ordinal,
-			Image: "docker.io/library/nginx:1", Tag: "1", Strategy: domain.StrategyBlueGreen, Slot: domain.SlotBlue,
+			CandidateWorkload: releaseTestWorkloadSeal(
+				"docker.io/library/nginx:1",
+			), Tag: "1", Strategy: domain.StrategyBlueGreen, Slot: domain.SlotBlue,
 			OnFailure: domain.OnFailureLeaveActive, RenderInputID: artifactID, RenderInputDigest: renderDigest,
 			CreatedAt: now, Actor: "operator", OriginatingTaskID: taskID,
 			Workspace: domain.Workspace{
@@ -68,9 +70,14 @@ func TestReleaseTerminalizationBatchesMaximumGroupBelowTransactionCeiling(t *tes
 		if err != nil {
 			t.Fatal(err)
 		}
-		mutations = append(mutations,
+		mutations = append(
+			mutations,
 			Mutation{Type: MutationPut, Key: releaseIntentStagingKey(publicationID, releaseID), Value: intentValue},
-			Mutation{Type: MutationPut, Key: releaseCheckpointStagingKey(publicationID, releaseID), Value: checkpointValue},
+			Mutation{
+				Type:  MutationPut,
+				Key:   releaseCheckpointStagingKey(publicationID, releaseID),
+				Value: checkpointValue,
+			},
 		)
 		for step := range 5 {
 			steps[index*5+step] = TaskStepRecord{Kind: TaskStepOperation, ID: ids.New(ids.KindStep)}
@@ -132,7 +139,12 @@ func TestReleaseTerminalizationBatchesMaximumGroupBelowTransactionCeiling(t *tes
 	}
 	task := TaskRecord{
 		ID: taskID, OperationID: operationID,
-		Owner:    TaskOwner{WorkspaceType: TaskWorkspaceTenant, TenantID: tenantID, ProjectID: projectID, EnvironmentID: environmentID},
+		Owner: TaskOwner{
+			WorkspaceType: TaskWorkspaceTenant,
+			TenantID:      tenantID,
+			ProjectID:     projectID,
+			EnvironmentID: environmentID,
+		},
 		Executor: TaskExecutorAgent, PlanID: planID, RenderGeneration: 1,
 		Type: TaskDeploy, Target: groupID, Params: map[string]string{TaskReleasePublicationParam: publicationID}, Steps: steps,
 	}
@@ -144,9 +156,18 @@ func TestReleaseTerminalizationBatchesMaximumGroupBelowTransactionCeiling(t *tes
 			t.Fatal(readErr)
 		}
 		processed, finalizeErr := repository.finalizeReleaseTaskBatch(
-			ctx, task, assignment, TaskStatusCompleted,
-			TaskResultRecord{Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone, ProxyEvidence: proxyEvidence},
-			agentID, now.Add(time.Minute), read.ReadRevision,
+			ctx,
+			task,
+			assignment,
+			TaskStatusCompleted,
+			TaskResultRecord{
+				Kind:          TaskResultCompose,
+				Diagnostic:    TaskResultDiagnosticNone,
+				ProxyEvidence: proxyEvidence,
+			},
+			agentID,
+			now.Add(time.Minute),
+			read.ReadRevision,
 		)
 		if finalizeErr != nil {
 			t.Fatalf("finalizeReleaseTaskBatch(%d) error = %v", transaction, finalizeErr)
@@ -168,7 +189,8 @@ func TestReleaseTerminalizationBatchesMaximumGroupBelowTransactionCeiling(t *tes
 		t.Fatalf("closed release operation = %#v, %v", closed, err)
 	}
 	closedHead, err := decodeReleaseRecord[ReleaseOperationHead](closed.Values[0].Value, "release-operation")
-	if err != nil || closedHead.State != domain.StateCompleted || closedHead.Progress == nil || len(closedHead.Progress.Results) != domain.MaximumGroupMembers {
+	if err != nil || closedHead.State != domain.StateCompleted || closedHead.Progress == nil ||
+		len(closedHead.Progress.Results) != domain.MaximumGroupMembers {
 		t.Fatalf("closed Release head = %#v, %v", closedHead, err)
 	}
 }

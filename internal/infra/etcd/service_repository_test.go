@@ -66,7 +66,10 @@ func TestServiceRepositoryScopesLookupsToDesiredProjection(t *testing.T) {
 	if err != nil || byName.Record.Desired.ID != desired.ID {
 		t.Fatalf("GetServiceByName(api) = %#v, %v", byName, err)
 	}
-	if _, err := repository.GetServiceByName(ctx, environment.Record.ID, "missing"); !isKind(err, errs.KindServiceNotFound) {
+	if _, err := repository.GetServiceByName(ctx, environment.Record.ID, "missing"); !isKind(
+		err,
+		errs.KindServiceNotFound,
+	) {
 		t.Fatalf("GetServiceByName(missing) error = %v", err)
 	}
 	otherID := ids.NewAt(ids.KindService, serviceRecordTestTime(), 821)
@@ -89,7 +92,7 @@ func TestServiceRepositoryHidesComponentGeneratedServicesFromOrdinaryReads(t *te
 		Owner: core.ComponentOwnerEnvironment, OwnerID: environment.Record.ID,
 		Kind: core.ComponentKindIngressCaddy, Enabled: true,
 		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-			ZoneID: ids.NewAt(ids.KindNetwork, serviceRecordTestTime(), 834),
+			ZoneIDs: []string{ids.NewAt(ids.KindNetwork, serviceRecordTestTime(), 834)},
 		}},
 		GeneratedServices: []string{generatedRouter.ID}, PinnedIPv4: "10.34.0.2",
 	})
@@ -131,7 +134,12 @@ func TestServiceRepositoryHidesComponentGeneratedServicesFromOrdinaryReads(t *te
 	); !isKind(err, errs.KindServiceNotFound) {
 		t.Fatalf("GetServiceByName(generated) error = %v", err)
 	}
-	revision, err := repository.GetServiceRevision(ctx, environment.Record.ID, projection.RevisionID, generatedRouter.ID)
+	revision, err := repository.GetServiceRevision(
+		ctx,
+		environment.Record.ID,
+		projection.RevisionID,
+		generatedRouter.ID,
+	)
 	if err != nil || revision.Record.Desired.ID != generatedRouter.ID {
 		t.Fatalf("GetServiceRevision(generated) = %#v, %v", revision, err)
 	}
@@ -256,7 +264,11 @@ func seedServiceRepositoryTestDesiredProjection(
 	}
 	defer clear(headValue)
 	mutations := []Mutation{
-		{Type: MutationPut, Key: environmentBlueprintRootKey(projection.EnvironmentID, projection.RevisionID), Value: rootValue},
+		{
+			Type:  MutationPut,
+			Key:   environmentBlueprintRootKey(projection.EnvironmentID, projection.RevisionID),
+			Value: rootValue,
+		},
 		{Type: MutationPut, Key: environmentBlueprintHeadKey(projection.EnvironmentID), Value: headValue},
 	}
 	for index := uint32(0); index < streams.Descriptor.ProjectionChunks; index++ {

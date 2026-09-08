@@ -20,10 +20,18 @@ func (c *Client) CreateBackingService(
 	}
 	body := generated.BackingServiceCreate{
 		Slug: input.Slug, Name: input.Name, Adapter: input.Adapter, NetworkPool: input.NetworkPool,
-		Zone: generated.BackingServiceZoneCreate{Name: input.Zone.Name, Subnet: input.Zone.Subnet, Internal: input.Zone.Internal},
+		Zone: generated.BackingServiceZoneCreate{
+			Name:     input.Zone.Name,
+			Subnet:   input.Zone.Subnet,
+			Internal: input.Zone.Internal,
+		},
 	}
 	if input.Description != "" {
 		body.Description = &input.Description
+	}
+	if input.Authentication != "" {
+		authentication := generated.BackingServiceCreateAuthentication(input.Authentication)
+		body.Authentication = &authentication
 	}
 	path := "/api/v1/backing-services"
 	response, err := client.BackingServiceCreateWithResponse(
@@ -189,8 +197,13 @@ func (c *Client) DestroyBackingService(ctx context.Context, projectID string) (a
 }
 
 func backingServiceFromGenerated(item generated.BackingService) apiTypes.BackingService {
+	authentication := ""
+	if item.Authentication != nil {
+		authentication = *item.Authentication
+	}
 	return apiTypes.BackingService{
-		ProjectID: item.ProjectId, EnvironmentID: item.EnvironmentId, ServiceID: item.ServiceId,
+		Authentication: authentication,
+		ProjectID:      item.ProjectId, EnvironmentID: item.EnvironmentId, ServiceID: item.ServiceId,
 		BackingNetworkID: item.BackingNetworkId,
 	}
 }

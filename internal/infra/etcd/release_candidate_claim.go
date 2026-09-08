@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"slices"
 	"sort"
 	"time"
 
@@ -29,6 +30,9 @@ func validateReleaseCandidateDescriptor(
 		len(procedure.GetMembers()) != len(manifest.Members) {
 		return nil, corruptReleaseRecord()
 	}
+	if !slices.Equal(descriptor.ComponentActionStepIDs, task.ComponentActionStepIDs) {
+		return nil, corruptReleaseRecord()
+	}
 	manifestMembers := make(map[string]string, len(manifest.Members))
 	for _, member := range manifest.Members {
 		manifestMembers[member.ServiceID] = member.ReleaseID
@@ -36,6 +40,11 @@ func validateReleaseCandidateDescriptor(
 	taskSteps := make(map[string]struct{}, len(task.Steps))
 	for _, step := range task.Steps {
 		taskSteps[step.ID] = struct{}{}
+	}
+	for _, id := range descriptor.ComponentActionStepIDs {
+		if _, exists := taskSteps[id]; !exists {
+			return nil, corruptReleaseRecord()
+		}
 	}
 	for _, member := range procedure.GetMembers() {
 		if manifestMembers[member.GetServiceId()] != member.GetCandidateReleaseId() {
@@ -102,7 +111,11 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 	}
 	candidates := make([]ReleaseRestorationCandidate, len(manifest.Members))
 	for index, member := range manifest.Members {
-		candidates[index] = ReleaseRestorationCandidate{ServiceID: member.ServiceID, ReleaseID: member.ReleaseID}
+		candidates[index] = ReleaseRestorationCandidate{
+			ServiceID: member.ServiceID,
+			ReleaseID: member.ReleaseID,
+			Target:    target,
+		}
 	}
 	sort.Slice(candidates, func(left, right int) bool {
 		if candidates[left].ServiceID == candidates[right].ServiceID {
@@ -111,7 +124,7 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 		return candidates[left].ServiceID < candidates[right].ServiceID
 	})
 	authority := ReleaseRestorationAuthority{
-		Schema: 1, Target: target, TaskID: task.ID, OperationID: task.OperationID, PlanHash: task.PlanHash,
+		Schema: 1, TaskID: task.ID, OperationID: task.OperationID, PlanHash: task.PlanHash,
 		EnvironmentID: task.Owner.EnvironmentID, CandidateArtifactID: artifactID, Candidates: candidates,
 	}
 	projectionRevision := int64(0)
@@ -123,11 +136,12 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 			return ReleaseRestorationAuthority{}, "", nil, corruptReleaseRecord()
 		}
 		projection, decodeErr := decodeEnvironmentComposeProjection(read.Values[2].Value)
-		if decodeErr != nil || projection.EnvironmentID != task.Owner.EnvironmentID || len(projection.ComposeArtifact) == 0 {
+		if decodeErr != nil || projection.EnvironmentID != task.Owner.EnvironmentID ||
+			len(projection.ComposeArtifact) == 0 {
 			return ReleaseRestorationAuthority{}, "", nil, corruptReleaseRecord()
 		}
 		digest := sha256.Sum256(projection.ComposeArtifact)
-		authority.ServingPredecessor = &ReleaseServingPredecessorAuthority{
+		authority.AppliedPredecessor = &ReleaseAppliedPredecessorAuthority{
 			KeyRevision: projectionRevision, RevisionID: projection.RevisionID,
 			RenderGeneration: projection.RenderGeneration, ComposeArtifactSHA256: hex.EncodeToString(digest[:]),
 			ComposeArtifact: append([]byte(nil), projection.ComposeArtifact...),
@@ -189,21 +203,35 @@ func (repository *TaskRepository) prepareBlueprintRestorationAuthority(
 		read.Values[2], task.Owner.EnvironmentID, task.RenderGeneration,
 	)
 	if observedErr != nil || observed != *writer.BlueprintAppliedPredecessor {
-		return ReleaseRestorationAuthority{}, "", nil, errs.New(errs.KindStateConflict, "Blueprint applied predecessor changed during claim")
+		return ReleaseRestorationAuthority{}, "", nil, errs.New(
+			errs.KindStateConflict,
+			"Blueprint applied predecessor changed during claim",
+		)
 	}
 	var composeArtifact []byte
 	if observed.Present {
 		projection, decodeErr := decodeEnvironmentComposeProjection(read.Values[2].Value)
-		if decodeErr != nil || projection.RevisionID != observed.RevisionID || projection.RenderGeneration != observed.RenderGeneration {
-			return ReleaseRestorationAuthority{}, "", nil, errs.New(errs.KindStateConflict, "Blueprint applied predecessor artifact changed during claim")
+		if decodeErr != nil || projection.RevisionID != observed.RevisionID ||
+			projection.RenderGeneration != observed.RenderGeneration {
+			return ReleaseRestorationAuthority{}, "", nil, errs.New(
+				errs.KindStateConflict,
+				"Blueprint applied predecessor artifact changed during claim",
+			)
 		}
 		composeArtifact = projection.ComposeArtifact
 	}
-	if err := validateSelectedRestorationTarget(procedure, observed.Present); err != nil {
+	authority, digest, err := buildBlueprintNativeRestorationAuthority(
+		task,
+		observed,
+		marker,
+		manifest,
+		procedure,
+		composeArtifact,
+	)
+	if err != nil {
 		return ReleaseRestorationAuthority{}, "", nil, err
 	}
-	authority, digest, err := buildBlueprintRestorationAuthority(task, observed, manifest, composeArtifact)
-	if err != nil {
+	if err := validateSelectedRestorationTargets(procedure, authority.Candidates); err != nil {
 		return ReleaseRestorationAuthority{}, "", nil, err
 	}
 	projectionRevision := int64(0)
@@ -218,10 +246,20 @@ func (repository *TaskRepository) prepareBlueprintRestorationAuthority(
 	return authority, digest, conditions, nil
 }
 
-func validateSelectedRestorationTarget(procedure *agentpb.CandidateReleaseProcedure, predecessorPresent bool) error {
-	for _, member := range procedure.GetMembers() {
-		if predecessorPresent && member.GetServingPredecessor() == nil ||
-			!predecessorPresent && member.GetCandidateAbsence() == nil {
+func validateSelectedRestorationTargets(
+	procedure *agentpb.CandidateReleaseProcedure,
+	candidates []ReleaseRestorationCandidate,
+) error {
+	if len(candidates) != len(procedure.GetMembers()) {
+		return corruptTaskAssignment()
+	}
+	for index, member := range procedure.GetMembers() {
+		candidate := candidates[index]
+		if candidate.ServiceID != member.GetServiceId() || candidate.ReleaseID != member.GetCandidateReleaseId() ||
+			candidate.Target == ReleaseRestorationServingPredecessor && member.GetServingPredecessor() == nil ||
+			candidate.Target == ReleaseRestorationCandidateAbsence && member.GetCandidateAbsence() == nil ||
+			candidate.Target != ReleaseRestorationServingPredecessor &&
+				candidate.Target != ReleaseRestorationCandidateAbsence {
 			return corruptTaskAssignment()
 		}
 	}
@@ -245,7 +283,18 @@ func validateReleaseCandidateMarker(
 	if err != nil || digest != manifest.Digest {
 		return nil, corruptReleaseRecord()
 	}
-	return validateReleaseCandidateDescriptor(marker.CandidateReleaseDescriptor, task, manifest)
+	procedure, err := validateReleaseCandidateDescriptor(marker.CandidateReleaseDescriptor, task, manifest)
+	if err != nil {
+		return nil, err
+	}
+	if task.Type == TaskUpdate {
+		if err := validateBlueprintNativePredecessors(marker.NativePredecessors, procedure, task.Owner.EnvironmentID); err != nil {
+			return nil, err
+		}
+	} else if len(marker.NativePredecessors) != 0 {
+		return nil, corruptReleaseRecord()
+	}
+	return procedure, nil
 }
 
 func (repository *TaskRepository) candidateReleaseDescriptorAtRevision(
@@ -260,7 +309,8 @@ func (repository *TaskRepository) candidateReleaseDescriptorAtRevision(
 	if err != nil {
 		return executionplan.CandidateReleaseDescriptor{}, nil, err
 	}
-	if read == nil || read.ReadRevision != revision || len(read.Values) != 2 || read.Values[0] == nil || read.Values[1] == nil {
+	if read == nil || read.ReadRevision != revision || len(read.Values) != 2 || read.Values[0] == nil ||
+		read.Values[1] == nil {
 		return executionplan.CandidateReleaseDescriptor{}, nil, corruptReleaseRecord()
 	}
 	marker, markerErr := decodeReleaseRecord[ReleasePublicationMarker](read.Values[0].Value, "release-publication")
@@ -297,8 +347,7 @@ func validateAssignmentRestorationDescriptor(
 		len(authority.Candidates) != len(procedure.GetMembers()) {
 		return corruptTaskAssignment()
 	}
-	wantPresent := authority.Target == ReleaseRestorationServingPredecessor
-	if err := validateSelectedRestorationTarget(procedure, wantPresent); err != nil {
+	if err := validateSelectedRestorationTargets(procedure, authority.Candidates); err != nil {
 		return err
 	}
 	for index, member := range procedure.GetMembers() {
@@ -307,6 +356,13 @@ func validateAssignmentRestorationDescriptor(
 			authority.CandidateArtifactID != member.GetCandidateArtifactId() {
 			return corruptTaskAssignment()
 		}
+	}
+	if taskHasBlueprintCandidateAppliedAuthority(task) {
+		if err := validateNativeRestorationDescriptor(*authority, procedure); err != nil {
+			return err
+		}
+	} else if len(authority.NativePredecessors) != 0 {
+		return corruptTaskAssignment()
 	}
 	digest, err := releaseRestorationAuthoritySHA256(*authority)
 	if err != nil || digest != assignment.RestorationAuthoritySHA256 {

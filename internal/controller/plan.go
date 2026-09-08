@@ -13,7 +13,6 @@ import (
 	"context"
 	"math"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
@@ -61,6 +60,8 @@ type PlanBuildInput struct {
 	ComponentLifecycleMode       agentpb.ComponentLifecycleMode
 	ComponentRollbackObservation *agentpb.ComponentApply
 	CandidateReleaseProcedure    *agentpb.CandidateReleaseProcedure
+	ManagedComponentProcedure    *agentpb.ManagedComponentProcedure
+	ServiceLifecycleProcedure    *agentpb.ServiceLifecycleProcedure
 }
 
 // BuildPlan owns schema selection, defensive copying, deterministic hashing,
@@ -78,6 +79,8 @@ func BuildPlan(input PlanBuildInput) (*ExecutionPlan, error) {
 		ComponentLifecycleMode:       input.ComponentLifecycleMode,
 		ComponentRollbackObservation: input.ComponentRollbackObservation,
 		CandidateReleaseProcedure:    input.CandidateReleaseProcedure,
+		ManagedComponentProcedure:    input.ManagedComponentProcedure,
+		ServiceLifecycleProcedure:    input.ServiceLifecycleProcedure,
 	})
 	if err != nil {
 		return nil, err
@@ -88,20 +91,20 @@ func BuildPlan(input PlanBuildInput) (*ExecutionPlan, error) {
 	return plan, nil
 }
 
-// TaskPlanResolver rebuilds ephemeral plans exclusively from closed durable
-// Task inputs and daemon-owned path policy. Rendered plans are never stored.
+// TaskPlanResolver rebuilds plans from closed durable Task inputs and daemon-owned policy; plans are never stored.
 type TaskPlanResolver struct {
-	volumeRoot       string
-	blueprints       blueprintPlanStateReader
-	attaches         attachPlanRecordReader
-	services         attachPlanServiceReader
-	attachIdentities attachPlanIdentityResolver
-	componentCatalog []EnvironmentComponentRegistration
-	routeState       routeProviderStateReader
-	releases         *etcd.ReleaseLedger
-	backupRuns       backupRunPlanReader
-	componentPlans   ComponentTaskPlanResolver
-	scriptPlans      ScriptExecutionPlanReader
+	volumeRoot        string
+	blueprints        blueprintPlanStateReader
+	attaches          attachPlanRecordReader
+	services          attachPlanServiceReader
+	attachIdentities  attachPlanIdentityResolver
+	componentCatalog  []EnvironmentComponentRegistration
+	serviceProxyImage *etcd.ReleaseProxyImage
+	routeState        routeProviderStateReader
+	releases          *etcd.ReleaseLedger
+	backupRuns        backupRunPlanReader
+	componentPlans    ComponentTaskPlanResolver
+	scriptPlans       ScriptExecutionPlanReader
 }
 
 func (resolver *TaskPlanResolver) EnableRoutePlans(state routeProviderStateReader) error {
@@ -176,7 +179,7 @@ func NewTaskPlanResolverWithBlueprints(
 	return resolver, nil
 }
 
-func (resolver *TaskPlanResolver) ResolveExecutionPlan(
+func (resolver *TaskPlanResolver) resolveExecutionPlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
@@ -364,27 +367,23 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 			return nil, err
 		}
 	}
-	releaseHookCount, releaseProcedureStepCount := 0, 0
-	if hasBlueprintReleases {
-		var hookErr error
-		releaseHookCount, hookErr = blueprintReleaseHookCount(blueprintReleases.Members)
-		if hookErr != nil {
-			return nil, hookErr
-		}
-		var valid bool
-		releaseProcedureStepCount, valid = taskcontract.BlueprintReleaseProcedureStepCount(
-			len(blueprintReleases.Members),
-			releaseHookCount,
-		)
-		if !valid {
-			return nil, errs.New(errs.KindInternal, "durable Blueprint Release procedure shape is invalid")
-		}
+	releaseHookCount, releaseProcedureStepCount, err := blueprintReleaseProcedureCounts(
+		blueprintReleases.Members,
+		hasBlueprintReleases,
+	)
+	if err != nil {
+		return nil, err
 	}
 	managedVolumeIDs, volumeIntentDigest, err := blueprintManagedVolumeProcedure(task.Params)
 	if err != nil {
 		return nil, err
 	}
 	expectedParams := 4
+	resourceStepIDs, resourceParams, err := blueprintReleaseResourceStepIDs(task)
+	if err != nil {
+		return nil, err
+	}
+	expectedParams += resourceParams
 	_, hasRequirementGate := task.Params[etcd.TaskBlueprintRequirementGateSHA256Param]
 	if hasRequirementGate {
 		expectedParams++
@@ -417,6 +416,13 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if err != nil {
 		return nil, err
 	}
+	if hasBlueprintReleases && len(resourceStepIDs) != len(pinned.artifact.Networks)+len(pinned.artifact.Volumes) ||
+		!hasBlueprintReleases && len(resourceStepIDs) != 0 {
+		return nil, errs.New(
+			errs.KindInternal,
+			"durable Blueprint resource preparation count differs from its owned resources",
+		)
+	}
 	if hasRequirementGate != (len(pinned.requirements.Resolved) != 0) {
 		return nil, errs.New(errs.KindInternal, "durable Blueprint requirement marker is inconsistent")
 	}
@@ -434,7 +440,29 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if err != nil {
 		return nil, err
 	}
+	var managedServiceSteps []*agentpb.ExecutionStep
+	managedTeardown := BlueprintManagedComponentTeardown{Artifacts: []*agentpb.ComposeArtifact{pinned.artifact}}
+	if procedure != taskcontract.BlueprintComposeProcedureFullReconcile {
+		managedTeardown, err = resolver.BlueprintManagedComponentTeardown(
+			ctx,
+			task,
+			pinned.projection,
+			pinned.artifact,
+			"",
+			hasBlueprintReleases,
+		)
+		if err != nil {
+			return nil, err
+		}
+		managedServiceSteps, err = BlueprintManagedServiceSteps(task, pinned.artifact, "", hasBlueprintReleases)
+		if err != nil {
+			return nil, err
+		}
+	}
 	expectedSteps := len(task.Materializations)
+	expectedSteps += len(managedTeardown.Steps)
+	expectedSteps += len(managedServiceSteps)
+	expectedSteps += len(resourceStepIDs)
 	if hasBlueprintReleases {
 		expectedSteps += releaseProcedureStepCount
 	} else if procedure == taskcontract.BlueprintComposeProcedureFullReconcile {
@@ -514,15 +542,19 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	steps = append(steps, attachSteps...)
 	stepIndex = nextStepIndex
 	if hasBlueprintReleases {
-		applyStepIDs, healthStepIDs, recoveryProbeStepIDs, recoveryCompensateStepIDs, postStepIDs, releaseEnd, stepErr := blueprintReleaseProcedureStepIDs(
+		releaseInput, releaseEnd, stepErr := blueprintReleaseProcedureStepIDs(
 			task,
-			blueprintReleases.Members,
+			blueprintReleases,
 			stepIndex,
 		)
 		if stepErr != nil {
 			return nil, stepErr
 		}
 		componentSteps := []*agentpb.ExecutionStep(nil)
+		if err := blueprintManagedStepsMatch(task, releaseEnd, managedServiceSteps); err != nil {
+			return nil, err
+		}
+		releaseEnd += len(managedServiceSteps)
 		if hasManagedConfigApply {
 			managedConfigStep, stepErr := managedConfigApply.ExecutionStep(
 				task.Steps[releaseEnd].ID,
@@ -537,13 +569,43 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		if releaseEnd != len(task.Steps) {
 			return nil, errs.New(errs.KindInternal, "durable Blueprint Release step order is invalid")
 		}
-		_, plan, prepareErr := resolver.PrepareBlueprintReleaseTask(ctx, task, BlueprintReleasePlanInput{
-			Members: blueprintReleases.Members, PrefixSteps: steps, ComponentSteps: componentSteps,
-			ApplyStepIDs: applyStepIDs, HealthStepIDs: healthStepIDs,
-			RecoveryProbeStepIDs: recoveryProbeStepIDs, RecoveryCompensateStepIDs: recoveryCompensateStepIDs,
-			PostStepIDs: postStepIDs,
-		})
+		releaseInput.PrefixSteps, releaseInput.ComponentSteps = steps, componentSteps
+		_, plan, prepareErr := resolver.PrepareBlueprintReleaseTask(ctx, task, releaseInput)
 		return plan, prepareErr
+	}
+	if procedure != taskcontract.BlueprintComposeProcedureFullReconcile {
+		prerequisite := ""
+		if len(steps) != 0 {
+			prerequisite = steps[len(steps)-1].StepId
+		}
+		managedTeardown, err = resolver.BlueprintManagedComponentTeardown(
+			ctx,
+			task,
+			pinned.projection,
+			pinned.artifact,
+			prerequisite,
+			false,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if err := blueprintManagedStepsMatch(task, stepIndex, managedTeardown.Steps); err != nil {
+			return nil, err
+		}
+		steps = append(steps, managedTeardown.Steps...)
+		stepIndex += len(managedTeardown.Steps)
+		if len(steps) != 0 {
+			prerequisite = steps[len(steps)-1].StepId
+		}
+		managedServiceSteps, err = BlueprintManagedServiceSteps(task, pinned.artifact, prerequisite, false)
+		if err != nil {
+			return nil, err
+		}
+		if err := blueprintManagedStepsMatch(task, stepIndex, managedServiceSteps); err != nil {
+			return nil, err
+		}
+		steps = append(steps, managedServiceSteps...)
+		stepIndex += len(managedServiceSteps)
 	}
 	if procedure == taskcontract.BlueprintComposeProcedureFullReconcile {
 		steps = append(steps, &agentpb.ExecutionStep{
@@ -588,69 +650,9 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
 		RenderGeneration: uint64(task.RenderGeneration),
 		Operation:        operation, TargetID: task.Target,
-		Artifacts: []*agentpb.ComposeArtifact{pinned.artifact}, Steps: steps,
+		Artifacts: managedTeardown.Artifacts, Steps: steps,
+		ManagedComponentProcedure: managedTeardown.Procedure,
 	})
-}
-
-func blueprintReleaseHookCount(members []etcd.ReleaseTaskRenderMember) (int, error) {
-	total := 0
-	for _, member := range members {
-		for _, hook := range member.Render.Hooks {
-			if hook.When != core.ScriptPostDeploy {
-				return 0, errs.New(errs.KindInternal, "durable Blueprint Release hook selection is invalid")
-			}
-			total++
-			if total > taskcontract.MaximumBlueprintPostDeployHooks {
-				return 0, errs.New(errs.KindInternal, "durable Blueprint Release hook count is invalid")
-			}
-		}
-	}
-	return total, nil
-}
-
-func blueprintReleaseProcedureStepIDs(
-	task etcd.TaskRecord,
-	members []etcd.ReleaseTaskRenderMember,
-	start int,
-) ([]string, []string, []string, []string, [][]string, int, error) {
-	hookCount, err := blueprintReleaseHookCount(members)
-	if err != nil {
-		return nil, nil, nil, nil, nil, 0, err
-	}
-	procedureStepCount := len(members)*4 + hookCount
-	if len(members) == 0 || hookCount < 0 || start < 0 || start > len(task.Steps) || procedureStepCount > len(task.Steps)-start {
-		return nil, nil, nil, nil, nil, 0, errs.New(errs.KindInternal, "durable Blueprint Release procedure steps are invalid")
-	}
-	applyStepIDs := make([]string, len(members))
-	healthStepIDs := make([]string, len(members))
-	recoveryProbeStepIDs := make([]string, len(members))
-	recoveryCompensateStepIDs := make([]string, len(members))
-	postStepIDs := make([][]string, len(members))
-	cursor := start
-	for memberIndex, member := range members {
-		applyStepIDs[memberIndex] = task.Steps[cursor].ID
-		cursor++
-		postStepIDs[memberIndex] = make([]string, len(member.Render.Hooks))
-		for hookIndex, hook := range member.Render.Hooks {
-			stepID := task.Steps[cursor].ID
-			if task.Params[etcd.ReleaseHookStepMemberParam(stepID)] != strconv.Itoa(memberIndex+1) ||
-				task.Params[etcd.ReleaseHookStepExecutionParam(stepID)] != hook.ScriptExecutionID {
-				return nil, nil, nil, nil, nil, 0, errs.New(
-					errs.KindInternal,
-					"durable Blueprint Release hook step authority is invalid",
-				)
-			}
-			postStepIDs[memberIndex][hookIndex] = stepID
-			cursor++
-		}
-		healthStepIDs[memberIndex] = task.Steps[cursor].ID
-		cursor++
-		recoveryProbeStepIDs[memberIndex] = task.Steps[cursor].ID
-		cursor++
-		recoveryCompensateStepIDs[memberIndex] = task.Steps[cursor].ID
-		cursor++
-	}
-	return applyStepIDs, healthStepIDs, recoveryProbeStepIDs, recoveryCompensateStepIDs, postStepIDs, cursor, nil
 }
 
 func blueprintManagedVolumeProcedure(params map[string]string) ([]string, []byte, error) {
@@ -759,6 +761,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentRemovalPlan(
 
 type pinnedEnvironmentBlueprintArtifact struct {
 	artifact     *agentpb.ComposeArtifact
+	projection   etcd.EnvironmentComposeProjection
 	components   []etcd.ComponentRecord
 	requirements core.BlueprintRequirements
 }
@@ -816,6 +819,7 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentBlueprintArtifact(
 	}
 	return pinnedEnvironmentBlueprintArtifact{
 		artifact:     proto.Clone(artifact).(*agentpb.ComposeArtifact),
+		projection:   projection.Record,
 		components:   projection.Record.Components,
 		requirements: projection.Record.BlueprintRequirements.Clone(),
 	}, nil
@@ -1039,7 +1043,10 @@ func ComposeIdentitySnapshotFromProjection(
 			return ComposeIdentitySnapshot{}, errs.New(errs.KindInternal, "desired Service render identity is invalid")
 		}
 		if _, duplicate := desiredServiceNames[service.ID]; duplicate {
-			return ComposeIdentitySnapshot{}, errs.New(errs.KindInternal, "desired Service render identity is duplicated")
+			return ComposeIdentitySnapshot{}, errs.New(
+				errs.KindInternal,
+				"desired Service render identity is duplicated",
+			)
 		}
 		if _, duplicate := desiredNames[service.Name]; duplicate {
 			return ComposeIdentitySnapshot{}, errs.New(errs.KindInternal, "desired Service render name is duplicated")
@@ -1056,7 +1063,10 @@ func ComposeIdentitySnapshotFromProjection(
 	if len(componentOwners) != 0 {
 		artifact := &agentpb.ComposeArtifact{}
 		if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(projection.ComposeArtifact, artifact); err != nil {
-			return ComposeIdentitySnapshot{}, errs.New(errs.KindInternal, "Component generated Service render metadata is corrupt")
+			return ComposeIdentitySnapshot{}, errs.New(
+				errs.KindInternal,
+				"Component generated Service render metadata is corrupt",
+			)
 		}
 		for _, service := range artifact.GetServices() {
 			componentID, generated := componentOwners[service.GetServiceId()]
@@ -1070,19 +1080,25 @@ func ComposeIdentitySnapshotFromProjection(
 				)
 			}
 			if service.GetComposeName() == "" || service.GetComposeName() != desiredName {
-				return ComposeIdentitySnapshot{}, errs.New(errs.KindInternal, "Component generated Service render name is missing")
+				return ComposeIdentitySnapshot{}, errs.New(
+					errs.KindInternal,
+					"Component generated Service render name is missing",
+				)
 			}
-			if _, duplicate := usedServiceIDs[service.GetServiceId()]; duplicate {
-				return ComposeIdentitySnapshot{}, errs.New(errs.KindInternal, "Component generated Service render identity is duplicated")
+			_, duplicateID := usedServiceIDs[service.GetServiceId()]
+			_, duplicateName := usedServiceNames[service.GetComposeName()]
+			if duplicateID || duplicateName {
+				return ComposeIdentitySnapshot{}, errs.New(
+					errs.KindInternal,
+					"Component generated Service render identity or name is duplicated",
+				)
 			}
-			if _, duplicate := usedServiceNames[service.GetComposeName()]; duplicate {
-				return ComposeIdentitySnapshot{}, errs.New(errs.KindInternal, "Component generated Service render name is duplicated")
+			identity, err := pinnedComponentServiceIdentity(service, componentID)
+			if err != nil {
+				return ComposeIdentitySnapshot{}, err
 			}
-			usedServiceIDs[service.GetServiceId()] = struct{}{}
-			usedServiceNames[service.GetComposeName()] = struct{}{}
-			services = append(services, ComposeResourceIdentity{
-				ID: service.GetServiceId(), Name: service.GetComposeName(), ComponentID: componentID,
-			})
+			usedServiceIDs[identity.ID], usedServiceNames[identity.Name] = struct{}{}, struct{}{}
+			services = append(services, identity)
 		}
 		for serviceID := range componentOwners {
 			if _, desired := desiredServiceNames[serviceID]; !desired {
@@ -1091,7 +1107,10 @@ func ComposeIdentitySnapshotFromProjection(
 				)
 			}
 			if _, found := usedServiceIDs[serviceID]; !found {
-				return ComposeIdentitySnapshot{}, errs.New(errs.KindInternal, "Component generated Service render metadata is missing")
+				return ComposeIdentitySnapshot{}, errs.New(
+					errs.KindInternal,
+					"Component generated Service render metadata is missing",
+				)
 			}
 		}
 	}

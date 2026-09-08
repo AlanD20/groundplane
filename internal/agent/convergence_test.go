@@ -85,7 +85,13 @@ func TestEvaluateComposeConvergenceDistinguishesReleaseRuntimes(t *testing.T) {
 		ProjectName: "groundplane-release",
 		Services: []*agentpb.ComposeService{
 			{ServiceId: "svc_api", ComposeName: "api", ExpectedReplicas: 1, ExpectedLabels: proxyLabels},
-			{ServiceId: "svc_api", ComposeName: "api--blue", ExpectedReplicas: 1, HasHealthcheck: true, ExpectedLabels: workloadLabels},
+			{
+				ServiceId:        "svc_api",
+				ComposeName:      "api--blue",
+				ExpectedReplicas: 1,
+				HasHealthcheck:   true,
+				ExpectedLabels:   workloadLabels,
+			},
 		},
 	}
 	workload := healthyContainer("ctr_api_blue_1", "svc_api")

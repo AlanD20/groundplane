@@ -11,14 +11,18 @@ import (
 	"strings"
 	"time"
 
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	containerderrdefs "github.com/containerd/errdefs"
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/AlanD20/groundplane/internal/common/imageref"
+	"github.com/AlanD20/groundplane/internal/common/workloadimage"
 	"github.com/AlanD20/groundplane/internal/infra/docker/managedconfighelper"
+	"github.com/AlanD20/groundplane/internal/infra/docker/managedimage"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -49,22 +53,32 @@ type Executor struct {
 	image  string
 }
 
+// ValidatorImage carries the selected compiled platform and its pinned reference.
+type ValidatorImage struct {
+	Reference string
+	Platform  componentsdk.OCIPlatform
+}
+
 // Validate runs the candidate through the registered pinned serving image
 // before the atomic managed-config helper can publish it.
 func (executor *Executor) Validate(
 	ctx context.Context,
-	image string,
+	image ValidatorImage,
 	arguments []string,
 	content []byte,
 ) (resultErr error) {
-	if executor == nil || executor.engine == nil || ctx == nil || !imageref.IsDigestPinned(image) ||
+	if executor == nil || executor.engine == nil || ctx == nil || !imageref.IsDigestPinned(image.Reference) ||
+		!validValidatorPlatform(
+			image.Platform,
+		) || !strings.HasSuffix(image.Reference, "@sha256:"+image.Platform.ChildDigest) ||
 		len(arguments) == 0 || len(content) == 0 {
 		return errs.New(errs.KindValidationFailed, "managed-config validator configuration is invalid")
 	}
-	if err := executor.ensureImage(ctx, image); err != nil {
+	localID, err := executor.ensureImage(ctx, image)
+	if err != nil {
 		return err
 	}
-	created, err := executor.engine.ContainerCreate(ctx, validationCreateOptions(image, arguments))
+	created, err := executor.engine.ContainerCreate(ctx, validationCreateOptions(localID, arguments))
 	if err != nil {
 		return operationError(ctx, "create validator", err)
 	}
@@ -142,25 +156,48 @@ func (executor *Executor) Validate(
 	}
 }
 
-func (executor *Executor) ensureImage(ctx context.Context, image string) error {
-	if _, err := executor.engine.ImageInspect(ctx, image); err == nil {
-		return nil
+func (executor *Executor) ensureImage(ctx context.Context, image ValidatorImage) (string, error) {
+	if observed, err := executor.engine.ImageInspect(ctx, image.Reference); err == nil {
+		return verifyValidatorImage(observed, image.Platform)
 	} else if !containerderrdefs.IsNotFound(err) {
-		return operationError(ctx, "inspect validator image", err)
+		return "", operationError(ctx, "inspect validator image", err)
 	}
-	pull, err := executor.engine.ImagePull(ctx, image, client.ImagePullOptions{})
+	pull, err := executor.engine.ImagePull(ctx, image.Reference, client.ImagePullOptions{})
 	if err != nil {
-		return operationError(ctx, "pull validator image", err)
+		return "", operationError(ctx, "pull validator image", err)
 	}
 	waitErr := pull.Wait(ctx)
 	closeErr := pull.Close()
 	if waitErr != nil {
-		return operationError(ctx, "wait for validator image pull", errors.Join(waitErr, closeErr))
+		return "", operationError(ctx, "wait for validator image pull", errors.Join(waitErr, closeErr))
 	}
 	if closeErr != nil {
-		return operationError(ctx, "close validator image pull", closeErr)
+		return "", operationError(ctx, "close validator image pull", closeErr)
 	}
-	return nil
+	observed, err := executor.engine.ImageInspect(ctx, image.Reference)
+	if err != nil {
+		return "", operationError(ctx, "inspect pulled validator image", err)
+	}
+	return verifyValidatorImage(observed, image.Platform)
+}
+
+func verifyValidatorImage(observed client.ImageInspectResult, platform componentsdk.OCIPlatform) (string, error) {
+	if observed.Os != platform.OS || observed.Architecture != platform.Architecture ||
+		observed.Variant != platform.Variant {
+		return "", errs.New(errs.KindStateConflict, "managed-config validator image differs from compiled platform")
+	}
+	if err := managedimage.Verify(observed.ID, observed.Descriptor, "sha256:"+platform.ChildDigest, "sha256:"+platform.ConfigDigest,
+		ocispec.Platform{OS: platform.OS, Architecture: platform.Architecture, Variant: platform.Variant}); err != nil {
+		return "", err
+	}
+	return observed.ID, nil
+}
+
+func validValidatorPlatform(platform componentsdk.OCIPlatform) bool {
+	return platform.OS == "linux" && workloadimage.LocalIDValid("sha256:"+platform.ChildDigest) &&
+		workloadimage.LocalIDValid("sha256:"+platform.ConfigDigest) &&
+		(platform.Architecture == "amd64" && platform.Variant == "" ||
+			platform.Architecture == "arm64" && (platform.Variant == "" || platform.Variant == "v8"))
 }
 
 func validationCreateOptions(image string, arguments []string) client.ContainerCreateOptions {

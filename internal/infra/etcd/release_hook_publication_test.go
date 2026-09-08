@@ -46,7 +46,7 @@ func TestPrepareReleaseHookPublicationBindsInitialPostDeployScriptSetGeneration(
 			},
 			Revision: 33, ReadRevision: revision,
 		},
-		Release: CurrentSuccessfulRelease{
+		Release: ServingRelease{
 			Intent: domain.Intent{ID: record.ReleaseID}, Revision: revision,
 		},
 		RenderInput: Versioned[ReleaseRenderInput]{
@@ -89,6 +89,10 @@ func TestPrepareReleaseHookPublicationBindsInitialPostDeployScriptSetGeneration(
 		t.Fatalf("decode stored Script execution: %v", err)
 	}
 	if stored.ScriptSetGeneration != generationID || record.ScriptSetGeneration != "" {
-		t.Fatalf("stored Script-set generation = %q; source record = %q", stored.ScriptSetGeneration, record.ScriptSetGeneration)
+		t.Fatalf(
+			"stored Script-set generation = %q; source record = %q",
+			stored.ScriptSetGeneration,
+			record.ScriptSetGeneration,
+		)
 	}
 }

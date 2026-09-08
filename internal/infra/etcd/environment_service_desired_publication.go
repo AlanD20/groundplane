@@ -58,7 +58,8 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 			errs.KindValidationFailed, "direct Service desired publication marker is invalid",
 		)
 	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, input.Marker); err != nil || found {
+	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, input.Marker); err != nil ||
+		found {
 		return existing, err
 	}
 	fence, err := repository.loadEnvironmentBlueprintMutationFence(ctx, input.Project, input.Environment)
@@ -108,7 +109,10 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 
 	serviceID := input.Change.Record.Desired.ID
 	conditions := []Condition{
-		{Key: environmentBlueprintRootKey(input.Revision.EnvironmentID, input.Revision.RevisionID), ModRevision: publication.rootRevision},
+		{
+			Key:         environmentBlueprintRootKey(input.Revision.EnvironmentID, input.Revision.RevisionID),
+			ModRevision: publication.rootRevision,
+		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 		{Key: environmentBlueprintHeadKey(input.Revision.EnvironmentID), ModRevision: input.ExpectedHeadRevision},
@@ -132,7 +136,10 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 			return IdempotencyTransactionResult{}, runtimeErr
 		}
 		defer clear(runtimeValue)
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: serviceRuntimeKey(serviceID), Value: runtimeValue})
+		mutations = append(
+			mutations,
+			Mutation{Type: MutationPut, Key: serviceRuntimeKey(serviceID), Value: runtimeValue},
+		)
 	}
 	mutations = append(mutations, epochMutation)
 	classifier := func(_ int64, values []*KeyValue) error {
@@ -320,7 +327,10 @@ func (repository *HierarchyRepository) prepareEnvironmentDirectPublication(
 		return environmentBlueprintPublicationEvidence{}, err
 	}
 	if descriptorRead == nil || descriptorRead.Entry == nil {
-		return environmentBlueprintPublicationEvidence{}, errs.New(errs.KindStateConflict, "desired revision staging evidence is unavailable")
+		return environmentBlueprintPublicationEvidence{}, errs.New(
+			errs.KindStateConflict,
+			"desired revision staging evidence is unavailable",
+		)
 	}
 	defer clear(descriptorRead.Entry.Value)
 	descriptor, err := decodeEnvironmentBlueprintStageDescriptor(descriptorRead.Entry.Value)
@@ -338,8 +348,12 @@ func (repository *HierarchyRepository) prepareEnvironmentDirectPublication(
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}
-	if result == nil || len(result.Values) != 3 || result.Values[0] == nil || result.Values[1] == nil || result.Values[2] == nil {
-		return environmentBlueprintPublicationEvidence{}, errs.New(errs.KindStateConflict, "desired revision staging evidence is unavailable")
+	if result == nil || len(result.Values) != 3 || result.Values[0] == nil || result.Values[1] == nil ||
+		result.Values[2] == nil {
+		return environmentBlueprintPublicationEvidence{}, errs.New(
+			errs.KindStateConflict,
+			"desired revision staging evidence is unavailable",
+		)
 	}
 	defer clearKeyValues(result.Values)
 	seal, err := decodeEnvironmentBlueprintSeal(result.Values[0].Value)
@@ -360,7 +374,10 @@ func (repository *HierarchyRepository) prepareEnvironmentDirectPublication(
 		claim.SourceKind != EnvironmentBlueprintSourceMutation || claim.TaskID != revision.RevisionID ||
 		projection.RevisionID != revision.RevisionID || projection.RenderGeneration != claim.RenderGeneration ||
 		marker.Locator != claim.Locator || !sameBlueprintProtectedIntent(marker.Intent, claim.Intent) {
-		return environmentBlueprintPublicationEvidence{}, errs.New(errs.KindStateConflict, "desired revision staging evidence changed")
+		return environmentBlueprintPublicationEvidence{}, errs.New(
+			errs.KindStateConflict,
+			"desired revision staging evidence changed",
+		)
 	}
 	published := descriptor
 	published.State = EnvironmentBlueprintStagePublished

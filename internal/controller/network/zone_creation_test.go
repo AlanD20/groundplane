@@ -66,8 +66,10 @@ func TestZoneCreationServiceDerivesOwnershipAndPersistsExactResponse(t *testing.
 		zone.OwnerID != environmentID {
 		t.Fatalf("CreateZone() response/Zone = %#v/%#v", response, zone)
 	}
-	if repository.publication.Zone.Desired.ID != zone.ID || repository.publication.Zone.Desired.OwnerID != environmentID ||
-		repository.publication.Zone.Desired.Name != input.Name || repository.calls != 1 {
+	if repository.publication.Zone.Desired.ID != zone.ID ||
+		repository.publication.Zone.Desired.OwnerID != environmentID ||
+		repository.publication.Zone.Desired.Name != input.Name ||
+		repository.calls != 1 {
 		t.Fatalf("published Zone/calls = %#v/%d", repository.publication.Zone, repository.calls)
 	}
 	marker := repository.publication.Marker

@@ -93,10 +93,16 @@ func decodeRunnerEdit(body []byte) (apiTypes.RunnerEditRequest, error) {
 		}
 		member, ok := token.(string)
 		if !ok || member != "slug" {
-			return apiTypes.RunnerEditRequest{}, errs.New(errs.KindMalformedRequest, "Runner edit body contains an unknown member")
+			return apiTypes.RunnerEditRequest{}, errs.New(
+				errs.KindMalformedRequest,
+				"Runner edit body contains an unknown member",
+			)
 		}
 		if seen {
-			return apiTypes.RunnerEditRequest{}, errs.New(errs.KindMalformedRequest, "Runner edit body contains a duplicate member")
+			return apiTypes.RunnerEditRequest{}, errs.New(
+				errs.KindMalformedRequest,
+				"Runner edit body contains a duplicate member",
+			)
 		}
 		seen = true
 		if err := decoder.Decode(&request.Slug); err != nil {
@@ -132,7 +138,8 @@ func decodeRunnerEdit(body []byte) (apiTypes.RunnerEditRequest, error) {
 func (s *Server) rejectRunnerEditQuery(ctx huma.Context, next func(huma.Context)) {
 	requestURL := ctx.URL()
 	if len(requestURL.Query()) != 0 {
-		if err := huma.WriteErr(s.API, ctx, http.StatusBadRequest, "Runner edit query is invalid"); err != nil && s.Logger != nil {
+		if err := huma.WriteErr(s.API, ctx, http.StatusBadRequest, "Runner edit query is invalid"); err != nil &&
+			s.Logger != nil {
 			s.Logger.Error("controller: write Runner edit problem", slog.Any("error", err))
 		}
 		return

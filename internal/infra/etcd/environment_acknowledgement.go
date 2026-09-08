@@ -332,7 +332,10 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		{Key: environmentKey(environment.ID), ModRevision: environmentValue.ModRevision},
 		{Key: environmentNameKey(environment.ProjectID, environment.Name), ModRevision: indexes.Values[0].ModRevision},
 		{Key: environmentOwnerKey(environment.ProjectID, environment.ID), ModRevision: indexes.Values[1].ModRevision},
-		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID), ModRevision: tombstoneValue.ModRevision},
+		{
+			Key:         deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID),
+			ModRevision: tombstoneValue.ModRevision,
+		},
 		{Key: environmentBlueprintHeadKey(environment.ID), ModRevision: keyValueRevision(stored.Values[2])},
 		{Key: environmentComposeProjectionKey(environment.ID), ModRevision: keyValueRevision(stored.Values[3])},
 		{Key: environmentMutationEpochKey(environment.ID), ModRevision: stored.Values[5].ModRevision},

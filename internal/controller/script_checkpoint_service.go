@@ -12,7 +12,10 @@ import (
 )
 
 type ScriptCheckpointRepository interface {
-	CheckpointScriptExecution(context.Context, etcd.ScriptCheckpointInput) (etcd.Versioned[etcd.ScriptExecutionRecord], error)
+	CheckpointScriptExecution(
+		context.Context,
+		etcd.ScriptCheckpointInput,
+	) (etcd.Versioned[etcd.ScriptExecutionRecord], error)
 }
 
 type ScriptCheckpointService struct {

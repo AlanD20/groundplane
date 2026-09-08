@@ -49,7 +49,11 @@ func New(operations hostOperations) (*HostControl, error) {
 func (control *HostControl) EnsureIdentity(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
 	return control.ensure(ctx, plan, corerunner.StepEnsureIdentity, control.operations.EnsureIdentity)
 }
-func (control *HostControl) ObserveIdentity(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (control *HostControl) ObserveIdentity(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return control.observe(ctx, plan, corerunner.StepEnsureIdentity, false, control.operations.ObserveIdentity)
 }
 func (control *HostControl) EnsureNetwork(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
@@ -108,37 +112,61 @@ func (control *HostControl) ObserveRunner(ctx context.Context, plan corerunner.P
 func (control *HostControl) StopRunner(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
 	return control.remove(ctx, plan, corerunner.StepStopRunner, control.operations.StopRunner)
 }
-func (control *HostControl) ObserveRunnerAbsent(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (control *HostControl) ObserveRunnerAbsent(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return control.observe(ctx, plan, corerunner.StepStopRunner, true, control.operations.ObserveRunnerAbsent)
 }
 func (control *HostControl) StopDaemon(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
 	return control.remove(ctx, plan, corerunner.StepStopDaemon, control.operations.StopDaemon)
 }
-func (control *HostControl) ObserveDaemonAbsent(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (control *HostControl) ObserveDaemonAbsent(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return control.observe(ctx, plan, corerunner.StepStopDaemon, true, control.operations.ObserveDaemonAbsent)
 }
 func (control *HostControl) StopProxy(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
 	return control.remove(ctx, plan, corerunner.StepStopProxy, control.operations.StopProxy)
 }
-func (control *HostControl) ObserveProxyAbsent(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (control *HostControl) ObserveProxyAbsent(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return control.observe(ctx, plan, corerunner.StepStopProxy, true, control.operations.ObserveProxyAbsent)
 }
 func (control *HostControl) RemoveNetwork(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
 	return control.remove(ctx, plan, corerunner.StepRemoveNetwork, control.operations.RemoveNetwork)
 }
-func (control *HostControl) ObserveNetworkAbsent(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (control *HostControl) ObserveNetworkAbsent(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return control.observe(ctx, plan, corerunner.StepRemoveNetwork, true, control.operations.ObserveNetworkAbsent)
 }
 func (control *HostControl) RemoveIdentity(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
 	return control.remove(ctx, plan, corerunner.StepRemoveIdentity, control.operations.RemoveIdentity)
 }
-func (control *HostControl) ObserveIdentityAbsent(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (control *HostControl) ObserveIdentityAbsent(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return control.observe(ctx, plan, corerunner.StepRemoveIdentity, true, control.operations.ObserveIdentityAbsent)
 }
 func (control *HostControl) RemoveEgress(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
 	return control.remove(ctx, plan, corerunner.StepRemoveEgress, control.operations.RemoveEgress)
 }
-func (control *HostControl) ObserveEgressAbsent(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (control *HostControl) ObserveEgressAbsent(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return control.observe(ctx, plan, corerunner.StepRemoveEgress, true, control.operations.ObserveEgressAbsent)
 }
 

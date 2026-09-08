@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
+	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -346,13 +347,13 @@ func TestPrepareEnvironmentBlueprintServiceChangesPreservesRuntimeIntent(t *test
 	}
 	current := etcd.Versioned[etcd.ServiceRecord]{Record: record, Revision: 7, ReadRevision: 9}
 
-	changes, err := prepareEnvironmentBlueprintServiceChanges(
+	changes, err := blueprintrelease.PrepareServiceChanges(
 		environmentID,
 		[]core.Service{{ID: serviceID, Name: "api", Image: "app:new"}},
 		[]etcd.Versioned[etcd.ServiceRecord]{current},
 	)
 	if err != nil {
-		t.Fatalf("prepareEnvironmentBlueprintServiceChanges() error = %v", err)
+		t.Fatalf("PrepareServiceChanges() error = %v", err)
 	}
 	if len(changes) != 1 || changes[0].Current == nil ||
 		changes[0].Record.Desired.Image != "app:new" || changes[0].Record.Runtime != record.Runtime {
@@ -368,13 +369,13 @@ func TestPrepareEnvironmentBlueprintServiceChangesStartsNewServiceRunning(t *tes
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 3)
 	serviceID := ids.NewAt(ids.KindService, at, 4)
 
-	changes, err := prepareEnvironmentBlueprintServiceChanges(
+	changes, err := blueprintrelease.PrepareServiceChanges(
 		environmentID,
 		[]core.Service{{ID: serviceID, Name: "worker", Image: "app:1"}},
 		nil,
 	)
 	if err != nil {
-		t.Fatalf("prepareEnvironmentBlueprintServiceChanges() error = %v", err)
+		t.Fatalf("PrepareServiceChanges() error = %v", err)
 	}
 	if len(changes) != 1 || changes[0].Current != nil ||
 		changes[0].Record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentRunning {
@@ -531,8 +532,13 @@ volumes:
 	if _, generated := candidate.Services["router"]; generated {
 		t.Fatal("generated Component Service was adopted into authored desired state")
 	}
-	if candidate.Configs["app-config"].File != "config/app.conf" || candidate.Secrets["app-secret"].File != "secrets/app.secret" {
-		t.Fatalf("native Config/Secret state was not retained: configs=%#v secrets=%#v", candidate.Configs, candidate.Secrets)
+	if candidate.Configs["app-config"].File != "config/app.conf" ||
+		candidate.Secrets["app-secret"].File != "secrets/app.secret" {
+		t.Fatalf(
+			"native Config/Secret state was not retained: configs=%#v secrets=%#v",
+			candidate.Configs,
+			candidate.Secrets,
+		)
 	}
 	if candidate.Volumes["data"].Labels["com.example.owner"] != "operator" {
 		t.Fatalf("native Volume state was not retained: %#v", candidate.Volumes["data"])
@@ -648,7 +654,8 @@ func TestPreserveEnvironmentBlueprintResourcesPreservesDisabledServicesWithoutDu
 	}, nil, true); err != nil {
 		t.Fatalf("preserveEnvironmentBlueprintResources(existing disabled) error = %v", err)
 	}
-	if _, found := project.Services["worker"]; found || project.DisabledServices["worker"].Image != "example/worker:new" {
+	if _, found := project.Services["worker"]; found ||
+		project.DisabledServices["worker"].Image != "example/worker:new" {
 		t.Fatal("existing profile-disabled Service was duplicated or replaced")
 	}
 }
@@ -744,7 +751,11 @@ func TestPreserveEnvironmentBlueprintRoutesCarriesForwardOmittedRoute(t *testing
 	if err != nil {
 		t.Fatalf("NewRouteRecord() error = %v", err)
 	}
-	specs, err := preserveEnvironmentBlueprintRoutes(nil, []core.Service{{ID: serviceID, Name: "api"}}, []etcd.Versioned[etcd.RouteRecord]{{Record: record}})
+	specs, err := preserveEnvironmentBlueprintRoutes(
+		nil,
+		[]core.Service{{ID: serviceID, Name: "api"}},
+		[]etcd.Versioned[etcd.RouteRecord]{{Record: record}},
+	)
 	if err != nil {
 		t.Fatalf("preserveEnvironmentBlueprintRoutes() error = %v", err)
 	}

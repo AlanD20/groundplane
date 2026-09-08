@@ -445,10 +445,13 @@ The plan seals one immutable candidate Release procedure for each selected
 Service. It declares the exact forward mutation anchors and the complete lawful
 restoration alternatives `serving_predecessor` and `candidate_absence`; it
 never fabricates `baseline` or derives restoration from a mutable current
-Service projection. Claim selects exactly one alternative from the sealed
-nullable applied predecessor and stores that selection plus its canonical
-digest with the assignment and execution epoch. Host state can prove the
-selected target but cannot choose it.
+Service projection. Claim selects exactly one alternative per Service from the
+sealed nullable applied predecessor and stores the complete sorted member map
+plus its canonical digest with the assignment and execution epoch. Configured-
+only Services select absence even when an applied Environment record exists;
+the exact nullable witness stays independently fenced. Mixed recovery restores
+serving members and removes only first candidates, leaving unrelated runtime
+untouched. Host state can prove a selected target but cannot choose it.
 
 No mutation-capable candidate step begins until its running event is durably
 accepted for that epoch. A reconnect remains forward only while the Controller
@@ -468,6 +471,18 @@ references then follow the existing bounded `normal_completion` path while the
 Task, recovery record, assignment, timeout, writer, and operation stay live;
 their final source transaction and the original Task terminalization are
 atomic. A later or unknown Script checkpoint fails closed.
+
+Before Blueprint candidate source release starts, the Controller validates the
+complete terminal envelope against physical transaction limits (ADR 0067).
+Normal source closure atomically captures the original Agent terminal report,
+including its epoch, recovery digest, exact Task/assignment revisions and
+observation time. Every release batch compares this temporary continuation.
+Reconnect finishes it before effect classification or epoch increment, without
+Script artifact resolution or Agent dispatch. A maximum-epoch closing report
+can finish; a reconnect needing a new epoch still rejects exhaustion. Conflicting
+reports and new events reject without writes; identical event retransmissions
+remain read-only. Final completion deletes the report with the source root and
+uses the existing generic terminal receipt for exact replay.
 
 The existing Task detail step projection records each selected Script's
 captured non-secret id and slug, while existing events carry its `step_id`
@@ -926,6 +941,15 @@ The adapter registry, not the Blueprint, supplies `requires`, provision and
 detach operations, fact templates, and backup/restore strategy. `manual` is a
 registry adapter with network-only attach behavior.
 
+Valkey authentication is immutable backing-instance policy selected by backing
+creation (`username_password`, `password`, or explicit `none`), not a consumer
+Blueprint decision. `x-gp-attachments` inherits it and cannot downgrade it.
+No-auth bindings still own/reuse HOST, PORT and credential-free URL facts and
+network membership, but generate no credential or adapter provisioning step.
+Their `credential.mode` keeps its existing new-binding/direct-owner meaning.
+Password-only owners have distinct passwords on one shared default identity;
+detaching an owner revokes only its password. See ADR 0068.
+
 `x-gp-attachments` is authored at environment scope. Its key is the attach
 name; it is not used to derive any database, role, password, network, or
 container name:
@@ -1135,7 +1159,7 @@ x-gp-components:
     implementation: caddy
     enabled: true
     settings:
-      zone_id: net_01J...
+      zone_ids: [net_01J..., net_01K...]
     implementation_config:
       caddyfile_template: |
         {routes}
@@ -1164,7 +1188,7 @@ or arbitrary URL.
 
 The Tunnel token is materialized through a service-specific opaque secret
 binding and is never placed in Compose or `x-gp-*`. The Cloudflare Tunnel
-typed config contains only stable `secret_id`; direct token input is a
+typed config contains ordered stable `zone_ids` and stable `secret_id`; direct token input is a
 Console/API mutation that creates a Project Secret and is not Blueprint
 desired state. Tunnel lifecycle is independent of `http-router`. Groundplane
 starts or stops the connector and reports health, but does not configure its
@@ -1181,7 +1205,15 @@ allocates a new address and regenerates the CoreDNS entries, Caddy origin, and
 any generated tunnel-origin guidance. The address is durable component state
 while enabled, not a permanent environment identity.
 
-`zone_id` is required to enable Caddy and is a stable Zone reference. The
+`zone_ids` is required for both Caddy and Tunnel: a nonempty ordered list of
+distinct stable references to ordinary Zones in the same Environment. Caddy's
+first Zone is primary and holds its one pinned address; secondary interfaces
+are dynamic. A Route target must share at least one selected router Zone.
+Tunnel joins exactly its independently selected Zones, requires at least one
+non-internal Zone, and selects the first non-internal Zone as outbound gateway.
+There is no implicit router-following attachment or default bridge fallback.
+Removing any selected Zone while its Component remains enabled rejects.
+The
 optional `caddyfile_template` defaults to `{routes}` and, when set, contains
 that marker exactly once. The Controller replaces it with complete grouped
 site blocks. `{host}` and `{slot}` are not template variables.
@@ -1303,8 +1335,9 @@ Arm or byte overflow is rejected locally before etcd as
 `validation.failed`/HTTP 422 and publishes no public state. A fitting
 comparison that loses at etcd remains an atomic conflict: its fixed-revision
 failure arm is selected and no success mutation commits. Staging, sealing,
-Script source preparation/release, and every other non-final-publication limit
-remain unchanged. Ordinary non-Blueprint `Store.Transact` retains its
+Script source preparation/release, and other ordinary transaction limits remain
+unchanged. Candidate terminal completion uses the distinct closed envelope
+below, not final-publication authority. Ordinary `Store.Transact` retains its
 96-selected-operation protection.
 
 Focused proof must cover exact `30/42/30`, `44/98/44`, `117/147/117`, and
@@ -1316,6 +1349,21 @@ publish nothing. A retryable or deadline result whose commit status is unknown
 remains unresolved until ADR 0021's durable evidence identifies the one atomic
 result as wholly old or wholly new; marker absence alone never proves the prior
 head won.
+
+**Blueprint candidate terminal envelope.** ADR 0067 preserves one atomic Task completion with all candidate promotion or
+failure records, applied projection, materialization cleanup, Environment
+fences, retention/idempotency records and final Script source fragment. It uses
+the same 256-operation per-arm and exact physical 1 MiB request ceilings, through
+a separate closed persistence method; it does not raise the ordinary 96 limit.
+
+Read-only preparation composes the entire envelope before source release can
+write. Source/root/closing-report comparisons whose revisions will change
+reserve the maximum positive ModRevision encoding width. This budget projection
+cannot execute. The final transaction re-reads exact current authority and
+requires drained memberships and empty reverse prefixes. A lost compare writes
+no terminal fragment and preserves the original closing report; changed sealed
+authority remains fail-closed. If a commit succeeds but its response is lost,
+the existing durable terminal receipt must produce exact read-only replay.
 
 `encryption` is `age` or `none`. Because the config source includes secret
 Entry values, any policy selecting config must use `encryption: age`.

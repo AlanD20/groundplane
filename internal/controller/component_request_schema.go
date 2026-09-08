@@ -21,7 +21,8 @@ func componentConfigSchema(registry huma.Registry) *huma.Schema {
 		coreDNSComponentConfigSchema(),
 	}
 	componentReference := openAPISchema[apiTypes.Component](registry, "Component")
-	if componentSchema := registry.SchemaFromRef(componentReference.Ref); componentSchema != nil && componentSchema.Properties != nil {
+	if componentSchema := registry.SchemaFromRef(componentReference.Ref); componentSchema != nil &&
+		componentSchema.Properties != nil {
 		componentSchema.Properties["config"] = nullableComponentConfigSchema(reference.Ref)
 	}
 	return reference
@@ -66,6 +67,20 @@ func componentConfigMutationRequestSchema(registry huma.Registry) *huma.Schema {
 	return reference
 }
 
+func componentEnableRequestSchema(registry huma.Registry) *huma.Schema {
+	reference := openAPISchema[apiTypes.ComponentEnableRequest](registry, "ComponentEnableRequest")
+	schema := registry.SchemaFromRef(reference.Ref)
+	if schema == nil {
+		return reference
+	}
+	schema.AdditionalProperties = false
+	schema.Required = nil
+	schema.Properties = map[string]*huma.Schema{"config": {OneOf: []*huma.Schema{
+		caddyComponentConfigSchema(), cloudflareTunnelComponentConfigSchema(),
+	}}}
+	return reference
+}
+
 func coreDNSComponentConfigSchema() *huma.Schema {
 	five := 5
 	resolverList := &huma.Schema{
@@ -91,7 +106,13 @@ func coreDNSComponentConfigSchema() *huma.Schema {
 			"forwarders":         {Type: huma.TypeArray, Items: forwarder},
 			"tailnet_delegation": {Type: huma.TypeBoolean},
 		},
-		Required:      []string{"corefile_template", "upstream_auto", "upstream_resolvers", "forwarders", "tailnet_delegation"},
+		Required: []string{
+			"corefile_template",
+			"upstream_auto",
+			"upstream_resolvers",
+			"forwarders",
+			"tailnet_delegation",
+		},
 		MinProperties: &five,
 		MaxProperties: &five,
 	}
@@ -104,24 +125,22 @@ func caddyComponentConfigSchema() *huma.Schema {
 		Type:                 huma.TypeObject,
 		AdditionalProperties: false,
 		Properties: map[string]*huma.Schema{
-			"zone_id": {
-				Type:    huma.TypeString,
-				Pattern: "^net_[0-9A-HJKMNP-TV-Z]{26}$",
-			},
+			"zone_ids":           componentZoneIDsSchema(),
 			"caddyfile_template": {Type: huma.TypeString},
 		},
-		Required:      []string{"zone_id"},
+		Required:      []string{"zone_ids"},
 		MinProperties: &one,
 		MaxProperties: &two,
 	}
 }
 
 func cloudflareTunnelComponentConfigSchema() *huma.Schema {
-	one := 1
+	two := 2
 	return &huma.Schema{
 		Type:                 huma.TypeObject,
 		AdditionalProperties: false,
 		Properties: map[string]*huma.Schema{
+			"zone_ids": componentZoneIDsSchema(),
 			"credential": {
 				OneOf: []*huma.Schema{
 					cloudflareTunnelExistingCredentialSchema(),
@@ -129,26 +148,36 @@ func cloudflareTunnelComponentConfigSchema() *huma.Schema {
 				},
 			},
 		},
-		Required:      []string{"credential"},
-		MinProperties: &one,
-		MaxProperties: &one,
+		Required:      []string{"zone_ids", "credential"},
+		MinProperties: &two,
+		MaxProperties: &two,
 	}
 }
 
 func cloudflareTunnelComponentConfigResponseSchema() *huma.Schema {
-	one := 1
+	two := 2
 	return &huma.Schema{
 		Type:                 huma.TypeObject,
 		AdditionalProperties: false,
 		Properties: map[string]*huma.Schema{
+			"zone_ids": componentZoneIDsSchema(),
 			"secret_id": {
 				Type:    huma.TypeString,
 				Pattern: "^sec_[0-9A-HJKMNP-TV-Z]{26}$",
 			},
 		},
-		Required:      []string{"secret_id"},
-		MinProperties: &one,
-		MaxProperties: &one,
+		Required:      []string{"zone_ids", "secret_id"},
+		MinProperties: &two,
+		MaxProperties: &two,
+	}
+}
+
+func componentZoneIDsSchema() *huma.Schema {
+	one := 1
+	return &huma.Schema{
+		Type: huma.TypeArray, MinItems: &one, UniqueItems: true,
+		Description: "Ordered selected Environment Zone IDs; the first router Zone is primary.",
+		Items:       &huma.Schema{Type: huma.TypeString, Pattern: "^net_[0-9A-HJKMNP-TV-Z]{26}$"},
 	}
 }
 

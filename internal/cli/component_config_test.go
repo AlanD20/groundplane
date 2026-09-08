@@ -20,7 +20,8 @@ func TestParseCoreDNSForwardFlagsRejectsWhitespaceInsteadOfNormalizing(t *testin
 	if err != nil {
 		t.Fatalf("parseCoreDNSForwardFlags(valid) error = %v", err)
 	}
-	if len(parsed) != 1 || parsed[0].Domain != "example.com" || len(parsed[0].Resolvers) != 2 || parsed[0].Resolvers[1] != "8.8.8.8" {
+	if len(parsed) != 1 || parsed[0].Domain != "example.com" || len(parsed[0].Resolvers) != 2 ||
+		parsed[0].Resolvers[1] != "8.8.8.8" {
 		t.Fatalf("parseCoreDNSForwardFlags(valid) = %#v", parsed)
 	}
 }

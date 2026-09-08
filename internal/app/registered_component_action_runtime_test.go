@@ -13,6 +13,7 @@ import (
 	registeredcoredns "github.com/AlanD20/groundplane-registered-components/coredns"
 	"github.com/AlanD20/groundplane/internal/agent"
 	"github.com/AlanD20/groundplane/internal/infra/docker/dnsresolverobserver"
+	"github.com/AlanD20/groundplane/internal/infra/docker/managedconfighelpercontainer"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -34,7 +35,12 @@ func TestRegisteredPlannerRejectsUnregisteredValidImage(t *testing.T) {
 
 type componentActionManagedExecutorStub struct{}
 
-func (componentActionManagedExecutorStub) Validate(context.Context, string, []string, []byte) error {
+func (componentActionManagedExecutorStub) Validate(
+	context.Context,
+	managedconfighelpercontainer.ValidatorImage,
+	[]string,
+	[]byte,
+) error {
 	return nil
 }
 
@@ -43,7 +49,12 @@ type componentActionRecoveringManagedExecutor struct {
 	response *agentpb.ManagedConfigHelperResponse
 }
 
-func (*componentActionRecoveringManagedExecutor) Validate(context.Context, string, []string, []byte) error {
+func (*componentActionRecoveringManagedExecutor) Validate(
+	context.Context,
+	managedconfighelpercontainer.ValidatorImage,
+	[]string,
+	[]byte,
+) error {
 	return nil
 }
 
@@ -212,7 +223,11 @@ func TestManagedConfigRequestIdentityIsTaskAttemptScoped(t *testing.T) {
 		agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_PUBLISH,
 	)
 	if first.GetTransactionId() != replay.GetTransactionId() {
-		t.Fatalf("one Task attempt changed transaction identity: %q != %q", first.GetTransactionId(), replay.GetTransactionId())
+		t.Fatalf(
+			"one Task attempt changed transaction identity: %q != %q",
+			first.GetTransactionId(),
+			replay.GetTransactionId(),
+		)
 	}
 	if first.GetTransactionId() == retry.GetTransactionId() {
 		t.Fatalf("retry reused compensated transaction identity %q", first.GetTransactionId())

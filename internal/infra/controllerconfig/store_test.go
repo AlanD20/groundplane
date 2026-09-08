@@ -135,7 +135,12 @@ func TestStoreStartupRevisionUsesExactLoadedDocumentWhenPathChanges(t *testing.T
 		ctx, "controller-config-key-race", changedRevision, string(startupDocument),
 	)
 	if err != nil || revertedRevision != revision(startupDocument) || restartRequired {
-		t.Fatalf("Replace(revert) = %q/%t/%v, want parsed startup revision without restart", revertedRevision, restartRequired, err)
+		t.Fatalf(
+			"Replace(revert) = %q/%t/%v, want parsed startup revision without restart",
+			revertedRevision,
+			restartRequired,
+			err,
+		)
 	}
 }
 

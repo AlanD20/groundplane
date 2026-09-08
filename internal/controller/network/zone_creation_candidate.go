@@ -23,11 +23,17 @@ func buildZoneCreationProjection(
 ) (etcd.EnvironmentComposeProjection, error) {
 	if ids.Validate(ids.KindEnvironment, current.EnvironmentID) != nil ||
 		zone.EnvironmentID != current.EnvironmentID || ids.Validate(ids.KindTask, revisionID) != nil || generation == 0 {
-		return etcd.EnvironmentComposeProjection{}, errs.New(errs.KindInternal, "Zone creation projection input is invalid")
+		return etcd.EnvironmentComposeProjection{}, errs.New(
+			errs.KindInternal,
+			"Zone creation projection input is invalid",
+		)
 	}
 	for _, existing := range current.DesiredZones {
 		if existing.Desired.ID == zone.Desired.ID || existing.Desired.Name == zone.Desired.Name {
-			return etcd.EnvironmentComposeProjection{}, errs.New(errs.KindStateConflict, "Zone identity already exists in the current desired revision")
+			return etcd.EnvironmentComposeProjection{}, errs.New(
+				errs.KindStateConflict,
+				"Zone identity already exists in the current desired revision",
+			)
 		}
 	}
 	candidate := current

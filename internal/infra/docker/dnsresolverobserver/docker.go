@@ -14,7 +14,9 @@ import (
 
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/client"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
+	"github.com/AlanD20/groundplane/internal/infra/docker/managedimage"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -47,9 +49,8 @@ func (inspector *dockerRuntimeInspector) Inspect(ctx context.Context, request Re
 		return runtimeEvidence{}, errs.Wrap(errs.KindInternal, err)
 	}
 	container := inspected.Container
-	expectedImageID := "sha256:" + hex.EncodeToString(request.ImageConfigDigest[:])
 	if container.Config == nil || container.State == nil || !container.State.Running ||
-		container.Config.Image != request.ImageReference || container.Image != expectedImageID {
+		container.Config.Image != request.ImageReference {
 		return runtimeEvidence{}, errs.New(errs.KindStateConflict, "DNS resolver runtime identity is invalid")
 	}
 	for key, value := range request.ExpectedLabels {
@@ -105,7 +106,13 @@ func (inspector *dockerRuntimeInspector) Inspect(ctx context.Context, request Re
 		clear(logs)
 		return runtimeEvidence{}, err
 	}
-	actualConfigDigest, err := verifiedImageConfigDigest(container.Image, image.ID, request.ImageConfigDigest)
+	configAuthority, err := bindRuntimeImageConfigAuthority(
+		container.Image,
+		container.ImageManifestDescriptor,
+		image,
+		request,
+		digest,
+	)
 	if err != nil {
 		clear(artifact)
 		clear(logs)
@@ -113,11 +120,46 @@ func (inspector *dockerRuntimeInspector) Inspect(ctx context.Context, request Re
 	}
 	return runtimeEvidence{
 		artifact: artifact, logs: logs, verifiedImageDigest: digest,
-		verifiedImageConfigDigest: actualConfigDigest,
+		imageConfigAuthority: configAuthority,
 	}, nil
 }
 
-func verifiedImageConfigDigest(
+func bindRuntimeImageConfigAuthority(
+	containerImageID string,
+	containerDescriptor *ocispec.Descriptor,
+	image client.ImageInspectResult,
+	request Request,
+	child [sha256.Size]byte,
+) ([sha256.Size]byte, error) {
+	if image.ID != containerImageID || image.Os != request.ImageOS ||
+		image.Architecture != request.ImageArchitecture || image.Variant != request.ImageVariant {
+		return [sha256.Size]byte{}, errs.New(errs.KindStateConflict, "DNS resolver runtime image or platform changed")
+	}
+	platform := ocispec.Platform{
+		OS:           request.ImageOS,
+		Architecture: request.ImageArchitecture,
+		Variant:      request.ImageVariant,
+	}
+	childDigest, configDigest := "sha256:"+hex.EncodeToString(
+		child[:],
+	), "sha256:"+hex.EncodeToString(
+		request.ImageConfigDigest[:],
+	)
+	if err := managedimage.Verify(containerImageID, containerDescriptor, childDigest, configDigest, platform); err != nil {
+		return [sha256.Size]byte{}, err
+	}
+	if err := managedimage.Verify(image.ID, image.Descriptor, childDigest, configDigest, platform); err != nil {
+		return [sha256.Size]byte{}, err
+	}
+	if image.Descriptor == nil {
+		return observedClassicImageConfigDigest(containerImageID, image.ID, request.ImageConfigDigest)
+	}
+	// The verified selected child commits to this sealed catalog config digest.
+	// Docker's containerd inspect does not independently expose config bytes.
+	return request.ImageConfigDigest, nil
+}
+
+func observedClassicImageConfigDigest(
 	containerImageID string,
 	inspectedImageID string,
 	expected [sha256.Size]byte,

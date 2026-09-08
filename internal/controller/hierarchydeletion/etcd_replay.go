@@ -75,7 +75,10 @@ func (repository *EtcdRepository) replayAtRevision(
 		return BeginResult{}, err
 	}
 	if evidence == nil {
-		return BeginResult{}, errs.New(errs.KindInternal, "hierarchy deletion replay marker disappeared from its fixed snapshot")
+		return BeginResult{}, errs.New(
+			errs.KindInternal,
+			"hierarchy deletion replay marker disappeared from its fixed snapshot",
+		)
 	}
 	marker, err := evidence.Marker()
 	if err != nil {
@@ -232,8 +235,12 @@ func (repository *EtcdRepository) protectBegin(
 		Locator: etcdinfra.IdempotencyLocator{ScopeKind: etcdinfra.IdempotencyScopeKind(scopeKind), ScopeID: scopeID,
 			Method: begin.IdempotencyIntent.Method, Route: begin.IdempotencyIntent.RouteTemplate, Key: begin.IdempotencyKey},
 		ReplayTarget: &replayTarget, Intent: durable,
-		Response: etcdinfra.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body},
-		TaskID:   begin.TaskIDCandidate, CreatedAt: begin.CreatedAt, UpdatedAt: begin.CreatedAt,
+		Response: etcdinfra.IdempotencyResponse{
+			Status:      http.StatusAccepted,
+			ContentKind: "application/json",
+			Body:        body,
+		},
+		TaskID: begin.TaskIDCandidate, CreatedAt: begin.CreatedAt, UpdatedAt: begin.CreatedAt,
 	}
 	return protected, marker, nil
 }
@@ -261,13 +268,16 @@ func (repository *EtcdRepository) replayedBeginAtRevision(
 	request DeleteRequest,
 	locator etcdinfra.IdempotencyLocator,
 ) (BeginResult, error) {
-	if resolution.Kind != idempotentintent.ResolutionReplay || resolution.Response.Status != http.StatusAccepted || revision <= 0 || markerTaskID == "" {
+	if resolution.Kind != idempotentintent.ResolutionReplay || resolution.Response.Status != http.StatusAccepted ||
+		revision <= 0 ||
+		markerTaskID == "" {
 		return BeginResult{}, errs.New(errs.KindInternal, "hierarchy deletion replay response is invalid")
 	}
 	var response struct {
 		TaskID string `json:"task_id"`
 	}
-	if json.Unmarshal(resolution.Response.Body, &response) != nil || response.TaskID == "" || response.TaskID != markerTaskID {
+	if json.Unmarshal(resolution.Response.Body, &response) != nil || response.TaskID == "" ||
+		response.TaskID != markerTaskID {
 		return BeginResult{}, errs.New(errs.KindInternal, "hierarchy deletion replay Task is inconsistent")
 	}
 	operation, err := repository.journal.OperationByTaskAtRevision(ctx, response.TaskID, revision)
@@ -277,8 +287,11 @@ func (repository *EtcdRepository) replayedBeginAtRevision(
 		}
 		return BeginResult{}, err
 	}
-	if locator.Method != http.MethodDelete || locator.Route != idempotencyIntent(request.TargetKind, request.TargetID).RouteTemplate ||
-		operation.MarkerLocator != locator || operation.Tombstone.TargetID != request.TargetID || operation.RootTaskID != markerTaskID ||
+	if locator.Method != http.MethodDelete ||
+		locator.Route != idempotencyIntent(request.TargetKind, request.TargetID).RouteTemplate ||
+		operation.MarkerLocator != locator ||
+		operation.Tombstone.TargetID != request.TargetID ||
+		operation.RootTaskID != markerTaskID ||
 		!replayScopeMatches(locator, operation) ||
 		(request.TargetKind == TargetTenant && operation.Tombstone.TargetKind != etcdinfra.HierarchyDeletionTargetTenant) ||
 		(request.TargetKind == TargetEnvironment && operation.Tombstone.TargetKind != etcdinfra.HierarchyDeletionTargetEnvironment) ||
@@ -359,7 +372,10 @@ func replayTargetForIntent(intent IdempotencyIntent, targetID string) (etcdinfra
 	case EnvironmentDeleteRoute:
 		kind = etcdinfra.IdempotencyReplayTargetEnvironment
 	default:
-		return etcdinfra.IdempotencyReplayTarget{}, errs.New(errs.KindValidationFailed, "hierarchy deletion replay route is invalid")
+		return etcdinfra.IdempotencyReplayTarget{}, errs.New(
+			errs.KindValidationFailed,
+			"hierarchy deletion replay route is invalid",
+		)
 	}
 	return etcdinfra.IdempotencyReplayTarget{Kind: kind, ID: targetID}, nil
 }

@@ -17,7 +17,8 @@ func validateAndCopyScriptArtifacts(
 ) (*agentpb.ScriptAssignmentArtifacts, error) {
 	hasScripts := plan != nil && len(plan.ScriptBodyArtifacts) != 0
 	if !hasScripts {
-		if artifacts != nil && (len(artifacts.Bodies) != 0 || len(artifacts.Secrets) != 0 || len(artifacts.Entries) != 0) {
+		if artifacts != nil &&
+			(len(artifacts.Bodies) != 0 || len(artifacts.Secrets) != 0 || len(artifacts.Entries) != 0) {
 			return nil, errs.New(errs.KindInternal, "agent: non-Script assignment contains Script artifacts")
 		}
 		return nil, nil
@@ -31,7 +32,8 @@ func validateAndCopyScriptArtifacts(
 	}
 	metadataByExecution := make(map[string]*agentpb.ScriptBodyArtifactMetadata, len(plan.ScriptBodyArtifacts))
 	for _, metadata := range plan.ScriptBodyArtifacts {
-		if metadata == nil || metadata.ScriptExecutionId == "" || metadataByExecution[metadata.ScriptExecutionId] != nil {
+		if metadata == nil || metadata.ScriptExecutionId == "" ||
+			metadataByExecution[metadata.ScriptExecutionId] != nil {
 			return nil, errs.New(errs.KindInternal, "agent: Script body artifact metadata is invalid")
 		}
 		metadataByExecution[metadata.ScriptExecutionId] = metadata

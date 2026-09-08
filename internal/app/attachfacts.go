@@ -67,6 +67,12 @@ func (service *AttachFactService) SealFactSets(
 		}
 		return nil, nil, nil
 	}
+	authentication, err := core.ResolveBackingAuthentication(
+		adapter.SupportsAuthenticationModes(), own.Authentication,
+	)
+	if err != nil || authentication != own.Authentication {
+		return nil, nil, errs.New(errs.KindValidationFailed, "Attach fact authentication mode is invalid")
+	}
 	canonicalGrants := append([]AttachGrantFactParams(nil), grants...)
 	slices.SortFunc(canonicalGrants, func(left AttachGrantFactParams, right AttachGrantFactParams) int {
 		return strings.Compare(left.AttachID, right.AttachID)
@@ -74,7 +80,7 @@ func (service *AttachFactService) SealFactSets(
 	priorGrantID := ""
 	for _, grant := range canonicalGrants {
 		if ids.Validate(ids.KindAttach, grant.AttachID) != nil || grant.AttachID == attachID ||
-			grant.AttachID == priorGrantID {
+			grant.AttachID == priorGrantID || grant.Params.Authentication != authentication {
 			return nil, nil, errs.New(errs.KindValidationFailed, "Attach grant fact ids must be valid and unique")
 		}
 		priorGrantID = grant.AttachID
@@ -119,9 +125,10 @@ func (service *AttachFactService) SealFactSets(
 		}
 	}
 	bundle := attachFactBundle{
-		Version: 2, AttachID: attachID, Sets: sets,
+		Version: 3, AttachID: attachID, Sets: sets,
 		Identity: attachTaskIdentity{
-			Database: own.Database, Role: own.Role, Password: append([]byte(nil), own.Password...),
+			Authentication: authentication,
+			Database:       own.Database, Role: own.Role, Password: append([]byte(nil), own.Password...),
 			Grants: make([]attachTaskGrantIdentity, 0, len(canonicalGrants)),
 		},
 	}
@@ -177,10 +184,11 @@ func (service *AttachFactService) ResolveTaskIdentity(
 	}
 	return service.openBundle(ctx, current, func(bundle *attachFactBundle) error {
 		identity := controllerpkg.AttachPlanIdentity{
-			Database: bundle.Identity.Database,
-			Role:     bundle.Identity.Role,
-			Password: append([]byte(nil), bundle.Identity.Password...),
-			Grants:   make([]controllerpkg.AttachPlanGrantIdentity, 0, len(bundle.Identity.Grants)),
+			Authentication: bundle.Identity.Authentication,
+			Database:       bundle.Identity.Database,
+			Role:           bundle.Identity.Role,
+			Password:       append([]byte(nil), bundle.Identity.Password...),
+			Grants:         make([]controllerpkg.AttachPlanGrantIdentity, 0, len(bundle.Identity.Grants)),
 		}
 		for _, grant := range bundle.Identity.Grants {
 			identity.Grants = append(identity.Grants, controllerpkg.AttachPlanGrantIdentity{
@@ -383,10 +391,11 @@ type attachFactBundle struct {
 }
 
 type attachTaskIdentity struct {
-	Database string                    `json:"database,omitempty"`
-	Role     string                    `json:"role"`
-	Password []byte                    `json:"password"`
-	Grants   []attachTaskGrantIdentity `json:"grants,omitempty"`
+	Authentication core.BackingAuthentication `json:"authentication,omitempty"`
+	Database       string                     `json:"database,omitempty"`
+	Role           string                     `json:"role"`
+	Password       []byte                     `json:"password"`
+	Grants         []attachTaskGrantIdentity  `json:"grants,omitempty"`
 }
 
 type attachTaskGrantIdentity struct {
@@ -424,8 +433,9 @@ func attachFactMetadataDefinition(
 }
 
 func validAttachFactBundle(bundle attachFactBundle, record etcd.AttachRecord) bool {
-	if bundle.Version != 2 || bundle.AttachID != record.ID || bundle.Identity.Role == "" ||
-		len(bundle.Identity.Password) == 0 || len(bundle.Identity.Grants) != len(record.GrantAttachIDs) ||
+	if bundle.Version != 3 || bundle.AttachID != record.ID ||
+		!validAttachTaskIdentityAuthentication(bundle.Identity) ||
+		len(bundle.Identity.Grants) != len(record.GrantAttachIDs) ||
 		len(bundle.Sets) != len(record.FactSets) {
 		return false
 	}
@@ -446,6 +456,19 @@ func validAttachFactBundle(bundle attachFactBundle, record etcd.AttachRecord) bo
 		}
 	}
 	return true
+}
+
+func validAttachTaskIdentityAuthentication(identity attachTaskIdentity) bool {
+	switch identity.Authentication {
+	case "", core.BackingAuthenticationUsernamePassword:
+		return identity.Role != "" && len(identity.Password) != 0
+	case core.BackingAuthenticationPassword:
+		return identity.Role == "default" && len(identity.Password) != 0
+	case core.BackingAuthenticationNone:
+		return identity.Role == "" && len(identity.Password) == 0 && len(identity.Grants) == 0
+	default:
+		return false
+	}
 }
 
 func (bundle *attachFactBundle) clear() {

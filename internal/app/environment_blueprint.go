@@ -43,7 +43,11 @@ type environmentBlueprintRepository interface {
 	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
 	GetEnvironmentBlueprintHead(context.Context, string) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
-	GetEnvironmentBlueprintRevision(context.Context, string, string) (etcd.Versioned[etcd.EnvironmentBlueprintRevision], bool, error)
+	GetEnvironmentBlueprintRevision(
+		context.Context,
+		string,
+		string,
+	) (etcd.Versioned[etcd.EnvironmentBlueprintRevision], bool, error)
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
@@ -166,8 +170,11 @@ func newDurableEnvironmentBlueprintRepository(
 	components *etcd.ComponentRepository,
 	scripts *etcd.ScriptRepository,
 ) (*durableEnvironmentBlueprintRepository, error) {
-	if hierarchy == nil || desired == nil || zones == nil || services == nil || routes == nil || entries == nil || values == nil ||
-		attaches == nil || components == nil || scripts == nil {
+	if hierarchy == nil || desired == nil || zones == nil || services == nil || routes == nil || entries == nil ||
+		values == nil ||
+		attaches == nil ||
+		components == nil ||
+		scripts == nil {
 		return nil, errs.New(errs.KindInternal, "Environment Blueprint repositories are not configured")
 	}
 	return &durableEnvironmentBlueprintRepository{
@@ -351,9 +358,15 @@ func newEnvironmentBlueprintService(
 	componentCatalog []controller.EnvironmentComponentRegistration,
 ) (*environmentBlueprintService, error) {
 	parsedEnvironmentPool, poolErr := netip.ParsePrefix(environmentPool)
-	if poolErr != nil || !parsedEnvironmentPool.Addr().Is4() || parsedEnvironmentPool != parsedEnvironmentPool.Masked() ||
-		repository == nil || idempotency == nil || materials == nil || releaseGroups == nil || entryGeneration == nil ||
-		attachFacts == nil || blueprintReleases == nil {
+	if poolErr != nil || !parsedEnvironmentPool.Addr().Is4() ||
+		parsedEnvironmentPool != parsedEnvironmentPool.Masked() ||
+		repository == nil ||
+		idempotency == nil ||
+		materials == nil ||
+		releaseGroups == nil ||
+		entryGeneration == nil ||
+		attachFacts == nil ||
+		blueprintReleases == nil {
 		return nil, errs.New(errs.KindInternal, "Environment Blueprint service is not configured")
 	}
 	if _, err := controller.NewTaskPlanResolver(volumeRoot, componentCatalog); err != nil {
@@ -384,12 +397,15 @@ func (service *environmentBlueprintService) ApplyComponentBlueprint(
 	environmentID string,
 	componentID string,
 	bundle core.BlueprintBundle,
-	idempotencyKey string,
+	expectedRevision, idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
-	if ids.Validate(ids.KindComponent, componentID) != nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Component id is invalid")
+	if ids.Validate(ids.KindComponent, componentID) != nil || expectedRevision == "" {
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"Component id or Blueprint revision is invalid",
+		)
 	}
-	return service.applyBlueprint(ctx, environmentID, environmentID, bundle, "", idempotencyKey, true)
+	return service.applyBlueprint(ctx, environmentID, environmentID, bundle, expectedRevision, idempotencyKey, true)
 }
 
 func (service *environmentBlueprintService) applyBlueprint(
@@ -547,6 +563,29 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	}
 	desiredEnvironment := environment
 	desiredEnvironment.Record.NetworkPool = parsed.Extensions.NetworkPool
+	if err := preserveEnvironmentBlueprintResources(
+		parsed.Project, priorProject, previous, previousProjection.Record.Volumes, hasProjection,
+	); err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	preflightServices, err := service.listBlueprintServices(ctx, environmentID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	preflightExtensions, err := preserveEnvironmentBlueprintServiceExtensions(
+		parsed.ServiceExtensions, submittedServiceNames, previous.Services, previousProjection.Record.ServiceExtensions,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	workloads, err := service.blueprintReleases.PreflightBlueprint(ctx, blueprintrelease.BlueprintPreflightInput{
+		EnvironmentID: environmentID, Project: parsed.Project, PriorProject: priorProject,
+		PreviousIdentities: previous, ServiceExtensions: preflightExtensions,
+		CurrentServices: preflightServices, AuthoredGroups: parsed.Extensions.ReleaseGroups,
+	}, service.releaseGroups)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	claim, err := desiredrevision.Claim(
 		ctx, service.repository, desiredrevision.ClaimInput{
 			EnvironmentID: environmentID, CandidateTaskID: candidateTaskID,
@@ -566,11 +605,6 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	}
 	taskID := claim.TaskID
 	now := claim.CreatedAt
-	if err := preserveEnvironmentBlueprintResources(
-		parsed.Project, priorProject, previous, previousProjection.Record.Volumes, hasProjection,
-	); err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
 	releaseMemberships, err := blueprintrelease.BuildNormalizedServiceMemberships(priorProject, parsed.Project)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -650,7 +684,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	serviceChanges, err := prepareEnvironmentBlueprintServiceChanges(
+	serviceChanges, err := blueprintrelease.PrepareServiceChanges(
 		environmentID, desiredServices, currentServices,
 	)
 	if err != nil {
@@ -868,6 +902,10 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	artifact, err = service.blueprintReleases.PrepareRuntimeArtifact(workloads, artifact, serviceChanges)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	artifactValue, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
@@ -920,7 +958,10 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if len(managedVolumeIDs) != 0 {
 		intentDigest, decodeErr := hex.DecodeString(evidence.Durable.CiphertextDigest)
 		if decodeErr != nil || len(intentDigest) != sha256.Size {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Blueprint protected intent digest is invalid")
+			return etcd.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Blueprint protected intent digest is invalid",
+			)
 		}
 		volumeIntentDigest = intentDigest
 		stepID := allocator.Named(ids.KindStep, "managed-volume-directories")
@@ -964,6 +1005,17 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		pinnedComponents,
 		reconciledEntries.Current,
 	)
+	projection.ManagedComponentRuntimeSources = append(
+		[]etcd.ManagedComponentRuntimeSource(nil),
+		previousProjection.Record.ManagedComponentRuntimeSources...,
+	)
+	projection.ManagedComponentRuntimeSources, err = etcd.ProjectManagedComponentRuntimeSources(
+		componentPreparation,
+		projection,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	topologyZones, topologyServices, topologyRoutes := environmentBlueprintTopologyProjection(
 		zoneChanges, serviceChanges, routeChanges,
 	)
@@ -1006,9 +1058,12 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		Materializations: materializations,
 		Status:           etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
+	task.ManagedComponentTeardownSources = componentPreparation.ManagedComponentTeardownSources()
 	preparedRelease, err := service.blueprintReleases.Prepare(ctx, blueprintrelease.PrepareInput{
-		VolumeRoot: service.volumeRoot,
-		Tenant:     tenant, Project: project, Environment: environment,
+		IntendedAttaches: preparedAttaches.effective,
+		Workloads:        workloads,
+		VolumeRoot:       service.volumeRoot,
+		Tenant:           tenant, Project: project, Environment: environment,
 		Projection: projection, ServiceChanges: serviceChanges, Memberships: releaseMemberships,
 		Scripts:       reconciledScripts.Current,
 		ReleaseGroups: effectiveReleaseGroups, Task: task,
@@ -1685,51 +1740,6 @@ func (service *environmentBlueprintService) environmentComponentMaterializations
 	return references, steps, nil
 }
 
-func prepareEnvironmentBlueprintServiceChanges(
-	environmentID string,
-	desired []core.Service,
-	current []etcd.Versioned[etcd.ServiceRecord],
-) ([]etcd.EnvironmentBlueprintServiceChange, error) {
-	currentByID := make(map[string]etcd.Versioned[etcd.ServiceRecord], len(current))
-	for _, service := range current {
-		if service.Record.EnvironmentID != environmentID || service.Record.Desired.ID == "" {
-			return nil, errs.New(errs.KindInternal, "durable Blueprint Service state is inconsistent")
-		}
-		if _, duplicate := currentByID[service.Record.Desired.ID]; duplicate {
-			return nil, errs.New(errs.KindInternal, "durable Blueprint Service state repeats an id")
-		}
-		currentByID[service.Record.Desired.ID] = service
-	}
-	changes := make([]etcd.EnvironmentBlueprintServiceChange, 0, len(desired))
-	for _, next := range desired {
-		if existing, found := currentByID[next.ID]; found {
-			replacement, err := etcd.ReplaceServiceDesired(existing.Record, next)
-			if err != nil {
-				return nil, err
-			}
-			currentCopy := existing
-			changes = append(changes, etcd.EnvironmentBlueprintServiceChange{
-				Current: &currentCopy,
-				Record:  replacement,
-			})
-			delete(currentByID, next.ID)
-			continue
-		}
-		record, err := etcd.NewServiceRecord(environmentID, next, "")
-		if err != nil {
-			return nil, err
-		}
-		changes = append(changes, etcd.EnvironmentBlueprintServiceChange{Record: record})
-	}
-	if len(currentByID) != 0 {
-		return nil, errs.New(
-			errs.KindResourceInUse,
-			"Blueprint omits an existing Service; remove it explicitly before apply",
-		)
-	}
-	return changes, nil
-}
-
 func prepareEnvironmentBlueprintRouteChanges(
 	environmentID string,
 	desired []core.Route,
@@ -1828,7 +1838,8 @@ func authoredComposeIdentitySnapshot(
 	seenServiceIDs := make(map[string]string, len(projection.DesiredServices))
 	seenServiceNames := make(map[string]string, len(projection.DesiredServices))
 	for index, service := range projection.DesiredServices {
-		if service.EnvironmentID != projection.EnvironmentID || ids.Validate(ids.KindService, service.Desired.ID) != nil ||
+		if service.EnvironmentID != projection.EnvironmentID ||
+			ids.Validate(ids.KindService, service.Desired.ID) != nil ||
 			service.Desired.Name == "" {
 			return controller.ComposeIdentitySnapshot{}, errs.New(
 				errs.KindInternal,
@@ -1841,7 +1852,8 @@ func authoredComposeIdentitySnapshot(
 				"Environment desired projection repeats an authored Service id",
 			)
 		}
-		if serviceID, duplicate := seenServiceNames[service.Desired.Name]; duplicate && serviceID != service.Desired.ID {
+		if serviceID, duplicate := seenServiceNames[service.Desired.Name]; duplicate &&
+			serviceID != service.Desired.ID {
 			return controller.ComposeIdentitySnapshot{}, errs.New(
 				errs.KindInternal,
 				"Environment desired projection repeats an authored Service name",
@@ -1856,7 +1868,10 @@ func authoredComposeIdentitySnapshot(
 		delete(authoredNames, service.Desired.Name)
 		seenServiceIDs[service.Desired.ID] = service.Desired.Name
 		seenServiceNames[service.Desired.Name] = service.Desired.ID
-		snapshot.Services[index] = controller.ComposeResourceIdentity{ID: service.Desired.ID, Name: service.Desired.Name}
+		snapshot.Services[index] = controller.ComposeResourceIdentity{
+			ID:   service.Desired.ID,
+			Name: service.Desired.Name,
+		}
 	}
 	if len(authoredNames) != 0 {
 		return controller.ComposeIdentitySnapshot{}, errs.New(
@@ -2156,10 +2171,16 @@ func environmentBlueprintVolumeMounts(
 			}
 			volumeID, exists := volumes[mount.Source]
 			if !exists {
-				return nil, errs.New(errs.KindValidationFailed, "Blueprint Service references an unknown managed Volume")
+				return nil, errs.New(
+					errs.KindValidationFailed,
+					"Blueprint Service references an unknown managed Volume",
+				)
 			}
 			if mount.Target == "" || !path.IsAbs(mount.Target) || path.Clean(mount.Target) != mount.Target {
-				return nil, errs.New(errs.KindValidationFailed, "Blueprint Volume mount target must be a clean absolute path")
+				return nil, errs.New(
+					errs.KindValidationFailed,
+					"Blueprint Volume mount target must be a clean absolute path",
+				)
 			}
 			if _, duplicate := seenTargets[mount.Target]; duplicate {
 				return nil, errs.New(errs.KindValidationFailed, "Blueprint Service repeats a Volume mount target")

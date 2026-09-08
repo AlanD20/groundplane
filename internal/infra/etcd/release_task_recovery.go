@@ -21,9 +21,10 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 	fence ReleaseFenceSet,
 	base *GetManyResult,
 	terminals *GetManyResult,
+	proofConditions ...Condition,
 ) (bool, error) {
 	if terminalStatus != TaskStatusCompleted || result.ReconciliationRequired {
-		return repository.returnReleaseToRecovery(ctx, task, head, base, terminalAt)
+		return repository.returnReleaseToRecovery(ctx, task, head, base, terminalAt, proofConditions...)
 	}
 	pending := make([]int, 0, maximumReleaseTerminalBatchMembers)
 	for index, value := range terminals.Values {
@@ -39,7 +40,7 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 		}
 	}
 	if len(pending) == 0 {
-		return repository.closeRecoveredRelease(ctx, task, head, fence, base, terminals, terminalAt)
+		return repository.closeRecoveredRelease(ctx, task, head, fence, base, terminals, terminalAt, proofConditions...)
 	}
 	detailKeys := make([]string, 0, len(pending)*3)
 	for _, index := range pending {
@@ -73,7 +74,8 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 			return false, corruptReleaseRecord()
 		}
 		intent, err := decodeReleaseRecord[domain.Intent](intentValue.Value, "release-intent")
-		if err != nil || domain.ValidateIntent(intent) != nil || intent.ID != member.ReleaseID || intent.ServiceID != member.ServiceID {
+		if err != nil || domain.ValidateIntent(intent) != nil || intent.ID != member.ReleaseID ||
+			intent.ServiceID != member.ServiceID {
 			return false, corruptReleaseRecord()
 		}
 		checkpoint, err := decodeReleaseRecord[domain.Checkpoint](checkpointValue.Value, "release-checkpoint")
@@ -91,7 +93,10 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 		proxy, hasProxy := releaseProxyEvidence(result, member.ServiceID)
 		recreate, hasRecreate := releaseRecreateEvidence(result, member.ServiceID)
 		if hasProxy == hasRecreate {
-			return false, errs.New(errs.KindStateConflict, "release recovery omitted its strategy-specific serving evidence")
+			return false, errs.New(
+				errs.KindStateConflict,
+				"release recovery omitted its strategy-specific serving evidence",
+			)
 		}
 		observedReleaseID, compensated := proxy.ReleaseID, proxy.Compensated
 		observedTarget := proxy.Target
@@ -127,10 +132,14 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 			effect := domain.EffectEvidence{
 				PlanID: task.PlanID, StepID: task.Steps[index*5+3].ID, AttemptID: task.ID,
 				AgentID: agentID, AcknowledgementID: assignment.AssignmentID, ObservedReleaseID: intent.ID,
-				ObservedRenderGeneration: uint64(task.RenderGeneration), EffectDigest: effectDigest, AcknowledgedAt: terminalAt,
+				ObservedRenderGeneration: uint64(
+					task.RenderGeneration,
+				), EffectDigest: effectDigest, AcknowledgedAt: terminalAt,
 			}
 			if hasProxy {
-				effect.ObservedSlot, effect.RouterConfigurationDigest, effect.ObservedRouterTarget = domain.WorkloadTarget(proxy.Target).Slot(), proxy.ConfigSHA256, proxy.Target
+				effect.ObservedSlot, effect.RouterConfigurationDigest, effect.ObservedRouterTarget = domain.WorkloadTarget(proxy.Target).
+					Slot(),
+					proxy.ConfigSHA256, proxy.Target
 			}
 			checkpoint.Evidence = []domain.EffectEvidence{effect}
 			summary.EffectDigests = append(slices.Clone(summary.EffectDigests), effectDigest)
@@ -175,10 +184,10 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 			Mutation{Type: MutationPut, Key: terminalValue.Key, Value: encodedTerminal},
 		)
 	}
-	if len(conditions)+len(mutations) > maximumTransactionOperations {
+	if len(conditions)+len(proofConditions)+len(mutations) > maximumTransactionOperations {
 		return false, errs.New(errs.KindInternal, "release recovery batch exceeds the transaction ceiling")
 	}
-	transaction, err := repository.store.Transact(ctx, conditions, mutations)
+	transaction, err := repository.store.Transact(ctx, append(conditions, proofConditions...), mutations)
 	if err != nil {
 		return false, err
 	}
@@ -189,7 +198,14 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 	return true, nil
 }
 
-func (repository *TaskRepository) returnReleaseToRecovery(ctx context.Context, task TaskRecord, head ReleaseOperationHead, base *GetManyResult, terminalAt time.Time) (bool, error) {
+func (repository *TaskRepository) returnReleaseToRecovery(
+	ctx context.Context,
+	task TaskRecord,
+	head ReleaseOperationHead,
+	base *GetManyResult,
+	terminalAt time.Time,
+	proofConditions ...Condition,
+) (bool, error) {
 	head.State = domain.StateRecoveryRequired
 	head.UpdatedAt = terminalAt
 	headValue, err := encodeReleaseRecord("release-operation", head)
@@ -197,12 +213,12 @@ func (repository *TaskRepository) returnReleaseToRecovery(ctx context.Context, t
 		return false, err
 	}
 	defer clear(headValue)
-	transaction, err := repository.store.Transact(ctx, []Condition{
+	transaction, err := repository.store.Transact(ctx, append([]Condition{
 		{Key: base.Values[0].Key, ModRevision: base.Values[0].ModRevision},
 		{Key: base.Values[1].Key, ModRevision: base.Values[1].ModRevision},
 		{Key: base.Values[2].Key, ModRevision: base.Values[2].ModRevision},
 		{Key: base.Values[3].Key, ModRevision: base.Values[3].ModRevision},
-	}, []Mutation{
+	}, proofConditions...), []Mutation{
 		{Type: MutationPut, Key: releaseOperationKey(task.OperationID), Value: headValue},
 		{Type: MutationPut, Key: base.Values[3].Key, Value: slices.Clone(base.Values[3].Value)},
 	})
@@ -216,7 +232,15 @@ func (repository *TaskRepository) returnReleaseToRecovery(ctx context.Context, t
 	return true, nil
 }
 
-func (repository *TaskRepository) closeRecoveredRelease(ctx context.Context, task TaskRecord, head ReleaseOperationHead, fence ReleaseFenceSet, base, terminals *GetManyResult, terminalAt time.Time) (bool, error) {
+func (repository *TaskRepository) closeRecoveredRelease(
+	ctx context.Context,
+	task TaskRecord,
+	head ReleaseOperationHead,
+	fence ReleaseFenceSet,
+	base, terminals *GetManyResult,
+	terminalAt time.Time,
+	proofConditions ...Condition,
+) (bool, error) {
 	if !head.RecoveryOutcome.Terminal() || fence.AttemptTaskID != task.ID {
 		return false, corruptReleaseRecord()
 	}
@@ -244,7 +268,7 @@ func (repository *TaskRepository) closeRecoveredRelease(ctx context.Context, tas
 		{Type: MutationPut, Key: base.Values[3].Key, Value: slices.Clone(base.Values[3].Value)},
 	}
 	defer clearMutations(mutations)
-	transaction, err := repository.store.Transact(ctx, conditions, mutations)
+	transaction, err := repository.store.Transact(ctx, append(conditions, proofConditions...), mutations)
 	if err != nil {
 		return false, err
 	}

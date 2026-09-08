@@ -11,12 +11,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/AlanD20/groundplane-component-sdk/component"
 	registeredcatalog "github.com/AlanD20/groundplane-registered-components/catalog"
 	"github.com/AlanD20/groundplane/internal/agent"
 	"github.com/AlanD20/groundplane/internal/common/managedconfig"
 	"github.com/AlanD20/groundplane/internal/infra/docker/dnsresolverobserver"
 	"github.com/AlanD20/groundplane/internal/infra/docker/managedconfighelper"
+	"github.com/AlanD20/groundplane/internal/infra/docker/managedconfighelpercontainer"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -33,7 +33,7 @@ type dnsResolverObserver interface {
 }
 
 type managedConfigExecutor interface {
-	Validate(context.Context, string, []string, []byte) error
+	Validate(context.Context, managedconfighelpercontainer.ValidatorImage, []string, []byte) error
 	Execute(context.Context, *agentpb.ManagedConfigHelperRequest) (*agentpb.ManagedConfigHelperResponse, error)
 }
 
@@ -148,7 +148,7 @@ func (runtime *registeredComponentActionRuntime) ExecuteComponentAction(
 		return nil, err
 	}
 	if err := runtime.managedHelper.Validate(
-		ctx, selectedImageReference(recipe.Image()), recipe.ValidateArgs(), content,
+		ctx, selectedValidatorImage(recipe.Image()), recipe.ValidateArgs(), content,
 	); err != nil {
 		return nil, err
 	}
@@ -395,11 +395,6 @@ func componentObservationComposeArtifact(plan *agentpb.ExecutionPlan) *agentpb.C
 		}
 	}
 	return nil
-}
-
-func selectedImageReference(image component.OCIImage) string {
-	_, reference, _ := image.Select(runtime.GOOS, runtime.GOARCH)
-	return reference
 }
 
 func closeComponentArtifact(source io.ReadCloser, operationErr error) error {

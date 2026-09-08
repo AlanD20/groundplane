@@ -2,19 +2,55 @@ package controller
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
 
 func TestPrepareReleaseTaskFirstDeploySealsCandidateAbsence(t *testing.T) {
+	testPrepareReleaseTaskFirstDeploy(t, false)
+}
+
+func TestPrepareReleaseTaskFirstBlueGreenDeploySealsCandidateAbsence(t *testing.T) {
+	testPrepareReleaseTaskFirstDeploy(t, true)
+}
+
+func testPrepareReleaseTaskFirstDeploy(t *testing.T, blueGreen bool) {
+	t.Helper()
 	reader, task := blueprintPlanTestState(t)
+	// A deployable Release must carry its healthcheck; the generic Blueprint
+	// fixture intentionally has none and is also used for configured-only work.
+	project := &composetypes.Project{
+		Services: composetypes.Services{"api": {
+			Name: "api", Image: "example/api:latest",
+			HealthCheck: &composetypes.HealthCheckConfig{Test: composetypes.HealthCheckTest{"CMD", "true"}},
+			Networks:    map[string]*composetypes.ServiceNetworkConfig{"frontend": {}},
+			Volumes: []composetypes.ServiceVolumeConfig{
+				{Type: composetypes.VolumeTypeVolume, Source: "app-data", Target: "/data"},
+			},
+		}},
+		Networks: composetypes.Networks{"frontend": {}},
+		Volumes:  composetypes.Volumes{"app-data": {}},
+	}
+	if blueGreen {
+		api := project.Services["api"]
+		api.Expose = []string{"8080"}
+		project.Services["api"] = api
+	}
+	normalized, err := project.MarshalYAML()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader.projection.NormalizedCompose = normalized
 	const (
 		publicationID = "publication-first-release"
 		releaseID     = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAW"
@@ -32,20 +68,38 @@ func TestPrepareReleaseTaskFirstDeploySealsCandidateAbsence(t *testing.T) {
 	}
 	member := etcd.ReleaseTaskRenderMember{
 		Intent: domain.Intent{ID: releaseID, EnvironmentID: reader.environment.ID, ServiceID: serviceID,
-			OperationID: task.OperationID, OperationKind: domain.OperationDeploy, Image: "example/api:first",
+			OperationID: task.OperationID, OperationKind: domain.OperationDeploy, CandidateWorkload: releaseTestWorkload("example/api:first"),
 			Strategy: domain.StrategyRecreate, OnFailure: domain.OnFailureSwitchBack},
 		Render: etcd.ReleaseRenderInput{ReleaseID: releaseID, PlanID: task.PlanID, ArtifactID: artifactID,
-			ServiceID: serviceID, ServiceName: "api", Image: "example/api:first", Strategy: domain.StrategyRecreate,
+			ServiceID: serviceID, ServiceName: "api", CandidateWorkload: releaseTestWorkload("example/api:first"), Strategy: domain.StrategyRecreate,
 			CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
 			TenantID: reader.tenant.ID, TenantSlug: reader.tenant.Slug, ProjectID: reader.project.ID,
 			ProjectSlug: reader.project.Slug, EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
 			AuthorizedVolumeDir: reader.environment.VolumeDir, Projection: reader.projection},
 	}
+	if blueGreen {
+		member.Intent.Strategy, member.Intent.Slot = domain.StrategyBlueGreen, domain.SlotBlue
+		member.Render.Strategy, member.Render.Slot = domain.StrategyBlueGreen, domain.SlotBlue
+		member.Render.PriorStrategy = domain.StrategyRecreate
+		member.Render.CandidateTarget = domain.WorkloadBlue
+		member.Render.ProxyPorts, member.Render.ProxyGeneration = []uint16{8080}, 2
+		member.Render.ProxyImage = testServiceProxyImage()
+		config, err := domain.RenderProxyConfig("api", releaseID, domain.WorkloadBlue, 2, []uint16{8080})
+		if err != nil {
+			t.Fatal(err)
+		}
+		member.Render.ProxyConfigDigest = hex.EncodeToString(config.SHA256[:])
+		// Direct Deploy must persist this exact render input before preparing
+		// its plan; bypassing the codec misses publication-only rejection.
+		if _, err := etcd.EncodeReleaseRenderInput(member.Render); err != nil {
+			t.Fatalf("first blue-green publication render: %v", err)
+		}
+	}
 	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, plan, err := resolver.PrepareReleaseTask(context.Background(), task, etcd.ReleaseTaskRenderInput{
+	prepared, plan, err := resolver.PrepareReleaseTask(context.Background(), task, etcd.ReleaseTaskRenderInput{
 		PublicationID: publicationID,
 		Operation: etcd.ReleaseOperationHead{OperationID: task.OperationID, PublicationID: publicationID,
 			EnvironmentID: reader.environment.ID, FailurePolicy: domain.OnFailureSwitchBack},
@@ -58,6 +112,44 @@ func TestPrepareReleaseTaskFirstDeploySealsCandidateAbsence(t *testing.T) {
 	if procedure == nil || len(procedure.GetMembers()) != 1 || procedure.GetMembers()[0].GetCandidateAbsence() == nil ||
 		procedure.GetMembers()[0].GetServingPredecessor() != nil || len(plan.GetArtifacts()) != 1 {
 		t.Fatalf("first Release procedure = %#v", procedure)
+	}
+	descriptor, err := executionplan.DescribeCandidateRelease(plan)
+	if err != nil || executionplan.CandidateReleaseDescriptorMatchesPlan(descriptor, plan) != nil ||
+		prepared.PlanHash != hex.EncodeToString(plan.GetPlanHash()) {
+		t.Fatalf("prepared publication did not bind the validated plan: %v", err)
+	}
+	if blueGreen {
+		steps := plan.GetSteps()
+		if len(steps) != 5 || steps[0].GetComposeWorkloadApply().GetTarget() != "blue" ||
+			!steps[0].GetComposeWorkloadApply().
+				GetEnsureProxy() ||
+			steps[1].GetWaitWorkloadHealthy().GetTarget() != "blue" ||
+			steps[2].GetServiceProxySwitch().GetReleaseId() != releaseID ||
+			steps[3].GetCandidateRestorationProbe().GetCandidateReleaseId() != releaseID ||
+			steps[4].GetCandidateRestorationCompensate().GetCandidateReleaseId() != releaseID {
+			t.Fatalf("first blue-green has incorrect forward or absence recovery steps: %v", steps)
+		}
+		workloads, candidates, proxies := 0, 0, 0
+		for _, service := range plan.GetArtifacts()[0].GetServices() {
+			switch service.GetRole() {
+			case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT:
+				workloads++
+				if service.GetSlot() == "blue" {
+					candidates++
+				}
+				if service.GetImageReference() != member.Render.CandidateWorkload.LocalImageID ||
+					service.GetExpectedReplicas() != 1 {
+					t.Fatalf("candidate workload authority changed: %v", service)
+				}
+			case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY:
+				proxies++
+			}
+		}
+		// The artifact retains both static slot definitions; the forward step
+		// above selects only blue, and no serving predecessor is authorized.
+		if workloads != 2 || candidates != 1 || proxies != 1 {
+			t.Fatalf("first blue-green rendered %d workloads and %d proxies", workloads, proxies)
+		}
 	}
 }
 

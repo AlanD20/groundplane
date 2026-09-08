@@ -77,7 +77,8 @@ func ValidateEnvironmentComponentCatalog(catalog []EnvironmentComponentRegistrat
 		}
 		if managed := registration.ManagedConfiguration; managed != nil {
 			action, found := registration.Definition.FindAction(managed.ActionID)
-			if managed.SourcePath == "" || path.IsAbs(managed.SourcePath) || path.Clean(managed.SourcePath) != managed.SourcePath ||
+			if managed.SourcePath == "" || path.IsAbs(managed.SourcePath) ||
+				path.Clean(managed.SourcePath) != managed.SourcePath ||
 				!found ||
 				action.Capability() != componentsdk.CapabilityManagedConfig ||
 				action.Operation() != componentsdk.OperationActivate {
@@ -352,7 +353,11 @@ func validateGeneratedEnvironmentService(
 		service.NetworkMode == componentsdk.ManagedNetworkModeHost {
 		return errs.New(errs.KindInternal, "Component planner emitted an invalid Service")
 	}
+	if service.Healthcheck != nil && service.Healthcheck.Validate() != nil {
+		return errs.New(errs.KindValidationFailed, "Component planner emitted an invalid healthcheck")
+	}
 	networks := make(map[string]struct{}, len(service.Networks))
+	gatewayPriorities := 0
 	for _, network := range service.Networks {
 		zone, exists := environment.Zones[network.Name]
 		if !exists || zone.Name != network.Name {
@@ -368,6 +373,15 @@ func validateGeneratedEnvironmentService(
 				return errs.New(errs.KindValidationFailed, "Component planner emitted an invalid static address")
 			}
 		}
+		if network.GatewayPriority < 0 || network.GatewayPriority > 1 {
+			return errs.New(errs.KindValidationFailed, "Component planner emitted an invalid gateway priority")
+		}
+		if network.GatewayPriority == 1 {
+			gatewayPriorities++
+		}
+	}
+	if gatewayPriorities > 1 {
+		return errs.New(errs.KindValidationFailed, "Component planner emitted multiple gateway priorities")
 	}
 	mountTargets := make(map[string]struct{}, len(service.Mounts))
 	for _, mount := range service.Mounts {

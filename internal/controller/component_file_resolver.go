@@ -103,8 +103,14 @@ func (resolver *TaskPlanResolver) resolveComponentFileFromProjection(
 	if err != nil {
 		return nil, err
 	}
+	// The upload is an audit input, not the complete retained topology. Use
+	// the same pinned normalized desired revision as runtime artifact replay.
+	normalized, err := loadNormalizedEnvironmentProject(ctx, projection)
+	if err != nil {
+		return nil, err
+	}
 	componentProjection, err := projectPinnedEnvironmentComponents(
-		parsed.Project,
+		normalized,
 		parsed.ServiceExtensions,
 		identity,
 		projection,

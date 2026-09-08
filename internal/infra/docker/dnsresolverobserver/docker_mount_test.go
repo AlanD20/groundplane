@@ -11,10 +11,24 @@ func TestArtifactDirectoryMountOwnsExactFileTarget(t *testing.T) {
 		target      string
 		want        bool
 	}{
-		{name: "read-only parent", destination: "/etc/groundplane/coredns", target: "/etc/groundplane/coredns/Corefile", want: true},
-		{name: "read-write parent", destination: "/etc/groundplane/coredns", readWrite: true, target: "/etc/groundplane/coredns/Corefile"},
+		{
+			name:        "read-only parent",
+			destination: "/etc/groundplane/coredns",
+			target:      "/etc/groundplane/coredns/Corefile",
+			want:        true,
+		},
+		{
+			name:        "read-write parent",
+			destination: "/etc/groundplane/coredns",
+			readWrite:   true,
+			target:      "/etc/groundplane/coredns/Corefile",
+		},
 		{name: "prefix sibling", destination: "/etc/groundplane/core", target: "/etc/groundplane/coredns/Corefile"},
-		{name: "file mount", destination: "/etc/groundplane/coredns/Corefile", target: "/etc/groundplane/coredns/Corefile"},
+		{
+			name:        "file mount",
+			destination: "/etc/groundplane/coredns/Corefile",
+			target:      "/etc/groundplane/coredns/Corefile",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

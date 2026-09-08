@@ -51,7 +51,9 @@ func TestHierarchyDeletionRoutesReplacePlaceholders(t *testing.T) {
 			if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 				t.Fatal(err)
 			}
-			if body.TaskID != "task_01K3D7R40G0000000000000000" || service.request.TargetKind != test.target || service.request.TargetID != test.id || service.request.IdempotencyKey != "hierarchy-delete-key-0001" {
+			if body.TaskID != "task_01K3D7R40G0000000000000000" || service.request.TargetKind != test.target ||
+				service.request.TargetID != test.id ||
+				service.request.IdempotencyKey != "hierarchy-delete-key-0001" {
 				t.Fatalf("response/request = %#v/%#v", body, service.request)
 			}
 		})

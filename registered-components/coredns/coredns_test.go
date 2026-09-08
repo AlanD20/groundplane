@@ -128,7 +128,9 @@ func TestRendererExpandsCanonicalTemplateExactly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
-	want := []byte(". {\n    bind 127.0.0.1\n    forward . 1.1.1.1\n    reload\n    prometheus 127.0.0.1:9153\n    log\n    errors\n}\n")
+	want := []byte(
+		". {\n    bind 127.0.0.1\n    forward . 1.1.1.1\n    reload\n    prometheus 127.0.0.1:9153\n    log\n    errors\n}\n",
+	)
 	if !bytes.Equal(rendered, want) {
 		t.Fatalf("Render() = %q, want %q", rendered, want)
 	}

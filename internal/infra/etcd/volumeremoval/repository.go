@@ -462,8 +462,16 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) CompletePathCall(
 	}
 	conditions = append(conditions, fence...)
 	mutations := []etcd.Mutation{
-		{Type: etcd.MutationPut, Key: environmentVolumeRemovalProgressKey(completion.OperationID), Value: progressValue},
-		{Type: etcd.MutationPut, Key: environmentVolumeRemovalCompletionKey(completion.OperationID, completion.RequestOrdinal), Value: completionValue},
+		{
+			Type:  etcd.MutationPut,
+			Key:   environmentVolumeRemovalProgressKey(completion.OperationID),
+			Value: progressValue,
+		},
+		{
+			Type:  etcd.MutationPut,
+			Key:   environmentVolumeRemovalCompletionKey(completion.OperationID, completion.RequestOrdinal),
+			Value: completionValue,
+		},
 		{Type: etcd.MutationDelete, Key: environmentVolumeRemovalPendingPathKey(completion.OperationID)},
 	}
 	if completion.DirectoryAbsent {

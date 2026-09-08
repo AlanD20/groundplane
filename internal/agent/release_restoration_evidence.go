@@ -4,11 +4,17 @@ import (
 	"bytes"
 	"crypto/sha256"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func releaseRestorationEvidenceProven(assignment Assignment, step *agentpb.ExecutionStep, result composeStepResult) bool {
+func releaseRestorationEvidenceProven(
+	assignment Assignment,
+	step *agentpb.ExecutionStep,
+	result composeStepResult,
+) bool {
 	if compensate := step.GetServiceProxyCompensate(); compensate != nil {
 		return compensate.GetEnabled() && exclusiveProxyEvidence(result) && exactProxyEvidence(
 			result.ProxyEvidence, compensate.GetServiceId(), compensate.GetPriorTarget(),
@@ -25,11 +31,16 @@ func releaseRestorationEvidenceProven(assignment Assignment, step *agentpb.Execu
 	if compensate == nil {
 		return false
 	}
-	switch assignment.RestorationAuthority.GetTarget() {
+	switch executionplan.RestorationTargetForService(assignment.RestorationAuthority, compensate.GetServiceId()) {
 	case agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE:
 		return exclusiveAbsenceEvidence(result) && result.CandidateAbsenceEvidence.GetAbsenceProven() &&
-			candidateAbsenceEvidenceMatches(assignment, compensate.GetServiceId(),
-				compensate.GetCandidateReleaseId(), compensate.GetCandidateArtifactId(), result.CandidateAbsenceEvidence)
+			candidateAbsenceEvidenceMatches(
+				assignment,
+				compensate.GetServiceId(),
+				compensate.GetCandidateReleaseId(),
+				compensate.GetCandidateArtifactId(),
+				result.CandidateAbsenceEvidence,
+			)
 	case agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR:
 		return candidateServingPredecessorEvidenceMatches(assignment, compensate.GetServiceId(), result)
 	default:
@@ -42,6 +53,13 @@ func releaseProbeEvidenceStatus(
 	step *agentpb.ExecutionStep,
 	result composeStepResult,
 ) (bool, error) {
+	if result.RestorationRequired {
+		if !selectedServingProbe(assignment, step) || result.ProxyEvidence != nil ||
+			result.RecreateEvidence != nil || result.CandidateAbsenceEvidence != nil {
+			return false, invalidReleaseProbeEvidence()
+		}
+		return true, nil
+	}
 	if probe := step.GetServiceProxyProbe(); probe != nil {
 		if !exclusiveProxyEvidence(result) || result.ProxyEvidence.GetCompensated() {
 			return false, invalidReleaseProbeEvidence()
@@ -76,7 +94,7 @@ func releaseProbeEvidenceStatus(
 	if probe == nil {
 		return false, invalidReleaseProbeEvidence()
 	}
-	switch assignment.RestorationAuthority.GetTarget() {
+	switch executionplan.RestorationTargetForService(assignment.RestorationAuthority, probe.GetServiceId()) {
 	case agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE:
 		if !exclusiveAbsenceEvidence(result) || !candidateAbsenceEvidenceMatches(
 			assignment, probe.GetServiceId(), probe.GetCandidateReleaseId(),
@@ -121,7 +139,10 @@ func recreateEvidenceExpectation(
 	return recreateEvidenceExpectationValue{serviceID, artifactID, releaseID, target, compensated}, matches == 1
 }
 
-func exactRecreateEvidenceValue(evidence *agentpb.ServiceRecreateEvidence, expected recreateEvidenceExpectationValue) bool {
+func exactRecreateEvidenceValue(
+	evidence *agentpb.ServiceRecreateEvidence,
+	expected recreateEvidenceExpectationValue,
+) bool {
 	return exactRecreateEvidence(evidence, expected.serviceID, expected.artifactID,
 		expected.releaseID, expected.target, expected.compensated)
 }
@@ -159,10 +180,15 @@ func candidateAbsenceEvidenceMatches(
 	authority := assignment.RestorationAuthority
 	plan := assignment.Plan
 	if evidence == nil || authority == nil || plan == nil || serviceID == "" || releaseID == "" || artifactID == "" ||
-		authority.GetTarget() != agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE ||
+		executionplan.RestorationTargetForService(
+			authority,
+			serviceID,
+		) != agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE ||
 		assignment.AssignmentID == "" || evidence.GetAssignmentId() != assignment.AssignmentID ||
 		len(plan.GetPlanHash()) != sha256.Size || len(authority.GetPlanHash()) != sha256.Size ||
-		len(authority.GetAuthoritySha256()) != sha256.Size || !bytes.Equal(evidence.GetPlanHash(), plan.GetPlanHash()) ||
+		len(
+			authority.GetAuthoritySha256(),
+		) != sha256.Size || !bytes.Equal(evidence.GetPlanHash(), plan.GetPlanHash()) ||
 		!bytes.Equal(evidence.GetPlanHash(), authority.GetPlanHash()) ||
 		!bytes.Equal(evidence.GetAuthoritySha256(), authority.GetAuthoritySha256()) ||
 		evidence.GetCandidateArtifactId() != authority.GetCandidateArtifactId() ||
@@ -171,7 +197,13 @@ func candidateAbsenceEvidenceMatches(
 	}
 	project, sealed, ok := candidateAbsenceRestorationTarget(plan, serviceID, releaseID, artifactID)
 	return ok && evidence.GetComposeProjectName() == project &&
-		candidateEvidenceMatchesAuthority(evidence.GetCandidates(), sealed, authority.GetCandidates())
+		candidateEvidenceMatchesAuthority(
+			evidence.GetCandidates(),
+			sealed,
+			authority.GetCandidates(),
+			serviceID,
+			releaseID,
+		)
 }
 
 func candidateAbsenceRestorationTarget(
@@ -199,22 +231,23 @@ func candidateEvidenceMatchesAuthority(
 	evidence []*agentpb.CandidateReleaseService,
 	sealed []*agentpb.CandidateReleaseService,
 	authority []*agentpb.ReleaseRestorationCandidate,
+	serviceID, releaseID string,
 ) bool {
-	evidenceSet, evidenceOK := candidateServiceSet(evidence)
-	sealedSet, sealedOK := candidateServiceSet(sealed)
-	authoritySet, authorityOK := restorationCandidateSet(authority)
-	if !evidenceOK || !sealedOK || !authorityOK || len(evidenceSet) != len(sealedSet) || len(evidenceSet) != len(authoritySet) {
+	if len(evidence) != 1 || evidence[0].GetServiceId() != serviceID || evidence[0].GetReleaseId() != releaseID {
 		return false
 	}
-	for identity := range evidenceSet {
-		if _, ok := sealedSet[identity]; !ok {
-			return false
-		}
+	sealedSet, sealedOK := candidateServiceSet(sealed)
+	authoritySet, authorityOK := restorationCandidateSet(authority)
+	if !sealedOK || !authorityOK || len(sealedSet) != len(authoritySet) {
+		return false
+	}
+	for identity := range sealedSet {
 		if _, ok := authoritySet[identity]; !ok {
 			return false
 		}
 	}
-	return true
+	_, selected := sealedSet[serviceID+"\x00"+releaseID]
+	return selected
 }
 
 func candidateServiceSet(values []*agentpb.CandidateReleaseService) (map[string]struct{}, bool) {
@@ -248,15 +281,18 @@ func restorationCandidateSet(values []*agentpb.ReleaseRestorationCandidate) (map
 }
 
 func exclusiveProxyEvidence(result composeStepResult) bool {
-	return result.ProxyEvidence != nil && result.RecreateEvidence == nil && result.CandidateAbsenceEvidence == nil
+	return !result.RestorationRequired && result.ProxyEvidence != nil && result.RecreateEvidence == nil &&
+		result.CandidateAbsenceEvidence == nil
 }
 
 func exclusiveRecreateEvidence(result composeStepResult) bool {
-	return result.ProxyEvidence == nil && result.RecreateEvidence != nil && result.CandidateAbsenceEvidence == nil
+	return !result.RestorationRequired && result.ProxyEvidence == nil && result.RecreateEvidence != nil &&
+		result.CandidateAbsenceEvidence == nil
 }
 
 func exclusiveAbsenceEvidence(result composeStepResult) bool {
-	return result.ProxyEvidence == nil && result.RecreateEvidence == nil && result.CandidateAbsenceEvidence != nil
+	return !result.RestorationRequired && result.ProxyEvidence == nil && result.RecreateEvidence == nil &&
+		result.CandidateAbsenceEvidence != nil
 }
 
 func invalidReleaseProbeEvidence() error {

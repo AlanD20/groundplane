@@ -99,7 +99,8 @@ func BuildReleaseHookPlan(input ReleaseHookPlanInput) (ReleaseHookPlan, error) {
 	sort.SliceStable(pre, func(i, j int) bool { return pre[i].ScriptSlug < pre[j].ScriptSlug })
 	sort.SliceStable(post, func(i, j int) bool { return post[i].ScriptSlug < post[j].ScriptSlug })
 	sort.SliceStable(failure, func(i, j int) bool { return failure[i].ScriptSlug < failure[j].ScriptSlug })
-	if len(input.PreStepIDs) != len(pre) || len(input.PostStepIDs) != len(post) || len(input.FailureStepIDs) != len(failure) {
+	if len(input.PreStepIDs) != len(pre) || len(input.PostStepIDs) != len(post) ||
+		len(input.FailureStepIDs) != len(failure) {
 		return output, errs.New(errs.KindValidationFailed, "release hook step IDs do not match selected hooks")
 	}
 	appendPhase := func(
@@ -141,7 +142,10 @@ func BuildReleaseHookPlan(input ReleaseHookPlanInput) (ReleaseHookPlan, error) {
 	return output, nil
 }
 
-func buildReleaseHookStep(hook etcd.ReleaseHookRenderInput, stepID, prerequisite, releaseID string) (*agentpb.ExecutionStep, *agentpb.ResolvedRunnerSnapshot, *agentpb.ScriptRunnerProjection, *agentpb.ScriptBodyArtifactMetadata, error) {
+func buildReleaseHookStep(
+	hook etcd.ReleaseHookRenderInput,
+	stepID, prerequisite, releaseID string,
+) (*agentpb.ExecutionStep, *agentpb.ResolvedRunnerSnapshot, *agentpb.ScriptRunnerProjection, *agentpb.ScriptBodyArtifactMetadata, error) {
 	if _, err := ulid.ParseStrict(hook.ScriptExecutionID); err != nil {
 		return nil, nil, nil, nil, errs.New(errs.KindValidationFailed, "release hook execution identity is invalid")
 	}
@@ -170,8 +174,28 @@ func buildReleaseHookStep(hook etcd.ReleaseHookRenderInput, stepID, prerequisite
 		return nil, nil, nil, nil, errs.New(errs.KindValidationFailed, "release hook service digest is invalid")
 	}
 	snapshotSHA := sha256.Sum256(hook.RunnerSnapshot)
-	body := &agentpb.ScriptBodyArtifactMetadata{ScriptExecutionId: hook.ScriptExecutionID, ScriptId: hook.ScriptID, Generation: hook.ScriptGeneration, Size: hook.BodySize, Sha256: bodySHA, Uid: projection.Uid, Gid: projection.Gid}
-	run := &agentpb.RunScript{ScriptExecutionId: hook.ScriptExecutionID, ScriptId: hook.ScriptID, ScriptGeneration: hook.ScriptGeneration, EnvironmentId: snapshot.EnvironmentId, ServiceId: snapshot.ServiceId, ReleaseId: snapshot.ReleaseId, RenderGeneration: snapshot.RenderGeneration, ServiceDefinitionSha256: serviceSHA, BodySha256: bodySHA, RunnerSnapshotId: hook.RunnerSnapshotID, RunnerSnapshotSha256: snapshotSHA[:]}
+	body := &agentpb.ScriptBodyArtifactMetadata{
+		ScriptExecutionId: hook.ScriptExecutionID,
+		ScriptId:          hook.ScriptID,
+		Generation:        hook.ScriptGeneration,
+		Size:              hook.BodySize,
+		Sha256:            bodySHA,
+		Uid:               projection.Uid,
+		Gid:               projection.Gid,
+	}
+	run := &agentpb.RunScript{
+		ScriptExecutionId:       hook.ScriptExecutionID,
+		ScriptId:                hook.ScriptID,
+		ScriptGeneration:        hook.ScriptGeneration,
+		EnvironmentId:           snapshot.EnvironmentId,
+		ServiceId:               snapshot.ServiceId,
+		ReleaseId:               snapshot.ReleaseId,
+		RenderGeneration:        snapshot.RenderGeneration,
+		ServiceDefinitionSha256: serviceSHA,
+		BodySha256:              bodySHA,
+		RunnerSnapshotId:        hook.RunnerSnapshotID,
+		RunnerSnapshotSha256:    snapshotSHA[:],
+	}
 	policy := agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FAILURE_HOOK
 	switch hook.When {
 	case core.ScriptPreDeploy, core.ScriptPreRollback:

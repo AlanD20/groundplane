@@ -104,10 +104,20 @@ func NewPlan(target Target, policy IsolationPolicy) (Plan, error) {
 			Name: "gp_runner_" + target.RunnerID, BridgeName: "g" + identityToken,
 			RunnerPool: policy.RunnerPool, Subnet: prefix, Gateway: gateway, RunnerAddress: runnerAddress,
 		},
-		Egress: Egress{SourceUID: target.Allocation.HostUID, DeniedCIDRs: denied, ControllerEndpoint: policy.ControllerEndpoint},
+		Egress: Egress{
+			SourceUID:          target.Allocation.HostUID,
+			DeniedCIDRs:        denied,
+			ControllerEndpoint: policy.ControllerEndpoint,
+		},
 		Container: Container{
 			Name: "gp_runner_" + target.RunnerID, ImageRef: target.ImageRef,
-			User:           strconv.FormatUint(uint64(target.Allocation.HostUID), 10) + ":" + strconv.FormatUint(uint64(target.Allocation.HostUID), 10),
+			User: strconv.FormatUint(
+				uint64(target.Allocation.HostUID),
+				10,
+			) + ":" + strconv.FormatUint(
+				uint64(target.Allocation.HostUID),
+				10,
+			),
 			ReadOnlyRootFS: true, CapDrop: []string{"ALL"}, SecurityOptions: []string{"no-new-privileges=true"},
 			NetworkName: "gp_runner_" + target.RunnerID, NetworkAddress: runnerAddress,
 			DockerSocketSource: proxySocket, DockerSocketTarget: "/var/run/docker.sock",
@@ -157,10 +167,13 @@ func validatePolicy(
 	allocationConfig runnerallocation.RunnerAllocationConfig,
 	policy IsolationPolicy,
 ) error {
-	if !policy.RunnerPool.IsValid() || !policy.RunnerPool.Addr().Is4() || policy.RunnerPool != policy.RunnerPool.Masked() ||
+	if !policy.RunnerPool.IsValid() || !policy.RunnerPool.Addr().Is4() ||
+		policy.RunnerPool != policy.RunnerPool.Masked() ||
 		policy.RunnerPool.Bits() > runnerallocation.RunnerSubnetBits ||
 		policy.RunnerPool != allocationConfig.RunnerPool ||
-		!policy.ControllerEndpoint.IsValid() || !policy.ControllerEndpoint.Addr().Is4() || policy.ControllerEndpoint.Port() == 0 {
+		!policy.ControllerEndpoint.IsValid() ||
+		!policy.ControllerEndpoint.Addr().Is4() ||
+		policy.ControllerEndpoint.Port() == 0 {
 		return errs.New(errs.KindValidationFailed, "runner Controller endpoint is invalid")
 	}
 	runnerPrefix := netip.MustParsePrefix(network)

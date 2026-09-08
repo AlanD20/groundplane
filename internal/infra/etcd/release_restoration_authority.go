@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"slices"
-	"sort"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -32,11 +31,12 @@ const (
 )
 
 type ReleaseRestorationCandidate struct {
-	ServiceID string `json:"service_id"`
-	ReleaseID string `json:"release_id"`
+	ServiceID string                   `json:"service_id"`
+	ReleaseID string                   `json:"release_id"`
+	Target    ReleaseRestorationTarget `json:"target"`
 }
 
-type ReleaseServingPredecessorAuthority struct {
+type ReleaseAppliedPredecessorAuthority struct {
 	KeyRevision           int64  `json:"key_revision"`
 	RevisionID            string `json:"revision_id"`
 	RenderGeneration      uint64 `json:"render_generation"`
@@ -49,14 +49,14 @@ type ReleaseServingPredecessorAuthority struct {
 // into a recovery record.
 type ReleaseRestorationAuthority struct {
 	Schema              int                                 `json:"schema"`
-	Target              ReleaseRestorationTarget            `json:"target"`
 	TaskID              string                              `json:"task_id"`
 	OperationID         string                              `json:"operation_id"`
 	PlanHash            string                              `json:"plan_hash"`
 	EnvironmentID       string                              `json:"environment_id"`
 	CandidateArtifactID string                              `json:"candidate_artifact_id"`
 	Candidates          []ReleaseRestorationCandidate       `json:"candidates"`
-	ServingPredecessor  *ReleaseServingPredecessorAuthority `json:"serving_predecessor,omitempty"`
+	AppliedPredecessor  *ReleaseAppliedPredecessorAuthority `json:"applied_predecessor,omitempty"`
+	NativePredecessors  []ReleaseNativePredecessorAuthority `json:"native_predecessors,omitempty"`
 }
 
 type ReleaseRecoveryPhase string
@@ -109,16 +109,21 @@ func validateReleaseRestorationAuthority(authority ReleaseRestorationAuthority) 
 	}
 	previous := ""
 	for _, candidate := range authority.Candidates {
-		identity := candidate.ServiceID + "\x00" + candidate.ReleaseID
-		if ids.Validate(ids.KindService, candidate.ServiceID) != nil || ids.Validate(ids.KindDeployment, candidate.ReleaseID) != nil || identity <= previous {
+		identity := candidate.ServiceID
+		if ids.Validate(ids.KindService, candidate.ServiceID) != nil ||
+			ids.Validate(ids.KindDeployment, candidate.ReleaseID) != nil ||
+			identity <= previous {
 			return corruptTaskAssignment()
 		}
 		previous = identity
+		if candidate.Target != ReleaseRestorationServingPredecessor &&
+			candidate.Target != ReleaseRestorationCandidateAbsence ||
+			candidate.Target == ReleaseRestorationServingPredecessor && authority.AppliedPredecessor == nil {
+			return corruptTaskAssignment()
+		}
 	}
-	switch authority.Target {
-	case ReleaseRestorationServingPredecessor:
-		predecessor := authority.ServingPredecessor
-		if predecessor == nil || predecessor.KeyRevision <= 0 || ids.Validate(ids.KindTask, predecessor.RevisionID) != nil ||
+	if predecessor := authority.AppliedPredecessor; predecessor != nil {
+		if predecessor.KeyRevision <= 0 || ids.Validate(ids.KindTask, predecessor.RevisionID) != nil ||
 			predecessor.RenderGeneration == 0 || !validSHA256(predecessor.ComposeArtifactSHA256) ||
 			len(predecessor.ComposeArtifact) == 0 || len(predecessor.ComposeArtifact) > MaximumTaskRecordBytes {
 			return corruptTaskAssignment()
@@ -127,19 +132,16 @@ func validateReleaseRestorationAuthority(authority ReleaseRestorationAuthority) 
 		if hex.EncodeToString(digest[:]) != predecessor.ComposeArtifactSHA256 {
 			return corruptTaskAssignment()
 		}
-	case ReleaseRestorationCandidateAbsence:
-		if authority.ServingPredecessor != nil {
-			return corruptTaskAssignment()
-		}
-	default:
-		return corruptTaskAssignment()
 	}
-	return nil
+	return validateRestorationMemberWitness(authority)
 }
 
 func validateReleaseRecoveryRecord(record releaseRecoveryRecord) error {
 	if record.Schema != 1 || ids.Validate(ids.KindTask, record.TaskID) != nil ||
-		ids.Validate(ids.KindAssignment, record.AssignmentID) != nil || ids.Validate(ids.KindOperation, record.OperationID) != nil ||
+		ids.Validate(
+			ids.KindAssignment,
+			record.AssignmentID,
+		) != nil || ids.Validate(ids.KindOperation, record.OperationID) != nil ||
 		!validSHA256(record.PlanHash) || !validSHA256(record.RestorationAuthoritySHA256) ||
 		!validSHA256(record.PrimaryReportSHA256) || record.PrimaryStatus == TaskStatusCompleted ||
 		!validTerminalTaskStatus(record.PrimaryStatus) || len(record.RecoveryStepIDs) == 0 ||
@@ -235,7 +237,10 @@ func releaseRecoveryRecordSHA256(record releaseRecoveryRecord) (string, error) {
 	})
 }
 
-func (repository *TaskRepository) createReleaseRecoveryRecord(ctx context.Context, record releaseRecoveryRecord) (Versioned[releaseRecoveryRecord], error) {
+func (repository *TaskRepository) createReleaseRecoveryRecord(
+	ctx context.Context,
+	record releaseRecoveryRecord,
+) (Versioned[releaseRecoveryRecord], error) {
 	if err := validateContext(ctx); err != nil {
 		return Versioned[releaseRecoveryRecord]{}, err
 	}
@@ -245,34 +250,55 @@ func (repository *TaskRepository) createReleaseRecoveryRecord(ctx context.Contex
 	}
 	defer clear(value)
 	key := releaseRecoveryKey(record.TaskID)
-	result, err := repository.store.Transact(ctx, []Condition{{Key: key}}, []Mutation{{Type: MutationPut, Key: key, Value: value}})
+	result, err := repository.store.Transact(
+		ctx,
+		[]Condition{{Key: key}},
+		[]Mutation{{Type: MutationPut, Key: key, Value: value}},
+	)
 	if err != nil {
 		return Versioned[releaseRecoveryRecord]{}, err
 	}
 	if result.Succeeded {
-		return Versioned[releaseRecoveryRecord]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
+		return Versioned[releaseRecoveryRecord]{
+			Record:       record,
+			Revision:     result.Revision,
+			ReadRevision: result.Revision,
+		}, nil
 	}
 	read, err := repository.store.Get(ctx, key)
 	if err != nil || read.Entry == nil {
-		return Versioned[releaseRecoveryRecord]{}, errs.New(errs.KindStateConflict, "release recovery record creation conflicted")
+		return Versioned[releaseRecoveryRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"release recovery record creation conflicted",
+		)
 	}
 	stored, decodeErr := decodeReleaseRecoveryRecord(read.Entry.Value)
 	storedValue, encodeErr := encodeReleaseRecoveryRecord(stored)
 	if decodeErr != nil || encodeErr != nil || !bytes.Equal(value, storedValue) {
 		clear(storedValue)
-		return Versioned[releaseRecoveryRecord]{}, errs.New(errs.KindStateConflict, "release recovery record creation conflicted")
+		return Versioned[releaseRecoveryRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"release recovery record creation conflicted",
+		)
 	}
 	clear(storedValue)
-	return Versioned[releaseRecoveryRecord]{Record: stored, Revision: read.Entry.ModRevision, ReadRevision: read.ReadRevision}, nil
+	return Versioned[releaseRecoveryRecord]{
+		Record:       stored,
+		Revision:     read.Entry.ModRevision,
+		ReadRevision: read.ReadRevision,
+	}, nil
 }
 
 func releaseRestorationStepIDs(
 	procedure *agentpb.CandidateReleaseProcedure,
-	target ReleaseRestorationTarget,
+	candidates []ReleaseRestorationCandidate,
 ) ([]string, error) {
+	if err := validateSelectedRestorationTargets(procedure, candidates); err != nil {
+		return nil, err
+	}
 	stepIDs := make([]string, 0, len(procedure.GetMembers())*2)
-	for _, member := range procedure.GetMembers() {
-		switch target {
+	for index, member := range procedure.GetMembers() {
+		switch candidates[index].Target {
 		case ReleaseRestorationServingPredecessor:
 			selected := member.GetServingPredecessor()
 			if selected == nil {
@@ -291,7 +317,7 @@ func releaseRestorationStepIDs(
 	}
 	for index := len(procedure.GetMembers()) - 1; index >= 0; index-- {
 		member := procedure.GetMembers()[index]
-		switch target {
+		switch candidates[index].Target {
 		case ReleaseRestorationServingPredecessor:
 			stepIDs = append(stepIDs, member.GetServingPredecessor().GetCompensateStepId())
 		case ReleaseRestorationCandidateAbsence:
@@ -301,10 +327,21 @@ func releaseRestorationStepIDs(
 	return stepIDs, nil
 }
 
-func advanceReleaseRecoveryRecord(record releaseRecoveryRecord, input TaskEventInput, revision int64) (releaseRecoveryRecord, bool, error) {
+func advanceReleaseRecoveryRecord(
+	record releaseRecoveryRecord,
+	input TaskEventInput,
+	revision int64,
+) (releaseRecoveryRecord, bool, error) {
 	if err := validateReleaseRecoveryRecord(record); err != nil || record.Phase == ReleaseRecoveryPhaseProven ||
-		int(record.Cursor) >= len(record.RecoveryStepIDs) || input.Identity.StepID != record.RecoveryStepIDs[record.Cursor] {
-		return releaseRecoveryRecord{}, false, errs.New(errs.KindStateConflict, "release recovery event is not the canonical next step")
+		int(
+			record.Cursor,
+		) >= len(
+			record.RecoveryStepIDs,
+		) || input.Identity.StepID != record.RecoveryStepIDs[record.Cursor] {
+		return releaseRecoveryRecord{}, false, errs.New(
+			errs.KindStateConflict,
+			"release recovery event is not the canonical next step",
+		)
 	}
 	switch input.State {
 	case TaskEventStateRunning, TaskEventStateFailed, TaskEventStateAborted, TaskEventStateTimedOut:
@@ -327,7 +364,10 @@ func advanceReleaseRecoveryRecord(record releaseRecoveryRecord, input TaskEventI
 		}
 		return next, true, nil
 	default:
-		return releaseRecoveryRecord{}, false, errs.New(errs.KindStateConflict, "release recovery event state is invalid")
+		return releaseRecoveryRecord{}, false, errs.New(
+			errs.KindStateConflict,
+			"release recovery event state is invalid",
+		)
 	}
 }
 
@@ -338,7 +378,8 @@ func (repository *TaskRepository) releaseRecoveryDirectiveAtRevision(
 	procedure *agentpb.CandidateReleaseProcedure,
 	revision int64,
 ) (*ReleaseRecoveryDirective, error) {
-	if assignment.ExecutionMode != TaskExecutionModeRecoveryOnly || !validSHA256(assignment.ReleaseRecoveryRecordSHA256) {
+	if assignment.ExecutionMode != TaskExecutionModeRecoveryOnly ||
+		!validSHA256(assignment.ReleaseRecoveryRecordSHA256) {
 		return nil, corruptTaskAssignment()
 	}
 	read, err := repository.store.GetMany(ctx, GetManyRequest{
@@ -362,11 +403,15 @@ func (repository *TaskRepository) releaseRecoveryDirectiveAtRevision(
 	if err != nil || digest != assignment.ReleaseRecoveryRecordSHA256 {
 		return nil, corruptTaskAssignment()
 	}
-	wantSteps, err := releaseRestorationStepIDs(procedure, assignment.RestorationAuthority.Target)
+	wantSteps, err := releaseRestorationStepIDs(procedure, assignment.RestorationAuthority.Candidates)
 	if err != nil || !slices.Equal(wantSteps, record.RecoveryStepIDs) {
 		return nil, corruptTaskAssignment()
 	}
-	applicable, err := releaseApplicableCompensationStepIDs(procedure, assignment.RestorationAuthority.Target, record.MutationEvidence)
+	applicable, err := releaseApplicableCompensationStepIDs(
+		procedure,
+		assignment.RestorationAuthority.Candidates,
+		record.MutationEvidence,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -378,9 +423,12 @@ func (repository *TaskRepository) releaseRecoveryDirectiveAtRevision(
 
 func releaseApplicableCompensationStepIDs(
 	procedure *agentpb.CandidateReleaseProcedure,
-	target ReleaseRestorationTarget,
+	candidates []ReleaseRestorationCandidate,
 	evidence []releaseRecoveryMutationEvidence,
 ) ([]string, error) {
+	if err := validateSelectedRestorationTargets(procedure, candidates); err != nil {
+		return nil, err
+	}
 	completed := make(map[string]struct{})
 	evidenceIndex := 0
 	for _, member := range procedure.GetMembers() {
@@ -411,7 +459,7 @@ func releaseApplicableCompensationStepIDs(
 			continue
 		}
 		var compensationStepID string
-		switch target {
+		switch candidates[index].Target {
 		case ReleaseRestorationServingPredecessor:
 			compensationStepID = member.GetServingPredecessor().GetCompensateStepId()
 		case ReleaseRestorationCandidateAbsence:
@@ -425,47 +473,6 @@ func releaseApplicableCompensationStepIDs(
 		result = append(result, compensationStepID)
 	}
 	return result, nil
-}
-
-func buildBlueprintRestorationAuthority(
-	task TaskRecord,
-	predecessor taskMaterializationAppliedPredecessor,
-	manifest ReleaseStagedManifest,
-	predecessorComposeArtifact []byte,
-) (ReleaseRestorationAuthority, string, error) {
-	if !taskHasBlueprintCandidateAppliedAuthority(task) || manifest.PublicationID != task.Params[TaskReleasePublicationParam] ||
-		manifest.OperationID != task.OperationID || len(manifest.Members) == 0 || predecessor.Present != (len(predecessorComposeArtifact) != 0) {
-		return ReleaseRestorationAuthority{}, "", corruptTaskAssignment()
-	}
-	candidates := make([]ReleaseRestorationCandidate, len(manifest.Members))
-	for index, member := range manifest.Members {
-		candidates[index] = ReleaseRestorationCandidate{ServiceID: member.ServiceID, ReleaseID: member.ReleaseID}
-	}
-	sort.Slice(candidates, func(left, right int) bool {
-		if candidates[left].ServiceID == candidates[right].ServiceID {
-			return candidates[left].ReleaseID < candidates[right].ReleaseID
-		}
-		return candidates[left].ServiceID < candidates[right].ServiceID
-	})
-	authority := ReleaseRestorationAuthority{
-		Schema: 1, TaskID: task.ID, OperationID: task.OperationID, PlanHash: task.PlanHash,
-		EnvironmentID: task.Owner.EnvironmentID, CandidateArtifactID: task.Params[TaskComposeArtifactParam], Candidates: candidates,
-		Target: ReleaseRestorationCandidateAbsence,
-	}
-	if predecessor.Present {
-		artifactDigest := sha256.Sum256(predecessorComposeArtifact)
-		authority.Target = ReleaseRestorationServingPredecessor
-		authority.ServingPredecessor = &ReleaseServingPredecessorAuthority{
-			KeyRevision: predecessor.KeyRevision, RevisionID: predecessor.RevisionID,
-			RenderGeneration: predecessor.RenderGeneration, ComposeArtifactSHA256: hex.EncodeToString(artifactDigest[:]),
-			ComposeArtifact: slices.Clone(predecessorComposeArtifact),
-		}
-	}
-	digest, err := releaseRestorationAuthoritySHA256(authority)
-	if err != nil {
-		return ReleaseRestorationAuthority{}, "", err
-	}
-	return authority, digest, nil
 }
 
 func validTerminalTaskStatus(status TaskStatus) bool {
@@ -490,10 +497,11 @@ func cloneReleaseRestorationAuthority(value *ReleaseRestorationAuthority) *Relea
 	}
 	clone := *value
 	clone.Candidates = slices.Clone(value.Candidates)
-	if value.ServingPredecessor != nil {
-		predecessor := *value.ServingPredecessor
-		predecessor.ComposeArtifact = slices.Clone(value.ServingPredecessor.ComposeArtifact)
-		clone.ServingPredecessor = &predecessor
+	clone.NativePredecessors = cloneReleaseNativePredecessors(value.NativePredecessors)
+	if value.AppliedPredecessor != nil {
+		predecessor := *value.AppliedPredecessor
+		predecessor.ComposeArtifact = slices.Clone(value.AppliedPredecessor.ComposeArtifact)
+		clone.AppliedPredecessor = &predecessor
 	}
 	return &clone
 }

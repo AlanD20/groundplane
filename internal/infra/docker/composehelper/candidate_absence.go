@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
+
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -25,9 +27,18 @@ func executeCandidateAbsence(
 	if err != nil {
 		return nil, err
 	}
+	var selected *agentpb.ReleaseRestorationCandidate
+	for _, member := range authority.GetCandidates() {
+		if member.GetServiceId() == restorationStepServiceID(step) {
+			selected = member
+		}
+	}
+	if selected == nil {
+		return nil, errs.New(errs.KindValidationFailed, "candidate absence member is missing")
+	}
 	executionCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
-	containers, err := exactCandidateContainers(executionCtx, taskRunner, artifact, authority, projectName)
+	containers, err := exactCandidateContainers(executionCtx, taskRunner, artifact, selected, projectName)
 	if err != nil {
 		return failedResponse(1), nil
 	}
@@ -39,7 +50,7 @@ func executeCandidateAbsence(
 		if runErr != nil || result.ExitCode != 0 {
 			return failedResponse(1), nil
 		}
-		containers, err = exactCandidateContainers(executionCtx, taskRunner, artifact, authority, projectName)
+		containers, err = exactCandidateContainers(executionCtx, taskRunner, artifact, selected, projectName)
 		if err != nil || len(containers) != 0 {
 			return failedResponse(1), nil
 		}
@@ -48,12 +59,9 @@ func executeCandidateAbsence(
 		AssignmentId: request.GetAssignmentId(), PlanHash: append([]byte(nil), request.GetPlan().GetPlanHash()...),
 		AuthoritySha256: append([]byte(nil), authority.GetAuthoritySha256()...), ComposeProjectName: projectName,
 		CandidateArtifactId: authority.GetCandidateArtifactId(), AbsenceProven: len(containers) == 0,
-		Candidates: make([]*agentpb.CandidateReleaseService, len(authority.GetCandidates())),
-	}
-	for index, candidate := range authority.GetCandidates() {
-		evidence.Candidates[index] = &agentpb.CandidateReleaseService{
-			ServiceId: candidate.GetServiceId(), ReleaseId: candidate.GetReleaseId(),
-		}
+		Candidates: []*agentpb.CandidateReleaseService{
+			{ServiceId: selected.GetServiceId(), ReleaseId: selected.GetReleaseId()},
+		},
 	}
 	return &agentpb.ComposeHelperResponse{
 		Schema: SchemaVersion, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,
@@ -69,7 +77,10 @@ func validateCandidateAbsenceRequest(
 	authority *agentpb.ReleaseRestorationAuthority,
 ) (string, error) {
 	if artifact == nil || authority == nil ||
-		authority.GetTarget() != agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE ||
+		executionplan.RestorationTargetForService(
+			authority,
+			restorationStepServiceID(step),
+		) != agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE ||
 		authority.GetTaskId() != request.GetTaskId() || authority.GetOperationId() != request.GetOperationId() ||
 		authority.GetCandidateArtifactId() != artifact.GetArtifactId() ||
 		len(authority.GetPlanHash()) != 32 || !bytes.Equal(authority.GetPlanHash(), request.GetPlan().GetPlanHash()) ||
@@ -81,6 +92,11 @@ func validateCandidateAbsenceRequest(
 		serviceID, releaseID = probe.GetServiceId(), probe.GetCandidateReleaseId()
 	} else if compensate := step.GetCandidateRestorationCompensate(); compensate != nil {
 		serviceID, releaseID = compensate.GetServiceId(), compensate.GetCandidateReleaseId()
+	}
+	for _, member := range authority.GetCandidates() {
+		if member.GetServiceId() == serviceID && member.GetReleaseId() != releaseID {
+			return "", errs.New(errs.KindValidationFailed, "candidate absence member release diverges")
+		}
 	}
 	projectName := ""
 	for _, member := range request.GetPlan().GetCandidateReleaseProcedure().GetMembers() {
@@ -100,20 +116,24 @@ func exactCandidateContainers(
 	ctx context.Context,
 	taskRunner runner.Runner,
 	artifact *agentpb.ComposeArtifact,
-	authority *agentpb.ReleaseRestorationAuthority,
+	candidate *agentpb.ReleaseRestorationCandidate,
 	projectName string,
 ) ([]string, error) {
 	list, err := taskRunner.Run(ctx, runner.RunCmdOpts{
 		Name: DockerExecutable,
-		Args: []string{"container", "ls", "--all", "--filter", "label=com.docker.compose.project=" + projectName, "--format", "{{.ID}}"},
-		Dir:  WorkDirectory, Env: append([]string(nil), fixedEnvironment...), ReplaceEnv: true,
+		Args: []string{
+			"container",
+			"ls",
+			"--all",
+			"--filter",
+			"label=com.docker.compose.project=" + projectName,
+			"--format",
+			"{{.ID}}",
+		},
+		Dir: WorkDirectory, Env: append([]string(nil), fixedEnvironment...), ReplaceEnv: true,
 	})
 	if err != nil || list.ExitCode != 0 {
 		return nil, errs.New(errs.KindRequestFailed, "candidate absence observation failed")
-	}
-	candidates := make(map[string]string, len(authority.GetCandidates()))
-	for _, candidate := range authority.GetCandidates() {
-		candidates[candidate.GetServiceId()] = candidate.GetReleaseId()
 	}
 	found := make([]string, 0)
 	for _, containerID := range strings.Fields(string(list.Stdout)) {
@@ -125,18 +145,23 @@ func exactCandidateContainers(
 			Dir: WorkDirectory, Env: append([]string(nil), fixedEnvironment...), ReplaceEnv: true,
 		})
 		labels := map[string]string{}
-		if inspectErr != nil || inspected.ExitCode != 0 || json.Unmarshal([]byte(strings.TrimSpace(string(inspected.Stdout))), &labels) != nil ||
+		if inspectErr != nil || inspected.ExitCode != 0 ||
+			json.Unmarshal([]byte(strings.TrimSpace(string(inspected.Stdout))), &labels) != nil ||
 			labels["com.docker.compose.project"] != projectName {
 			return nil, errs.New(errs.KindStateConflict, "candidate absence container evidence is ambiguous")
 		}
-		releaseID, selected := candidates[labels["com.groundplane.service-id"]]
-		if !selected {
+		if labels["com.groundplane.service-id"] != candidate.GetServiceId() {
 			continue
 		}
 		matched := false
 		for _, service := range artifact.GetServices() {
+			releaseMatches := labels["com.groundplane.release-id"] == candidate.GetReleaseId()
+			if service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+				releaseMatches = labels["com.groundplane.release-id"] == "" &&
+					expectedLabel(service.GetExpectedLabels(), "com.groundplane.release-id") == ""
+			}
 			if service.GetServiceId() == labels["com.groundplane.service-id"] &&
-				labels["com.groundplane.release-id"] == releaseID && hasAllExpectedLabels(labels, service.GetExpectedLabels()) {
+				releaseMatches && hasAllExpectedLabels(labels, service.GetExpectedLabels()) {
 				matched = true
 				break
 			}

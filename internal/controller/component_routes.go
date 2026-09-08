@@ -23,7 +23,7 @@ type ComponentReader interface {
 }
 
 type ComponentMutator interface {
-	EnableComponent(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	EnableComponent(context.Context, string, apiTypes.ComponentEnableRequest, string) (etcd.IdempotencyResponse, error)
 	DisableComponent(context.Context, string, string) (etcd.IdempotencyResponse, error)
 	UpdateComponent(context.Context, string, string) (etcd.IdempotencyResponse, error)
 	SetComponentConfig(
@@ -65,6 +65,12 @@ type componentConfigInput struct {
 	Body           apiTypes.ComponentConfigMutationRequest
 }
 
+type componentEnableInput struct {
+	ID             string                           `path:"id" pattern:"^cmp_[0-9A-HJKMNP-TV-Z]{26}$"`
+	IdempotencyKey string                           `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body           *apiTypes.ComponentEnableRequest `required:"false"`
+}
+
 type componentRouterInput struct {
 	ID string `path:"id" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
 }
@@ -75,7 +81,10 @@ func (s *Server) registerComponents() {
 	componentConfigSchema(s.API.OpenAPI().Components.Schemas)
 	componentConfigResponseSchema(s.API.OpenAPI().Components.Schemas)
 	taskAcceptedSchema := openAPISchema[apiTypes.TaskAccepted](s.API.OpenAPI().Components.Schemas, "TaskAccepted")
-	configResultSchema := openAPISchema[apiTypes.ComponentConfigMutationResult](s.API.OpenAPI().Components.Schemas, "ComponentConfigMutationResult")
+	configResultSchema := openAPISchema[apiTypes.ComponentConfigMutationResult](
+		s.API.OpenAPI().Components.Schemas,
+		"ComponentConfigMutationResult",
+	)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "component.list", Method: http.MethodGet, Path: "/components",
 		Summary: "List Components", Tags: []string{"Component"},
@@ -106,12 +115,20 @@ func (s *Server) registerComponents() {
 		},
 	}
 	huma.Register(s.API, configSetOperation, s.setComponentConfig)
+	huma.Register(s.API, huma.Operation{
+		OperationID: "component.enable", Method: http.MethodPost, Path: "/components/{id}/enable",
+		Summary: "Enable a Component with optional configuration", Tags: []string{"Component"}, DefaultStatus: http.StatusAccepted,
+		Middlewares: huma.Middlewares{s.rejectComponentQuery},
+		Responses:   attachMutationResponses(taskAcceptedSchema),
+		RequestBody: &huma.RequestBody{Required: false, Content: map[string]*huma.MediaType{
+			"application/json": {Schema: componentEnableRequestSchema(s.API.OpenAPI().Components.Schemas)},
+		}},
+	}, s.enableComponent)
 	for _, action := range []struct {
 		id      string
 		path    string
 		handler func(context.Context, *componentActionInput) (*componentMutationOutput, error)
 	}{
-		{id: "component.enable", path: "/components/{id}/enable", handler: s.enableComponent},
 		{id: "component.disable", path: "/components/{id}/disable", handler: s.disableComponent},
 		{id: "component.update", path: "/components/{id}/update", handler: s.updateComponent},
 	} {
@@ -127,6 +144,7 @@ func (s *Server) registerComponents() {
 		Summary: "Show Environment router", Tags: []string{"Component"},
 	}, s.showComponentRouter)
 	s.setRoutePolicy("PUT /api/v1/components/{id}/config", routePolicy{body: jsonBody})
+	s.setRoutePolicy("POST /api/v1/components/{id}/enable", routePolicy{body: jsonBody})
 }
 
 func (s *Server) listComponents(ctx context.Context, request *componentListInput) (*componentListOutput, error) {
@@ -175,7 +193,10 @@ func (s *Server) showComponentConfig(ctx context.Context, request *componentIDIn
 	return &componentConfigOutput{Body: response}, nil
 }
 
-func (s *Server) setComponentConfig(ctx context.Context, request *componentConfigInput) (*componentMutationOutput, error) {
+func (s *Server) setComponentConfig(
+	ctx context.Context,
+	request *componentConfigInput,
+) (*componentMutationOutput, error) {
 	if s.componentMutations == nil {
 		return nil, errs.New(errs.KindInternal, "Component mutation service is not configured")
 	}
@@ -186,18 +207,25 @@ func (s *Server) setComponentConfig(ctx context.Context, request *componentConfi
 	return componentMutationResponse(response), nil
 }
 
-func (s *Server) enableComponent(ctx context.Context, request *componentActionInput) (*componentMutationOutput, error) {
+func (s *Server) enableComponent(ctx context.Context, request *componentEnableInput) (*componentMutationOutput, error) {
 	if s.componentMutations == nil {
 		return nil, errs.New(errs.KindInternal, "Component mutation service is not configured")
 	}
-	response, err := s.componentMutations.EnableComponent(ctx, request.ID, request.IdempotencyKey)
+	body := apiTypes.ComponentEnableRequest{}
+	if request.Body != nil {
+		body = *request.Body
+	}
+	response, err := s.componentMutations.EnableComponent(ctx, request.ID, body, request.IdempotencyKey)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
 	return componentMutationResponse(response), nil
 }
 
-func (s *Server) disableComponent(ctx context.Context, request *componentActionInput) (*componentMutationOutput, error) {
+func (s *Server) disableComponent(
+	ctx context.Context,
+	request *componentActionInput,
+) (*componentMutationOutput, error) {
 	if s.componentMutations == nil {
 		return nil, errs.New(errs.KindInternal, "Component mutation service is not configured")
 	}
@@ -226,13 +254,20 @@ type componentMutationOutput struct {
 }
 
 func componentMutationResponse(response etcd.IdempotencyResponse) *componentMutationOutput {
-	return &componentMutationOutput{Status: response.Status, ContentType: response.ContentKind, Body: func(ctx huma.Context) {
-		ctx.SetStatus(response.Status)
-		_, _ = ctx.BodyWriter().Write(response.Body)
-	}}
+	return &componentMutationOutput{
+		Status:      response.Status,
+		ContentType: response.ContentKind,
+		Body: func(ctx huma.Context) {
+			ctx.SetStatus(response.Status)
+			_, _ = ctx.BodyWriter().Write(response.Body)
+		},
+	}
 }
 
-func (s *Server) showComponentRouter(ctx context.Context, request *componentRouterInput) (*componentRouterOutput, error) {
+func (s *Server) showComponentRouter(
+	ctx context.Context,
+	request *componentRouterInput,
+) (*componentRouterOutput, error) {
 	if s.components == nil {
 		return nil, errs.New(errs.KindInternal, "Component reader is not configured")
 	}

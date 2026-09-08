@@ -46,7 +46,10 @@ func (repository *Repository) ClaimEnvironmentBlueprintStage(
 	request etcd.EnvironmentBlueprintStageClaimRequest,
 ) (etcd.EnvironmentBlueprintStageClaim, error) {
 	if repository.desired == nil {
-		return etcd.EnvironmentBlueprintStageClaim{}, errs.New(errs.KindInternal, "Network desired revision persistence is not configured")
+		return etcd.EnvironmentBlueprintStageClaim{}, errs.New(
+			errs.KindInternal,
+			"Network desired revision persistence is not configured",
+		)
 	}
 	return repository.desired.ClaimEnvironmentBlueprintStage(ctx, request)
 }
@@ -56,7 +59,10 @@ func (repository *Repository) StageEnvironmentBlueprintRevision(
 	request etcd.EnvironmentBlueprintStageRequest,
 ) (etcd.EnvironmentBlueprintSeal, error) {
 	if repository.desired == nil {
-		return etcd.EnvironmentBlueprintSeal{}, errs.New(errs.KindInternal, "Network desired revision persistence is not configured")
+		return etcd.EnvironmentBlueprintSeal{}, errs.New(
+			errs.KindInternal,
+			"Network desired revision persistence is not configured",
+		)
 	}
 	return repository.desired.StageEnvironmentBlueprintRevision(ctx, request)
 }
@@ -161,7 +167,17 @@ func (repository *Repository) BeginZoneDeletionWithTask(
 	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
-	return repository.zones.BeginZoneDeletionWithTask(ctx, environment, project, zone, authorities, tombstone, intent, task, marker)
+	return repository.zones.BeginZoneDeletionWithTask(
+		ctx,
+		environment,
+		project,
+		zone,
+		authorities,
+		tombstone,
+		intent,
+		task,
+		marker,
+	)
 }
 
 func (repository *Repository) GetRoute(

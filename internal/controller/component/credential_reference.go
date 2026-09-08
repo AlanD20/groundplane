@@ -64,7 +64,10 @@ func (resolver *CredentialReferenceResolver) ResolveCredentialReference(
 	switch credential.Mode {
 	case "existing":
 		if credential.SecretID == "" || credential.Name != "" || credential.Value != "" {
-			return "", errs.New(errs.KindValidationFailed, "Existing Component credential accepts only mode and secret_id")
+			return "", errs.New(
+				errs.KindValidationFailed,
+				"Existing Component credential accepts only mode and secret_id",
+			)
 		}
 		if ids.Validate(ids.KindSecret, credential.SecretID) != nil {
 			return "", errs.New(errs.KindValidationFailed, "Component credential secret_id is invalid")
@@ -75,7 +78,10 @@ func (resolver *CredentialReferenceResolver) ResolveCredentialReference(
 		return credential.SecretID, nil
 	case "new":
 		if credential.SecretID != "" || credential.Name == "" || credential.Value == "" {
-			return "", errs.New(errs.KindValidationFailed, "New Component credential accepts only mode, name, and value")
+			return "", errs.New(
+				errs.KindValidationFailed,
+				"New Component credential accepts only mode, name, and value",
+			)
 		}
 		response, err := resolver.creator.CreateSecret(ctx, apiTypes.SecretCreateRequest{
 			ProjectID: environment.Record.ProjectID,

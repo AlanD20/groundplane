@@ -24,23 +24,7 @@ type ComposeHelper interface {
 
 type ComposeObserver interface {
 	Observe(context.Context, *agentpb.ExecutionPlan, string) (*agentpb.ObservedProject, error)
-}
-
-type ComposeServiceImageObserver interface {
-	ObserveServiceImage(
-		context.Context,
-		*agentpb.ExecutionPlan,
-		string,
-		string,
-		string,
-		string,
-	) (*agentpb.ProcedureServiceImageResult, error)
-	VerifyServiceImage(
-		context.Context,
-		*agentpb.ExecutionPlan,
-		string,
-		*agentpb.ProcedureServiceImageResult,
-	) error
+	ObserveRestoration(context.Context, *executionplan.RestorationObservation) (*agentpb.ObservedProject, error)
 }
 
 type ComposeRuntime struct {
@@ -54,10 +38,10 @@ type composeStepResult struct {
 	Diagnostic               agentpb.ComposeHelperDiagnostic
 	MutationAttempted        bool
 	ReconciliationRequired   bool
+	RestorationRequired      bool
 	ProxyEvidence            *agentpb.ServiceProxyEvidence
 	RecreateEvidence         *agentpb.ServiceRecreateEvidence
 	CandidateAbsenceEvidence *agentpb.CandidateAbsenceEvidence
-	ExecutionStepResult      *agentpb.ExecutionStepResult
 }
 
 func NewComposeRuntime(helper ComposeHelper, observer ComposeObserver) (*ComposeRuntime, error) {
@@ -81,41 +65,14 @@ func (runtime *ComposeRuntime) executeStep(
 
 	switch payload := step.GetPayload().(type) {
 	case *agentpb.ExecutionStep_ComposeApply:
-		authority, required, err := executionplan.FindProcedureServiceImageAuthority(
-			assignment.Plan, step.GetStepId(),
-		)
-		if err != nil {
-			return composeStepResult{}, err
+		if assignment.Plan.GetServiceLifecycleProcedure() != nil {
+			return runtime.executeServiceLifecycleMutation(ctx, assignment, step, payload.ComposeApply.GetArtifactId())
 		}
-		if !required {
-			return runtime.mutate(ctx, assignment, step, payload.ComposeApply.GetArtifactId(), nil)
-		}
-		acknowledged, found, err := executionplan.FindProcedureServiceImageResult(
-			assignment.AcknowledgedStepResults, authority,
-		)
-		if err != nil {
-			return composeStepResult{}, err
-		}
-		if found {
-			observer, ok := runtime.observer.(ComposeServiceImageObserver)
-			if !ok {
-				return composeStepResult{}, errs.New(errs.KindInternal, "agent: Compose service image observer is not configured")
-			}
-			if err := observer.VerifyServiceImage(
-				ctx, assignment.Plan, authority.GetArtifactId(), acknowledged,
-			); err != nil {
-				return composeStepResult{ReconciliationRequired: true}, err
-			}
-			return composeStepResult{}, nil
-		}
-		result, err := runtime.mutate(ctx, assignment, step, payload.ComposeApply.GetArtifactId(), nil)
-		if err == nil {
-			result.ExecutionStepResult, err = runtime.composeApplyExecutionStepResult(
-				ctx, assignment, step, authority,
-			)
-		}
-		return result, err
+		return runtime.mutate(ctx, assignment, step, payload.ComposeApply.GetArtifactId(), nil)
 	case *agentpb.ExecutionStep_ComposeStop:
+		if assignment.Plan.GetServiceLifecycleProcedure() != nil {
+			return runtime.executeServiceLifecycleMutation(ctx, assignment, step, payload.ComposeStop.GetArtifactId())
+		}
 		return runtime.mutate(
 			ctx,
 			assignment,
@@ -126,17 +83,31 @@ func (runtime *ComposeRuntime) executeStep(
 			},
 		)
 	case *agentpb.ExecutionStep_ComposeRemove:
+		if assignment.Plan.GetServiceLifecycleProcedure() != nil {
+			return runtime.executeServiceLifecycleMutation(ctx, assignment, step, payload.ComposeRemove.GetArtifactId())
+		}
+		postcondition := func(observed *agentpb.ObservedProject) error {
+			return removedServices(observed, payload.ComposeRemove.GetServiceIds())
+		}
+		if source := managedComponentRemovalSource(assignment.Plan, step.GetStepId()); source != nil {
+			postcondition = func(observed *agentpb.ObservedProject) error {
+				if err := removedServices(observed, payload.ComposeRemove.GetServiceIds()); err != nil {
+					return err
+				}
+				return managedComponentRemovalPostcondition(observed, source)
+			}
+		}
 		return runtime.mutate(
 			ctx,
 			assignment,
 			step,
 			payload.ComposeRemove.GetArtifactId(),
-			func(observed *agentpb.ObservedProject) error {
-				return removedServices(observed, payload.ComposeRemove.GetServiceIds())
-			},
+			postcondition,
 		)
 	case *agentpb.ExecutionStep_ManagedNetworkRemove:
 		return runtime.removeManagedNetwork(ctx, assignment, step)
+	case *agentpb.ExecutionStep_ManagedNetworkEnsure, *agentpb.ExecutionStep_ManagedVolumeEnsure:
+		return runtime.ensureManagedComposeResource(ctx, assignment, step)
 	case *agentpb.ExecutionStep_ManagedVolumeRemove:
 		return runtime.removeManagedVolume(ctx, assignment, step)
 	case *agentpb.ExecutionStep_WaitHealthy:
@@ -163,7 +134,11 @@ func (runtime *ComposeRuntime) executeStep(
 	}
 }
 
-func (runtime *ComposeRuntime) waitWorkloadHealthy(ctx context.Context, plan *agentpb.ExecutionPlan, wait *agentpb.WaitWorkloadHealthy) (composeStepResult, error) {
+func (runtime *ComposeRuntime) waitWorkloadHealthy(
+	ctx context.Context,
+	plan *agentpb.ExecutionPlan,
+	wait *agentpb.WaitWorkloadHealthy,
+) (composeStepResult, error) {
 	result := composeStepResult{}
 	artifact := composeArtifact(plan, wait.ArtifactId)
 	role, slot := agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT, wait.Target
@@ -200,7 +175,11 @@ func (runtime *ComposeRuntime) waitWorkloadHealthy(ctx context.Context, plan *ag
 	}
 }
 
-func releaseRuntimeComposeName(artifact *agentpb.ComposeArtifact, serviceID, slot string, role agentpb.ComposeServiceRole) string {
+func releaseRuntimeComposeName(
+	artifact *agentpb.ComposeArtifact,
+	serviceID, slot string,
+	role agentpb.ComposeServiceRole,
+) string {
 	if artifact == nil {
 		return ""
 	}
@@ -380,7 +359,14 @@ func (runtime *ComposeRuntime) waitHealthy(
 			return result, observeErr
 		}
 		result.Observed = observed
-		convergence, convergeErr := evaluateComposeConvergence(artifact, observed, selected)
+		var convergence composeConvergence
+		var convergeErr error
+		if len(wait.GetServiceIds()) > 0 &&
+			(plan.GetServiceLifecycleProcedure() != nil || plan.GetManagedComponentProcedure() != nil) {
+			convergence, convergeErr = evaluateLifecycleComposeConvergence(artifact, observed, selected, true)
+		} else {
+			convergence, convergeErr = evaluateComposeConvergence(artifact, observed, selected)
+		}
 		if convergeErr != nil {
 			result.ReconciliationRequired = true
 			return result, convergeErr
@@ -499,32 +485,4 @@ func remainingSeconds(ctx context.Context, maximum uint32) uint32 {
 		return maximum
 	}
 	return seconds
-}
-
-func (runtime *ComposeRuntime) composeApplyExecutionStepResult(
-	ctx context.Context,
-	assignment Assignment,
-	step *agentpb.ExecutionStep,
-	authority *agentpb.ProcedureServiceImageAuthority,
-) (*agentpb.ExecutionStepResult, error) {
-	if authority == nil {
-		return nil, errs.New(errs.KindInternal, "agent: ComposeApply procedure image authority is missing")
-	}
-	observer, ok := runtime.observer.(ComposeServiceImageObserver)
-	if !ok {
-		return nil, errs.New(errs.KindInternal, "agent: Compose service image observer is not configured")
-	}
-	evidence, err := observer.ObserveServiceImage(
-		ctx, assignment.Plan, authority.GetArtifactId(), authority.GetServiceId(),
-		authority.GetReleaseId(), authority.GetRequestedReference(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	return executionplan.SealExecutionStepResult(&agentpb.ExecutionStepResult{
-		OperationId: assignment.OperationID,
-		PlanHash:    append([]byte(nil), assignment.Plan.GetPlanHash()...),
-		StepId:      step.GetStepId(),
-		Result:      &agentpb.ExecutionStepResult_ProcedureServiceImage{ProcedureServiceImage: evidence},
-	})
 }

@@ -196,8 +196,8 @@ type ComponentSpec struct {
 }
 
 type ComponentCapabilitySettings struct {
-	ZoneID   string `yaml:"zone_id,omitempty"`
-	SecretID string `yaml:"secret_id,omitempty"`
+	ZoneIDs  []string `yaml:"zone_ids,omitempty"`
+	SecretID string   `yaml:"secret_id,omitempty"`
 }
 
 type ComponentImplementationConfig struct {

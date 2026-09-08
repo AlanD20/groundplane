@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -223,6 +224,9 @@ type TaskRecord struct {
 	FinishedAt         *time.Time                    `json:"finished_at,omitempty"`
 	RetainUntil        *time.Time                    `json:"retain_until,omitempty"`
 	idempotencyMarker  *IdempotencyLocator
+
+	ComponentActionStepIDs          []string                        `json:"component_action_step_ids"`
+	ManagedComponentTeardownSources []ManagedComponentRuntimeSource `json:"managed_component_teardown_sources,omitempty"`
 }
 
 // TaskEventIdentity is stable across Agent reconnects and Controller restarts.
@@ -301,6 +305,9 @@ type taskRecordData struct {
 	FinishedAt         string                        `json:"finished_at,omitempty"`
 	RetainUntil        string                        `json:"retain_until,omitempty"`
 	IdempotencyMarker  *IdempotencyLocator           `json:"idempotency_marker,omitempty"`
+
+	ComponentActionStepIDs          []string                        `json:"component_action_step_ids"`
+	ManagedComponentTeardownSources []ManagedComponentRuntimeSource `json:"managed_component_teardown_sources,omitempty"`
 }
 
 type taskResultData struct {
@@ -384,8 +391,10 @@ func cloneRetryTask(source TaskRecord, id string, actor TaskActor, createdAt tim
 		PlanHash: source.PlanHash, RenderGeneration: source.RenderGeneration,
 		Type: source.Type, Target: source.Target, Params: cloneStringMap(source.Params),
 		Steps: cloneTaskSteps(source.Steps), TimeoutSeconds: source.TimeoutSeconds,
-		Materializations: cloneTaskMaterializationReferences(source.Materializations),
-		Status:           TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
+		ComponentActionStepIDs:          append([]string(nil), source.ComponentActionStepIDs...),
+		ManagedComponentTeardownSources: cloneManagedComponentRuntimeSources(source.ManagedComponentTeardownSources),
+		Materializations:                cloneTaskMaterializationReferences(source.Materializations),
+		Status:                          TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
 	if err := validateTaskRecord(retry); err != nil {
 		return TaskRecord{}, err
@@ -647,6 +656,24 @@ func validateTaskRecord(record TaskRecord) error {
 	if err := validateTaskSteps(record.Steps); err != nil {
 		return err
 	}
+	if err := executionplan.ValidateComponentActionStepIDs(record.ComponentActionStepIDs); err != nil {
+		return err
+	}
+	if err := ValidateManagedComponentTeardownSources(record.ManagedComponentTeardownSources); err != nil {
+		return err
+	}
+	for _, id := range record.ComponentActionStepIDs {
+		found := false
+		for _, step := range record.Steps {
+			if step.ID == id {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return errs.New(errs.KindValidationFailed, "Component action step is absent from Task")
+		}
+	}
 	if err := validateTaskMaterializationReferences(
 		record.Materializations,
 		record.Steps,
@@ -748,7 +775,9 @@ func validateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 		previous := ""
 		for _, candidate := range evidence.Candidates {
 			identity := candidate.ServiceID + "\x00" + candidate.ReleaseID
-			if ids.Validate(ids.KindService, candidate.ServiceID) != nil || ids.Validate(ids.KindDeployment, candidate.ReleaseID) != nil || identity <= previous {
+			if ids.Validate(ids.KindService, candidate.ServiceID) != nil ||
+				ids.Validate(ids.KindDeployment, candidate.ReleaseID) != nil ||
+				identity <= previous {
 				return errs.New(errs.KindValidationFailed, "task candidate absence evidence is invalid or unsorted")
 			}
 			previous = identity
@@ -1069,8 +1098,10 @@ func taskRecordToData(record TaskRecord) taskRecordData {
 		PlanHash: record.PlanHash, RenderGeneration: record.RenderGeneration,
 		Type: record.Type, Target: record.Target, Params: cloneStringMap(record.Params),
 		Steps: cloneTaskSteps(record.Steps), TimeoutSeconds: record.TimeoutSeconds,
-		Materializations: cloneTaskMaterializationReferences(record.Materializations),
-		Status:           record.Status, NextEventSequence: record.NextEventSequence,
+		ComponentActionStepIDs:          append([]string(nil), record.ComponentActionStepIDs...),
+		ManagedComponentTeardownSources: cloneManagedComponentRuntimeSources(record.ManagedComponentTeardownSources),
+		Materializations:                cloneTaskMaterializationReferences(record.Materializations),
+		Status:                          record.Status, NextEventSequence: record.NextEventSequence,
 		Result:             taskResultToData(record.Result),
 		TerminalAssignment: cloneTaskTerminalAssignment(record.TerminalAssignment),
 		EventCount:         record.EventCount, CreatedAt: record.CreatedAt.UTC().Format(time.RFC3339Nano),
@@ -1113,8 +1144,10 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 		Executor: data.Executor, PlanID: data.PlanID,
 		PlanHash: data.PlanHash, RenderGeneration: data.RenderGeneration,
 		Type: data.Type, Target: data.Target, Params: data.Params, Steps: data.Steps,
-		Materializations: data.Materializations,
-		TimeoutSeconds:   data.TimeoutSeconds, Status: data.Status,
+		ComponentActionStepIDs:          append([]string(nil), data.ComponentActionStepIDs...),
+		ManagedComponentTeardownSources: cloneManagedComponentRuntimeSources(data.ManagedComponentTeardownSources),
+		Materializations:                data.Materializations,
+		TimeoutSeconds:                  data.TimeoutSeconds, Status: data.Status,
 		Result:             result,
 		TerminalAssignment: cloneTaskTerminalAssignment(data.TerminalAssignment),
 		NextEventSequence:  data.NextEventSequence, EventCount: data.EventCount,
@@ -1226,6 +1259,8 @@ func taskContainsStep(task TaskRecord, stepID string) bool {
 
 func cloneTaskRecord(record TaskRecord) TaskRecord {
 	cloned := record
+	cloned.ComponentActionStepIDs = append([]string(nil), record.ComponentActionStepIDs...)
+	cloned.ManagedComponentTeardownSources = cloneManagedComponentRuntimeSources(record.ManagedComponentTeardownSources)
 	cloned.Params = cloneStringMap(record.Params)
 	cloned.Steps = cloneTaskSteps(record.Steps)
 	cloned.Materializations = cloneTaskMaterializationReferences(record.Materializations)

@@ -913,6 +913,21 @@ tenants and one database.
   the shared instance. The keys stay stable and prefixed; uniqueness
   lives in the values.
 
+  **Valkey authentication.** A Valkey backing instance chooses immutable
+  `authentication`: `username_password` (default), `password`, or `none`.
+  Every Attach inherits it. Named mode issues a named user/password; password
+  mode issues an independently revocable password on the shared default user.
+  No-auth is an explicit instance-wide choice: any reachable client can access
+  it. Its bindings generate no credentials and expose only HOST, PORT and a
+  credential-free URL. Named mode additionally exposes ROLE; authenticated
+  modes expose PASSWORD and a secret URL. All modes share data and Pub/Sub;
+  none provides keyspace isolation. Consumer credentials exclude administrative
+  commands and never expose Groundplane's separate bootstrap administrator.
+  ACLs survive restart. Password detach revokes only that owner's password
+  for future AUTH, not already-authenticated default-user connections. The
+  existing owner/reuse protections also apply to credential-free fact bindings.
+  Mode changes require a new instance. See ADR 0068.
+
   **Grants.** An attach may also access a database owned by another attach of
   the same backing project under its **single role**. Grants reference the
   target attach id/name, never a mutable database string (e.g. the identity
@@ -1021,12 +1036,23 @@ tenants and one database.
   Caddy is the sole MVP HTTP-router implementation; Cloudflare Tunnel is the
   sole MVP edge-tunnel implementation. Both are off by default and their
   lifecycle decisions are independent.
-  Enabling Caddy requires an explicit stable `zone_id`. The Controller
+  Enabling either Component requires an explicit nonempty, duplicate-free
+  ordered `zone_ids` list of ordinary Zones in the same Environment. Both
+  Components support multiple memberships, independently selected by the
+  operator. Enable and Configure offer existing-Zone selection and inline
+  Zone creation. Inline creation uses the ordinary Zone-create operation;
+  a created Zone remains an operator-owned Environment resource if subsequent
+  enablement fails or is cancelled. It is never silently deleted on disable.
+  The first Caddy Zone is its explicitly presented primary Zone. The Controller
   transactionally reserves the first available usable address in that Zone,
   excluding the network, gateway, broadcast, and other reserved addresses; the
-  address remains stable until successful disable. Groundplane never infers a
-  Zone by name or assumes `.2`. Every Route target Service must explicitly join
-  that Zone and expose its required `target_port`; unreachable Routes fail
+  address remains stable while the primary Zone is unchanged, until successful
+  disable. Additional Caddy interfaces use dynamic addresses like ordinary
+  Services. Host/LAN DNS continues using the primary pinned address. Changing
+  only secondary memberships does not replace that reservation. Groundplane
+  never infers a Zone by name or assumes `.2`. Every Route target Service must
+  explicitly share at least one selected router Zone and expose its required
+  `target_port`; unreachable Routes fail
   validation rather than silently changing memberships.
   Route resources are authoritative Environment desired state. They may be
   created, edited, or retained while no HTTP router is enabled and then report
@@ -1048,8 +1074,14 @@ tenants and one database.
   hostnames use Caddy's internal CA; the enable/reconcile Task installs that
   Environment root into the host trust store. LAN clients may install the
   exported public root manually.
-  Tunnel config stores only one authorized Project or platform env-var Secret
-  reference as stable `secret_id`. Direct token input creates a Project Secret
+  Tunnel config stores its ordered `zone_ids` and one authorized Project or
+  platform env-var Secret reference as stable `secret_id`. It joins exactly
+  its selected Zones, never a router-inferred or default bridge. At least one
+  selected Zone must be non-internal; the first such Zone explicitly carries
+  default-gateway priority for connector egress. Internal memberships retain
+  their isolation. Removing any Zone selected by an enabled router or tunnel
+  is rejected until the Component membership is changed or disabled.
+  Direct token input creates a Project Secret
   and immediately replaces the write-only token with that stable reference.
   Only the generated cloudflare-tunnel Service receives it as `TUNNEL_TOKEN`.
   Groundplane never fetches, parses, or displays the token and never calls the
@@ -1654,8 +1686,11 @@ typed plan reaches its `WaitHealthy` step. Only after the assignment succeeds
 does the Controller perform the Controller-only atomic promotion. That
 transaction promotes the candidate Releases, applied Environment projection,
 Component state, and Routes together, then records the parent Task success.
-Before promotion, a failure must prove exact predecessor restoration, or exact
-first-candidate absence when no predecessor exists. The desired head is never
+Before promotion, a failure must prove exact predecessor restoration for each
+selected Service that previously served, and exact first-candidate absence for
+each selected Service that did not. A configured-only Service in an applied
+Environment projection is not a serving predecessor. Mixed recovery preserves
+unrelated runtime and the exact applied projection. The desired head is never
 rolled back, and no failed or unproven candidate may be published as a serving
 Release or Route. If the proof is not available, the Task remains
 nonterminal/recovery-required rather than claiming success or false serving
@@ -1757,9 +1792,9 @@ An environment document and its mapping to Compose:
 | files.<name> | plain (non-secret) file entries: materialized at `<volume_dir>/<path>`, exposure per service |
 | `x-gp-attachments` | attach to a Backing Service per **Service**, keyed by the Attach's **name** (`api-db`, an operator decision unique per Environment): `service` is singular; `credential.mode` is `new` or `existing`; existing names one credential-owning Attach in the same Environment and Backing Service; the backing network join is a consequence; only a new credential provisions `<service-name>_<first-6-of-attach-id>` and may declare `grants` |
 | routes[].exposure: public | remains valid desired state without an enabled router and reports `unserved`; Caddy serves it when the `http-router` capability is enabled |
-| `x-gp-components.http-router` | environment-owned HTTP entry point, off by default; selects the registered `caddy` implementation for MVP and uses portable `settings.zone_id` |
+| `x-gp-components.http-router` | environment-owned HTTP entry point, off by default; selects the registered `caddy` implementation for MVP and uses ordered portable `settings.zone_ids`, first Zone primary |
 | `x-gp-components.http-router.implementation_config.caddyfile_template` | optional editable Caddy implementation template with exactly one `{routes}` marker; validated as a complete file before reload |
-| `x-gp-components.edge-tunnel` | environment-owned outbound tunnel connector, off by default; selects `cloudflare-tunnel` and stores only `settings.secret_id`; the selected Project or platform env-var Secret is materialized only as cloudflared's `TUNNEL_TOKEN`; Groundplane starts/stops the connector and reports health but does not configure DNS, public hostnames, ingress rules, origin targets, or protocol |
+| `x-gp-components.edge-tunnel` | environment-owned outbound tunnel connector, off by default; selects `cloudflare-tunnel` and stores ordered `settings.zone_ids` plus `settings.secret_id`; the selected Project or platform env-var Secret is materialized only as cloudflared's `TUNNEL_TOKEN`; Groundplane starts/stops the connector and reports health but does not configure DNS, public hostnames, ingress rules, origin targets, or protocol |
 | secrets.env_file | generated secret files the Agent materializes on the host (0600), referenced explicitly through service `env_file:` |
 | volumes.<key> / `x-gp-slug` | the immutable Compose key plus an optional mutable Groundplane slug; the Controller renders a managed local Docker Volume backed by the Environment-owned path |
 | x-gp-scripts.<reconciliation-key> | per-environment Scripts: `{ slug, service, script, when }`; the map key is immutable reconciliation identity, `slug` is renamable, `script` is the full body, and `when` is `manual`, `pre-deploy`, `post-deploy`, `pre-rollback`, `post-rollback`, or `on-failure` |
@@ -1814,6 +1849,19 @@ transfer the operation only while every selected execution is durably
 `not_started`; `start_authorized` or an unknown state rejects with
 `script.retry_unsafe`. ADR 0040 owns execution, cleanup, and retry. ADR 0062
 owns prepared immutable-input reference generations and their bounded release.
+
+Blueprint candidate completion uses one closed terminal transaction (ADR 0067),
+separate from desired-state publication. Its complete physical request must fit
+256 operations per comparison/success/failure arm and 1 MiB before Script
+source release begins; ordinary transactions and release batches retain their
+existing limits. Source closure stores the original terminal report with exact
+Task and assignment authority. After interruption, the Controller finishes that
+report without redispatching closed hooks or advancing the execution epoch,
+including at the maximum positive epoch. Conflicting reports or new events
+cannot change closing execution authority. Final completion atomically removes
+the temporary report and source root with the ordinary terminal state and
+receipt. Unknown commit status requires exact durable terminal replay, never
+inferred success from workload health or fabricated reports for old Tasks.
 
 TLS-first setup uses this generic contract: a project-authored `pre-deploy`
 Script runs `/bin/sh` plus `openssl` from its target Service's externally built,

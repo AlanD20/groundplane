@@ -69,7 +69,9 @@ func TestResolveArtifactFreeEnvironmentRemovalPlan(t *testing.T) {
 		PlanID: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV", RenderGeneration: 1,
 		Type: etcd.TaskRemove, Target: environmentID,
 		Params: map[string]string{EnvironmentRemoveVolumeDirectoryParam: directory},
-		Steps:  []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"}}, TimeoutSeconds: 120,
+		Steps: []etcd.TaskStepRecord{
+			{Kind: etcd.TaskStepOperation, ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
+		}, TimeoutSeconds: 120,
 	})
 	if err != nil {
 		t.Fatalf("ResolveExecutionPlan() error = %v", err)

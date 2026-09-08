@@ -15,7 +15,8 @@ func TestCheckpointTransitionsDoNotReopenTerminalState(t *testing.T) {
 			t.Fatalf("terminal state %q reopened", state)
 		}
 	}
-	if !CanTransition(StateRecoveryRequired, StateRecovering) || !CanTransition(StateRecovering, StateRecoveryRequired) {
+	if !CanTransition(StateRecoveryRequired, StateRecovering) ||
+		!CanTransition(StateRecovering, StateRecoveryRequired) {
 		t.Fatal("recovery transition is not closed")
 	}
 }
@@ -60,8 +61,10 @@ func TestGroupExecutorRunsForwardAndCompensatesInReverse(t *testing.T) {
 			t.Fatalf("RecordCompensation(%d) error = %v", ordinal, err)
 		}
 	}
-	if progress.Compensating || progress.NextCompensationOrdinal != 0 || progress.Results[0].Outcome != MemberCompensated ||
-		progress.Results[1].Outcome != MemberCompensated || progress.Results[2].Outcome != MemberFailed {
+	if progress.Compensating || progress.NextCompensationOrdinal != 0 ||
+		progress.Results[0].Outcome != MemberCompensated ||
+		progress.Results[1].Outcome != MemberCompensated ||
+		progress.Results[2].Outcome != MemberFailed {
 		t.Fatalf("compensation result = %#v", progress)
 	}
 }
@@ -72,10 +75,15 @@ func TestValidateIntentRejectsMutableStatusEraFieldsByConstruction(t *testing.T)
 	intent := Intent{
 		ID: ids.NewAt(ids.KindDeployment, now, 1), EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 2),
 		ServiceID: ids.NewAt(ids.KindService, now, 3), OperationID: ids.NewAt(ids.KindOperation, now, 4),
-		OperationKind: OperationDeploy, Image: "registry.invalid/app", Tag: "sha-123", Strategy: StrategyRecreate,
+		OperationKind: OperationDeploy, CandidateWorkload: testWorkloadSeal(), Tag: "sha-123", Strategy: StrategyRecreate,
 		OnFailure: OnFailureSwitchBack, RenderInputID: ids.NewAt(ids.KindConfig, now, 5),
 		RenderInputDigest: strings.Repeat("a", 64), CreatedAt: now, Actor: "operator",
-		Workspace:         Workspace{Kind: WorkspaceTenant, TenantID: ids.NewAt(ids.KindTenant, now, 6), ProjectID: ids.NewAt(ids.KindProject, now, 7), EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 2)},
+		Workspace: Workspace{
+			Kind:          WorkspaceTenant,
+			TenantID:      ids.NewAt(ids.KindTenant, now, 6),
+			ProjectID:     ids.NewAt(ids.KindProject, now, 7),
+			EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 2),
+		},
 		OriginatingTaskID: ids.NewAt(ids.KindTask, now, 8),
 	}
 	if err := ValidateIntent(intent); err != nil {
@@ -90,10 +98,15 @@ func TestValidateIntentOperationKinds(t *testing.T) {
 	intent := Intent{
 		ID: ids.NewAt(ids.KindDeployment, now, 1), EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 2),
 		ServiceID: ids.NewAt(ids.KindService, now, 3), OperationID: ids.NewAt(ids.KindOperation, now, 4),
-		Image: "registry.invalid/app", Tag: "sha-123", Strategy: StrategyRecreate,
+		CandidateWorkload: testWorkloadSeal(), Tag: "sha-123", Strategy: StrategyRecreate,
 		OnFailure: OnFailureSwitchBack, RenderInputID: ids.NewAt(ids.KindConfig, now, 5),
 		RenderInputDigest: strings.Repeat("a", 64), CreatedAt: now, Actor: "controller",
-		Workspace:         Workspace{Kind: WorkspaceTenant, TenantID: ids.NewAt(ids.KindTenant, now, 6), ProjectID: ids.NewAt(ids.KindProject, now, 7), EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 2)},
+		Workspace: Workspace{
+			Kind:          WorkspaceTenant,
+			TenantID:      ids.NewAt(ids.KindTenant, now, 6),
+			ProjectID:     ids.NewAt(ids.KindProject, now, 7),
+			EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 2),
+		},
 		OriginatingTaskID: ids.NewAt(ids.KindTask, now, 8),
 	}
 	for _, test := range []struct {

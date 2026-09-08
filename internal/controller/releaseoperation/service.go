@@ -9,6 +9,7 @@ import (
 
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	etcdrg "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroup"
@@ -23,7 +24,13 @@ const (
 	defaultReleaseExecutionTimeout = 15 * time.Hour
 )
 
+type localAgentReader interface {
+	GetSingleton(context.Context) (etcd.Versioned[etcd.LocalAgentRecord], error)
+}
+
 type Service struct {
+	agents      localAgentReader
+	images      workloadseal.Resolver
 	ledger      *etcd.ReleaseLedger
 	services    *etcd.ServiceRepository
 	groups      *etcdrg.Store
@@ -38,10 +45,10 @@ type Service struct {
 
 type releaseCandidateInput struct {
 	planning       etcd.ReleasePlanningService
-	image          string
+	selection      workloadseal.Selection
+	workload       domain.WorkloadSeal
 	tag            string
-	digest         string
-	priorImage     string
+	priorWorkload  *domain.WorkloadSeal
 	priorReleaseID string
 	strategy       domain.Strategy
 	priorStrategy  domain.Strategy
@@ -60,18 +67,24 @@ func NewService(
 	scripts *etcd.ScriptRepository,
 	artifacts *controllerpkg.ScriptArtifactService,
 	timeout time.Duration,
+	agents *etcd.LocalAgentRepository,
+	images workloadseal.Resolver,
 ) (*Service, error) {
 	if ledger == nil || services == nil || groups == nil || idempotency == nil || coordinator == nil ||
-		plans == nil || scripts == nil || artifacts == nil {
+		plans == nil || scripts == nil || artifacts == nil || agents == nil || images == nil {
 		return nil, errs.New(errs.KindInternal, "release operation dependencies are not configured")
 	}
 	if timeout == 0 {
 		timeout = defaultReleaseExecutionTimeout
 	}
 	if timeout < 40*time.Minute || timeout > 24*time.Hour || timeout%time.Second != 0 {
-		return nil, errs.New(errs.KindValidationFailed, "release execution timeout must be an integral duration from 40m through 24h")
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"release execution timeout must be an integral duration from 40m through 24h",
+		)
 	}
 	return &Service{
+		agents: agents, images: images,
 		ledger: ledger, services: services, groups: groups, idempotency: idempotency,
 		coordinator: coordinator, plans: plans, scripts: scripts, artifacts: artifacts,
 		timeout: timeout, now: time.Now,
@@ -113,7 +126,14 @@ func (service *Service) DeployService(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	selected, err := service.deployCandidate(ctx, scope, planning[0], request.Tag, string(request.Strategy), request.OnFailure)
+	selected, err := service.deployCandidate(
+		ctx,
+		scope,
+		planning[0],
+		request.Tag,
+		string(request.Strategy),
+		request.OnFailure,
+	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -198,7 +218,10 @@ func (service *Service) DeployReleaseGroup(
 		tag = group.Group.DefaultTag
 	}
 	if tag == "" {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindReleaseGroupTagRequired, "release group deploy requires a tag or group default")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindReleaseGroupTagRequired,
+			"release group deploy requires a tag or group default",
+		)
 	}
 	planning, err := service.ledger.LoadPlanningServices(ctx, scope, group.Group.Order)
 	if err != nil {
@@ -206,7 +229,14 @@ func (service *Service) DeployReleaseGroup(
 	}
 	candidates := make([]releaseCandidateInput, len(planning))
 	for index := range planning {
-		candidates[index], err = service.deployCandidate(ctx, scope, planning[index], tag, "", domain.OnFailure(group.Group.OnFailure))
+		candidates[index], err = service.deployCandidate(
+			ctx,
+			scope,
+			planning[index],
+			tag,
+			"",
+			domain.OnFailure(group.Group.OnFailure),
+		)
 		if err != nil {
 			return etcd.IdempotencyResponse{}, err
 		}
@@ -233,7 +263,13 @@ func (service *Service) RollbackReleaseGroup(ctx context.Context, groupID string
 	}
 	defer protected.Destroy()
 	defer clear(durable.Ciphertext)
-	selection, err := service.selectGroupRollback(ctx, current.Group.EnvironmentID, groupID, request.Tag, request.PreviewRevision)
+	selection, err := service.selectGroupRollback(
+		ctx,
+		current.Group.EnvironmentID,
+		groupID,
+		request.Tag,
+		request.PreviewRevision,
+	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -241,7 +277,11 @@ func (service *Service) RollbackReleaseGroup(ctx context.Context, groupID string
 		groupID, selection.candidates, locator, durable, protected)
 }
 
-func (service *Service) PreviewReleaseGroupRollback(ctx context.Context, groupID string, input domain.GroupRollbackPreviewInput) (domain.GroupRollbackPreview, error) {
+func (service *Service) PreviewReleaseGroupRollback(
+	ctx context.Context,
+	groupID string,
+	input domain.GroupRollbackPreviewInput,
+) (domain.GroupRollbackPreview, error) {
 	current, err := service.groups.Get(ctx, groupID)
 	if err != nil {
 		return domain.GroupRollbackPreview{}, err
@@ -252,7 +292,11 @@ func (service *Service) PreviewReleaseGroupRollback(ctx context.Context, groupID
 	}
 	sources := make([]domain.RollbackSource, len(selection.candidates))
 	for index, candidate := range selection.candidates {
-		sources[index] = domain.RollbackSource{ServiceID: candidate.planning.Service.Record.Desired.ID, ReleaseID: candidate.rollbackSource, Tag: candidate.tag}
+		sources[index] = domain.RollbackSource{
+			ServiceID: candidate.planning.Service.Record.Desired.ID,
+			ReleaseID: candidate.rollbackSource,
+			Tag:       candidate.tag,
+		}
 	}
 	return domain.GroupRollbackPreview{GroupID: groupID, Revision: selection.scope.ReadRevision, Sources: sources}, nil
 }
@@ -263,7 +307,12 @@ type groupRollbackSelection struct {
 	candidates []releaseCandidateInput
 }
 
-func (service *Service) selectGroupRollback(ctx context.Context, environmentID, groupID string, tag *string, revision *int64) (groupRollbackSelection, error) {
+func (service *Service) selectGroupRollback(
+	ctx context.Context,
+	environmentID, groupID string,
+	tag *string,
+	revision *int64,
+) (groupRollbackSelection, error) {
 	var scope etcd.ReleasePlanningScope
 	var err error
 	if revision == nil {
@@ -288,7 +337,13 @@ func (service *Service) selectGroupRollback(ctx context.Context, environmentID, 
 		explicitTag = *tag
 	}
 	for index := range planning {
-		candidates[index], err = service.rollbackCandidate(ctx, scope, planning[index], explicitTag, domain.OnFailure(group.Group.OnFailure))
+		candidates[index], err = service.rollbackCandidate(
+			ctx,
+			scope,
+			planning[index],
+			explicitTag,
+			domain.OnFailure(group.Group.OnFailure),
+		)
 		if err != nil {
 			return groupRollbackSelection{}, err
 		}
@@ -297,7 +352,9 @@ func (service *Service) selectGroupRollback(ctx context.Context, environmentID, 
 }
 
 func releaseRollbackRequestBody(request domain.ServiceRollbackInput) idempotentintent.Body {
-	return idempotentintent.JSONBody(idempotentintent.Object(idempotentintent.Field{Name: "tag", Value: idempotentintent.String(request.Tag)}))
+	return idempotentintent.JSONBody(
+		idempotentintent.Object(idempotentintent.Field{Name: "tag", Value: idempotentintent.String(request.Tag)}),
+	)
 }
 
 func groupRollbackRequestBody(request domain.GroupRollbackInput) idempotentintent.Body {
@@ -306,7 +363,13 @@ func groupRollbackRequestBody(request domain.GroupRollbackInput) idempotentinten
 		fields = append(fields, idempotentintent.Field{Name: "tag", Value: idempotentintent.String(*request.Tag)})
 	}
 	if request.PreviewRevision != nil {
-		fields = append(fields, idempotentintent.Field{Name: "preview_revision", Value: idempotentintent.String(strconv.FormatInt(*request.PreviewRevision, 10))})
+		fields = append(
+			fields,
+			idempotentintent.Field{
+				Name:  "preview_revision",
+				Value: idempotentintent.String(strconv.FormatInt(*request.PreviewRevision, 10)),
+			},
+		)
 	}
 	return idempotentintent.JSONBody(idempotentintent.Object(fields...))
 }
@@ -376,13 +439,16 @@ func (service *Service) deployCandidate(
 	}
 	tag := strings.TrimSpace(requestedTag)
 	if tag != requestedTag {
-		return releaseCandidateInput{}, errs.New(errs.KindValidationFailed, "release tag must not contain surrounding whitespace")
+		return releaseCandidateInput{}, errs.New(
+			errs.KindValidationFailed,
+			"release tag must not contain surrounding whitespace",
+		)
 	}
 	currentTag := ""
 	if hasServing {
 		currentTag = serving.Tag
 	}
-	image, tag, digest, err := releaseImageWithTag(
+	image, tag, _, err := releaseImageWithTag(
 		planning.Service.Record.Desired.Image,
 		tag,
 		currentTag,
@@ -398,9 +464,17 @@ func (service *Service) deployCandidate(
 	if err != nil {
 		return releaseCandidateInput{}, err
 	}
+	replicas := planning.Service.Record.Desired.Replicas
+	// ADR 0052: normalize native Compose omission at the direct-input boundary.
+	if replicas == 0 {
+		replicas = 1
+	}
+	if replicas < 1 || uint64(replicas) > uint64(^uint32(0)) {
+		return releaseCandidateInput{}, errs.New(errs.KindValidationFailed, "release replica count is invalid")
+	}
 	return releaseCandidateInput{
-		planning: planning, image: image, tag: tag, digest: digest,
-		priorImage: releasePriorImage(planning, serving, hasServing), priorReleaseID: releasePriorID(serving, hasServing),
+		planning: planning, selection: workloadseal.Selection{Requested: &workloadseal.Requested{Reference: image, Replicas: uint32(replicas)}}, tag: tag,
+		priorWorkload: releasePriorWorkload(serving, hasServing), priorReleaseID: releasePriorID(serving, hasServing),
 		strategy: strategy, priorStrategy: releasePriorStrategy(serving, hasServing),
 		slot: inactiveReleaseSlot(strategy, planning.Projection.ServingSlot), onFailure: onFailure,
 	}, nil
@@ -428,9 +502,9 @@ func (service *Service) rollbackCandidate(
 		onFailure = overrideFailure
 	}
 	return releaseCandidateInput{
-		planning: planning, image: selection.Source.Image, tag: selection.Source.Tag,
-		digest: selection.Source.Digest, strategy: selection.Source.Strategy,
-		priorImage: releasePriorImage(planning, serving, hasServing), priorReleaseID: releasePriorID(serving, hasServing),
+		planning: planning, selection: workloadseal.Selection{Historical: &selection.Source.CandidateWorkload}, tag: selection.Source.Tag,
+		strategy:      selection.Source.Strategy,
+		priorWorkload: releasePriorWorkload(serving, hasServing), priorReleaseID: releasePriorID(serving, hasServing),
 		priorStrategy: releasePriorStrategy(serving, hasServing),
 		slot:          inactiveReleaseSlot(selection.Source.Strategy, planning.Projection.ServingSlot),
 		onFailure:     onFailure, rollbackSource: selection.Source.ID,

@@ -254,7 +254,10 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupSources(
 			ID: sourceID, EnvironmentID: input.EnvironmentID, Kind: selection.Kind,
 			TargetID: selection.TargetID, CreatedAt: input.CreatedAt,
 		}
-		item := blueprintBackupPolicySourceEvidence{record: record, identityIndex: cloneBackupPolicyEvidenceKeyValue(identity.Values[0])}
+		item := blueprintBackupPolicySourceEvidence{
+			record:        record,
+			identityIndex: cloneBackupPolicyEvidenceKeyValue(identity.Values[0]),
+		}
 		if identity.Values[0] != nil {
 			triples, readErr := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
 				backupSourceKey(sourceID), backupSourceEnvironmentKey(input.EnvironmentID, sourceID),
@@ -324,7 +327,8 @@ func validateBlueprintBackupTarget(
 		}
 	case core.BackupSourceAttach:
 		candidate := blueprintBackupAttachCandidate(input.AttachPreparation, selection.TargetID)
-		if candidate == nil || candidate.Record.EnvironmentID == input.EnvironmentID && candidate.Record.OwnsCredential() {
+		if candidate == nil ||
+			candidate.Record.EnvironmentID == input.EnvironmentID && candidate.Record.OwnsCredential() {
 			return nil
 		}
 	}

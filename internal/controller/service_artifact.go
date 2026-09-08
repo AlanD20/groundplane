@@ -48,8 +48,14 @@ func MutateEnvironmentServiceArtifact(
 ) (*agentpb.ComposeArtifact, error) {
 	if current == nil || current.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
 		ids.Validate(ids.KindEnvironment, current.GetOwnerId()) != nil ||
-		ids.Validate(ids.KindConfig, mutation.ArtifactID) != nil || ids.Validate(ids.KindPlan, mutation.PlanID) != nil ||
-		ids.Validate(ids.KindTenant, mutation.TenantID) != nil || ids.Validate(ids.KindProject, mutation.ProjectID) != nil ||
+		ids.Validate(
+			ids.KindConfig,
+			mutation.ArtifactID,
+		) != nil || ids.Validate(ids.KindPlan, mutation.PlanID) != nil ||
+		ids.Validate(
+			ids.KindTenant,
+			mutation.TenantID,
+		) != nil || ids.Validate(ids.KindProject, mutation.ProjectID) != nil ||
 		mutation.RenderGeneration == 0 ||
 		(mutation.Action != ServiceArtifactCreate && mutation.Action != ServiceArtifactEdit &&
 			mutation.Action != ServiceArtifactRemove) ||
@@ -105,7 +111,7 @@ func MutateEnvironmentServiceArtifact(
 		owned.Services = append(owned.Services, &agentpb.ComposeService{
 			ServiceId: mutation.Desired.ID, ComposeName: mutation.Desired.Name,
 			ExpectedLabels: labelPairs(labels), ExpectedReplicas: uint32(mutation.Desired.Replicas),
-			HasHealthcheck: mutation.Desired.Healthcheck != (core.Healthcheck{}),
+			HasHealthcheck: serviceNodeHasHealthcheck(node),
 		})
 	} else if mutation.Action == ServiceArtifactEdit {
 		if found < 0 || metadataIndex < 0 {
@@ -115,7 +121,7 @@ func MutateEnvironmentServiceArtifact(
 			return nil, err
 		}
 		owned.Services[metadataIndex].ExpectedReplicas = uint32(mutation.Desired.Replicas)
-		owned.Services[metadataIndex].HasHealthcheck = mutation.Desired.Healthcheck != (core.Healthcheck{})
+		owned.Services[metadataIndex].HasHealthcheck = serviceNodeHasHealthcheck(services.Content[found+1])
 	} else {
 		if found < 0 || metadataIndex < 0 {
 			return nil, errs.New(errs.KindStateConflict, "Service artifact identity is absent")
@@ -268,7 +274,11 @@ func validateServiceArtifactZones(names []string, zones []ServiceArtifactZone) e
 	return nil
 }
 
-func ensureServiceZoneNetworks(root *yaml.Node, artifact *agentpb.ComposeArtifact, mutation ServiceArtifactMutation) error {
+func ensureServiceZoneNetworks(
+	root *yaml.Node,
+	artifact *agentpb.ComposeArtifact,
+	mutation ServiceArtifactMutation,
+) error {
 	networks := ensureMappingValue(root, "networks")
 	if networks == nil {
 		return errs.New(errs.KindInternal, "normalized Compose network mapping is corrupt")
@@ -388,7 +398,9 @@ func applyDirectServiceDesired(node *yaml.Node, desired core.Service) error {
 	}
 	setMappingTypedScalar(deploy, "replicas", "!!int", strconv.Itoa(desired.Replicas))
 	if desired.Healthcheck == (core.Healthcheck{}) {
-		removeMappingValue(node, "healthcheck")
+		if index := mappingIndex(node, "healthcheck"); index >= 0 && typedServiceHealthcheck(node.Content[index+1]) {
+			removeMappingValue(node, "healthcheck")
+		}
 	} else {
 		setMappingNode(node, "healthcheck", serviceHealthcheckNode(desired.Healthcheck))
 	}
@@ -425,34 +437,6 @@ func setServiceStringSequence(mapping *yaml.Node, key string, values []string) {
 		sequence.Content = append(sequence.Content, scalarNode(value))
 	}
 	setMappingNode(mapping, key, sequence)
-}
-
-func serviceHealthcheckNode(health core.Healthcheck) *yaml.Node {
-	node := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	command := ""
-	switch {
-	case health.HTTP != "":
-		command = "curl -fsS -- " + shellQuote("http://127.0.0.1"+health.HTTP) + " >/dev/null"
-	case health.TCP != "":
-		host, port, _ := strings.Cut(health.TCP, ":")
-		command = "nc -z -- " + shellQuote(host) + " " + shellQuote(port)
-	default:
-		command = "pgrep -f -- " + shellQuote(health.Pgrep) + " >/dev/null"
-	}
-	test := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
-	test.Content = append(test.Content, scalarNode("CMD-SHELL"), scalarNode(command))
-	appendMappingValue(node, "test", test)
-	for _, field := range []struct{ key, value string }{
-		{"interval", health.Interval}, {"timeout", health.Timeout}, {"start_period", health.StartPeriod},
-	} {
-		if field.value != "" {
-			appendMappingValue(node, field.key, scalarNode(field.value))
-		}
-	}
-	if health.Retries != 0 {
-		appendMappingValue(node, "retries", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: strconv.Itoa(health.Retries)})
-	}
-	return node
 }
 
 func shellQuote(value string) string {

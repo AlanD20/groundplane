@@ -484,7 +484,8 @@ func validRouteMutationAcceptedResponse(method string, response IdempotencyRespo
 }
 
 func validTaskResponse(response IdempotencyResponse, taskID string) bool {
-	if response.Status != http.StatusOK && response.Status != http.StatusAccepted && response.Status != http.StatusCreated ||
+	if response.Status != http.StatusOK && response.Status != http.StatusAccepted &&
+		response.Status != http.StatusCreated ||
 		response.ContentKind != "application/json" {
 		return false
 	}

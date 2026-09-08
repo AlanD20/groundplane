@@ -371,7 +371,10 @@ func rewriteEntryArtifactMounts(
 				return err
 			}
 			if target == mount.target {
-				return errs.New(errs.KindNameConflict, "Environment file Entry conflicts with an existing Service mount")
+				return errs.New(
+					errs.KindNameConflict,
+					"Environment file Entry conflicts with an existing Service mount",
+				)
 			}
 		}
 		retained = append(retained, entryArtifactMountNode(mount))

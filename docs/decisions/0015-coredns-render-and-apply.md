@@ -1722,6 +1722,17 @@ present, its digest must also match. `healthy` proves
 the exact configured routing block and one reachable selected upstream per
 group at proof time; catch-all success alone is insufficient.
 
+Image evidence keeps the selected child and config digests distinct. With
+classic Docker, the config digest is derived from matching container and image
+inspect IDs. With the containerd image store, both inspect IDs and their typed
+manifest descriptors must match the exact selected child, and the image's
+reported platform must match the sealed platform. The proof's config digest
+then denotes the sealed catalog config authority committed by that verified
+child; it is not an independently observed hash of runtime config bytes.
+The Controller still requires exact equality with the candidate's sealed config
+digest. An index descriptor, inconsistent descriptor/platform, or mismatched
+runtime ID cannot supply this binding.
+
 Only after healthy initial apply does the Agent mount and verify the exact
 read-only Groundplane resolver source over `/etc/resolv.conf`, retaining the
 underlying baseline manifest and exact mount ownership proof.

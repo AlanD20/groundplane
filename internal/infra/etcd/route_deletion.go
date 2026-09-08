@@ -142,7 +142,14 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 		{Type: MutationPut, Key: tombstoneKey, Value: tombstoneValue},
 		{Type: MutationPut, Key: routeRemovalIntentKey(task.ID), Value: intentValue},
 	}
-	mutations = append(mutations, Mutation{Type: MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID)})
+	mutations = append(
+		mutations,
+		Mutation{
+			Type:  MutationPut,
+			Key:   componentTaskActiveEnvironmentKey(environment.Record.ID),
+			Value: []byte(task.ID),
+		},
+	)
 	mutations = append(mutations, publication.mutations...)
 	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
 	if err != nil {

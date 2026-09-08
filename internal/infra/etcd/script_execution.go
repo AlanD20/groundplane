@@ -152,7 +152,10 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 			continue
 		}
 		if record.State != ScriptExecutionNotStarted && record.State != ScriptExecutionCleanupProven {
-			return false, errs.New(errs.KindStateConflict, "release hook execution has not reached a releasable checkpoint")
+			return false, errs.New(
+				errs.KindStateConflict,
+				"release hook execution has not reached a releasable checkpoint",
+			)
 		}
 		if !terminalAt.After(record.UpdatedAt) {
 			return false, errs.New(errs.KindStateConflict, "release hook terminal timestamp is not monotonic")
@@ -594,7 +597,9 @@ func NewScriptExecutionRecords(
 			ScriptID: run.ScriptId, ScriptGeneration: run.ScriptGeneration,
 			EnvironmentID: run.EnvironmentId, ServiceID: run.ServiceId, ReleaseID: run.ReleaseId,
 			RenderGeneration: run.RenderGeneration, PlanHash: hex.EncodeToString(validated.PlanHash),
-			SnapshotSHA256: hex.EncodeToString(run.RunnerSnapshotSha256), BodySHA256: hex.EncodeToString(run.BodySha256),
+			SnapshotSHA256: hex.EncodeToString(
+				run.RunnerSnapshotSha256,
+			), BodySHA256: hex.EncodeToString(run.BodySha256),
 			RunnerProjectionSHA256: hex.EncodeToString(snapshot.RunnerProjectionSha256),
 			Plan:                   append([]byte(nil), planBytes...), Snapshot: snapshotBytes,
 			State: ScriptExecutionNotStarted, ActiveReference: true, CreatedAt: at.UTC(), UpdatedAt: at.UTC(),
@@ -630,15 +635,26 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	}
 	if err := validateScriptExecutionRecord(execution); err != nil ||
 		execution.State != ScriptExecutionNotStarted || !execution.ActiveReference {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "new Script execution record is invalid")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"new Script execution record is invalid",
+		)
 	}
 	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || !marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) || task.ID != execution.CurrentTaskID ||
 		task.OperationID != execution.OperationID || len(task.Steps) != 1 || task.Steps[0].ID != execution.StepID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Script execution marker does not match its Task")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Script execution marker does not match its Task",
+		)
 	}
-	initiation, err := newEnvironmentTaskInitiation(&sources.Tenant, sources.Project, sources.Environment, TaskActorOperator)
+	initiation, err := newEnvironmentTaskInitiation(
+		&sources.Tenant,
+		sources.Project,
+		sources.Environment,
+		TaskActorOperator,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -654,7 +670,10 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	if sources.Script.Record.ActiveReferences == math.MaxUint64 {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Script active reference count is exhausted")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"Script active reference count is exhausted",
+		)
 	}
 	updatedScript := sources.Script.Record
 	updatedScript.ActiveReferences++
@@ -707,14 +726,33 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	conditions := []Condition{
 		{Key: scriptExecutionKey(execution.ID)},
 		{Key: scriptRunnerSnapshotKey(execution.SnapshotID)},
-		{Key: scriptSetBodyForwardReferenceKey(execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID, execution.ScriptGeneration, execution.ID)},
+		{
+			Key: scriptSetBodyForwardReferenceKey(
+				execution.EnvironmentID,
+				execution.ScriptSetGeneration,
+				execution.ScriptID,
+				execution.ScriptGeneration,
+				execution.ID,
+			),
+		},
 		{Key: scriptBodyReverseReferenceKey(execution.ID)},
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
-		{Key: scriptSetScriptKey(execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID), ModRevision: sources.Script.Revision},
-		{Key: scriptSetBodyGenerationKey(execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID, execution.ScriptGeneration), ModRevision: sources.BodyGeneration.Revision},
+		{
+			Key:         scriptSetScriptKey(execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID),
+			ModRevision: sources.Script.Revision,
+		},
+		{
+			Key: scriptSetBodyGenerationKey(
+				execution.EnvironmentID,
+				execution.ScriptSetGeneration,
+				execution.ScriptID,
+				execution.ScriptGeneration,
+			),
+			ModRevision: sources.BodyGeneration.Revision,
+		},
 		{Key: scriptSetActiveKey(execution.EnvironmentID)},
 		serviceDesiredCondition(sources.Service),
 		{Key: releaseProjectionKey(execution.ServiceID), ModRevision: sources.Release.ProjectionRevision},
@@ -734,10 +772,24 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	}
 	defer clear(activeValue)
 	mutations := []Mutation{
-		{Type: MutationPut, Key: scriptSetScriptKey(execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID), Value: scriptValue},
+		{
+			Type:  MutationPut,
+			Key:   scriptSetScriptKey(execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID),
+			Value: scriptValue,
+		},
 		{Type: MutationPut, Key: scriptExecutionKey(execution.ID), Value: executionValue},
 		{Type: MutationPut, Key: scriptRunnerSnapshotKey(execution.SnapshotID), Value: snapshotValue},
-		{Type: MutationPut, Key: scriptSetBodyForwardReferenceKey(execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID, execution.ScriptGeneration, execution.ID), Value: bodyReference},
+		{
+			Type: MutationPut,
+			Key: scriptSetBodyForwardReferenceKey(
+				execution.EnvironmentID,
+				execution.ScriptSetGeneration,
+				execution.ScriptID,
+				execution.ScriptGeneration,
+				execution.ID,
+			),
+			Value: bodyReference,
+		},
 		{Type: MutationPut, Key: scriptBodyReverseReferenceKey(execution.ID), Value: bodyReference},
 		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
 		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
@@ -994,6 +1046,7 @@ func scriptExecutionProjectionConditions(sources ScriptExecutionSources) []Condi
 			Key: deletionTombstoneKey(string(DeletionTargetZone), network.Record.Desired.ID),
 		})
 	}
+	conditions = append(conditions, scriptAttachSourceConditions(sources.AttachSources)...)
 	return conditions
 }
 
@@ -1003,11 +1056,16 @@ func validateScriptExecutionRecord(record ScriptExecutionRecord) error {
 		ids.Validate(ids.KindTask, record.CurrentTaskID) != nil || ids.Validate(ids.KindStep, record.StepID) != nil ||
 		ids.Validate(ids.KindScript, record.ScriptID) != nil ||
 		record.ScriptGeneration == 0 || ids.Validate(ids.KindEnvironment, record.EnvironmentID) != nil ||
-		ids.Validate(ids.KindService, record.ServiceID) != nil || ids.Validate(ids.KindDeployment, record.ReleaseID) != nil ||
+		ids.Validate(
+			ids.KindService,
+			record.ServiceID,
+		) != nil || ids.Validate(ids.KindDeployment, record.ReleaseID) != nil ||
 		record.RenderGeneration == 0 || !validLowerSHA256(record.PlanHash) || !validLowerSHA256(record.SnapshotSHA256) ||
 		!validLowerSHA256(record.BodySHA256) || !validLowerSHA256(record.RunnerProjectionSHA256) ||
 		len(record.Plan) == 0 || len(record.Plan) > executionplan.MaximumPlanBytes || len(record.Snapshot) == 0 ||
-		!validScriptExecutionState(record.State) || record.CreatedAt.IsZero() || record.UpdatedAt.Before(record.CreatedAt) ||
+		!validScriptExecutionState(
+			record.State,
+		) || record.CreatedAt.IsZero() || record.UpdatedAt.Before(record.CreatedAt) ||
 		validateScriptExecutionCheckpointShape(record) != nil {
 		return errs.New(errs.KindValidationFailed, "Script execution record is invalid")
 	}
@@ -1050,8 +1108,17 @@ func scriptRunnerSnapshotKey(snapshotID string) string {
 	return scriptRunnerSnapshotPrefix + snapshotID
 }
 
-func scriptSetBodyForwardReferenceKey(environmentID, setGeneration, scriptID string, generation uint64, executionID string) string {
-	return scriptSetBodyGenerationKey(environmentID, setGeneration, scriptID, generation) + scriptBodyForwardRefSegment + executionID
+func scriptSetBodyForwardReferenceKey(
+	environmentID, setGeneration, scriptID string,
+	generation uint64,
+	executionID string,
+) string {
+	return scriptSetBodyGenerationKey(
+		environmentID,
+		setGeneration,
+		scriptID,
+		generation,
+	) + scriptBodyForwardRefSegment + executionID
 }
 
 func scriptBodyReverseReferenceKey(executionID string) string {

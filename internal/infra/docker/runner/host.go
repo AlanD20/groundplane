@@ -78,7 +78,10 @@ func (operations *localOperations) EnsureIdentity(ctx context.Context, plan core
 	return nil
 }
 
-func (operations *localOperations) ObserveIdentity(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+func (operations *localOperations) ObserveIdentity(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	if err := operations.identityMatches(ctx, plan); err != nil {
 		return corerunner.StepEvidence{}, err
 	}
@@ -94,7 +97,10 @@ func (operations *localOperations) EnsureNetwork(ctx context.Context, plan corer
 	return ensureNetwork(ctx, engine, plan, true)
 }
 
-func (operations *localOperations) ObserveNetwork(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+func (operations *localOperations) ObserveNetwork(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	engine, err := newEngine(hostDockerSocket)
 	if err != nil {
 		return corerunner.StepEvidence{}, err
@@ -124,7 +130,10 @@ func (operations *localOperations) EnsureEgress(ctx context.Context, plan coreru
 	return err
 }
 
-func (operations *localOperations) ObserveEgress(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+func (operations *localOperations) ObserveEgress(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	result, err := operations.run(ctx, "nft", "list", "table", "inet", nftTable(plan))
 	if err != nil {
 		return corerunner.StepEvidence{}, err
@@ -153,7 +162,10 @@ func (operations *localOperations) StartProxy(ctx context.Context, plan corerunn
 	return waitForSocket(ctx, plan.Paths.ProxySocket)
 }
 
-func (operations *localOperations) ObserveProxy(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+func (operations *localOperations) ObserveProxy(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	if err := operations.observeUnit(ctx, proxyUnit(plan)); err != nil {
 		return corerunner.StepEvidence{}, err
 	}
@@ -205,7 +217,10 @@ func (operations *localOperations) StartDaemon(ctx context.Context, plan corerun
 	return importImage(ctx, engine, plan.Container.ImageRef)
 }
 
-func (operations *localOperations) ObserveDaemon(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+func (operations *localOperations) ObserveDaemon(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	if err := operations.observeUnit(ctx, daemonUnit(plan)); err != nil {
 		return corerunner.StepEvidence{}, err
 	}
@@ -245,7 +260,10 @@ func (operations *localOperations) StartRunner(
 		return runnerallocation.RunnerRuntimeEvidence{}, dockerError(ctx, "create Runner container", err)
 	}
 	if created.ID == "" {
-		return runnerallocation.RunnerRuntimeEvidence{}, errs.New(errs.KindInternal, "Runner Docker returned an empty container id")
+		return runnerallocation.RunnerRuntimeEvidence{}, errs.New(
+			errs.KindInternal,
+			"Runner Docker returned an empty container id",
+		)
 	}
 	keep := false
 	defer func() {
@@ -280,13 +298,19 @@ func (operations *localOperations) StartRunner(
 		return runnerallocation.RunnerRuntimeEvidence{}, err
 	}
 	if !found {
-		return runnerallocation.RunnerRuntimeEvidence{}, errs.New(errs.KindInternal, "Runner container disappeared after registration")
+		return runnerallocation.RunnerRuntimeEvidence{}, errs.New(
+			errs.KindInternal,
+			"Runner container disappeared after registration",
+		)
 	}
 	keep = true
 	return evidence, nil
 }
 
-func (operations *localOperations) ObserveRunner(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+func (operations *localOperations) ObserveRunner(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	engine, err := newEngine(plan.Paths.ProxySocket)
 	if err != nil {
 		return corerunner.StepEvidence{}, err
@@ -317,7 +341,10 @@ func (operations *localOperations) StopRunner(ctx context.Context, plan corerunn
 	return receipt(plan, corerunner.StepStopRunner), nil
 }
 
-func (operations *localOperations) ObserveRunnerAbsent(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+func (operations *localOperations) ObserveRunnerAbsent(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	engine, err := newEngine(plan.Paths.ProxySocket)
 	if err != nil {
 		return corerunner.StepEvidence{}, err
@@ -340,7 +367,10 @@ func (operations *localOperations) StopDaemon(ctx context.Context, plan corerunn
 	return receipt(plan, corerunner.StepStopDaemon), nil
 }
 
-func (operations *localOperations) ObserveDaemonAbsent(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+func (operations *localOperations) ObserveDaemonAbsent(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	if err := operations.observeUnitAbsent(ctx, daemonUnit(plan)); err != nil {
 		return corerunner.StepEvidence{}, err
 	}
@@ -357,7 +387,10 @@ func (operations *localOperations) StopProxy(ctx context.Context, plan corerunne
 	return receipt(plan, corerunner.StepStopProxy), nil
 }
 
-func (operations *localOperations) ObserveProxyAbsent(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+func (operations *localOperations) ObserveProxyAbsent(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	if err := operations.observeUnitAbsent(ctx, proxyUnit(plan)); err != nil {
 		return corerunner.StepEvidence{}, err
 	}
@@ -380,7 +413,10 @@ func (operations *localOperations) RemoveNetwork(ctx context.Context, plan corer
 	return receipt(plan, corerunner.StepRemoveNetwork), nil
 }
 
-func (operations *localOperations) ObserveNetworkAbsent(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+func (operations *localOperations) ObserveNetworkAbsent(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	engine, err := newEngine(hostDockerSocket)
 	if err != nil {
 		return corerunner.StepEvidence{}, err
@@ -413,7 +449,10 @@ func (operations *localOperations) RemoveIdentity(ctx context.Context, plan core
 	return receipt(plan, corerunner.StepRemoveIdentity), nil
 }
 
-func (operations *localOperations) ObserveIdentityAbsent(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+func (operations *localOperations) ObserveIdentityAbsent(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	if result, err := operations.run(ctx, "getent", "passwd", plan.Identity.User); err == nil || result.ExitCode == 0 {
 		return corerunner.StepEvidence{}, errs.New(errs.KindStateConflict, "Runner host user still exists")
 	}
@@ -431,7 +470,10 @@ func (operations *localOperations) RemoveEgress(ctx context.Context, plan coreru
 	return receipt(plan, corerunner.StepRemoveEgress), nil
 }
 
-func (operations *localOperations) ObserveEgressAbsent(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+func (operations *localOperations) ObserveEgressAbsent(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	result, err := operations.run(ctx, "nft", "list", "table", "inet", nftTable(plan))
 	if err == nil || result.ExitCode == 0 {
 		return corerunner.StepEvidence{}, errs.New(errs.KindStateConflict, "Runner egress policy still exists")
@@ -445,11 +487,18 @@ func (operations *localOperations) ensureGroup(ctx context.Context, plan corerun
 		if result.ExitCode != 2 {
 			return err
 		}
-		_, err = operations.run(ctx, "groupadd", "--gid", strconv.FormatUint(uint64(plan.Identity.GID), 10), plan.Identity.Group)
+		_, err = operations.run(
+			ctx,
+			"groupadd",
+			"--gid",
+			strconv.FormatUint(uint64(plan.Identity.GID), 10),
+			plan.Identity.Group,
+		)
 		return err
 	}
 	fields := strings.Split(strings.TrimSpace(string(result.Stdout)), ":")
-	if len(fields) < 3 || fields[0] != plan.Identity.Group || fields[2] != strconv.FormatUint(uint64(plan.Identity.GID), 10) {
+	if len(fields) < 3 || fields[0] != plan.Identity.Group ||
+		fields[2] != strconv.FormatUint(uint64(plan.Identity.GID), 10) {
 		return errs.New(errs.KindStateConflict, "Runner host group identity changed")
 	}
 	return nil
@@ -509,7 +558,10 @@ func (operations *localOperations) inspectRunner(
 	inspected := result.Container
 	if inspected.ID == "" || inspected.Config == nil || inspected.Config.Image != plan.Container.ImageRef ||
 		inspected.State == nil || !inspected.State.Running {
-		return runnerallocation.RunnerRuntimeEvidence{}, false, errs.New(errs.KindStateConflict, "Runner container identity changed")
+		return runnerallocation.RunnerRuntimeEvidence{}, false, errs.New(
+			errs.KindStateConflict,
+			"Runner container identity changed",
+		)
 	}
 	device, inode, err := socketIdentity(plan.Paths.RawSocket)
 	if err != nil {
@@ -748,7 +800,8 @@ func registrationDocument(plan corerunner.Plan, token []byte) []byte {
 func waitForRunnerConfiguration(ctx context.Context, engine *client.Client, plan corerunner.Plan) error {
 	deadline := time.Now().Add(startupTimeout)
 	for {
-		if info, err := os.Stat(filepath.Join(plan.Paths.RunnerHome, ".runner")); err == nil && info.Mode().IsRegular() {
+		if info, err := os.Stat(filepath.Join(plan.Paths.RunnerHome, ".runner")); err == nil &&
+			info.Mode().IsRegular() {
 			return nil
 		}
 		inspected, err := engine.ContainerInspect(ctx, plan.Container.Name, client.ContainerInspectOptions{})

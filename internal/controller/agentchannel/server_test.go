@@ -25,12 +25,13 @@ import (
 )
 
 type fakeAuthenticator struct {
-	authorization Authorization
-	configuration *agentpb.AgentConfig
-	err           error
-	calls         int
-	seenID        string
-	seenToken     Token
+	configurationMu sync.Mutex
+	authorization   Authorization
+	configuration   *agentpb.AgentConfig
+	err             error
+	calls           int
+	seenID          string
+	seenToken       Token
 }
 
 type pausedAuthenticator struct {
@@ -262,7 +263,13 @@ func TestOperationMatchesTaskRequiresClosedEnvironmentComposeProcedure(t *testin
 			}
 			task := etcd.TaskRecord{Type: etcd.TaskUpdate, Target: environmentID, Params: params}
 			if got := operationMatchesTask(test.operation, task); got != test.want {
-				t.Fatalf("operationMatchesTask(%s, marker %q) = %t, want %t", test.operation, test.marker, got, test.want)
+				t.Fatalf(
+					"operationMatchesTask(%s, marker %q) = %t, want %t",
+					test.operation,
+					test.marker,
+					got,
+					test.want,
+				)
 			}
 		})
 	}
@@ -418,9 +425,13 @@ func TestAcknowledgeTerminalRecoveryReplaySurvivesAssignmentCleanup(t *testing.T
 			AssignmentID: assignmentID, AgentID: testAgentID, AgentGeneration: 1,
 		},
 	}}}}
-	server := &Server{tasks: &terminalReplayTaskStore{fakeTaskStore: base}, plans: &fakePlanResolver{plan: &agentpb.ExecutionPlan{
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, PlanHash: planHash[:],
-	}}, now: func() time.Time { return now }}
+	server := &Server{
+		tasks: &terminalReplayTaskStore{fakeTaskStore: base},
+		plans: &fakePlanResolver{plan: &agentpb.ExecutionPlan{
+			Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, PlanHash: planHash[:],
+		}},
+		now: func() time.Time { return now },
+	}
 	ack := &agentpb.TaskAck{TaskId: taskID, AssignmentId: assignmentID, PlanHash: planHash[:], ExecutionEpoch: 2,
 		ReleaseRecoveryRecordSha256: recoveryDigest[:], Terminal: agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED,
 		Result: &agentpb.TaskAck_ComposeResult{ComposeResult: &agentpb.ComposeTaskResult{
@@ -432,7 +443,10 @@ func TestAcknowledgeTerminalRecoveryReplaySurvivesAssignmentCleanup(t *testing.T
 	}
 	changed := proto.Clone(ack).(*agentpb.TaskAck)
 	changed.ReleaseRecoveryRecordSha256[0] ^= 0xff
-	if err := server.acknowledge(context.Background(), testAgentID, 1, changed); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+	if err := server.acknowledge(context.Background(), testAgentID, 1, changed); !errors.Is(
+		err,
+		errs.New(errs.KindStateConflict, ""),
+	) {
 		t.Fatalf("changed terminal replay error = %v, want state conflict", err)
 	}
 }
@@ -456,13 +470,6 @@ func (a *fakeAuthenticator) Authenticate(_ context.Context, id string, token Tok
 	a.seenID = id
 	a.seenToken = token
 	return a.authorization, a.err
-}
-
-func (a *fakeAuthenticator) Configuration(context.Context, string, uint64) (*agentpb.AgentConfig, error) {
-	if a.configuration != nil {
-		return proto.Clone(a.configuration).(*agentpb.AgentConfig), nil
-	}
-	return proto.Clone(a.authorization.Config).(*agentpb.AgentConfig), nil
 }
 
 type scriptedStream struct {
@@ -767,7 +774,7 @@ func TestConnectDeliversFencedTaskAbort(t *testing.T) {
 		t.Fatal("Controller did not deliver TaskAbort")
 	}
 	stream.received <- &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_TaskAck{TaskAck: &agentpb.TaskAck{
-		TaskId: taskID, AssignmentId: assignmentID,
+		TaskId: taskID, AssignmentId: assignmentID, ExecutionEpoch: 1,
 		PlanHash: planHash, Terminal: agentpb.TaskTerminal_TASK_TERMINAL_ABORTED,
 		Result: &agentpb.TaskAck_ComposeResult{ComposeResult: &agentpb.ComposeTaskResult{
 			Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
@@ -1150,7 +1157,7 @@ func TestConnectWakeRequiresFreshReadyAfterConfigUpdate(t *testing.T) {
 
 	nextConfig := proto.Clone(authenticator.authorization.Config).(*agentpb.AgentConfig)
 	nextConfig.PullIntervalSeconds++
-	authenticator.configuration = nextConfig
+	authenticator.setConfiguration(nextConfig)
 	stream.received <- readyMessage(1)
 	pendingDeadline := time.NewTimer(time.Second)
 	for {

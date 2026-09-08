@@ -165,8 +165,14 @@ func TestPrepareConfigTaskRequiresObservationOnlyForServingPredecessor(t *testin
 			task := etcd.TaskRecord{
 				ID: ids.NewAt(ids.KindTask, now, 2), PlanID: ids.NewAt(ids.KindPlan, now, 3),
 				RenderGeneration: 1, Steps: []etcd.TaskStepRecord{
-					{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 4)}, {Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 5)},
-					{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 6)}, {Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 7)},
+					{
+						Kind: etcd.TaskStepOperation,
+						ID:   ids.NewAt(ids.KindStep, now, 4),
+					}, {Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 5)},
+					{
+						Kind: etcd.TaskStepOperation,
+						ID:   ids.NewAt(ids.KindStep, now, 6),
+					}, {Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 7)},
 				},
 			}
 			current := etcd.Versioned[etcd.ComponentRecord]{Record: record}

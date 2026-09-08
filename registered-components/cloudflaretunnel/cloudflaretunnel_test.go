@@ -1,6 +1,7 @@
 package cloudflaretunnel
 
 import (
+	"reflect"
 	"slices"
 	"testing"
 
@@ -14,6 +15,11 @@ func TestPlanBuildsSecretBoundTunnelConnector(t *testing.T) {
 	plan, err := Plan(Input{
 		GeneratedServiceID: "svc_tunnel",
 		SecretID:           "sec_token",
+		Zones: []component.NetworkInput{
+			{ID: "net_private", Name: "private", Internal: true},
+			{ID: "net_frontend", Name: "frontend"},
+			{ID: "net_services", Name: "services"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
@@ -22,13 +28,24 @@ func TestPlanBuildsSecretBoundTunnelConnector(t *testing.T) {
 		t.Fatalf("Plan() services = %#v", plan.Services)
 	}
 	service := plan.Services[0]
-	if service.Name != ServiceName || service.NetworkMode != component.ManagedNetworkModeDefault ||
+	if service.Name != ServiceName || service.NetworkMode != component.ManagedNetworkModeZones ||
 		!service.Image.Equal(Image) ||
-		len(service.Networks) != 0 || !slices.Equal(service.Command, []string{"tunnel", "--no-autoupdate", "run"}) ||
+		!reflect.DeepEqual(service.Networks, []component.ManagedNetworkAttachment{
+			{Name: "private"},
+			{Name: "frontend", GatewayPriority: 1},
+			{Name: "services"},
+		}) || !slices.Equal(service.Command, []string{"tunnel", "--no-autoupdate", "--metrics", "127.0.0.1:2000", "run"}) ||
 		len(service.Dependencies) != 0 ||
 		len(service.SecretEnvironment) != 1 || service.SecretEnvironment[0].Name != tokenName ||
 		service.SecretEnvironment[0].SecretID != "sec_token" {
 		t.Fatalf("Plan() service = %#v", service)
+	}
+	if service.Healthcheck == nil || service.Healthcheck.Validate() != nil ||
+		!slices.Equal(
+			service.Healthcheck.Command,
+			[]string{"cloudflared", "tunnel", "--metrics", "127.0.0.1:2000", "ready"},
+		) {
+		t.Fatal("Tunnel readiness must query its bound loopback metrics endpoint")
 	}
 }
 
@@ -38,5 +55,32 @@ func TestPlanRejectsMissingConnectorIdentity(t *testing.T) {
 	t.Parallel()
 	if plan, err := Plan(Input{SecretID: "sec_token"}); err == nil || len(plan.Services) != 0 {
 		t.Fatalf("Plan() = %#v, %v, want empty plan and error", plan, err)
+	}
+}
+
+// Rationale: the connector must never receive an implicit default bridge or
+// silently treat an internal-only placement as internet egress.
+func TestPlanRejectsInvalidZonePlacement(t *testing.T) {
+	t.Parallel()
+	valid := Input{
+		GeneratedServiceID: "svc_tunnel", SecretID: "sec_token",
+		Zones: []component.NetworkInput{{ID: "net_frontend", Name: "frontend"}},
+	}
+	for name, mutate := range map[string]func(*Input){
+		"missing zones": func(input *Input) { input.Zones = nil },
+		"internal only": func(input *Input) { input.Zones[0].Internal = true },
+		"duplicate id":  func(input *Input) { input.Zones = append(input.Zones, input.Zones[0]) },
+		"duplicate name": func(input *Input) {
+			input.Zones = append(input.Zones, component.NetworkInput{ID: "net_other", Name: input.Zones[0].Name})
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			input := valid
+			input.Zones = append([]component.NetworkInput(nil), valid.Zones...)
+			mutate(&input)
+			if plan, err := Plan(input); err == nil || len(plan.Services) != 0 {
+				t.Fatalf("Plan() = %#v, %v, want empty plan and error", plan, err)
+			}
+		})
 	}
 }

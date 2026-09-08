@@ -32,7 +32,8 @@ func (service *LogService) OpenEnvironment(
 	tail uint32,
 	follow bool,
 ) (*agentchannel.LogSubscription, error) {
-	if service == nil || service.environments == nil || service.services == nil || service.releases == nil || service.registry == nil {
+	if service == nil || service.environments == nil || service.services == nil || service.releases == nil ||
+		service.registry == nil {
 		return nil, errs.New(errs.KindInternal, "environment logs are not configured")
 	}
 	resolved, err := service.releases.ResolveEnvironmentLogTargets(ctx, environmentID, 128)

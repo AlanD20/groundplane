@@ -519,7 +519,11 @@ func TestReconcileCompletesInterruptedUpdateAfterAuthenticatedReady(t *testing.T
 		t.Fatalf("completed update replay error = %v", err)
 	}
 	if repository.record.Record.Generation != interrupted.Generation {
-		t.Fatalf("completed replay generation = %d, want %d", repository.record.Record.Generation, interrupted.Generation)
+		t.Fatalf(
+			"completed replay generation = %d, want %d",
+			repository.record.Record.Generation,
+			interrupted.Generation,
+		)
 	}
 }
 

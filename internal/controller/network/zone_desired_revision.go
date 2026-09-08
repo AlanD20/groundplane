@@ -25,7 +25,10 @@ func buildZoneRemovalProjection(
 	if ids.Validate(ids.KindEnvironment, current.EnvironmentID) != nil ||
 		ids.Validate(ids.KindNetwork, zoneID) != nil || zoneName == "" ||
 		ids.Validate(ids.KindTask, revisionID) != nil || generation == 0 {
-		return etcd.EnvironmentComposeProjection{}, nil, errs.New(errs.KindInternal, "Zone removal projection input is invalid")
+		return etcd.EnvironmentComposeProjection{}, nil, errs.New(
+			errs.KindInternal,
+			"Zone removal projection input is invalid",
+		)
 	}
 
 	candidate := current
@@ -36,7 +39,10 @@ func buildZoneRemovalProjection(
 	for _, zone := range current.DesiredZones {
 		if zone.Desired.ID == zoneID && zone.Desired.Name == zoneName {
 			if foundDesired {
-				return etcd.EnvironmentComposeProjection{}, nil, errs.New(errs.KindInternal, "Zone desired identity is duplicated")
+				return etcd.EnvironmentComposeProjection{}, nil, errs.New(
+					errs.KindInternal,
+					"Zone desired identity is duplicated",
+				)
 			}
 			foundDesired = true
 			continue
@@ -44,7 +50,10 @@ func buildZoneRemovalProjection(
 		candidate.DesiredZones = append(candidate.DesiredZones, zone)
 	}
 	if !foundDesired {
-		return etcd.EnvironmentComposeProjection{}, nil, errs.New(errs.KindStateConflict, "Zone is absent from the current desired revision")
+		return etcd.EnvironmentComposeProjection{}, nil, errs.New(
+			errs.KindStateConflict,
+			"Zone is absent from the current desired revision",
+		)
 	}
 	candidate.DesiredServices = make([]etcd.EnvironmentServiceProjection, len(current.DesiredServices))
 	affected := make([]string, 0)
@@ -57,7 +66,10 @@ func buildZoneRemovalProjection(
 				removed = true
 				continue
 			}
-			candidate.DesiredServices[index].Desired.Zones = append(candidate.DesiredServices[index].Desired.Zones, name)
+			candidate.DesiredServices[index].Desired.Zones = append(
+				candidate.DesiredServices[index].Desired.Zones,
+				name,
+			)
 		}
 		if removed {
 			affected = append(affected, service.Desired.ID)
@@ -67,7 +79,10 @@ func buildZoneRemovalProjection(
 
 	artifact := &agentpb.ComposeArtifact{}
 	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(current.ComposeArtifact, artifact); err != nil {
-		return etcd.EnvironmentComposeProjection{}, nil, errs.New(errs.KindInternal, "Zone baseline artifact is corrupt")
+		return etcd.EnvironmentComposeProjection{}, nil, errs.New(
+			errs.KindInternal,
+			"Zone baseline artifact is corrupt",
+		)
 	}
 	mutation := controller.ZoneArtifactMutation{
 		ZoneID: zoneID, ZoneName: zoneName,

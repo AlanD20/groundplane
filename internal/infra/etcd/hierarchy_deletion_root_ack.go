@@ -76,7 +76,10 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 	task, err := decodeTaskRecord(taskValue.Value)
 	if err != nil || task.ID != taskID || task.Executor != TaskExecutorController ||
 		task.Params[TaskResourceKindParam] != TaskResourceHierarchyDeletion {
-		return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "hierarchy deletion root Task identity changed")
+		return Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion root Task identity changed",
+		)
 	}
 	journal, err := newHierarchyDeletionRepository(repository.store)
 	if err != nil {
@@ -84,24 +87,37 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 	}
 	if read.Values[1] == nil {
 		if read.Values[2] != nil || task.Status != terminalStatus {
-			return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "hierarchy deletion root Task has no matching claim")
+			return Versioned[TaskRecord]{}, errs.New(
+				errs.KindStateConflict,
+				"hierarchy deletion root Task has no matching claim",
+			)
 		}
 		operation, operationErr := journal.OperationByTaskAtRevision(ctx, task.ID, read.ReadRevision)
 		if operationErr != nil || operation.Tombstone.Terminal == nil ||
 			operation.Tombstone.Terminal.TaskID != task.ID ||
 			operation.Tombstone.Terminal.Status != string(terminalStatus) {
-			return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "hierarchy deletion root terminal evidence changed")
+			return Versioned[TaskRecord]{}, errs.New(
+				errs.KindStateConflict,
+				"hierarchy deletion root terminal evidence changed",
+			)
 		}
 		if err := repository.validateTaskRetentionReplay(ctx, task, read.ReadRevision); err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
-		return Versioned[TaskRecord]{Record: task, Revision: taskValue.ModRevision, ReadRevision: read.ReadRevision}, nil
+		return Versioned[TaskRecord]{
+			Record:       task,
+			Revision:     taskValue.ModRevision,
+			ReadRevision: read.ReadRevision,
+		}, nil
 	}
 	assignmentValue := read.Values[1]
 	assignmentIndexValue := read.Values[2]
 	if assignmentIndexValue == nil || assignmentIndexValue.ModRevision != assignmentValue.ModRevision ||
 		!bytes.Equal(assignmentIndexValue.Value, assignmentValue.Value) {
-		return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "hierarchy deletion root assignment indexes disagree")
+		return Versioned[TaskRecord]{}, errs.New(
+			errs.KindInternal,
+			"hierarchy deletion root assignment indexes disagree",
+		)
 	}
 	assignment, err := decodeTaskAssignment(assignmentValue.Value)
 	if err != nil {
@@ -152,7 +168,10 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 		companions.Values[4] != nil || companions.Values[5] == nil ||
 		companions.Values[5].ModRevision != assignmentValue.ModRevision ||
 		!bytes.Equal(companions.Values[5].Value, assignmentValue.Value) {
-		return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "hierarchy deletion root lifecycle records disagree")
+		return Versioned[TaskRecord]{}, errs.New(
+			errs.KindInternal,
+			"hierarchy deletion root lifecycle records disagree",
+		)
 	}
 	if err := validateTaskLifecycleCompanions(task, companions.Values[0], companions.Values[1]); err != nil {
 		return Versioned[TaskRecord]{}, err
@@ -214,9 +233,16 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 	}
 	clearKeyValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "hierarchy deletion root acknowledgement changed")
+		return Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion root acknowledgement changed",
+		)
 	}
-	return Versioned[TaskRecord]{Record: terminal, Revision: transaction.Revision, ReadRevision: transaction.Revision}, nil
+	return Versioned[TaskRecord]{
+		Record:       terminal,
+		Revision:     transaction.Revision,
+		ReadRevision: transaction.Revision,
+	}, nil
 }
 
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRootAcknowledgement(
@@ -235,7 +261,10 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRootAckno
 	fenceKey, _ := HierarchyDeletionCleanupFenceKey(operation.Tombstone.OperationID)
 	replayKey, _ := HierarchyDeletionReplayTargetKey(operation.Tombstone.OperationID)
 	lockKey := HierarchyDeletionLockKey(string(operation.Tombstone.TargetKind), operation.Tombstone.TargetID)
-	auxiliary, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{replayKey, lockKey}, Revision: revision})
+	auxiliary, err := repository.store.GetMany(
+		ctx,
+		GetManyRequest{Keys: []string{replayKey, lockKey}, Revision: revision},
+	)
 	if err != nil {
 		return hierarchyDeletionRootAckChange{}, err
 	}
@@ -315,13 +344,19 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompleted
 	nextFence *HierarchyDeletionCleanupFence,
 	replay *HierarchyDeletionReplayLocator,
 ) (hierarchyDeletionRootAckChange, error) {
-	if operation.Tombstone.Phase != HierarchyDeletionFinalizing || operation.Fence.Phase != HierarchyDeletionFinalizing ||
-		operation.Fence.Dispatch != HierarchyDeletionDispatchRetiring || operation.Tombstone.PlanCount == nil ||
-		operation.Tombstone.PlanDigest == nil || *operation.Tombstone.PlanCount <= 0 ||
+	if operation.Tombstone.Phase != HierarchyDeletionFinalizing ||
+		operation.Fence.Phase != HierarchyDeletionFinalizing ||
+		operation.Fence.Dispatch != HierarchyDeletionDispatchRetiring ||
+		operation.Tombstone.PlanCount == nil ||
+		operation.Tombstone.PlanDigest == nil ||
+		*operation.Tombstone.PlanCount <= 0 ||
 		operation.Tombstone.Checkpoint.CompletedCount != *operation.Tombstone.PlanCount-1 ||
 		operation.Fence.ActiveActionOrdinal == nil ||
 		*operation.Fence.ActiveActionOrdinal != *operation.Tombstone.PlanCount-1 {
-		return hierarchyDeletionRootAckChange{}, errs.New(errs.KindStateConflict, "hierarchy deletion root is not ready")
+		return hierarchyDeletionRootAckChange{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion root is not ready",
+		)
 	}
 	rootOrdinal := *operation.Tombstone.PlanCount - 1
 	actionKey, _ := HierarchyDeletionActionKey(operation.Tombstone.OperationID, rootOrdinal)
@@ -345,7 +380,11 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompleted
 	if err != nil {
 		return hierarchyDeletionRootAckChange{}, err
 	}
-	change := hierarchyDeletionRootAckChange{conditions: effects.conditions, mutations: effects.mutations, values: effects.values}
+	change := hierarchyDeletionRootAckChange{
+		conditions: effects.conditions,
+		mutations:  effects.mutations,
+		values:     effects.values,
+	}
 	expected, err := bindHierarchyDeletionControllerProcedure(
 		HierarchyDeletionPlannedAction{
 			NodeID: action.NodeID, Ordinal: action.Ordinal, ParentOperationID: action.ParentOperationID,
@@ -360,7 +399,10 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompleted
 	)
 	if err != nil || expected != *action.ControllerProcedure {
 		change.clear()
-		return hierarchyDeletionRootAckChange{}, errs.New(errs.KindStateConflict, "hierarchy deletion root template changed")
+		return hierarchyDeletionRootAckChange{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion root template changed",
+		)
 	}
 	actionValue, err := encodeHierarchyDeletionAction(action)
 	if err != nil {
@@ -504,14 +546,29 @@ func (repository *HierarchyDeletionRepository) buildHierarchyDeletionSummaries(
 				return hierarchyDeletionRootAckChange{}, corruptHierarchyDeletion()
 			}
 			valueDigest := hierarchyDeletionBytesDigest(value.Value)
-			completionDigest = hierarchyDeletionFoldDigest("gp-deletion-completion-set-item-v1", completionDigest, strconv.FormatInt(ordinal, 10), valueDigest)
+			completionDigest = hierarchyDeletionFoldDigest(
+				"gp-deletion-completion-set-item-v1",
+				completionDigest,
+				strconv.FormatInt(ordinal, 10),
+				valueDigest,
+			)
 			if completion.AgentProof != nil {
 				childCount++
-				receiptDigest = hierarchyDeletionFoldDigest("gp-deletion-receipt-set-item-v1", receiptDigest, strconv.FormatInt(ordinal, 10), completion.AgentProof.ReceiptDigest)
+				receiptDigest = hierarchyDeletionFoldDigest(
+					"gp-deletion-receipt-set-item-v1",
+					receiptDigest,
+					strconv.FormatInt(ordinal, 10),
+					completion.AgentProof.ReceiptDigest,
+				)
 			}
 		}
 	}
-	completionDigest = hierarchyDeletionFoldDigest("gp-deletion-completion-set-item-v1", completionDigest, strconv.FormatInt(count-1, 10), hierarchyDeletionBytesDigest(rootCompletion))
+	completionDigest = hierarchyDeletionFoldDigest(
+		"gp-deletion-completion-set-item-v1",
+		completionDigest,
+		strconv.FormatInt(count-1, 10),
+		hierarchyDeletionBytesDigest(rootCompletion),
+	)
 	receiptSummary := HierarchyDeletionReceiptSummary{
 		Schema: 1, ParentOperationID: operation.Tombstone.OperationID,
 		DeletionEpoch: operation.Tombstone.DeletionEpoch, ChildCount: childCount,
@@ -558,11 +615,22 @@ func (repository *HierarchyDeletionRepository) buildHierarchyDeletionSummaries(
 	}
 	receiptSummaryKey, _ := HierarchyDeletionReceiptSummaryKey(operation.Tombstone.OperationID)
 	completionSummaryKey, _ := HierarchyDeletionCompletionSummaryKey(operation.Tombstone.OperationID)
-	receiptCursorKey, _ := HierarchyDeletionReceiptScanCursorKey(operation.Tombstone.OperationID, operation.Tombstone.CurrentTaskID)
-	completionCursorKey, _ := HierarchyDeletionCompletionScanCursorKey(operation.Tombstone.OperationID, operation.Tombstone.CurrentTaskID)
+	receiptCursorKey, _ := HierarchyDeletionReceiptScanCursorKey(
+		operation.Tombstone.OperationID,
+		operation.Tombstone.CurrentTaskID,
+	)
+	completionCursorKey, _ := HierarchyDeletionCompletionScanCursorKey(
+		operation.Tombstone.OperationID,
+		operation.Tombstone.CurrentTaskID,
+	)
 	return hierarchyDeletionRootAckChange{
-		conditions: []Condition{{Key: receiptSummaryKey}, {Key: completionSummaryKey}, {Key: receiptCursorKey}, {Key: completionCursorKey},
-			{Key: mustHierarchyDeletionCompletionKey(operation.Tombstone.OperationID, count-1)}},
+		conditions: []Condition{
+			{Key: receiptSummaryKey},
+			{Key: completionSummaryKey},
+			{Key: receiptCursorKey},
+			{Key: completionCursorKey},
+			{Key: mustHierarchyDeletionCompletionKey(operation.Tombstone.OperationID, count-1)},
+		},
 		mutations: []Mutation{
 			{Type: MutationPut, Key: receiptSummaryKey, Value: receiptSummaryValue},
 			{Type: MutationPut, Key: completionSummaryKey, Value: completionSummaryValue},

@@ -22,10 +22,23 @@ import (
 )
 
 func TestBlueprintFinalRecoveryAcknowledgementIsAtomicReplayableAndCleansAuthority(t *testing.T) {
+	blueprintFinalRecoveryAcknowledgement(t, false, false)
+}
+
+func TestBlueprintComponentRunningPreventsWorkloadOnlyRecoveryClosure(t *testing.T) {
+	blueprintFinalRecoveryAcknowledgement(t, true, true)
+}
+
+func TestBlueprintUnstartedComponentAllowsWorkloadRecovery(t *testing.T) {
+	blueprintFinalRecoveryAcknowledgement(t, true, false)
+}
+
+func blueprintFinalRecoveryAcknowledgement(t *testing.T, componentDeclared, componentRunning bool) {
 	ctx := context.Background()
-	published, err := publishEnvironmentBlueprintAtomicShape(t, environmentBlueprintAtomicShape{
+	shape := environmentBlueprintAtomicShape{
 		name: "final recovery acknowledgement", releases: 1, hooks: 1, physicalSources: 1,
-	}, false)
+	}
+	published, err := publishEnvironmentBlueprintAtomicShape(t, shape, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,6 +50,7 @@ func TestBlueprintFinalRecoveryAcknowledgementIsAtomicReplayableAndCleansAuthori
 	if err != nil {
 		t.Fatal(err)
 	}
+	repository.blueprintTerminalStore = published.store
 	task := published.task
 	publicationID := published.releasePublicationID
 	read, err := published.store.GetMany(ctx, GetManyRequest{Keys: []string{
@@ -59,15 +73,24 @@ func TestBlueprintFinalRecoveryAcknowledgementIsAtomicReplayableAndCleansAuthori
 		EnvironmentID: published.environmentID, RevisionID: task.ID, RenderGeneration: uint64(task.RenderGeneration),
 		DesiredServices: []EnvironmentServiceProjection{{
 			EnvironmentID: published.environmentID,
-			Desired:       core.Service{ID: member.ServiceID, Name: "api", Image: "example/api:1", Strategy: core.StrategyRecreate},
+			Desired: core.Service{
+				ID:       member.ServiceID,
+				Name:     "api",
+				Image:    "example/api:1",
+				Strategy: core.StrategyRecreate,
+			},
 		}},
 		ServiceDependencyPlans: core.ServiceDependencyPlans{},
 	})
 	render := ReleaseRenderInput{
 		ReleaseID: member.ReleaseID, PlanID: task.PlanID, ArtifactID: task.Params[TaskComposeArtifactParam],
-		ServiceID: member.ServiceID, ServiceName: "api", Image: "example/api:1",
+		ServiceID: member.ServiceID, ServiceName: "api", CandidateWorkload: releaseTestWorkloadSeal("example/api:1"),
 		Strategy: domain.StrategyRecreate, CandidateTarget: domain.WorkloadSingleton,
-		PriorArtifactID: ids.NewAt(ids.KindConfig, task.CreatedAt, 19991), PriorImage: "example/api:previous",
+		PriorArtifactID: ids.NewAt(
+			ids.KindConfig,
+			task.CreatedAt,
+			19991,
+		), PriorWorkload: releaseTestPriorWorkload("example/api:previous"),
 		PriorStrategy: domain.StrategyRecreate, PriorTarget: domain.WorkloadSingleton,
 		TenantID: task.Owner.TenantID, TenantSlug: "tenant", ProjectID: task.Owner.ProjectID, ProjectSlug: "project",
 		EnvironmentID: published.environmentID, EnvironmentName: "production",
@@ -86,7 +109,7 @@ func TestBlueprintFinalRecoveryAcknowledgementIsAtomicReplayableAndCleansAuthori
 		ID: member.ReleaseID, EnvironmentID: published.environmentID, ServiceID: member.ServiceID,
 		OperationID: task.OperationID, OperationKind: domain.OperationBlueprintApply,
 		GroupOperationID: task.OperationID, GroupMemberOrdinal: 1,
-		Image: render.Image, Tag: "stable", Strategy: domain.StrategyRecreate,
+		CandidateWorkload: render.CandidateWorkload, Tag: "stable", Strategy: domain.StrategyRecreate,
 		OnFailure: domain.OnFailureSwitchBack, RenderInputID: render.ArtifactID, RenderInputDigest: renderDigest,
 		CreatedAt: task.CreatedAt, Actor: "operator", OriginatingTaskID: task.ID,
 		Workspace: domain.Workspace{
@@ -113,6 +136,29 @@ func TestBlueprintFinalRecoveryAcknowledgementIsAtomicReplayableAndCleansAuthori
 	}
 	marker.ManifestDigest = manifest.Digest
 	values := make(map[string][]byte)
+	componentStepID := ids.NewAt(ids.KindStep, task.CreatedAt, 19995)
+	if componentDeclared {
+		stored, readErr := published.store.Get(ctx, taskKey(task.ID))
+		if readErr != nil || stored.Entry == nil {
+			t.Fatalf("read published Task: %v", readErr)
+		}
+		task, err = decodeTaskRecord(stored.Entry.Value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		root, readErr := published.store.Get(ctx, scriptSourceRootKey(task.OperationID))
+		if readErr != nil || root.Entry == nil {
+			t.Fatalf("read Script source root: %v", readErr)
+		}
+		values[scriptSourceRootKey(task.OperationID)] = root.Entry.Value
+		task.ComponentActionStepIDs = []string{componentStepID}
+		task.Steps = append(task.Steps, TaskStepRecord{Kind: TaskStepOperation, ID: componentStepID})
+		marker.CandidateReleaseDescriptor.ComponentActionStepIDs = []string{componentStepID}
+		values[taskKey(task.ID)], err = encodeTaskRecord(task)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	for key, record := range map[string]struct {
 		typeName string
 		value    any
@@ -140,9 +186,58 @@ func TestBlueprintFinalRecoveryAcknowledgementIsAtomicReplayableAndCleansAuthori
 		t.Fatalf("install exact candidate ledger = %#v, %v", updated, err)
 	}
 	agentID := ids.NewAt(ids.KindAgent, task.CreatedAt, 19990)
+	if _, checkErr := validateReleaseCandidateDescriptor(marker.CandidateReleaseDescriptor, task, manifest); checkErr != nil {
+		t.Fatalf(
+			"fixture descriptor mismatch: %+v taskhash=%s descriptor=%+v",
+			checkErr,
+			task.PlanHash,
+			marker.CandidateReleaseDescriptor,
+		)
+	}
+	if componentDeclared {
+		persisted, err := published.store.Get(ctx, taskKey(task.ID))
+		if err != nil {
+			t.Fatal(err)
+		}
+		actualTask, err := decodeTaskRecord(persisted.Entry.Value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		persisted, err = published.store.Get(ctx, releasePublicationKey(publicationID))
+		if err != nil {
+			t.Fatal(err)
+		}
+		actualMarker, err := decodeReleaseRecord[ReleasePublicationMarker](persisted.Entry.Value, "release-publication")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := validateReleaseCandidateDescriptor(actualMarker.CandidateReleaseDescriptor, actualTask, manifest); err != nil {
+			t.Fatalf(
+				"stored descriptor mismatch taskIDs=%v descriptorIDs=%v: %v",
+				actualTask.ComponentActionStepIDs,
+				actualMarker.CandidateReleaseDescriptor.ComponentActionStepIDs,
+				err,
+			)
+		}
+		omitted := cloneTaskRecord(actualTask)
+		omitted.ComponentActionStepIDs = nil
+		if _, err := validateReleaseCandidateDescriptor(actualMarker.CandidateReleaseDescriptor, omitted, manifest); err == nil {
+			t.Fatal("accepted omitted Task Component authority")
+		}
+		tampered := executionplan.CloneCandidateReleaseDescriptor(actualMarker.CandidateReleaseDescriptor)
+		tampered.ComponentActionStepIDs = nil
+		if _, err := validateReleaseCandidateDescriptor(tampered, actualTask, manifest); err == nil {
+			t.Fatal("accepted omitted descriptor Component authority")
+		}
+		tampered = executionplan.CloneCandidateReleaseDescriptor(actualMarker.CandidateReleaseDescriptor)
+		tampered.PlanHash = bytes.Repeat([]byte{0xff}, 32)
+		if _, err := validateReleaseCandidateDescriptor(tampered, actualTask, manifest); err == nil {
+			t.Fatal("accepted Component authority from changed plan hash")
+		}
+	}
 	claim, found, err := repository.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(2*time.Minute))
 	if err != nil || !found || claim.Assignment.Record.RestorationAuthority == nil ||
-		claim.Assignment.Record.RestorationAuthority.Target != ReleaseRestorationCandidateAbsence {
+		claim.Assignment.Record.RestorationAuthority.Candidates[0].Target != ReleaseRestorationCandidateAbsence {
 		t.Fatalf("claim recovery fixture = %#v, %t, %v", claim, found, err)
 	}
 	procedure, err := executionplan.OpenCandidateReleaseDescriptor(marker.CandidateReleaseDescriptor)
@@ -152,6 +247,28 @@ func TestBlueprintFinalRecoveryAcknowledgementIsAtomicReplayableAndCleansAuthori
 	primary := TaskResultRecord{
 		Kind: TaskResultCompose, ExitCode: 17, FailedStepID: procedure.GetMembers()[0].GetForwardStepIds()[0],
 		Diagnostic: TaskResultDiagnosticComposeFailed, ReconciliationRequired: true, ExecutionEpoch: 1,
+	}
+	if componentRunning {
+		_, err = repository.AppendTaskEvent(
+			ctx,
+			TaskEventInput{
+				Identity: TaskEventIdentity{
+					AssignmentID:    claim.Assignment.Record.AssignmentID,
+					AgentID:         agentID,
+					AgentGeneration: 1,
+					TaskID:          task.ID,
+					StepID:          componentStepID,
+					Attempt:         1,
+					Ordinal:         1,
+				},
+				State:   TaskEventStateRunning,
+				Payload: json.RawMessage(`{"message":"Component activation started"}`),
+			},
+			task.CreatedAt.Add(150*time.Second),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	transitioned, err := repository.AcknowledgeTask(
 		ctx, agentID, 1, task.ID, claim.Assignment.Record.AssignmentID,
@@ -197,6 +314,20 @@ func TestBlueprintFinalRecoveryAcknowledgementIsAtomicReplayableAndCleansAuthori
 		ctx, agentID, 1, task.ID, recovery.Assignment.Record.AssignmentID,
 		TaskStatusCompleted, final, task.CreatedAt.Add(10*time.Minute),
 	)
+	if componentRunning {
+		if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+			t.Fatalf(
+				"Component effect allowed workload-only terminal closure: task=%v error=%v",
+				terminal.Record.Status,
+				err,
+			)
+		}
+		retained, readErr := repository.GetTaskAssignment(ctx, task.ID)
+		if readErr != nil || retained.Assignment.Record.ExecutionMode != TaskExecutionModeRecoveryOnly {
+			t.Fatalf("recovery ownership lost: %#v %v", retained, readErr)
+		}
+		return
+	}
 	if err != nil || terminal.Record.Status != TaskStatusFailed || terminal.Record.Result == nil ||
 		terminal.Record.Result.ExitCode != primary.ExitCode || terminal.Record.Result.FailedStepID != primary.FailedStepID ||
 		terminal.Record.Result.ReconciliationRequired {
@@ -204,7 +335,9 @@ func TestBlueprintFinalRecoveryAcknowledgementIsAtomicReplayableAndCleansAuthori
 	}
 	cleanup, err := published.store.GetMany(ctx, GetManyRequest{Keys: []string{
 		taskAssignmentKey(agentID, task.ID), taskAssignmentIndexKey(task.ID),
-		taskActiveOperationKey(task.OperationID), taskTimeoutIndexKey(task.ID, recovery.Assignment.Record.RecoveryDeadline),
+		taskActiveOperationKey(
+			task.OperationID,
+		), taskTimeoutIndexKey(task.ID, recovery.Assignment.Record.RecoveryDeadline),
 		taskMaterializationWriterKey(published.environmentID), releaseRecoveryKey(task.ID),
 		scriptSourceRootKey(task.OperationID), environmentComposeProjectionKey(published.environmentID),
 	}})
@@ -334,10 +467,66 @@ func TestBlueprintTerminalReplayTypedEqualityPreservesExactLedgerIdentity(t *tes
 func TestOrdinaryReleaseClaimCarriesDescriptorRestorationAuthority(t *testing.T) {
 	fixture := newOrdinaryReleaseClaimFixture(t)
 	authority := fixture.claim.Assignment.Record.RestorationAuthority
-	if authority == nil || authority.Target != ReleaseRestorationCandidateAbsence ||
-		authority.CandidateArtifactID != fixture.artifactID || len(authority.Candidates) != 1 ||
-		authority.Candidates[0].ServiceID != fixture.serviceID || authority.Candidates[0].ReleaseID != fixture.releaseID {
+	if authority == nil || len(authority.Candidates) != 1 ||
+		authority.Candidates[0].Target != ReleaseRestorationCandidateAbsence ||
+		authority.CandidateArtifactID != fixture.artifactID ||
+		authority.Candidates[0].ServiceID != fixture.serviceID ||
+		authority.Candidates[0].ReleaseID != fixture.releaseID {
 		t.Fatalf("ordinary Release claim authority = %#v", authority)
+	}
+}
+
+// Rationale: Service-target releases have no materialization writer but need durable, reconnectable authority.
+func TestOrdinaryServiceReleaseClaimWithoutWriterCarriesDurableAuthority(t *testing.T) {
+	fixture := newOrdinaryReleaseClaimFixtureForTarget(t, true)
+	ctx := context.Background()
+	claim := fixture.claim
+	authority := claim.Assignment.Record.RestorationAuthority
+	if authority == nil {
+		t.Fatal("Service-target release claim has no restoration authority")
+	}
+	digest, err := releaseRestorationAuthoritySHA256(*authority)
+	if err != nil || digest != claim.Assignment.Record.RestorationAuthoritySHA256 {
+		t.Fatalf("restoration authority digest mismatch: %v", err)
+	}
+	if claim.Task.Record.Target != fixture.serviceID ||
+		claim.Task.Record.Params[TaskMaterializationEnvironmentParam] != "" {
+		t.Fatal("fixture does not represent a Service-target release without a writer")
+	}
+	read, err := fixture.repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+		taskAssignmentKey(fixture.agentID, claim.Task.Record.ID), taskAssignmentIndexKey(claim.Task.Record.ID),
+		taskTimeoutIndexKey(claim.Task.Record.ID, claim.Assignment.Record.Deadline),
+	}})
+	if err != nil || len(read.Values) != 3 {
+		t.Fatalf("read assignment copies: %v", err)
+	}
+	defer clearKeyValues(read.Values)
+	encoded, err := encodeTaskAssignment(claim.Assignment.Record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(encoded)
+	for _, value := range read.Values {
+		if value == nil || value.ModRevision != claim.Assignment.Revision || !bytes.Equal(value.Value, encoded) {
+			t.Fatal("assignment copies were not atomically published with restoration authority")
+		}
+	}
+	current, err := fixture.repository.GetTaskAssignment(ctx, claim.Task.Record.ID)
+	if err != nil || current.Assignment.Record.RestorationAuthoritySHA256 != digest {
+		t.Fatalf("GetTaskAssignment rejected durable authority: %v", err)
+	}
+	listed, err := fixture.repository.ListAgentAssignments(ctx, fixture.agentID, 1, 1)
+	if err != nil || len(listed) != 1 || listed[0].Assignment.Record.RestorationAuthoritySHA256 != digest {
+		t.Fatalf("ListAgentAssignments rejected durable authority: %v", err)
+	}
+	reconnected, err := fixture.repository.ReconnectAgentAssignment(ctx, current)
+	if err != nil || reconnected.Assignment.Record.ExecutionEpoch != 2 ||
+		reconnected.Assignment.Record.RestorationAuthoritySHA256 != digest {
+		t.Fatalf("reconnect did not preserve durable authority: %v", err)
+	}
+	listed, err = fixture.repository.ListAgentAssignments(ctx, fixture.agentID, 1, 1)
+	if err != nil || len(listed) != 1 || listed[0].Assignment.Record.ExecutionEpoch != 2 {
+		t.Fatalf("reconnected assignment is not listable: %v", err)
 	}
 }
 
@@ -464,6 +653,11 @@ type ordinaryReleaseClaimFixture struct {
 
 func newOrdinaryReleaseClaimFixture(t *testing.T) ordinaryReleaseClaimFixture {
 	t.Helper()
+	return newOrdinaryReleaseClaimFixtureForTarget(t, false)
+}
+
+func newOrdinaryReleaseClaimFixtureForTarget(t *testing.T, serviceTarget bool) ordinaryReleaseClaimFixture {
+	t.Helper()
 	ctx := context.Background()
 	now := time.Date(2026, 9, 4, 19, 0, 0, 0, time.UTC)
 	store := newMemoryTaskStore()
@@ -525,7 +719,9 @@ func newOrdinaryReleaseClaimFixture(t *testing.T) ordinaryReleaseClaimFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	epochValue, err := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{EnvironmentID: environmentID})
+	epochValue, err := encodeEnvironmentMutationEpochRecord(
+		EnvironmentMutationEpochRecord{EnvironmentID: environmentID},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -553,6 +749,10 @@ func newOrdinaryReleaseClaimFixture(t *testing.T) ordinaryReleaseClaimFixture {
 		TaskReleasePublicationParam: publicationID, TaskComposeArtifactParam: artifactID,
 		TaskMaterializationEnvironmentParam: environmentID,
 	}
+	if serviceTarget {
+		task.Target = serviceID
+		delete(task.Params, TaskMaterializationEnvironmentParam)
+	}
 	task.Steps = []TaskStepRecord{
 		{Kind: TaskStepOperation, ID: forwardStepID},
 		{Kind: TaskStepOperation, ID: probeStepID},
@@ -575,7 +775,12 @@ func TestReleaseRecoveryRecordCreateOnceReplayAndConflict(t *testing.T) {
 	at := time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC)
 	taskID := ids.NewAt(ids.KindTask, at, 1)
 	status := TaskStatusFailed
-	result := TaskResultRecord{Kind: TaskResultCompose, ExitCode: 1, Diagnostic: TaskResultDiagnosticComposeFailed, ReconciliationRequired: true}
+	result := TaskResultRecord{
+		Kind:                   TaskResultCompose,
+		ExitCode:               1,
+		Diagnostic:             TaskResultDiagnosticComposeFailed,
+		ReconciliationRequired: true,
+	}
 	primaryDigest, err := canonicalPrimaryReportSHA256(status, result)
 	if err != nil {
 		t.Fatal(err)
@@ -604,7 +809,10 @@ func TestReleaseRecoveryRecordCreateOnceReplayAndConflict(t *testing.T) {
 	}
 	changed := record
 	changed.EvidenceRevision++
-	if _, err := repository.createReleaseRecoveryRecord(context.Background(), changed); !isKind(err, errs.KindStateConflict) {
+	if _, err := repository.createReleaseRecoveryRecord(context.Background(), changed); !isKind(
+		err,
+		errs.KindStateConflict,
+	) {
 		t.Fatalf("changed replay error = %v, want state conflict", err)
 	}
 	corrupt := record
@@ -621,14 +829,35 @@ func TestReleaseRecoveryAuthorityDigestAndCanonicalProgress(t *testing.T) {
 	compensateA, compensateB := ids.NewAt(ids.KindStep, at, 3), ids.NewAt(ids.KindStep, at, 4)
 	forwardA, forwardB := ids.NewAt(ids.KindStep, at, 8), ids.NewAt(ids.KindStep, at, 9)
 	procedure := &agentpb.CandidateReleaseProcedure{Members: []*agentpb.CandidateReleaseMember{
-		{ForwardStepIds: []string{forwardA}, CandidateAbsence: &agentpb.CandidateAbsenceRestoration{ProbeStepId: probeA, CompensateStepId: compensateA}},
-		{ForwardStepIds: []string{forwardB}, CandidateAbsence: &agentpb.CandidateAbsenceRestoration{ProbeStepId: probeB, CompensateStepId: compensateB}},
+		{
+			ForwardStepIds:   []string{forwardA},
+			CandidateAbsence: &agentpb.CandidateAbsenceRestoration{ProbeStepId: probeA, CompensateStepId: compensateA},
+		},
+		{
+			ForwardStepIds:   []string{forwardB},
+			CandidateAbsence: &agentpb.CandidateAbsenceRestoration{ProbeStepId: probeB, CompensateStepId: compensateB},
+		},
 	}}
-	steps, err := releaseRestorationStepIDs(procedure, ReleaseRestorationCandidateAbsence)
+	candidates := make([]ReleaseRestorationCandidate, len(procedure.Members))
+	for index, member := range procedure.Members {
+		member.ServiceId = ids.NewAt(ids.KindService, at, int64(20+index))
+		member.CandidateReleaseId = ids.NewAt(ids.KindDeployment, at, int64(30+index))
+		candidates[index] = ReleaseRestorationCandidate{
+			ServiceID: member.ServiceId,
+			ReleaseID: member.CandidateReleaseId,
+			Target:    ReleaseRestorationCandidateAbsence,
+		}
+	}
+	steps, err := releaseRestorationStepIDs(procedure, candidates)
 	if err != nil || !reflect.DeepEqual(steps, []string{probeA, probeB, compensateB, compensateA}) {
 		t.Fatalf("canonical recovery steps = %v, %v", steps, err)
 	}
-	result := TaskResultRecord{Kind: TaskResultCompose, ExitCode: 1, Diagnostic: TaskResultDiagnosticComposeFailed, ReconciliationRequired: true}
+	result := TaskResultRecord{
+		Kind:                   TaskResultCompose,
+		ExitCode:               1,
+		Diagnostic:             TaskResultDiagnosticComposeFailed,
+		ReconciliationRequired: true,
+	}
 	report, err := canonicalPrimaryReportSHA256(TaskStatusFailed, result)
 	if err != nil {
 		t.Fatal(err)
@@ -638,14 +867,16 @@ func TestReleaseRecoveryAuthorityDigestAndCanonicalProgress(t *testing.T) {
 		OperationID: ids.NewAt(ids.KindOperation, at, 7), PlanHash: strings.Repeat("1", 64),
 		RestorationAuthoritySHA256: strings.Repeat("2", 64), PrimaryReportSHA256: report,
 		PrimaryStatus: TaskStatusFailed, PrimaryResult: result, RecoveryDeadline: at.Add(time.Hour),
-		MutationEvidence: []releaseRecoveryMutationEvidence{{StepID: forwardB, Running: true, Completed: true}}, RecoveryStepIDs: steps,
+		MutationEvidence: []releaseRecoveryMutationEvidence{
+			{StepID: forwardB, Running: true, Completed: true},
+		}, RecoveryStepIDs: steps,
 		Phase: ReleaseRecoveryPhaseProbe, EvidenceRevision: 9,
 	}
 	digest, err := releaseRecoveryRecordSHA256(record)
 	if err != nil {
 		t.Fatal(err)
 	}
-	applicable, err := releaseApplicableCompensationStepIDs(procedure, ReleaseRestorationCandidateAbsence, record.MutationEvidence)
+	applicable, err := releaseApplicableCompensationStepIDs(procedure, candidates, record.MutationEvidence)
 	if err != nil || !reflect.DeepEqual(applicable, []string{compensateB}) {
 		t.Fatalf("recorded mutation compensation = %v, %v", applicable, err)
 	}
@@ -701,7 +932,7 @@ func TestTaskAssignmentRequiresEpochModeDeadlinesAndRecoveryDigest(t *testing.T)
 	}
 }
 
-func TestBlueprintRestorationAuthoritySelectsOnlySealedPredecessorPresence(t *testing.T) {
+func TestBlueprintRestorationAuthorityPreservesConfiguredAppliedWitness(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 9, 4, 13, 0, 0, 0, time.UTC)
 	task := TaskRecord{
@@ -715,19 +946,33 @@ func TestBlueprintRestorationAuthoritySelectsOnlySealedPredecessorPresence(t *te
 	}
 	manifest := ReleaseStagedManifest{
 		PublicationID: task.Params[TaskReleasePublicationParam], OperationID: task.OperationID,
-		Members: []ReleaseStagedMemberRef{{ServiceID: ids.NewAt(ids.KindService, at, 14), ReleaseID: ids.NewAt(ids.KindDeployment, at, 15)}},
+		Members: []ReleaseStagedMemberRef{
+			{ServiceID: ids.NewAt(ids.KindService, at, 14), ReleaseID: ids.NewAt(ids.KindDeployment, at, 15)},
+		},
 	}
-	absent, absentDigest, err := buildBlueprintRestorationAuthority(task, taskMaterializationAppliedPredecessor{}, manifest, nil)
-	if err != nil || absent.Target != ReleaseRestorationCandidateAbsence || absent.ServingPredecessor != nil || !validSHA256(absentDigest) {
+	absent, absentDigest, err := buildBlueprintRestorationAuthority(
+		task,
+		taskMaterializationAppliedPredecessor{},
+		manifest,
+		nil,
+	)
+	if err != nil || absent.Candidates[0].Target != ReleaseRestorationCandidateAbsence ||
+		absent.AppliedPredecessor != nil ||
+		!validSHA256(absentDigest) {
 		t.Fatalf("absence authority = %#v, %q, %v", absent, absentDigest, err)
 	}
 	predecessor := taskMaterializationAppliedPredecessor{
 		Present: true, KeyRevision: 21, RevisionID: ids.NewAt(ids.KindTask, at, 16), RenderGeneration: 1,
 	}
-	present, presentDigest, err := buildBlueprintRestorationAuthority(task, predecessor, manifest, []byte("sealed predecessor compose"))
-	if err != nil || present.Target != ReleaseRestorationServingPredecessor || present.ServingPredecessor == nil ||
-		present.ServingPredecessor.KeyRevision != predecessor.KeyRevision ||
-		string(present.ServingPredecessor.ComposeArtifact) != "sealed predecessor compose" || presentDigest == absentDigest {
+	artifact := withTestEnvironmentComposeArtifact(
+		EnvironmentComposeProjection{EnvironmentID: task.Owner.EnvironmentID},
+	).ComposeArtifact
+	present, presentDigest, err := buildBlueprintRestorationAuthority(task, predecessor, manifest, artifact)
+	if err != nil || present.Candidates[0].Target != ReleaseRestorationCandidateAbsence ||
+		present.AppliedPredecessor == nil ||
+		present.AppliedPredecessor.KeyRevision != predecessor.KeyRevision ||
+		!bytes.Equal(present.AppliedPredecessor.ComposeArtifact, artifact) ||
+		presentDigest == absentDigest {
 		t.Fatalf("present authority = %#v, %q, %v", present, presentDigest, err)
 	}
 	if _, _, err := buildBlueprintRestorationAuthority(task, predecessor, manifest, nil); err == nil {
@@ -735,7 +980,7 @@ func TestBlueprintRestorationAuthoritySelectsOnlySealedPredecessorPresence(t *te
 	}
 	drifted := predecessor
 	drifted.KeyRevision++
-	_, driftedDigest, err := buildBlueprintRestorationAuthority(task, drifted, manifest, []byte("sealed predecessor compose"))
+	_, driftedDigest, err := buildBlueprintRestorationAuthority(task, drifted, manifest, artifact)
 	if err != nil || driftedDigest == presentDigest {
 		t.Fatalf("predecessor drift digest = %q, %v, want changed", driftedDigest, err)
 	}

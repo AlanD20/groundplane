@@ -162,7 +162,8 @@ func validateHierarchyDeletionRunnerOwner(value []byte, id, owner string) error 
 
 func validateHierarchyDeletionSecretOwner(value []byte, id, owner string) error {
 	record, err := decodeSecretRecord(value)
-	if err != nil || record.Secret.ID != id || record.Secret.ProjectID != owner || record.Secret.Scope != core.SecretScopeProject {
+	if err != nil || record.Secret.ID != id || record.Secret.ProjectID != owner ||
+		record.Secret.Scope != core.SecretScopeProject {
 		return corruptHierarchyDeletion()
 	}
 	return nil

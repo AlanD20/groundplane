@@ -38,7 +38,8 @@ func TestBlueprintBackupRetainFencesConnectorOnComposedFinalPublication(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if outcome, _, conflict, classifyErr := seeded.Classify(); classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
+	if outcome, _, conflict, classifyErr := seeded.Classify(); classifyErr != nil || conflict != nil ||
+		outcome != IdempotencyKnownApplied {
 		t.Fatalf("seed policy = %v/%v/%v", outcome, conflict, classifyErr)
 	}
 
@@ -46,10 +47,13 @@ func TestBlueprintBackupRetainFencesConnectorOnComposedFinalPublication(t *testi
 	projection := environmentBlueprintTestProjection(fixture.environment.Record.ID, task, 1)
 	projection.DesiredZones[0].Desired.Subnet = "10.240.0.0/25"
 	beforePreparation := fixture.store.revision
-	prepared, err := fixture.repository.PrepareEnvironmentBlueprintBackupPolicy(ctx, EnvironmentBlueprintBackupPolicyInput{
-		EnvironmentID: fixture.environment.Record.ID, TaskID: task.ID,
-		ReadRevision: beforePreparation, Retain: true, Projection: projection, CreatedAt: task.CreatedAt,
-	})
+	prepared, err := fixture.repository.PrepareEnvironmentBlueprintBackupPolicy(
+		ctx,
+		EnvironmentBlueprintBackupPolicyInput{
+			EnvironmentID: fixture.environment.Record.ID, TaskID: task.ID,
+			ReadRevision: beforePreparation, Retain: true, Projection: projection, CreatedAt: task.CreatedAt,
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +101,8 @@ func TestBlueprintBackupRetainFencesConnectorOnComposedFinalPublication(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict == nil || outcome != IdempotencyKnownConflict {
+	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict == nil ||
+		outcome != IdempotencyKnownConflict {
 		t.Fatalf("raced publication = %v/%v/%v", outcome, conflict, classifyErr)
 	}
 	for _, key := range []string{
@@ -142,15 +147,18 @@ func TestBlueprintBackupCandidateVolumePublishesWithFinalAuthority(t *testing.T)
 	volumeID := projection.Volumes[0].ID
 	sourceID := ids.NewAt(ids.KindBackupSource, fixture.now, 5201)
 	beforePreparation := fixture.store.revision
-	prepared, err := fixture.repository.PrepareEnvironmentBlueprintBackupPolicy(ctx, EnvironmentBlueprintBackupPolicyInput{
-		EnvironmentID: fixture.environment.Record.ID, TaskID: task.ID,
-		ReadRevision: beforePreparation, Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 7,
-		Encryption: "none", ConnectorName: fixture.connector.Record.Connector.Name,
-		Sources: []EnvironmentBlueprintBackupPolicySourceInput{{
-			CandidateID: sourceID, Kind: core.BackupSourceVolume, TargetID: volumeID,
-		}},
-		Projection: projection, CreatedAt: task.CreatedAt,
-	})
+	prepared, err := fixture.repository.PrepareEnvironmentBlueprintBackupPolicy(
+		ctx,
+		EnvironmentBlueprintBackupPolicyInput{
+			EnvironmentID: fixture.environment.Record.ID, TaskID: task.ID,
+			ReadRevision: beforePreparation, Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 7,
+			Encryption: "none", ConnectorName: fixture.connector.Record.Connector.Name,
+			Sources: []EnvironmentBlueprintBackupPolicySourceInput{{
+				CandidateID: sourceID, Kind: core.BackupSourceVolume, TargetID: volumeID,
+			}},
+			Projection: projection, CreatedAt: task.CreatedAt,
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +191,8 @@ func TestBlueprintBackupCandidateVolumePublishesWithFinalAuthority(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
+	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict != nil ||
+		outcome != IdempotencyKnownApplied {
 		t.Fatalf("candidate Volume publication = %v/%v/%v", outcome, conflict, classifyErr)
 	}
 	head, found, err := hierarchy.GetEnvironmentBlueprintHead(ctx, fixture.environment.Record.ID)

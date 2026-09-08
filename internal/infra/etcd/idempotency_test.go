@@ -82,7 +82,9 @@ func TestIdempotencyTaskMarkerRequiresCanonicalResponse(t *testing.T) {
 	if _, err := encodeIdempotencyMarker(marker); err != nil {
 		t.Fatalf("encodeIdempotencyMarker(task) error = %v", err)
 	}
-	marker.Response.Body = []byte(`{"task_id":"` + marker.TaskID + `","operation_id":"op_01M12TQSNE508NMQWCJQWEW4MZ","release_id":"dep_01M12TQSNE508NMQWCKBCJGEEW"}`)
+	marker.Response.Body = []byte(
+		`{"task_id":"` + marker.TaskID + `","operation_id":"op_01M12TQSNE508NMQWCJQWEW4MZ","release_id":"dep_01M12TQSNE508NMQWCKBCJGEEW"}`,
+	)
 	if _, err := encodeIdempotencyMarker(marker); err != nil {
 		t.Fatalf("encodeIdempotencyMarker(endpoint-specific task) error = %v", err)
 	}

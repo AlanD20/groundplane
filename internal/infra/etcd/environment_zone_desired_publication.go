@@ -37,7 +37,8 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 	if err := validateDirectZoneDesiredPublicationInput(input); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, input.Marker); err != nil || found {
+	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, input.Marker); err != nil ||
+		found {
 		return existing, err
 	}
 
@@ -98,7 +99,10 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 	defer clear(epochMutation.Value)
 
 	conditions := []Condition{
-		{Key: environmentBlueprintRootKey(input.Revision.EnvironmentID, input.Revision.RevisionID), ModRevision: publication.rootRevision},
+		{
+			Key:         environmentBlueprintRootKey(input.Revision.EnvironmentID, input.Revision.RevisionID),
+			ModRevision: publication.rootRevision,
+		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 		{Key: environmentBlueprintHeadKey(input.Revision.EnvironmentID), ModRevision: input.ExpectedHeadRevision},
@@ -294,7 +298,9 @@ func validateZoneArtifactAddition(currentValue []byte, candidateValue []byte, zo
 	stripped.YamlSha256 = append([]byte(nil), current.GetYamlSha256()...)
 	for index := range stripped.Services {
 		if index < len(current.Services) {
-			stripped.Services[index].ExpectedLabels = cloneDirectZoneLabelPairs(current.Services[index].GetExpectedLabels())
+			stripped.Services[index].ExpectedLabels = cloneDirectZoneLabelPairs(
+				current.Services[index].GetExpectedLabels(),
+			)
 		}
 	}
 	if !proto.Equal(stripped, current) {

@@ -2,7 +2,6 @@ package releaseoperation
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -33,6 +32,9 @@ func (service *Service) publish(
 	durable etcd.ProtectedIntentRecord,
 	protected idempotentintent.ProtectedEvidence,
 ) (etcd.IdempotencyResponse, error) {
+	if err := service.sealCandidates(ctx, candidates); err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	now := service.now().UTC()
 	operationKind := domain.OperationDeploy
 	taskType := etcd.TaskDeploy
@@ -69,8 +71,11 @@ func (service *Service) publish(
 		ID: taskID, OperationID: operationID, IdempotencyKey: locator.Key,
 		Owner: owner, Actor: etcd.TaskActorOperator, Executor: etcd.TaskExecutorAgent,
 		PlanID: planID, Type: taskType, Target: desiredID,
-		Params: map[string]string{etcd.TaskReleasePublicationParam: publicationID},
-		Steps:  make([]etcd.TaskStepRecord, len(candidates)*5), TimeoutSeconds: configured,
+		Params: map[string]string{
+			etcd.TaskReleasePublicationParam: publicationID,
+			etcd.TaskComposeArtifactParam:    artifactID,
+		},
+		Steps: make([]etcd.TaskStepRecord, len(candidates)*5), TimeoutSeconds: configured,
 		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	for index := range task.Steps {
@@ -92,8 +97,6 @@ func (service *Service) publish(
 	}
 	for index, candidate := range candidates {
 		releaseID := ids.New(ids.KindDeployment)
-		var proxyPorts []uint16
-		var candidateProxyDigest, priorProxyDigest string
 		priorArtifactID := ""
 		priorSlot := candidate.planning.Projection.ServingSlot
 		if candidate.priorStrategy != domain.StrategyBlueGreen {
@@ -110,44 +113,39 @@ func (service *Service) publish(
 		if releaseNeedsPriorArtifact(candidate) {
 			priorArtifactID = priorTopologyArtifactID
 		}
-		var proxyGeneration, priorGeneration uint64
-		proxyPorts, proxyErr := domain.ProxyPorts(candidate.planning.Service.Record.Desired.Expose)
-		if proxyErr == nil {
-			proxyGeneration = candidate.planning.Projection.Revision + 1
-			if proxyGeneration == 1 {
-				proxyGeneration = 2
-			}
-			priorGeneration = proxyGeneration - 1
-			candidateProxy, err := domain.RenderProxyConfig(candidate.planning.Service.Record.Desired.Name, releaseID, candidateTarget, proxyGeneration, proxyPorts)
-			if err != nil {
-				return etcd.IdempotencyResponse{}, err
-			}
-			priorProxy, err := domain.RenderProxyConfig(candidate.planning.Service.Record.Desired.Name, candidate.priorReleaseID, priorTarget, priorGeneration, proxyPorts)
-			if err != nil {
-				return etcd.IdempotencyResponse{}, err
-			}
-			candidateProxyDigest = hex.EncodeToString(candidateProxy.SHA256[:])
-			priorProxyDigest = hex.EncodeToString(priorProxy.SHA256[:])
-		} else if candidate.strategy == domain.StrategyBlueGreen {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "blue-green release requires an addressable TCP service")
-		} else {
-			priorSlot = ""
-		}
 		render := etcd.ReleaseRenderInput{
 			ReleaseID: releaseID, PlanID: planID, ArtifactID: artifactID, PriorArtifactID: priorArtifactID,
-			ServiceID:   candidate.planning.Service.Record.Desired.ID,
-			ServiceName: candidate.planning.Service.Record.Desired.Name,
-			Image:       candidate.image, PriorImage: conditionalPriorImage(priorArtifactID != "", candidate.priorImage),
+			ServiceID:         candidate.planning.Service.Record.Desired.ID,
+			ServiceName:       candidate.planning.Service.Record.Desired.Name,
+			CandidateWorkload: candidate.workload, PriorWorkload: conditionalPriorWorkload(priorArtifactID != "", candidate.priorWorkload),
 			Strategy: candidate.strategy, PriorStrategy: candidate.priorStrategy, Slot: candidate.slot,
 			PriorSlot: priorSlot, CandidateTarget: candidateTarget, PriorTarget: priorTarget,
-			ProxyGeneration: proxyGeneration, PriorProxyGeneration: priorGeneration,
-			ProxyPorts: proxyPorts, ProxyConfigDigest: candidateProxyDigest,
-			PriorProxyDigest:       priorProxyDigest,
 			ServiceDependencyPlans: scope.Compose.Record.ServiceDependencyPlans.Clone(),
 			TenantID:               scope.Tenant.Record.ID, TenantSlug: scope.Tenant.Record.Slug,
 			ProjectID: scope.Project.Record.ID, ProjectSlug: scope.Project.Record.Slug,
 			EnvironmentID: scope.Environment.Record.ID, EnvironmentName: scope.Environment.Record.Name,
 			AuthorizedVolumeDir: scope.Environment.Record.VolumeDir, Projection: scope.Compose.Record,
+		}
+		if err := configureReleaseProxy(&render, candidate.planning.Service.Record.Desired.Expose,
+			candidate.priorReleaseID, candidate.planning.Projection.Revision); err != nil {
+			return etcd.IdempotencyResponse{}, err
+		}
+		var priorRender *etcd.ReleaseRenderInput
+		if candidate.priorReleaseID != "" {
+			prior, err := service.ledger.GetReleaseRenderInputAt(ctx, candidate.priorReleaseID, scope.ReadRevision)
+			if err != nil {
+				return etcd.IdempotencyResponse{}, err
+			}
+			if prior.Record.ServiceID != render.ServiceID || prior.Record.EnvironmentID != render.EnvironmentID {
+				return etcd.IdempotencyResponse{}, errs.New(
+					errs.KindStateConflict,
+					"historical Service proxy source identity changed",
+				)
+			}
+			priorRender = &prior.Record
+		}
+		if err := service.plans.PrepareReleaseProxyImage(&render, priorRender); err != nil {
+			return etcd.IdempotencyResponse{}, err
 		}
 		raw, err := etcd.EncodeReleaseRenderInput(render)
 		if err != nil {
@@ -157,7 +155,7 @@ func (service *Service) publish(
 		intent := domain.Intent{
 			ID: releaseID, EnvironmentID: scope.Environment.Record.ID, ServiceID: render.ServiceID,
 			OperationID: operationID, OperationKind: operationKind,
-			Image: candidate.image, Tag: candidate.tag, Digest: candidate.digest,
+			CandidateWorkload: candidate.workload, Tag: candidate.tag,
 			Strategy: candidate.strategy, Slot: candidate.slot, OnFailure: candidate.onFailure,
 			RollbackSourceReleaseID:  candidate.rollbackSource,
 			PriorServingReleaseID:    candidate.planning.Projection.ServingReleaseID,
@@ -174,7 +172,11 @@ func (service *Service) publish(
 		}
 		checkpoint := domain.Checkpoint{ReleaseID: releaseID, State: domain.StatePending, UpdatedAt: now}
 		stage.Members[index] = etcd.ReleaseStageMember{Intent: intent, RenderInput: raw, Checkpoint: checkpoint}
-		groupMembers[index] = domain.GroupMember{Ordinal: uint32(index + 1), ServiceID: render.ServiceID, ReleaseID: releaseID}
+		groupMembers[index] = domain.GroupMember{
+			Ordinal:   uint32(index + 1),
+			ServiceID: render.ServiceID,
+			ReleaseID: releaseID,
+		}
 		renderMembers[index] = etcd.ReleaseTaskRenderMember{Intent: intent, Render: render}
 		fenceMembers[index] = etcd.ReleaseFenceMember{
 			ServiceID: render.ServiceID, CandidateReleaseID: releaseID, RenderInputDigest: digest,
@@ -191,7 +193,10 @@ func (service *Service) publish(
 	task, renderMembers = hooks.task, hooks.members
 	budget += int64(hooks.executions) * int64(executionplan.ScriptExecutionTimeoutSeconds)
 	if configured < budget {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindReleaseDeadlineTooShort, "configured release deadline is below the computed attempt budget")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindReleaseDeadlineTooShort,
+			"configured release deadline is below the computed attempt budget",
+		)
 	}
 	head := etcd.ReleaseOperationHead{
 		OperationID: operationID, PublicationID: publicationID, EnvironmentID: scope.Environment.Record.ID,
@@ -226,9 +231,12 @@ func (service *Service) publish(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
-	executions, err := etcd.NewScriptExecutionRecords(task, plan, now)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+	var executions []etcd.ScriptExecutionRecord
+	if len(plan.GetScriptRunnerSnapshots()) != 0 {
+		executions, err = etcd.NewScriptExecutionRecords(task, plan, now)
+		if err != nil {
+			return etcd.IdempotencyResponse{}, err
+		}
 	}
 	if len(executions) != hooks.executions {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "release hook execution authority is incomplete")
@@ -290,31 +298,37 @@ func validateReleaseDependencyOrder(candidates []releaseCandidateInput, plan cor
 		consumer, selectedConsumer := positions[edge.Service]
 		dependency, selectedDependency := positions[edge.Dependency]
 		if selectedConsumer && selectedDependency && dependency >= consumer {
-			return errs.Newf(errs.KindValidationFailed, "release group order places Service %s before prerequisite %s", edge.Service, edge.Dependency)
+			return errs.Newf(
+				errs.KindValidationFailed,
+				"release group order places Service %s before prerequisite %s",
+				edge.Service,
+				edge.Dependency,
+			)
 		}
 	}
 	return nil
 }
 
-func releasePriorImage(planning etcd.ReleasePlanningService, serving domain.Intent, hasServing bool) string {
-	if hasServing {
-		return serving.Image
+func releasePriorWorkload(serving domain.Intent, hasServing bool) *domain.WorkloadSeal {
+	if !hasServing {
+		return nil
 	}
-	return planning.Service.Record.Desired.Image
+	seal := serving.CandidateWorkload
+	return &seal
 }
 
 func releasePriorID(serving domain.Intent, hasServing bool) string {
 	if hasServing {
 		return serving.ID
 	}
-	return "baseline"
+	return ""
 }
 
-func conditionalPriorImage(singleton bool, image string) string {
-	if singleton {
-		return image
+func conditionalPriorWorkload(required bool, seal *domain.WorkloadSeal) *domain.WorkloadSeal {
+	if required {
+		return seal
 	}
-	return ""
+	return nil
 }
 
 func releasePriorStrategy(serving domain.Intent, hasServing bool) domain.Strategy {
@@ -325,12 +339,7 @@ func releasePriorStrategy(serving domain.Intent, hasServing bool) domain.Strateg
 }
 
 func releaseNeedsPriorArtifact(candidate releaseCandidateInput) bool {
-	priorSlot := candidate.planning.Projection.ServingSlot
-	if candidate.priorStrategy != domain.StrategyBlueGreen {
-		priorSlot = ""
-	}
-	transition, err := domain.NewTopologyTransition(candidate.strategy, candidate.slot, candidate.priorStrategy, priorSlot)
-	return err == nil && transition.RequiresPriorArtifact()
+	return candidate.priorWorkload != nil
 }
 
 func releaseAcceptedResponse(

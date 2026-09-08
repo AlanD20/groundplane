@@ -141,9 +141,11 @@ func (registry *Registry) OpenLogs(
 		})
 	}
 	command := logCommand{
-		message: &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_LogSubscribe{LogSubscribe: &agentpb.LogSubscribe{
-			RequestId: requestID, Targets: protobufTargets, Tail: tail, Follow: follow,
-		}}},
+		message: &agentpb.ControllerMessage{
+			Payload: &agentpb.ControllerMessage_LogSubscribe{LogSubscribe: &agentpb.LogSubscribe{
+				RequestId: requestID, Targets: protobufTargets, Tail: tail, Follow: follow,
+			}},
+		},
 		result: make(chan error, 1),
 	}
 	select {
@@ -181,7 +183,12 @@ func (registry *Registry) OpenLogs(
 	}
 }
 
-func (registry *Registry) observeLogSubscribe(subscription *LogSubscription, result <-chan error, delivery chan<- error, abandoned <-chan struct{}) {
+func (registry *Registry) observeLogSubscribe(
+	subscription *LogSubscription,
+	result <-chan error,
+	delivery chan<- error,
+	abandoned <-chan struct{},
+) {
 	select {
 	case err := <-result:
 		registry.finishObservedLogSubscribe(subscription, err, delivery, abandoned)
@@ -201,7 +208,12 @@ func (registry *Registry) observeLogSubscribe(subscription *LogSubscription, res
 	}
 }
 
-func (registry *Registry) finishObservedLogSubscribe(subscription *LogSubscription, err error, delivery chan<- error, abandoned <-chan struct{}) {
+func (registry *Registry) finishObservedLogSubscribe(
+	subscription *LogSubscription,
+	err error,
+	delivery chan<- error,
+	abandoned <-chan struct{},
+) {
 	select {
 	case delivery <- err:
 	case <-abandoned:
@@ -239,8 +251,10 @@ func (registry *Registry) CancelLogs(ctx context.Context, requestID string) {
 
 func (registry *Registry) deliverLogCancel(subscription *LogSubscription) {
 	command := logCommand{
-		message: &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_LogCancel{LogCancel: &agentpb.LogCancel{RequestId: subscription.ID}}},
-		result:  make(chan error, 1),
+		message: &agentpb.ControllerMessage{
+			Payload: &agentpb.ControllerMessage_LogCancel{LogCancel: &agentpb.LogCancel{RequestId: subscription.ID}},
+		},
+		result: make(chan error, 1),
 	}
 	select {
 	case subscription.state.logCommands <- command:

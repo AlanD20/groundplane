@@ -509,7 +509,11 @@ func TestBackupPolicyProtectedReplacementRejectsAdvancedCoordinationWithoutWrite
 		t.Fatalf("replaceBackupPolicyProtected(stale epoch) = %#v, %v", result, err)
 	}
 	if fixture.store.revision != revisionBefore {
-		t.Fatalf("stale-coordination replacement revision = %d, want unchanged %d", fixture.store.revision, revisionBefore)
+		t.Fatalf(
+			"stale-coordination replacement revision = %d, want unchanged %d",
+			fixture.store.revision,
+			revisionBefore,
+		)
 	}
 }
 

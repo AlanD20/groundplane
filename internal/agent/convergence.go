@@ -25,6 +25,72 @@ func evaluateComposeConvergence(
 	return evaluateSelectedComposeConvergence(artifact, observed, selectedServices, true)
 }
 
+// Sealed lifecycle procedures reconcile selected services within a shared
+// Compose project. Unrelated containers can legitimately retain prior plan
+// labels. Only a named container outside the selected names and stable Service
+// ids is irrelevant here. Named networks outside the artifact are also outside
+// lifecycle authority; selected, unidentifiable, and volume collisions fail closed.
+func evaluateLifecycleComposeConvergence(
+	artifact *agentpb.ComposeArtifact,
+	observed *agentpb.ObservedProject,
+	selectedServices []string,
+	requireHealthcheck bool,
+) (composeConvergence, error) {
+	if artifact == nil || observed == nil || len(selectedServices) == 0 {
+		return evaluateSelectedComposeConvergence(artifact, observed, selectedServices, requireHealthcheck)
+	}
+	services, err := convergenceServices(artifact, selectedServices)
+	if err != nil {
+		return composeConvergence{}, err
+	}
+	scoped := scopeLifecycleComposeObservation(artifact, observed, services)
+	return evaluateSelectedComposeConvergence(artifact, scoped, selectedServices, requireHealthcheck)
+}
+
+// scopeLifecycleComposeObservation keeps collision evidence that could affect
+// the selected sealed services while excluding unrelated named resources in
+// their shared Compose project. Unnamed, selected, and non-container evidence
+// remains fail-closed because it cannot be safely attributed elsewhere.
+func scopeLifecycleComposeObservation(
+	artifact *agentpb.ComposeArtifact,
+	observed *agentpb.ObservedProject,
+	selectedServices []*agentpb.ComposeService,
+) *agentpb.ObservedProject {
+	if artifact == nil || observed == nil {
+		return observed
+	}
+	names := make(map[string]bool, len(selectedServices))
+	serviceIDs := make(map[string]bool, len(selectedServices))
+	for _, service := range selectedServices {
+		if service == nil {
+			continue
+		}
+		names[service.GetComposeName()] = true
+		if service.GetServiceId() != "" {
+			serviceIDs[service.GetServiceId()] = true
+		}
+	}
+	networkNames := make(map[string]bool, len(artifact.GetNetworks())*2)
+	for _, network := range artifact.GetNetworks() {
+		networkNames[network.GetDockerName()] = true
+		networkNames[network.GetComposeName()] = true
+	}
+	scoped := proto.CloneOf(observed)
+	scoped.Collisions = nil
+	for _, collision := range observed.GetCollisions() {
+		if collision.GetKind() == agentpb.ObservedCollisionKind_OBSERVED_COLLISION_KIND_NETWORK &&
+			collision.GetName() != "" && !networkNames[collision.GetName()] {
+			continue
+		}
+		if collision.GetKind() != agentpb.ObservedCollisionKind_OBSERVED_COLLISION_KIND_CONTAINER ||
+			collision.GetComposeServiceName() == "" || names[collision.GetComposeServiceName()] ||
+			serviceIDs[collision.GetServiceId()] {
+			scoped.Collisions = append(scoped.Collisions, collision)
+		}
+	}
+	return scoped
+}
+
 func evaluateSelectedComposeConvergence(
 	artifact *agentpb.ComposeArtifact,
 	observed *agentpb.ObservedProject,

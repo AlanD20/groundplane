@@ -213,7 +213,13 @@ router reconciles those same Routes.
 
 Caddy retains the typed implementation setting `caddyfile_template`. The
 setting is intentionally not portable to another HTTP-router implementation.
-Cloudflare Tunnel stores and resolves only an authorized Secret reference,
+Both Environment ingress Components select explicit ordered `zone_ids` in
+their own Environment. Caddy's first Zone retains its one pinned address;
+secondary interfaces are dynamic. Route reachability requires a shared selected
+Zone. Tunnel consumes granted generic Networks/read snapshots, joins its exact
+independent selections, and gives its first non-internal Zone gateway priority.
+It neither consumes HTTP-router/read nor automatically follows router placement.
+Cloudflare Tunnel stores and resolves an authorized Secret reference,
 starts or stops the remotely managed connector, and reports health. Its
 lifecycle is independent of the HTTP-router provider. Groundplane does not
 configure Tunnel DNS, public hostnames, ingress rules, origin targets, or

@@ -62,9 +62,17 @@ func TestZoneRemovalArtifactDetachesServicesAndPreservesWorkloads(t *testing.T) 
 	artifact := &agentpb.ComposeArtifact{
 		ArtifactId: ids.NewAt(ids.KindConfig, now, 6),
 		OwnerKind:  agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT, OwnerId: environmentID,
-		CanonicalYaml: []byte("services:\n  api:\n    image: example.invalid/api:1\n    networks:\n      frontend: {}\n      backend: {}\n  worker:\n    image: example.invalid/worker:1\n    networks:\n      backend: {}\nnetworks:\n  frontend: {}\n  backend: {}\n"),
-		Services:      []*agentpb.ComposeService{{ServiceId: serviceID, ComposeName: "api"}, {ServiceId: otherServiceID, ComposeName: "worker"}},
-		Networks:      []*agentpb.ComposeNetwork{{NetworkId: zoneID, ComposeName: "frontend", DockerName: "gp_net_" + zoneID}, {NetworkId: otherZoneID, ComposeName: "backend", DockerName: "gp_net_" + otherZoneID}},
+		CanonicalYaml: []byte(
+			"services:\n  api:\n    image: example.invalid/api:1\n    networks:\n      frontend: {}\n      backend: {}\n  worker:\n    image: example.invalid/worker:1\n    networks:\n      backend: {}\nnetworks:\n  frontend: {}\n  backend: {}\n",
+		),
+		Services: []*agentpb.ComposeService{
+			{ServiceId: serviceID, ComposeName: "api"},
+			{ServiceId: otherServiceID, ComposeName: "worker"},
+		},
+		Networks: []*agentpb.ComposeNetwork{
+			{NetworkId: zoneID, ComposeName: "frontend", DockerName: "gp_net_" + zoneID},
+			{NetworkId: otherZoneID, ComposeName: "backend", DockerName: "gp_net_" + otherZoneID},
+		},
 	}
 	mutated, err := MutateEnvironmentZoneArtifact(artifact, ZoneArtifactMutation{
 		ZoneID: zoneID, ZoneName: "frontend", ArtifactID: ids.NewAt(ids.KindConfig, now, 7),

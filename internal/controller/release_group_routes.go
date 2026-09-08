@@ -24,7 +24,12 @@ type ReleaseGroupReader interface {
 
 type ReleaseGroupMutator interface {
 	AddReleaseGroup(context.Context, apiTypes.ReleaseGroupAddRequest, string) (etcd.IdempotencyResponse, error)
-	EditReleaseGroup(context.Context, string, apiTypes.ReleaseGroupEditRequest, string) (etcd.IdempotencyResponse, error)
+	EditReleaseGroup(
+		context.Context,
+		string,
+		apiTypes.ReleaseGroupEditRequest,
+		string,
+	) (etcd.IdempotencyResponse, error)
 	RemoveReleaseGroup(context.Context, string, string) (etcd.IdempotencyResponse, error)
 }
 
@@ -33,7 +38,11 @@ type ReleaseOperator interface {
 	RollbackService(context.Context, string, domain.ServiceRollbackInput, string) (etcd.IdempotencyResponse, error)
 	DeployReleaseGroup(context.Context, string, domain.GroupDeployInput, string) (etcd.IdempotencyResponse, error)
 	RollbackReleaseGroup(context.Context, string, domain.GroupRollbackInput, string) (etcd.IdempotencyResponse, error)
-	PreviewReleaseGroupRollback(context.Context, string, domain.GroupRollbackPreviewInput) (domain.GroupRollbackPreview, error)
+	PreviewReleaseGroupRollback(
+		context.Context,
+		string,
+		domain.GroupRollbackPreviewInput,
+	) (domain.GroupRollbackPreview, error)
 }
 
 type releaseGroupListInput struct {
@@ -112,16 +121,20 @@ func (s *Server) registerReleaseGroups() {
 	huma.Register(s.API, huma.Operation{
 		OperationID: "release-group.add", Method: http.MethodPost, Path: "/release-groups",
 		Summary: "Add a release group", Tags: []string{"Release Group"}, DefaultStatus: http.StatusCreated,
-		Responses: map[string]*huma.Response{"201": {Description: http.StatusText(http.StatusCreated), Content: map[string]*huma.MediaType{
-			"application/json": {Schema: groupSchema},
-		}}},
+		Responses: map[string]*huma.Response{
+			"201": {Description: http.StatusText(http.StatusCreated), Content: map[string]*huma.MediaType{
+				"application/json": {Schema: groupSchema},
+			}},
+		},
 	}, s.addReleaseGroup)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "release-group.edit", Method: http.MethodPatch, Path: "/release-groups/{id}",
 		Summary: "Edit a release group", Tags: []string{"Release Group"}, DefaultStatus: http.StatusOK,
-		Responses: map[string]*huma.Response{"200": {Description: http.StatusText(http.StatusOK), Content: map[string]*huma.MediaType{
-			"application/json": {Schema: groupSchema},
-		}}},
+		Responses: map[string]*huma.Response{
+			"200": {Description: http.StatusText(http.StatusOK), Content: map[string]*huma.MediaType{
+				"application/json": {Schema: groupSchema},
+			}},
+		},
 	}, s.editReleaseGroup)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "release-group.remove", Method: http.MethodDelete, Path: "/release-groups/{id}",
@@ -135,16 +148,20 @@ func (s *Server) registerReleaseGroups() {
 	huma.Register(s.API, huma.Operation{
 		OperationID: "release-group.deploy", Method: http.MethodPost, Path: "/release-groups/{id}/deploy",
 		Summary: "Deploy a release group", Tags: []string{"Release Group"}, DefaultStatus: http.StatusAccepted,
-		Responses: map[string]*huma.Response{"202": {Description: http.StatusText(http.StatusAccepted), Content: map[string]*huma.MediaType{
-			"application/json": {Schema: taskSchema},
-		}}},
+		Responses: map[string]*huma.Response{
+			"202": {Description: http.StatusText(http.StatusAccepted), Content: map[string]*huma.MediaType{
+				"application/json": {Schema: taskSchema},
+			}},
+		},
 	}, s.deployReleaseGroup)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "release-group.rollback", Method: http.MethodPost, Path: "/release-groups/{id}/rollback",
 		Summary: "Roll back a release group", Tags: []string{"Release Group"}, DefaultStatus: http.StatusAccepted,
-		Responses: map[string]*huma.Response{"202": {Description: http.StatusText(http.StatusAccepted), Content: map[string]*huma.MediaType{
-			"application/json": {Schema: taskSchema},
-		}}},
+		Responses: map[string]*huma.Response{
+			"202": {Description: http.StatusText(http.StatusAccepted), Content: map[string]*huma.MediaType{
+				"application/json": {Schema: taskSchema},
+			}},
+		},
 	}, s.rollbackReleaseGroup)
 	s.setRoutePolicy("POST /api/v1/release-groups", routePolicy{body: jsonBody})
 	s.setRoutePolicy("PATCH /api/v1/release-groups/{id}", routePolicy{body: jsonBody})
@@ -152,18 +169,29 @@ func (s *Server) registerReleaseGroups() {
 	s.setRoutePolicy("POST /api/v1/release-groups/{id}/rollback", routePolicy{body: jsonBody})
 }
 
-func (s *Server) deployReleaseGroup(ctx context.Context, input *releaseGroupDeployInput) (*releaseGroupMutationOutput, error) {
+func (s *Server) deployReleaseGroup(
+	ctx context.Context,
+	input *releaseGroupDeployInput,
+) (*releaseGroupMutationOutput, error) {
 	if s.releaseOperations == nil {
 		return nil, errs.New(errs.KindInternal, "release operator is not configured")
 	}
-	response, err := s.releaseOperations.DeployReleaseGroup(ctx, input.ID, domain.GroupDeployInput{Tag: input.Body.Tag}, input.IdempotencyKey)
+	response, err := s.releaseOperations.DeployReleaseGroup(
+		ctx,
+		input.ID,
+		domain.GroupDeployInput{Tag: input.Body.Tag},
+		input.IdempotencyKey,
+	)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
 	return s.releaseGroupMutationResponse(response), nil
 }
 
-func (s *Server) rollbackReleaseGroup(ctx context.Context, input *releaseGroupRollbackInput) (*releaseGroupMutationOutput, error) {
+func (s *Server) rollbackReleaseGroup(
+	ctx context.Context,
+	input *releaseGroupRollbackInput,
+) (*releaseGroupMutationOutput, error) {
 	if s.releaseOperations == nil {
 		return nil, errs.New(errs.KindInternal, "release operator is not configured")
 	}
@@ -190,7 +218,10 @@ func (s *Server) rollbackReleaseGroup(ctx context.Context, input *releaseGroupRo
 	return s.releaseGroupMutationResponse(response), nil
 }
 
-func (s *Server) previewReleaseGroupRollback(ctx context.Context, input *releaseGroupRollbackPreviewInput) (*releaseGroupRollbackPreviewOutput, error) {
+func (s *Server) previewReleaseGroupRollback(
+	ctx context.Context,
+	input *releaseGroupRollbackPreviewInput,
+) (*releaseGroupRollbackPreviewOutput, error) {
 	if s.releaseOperations == nil {
 		return nil, errs.New(errs.KindInternal, "release operator is not configured")
 	}
@@ -208,9 +239,19 @@ func (s *Server) previewReleaseGroupRollback(ctx context.Context, input *release
 	}
 	sources := make([]apiTypes.ReleaseGroupRollbackSource, len(preview.Sources))
 	for index, source := range preview.Sources {
-		sources[index] = apiTypes.ReleaseGroupRollbackSource{ServiceID: source.ServiceID, ReleaseID: source.ReleaseID, Tag: source.Tag}
+		sources[index] = apiTypes.ReleaseGroupRollbackSource{
+			ServiceID: source.ServiceID,
+			ReleaseID: source.ReleaseID,
+			Tag:       source.Tag,
+		}
 	}
-	return &releaseGroupRollbackPreviewOutput{Body: apiTypes.ReleaseGroupRollbackPreview{ReleaseGroupID: preview.GroupID, Revision: strconv.FormatInt(preview.Revision, 10), Sources: sources}}, nil
+	return &releaseGroupRollbackPreviewOutput{
+		Body: apiTypes.ReleaseGroupRollbackPreview{
+			ReleaseGroupID: preview.GroupID,
+			Revision:       strconv.FormatInt(preview.Revision, 10),
+			Sources:        sources,
+		},
+	}, nil
 }
 
 func (s *Server) rejectInvalidRollbackPreviewTag(ctx huma.Context, next func(huma.Context)) {
@@ -231,7 +272,11 @@ func (s *Server) listReleaseGroups(ctx context.Context, input *releaseGroupListI
 	if limit == 0 {
 		limit = 50
 	}
-	page, err := s.releaseGroups.List(ctx, input.EnvironmentID, etcdreleasegroup.PageRequest{Limit: limit, Cursor: input.Cursor})
+	page, err := s.releaseGroups.List(
+		ctx,
+		input.EnvironmentID,
+		etcdreleasegroup.PageRequest{Limit: limit, Cursor: input.Cursor},
+	)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
@@ -255,7 +300,10 @@ func (s *Server) showReleaseGroup(ctx context.Context, input *releaseGroupShowIn
 	return &releaseGroupOutput{Body: releaseGroupResponse(group)}, nil
 }
 
-func (s *Server) addReleaseGroup(ctx context.Context, input *releaseGroupAddInput) (*releaseGroupMutationOutput, error) {
+func (s *Server) addReleaseGroup(
+	ctx context.Context,
+	input *releaseGroupAddInput,
+) (*releaseGroupMutationOutput, error) {
 	if s.releaseGroupMutations == nil {
 		return nil, errs.New(errs.KindInternal, "release group mutator is not configured")
 	}
@@ -266,7 +314,10 @@ func (s *Server) addReleaseGroup(ctx context.Context, input *releaseGroupAddInpu
 	return s.releaseGroupMutationResponse(response), nil
 }
 
-func (s *Server) editReleaseGroup(ctx context.Context, input *releaseGroupEditInput) (*releaseGroupMutationOutput, error) {
+func (s *Server) editReleaseGroup(
+	ctx context.Context,
+	input *releaseGroupEditInput,
+) (*releaseGroupMutationOutput, error) {
 	if s.releaseGroupMutations == nil {
 		return nil, errs.New(errs.KindInternal, "release group mutator is not configured")
 	}
@@ -277,7 +328,10 @@ func (s *Server) editReleaseGroup(ctx context.Context, input *releaseGroupEditIn
 	return s.releaseGroupMutationResponse(response), nil
 }
 
-func (s *Server) removeReleaseGroup(ctx context.Context, input *releaseGroupRemoveInput) (*releaseGroupMutationOutput, error) {
+func (s *Server) removeReleaseGroup(
+	ctx context.Context,
+	input *releaseGroupRemoveInput,
+) (*releaseGroupMutationOutput, error) {
 	if s.releaseGroupMutations == nil {
 		return nil, errs.New(errs.KindInternal, "release group mutator is not configured")
 	}

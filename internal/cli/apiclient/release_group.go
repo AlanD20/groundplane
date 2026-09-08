@@ -10,7 +10,12 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
-func (c *Client) ListReleaseGroups(ctx context.Context, environmentID string, limit int, cursor string) (apiTypes.Page[apiTypes.ReleaseGroup], error) {
+func (c *Client) ListReleaseGroups(
+	ctx context.Context,
+	environmentID string,
+	limit int,
+	cursor string,
+) (apiTypes.Page[apiTypes.ReleaseGroup], error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.Page[apiTypes.ReleaseGroup]{}, err
@@ -25,7 +30,12 @@ func (c *Client) ListReleaseGroups(ctx context.Context, environmentID string, li
 	}
 	response, err := client.ReleaseGroupListWithResponse(ctx, params)
 	if err != nil {
-		return apiTypes.Page[apiTypes.ReleaseGroup]{}, generatedCallError(ctx, http.MethodGet, "/api/v1/release-groups", err)
+		return apiTypes.Page[apiTypes.ReleaseGroup]{}, generatedCallError(
+			ctx,
+			http.MethodGet,
+			"/api/v1/release-groups",
+			err,
+		)
 	}
 	if err := generatedResponseError(http.MethodGet, "/api/v1/release-groups", response.HTTPResponse, response.Body, http.StatusOK); err != nil {
 		return apiTypes.Page[apiTypes.ReleaseGroup]{}, err
@@ -53,7 +63,10 @@ func (c *Client) GetReleaseGroup(ctx context.Context, id string) (apiTypes.Relea
 	return decodeReleaseGroupResponse(http.MethodGet, path, response.Body)
 }
 
-func (c *Client) AddReleaseGroup(ctx context.Context, input apiTypes.ReleaseGroupAddRequest) (apiTypes.ReleaseGroup, error) {
+func (c *Client) AddReleaseGroup(
+	ctx context.Context,
+	input apiTypes.ReleaseGroupAddRequest,
+) (apiTypes.ReleaseGroup, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.ReleaseGroup{}, err
@@ -62,7 +75,11 @@ func (c *Client) AddReleaseGroup(ctx context.Context, input apiTypes.ReleaseGrou
 	if err != nil {
 		return apiTypes.ReleaseGroup{}, err
 	}
-	response, err := client.ReleaseGroupAddWithResponse(ctx, &generated.ReleaseGroupAddParams{IdempotencyKey: ids.NewULID()}, body)
+	response, err := client.ReleaseGroupAddWithResponse(
+		ctx,
+		&generated.ReleaseGroupAddParams{IdempotencyKey: ids.NewULID()},
+		body,
+	)
 	if err != nil {
 		return apiTypes.ReleaseGroup{}, generatedCallError(ctx, http.MethodPost, "/api/v1/release-groups", err)
 	}
@@ -72,7 +89,11 @@ func (c *Client) AddReleaseGroup(ctx context.Context, input apiTypes.ReleaseGrou
 	return decodeReleaseGroupResponse(http.MethodPost, "/api/v1/release-groups", response.Body)
 }
 
-func (c *Client) EditReleaseGroup(ctx context.Context, id string, input apiTypes.ReleaseGroupEditRequest) (apiTypes.ReleaseGroup, error) {
+func (c *Client) EditReleaseGroup(
+	ctx context.Context,
+	id string,
+	input apiTypes.ReleaseGroupEditRequest,
+) (apiTypes.ReleaseGroup, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.ReleaseGroup{}, err
@@ -82,7 +103,12 @@ func (c *Client) EditReleaseGroup(ctx context.Context, id string, input apiTypes
 		return apiTypes.ReleaseGroup{}, err
 	}
 	path := "/api/v1/release-groups/" + id
-	response, err := client.ReleaseGroupEditWithResponse(ctx, id, &generated.ReleaseGroupEditParams{IdempotencyKey: ids.NewULID()}, body)
+	response, err := client.ReleaseGroupEditWithResponse(
+		ctx,
+		id,
+		&generated.ReleaseGroupEditParams{IdempotencyKey: ids.NewULID()},
+		body,
+	)
 	if err != nil {
 		return apiTypes.ReleaseGroup{}, generatedCallError(ctx, http.MethodPatch, path, err)
 	}
@@ -98,7 +124,11 @@ func (c *Client) RemoveReleaseGroup(ctx context.Context, id string) (apiTypes.Ta
 		return apiTypes.TaskAccepted{}, err
 	}
 	path := "/api/v1/release-groups/" + id
-	response, err := client.ReleaseGroupRemoveWithResponse(ctx, id, &generated.ReleaseGroupRemoveParams{IdempotencyKey: ids.NewULID()})
+	response, err := client.ReleaseGroupRemoveWithResponse(
+		ctx,
+		id,
+		&generated.ReleaseGroupRemoveParams{IdempotencyKey: ids.NewULID()},
+	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodDelete, path, err)
 	}

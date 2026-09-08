@@ -691,7 +691,8 @@ func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 			return errs.New(errs.KindInternal, "volume backup source snapshot is corrupt")
 		}
 		keys := make([]*KeyValue, 0, len(snapshot.Services)+3)
-		keys = append(keys,
+		keys = append(
+			keys,
 			result.Values[dynamic.index[environmentKey(snapshot.EnvironmentID)]],
 			result.Values[dynamic.index[environmentBlueprintHeadKey(snapshot.EnvironmentID)]],
 			result.Values[dynamic.index[environmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID)]],

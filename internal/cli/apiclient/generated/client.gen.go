@@ -37,6 +37,27 @@ func (e AttachCredentialMode) Valid() bool {
 	}
 }
 
+// Defines values for BackingServiceCreateAuthentication.
+const (
+	BackingServiceCreateAuthenticationNone             BackingServiceCreateAuthentication = "none"
+	BackingServiceCreateAuthenticationPassword         BackingServiceCreateAuthentication = "password"
+	BackingServiceCreateAuthenticationUsernamePassword BackingServiceCreateAuthentication = "username_password"
+)
+
+// Valid indicates whether the value is a known member of the BackingServiceCreateAuthentication enum.
+func (e BackingServiceCreateAuthentication) Valid() bool {
+	switch e {
+	case BackingServiceCreateAuthenticationNone:
+		return true
+	case BackingServiceCreateAuthenticationPassword:
+		return true
+	case BackingServiceCreateAuthenticationUsernamePassword:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for BackupPolicyEncryption.
 const (
 	BackupPolicyEncryptionAge  BackupPolicyEncryption = "age"
@@ -184,6 +205,36 @@ const (
 func (e ComponentConfigMutationRequestConfig1Credential1Mode) Valid() bool {
 	switch e {
 	case ComponentConfigMutationRequestConfig1Credential1ModeNew:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ComponentEnableRequestConfig1Credential0Mode.
+const (
+	ComponentEnableRequestConfig1Credential0ModeExisting ComponentEnableRequestConfig1Credential0Mode = "existing"
+)
+
+// Valid indicates whether the value is a known member of the ComponentEnableRequestConfig1Credential0Mode enum.
+func (e ComponentEnableRequestConfig1Credential0Mode) Valid() bool {
+	switch e {
+	case ComponentEnableRequestConfig1Credential0ModeExisting:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ComponentEnableRequestConfig1Credential1Mode.
+const (
+	ComponentEnableRequestConfig1Credential1ModeNew ComponentEnableRequestConfig1Credential1Mode = "new"
+)
+
+// Valid indicates whether the value is a known member of the ComponentEnableRequestConfig1Credential1Mode enum.
+func (e ComponentEnableRequestConfig1Credential1Mode) Valid() bool {
+	switch e {
+	case ComponentEnableRequestConfig1Credential1ModeNew:
 		return true
 	default:
 		return false
@@ -705,6 +756,7 @@ type BackingService struct {
 	//
 	// Examples: /api/v1/BackingService.json
 	Schema           *string `json:"$schema,omitempty"`
+	Authentication   *string `json:"authentication,omitempty"`
 	BackingNetworkId string  `json:"backing_network_id"`
 	EnvironmentId    string  `json:"environment_id"`
 	ProjectId        string  `json:"project_id"`
@@ -716,14 +768,20 @@ type BackingServiceCreate struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/BackingServiceCreate.json
-	Schema      *string                  `json:"$schema,omitempty"`
-	Adapter     string                   `json:"adapter"`
-	Description *string                  `json:"description,omitempty"`
-	Name        string                   `json:"name"`
-	NetworkPool string                   `json:"network_pool"`
-	Slug        string                   `json:"slug"`
-	Zone        BackingServiceZoneCreate `json:"zone"`
+	Schema  *string `json:"$schema,omitempty"`
+	Adapter string  `json:"adapter"`
+
+	// Authentication Immutable Valkey authentication mode; omitted selects username_password. Unsupported for other adapters.
+	Authentication *BackingServiceCreateAuthentication `json:"authentication,omitempty"`
+	Description    *string                             `json:"description,omitempty"`
+	Name           string                              `json:"name"`
+	NetworkPool    string                              `json:"network_pool"`
+	Slug           string                              `json:"slug"`
+	Zone           BackingServiceZoneCreate            `json:"zone"`
 }
+
+// BackingServiceCreateAuthentication Immutable Valkey authentication mode; omitted selects username_password. Unsupported for other adapters.
+type BackingServiceCreateAuthentication string
 
 // BackingServiceCreated defines model for BackingServiceCreated.
 type BackingServiceCreated struct {
@@ -833,12 +891,17 @@ type ComponentConfig struct {
 // ComponentConfig0 defines model for ComponentConfig.0.
 type ComponentConfig0 struct {
 	CaddyfileTemplate *string `json:"caddyfile_template,omitempty"`
-	ZoneId            string  `json:"zone_id"`
+
+	// ZoneIds Ordered selected Environment Zone IDs; the first router Zone is primary.
+	ZoneIds []string `json:"zone_ids"`
 }
 
 // ComponentConfig1 defines model for ComponentConfig.1.
 type ComponentConfig1 struct {
 	SecretId string `json:"secret_id"`
+
+	// ZoneIds Ordered selected Environment Zone IDs; the first router Zone is primary.
+	ZoneIds []string `json:"zone_ids"`
 }
 
 // ComponentConfig2 defines model for ComponentConfig.2.
@@ -865,12 +928,17 @@ type ComponentConfigMutationRequest struct {
 // ComponentConfigMutationRequestConfig0 defines model for ComponentConfigMutationRequest.Config.0.
 type ComponentConfigMutationRequestConfig0 struct {
 	CaddyfileTemplate *string `json:"caddyfile_template,omitempty"`
-	ZoneId            string  `json:"zone_id"`
+
+	// ZoneIds Ordered selected Environment Zone IDs; the first router Zone is primary.
+	ZoneIds []string `json:"zone_ids"`
 }
 
 // ComponentConfigMutationRequestConfig1 defines model for ComponentConfigMutationRequest.Config.1.
 type ComponentConfigMutationRequestConfig1 struct {
 	Credential ComponentConfigMutationRequest_Config_1_Credential `json:"credential"`
+
+	// ZoneIds Ordered selected Environment Zone IDs; the first router Zone is primary.
+	ZoneIds []string `json:"zone_ids"`
 }
 
 // ComponentConfigMutationRequestConfig1Credential0 defines model for ComponentConfigMutationRequest.Config.1.Credential.0.
@@ -932,6 +1000,60 @@ type ComponentConfigResponse struct {
 	Schema       *string             `json:"$schema,omitempty"`
 	Config       *ComponentConfig    `json:"config"`
 	ManagedFiles []ManagedConfigFile `json:"managed_files"`
+}
+
+// ComponentEnableRequest defines model for ComponentEnableRequest.
+type ComponentEnableRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ComponentEnableRequest.json
+	Schema *string                        `json:"$schema,omitempty"`
+	Config *ComponentEnableRequest_Config `json:"config,omitempty"`
+}
+
+// ComponentEnableRequestConfig0 defines model for ComponentEnableRequest.Config.0.
+type ComponentEnableRequestConfig0 struct {
+	CaddyfileTemplate *string `json:"caddyfile_template,omitempty"`
+
+	// ZoneIds Ordered selected Environment Zone IDs; the first router Zone is primary.
+	ZoneIds []string `json:"zone_ids"`
+}
+
+// ComponentEnableRequestConfig1 defines model for ComponentEnableRequest.Config.1.
+type ComponentEnableRequestConfig1 struct {
+	Credential ComponentEnableRequest_Config_1_Credential `json:"credential"`
+
+	// ZoneIds Ordered selected Environment Zone IDs; the first router Zone is primary.
+	ZoneIds []string `json:"zone_ids"`
+}
+
+// ComponentEnableRequestConfig1Credential0 defines model for ComponentEnableRequest.Config.1.Credential.0.
+type ComponentEnableRequestConfig1Credential0 struct {
+	Mode     ComponentEnableRequestConfig1Credential0Mode `json:"mode"`
+	SecretId string                                       `json:"secret_id"`
+}
+
+// ComponentEnableRequestConfig1Credential0Mode defines model for ComponentEnableRequest.Config.1.Credential.0.Mode.
+type ComponentEnableRequestConfig1Credential0Mode string
+
+// ComponentEnableRequestConfig1Credential1 defines model for ComponentEnableRequest.Config.1.Credential.1.
+type ComponentEnableRequestConfig1Credential1 struct {
+	Mode       ComponentEnableRequestConfig1Credential1Mode `json:"mode"`
+	SecretName string                                       `json:"secret_name"`
+	Token      *string                                      `json:"token,omitempty"`
+}
+
+// ComponentEnableRequestConfig1Credential1Mode defines model for ComponentEnableRequest.Config.1.Credential.1.Mode.
+type ComponentEnableRequestConfig1Credential1Mode string
+
+// ComponentEnableRequest_Config_1_Credential defines model for ComponentEnableRequest.Config.1.Credential.
+type ComponentEnableRequest_Config_1_Credential struct {
+	union json.RawMessage
+}
+
+// ComponentEnableRequest_Config defines model for ComponentEnableRequest.Config.
+type ComponentEnableRequest_Config struct {
+	union json.RawMessage
 }
 
 // ComponentProjection defines model for ComponentProjection.
@@ -2977,6 +3099,9 @@ type BackingServiceCreateJSONRequestBody = BackingServiceCreate
 // ComponentConfigSetJSONRequestBody defines body for ComponentConfigSet for application/json ContentType.
 type ComponentConfigSetJSONRequestBody = ComponentConfigMutationRequest
 
+// ComponentEnableJSONRequestBody defines body for ComponentEnable for application/json ContentType.
+type ComponentEnableJSONRequestBody = ComponentEnableRequest
+
 // ConnectorCreateJSONRequestBody defines body for ConnectorCreate for application/json ContentType.
 type ConnectorCreateJSONRequestBody = ConnectorCreateRequest
 
@@ -3319,6 +3444,130 @@ func (t ComponentConfigMutationRequest_Config) MarshalJSON() ([]byte, error) {
 }
 
 func (t *ComponentConfigMutationRequest_Config) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsComponentEnableRequestConfig1Credential0 returns the union data inside the ComponentEnableRequest_Config_1_Credential as a ComponentEnableRequestConfig1Credential0
+func (t ComponentEnableRequest_Config_1_Credential) AsComponentEnableRequestConfig1Credential0() (ComponentEnableRequestConfig1Credential0, error) {
+	var body ComponentEnableRequestConfig1Credential0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentEnableRequestConfig1Credential0 overwrites any union data inside the ComponentEnableRequest_Config_1_Credential as the provided ComponentEnableRequestConfig1Credential0
+func (t *ComponentEnableRequest_Config_1_Credential) FromComponentEnableRequestConfig1Credential0(v ComponentEnableRequestConfig1Credential0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentEnableRequestConfig1Credential0 performs a merge with any union data inside the ComponentEnableRequest_Config_1_Credential, using the provided ComponentEnableRequestConfig1Credential0
+func (t *ComponentEnableRequest_Config_1_Credential) MergeComponentEnableRequestConfig1Credential0(v ComponentEnableRequestConfig1Credential0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsComponentEnableRequestConfig1Credential1 returns the union data inside the ComponentEnableRequest_Config_1_Credential as a ComponentEnableRequestConfig1Credential1
+func (t ComponentEnableRequest_Config_1_Credential) AsComponentEnableRequestConfig1Credential1() (ComponentEnableRequestConfig1Credential1, error) {
+	var body ComponentEnableRequestConfig1Credential1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentEnableRequestConfig1Credential1 overwrites any union data inside the ComponentEnableRequest_Config_1_Credential as the provided ComponentEnableRequestConfig1Credential1
+func (t *ComponentEnableRequest_Config_1_Credential) FromComponentEnableRequestConfig1Credential1(v ComponentEnableRequestConfig1Credential1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentEnableRequestConfig1Credential1 performs a merge with any union data inside the ComponentEnableRequest_Config_1_Credential, using the provided ComponentEnableRequestConfig1Credential1
+func (t *ComponentEnableRequest_Config_1_Credential) MergeComponentEnableRequestConfig1Credential1(v ComponentEnableRequestConfig1Credential1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ComponentEnableRequest_Config_1_Credential) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *ComponentEnableRequest_Config_1_Credential) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsComponentEnableRequestConfig0 returns the union data inside the ComponentEnableRequest_Config as a ComponentEnableRequestConfig0
+func (t ComponentEnableRequest_Config) AsComponentEnableRequestConfig0() (ComponentEnableRequestConfig0, error) {
+	var body ComponentEnableRequestConfig0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentEnableRequestConfig0 overwrites any union data inside the ComponentEnableRequest_Config as the provided ComponentEnableRequestConfig0
+func (t *ComponentEnableRequest_Config) FromComponentEnableRequestConfig0(v ComponentEnableRequestConfig0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentEnableRequestConfig0 performs a merge with any union data inside the ComponentEnableRequest_Config, using the provided ComponentEnableRequestConfig0
+func (t *ComponentEnableRequest_Config) MergeComponentEnableRequestConfig0(v ComponentEnableRequestConfig0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsComponentEnableRequestConfig1 returns the union data inside the ComponentEnableRequest_Config as a ComponentEnableRequestConfig1
+func (t ComponentEnableRequest_Config) AsComponentEnableRequestConfig1() (ComponentEnableRequestConfig1, error) {
+	var body ComponentEnableRequestConfig1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentEnableRequestConfig1 overwrites any union data inside the ComponentEnableRequest_Config as the provided ComponentEnableRequestConfig1
+func (t *ComponentEnableRequest_Config) FromComponentEnableRequestConfig1(v ComponentEnableRequestConfig1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentEnableRequestConfig1 performs a merge with any union data inside the ComponentEnableRequest_Config, using the provided ComponentEnableRequestConfig1
+func (t *ComponentEnableRequest_Config) MergeComponentEnableRequestConfig1(v ComponentEnableRequestConfig1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ComponentEnableRequest_Config) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *ComponentEnableRequest_Config) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
@@ -3819,10 +4068,19 @@ type ClientInterface interface {
 	// Corresponds with POST /components/{id}/disable (the `ComponentDisable` operationId).
 	ComponentDisable(ctx context.Context, id string, params *ComponentDisableParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ComponentEnable component.enable
+	// ComponentEnableWithBody Enable a Component with optional configuration
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /components/{id}/enable (the `ComponentEnable` operationId).
-	ComponentEnable(ctx context.Context, id string, params *ComponentEnableParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ComponentEnableWithBody(ctx context.Context, id string, params *ComponentEnableParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ComponentEnable Enable a Component with optional configuration
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /components/{id}/enable (the `ComponentEnable` operationId).
+	ComponentEnable(ctx context.Context, id string, params *ComponentEnableParams, body ComponentEnableJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ComponentUpdate component.update
 	//
@@ -5107,11 +5365,30 @@ func (c *Client) ComponentDisable(ctx context.Context, id string, params *Compon
 	return c.Client.Do(req)
 }
 
-// ComponentEnable component.enable
+// ComponentEnableWithBody Enable a Component with optional configuration
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with POST /components/{id}/enable (the `ComponentEnable` operationId).
-func (c *Client) ComponentEnable(ctx context.Context, id string, params *ComponentEnableParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewComponentEnableRequest(c.Server, id, params)
+func (c *Client) ComponentEnableWithBody(ctx context.Context, id string, params *ComponentEnableParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewComponentEnableRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ComponentEnable Enable a Component with optional configuration
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /components/{id}/enable (the `ComponentEnable` operationId).
+func (c *Client) ComponentEnable(ctx context.Context, id string, params *ComponentEnableParams, body ComponentEnableJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewComponentEnableRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -8622,8 +8899,19 @@ func NewComponentDisableRequest(server string, id string, params *ComponentDisab
 	return req, nil
 }
 
-// NewComponentEnableRequest constructs an http.Request for the ComponentEnable method
-func NewComponentEnableRequest(server string, id string, params *ComponentEnableParams) (*http.Request, error) {
+// NewComponentEnableRequest calls the generic ComponentEnable builder with application/json body
+func NewComponentEnableRequest(server string, id string, params *ComponentEnableParams, body ComponentEnableJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewComponentEnableRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewComponentEnableRequestWithBody constructs an http.Request for the ComponentEnable method, with any body, and a specified content type
+func NewComponentEnableRequestWithBody(server string, id string, params *ComponentEnableParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -8648,10 +8936,12 @@ func NewComponentEnableRequest(server string, id string, params *ComponentEnable
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -14455,12 +14745,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /components/{id}/disable (the `ComponentDisable` operationId).
 	ComponentDisableWithResponse(ctx context.Context, id string, params *ComponentDisableParams, reqEditors ...RequestEditorFn) (*ComponentDisableResponse, error)
 
-	// ComponentEnableWithResponse component.enable
+	// ComponentEnableWithBodyWithResponse Enable a Component with optional configuration
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /components/{id}/enable (the `ComponentEnable` operationId).
-	ComponentEnableWithResponse(ctx context.Context, id string, params *ComponentEnableParams, reqEditors ...RequestEditorFn) (*ComponentEnableResponse, error)
+	ComponentEnableWithBodyWithResponse(ctx context.Context, id string, params *ComponentEnableParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ComponentEnableResponse, error)
+
+	// ComponentEnableWithResponse Enable a Component with optional configuration
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /components/{id}/enable (the `ComponentEnable` operationId).
+	ComponentEnableWithResponse(ctx context.Context, id string, params *ComponentEnableParams, body ComponentEnableJSONRequestBody, reqEditors ...RequestEditorFn) (*ComponentEnableResponse, error)
 
 	// ComponentUpdateWithResponse component.update
 	//
@@ -22411,13 +22708,26 @@ func (c *ClientWithResponses) ComponentDisableWithResponse(ctx context.Context, 
 	return ParseComponentDisableResponse(rsp)
 }
 
-// ComponentEnableWithResponse component.enable
+// ComponentEnableWithBodyWithResponse Enable a Component with optional configuration
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /components/{id}/enable (the `ComponentEnable` operationId).
-func (c *ClientWithResponses) ComponentEnableWithResponse(ctx context.Context, id string, params *ComponentEnableParams, reqEditors ...RequestEditorFn) (*ComponentEnableResponse, error) {
-	rsp, err := c.ComponentEnable(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) ComponentEnableWithBodyWithResponse(ctx context.Context, id string, params *ComponentEnableParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ComponentEnableResponse, error) {
+	rsp, err := c.ComponentEnableWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseComponentEnableResponse(rsp)
+}
+
+// ComponentEnableWithResponse Enable a Component with optional configuration
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /components/{id}/enable (the `ComponentEnable` operationId).
+func (c *ClientWithResponses) ComponentEnableWithResponse(ctx context.Context, id string, params *ComponentEnableParams, body ComponentEnableJSONRequestBody, reqEditors ...RequestEditorFn) (*ComponentEnableResponse, error) {
+	rsp, err := c.ComponentEnable(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}

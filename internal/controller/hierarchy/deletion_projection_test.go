@@ -9,8 +9,12 @@ import (
 
 func TestDeletionTaskIDSurvivesHierarchyPersistenceConversion(t *testing.T) {
 	taskID := "task_01K3D7R40G0000000000000000"
-	tenant := tenantFromEtcd(etcdinfra.Versioned[etcdinfra.TenantRecord]{Record: etcdinfra.TenantRecord{DeletionTaskID: taskID}})
-	project := projectFromEtcd(etcdinfra.Versioned[etcdinfra.ProjectRecord]{Record: etcdinfra.ProjectRecord{DeletionTaskID: taskID}})
+	tenant := tenantFromEtcd(
+		etcdinfra.Versioned[etcdinfra.TenantRecord]{Record: etcdinfra.TenantRecord{DeletionTaskID: taskID}},
+	)
+	project := projectFromEtcd(
+		etcdinfra.Versioned[etcdinfra.ProjectRecord]{Record: etcdinfra.ProjectRecord{DeletionTaskID: taskID}},
+	)
 	if tenant.Record.DeletionTaskID == nil || *tenant.Record.DeletionTaskID != taskID {
 		t.Fatalf("Tenant deletion_task_id = %#v", tenant.Record.DeletionTaskID)
 	}

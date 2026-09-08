@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/common/workloadimage"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -20,8 +21,19 @@ func (runtime *ComposeRuntime) candidateRestoration(
 	response, err := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
 		Schema: composeHelperSchema, AssignmentId: assignment.AssignmentID, TaskId: assignment.TaskID,
 		OperationId: assignment.OperationID, Plan: assignment.Plan, StepId: step.GetStepId(),
-		TimeoutSeconds: remainingSeconds(ctx, step.GetTimeoutSeconds()), RestorationAuthority: assignment.RestorationAuthority,
+		TimeoutSeconds: remainingSeconds(
+			ctx,
+			step.GetTimeoutSeconds(),
+		), RestorationAuthority: assignment.RestorationAuthority,
 	})
+	if err == nil && response.GetOutcome() == agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_RESTORATION_REQUIRED {
+		if !validUnrestoredProbeResponse(assignment, step, response) {
+			result.ReconciliationRequired = true
+			return result, invalidReleaseProbeEvidence()
+		}
+		result.Diagnostic, result.RestorationRequired = response.GetDiagnostic(), true
+		return result, nil
+	}
 	if err != nil || response == nil || response.GetSchema() != composeHelperSchema ||
 		response.GetOutcome() != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED {
 		result.ReconciliationRequired = true
@@ -48,7 +60,9 @@ func (runtime *ComposeRuntime) proxyProcedure(
 	assignment Assignment,
 	step *agentpb.ExecutionStep,
 ) (composeStepResult, error) {
-	result := composeStepResult{MutationAttempted: step.GetServiceProxySwitch() != nil || step.GetServiceProxyCompensate() != nil}
+	result := composeStepResult{
+		MutationAttempted: step.GetServiceProxySwitch() != nil || step.GetServiceProxyCompensate() != nil,
+	}
 	response, err := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
 		Schema: composeHelperSchema, AssignmentId: assignment.AssignmentID, TaskId: assignment.TaskID,
 		OperationId: assignment.OperationID, Plan: assignment.Plan, StepId: step.GetStepId(),
@@ -64,7 +78,11 @@ func (runtime *ComposeRuntime) proxyProcedure(
 	result.ExitCode, result.Diagnostic = response.GetExitCode(), response.GetDiagnostic()
 	if response.GetOutcome() != agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED {
 		result.ReconciliationRequired = true
-		return result, errs.Newf(errs.KindRequestFailed, "agent: release proxy procedure failed with diagnostic %s", response.GetDiagnostic().String())
+		return result, errs.Newf(
+			errs.KindRequestFailed,
+			"agent: release proxy procedure failed with diagnostic %s",
+			response.GetDiagnostic().String(),
+		)
 	}
 	if response.GetProxyEvidence() != nil {
 		result.ProxyEvidence = proto.Clone(response.GetProxyEvidence()).(*agentpb.ServiceProxyEvidence)
@@ -85,7 +103,11 @@ func (runtime *ComposeRuntime) verifyReleaseRestorationPostcondition(
 	if stepErr != nil {
 		return result, stepErr
 	}
-	artifact, serviceID, target, releaseID, observationPlan, errorValue := restorationObservationTarget(assignment, step, result)
+	artifact, serviceID, target, releaseID, observationPlan, errorValue := restorationObservationTarget(
+		assignment,
+		step,
+		result,
+	)
 	if errorValue != nil {
 		result.ReconciliationRequired = true
 		return result, errorValue
@@ -93,7 +115,21 @@ func (runtime *ComposeRuntime) verifyReleaseRestorationPostcondition(
 	if artifact == nil { // Candidate absence is proven without a predecessor workload.
 		return result, nil
 	}
-	observed, err := runtime.observer.Observe(ctx, observationPlan, artifact.GetArtifactId())
+	var observed *agentpb.ObservedProject
+	var err error
+	if step.GetCandidateRestorationProbe() != nil || step.GetCandidateRestorationCompensate() != nil {
+		var observation *executionplan.RestorationObservation
+		observation, err = executionplan.NewRestorationObservation(
+			assignment.Plan,
+			assignment.RestorationAuthority,
+			step.GetStepId(),
+		)
+		if err == nil {
+			observed, err = runtime.observer.ObserveRestoration(ctx, observation)
+		}
+	} else {
+		observed, err = runtime.observer.Observe(ctx, observationPlan, artifact.GetArtifactId())
+	}
 	result.Observed = observed
 	if err == nil {
 		err = releaseRestorationWorkloadTargetProven(artifact, observed, serviceID, target, releaseID)
@@ -112,7 +148,10 @@ func restorationObservationTarget(
 ) (*agentpb.ComposeArtifact, string, string, string, *agentpb.ExecutionPlan, error) {
 	if step.GetPolicy() == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE {
 		if !releaseRestorationEvidenceProven(assignment, step, result) {
-			return nil, "", "", "", nil, errs.New(errs.KindInternal, "agent: release compensation returned no exact restoration proof")
+			return nil, "", "", "", nil, errs.New(
+				errs.KindInternal,
+				"agent: release compensation returned no exact restoration proof",
+			)
 		}
 	} else if _, err := releaseProbeEvidenceStatus(assignment, step, result); err != nil {
 		return nil, "", "", "", nil, err
@@ -141,19 +180,21 @@ func restorationObservationTarget(
 			assignment.Plan, artifactID, probe.GetServiceId(), result.RecreateEvidence.GetTarget(), releaseID,
 		)
 	}
-	if assignment.RestorationAuthority.GetTarget() == agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE {
-		return nil, "", "", "", assignment.Plan, nil
-	}
 	serviceID := step.GetCandidateRestorationProbe().GetServiceId()
 	if serviceID == "" {
 		serviceID = step.GetCandidateRestorationCompensate().GetServiceId()
+	}
+	if executionplan.RestorationTargetForService(
+		assignment.RestorationAuthority,
+		serviceID,
+	) == agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE {
+		return nil, "", "", "", assignment.Plan, nil
 	}
 	artifact, target, releaseID, err := openServingPredecessorAuthority(assignment, serviceID)
 	if err != nil {
 		return nil, "", "", "", nil, err
 	}
-	plan, err := observationPlanWithArtifact(assignment.Plan, artifact)
-	return artifact, serviceID, target, releaseID, plan, err
+	return artifact, serviceID, target, releaseID, assignment.Plan, nil
 }
 
 func planRestorationTarget(
@@ -171,24 +212,53 @@ func openServingPredecessorAuthority(
 	assignment Assignment,
 	serviceID string,
 ) (*agentpb.ComposeArtifact, string, string, error) {
-	sealed := assignment.RestorationAuthority.GetServingPredecessor()
-	if sealed == nil || len(sealed.GetComposeArtifact()) == 0 || len(sealed.GetComposeArtifactSha256()) != sha256.Size {
+	var encoded []byte
+	var expectedDigest []byte
+	if len(assignment.RestorationAuthority.GetNativePredecessors()) != 0 {
+		for _, witness := range assignment.RestorationAuthority.GetNativePredecessors() {
+			if witness.GetServiceId() != serviceID {
+				continue
+			}
+			if len(encoded) != 0 || len(witness.GetCurrentArtifact()) == 0 {
+				return nil, "", "", errs.New(
+					errs.KindInternal,
+					"agent: native serving predecessor authority is incomplete",
+				)
+			}
+			encoded = witness.GetCurrentArtifact()
+		}
+	} else if sealed := assignment.RestorationAuthority.GetAppliedPredecessor(); sealed != nil {
+		if len(sealed.GetComposeArtifact()) != 0 && len(sealed.GetComposeArtifactSha256()) == sha256.Size {
+			encoded = sealed.GetComposeArtifact()
+			expectedDigest = sealed.GetComposeArtifactSha256()
+		}
+	}
+	if len(encoded) == 0 {
 		return nil, "", "", errs.New(errs.KindInternal, "agent: serving predecessor authority is incomplete")
 	}
-	digest := sha256.Sum256(sealed.GetComposeArtifact())
+	if len(assignment.RestorationAuthority.GetNativePredecessors()) != 0 {
+		if err := executionplan.ValidateNativePredecessorWitness(
+			assignment.RestorationAuthority.GetEnvironmentId(), serviceID, encoded,
+			nativeServingPredecessorRetainedArtifact(assignment.RestorationAuthority, serviceID),
+		); err != nil {
+			return nil, "", "", errs.New(errs.KindInternal, "agent: native serving predecessor authority is invalid")
+		}
+	}
+	digest := sha256.Sum256(encoded)
 	artifact := new(agentpb.ComposeArtifact)
-	if !bytes.Equal(digest[:], sealed.GetComposeArtifactSha256()) ||
-		(proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(sealed.GetComposeArtifact(), artifact) != nil ||
+	if len(expectedDigest) != 0 && !bytes.Equal(digest[:], expectedDigest) ||
+		(proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(encoded, artifact) != nil ||
 		executionplan.RejectUnknown(artifact) != nil {
 		return nil, "", "", errs.New(errs.KindInternal, "agent: serving predecessor artifact is invalid")
 	}
 	canonical, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
-	if err != nil || !bytes.Equal(canonical, sealed.GetComposeArtifact()) {
+	if err != nil || !bytes.Equal(canonical, encoded) {
 		return nil, "", "", errs.New(errs.KindInternal, "agent: serving predecessor artifact is not canonical")
 	}
 	var target, releaseID string
 	for _, service := range artifact.GetServices() {
-		if service.GetServiceId() != serviceID || service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY ||
+		if service.GetServiceId() != serviceID ||
+			service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY ||
 			restorationReleaseLabel(service) == "" {
 			continue
 		}
@@ -206,29 +276,28 @@ func openServingPredecessorAuthority(
 	return artifact, target, releaseID, nil
 }
 
-func observationPlanWithArtifact(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArtifact) (*agentpb.ExecutionPlan, error) {
-	owned := proto.Clone(plan).(*agentpb.ExecutionPlan)
-	owned.PlanHash = nil
-	found := false
-	for index, current := range owned.GetArtifacts() {
-		if current.GetArtifactId() == artifact.GetArtifactId() {
-			owned.Artifacts[index], found = proto.Clone(artifact).(*agentpb.ComposeArtifact), true
+func nativeServingPredecessorRetainedArtifact(authority *agentpb.ReleaseRestorationAuthority, serviceID string) []byte {
+	for _, witness := range authority.GetNativePredecessors() {
+		if witness.GetServiceId() == serviceID {
+			return witness.GetRetainedPriorArtifact()
 		}
 	}
-	if !found {
-		owned.Artifacts = append(owned.Artifacts, proto.Clone(artifact).(*agentpb.ComposeArtifact))
-	}
-	return executionplan.Seal(owned)
+	return nil
 }
 
-func candidateServingPredecessorEvidenceMatches(assignment Assignment, serviceID string, result composeStepResult) bool {
+func candidateServingPredecessorEvidenceMatches(
+	assignment Assignment,
+	serviceID string,
+	result composeStepResult,
+) bool {
 	artifact, target, releaseID, err := openServingPredecessorAuthority(assignment, serviceID)
 	if err != nil {
 		return false
 	}
 	var proxy *agentpb.ComposeService
 	for _, service := range artifact.GetServices() {
-		if service.GetServiceId() == serviceID && service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+		if service.GetServiceId() == serviceID &&
+			service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
 			if proxy != nil {
 				return false
 			}
@@ -257,13 +326,16 @@ func releaseRestorationWorkloadTargetProven(
 	observed *agentpb.ObservedProject,
 	serviceID, target, releaseID string,
 ) error {
-	if artifact == nil || observed == nil || artifact.GetProjectName() == "" || observed.GetProjectName() != artifact.GetProjectName() || len(observed.GetCollisions()) != 0 {
+	if artifact == nil || observed == nil || artifact.GetProjectName() == "" ||
+		observed.GetProjectName() != artifact.GetProjectName() ||
+		len(observed.GetCollisions()) != 0 {
 		return errs.New(errs.KindStateConflict, "agent: release restoration observation identity diverges")
 	}
 	expected := make([]*agentpb.ComposeService, 0, 2)
 	known := make([]*agentpb.ComposeService, 0, 3)
 	for _, service := range artifact.GetServices() {
-		if service.GetServiceId() != serviceID || service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+		if service.GetServiceId() != serviceID ||
+			service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
 			continue
 		}
 		known = append(known, service)
@@ -280,16 +352,26 @@ func releaseRestorationWorkloadTargetProven(
 		return errs.New(errs.KindInternal, "agent: sealed predecessor workload is absent")
 	}
 	for _, service := range expected {
-		if service.GetExpectedReplicas() < 1 ||
-			(target != "" || releaseID != "") && (service.GetImageReference() == "" || !service.GetHasHealthcheck()) {
+		if service.GetExpectedReplicas() < 1 || !workloadimage.LocalIDValid(service.GetImageReference()) ||
+			!service.GetHasHealthcheck() {
 			return errs.New(errs.KindInternal, "agent: sealed predecessor workload health authority is incomplete")
 		}
 	}
 	counts := make([]uint32, len(expected))
+	containerIDs := make(map[string]struct{})
 	for _, container := range observed.GetContainers() {
-		if container.GetServiceId() != serviceID || observedLabel(container, "com.groundplane.runtime-role") == "proxy" {
+		if container.GetServiceId() != serviceID ||
+			observedLabel(container, "com.groundplane.runtime-role") == "proxy" {
 			continue
 		}
+		containerID := container.GetContainerId()
+		if len(containerID) != 64 || !validContainerID(containerID) {
+			return errs.New(errs.KindStateConflict, "agent: predecessor workload container identity is invalid")
+		}
+		if _, duplicate := containerIDs[containerID]; duplicate {
+			return errs.New(errs.KindStateConflict, "agent: predecessor workload container identity is duplicated")
+		}
+		containerIDs[containerID] = struct{}{}
 		matched := -1
 		for index, service := range expected {
 			if containerHasExpectedLabels(container, service.GetExpectedLabels()) {
@@ -309,6 +391,7 @@ func releaseRestorationWorkloadTargetProven(
 			}
 		}
 		if matched == -1 || container.GetImageReference() != expected[matched].GetImageReference() ||
+			container.GetImageId() != expected[matched].GetImageReference() ||
 			container.GetState() != agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING ||
 			container.GetHealth() != agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY {
 			return errs.New(errs.KindStateConflict, "agent: predecessor workload is foreign or unhealthy")

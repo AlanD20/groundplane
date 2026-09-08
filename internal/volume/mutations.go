@@ -278,7 +278,10 @@ func (service *MutationService) mutateOnce(
 	}
 	if project.Record.Kind != etcd.ProjectKindTenant ||
 		environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindResourceInUse, "Environment is not ready for Volume mutation")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindResourceInUse,
+			"Environment is not ready for Volume mutation",
+		)
 	}
 	head, hasHead, err := service.repository.GetEnvironmentBlueprintHead(ctx, request.environmentID)
 	if err != nil {
@@ -295,7 +298,10 @@ func (service *MutationService) mutateOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if generation > math.MaxInt32 {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindResourceInUse, "Environment render generation is exhausted")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindResourceInUse,
+			"Environment render generation is exhausted",
+		)
 	}
 	if err := validateVolumeMutationAgainstProjection(request, current.Record, hasCurrent); err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -435,9 +441,21 @@ func (service *MutationService) mutateOnce(
 		marker.ReplayTarget = &target
 	}
 	result, mutationErr := service.repository.PublishEnvironmentDesiredRevisionWithTask(
-		ctx, project, environment, expectedHeadRevision, claim,
+		ctx,
+		project,
+		environment,
+		expectedHeadRevision,
+		claim,
 		etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: request.environmentID, RevisionID: claim.RevisionID},
-		candidate, nil, nil, nil, etcd.ReleaseGroupBlueprintPreparedMutation{}, etcd.ComponentTaskPreparation{}, etcd.BlueprintAttachTaskPreparation{}, task, marker,
+		candidate,
+		nil,
+		nil,
+		nil,
+		etcd.ReleaseGroupBlueprintPreparedMutation{},
+		etcd.ComponentTaskPreparation{},
+		etcd.BlueprintAttachTaskPreparation{},
+		task,
+		marker,
 	)
 	if mutationErr != nil {
 		if !isUnknownPublicationOutcome(mutationErr) {

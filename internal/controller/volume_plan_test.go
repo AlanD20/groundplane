@@ -31,7 +31,10 @@ func (reader *volumePlanReader) GetProject(context.Context, string) (etcd.Versio
 	return etcd.Versioned[etcd.ProjectRecord]{Record: reader.project}, nil
 }
 
-func (reader *volumePlanReader) GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error) {
+func (reader *volumePlanReader) GetEnvironment(
+	context.Context,
+	string,
+) (etcd.Versioned[etcd.EnvironmentRecord], error) {
 	return etcd.Versioned[etcd.EnvironmentRecord]{Record: reader.environment}, nil
 }
 
@@ -59,7 +62,11 @@ func (reader *volumePlanReader) GetEnvironmentComposeProjectionRevision(
 	if !found || projection.EnvironmentID != environmentID {
 		return etcd.Versioned[etcd.EnvironmentComposeProjection]{}, false, nil
 	}
-	return etcd.Versioned[etcd.EnvironmentComposeProjection]{Record: projection, Revision: 1, ReadRevision: 1}, true, nil
+	return etcd.Versioned[etcd.EnvironmentComposeProjection]{
+		Record:       projection,
+		Revision:     1,
+		ReadRevision: 1,
+	}, true, nil
 }
 
 func TestResolveVolumeAddPlanReplaysStableHash(t *testing.T) {
@@ -215,8 +222,15 @@ func newVolumePlanState(t *testing.T, removal bool) volumePlanState {
 	}
 	intentDigest := bytes.Repeat([]byte{0xab}, 32)
 	reader := &volumePlanReader{
-		tenant: tenantRecord(tenantID), project: etcd.ProjectRecord{ID: projectID, TenantID: tenantID, Kind: etcd.ProjectKindTenant},
-		environment: etcd.EnvironmentRecord{ID: environmentID, ProjectID: projectID, VolumeDir: volumeDir, ProvisioningState: etcd.EnvironmentProvisioningReady},
+		tenant: tenantRecord(
+			tenantID,
+		), project: etcd.ProjectRecord{ID: projectID, TenantID: tenantID, Kind: etcd.ProjectKindTenant},
+		environment: etcd.EnvironmentRecord{
+			ID:                environmentID,
+			ProjectID:         projectID,
+			VolumeDir:         volumeDir,
+			ProvisioningState: etcd.EnvironmentProvisioningReady,
+		},
 		projections: map[string]etcd.EnvironmentComposeProjection{
 			candidateRevisionID: {
 				EnvironmentID: environmentID, RevisionID: candidateRevisionID, RenderGeneration: 2, ComposeArtifact: candidateValue,
@@ -227,15 +241,60 @@ func newVolumePlanState(t *testing.T, removal bool) volumePlanState {
 					if !removal {
 						return nil
 					}
-					return []etcd.EnvironmentServiceVolumeMount{{ServiceID: serviceID, VolumeID: volumeID, Target: "/data"}}
+					return []etcd.EnvironmentServiceVolumeMount{
+						{ServiceID: serviceID, VolumeID: volumeID, Target: "/data"},
+					}
 				}(),
 			},
 		},
 	}
-	addTask := volumeTask(addTaskID, addPlanID, etcd.TaskCreate, volumeID, environmentID, candidateRevisionID, addArtifactID, volumeKey, intentDigest, "", nil)
-	editTask := volumeTask(addTaskID, addPlanID, etcd.TaskUpdate, volumeID, environmentID, candidateRevisionID, addArtifactID, volumeKey, intentDigest, "", nil)
-	removeTask := volumeTask(removeTaskID, removePlanID, etcd.TaskRemove, volumeID, environmentID, candidateRevisionID, candidateArtifactID, volumeKey, intentDigest, baselineRevisionID, []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: serviceStepID}, {Kind: etcd.TaskStepOperation, ID: dockerStepID}, {Kind: etcd.TaskStepOperation, ID: directoryStepID}})
-	addTask.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: serviceStepID}, {Kind: etcd.TaskStepOperation, ID: dockerStepID}}
+	addTask := volumeTask(
+		addTaskID,
+		addPlanID,
+		etcd.TaskCreate,
+		volumeID,
+		environmentID,
+		candidateRevisionID,
+		addArtifactID,
+		volumeKey,
+		intentDigest,
+		"",
+		nil,
+	)
+	editTask := volumeTask(
+		addTaskID,
+		addPlanID,
+		etcd.TaskUpdate,
+		volumeID,
+		environmentID,
+		candidateRevisionID,
+		addArtifactID,
+		volumeKey,
+		intentDigest,
+		"",
+		nil,
+	)
+	removeTask := volumeTask(
+		removeTaskID,
+		removePlanID,
+		etcd.TaskRemove,
+		volumeID,
+		environmentID,
+		candidateRevisionID,
+		candidateArtifactID,
+		volumeKey,
+		intentDigest,
+		baselineRevisionID,
+		[]etcd.TaskStepRecord{
+			{Kind: etcd.TaskStepOperation, ID: serviceStepID},
+			{Kind: etcd.TaskStepOperation, ID: dockerStepID},
+			{Kind: etcd.TaskStepOperation, ID: directoryStepID},
+		},
+	)
+	addTask.Steps = []etcd.TaskStepRecord{
+		{Kind: etcd.TaskStepOperation, ID: serviceStepID},
+		{Kind: etcd.TaskStepOperation, ID: dockerStepID},
+	}
 	return volumePlanState{reader: reader, addTask: addTask, editTask: editTask, removeTask: removeTask,
 		volumeID: volumeID, serviceID: serviceID, volumeKey: volumeKey, intentDigest: intentDigest,
 		baselineArtifactID: baselineArtifactID, candidateArtifactID: candidateArtifactID}

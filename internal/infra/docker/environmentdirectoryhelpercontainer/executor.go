@@ -216,7 +216,10 @@ func (executor *Executor) Execute(
 	if waited.Error != nil || waited.StatusCode != 0 {
 		return nil, errs.New(errs.KindInternal, "Environment directory helper process failed")
 	}
-	response, responseErr := environmentdirectoryhelper.ReadResponse(context.Background(), bytes.NewReader(output.stdout))
+	response, responseErr := environmentdirectoryhelper.ReadResponse(
+		context.Background(),
+		bytes.NewReader(output.stdout),
+	)
 	if responseErr != nil {
 		return nil, responseErr
 	}

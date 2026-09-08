@@ -12,6 +12,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -161,6 +162,11 @@ func controllerMaterializationTask(
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: operationID, PlanID: planID, PlanHash: hex.EncodeToString(plan.PlanHash),
 		RenderGeneration: 7, Type: etcd.TaskUpdate, Target: environmentID,
+		Params: map[string]string{
+			taskcontract.EnvironmentBlueprintProcedureParam: string(
+				taskcontract.BlueprintComposeProcedureFullReconcile,
+			),
+		},
 		Steps: []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: stepID}}, TimeoutSeconds: 60,
 		Status: etcd.TaskStatusRunning, NextEventSequence: 1, CreatedAt: now,
 	}

@@ -3009,7 +3009,7 @@ func TestTaskRepositoryAgentTimeoutContinuesAfterBackupTerminal(t *testing.T) {
 	if err != nil || !found || ordinaryClaim.Task.Record.ID != ordinary.ID {
 		t.Fatalf("ClaimNextTask(ordinary) = %#v/%v/%v", ordinaryClaim, found, err)
 	}
-	terminalAt := ordinaryClaim.Assignment.Record.Deadline.Add(time.Second)
+	terminalAt := backupClaim.Assignment.Record.Deadline.Add(time.Second)
 	count, err := tasks.TimeoutAgentAssignments(
 		context.Background(), agentID, 1, 2, terminalAt,
 	)
@@ -5010,8 +5010,13 @@ func TestBackupRuntimeRepositoryClassifiesPinnedVolumeEvidence(t *testing.T) {
 		PriorIntent: BackupServiceRuntimeIntent(runtime.Runtime.RuntimeIntent),
 	}}
 	corruptRuntime := append([]*KeyValue(nil), projectionEvidence...)
-	corruptRuntime = append(corruptRuntime,
-		&KeyValue{Key: serviceRuntimeKey(runtime.ServiceID), Value: []byte(`{"invalid":`), ModRevision: runtimeValue.ModRevision},
+	corruptRuntime = append(
+		corruptRuntime,
+		&KeyValue{
+			Key:         serviceRuntimeKey(runtime.ServiceID),
+			Value:       []byte(`{"invalid":`),
+			ModRevision: runtimeValue.ModRevision,
+		},
 	)
 	if err := validateBackupVolumePublicationEvidence(
 		corruptRuntime, source, serviceSnapshot,

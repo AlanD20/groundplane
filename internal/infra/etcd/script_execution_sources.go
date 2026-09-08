@@ -22,11 +22,12 @@ type ScriptExecutionSources struct {
 	ScriptSet         Versioned[ScriptSetGenerationRecord]
 	Script            Versioned[ScriptRecord]
 	BodyGeneration    Versioned[ScriptBodyGenerationRecord]
-	Release           CurrentSuccessfulRelease
+	Release           ServingRelease
 	RenderInput       Versioned[ReleaseRenderInput]
 	DesiredHead       Versioned[EnvironmentBlueprintHead]
 	DesiredProjection Versioned[EnvironmentComposeProjection]
 	Networks          []Versioned[ZoneRecord]
+	AttachSources     ScriptAttachSources
 }
 
 // LoadBlueprintReleaseHookExecutionSources loads exact prepublished Script/body
@@ -42,6 +43,7 @@ func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
 	project Versioned[ProjectRecord],
 	environment Versioned[EnvironmentRecord],
 	projection EnvironmentComposeProjection,
+	intendedAttaches []Versioned[AttachRecord],
 	revision int64,
 ) (ScriptExecutionSources, error) {
 	if ctx == nil || repository == nil || repository.store == nil ||
@@ -120,11 +122,23 @@ func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
 		render.Projection.RevisionID != projection.RevisionID {
 		return ScriptExecutionSources{}, corruptReleaseRecord()
 	}
+	attachNetworks, err := resolveScriptAttachNetworks(
+		ctx,
+		repository.store,
+		environment.Record.ID,
+		service.Desired.ID,
+		intendedAttaches,
+		revision,
+	)
+	if err != nil {
+		return ScriptExecutionSources{}, err
+	}
 	return ScriptExecutionSources{
-		Revision:    revision,
-		Tenant:      tenant,
-		Project:     project,
-		Environment: environment,
+		AttachSources: attachNetworks,
+		Revision:      revision,
+		Tenant:        tenant,
+		Project:       project,
+		Environment:   environment,
 		Service: Versioned[ServiceRecord]{
 			Record:       service,
 			ReadRevision: revision,
@@ -146,7 +160,7 @@ func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
 			Revision:     read.Values[1].ModRevision,
 			ReadRevision: revision,
 		},
-		Release: CurrentSuccessfulRelease{
+		Release: ServingRelease{
 			Intent:         intent,
 			IntentRevision: read.Values[2].ModRevision,
 			Revision:       revision,
@@ -220,7 +234,12 @@ func (repository *ScriptRepository) loadExecutionSources(
 	bodyValue, err := scriptExecutionValueAt(
 		ctx,
 		repository.store,
-		scriptSetBodyGenerationKey(metadata.EnvironmentID, metadata.ScriptSetGeneration, scriptID, metadata.ActiveGeneration),
+		scriptSetBodyGenerationKey(
+			metadata.EnvironmentID,
+			metadata.ScriptSetGeneration,
+			scriptID,
+			metadata.ActiveGeneration,
+		),
 		revision,
 	)
 	if err != nil {
@@ -235,7 +254,12 @@ func (repository *ScriptRepository) loadExecutionSources(
 		return ScriptExecutionSources{}, corruptRecord()
 	}
 
-	environmentValue, err := scriptExecutionValueAt(ctx, repository.store, environmentKey(metadata.EnvironmentID), revision)
+	environmentValue, err := scriptExecutionValueAt(
+		ctx,
+		repository.store,
+		environmentKey(metadata.EnvironmentID),
+		revision,
+	)
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
@@ -269,9 +293,9 @@ func (repository *ScriptRepository) loadExecutionSources(
 		return ScriptExecutionSources{}, errs.New(errs.KindStateConflict, "Script target Service is not runnable")
 	}
 
-	var release CurrentSuccessfulRelease
+	var release ServingRelease
 	if releaseID == "" {
-		release, err = ledger.ResolveCurrentSuccessful(ctx, environment.ID, target.Desired.ID, revision)
+		release, err = ledger.ResolveServing(ctx, environment.ID, target.Desired.ID, revision)
 		if err != nil {
 			return ScriptExecutionSources{}, err
 		}
@@ -287,12 +311,11 @@ func (repository *ScriptRepository) loadExecutionSources(
 			intent.EnvironmentID != environment.ID || intent.ServiceID != target.Desired.ID {
 			return ScriptExecutionSources{}, corruptReleaseRecord()
 		}
-		resolved, resolveErr := ledger.resolveSuccessfulReleaseImage(ctx, environment.ID, target.Desired.ID, intent, revision)
-		if resolveErr != nil {
+		if resolveErr := ledger.verifySuccessfulRelease(ctx, environment.ID, target.Desired.ID, intent, revision); resolveErr != nil {
 			return ScriptExecutionSources{}, resolveErr
 		}
-		release = CurrentSuccessfulRelease{
-			Intent: intent, IntentRevision: intentValue.ModRevision, ResolvedImage: resolved, Revision: revision,
+		release = ServingRelease{
+			Intent: intent, IntentRevision: intentValue.ModRevision, Revision: revision,
 		}
 	}
 	renderInput, err := ledger.GetReleaseRenderInputAt(ctx, release.Intent.ID, revision)
@@ -320,6 +343,21 @@ func (repository *ScriptRepository) loadExecutionSources(
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
+	intendedAttaches, err := loadScriptIntendedAttaches(ctx, repository.store, environment.ID, revision)
+	if err != nil {
+		return ScriptExecutionSources{}, err
+	}
+	attachNetworks, err := resolveScriptAttachNetworks(
+		ctx,
+		repository.store,
+		environment.ID,
+		service.Record.Desired.ID,
+		intendedAttaches,
+		revision,
+	)
+	if err != nil {
+		return ScriptExecutionSources{}, err
+	}
 
 	return ScriptExecutionSources{
 		Revision: revision,
@@ -336,7 +374,7 @@ func (repository *ScriptRepository) loadExecutionSources(
 		},
 		Release: release, RenderInput: renderInput,
 		DesiredHead: desiredHead, DesiredProjection: desiredProjection,
-		Networks: networks,
+		Networks: networks, AttachSources: attachNetworks,
 	}, nil
 }
 

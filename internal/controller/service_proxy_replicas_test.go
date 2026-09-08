@@ -100,7 +100,8 @@ func TestRenderComposeRejectsInvalidReplicaCount(t *testing.T) {
 			}})
 			input.Identities.Services = []ComposeResourceIdentity{{ID: serviceID, Name: "worker"}}
 			input.Releases = map[string]ComposeReleaseIdentity{serviceID: {
-				ReleaseID: releaseID, Image: "example/worker:next", Strategy: domain.StrategyRecreate,
+				ProxyImage: testServiceProxyImage(),
+				ReleaseID:  releaseID, Image: "example/worker:next", Strategy: domain.StrategyRecreate,
 				Target: domain.WorkloadSingleton, ServingTarget: domain.WorkloadSingleton,
 				ServingReleaseID: releaseID, ServingProxyGeneration: 1,
 			}}
@@ -165,7 +166,8 @@ func TestRenderComposeAddressableReplicaCountKeepsSingletonProxy(t *testing.T) {
 	input.Identities.Services = []ComposeResourceIdentity{{ID: serviceID, Name: "api"}}
 	input.Releases = map[string]ComposeReleaseIdentity{serviceID: {
 		ReleaseID: releaseID, Image: "example/api:next", Strategy: domain.StrategyRecreate,
-		Target: domain.WorkloadSingleton, ServingTarget: domain.WorkloadSingleton,
+		ProxyImage: testServiceProxyImage(),
+		Target:     domain.WorkloadSingleton, ServingTarget: domain.WorkloadSingleton,
 		ServingReleaseID: releaseID, ServingProxyGeneration: 1,
 	}}
 
@@ -197,6 +199,9 @@ func TestRenderComposeAddressableReplicaCountKeepsSingletonProxy(t *testing.T) {
 		t.Fatalf("decode rendered Compose YAML: %v", err)
 	}
 	if len(rendered.Services) != 2 || rendered.Services["api--singleton"].Deploy.Replicas != 3 {
-		t.Fatalf("addressable recreate YAML services = %#v, want singleton workload with three replicas", rendered.Services)
+		t.Fatalf(
+			"addressable recreate YAML services = %#v, want singleton workload with three replicas",
+			rendered.Services,
+		)
 	}
 }

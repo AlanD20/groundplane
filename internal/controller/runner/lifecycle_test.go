@@ -281,76 +281,168 @@ func (runtime *recordingRuntime) resolve(
 	return corerunner.StepEvidence{Step: step, State: corerunner.EffectApplied}, nil
 }
 
-func (runtime *recordingRuntime) EnsureIdentity(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+func (runtime *recordingRuntime) EnsureIdentity(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.apply(ctx, plan, corerunner.StepEnsureIdentity, nil)
 }
-func (runtime *recordingRuntime) ObserveIdentity(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) ObserveIdentity(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.resolve(ctx, plan, corerunner.StepEnsureIdentity)
 }
-func (runtime *recordingRuntime) EnsureNetwork(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) EnsureNetwork(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.apply(ctx, plan, corerunner.StepEnsureNetwork, nil)
 }
-func (runtime *recordingRuntime) ObserveNetwork(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) ObserveNetwork(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.resolve(ctx, plan, corerunner.StepEnsureNetwork)
 }
-func (runtime *recordingRuntime) EnsureEgress(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) EnsureEgress(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.apply(ctx, plan, corerunner.StepEnsureEgress, nil)
 }
-func (runtime *recordingRuntime) ObserveEgress(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) ObserveEgress(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.resolve(ctx, plan, corerunner.StepEnsureEgress)
 }
-func (runtime *recordingRuntime) StartProxy(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) StartProxy(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.apply(ctx, plan, corerunner.StepStartProxy, nil)
 }
-func (runtime *recordingRuntime) ObserveProxy(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) ObserveProxy(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.resolve(ctx, plan, corerunner.StepStartProxy)
 }
-func (runtime *recordingRuntime) StartDaemon(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) StartDaemon(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.apply(ctx, plan, corerunner.StepStartDaemon, nil)
 }
-func (runtime *recordingRuntime) ObserveDaemon(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) ObserveDaemon(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.resolve(ctx, plan, corerunner.StepStartDaemon)
 }
-func (runtime *recordingRuntime) StartRunner(ctx context.Context, plan corerunner.Plan, token []byte) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) StartRunner(
+	ctx context.Context,
+	plan corerunner.Plan,
+	token []byte,
+) (corerunner.StepEvidence, error) {
 	return runtime.apply(ctx, plan, corerunner.StepStartRunner, token)
 }
-func (runtime *recordingRuntime) ObserveRunner(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) ObserveRunner(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.resolve(ctx, plan, corerunner.StepStartRunner)
 }
-func (runtime *recordingRuntime) StopRunner(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) StopRunner(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.apply(ctx, plan, corerunner.StepStopRunner, nil)
 }
-func (runtime *recordingRuntime) ObserveRunnerAbsent(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) ObserveRunnerAbsent(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.removalObservation(ctx, plan, corerunner.StepStopRunner)
 }
-func (runtime *recordingRuntime) StopDaemon(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) StopDaemon(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.apply(ctx, plan, corerunner.StepStopDaemon, nil)
 }
-func (runtime *recordingRuntime) ObserveDaemonAbsent(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) ObserveDaemonAbsent(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.removalObservation(ctx, plan, corerunner.StepStopDaemon)
 }
 func (runtime *recordingRuntime) StopProxy(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
 	return runtime.apply(ctx, plan, corerunner.StepStopProxy, nil)
 }
-func (runtime *recordingRuntime) ObserveProxyAbsent(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) ObserveProxyAbsent(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.removalObservation(ctx, plan, corerunner.StepStopProxy)
 }
-func (runtime *recordingRuntime) RemoveNetwork(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) RemoveNetwork(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.apply(ctx, plan, corerunner.StepRemoveNetwork, nil)
 }
-func (runtime *recordingRuntime) ObserveNetworkAbsent(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) ObserveNetworkAbsent(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.removalObservation(ctx, plan, corerunner.StepRemoveNetwork)
 }
-func (runtime *recordingRuntime) RemoveIdentity(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) RemoveIdentity(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.apply(ctx, plan, corerunner.StepRemoveIdentity, nil)
 }
-func (runtime *recordingRuntime) ObserveIdentityAbsent(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) ObserveIdentityAbsent(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.removalObservation(ctx, plan, corerunner.StepRemoveIdentity)
 }
-func (runtime *recordingRuntime) RemoveEgress(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) RemoveEgress(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.apply(ctx, plan, corerunner.StepRemoveEgress, nil)
 }
-func (runtime *recordingRuntime) ObserveEgressAbsent(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
+
+func (runtime *recordingRuntime) ObserveEgressAbsent(
+	ctx context.Context,
+	plan corerunner.Plan,
+) (corerunner.StepEvidence, error) {
 	return runtime.removalObservation(ctx, plan, corerunner.StepRemoveEgress)
 }
 func (runtime *recordingRuntime) removalObservation(

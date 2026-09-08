@@ -461,7 +461,11 @@ func TestBlueprintReleasePublicationLeavesAppliedProjectionUntilAcknowledgement(
 				len(publication.conditions) != 3 || len(publication.mutations) != 3 {
 				t.Fatalf(
 					"publication staged shape = %d requirements, %d conditions, %d mutations",
-					len(publication.sources.StagedRequirements()), len(publication.conditions), len(publication.mutations),
+					len(
+						publication.sources.StagedRequirements(),
+					),
+					len(publication.conditions),
+					len(publication.mutations),
 				)
 			}
 			selected := map[string]int64{}

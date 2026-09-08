@@ -73,7 +73,8 @@ func candidateReleaseAssignmentAuthority(
 	}
 	procedure := plan.GetCandidateReleaseProcedure()
 	if procedure == nil {
-		if record.RestorationAuthority != nil || record.RestorationAuthoritySHA256 != "" || len(result.recoveryDigest) != 0 {
+		if record.RestorationAuthority != nil || record.RestorationAuthoritySHA256 != "" ||
+			len(result.recoveryDigest) != 0 {
 			return result, errs.New(errs.KindInternal, "non-release assignment carries restoration authority")
 		}
 		return result, nil
@@ -94,30 +95,59 @@ func candidateReleaseAssignmentAuthority(
 		AuthoritySha256: authorityDigest, Candidates: make([]*agentpb.ReleaseRestorationCandidate, len(authority.Candidates)),
 	}
 	for index, candidate := range authority.Candidates {
+		target := agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_UNSPECIFIED
+		switch candidate.Target {
+		case etcd.ReleaseRestorationServingPredecessor:
+			target = agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR
+		case etcd.ReleaseRestorationCandidateAbsence:
+			target = agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE
+		default:
+			return candidateReleaseWireAuthority{}, errs.New(
+				errs.KindInternal,
+				"candidate Release restoration target is invalid",
+			)
+		}
 		result.restoration.Candidates[index] = &agentpb.ReleaseRestorationCandidate{
-			ServiceId: candidate.ServiceID, ReleaseId: candidate.ReleaseID,
+			ServiceId: candidate.ServiceID, ReleaseId: candidate.ReleaseID, Target: target,
 		}
 	}
-	switch authority.Target {
-	case etcd.ReleaseRestorationServingPredecessor:
-		result.restoration.Target = agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR
-		predecessor := authority.ServingPredecessor
-		if predecessor == nil {
-			return candidateReleaseWireAuthority{}, errs.New(errs.KindInternal, "serving predecessor assignment authority is invalid")
-		}
+	if predecessor := authority.AppliedPredecessor; predecessor != nil {
 		artifactDigest, decodeErr := hex.DecodeString(predecessor.ComposeArtifactSHA256)
 		if decodeErr != nil || len(artifactDigest) != 32 {
-			return candidateReleaseWireAuthority{}, errs.New(errs.KindInternal, "serving predecessor assignment authority is invalid")
+			return candidateReleaseWireAuthority{}, errs.New(
+				errs.KindInternal,
+				"serving predecessor assignment authority is invalid",
+			)
 		}
-		result.restoration.ServingPredecessor = &agentpb.ReleaseServingPredecessorAuthority{
+		result.restoration.AppliedPredecessor = &agentpb.ReleaseAppliedPredecessorAuthority{
 			KeyRevision: predecessor.KeyRevision, RevisionId: predecessor.RevisionID,
 			RenderGeneration: predecessor.RenderGeneration, ComposeArtifactSha256: artifactDigest,
 			ComposeArtifact: append([]byte(nil), predecessor.ComposeArtifact...),
 		}
-	case etcd.ReleaseRestorationCandidateAbsence:
-		result.restoration.Target = agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE
-	default:
-		return candidateReleaseWireAuthority{}, errs.New(errs.KindInternal, "candidate Release restoration target is invalid")
+	}
+	if len(authority.NativePredecessors) != 0 {
+		if len(authority.NativePredecessors) != len(authority.Candidates) {
+			return candidateReleaseWireAuthority{}, errs.New(
+				errs.KindInternal,
+				"native predecessor assignment authority is incomplete",
+			)
+		}
+		result.restoration.NativePredecessors = make(
+			[]*agentpb.ReleaseNativePredecessorAuthority,
+			len(authority.NativePredecessors),
+		)
+		for index, predecessor := range authority.NativePredecessors {
+			if predecessor.ServiceID != authority.Candidates[index].ServiceID {
+				return candidateReleaseWireAuthority{}, errs.New(
+					errs.KindInternal,
+					"native predecessor assignment authority diverges",
+				)
+			}
+			result.restoration.NativePredecessors[index] = &agentpb.ReleaseNativePredecessorAuthority{
+				ServiceId: predecessor.ServiceID, CurrentArtifact: append([]byte(nil), predecessor.CurrentArtifact...),
+				RetainedPriorArtifact: append([]byte(nil), predecessor.RetainedPriorArtifact...),
+			}
+		}
 	}
 	if result.mode == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY {
 		directive := claim.ReleaseRecovery

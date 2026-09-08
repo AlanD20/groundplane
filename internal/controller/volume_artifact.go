@@ -43,8 +43,14 @@ func MutateEnvironmentVolumeArtifact(
 	if current == nil || current.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
 		ids.Validate(ids.KindEnvironment, current.GetOwnerId()) != nil ||
 		ids.Validate(ids.KindVolume, mutation.VolumeID) != nil ||
-		ids.Validate(ids.KindConfig, mutation.ArtifactID) != nil || ids.Validate(ids.KindPlan, mutation.PlanID) != nil ||
-		ids.Validate(ids.KindTenant, mutation.TenantID) != nil || ids.Validate(ids.KindProject, mutation.ProjectID) != nil ||
+		ids.Validate(
+			ids.KindConfig,
+			mutation.ArtifactID,
+		) != nil || ids.Validate(ids.KindPlan, mutation.PlanID) != nil ||
+		ids.Validate(
+			ids.KindTenant,
+			mutation.TenantID,
+		) != nil || ids.Validate(ids.KindProject, mutation.ProjectID) != nil ||
 		mutation.RenderGeneration == 0 ||
 		(mutation.Action != VolumeArtifactAdd && mutation.Action != VolumeArtifactEdit && mutation.Action != VolumeArtifactRemove) ||
 		!validVolumeArtifactKey(mutation.Key) {

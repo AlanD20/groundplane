@@ -5,12 +5,14 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // BackingServiceRecord is a read-only facade over the three durable hierarchy
 // records that make up one backing service. It is never persisted itself.
 type BackingServiceRecord struct {
+	Authentication   core.BackingAuthentication
 	ProjectID        string
 	EnvironmentID    string
 	ServiceID        string
@@ -127,7 +129,12 @@ func (repository *BackingServiceRepository) composeBackingService(
 			"Backing-service Environment projection is inconsistent",
 		)
 	}
-	projection, found, err := currentEnvironmentProjectionAtRevision(ctx, repository.store, environmentID, project.ReadRevision)
+	projection, found, err := currentEnvironmentProjectionAtRevision(
+		ctx,
+		repository.store,
+		environmentID,
+		project.ReadRevision,
+	)
 	if err != nil {
 		return Versioned[BackingServiceRecord]{}, err
 	}
@@ -151,10 +158,16 @@ func (repository *BackingServiceRepository) composeBackingService(
 	}
 	return Versioned[BackingServiceRecord]{
 		Record: BackingServiceRecord{
-			ProjectID: project.Record.ID, EnvironmentID: environmentID, ServiceID: serviceID,
+			Authentication: service.Record.Desired.Authentication,
+			ProjectID:      project.Record.ID, EnvironmentID: environmentID, ServiceID: serviceID,
 			BackingNetworkID: service.Record.BackingNetworkID,
 		},
-		Revision:     max(project.Revision, environmentValue.ModRevision, service.Revision, serviceRuntimeRevision(service)),
+		Revision: max(
+			project.Revision,
+			environmentValue.ModRevision,
+			service.Revision,
+			serviceRuntimeRevision(service),
+		),
 		ReadRevision: project.ReadRevision,
 	}, nil
 }

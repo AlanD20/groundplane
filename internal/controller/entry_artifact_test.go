@@ -27,8 +27,13 @@ func TestProjectEnvironmentEntryMutationReplacesOnlyEntryDecorations(t *testing.
 		ArtifactId: ids.NewAt(ids.KindConfig, now, 5),
 		OwnerKind:  agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT, OwnerId: environmentID,
 		AuthorizedVolumeDir: volumeDir,
-		CanonicalYaml:       []byte("services:\n  api:\n    image: example.test/api:1\n    env_file:\n      - path: " + filepath.Join(volumeDir, filepath.FromSlash(ServiceEnvFileName(environmentID, "api"))) + "\n        required: true\n      - path: /operator.env\n        required: true\n"),
-		Services:            []*agentpb.ComposeService{{ServiceId: serviceID, ComposeName: "api"}},
+		CanonicalYaml: []byte(
+			"services:\n  api:\n    image: example.test/api:1\n    env_file:\n      - path: " + filepath.Join(
+				volumeDir,
+				filepath.FromSlash(ServiceEnvFileName(environmentID, "api")),
+			) + "\n        required: true\n      - path: /operator.env\n        required: true\n",
+		),
+		Services: []*agentpb.ComposeService{{ServiceId: serviceID, ComposeName: "api"}},
 	}
 	digest := []byte(strings.Repeat("x", 32))
 	artifact.YamlSha256 = digest
@@ -42,15 +47,21 @@ func TestProjectEnvironmentEntryMutationReplacesOnlyEntryDecorations(t *testing.
 	current := etcd.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 7),
 		RenderGeneration: 1, ComposeArtifact: encoded, NormalizedCompose: []byte("services:\n  api:\n    image: example.test/api:1\n"),
-		DesiredZones: []etcd.EnvironmentZoneProjection{{EnvironmentID: environmentID, Desired: core.Zone{ID: "zone-id", Name: "frontend"}}},
+		DesiredZones: []etcd.EnvironmentZoneProjection{
+			{EnvironmentID: environmentID, Desired: core.Zone{ID: "zone-id", Name: "frontend"}},
+		},
 		DesiredServices: []etcd.EnvironmentServiceProjection{{EnvironmentID: environmentID, Desired: core.Service{
 			ID: serviceID, Name: "api", Image: "example.test/api:1",
 		}}},
-		DesiredRoutes: []etcd.EnvironmentRouteProjection{{EnvironmentID: environmentID, Desired: core.Route{ID: "route-id", Host: "api.example.test", Path: "/"}}},
-		Volumes:       []etcd.EnvironmentVolumeIdentity{{ID: "volume-id", Slug: "data", Key: "data"}},
-		VolumeMounts:  []etcd.EnvironmentServiceVolumeMount{{ServiceID: serviceID, VolumeID: "volume-id", Target: "/data"}},
-		Components:    []etcd.ComponentRecord{{Desired: etcd.ComponentDesiredRecord{ID: "component-id"}}},
-		Entries:       []etcd.EntryRecord{oldEntry},
+		DesiredRoutes: []etcd.EnvironmentRouteProjection{
+			{EnvironmentID: environmentID, Desired: core.Route{ID: "route-id", Host: "api.example.test", Path: "/"}},
+		},
+		Volumes: []etcd.EnvironmentVolumeIdentity{{ID: "volume-id", Slug: "data", Key: "data"}},
+		VolumeMounts: []etcd.EnvironmentServiceVolumeMount{
+			{ServiceID: serviceID, VolumeID: "volume-id", Target: "/data"},
+		},
+		Components: []etcd.ComponentRecord{{Desired: etcd.ComponentDesiredRecord{ID: "component-id"}}},
+		Entries:    []etcd.EntryRecord{oldEntry},
 	}
 	candidate, materializations, err := ProjectEnvironmentEntryMutation(current, EnvironmentEntryArtifactMutation{
 		RevisionID: ids.NewAt(ids.KindTask, now, 8), ArtifactID: ids.NewAt(ids.KindConfig, now, 9),

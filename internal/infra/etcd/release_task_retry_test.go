@@ -48,8 +48,10 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 
 	render := ReleaseRenderInput{
 		ReleaseID: releaseID, PlanID: planID, ArtifactID: artifactID, PriorArtifactID: priorArtifactID, ServiceID: serviceID, ServiceName: "api",
-		Image:      "registry.example/api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		PriorImage: "registry.example/api:previous", Strategy: domain.StrategyRecreate,
+		CandidateWorkload: releaseTestWorkloadSeal(
+			"registry.example/api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		),
+		PriorWorkload: releaseTestPriorWorkload("registry.example/api:previous"), Strategy: domain.StrategyRecreate,
 		PriorStrategy: domain.StrategyRecreate, CandidateTarget: domain.WorkloadSingleton,
 		PriorTarget: domain.WorkloadSingleton,
 		TenantID:    tenantID, TenantSlug: "tenant", ProjectID: projectID, ProjectSlug: "project",
@@ -58,7 +60,12 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 			EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 11), RenderGeneration: 1,
 			DesiredServices: []EnvironmentServiceProjection{{
 				EnvironmentID: environmentID,
-				Desired:       core.Service{ID: serviceID, Name: "api", Image: "registry.example/api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Strategy: core.StrategyRecreate},
+				Desired: core.Service{
+					ID:       serviceID,
+					Name:     "api",
+					Image:    "registry.example/api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+					Strategy: core.StrategyRecreate,
+				},
 			}},
 			ServiceDependencyPlans: core.ServiceDependencyPlans{},
 		},
@@ -74,12 +81,20 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 	}
 	intent := domain.Intent{
 		ID: releaseID, EnvironmentID: environmentID, ServiceID: serviceID, OperationID: operationID,
-		OperationKind: domain.OperationDeploy, Image: render.Image, Tag: "stable", Strategy: domain.StrategyRecreate,
+		OperationKind: domain.OperationDeploy, CandidateWorkload: render.CandidateWorkload, Tag: "stable", Strategy: domain.StrategyRecreate,
 		OnFailure: domain.OnFailureLeaveActive, RenderInputID: artifactID, RenderInputDigest: renderDigest,
 		CreatedAt: now, Actor: "operator", OriginatingTaskID: sourceTaskID,
-		Workspace: domain.Workspace{Kind: domain.WorkspaceTenant, TenantID: tenantID, ProjectID: projectID, EnvironmentID: environmentID},
+		Workspace: domain.Workspace{
+			Kind:          domain.WorkspaceTenant,
+			TenantID:      tenantID,
+			ProjectID:     projectID,
+			EnvironmentID: environmentID,
+		},
 	}
 	intentDigest, err := domain.Digest(intent)
+	if validationErr := domain.ValidateIntent(intent); validationErr != nil {
+		t.Fatalf("invalid retry intent fixture: %v", validationErr)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,12 +153,16 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 			OperationID: operationID, PublicationID: publicationID, EnvironmentID: environmentID,
 			FailurePolicy: domain.OnFailureLeaveActive, State: domain.StateRecoveryRequired,
 			RecoveryOutcome: domain.StateFailed, FailedMemberOrdinal: 1,
-			Attempts: []domain.Attempt{{ID: sourceTaskID, TaskID: sourceTaskID, StartedAt: now}}, Members: []domain.GroupMember{member},
+			Attempts: []domain.Attempt{
+				{ID: sourceTaskID, TaskID: sourceTaskID, StartedAt: now},
+			}, Members: []domain.GroupMember{member},
 			LatestTaskID: sourceTaskID, ConfiguredTimeoutSeconds: 900, ComputedBudgetSeconds: 1200, CreatedAt: now, UpdatedAt: now,
 		}},
 		{releaseFenceSetKey(environmentID), "release-fence-set", ReleaseFenceSet{
 			EnvironmentID: environmentID, Generation: 1, OperationID: operationID, AttemptTaskID: sourceTaskID,
-			Members: []ReleaseFenceMember{{ServiceID: serviceID, CandidateReleaseID: releaseID, RenderInputDigest: renderDigest}},
+			Members: []ReleaseFenceMember{
+				{ServiceID: serviceID, CandidateReleaseID: releaseID, RenderInputDigest: renderDigest},
+			},
 		}},
 		{releaseIntentStagingKey(publicationID, releaseID), "release-intent", intent},
 		{releaseRenderInputStagingKey(publicationID, releaseID), "release-render-input", rawRender},
@@ -157,7 +176,10 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 		}
 		mutations = append(mutations, Mutation{Type: MutationPut, Key: record.key, Value: value})
 	}
-	mutations = append(mutations, Mutation{Type: MutationPut, Key: environmentMutationEpochKey(environmentID), Value: []byte(`{"schema":1}`)})
+	mutations = append(
+		mutations,
+		Mutation{Type: MutationPut, Key: environmentMutationEpochKey(environmentID), Value: []byte(`{"schema":1}`)},
+	)
 	seeded, err := store.Transact(ctx, nil, mutations)
 	if err != nil || !seeded.Succeeded {
 		t.Fatalf("seed release retry = %#v, %v", seeded, err)
@@ -168,9 +190,15 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 	}
 	source := TaskRecord{
 		ID: sourceTaskID, OperationID: operationID,
-		Owner:    TaskOwner{WorkspaceType: TaskWorkspaceTenant, TenantID: tenantID, ProjectID: projectID, EnvironmentID: environmentID},
+		Owner: TaskOwner{
+			WorkspaceType: TaskWorkspaceTenant,
+			TenantID:      tenantID,
+			ProjectID:     projectID,
+			EnvironmentID: environmentID,
+		},
 		Executor: TaskExecutorAgent, PlanID: planID, Type: TaskDeploy,
 		PlanHash: hook.PlanHash, Params: map[string]string{
+			TaskComposeArtifactParam:    artifactID,
 			TaskReleasePublicationParam: publicationID, ReleaseHookStepExecutionParam(hook.StepID): hook.ID,
 		}, Steps: []TaskStepRecord{
 			{Kind: TaskStepOperation, ID: forwardStepID},
@@ -182,6 +210,12 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 	}
 	retry := cloneTaskRecord(source)
 	retry.ID, retry.RetryOf, retry.CreatedAt = retryTaskID, sourceTaskID, now.Add(time.Minute)
+	if _, err := validateReleaseCandidateDescriptor(descriptor, source, manifest); err != nil {
+		t.Fatalf("invalid retry descriptor fixture: %v", err)
+	}
+	if _, err := decodeReleaseRenderInput(rawRender); err != nil {
+		t.Fatalf("invalid retry render fixture: %v", err)
+	}
 	change, err := repository.prepareReleaseTaskRetry(ctx, source, retry, read.ReadRevision)
 	if err != nil {
 		t.Fatalf("prepareReleaseTaskRetry() error = %v", err)

@@ -18,7 +18,14 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func executeServiceProxy(ctx context.Context, taskRunner runner.Runner, timeout uint32, plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArtifact, step *agentpb.ExecutionStep) (*agentpb.ComposeHelperResponse, error) {
+func executeServiceProxy(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	timeout uint32,
+	plan *agentpb.ExecutionPlan,
+	artifact *agentpb.ComposeArtifact,
+	step *agentpb.ExecutionStep,
+) (*agentpb.ComposeHelperResponse, error) {
 	executionCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
 	serviceID := proxyStepServiceID(step)
@@ -46,17 +53,30 @@ func executeServiceProxy(ctx context.Context, taskRunner runner.Runner, timeout 
 	if err := file.Close(); err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
-	base := []string{"compose", "--project-name", artifact.ProjectName, "--project-directory", WorkDirectory, "--file", filepath.Clean(path)}
+	base := []string{
+		"compose",
+		"--project-name",
+		artifact.ProjectName,
+		"--project-directory",
+		WorkDirectory,
+		"--file",
+		filepath.Clean(path),
+	}
 	run := func(stdin []byte, args ...string) (runner.Result, *agentpb.ComposeHelperResponse, error) {
 		result, runErr := taskRunner.Run(executionCtx, runner.RunCmdOpts{
 			Name: DockerExecutable, Args: append(slices.Clone(base), args...), Dir: WorkDirectory,
-			Env: slices.Clone(fixedEnvironment), ReplaceEnv: true, Stdin: slices.Clone(stdin), CaptureLimitBytes: maximumComponentConfig,
+			Env: slices.Clone(
+				fixedEnvironment,
+			), ReplaceEnv: true, Stdin: slices.Clone(stdin), CaptureLimitBytes: maximumComponentConfig,
 		})
 		if executionCtx.Err() != nil {
 			return runner.Result{}, nil, executionCtx.Err()
 		}
 		if result.ExitCode < 0 || result.ExitCode > math.MaxInt32 {
-			return runner.Result{}, nil, errs.New(errs.KindInternal, "release proxy command returned an invalid exit code")
+			return runner.Result{}, nil, errs.New(
+				errs.KindInternal,
+				"release proxy command returned an invalid exit code",
+			)
 		}
 		if runErr != nil || result.ExitCode != 0 {
 			if runErr != nil && result.ExitCode == 0 {
@@ -68,7 +88,9 @@ func executeServiceProxy(ctx context.Context, taskRunner runner.Runner, timeout 
 			}
 			return result, &agentpb.ComposeHelperResponse{
 				Schema: SchemaVersion, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED,
-				ExitCode: int32(exitCode), Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
+				ExitCode: int32(
+					exitCode,
+				), Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
 			}, nil
 		}
 		return result, nil, nil
@@ -88,21 +110,33 @@ func executeServiceProxy(ctx context.Context, taskRunner runner.Runner, timeout 
 		}
 		defer cleanup()
 		priorNames := serviceNames(prior, []string{serviceID})
-		if _, failure, err := runWithComposeBase(executionCtx, taskRunner, priorBase, nil, "config", "--quiet", "--no-interpolate"); err != nil || failure != nil {
+		if _, failure, err := runWithComposeBase(executionCtx, taskRunner, priorBase, nil, "config", "--quiet", "--no-interpolate"); err != nil ||
+			failure != nil {
 			return failure, err
 		}
 		args := []string{"up", "--detach", "--force-recreate", "--no-deps"}
 		args = append(args, priorNames...)
-		if _, failure, err := runWithComposeBase(executionCtx, taskRunner, priorBase, nil, args...); err != nil || failure != nil {
+		if _, failure, err := runWithComposeBase(executionCtx, taskRunner, priorBase, nil, args...); err != nil ||
+			failure != nil {
 			return failure, err
 		}
 	}
 	if step.GetServiceProxySwitch() != nil || step.GetServiceProxyCompensate() != nil {
-		if _, failure, err := run(config, "exec", "--no-TTY", proxyName, "caddy", "reload", "--config", "-"); err != nil || failure != nil {
+		if _, failure, err := run(config, "exec", "--no-TTY", proxyName, "caddy", "reload", "--config", "-"); err != nil ||
+			failure != nil {
 			return failure, err
 		}
 	}
-	observed, failure, err := run(nil, "exec", "--no-TTY", proxyName, "wget", "--quiet", "--output-document=-", "http://127.0.0.1:2019/config/")
+	observed, failure, err := run(
+		nil,
+		"exec",
+		"--no-TTY",
+		proxyName,
+		"wget",
+		"--quiet",
+		"--output-document=-",
+		"http://127.0.0.1:2019/config/",
+	)
 	if err != nil || failure != nil {
 		return failure, err
 	}
@@ -121,7 +155,8 @@ func executeServiceProxy(ctx context.Context, taskRunner runner.Runner, timeout 
 		return failedProxyResponse(), nil
 	}
 	if compensate := step.GetServiceProxyCompensate(); compensate != nil {
-		if _, failure, err := run(nil, "rm", "--stop", "--force", releaseWorkloadName(artifact, serviceID, compensate.CandidateTarget)); err != nil || failure != nil {
+		if _, failure, err := run(nil, "rm", "--stop", "--force", releaseWorkloadName(artifact, serviceID, compensate.CandidateTarget)); err != nil ||
+			failure != nil {
 			return failure, err
 		}
 	}
@@ -135,7 +170,8 @@ func executeServiceProxy(ctx context.Context, taskRunner runner.Runner, timeout 
 			return nil, err
 		}
 		defer cleanup()
-		if _, failure, err := runWithComposeBase(executionCtx, taskRunner, priorBase, nil, "rm", "--stop", "--force", releaseWorkloadName(prior, serviceID, value.FromTarget)); err != nil || failure != nil {
+		if _, failure, err := runWithComposeBase(executionCtx, taskRunner, priorBase, nil, "rm", "--stop", "--force", releaseWorkloadName(prior, serviceID, value.FromTarget)); err != nil ||
+			failure != nil {
 			return failure, err
 		}
 	}
@@ -163,7 +199,13 @@ func proxyStepExpectation(step *agentpb.ExecutionStep) ([]byte, []byte, string, 
 	}
 	if value := step.GetServiceProxyProbe(); value != nil {
 		return value.ConfigJson, value.ConfigSha256, value.ExpectedTarget, value.ProxyGeneration, value.ReleaseId, false,
-			&proxyAlternate{config: value.AlternateConfigJson, digest: value.AlternateConfigSha256, target: value.AlternateTarget, generation: value.AlternateProxyGeneration, releaseID: value.AlternateReleaseId}
+			&proxyAlternate{
+				config:     value.AlternateConfigJson,
+				digest:     value.AlternateConfigSha256,
+				target:     value.AlternateTarget,
+				generation: value.AlternateProxyGeneration,
+				releaseID:  value.AlternateReleaseId,
+			}
 	}
 	value := step.GetServiceProxyCompensate()
 	return value.ConfigJson, value.ConfigSha256, value.PriorTarget, value.ProxyGeneration, value.PriorReleaseId, true, nil
@@ -199,20 +241,39 @@ func releaseComposeBase(artifact *agentpb.ComposeArtifact) ([]string, func(), er
 		cleanup()
 		return nil, nil, errs.Wrap(errs.KindInternal, err)
 	}
-	base := []string{"compose", "--project-name", artifact.GetProjectName(), "--project-directory", WorkDirectory, "--file", filepath.Clean(path)}
+	base := []string{
+		"compose",
+		"--project-name",
+		artifact.GetProjectName(),
+		"--project-directory",
+		WorkDirectory,
+		"--file",
+		filepath.Clean(path),
+	}
 	return base, cleanup, nil
 }
 
-func runWithComposeBase(ctx context.Context, taskRunner runner.Runner, base []string, stdin []byte, args ...string) (runner.Result, *agentpb.ComposeHelperResponse, error) {
+func runWithComposeBase(
+	ctx context.Context,
+	taskRunner runner.Runner,
+	base []string,
+	stdin []byte,
+	args ...string,
+) (runner.Result, *agentpb.ComposeHelperResponse, error) {
 	result, runErr := taskRunner.Run(ctx, runner.RunCmdOpts{
 		Name: DockerExecutable, Args: append(slices.Clone(base), args...), Dir: WorkDirectory,
-		Env: slices.Clone(fixedEnvironment), ReplaceEnv: true, Stdin: slices.Clone(stdin), CaptureLimitBytes: maximumComponentConfig,
+		Env: slices.Clone(
+			fixedEnvironment,
+		), ReplaceEnv: true, Stdin: slices.Clone(stdin), CaptureLimitBytes: maximumComponentConfig,
 	})
 	if ctx.Err() != nil {
 		return runner.Result{}, nil, ctx.Err()
 	}
 	if result.ExitCode < 0 || result.ExitCode > math.MaxInt32 {
-		return runner.Result{}, nil, errs.New(errs.KindInternal, "release topology command returned an invalid exit code")
+		return runner.Result{}, nil, errs.New(
+			errs.KindInternal,
+			"release topology command returned an invalid exit code",
+		)
 	}
 	if runErr != nil || result.ExitCode != 0 {
 		if runErr != nil && result.ExitCode == 0 {
@@ -222,7 +283,12 @@ func runWithComposeBase(ctx context.Context, taskRunner runner.Runner, base []st
 		if exitCode == 0 {
 			exitCode = 1
 		}
-		return result, &agentpb.ComposeHelperResponse{Schema: SchemaVersion, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED, ExitCode: int32(exitCode), Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED}, nil
+		return result, &agentpb.ComposeHelperResponse{
+			Schema:     SchemaVersion,
+			Outcome:    agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED,
+			ExitCode:   int32(exitCode),
+			Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED,
+		}, nil
 	}
 	return result, nil, nil
 }
@@ -242,7 +308,8 @@ func proxyStepServiceID(step *agentpb.ExecutionStep) string {
 
 func releaseProxyName(artifact *agentpb.ComposeArtifact, serviceID string) string {
 	for _, service := range artifact.GetServices() {
-		if service.GetServiceId() == serviceID && service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+		if service.GetServiceId() == serviceID &&
+			service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
 			return service.GetComposeName()
 		}
 	}

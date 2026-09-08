@@ -11,7 +11,11 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func testPlatformComponentComposeArtifact(artifactID string, serviceID string, configDigest string) *agentpb.ComposeArtifact {
+func testPlatformComponentComposeArtifact(
+	artifactID string,
+	serviceID string,
+	configDigest string,
+) *agentpb.ComposeArtifact {
 	return &agentpb.ComposeArtifact{
 		ArtifactId:  artifactID,
 		OwnerKind:   agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM,
@@ -160,7 +164,10 @@ func TestPlatformComponentAcknowledgementAtomicallyPublishesObservation(t *testi
 			TaskResourceKindParam:                   TaskResourceComponent,
 			TaskPlatformComponentDesiredSHA256Param: desiredSHA256,
 		},
-		Steps:      []TaskStepRecord{{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 7)}, {Kind: TaskStepOperation, ID: stepID}},
+		Steps: []TaskStepRecord{
+			{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 7)},
+			{Kind: TaskStepOperation, ID: stepID},
+		},
 		FinishedAt: &finishedAt,
 		TerminalAssignment: &TaskTerminalAssignmentRecord{
 			AssignmentID: ids.NewAt(ids.KindAssignment, now, 8),

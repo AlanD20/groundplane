@@ -28,7 +28,11 @@ func newBackingServiceMutationService(
 	if backingServices == nil || lifecycle == nil || creations == nil {
 		return nil, errs.New(errs.KindInternal, "Backing-service mutation dependencies are not configured")
 	}
-	return &backingServiceMutationService{backingServices: backingServices, lifecycle: lifecycle, creations: creations}, nil
+	return &backingServiceMutationService{
+		backingServices: backingServices,
+		lifecycle:       lifecycle,
+		creations:       creations,
+	}, nil
 }
 
 func (service *backingServiceMutationService) CreateBackingService(

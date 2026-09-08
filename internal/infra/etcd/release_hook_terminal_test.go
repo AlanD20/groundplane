@@ -46,9 +46,18 @@ func TestReleaseHookFailureUsesOwningMemberOrdinal(t *testing.T) {
 			ReleaseHookStepExecutionParam("hook"): "01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		},
 		Steps: []TaskStepRecord{
-			{Kind: TaskStepOperation, ID: "one-apply"}, {Kind: TaskStepOperation, ID: "one-health"}, {Kind: TaskStepOperation, ID: "one-switch"}, {Kind: TaskStepOperation, ID: "one-probe"}, {Kind: TaskStepOperation, ID: "one-compensate"},
-			{Kind: TaskStepOperation, ID: "two-apply"}, {Kind: TaskStepOperation, ID: "two-health"}, {Kind: TaskStepOperation, ID: "two-switch"}, {Kind: TaskStepOperation, ID: "two-probe"}, {Kind: TaskStepOperation, ID: "two-compensate"},
-			{Kind: TaskStepOperation, ID: "three-apply"}, {Kind: TaskStepOperation, ID: "three-health"}, {Kind: TaskStepOperation, ID: "three-switch"}, {Kind: TaskStepOperation, ID: "three-probe"}, {Kind: TaskStepOperation, ID: "three-compensate"},
+			{
+				Kind: TaskStepOperation,
+				ID:   "one-apply",
+			}, {Kind: TaskStepOperation, ID: "one-health"}, {Kind: TaskStepOperation, ID: "one-switch"}, {Kind: TaskStepOperation, ID: "one-probe"}, {Kind: TaskStepOperation, ID: "one-compensate"},
+			{
+				Kind: TaskStepOperation,
+				ID:   "two-apply",
+			}, {Kind: TaskStepOperation, ID: "two-health"}, {Kind: TaskStepOperation, ID: "two-switch"}, {Kind: TaskStepOperation, ID: "two-probe"}, {Kind: TaskStepOperation, ID: "two-compensate"},
+			{
+				Kind: TaskStepOperation,
+				ID:   "three-apply",
+			}, {Kind: TaskStepOperation, ID: "three-health"}, {Kind: TaskStepOperation, ID: "three-switch"}, {Kind: TaskStepOperation, ID: "three-probe"}, {Kind: TaskStepOperation, ID: "three-compensate"},
 			{Kind: TaskStepOperation, ID: "hook"},
 		},
 	}
@@ -103,8 +112,22 @@ func TestFinalizeReleaseHookExecutionBatchReleasesSkippedReferences(t *testing.T
 	}
 	seeded, err := store.Transact(ctx, nil, []Mutation{
 		{Type: MutationPut, Key: scriptExecutionKey(record.ID), Value: executionValue},
-		{Type: MutationPut, Key: scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.ScriptID), Value: scriptValue},
-		{Type: MutationPut, Key: scriptSetBodyForwardReferenceKey(record.EnvironmentID, record.ScriptSetGeneration, record.ScriptID, record.ScriptGeneration, record.ID), Value: referenceValue},
+		{
+			Type:  MutationPut,
+			Key:   scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.ScriptID),
+			Value: scriptValue,
+		},
+		{
+			Type: MutationPut,
+			Key: scriptSetBodyForwardReferenceKey(
+				record.EnvironmentID,
+				record.ScriptSetGeneration,
+				record.ScriptID,
+				record.ScriptGeneration,
+				record.ID,
+			),
+			Value: referenceValue,
+		},
 		{Type: MutationPut, Key: scriptBodyReverseReferenceKey(record.ID), Value: referenceValue},
 	})
 	if err != nil || !seeded.Succeeded {
@@ -113,7 +136,13 @@ func TestFinalizeReleaseHookExecutionBatchReleasesSkippedReferences(t *testing.T
 	seedKeys := []string{
 		scriptExecutionKey(record.ID),
 		scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.ScriptID),
-		scriptSetBodyForwardReferenceKey(record.EnvironmentID, record.ScriptSetGeneration, record.ScriptID, record.ScriptGeneration, record.ID),
+		scriptSetBodyForwardReferenceKey(
+			record.EnvironmentID,
+			record.ScriptSetGeneration,
+			record.ScriptID,
+			record.ScriptGeneration,
+			record.ID,
+		),
 		scriptBodyReverseReferenceKey(record.ID),
 	}
 	seedRead, err := store.GetMany(ctx, GetManyRequest{Keys: seedKeys})
@@ -141,7 +170,9 @@ func TestFinalizeReleaseHookExecutionBatchReleasesSkippedReferences(t *testing.T
 	}
 	task := TaskRecord{
 		ID: taskID, OperationID: record.OperationID, PlanHash: record.PlanHash, Type: TaskDeploy,
-		Params: map[string]string{ReleaseHookStepExecutionParam(stepID): record.ID}, Steps: []TaskStepRecord{{Kind: TaskStepOperation, ID: stepID}},
+		Params: map[string]string{
+			ReleaseHookStepExecutionParam(stepID): record.ID,
+		}, Steps: []TaskStepRecord{{Kind: TaskStepOperation, ID: stepID}},
 	}
 	read, err := store.Get(ctx, scriptExecutionKey(record.ID))
 	if err != nil {
@@ -152,8 +183,16 @@ func TestFinalizeReleaseHookExecutionBatchReleasesSkippedReferences(t *testing.T
 		t.Fatalf("finalizeReleaseHookExecutionBatch() = %v, %v", processed, err)
 	}
 	values, err := store.GetMany(ctx, GetManyRequest{Keys: []string{
-		scriptExecutionKey(record.ID), scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.ScriptID),
-		scriptSetBodyForwardReferenceKey(record.EnvironmentID, record.ScriptSetGeneration, record.ScriptID, record.ScriptGeneration, record.ID),
+		scriptExecutionKey(
+			record.ID,
+		), scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.ScriptID),
+		scriptSetBodyForwardReferenceKey(
+			record.EnvironmentID,
+			record.ScriptSetGeneration,
+			record.ScriptID,
+			record.ScriptGeneration,
+			record.ID,
+		),
 		scriptBodyReverseReferenceKey(record.ID),
 	}})
 	if err != nil {
@@ -167,7 +206,12 @@ func TestFinalizeReleaseHookExecutionBatchReleasesSkippedReferences(t *testing.T
 	if err != nil || updatedScript.ActiveReferences != 0 || values.Values[2] != nil || values.Values[3] != nil {
 		t.Fatalf("released hook references = %#v/%#v/%#v/%#v", updatedScript, values.Values[2], values.Values[3], err)
 	}
-	processed, err = repository.finalizeReleaseHookExecutionBatch(ctx, task, now.Add(2*time.Second), values.ReadRevision)
+	processed, err = repository.finalizeReleaseHookExecutionBatch(
+		ctx,
+		task,
+		now.Add(2*time.Second),
+		values.ReadRevision,
+	)
 	if err != nil || processed {
 		t.Fatalf("replay terminalization = %v, %v", processed, err)
 	}
@@ -262,8 +306,22 @@ func TestFinalizeReleaseHookExecutionBatchPreservesExecutedAssignmentForAcknowle
 	}
 	seeded, err := store.Transact(ctx, nil, []Mutation{
 		{Type: MutationPut, Key: scriptExecutionKey(record.ID), Value: executionValue},
-		{Type: MutationPut, Key: scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.ScriptID), Value: scriptValue},
-		{Type: MutationPut, Key: scriptSetBodyForwardReferenceKey(record.EnvironmentID, record.ScriptSetGeneration, record.ScriptID, record.ScriptGeneration, record.ID), Value: referenceValue},
+		{
+			Type:  MutationPut,
+			Key:   scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.ScriptID),
+			Value: scriptValue,
+		},
+		{
+			Type: MutationPut,
+			Key: scriptSetBodyForwardReferenceKey(
+				record.EnvironmentID,
+				record.ScriptSetGeneration,
+				record.ScriptID,
+				record.ScriptGeneration,
+				record.ID,
+			),
+			Value: referenceValue,
+		},
 		{Type: MutationPut, Key: scriptBodyReverseReferenceKey(record.ID), Value: referenceValue},
 	})
 	if err != nil || !seeded.Succeeded {

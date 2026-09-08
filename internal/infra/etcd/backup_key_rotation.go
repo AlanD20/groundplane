@@ -94,7 +94,10 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 		EnvironmentID: input.EnvironmentID, Recipient: material.Recipient, KeyEra: 1,
 		CreatedAt: input.CreatedAt, RotatedAt: input.CreatedAt,
 	}) != nil || len(material.Ciphertext) == 0 || len(material.Ciphertext) > maximumBackupKeyCiphertextLen {
-		return PreparedBackupKeyRotation{}, errs.New(errs.KindValidationFailed, "backup key rotation material is invalid")
+		return PreparedBackupKeyRotation{}, errs.New(
+			errs.KindValidationFailed,
+			"backup key rotation material is invalid",
+		)
 	}
 	anchor, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
 		environmentKey(input.EnvironmentID), backupKeyKey(input.EnvironmentID), backupKeyValueKey(input.EnvironmentID),
@@ -134,7 +137,10 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 		Keys: []string{projectKey(environment.ProjectID)}, Revision: anchor.ReadRevision,
 	})
 	if err != nil || projectRead == nil || len(projectRead.Values) != 1 || projectRead.Values[0] == nil {
-		return PreparedBackupKeyRotation{}, errs.New(errs.KindStateConflict, "backup key rotation Project is unavailable")
+		return PreparedBackupKeyRotation{}, errs.New(
+			errs.KindStateConflict,
+			"backup key rotation Project is unavailable",
+		)
 	}
 	defer clearKeyValues(projectRead.Values)
 	project, err := decodeProject(projectRead.Values[0].Value)
@@ -208,13 +214,19 @@ func (repository *BackupPolicyRepository) PublishBackupKeyRotation(
 ) (IdempotencyTransactionResult, error) {
 	publication := prepared.Publication
 	if publication == nil || publication.state == nil {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "backup key rotation publication is not prepared")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"backup key rotation publication is not prepared",
+		)
 	}
 	publication.state.mu.Lock()
 	belongsToRepository := publication.state.repository == repository
 	publication.state.mu.Unlock()
 	if !belongsToRepository {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "backup key rotation publication repository is invalid")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"backup key rotation publication repository is invalid",
+		)
 	}
 	return publication.publish(ctx, task, marker)
 }
@@ -223,12 +235,18 @@ func (publication *PreparedBackupKeyRotationPublication) publish(
 	ctx context.Context, task TaskRecord, marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if publication == nil || publication.state == nil {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "backup key rotation publication is not prepared")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"backup key rotation publication is not prepared",
+		)
 	}
 	publication.state.mu.Lock()
 	if publication.state.consumed || publication.state.repository == nil {
 		publication.state.mu.Unlock()
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "backup key rotation publication was already consumed")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"backup key rotation publication was already consumed",
+		)
 	}
 	publication.state.consumed = true
 	repository, plan := publication.state.repository, publication.state.plan
@@ -240,7 +258,10 @@ func (publication *PreparedBackupKeyRotationPublication) publish(
 		task.Target != plan.record.EnvironmentID || task.ID != plan.record.TaskID || task.OperationID != plan.record.OperationID ||
 		task.Owner.EnvironmentID != plan.record.EnvironmentID || task.CreatedAt.UTC() != plan.record.CreatedAt ||
 		marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending || marker.TaskID != task.ID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "backup key rotation Task publication is invalid")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"backup key rotation Task publication is invalid",
+		)
 	}
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -546,7 +567,10 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if actor != TaskActorOperator {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "backup key rotation retry actor must be operator")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"backup key rotation retry actor must be operator",
+		)
 	}
 	retry, err := cloneRetryTask(source.Record, retryTaskID, actor, marker.CreatedAt)
 	if err != nil {
@@ -554,7 +578,10 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 	}
 	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending || marker.TaskID != retry.ID ||
 		!marker.CreatedAt.Equal(retry.CreatedAt) || !marker.UpdatedAt.Equal(marker.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "backup key rotation retry marker does not match its Task")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"backup key rotation retry marker does not match its Task",
+		)
 	}
 	if err := validateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -571,14 +598,23 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if read == nil || read.ReadRevision != source.ReadRevision || len(read.Values) != 7 || read.Values[0] == nil || read.Values[1] == nil ||
-		read.Values[2] != nil || read.Values[3] != nil || read.Values[6] != nil {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "backup key rotation retry authority changed")
+	if read == nil || read.ReadRevision != source.ReadRevision || len(read.Values) != 7 || read.Values[0] == nil ||
+		read.Values[1] == nil ||
+		read.Values[2] != nil ||
+		read.Values[3] != nil ||
+		read.Values[6] != nil {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"backup key rotation retry authority changed",
+		)
 	}
 	defer clearKeyValues(read.Values)
 	rotation, err := decodeBackupKeyRotationRecord(read.Values[0].Value)
 	if err != nil || rotation.TaskID != source.Record.ID || rotation.State != BackupKeyRotationPrepared {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindTaskNotRetryable, "backup key rotation authority is not retryable")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"backup key rotation authority is not retryable",
+		)
 	}
 	current, err := decodeBackupKeyRecord(read.Values[4].Value)
 	if err != nil {
@@ -589,10 +625,20 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 		return IdempotencyTransactionResult{}, corruptBackupKey()
 	}
 	defer clear(currentValue.Ciphertext)
-	if current.KeyEra != rotation.CurrentKeyEra || read.Values[4].ModRevision != rotation.ExpectedCurrentRecordRevision || read.Values[5].ModRevision != rotation.ExpectedCurrentValueRevision {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "backup key changed before rotation retry")
+	if current.KeyEra != rotation.CurrentKeyEra ||
+		read.Values[4].ModRevision != rotation.ExpectedCurrentRecordRevision ||
+		read.Values[5].ModRevision != rotation.ExpectedCurrentValueRevision {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindStateConflict,
+			"backup key changed before rotation retry",
+		)
 	}
-	fence, err := loadOrdinaryEnvironmentMutationFence(ctx, repository.store, source.Record.Owner.EnvironmentID, source.ReadRevision)
+	fence, err := loadOrdinaryEnvironmentMutationFence(
+		ctx,
+		repository.store,
+		source.Record.Owner.EnvironmentID,
+		source.ReadRevision,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -629,7 +675,13 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 		{Key: taskKey(retry.ID)}, {Key: taskOperationIndexKey(retry.OperationID, retry.ID)},
 		{Key: taskActiveOperationKey(retry.OperationID)}, {Key: taskQueueKey(retry.Executor, retry.ID)},
 		{Key: backupKeyRotationKey(source.Record.ID), ModRevision: read.Values[0].ModRevision},
-		{Key: backupKeyRotationEnvironmentIndexKeyForRetry(source.Record.Owner.EnvironmentID, source.Record.ID), ModRevision: read.Values[1].ModRevision},
+		{
+			Key: backupKeyRotationEnvironmentIndexKeyForRetry(
+				source.Record.Owner.EnvironmentID,
+				source.Record.ID,
+			),
+			ModRevision: read.Values[1].ModRevision,
+		},
 		{Key: backupKeyRotationKey(retry.ID)}, {Key: newIndex},
 		{Key: backupKeyKey(source.Record.Owner.EnvironmentID), ModRevision: read.Values[4].ModRevision},
 		{Key: backupKeyValueKey(source.Record.Owner.EnvironmentID), ModRevision: read.Values[5].ModRevision},
@@ -641,7 +693,10 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 		{Type: MutationPut, Key: taskActiveOperationKey(retry.OperationID), Value: reference},
 		{Type: MutationPut, Key: taskQueueKey(retry.Executor, retry.ID), Value: reference},
 		{Type: MutationDelete, Key: backupKeyRotationKey(source.Record.ID)},
-		{Type: MutationDelete, Key: backupKeyRotationEnvironmentIndexKeyForRetry(source.Record.Owner.EnvironmentID, source.Record.ID)},
+		{
+			Type: MutationDelete,
+			Key:  backupKeyRotationEnvironmentIndexKeyForRetry(source.Record.Owner.EnvironmentID, source.Record.ID),
+		},
 		{Type: MutationPut, Key: backupKeyRotationKey(retry.ID), Value: rotationValue},
 		{Type: MutationPut, Key: newIndex, Value: []byte(retry.ID)},
 		{Type: MutationPut, Key: environmentOperationLockKey(source.Record.Owner.EnvironmentID), Value: lockValue},

@@ -51,7 +51,10 @@ func ResolveComponentTaskRouteProvider(
 			continue
 		}
 		if selected != nil {
-			return nil, false, errs.New(errs.KindStateConflict, "Environment has multiple enabled HTTP router providers")
+			return nil, false, errs.New(
+				errs.KindStateConflict,
+				"Environment has multiple enabled HTTP router providers",
+			)
 		}
 		component, err := etcd.ProjectComponentRecord(record)
 		if err != nil {
@@ -95,7 +98,14 @@ func (resolver *TaskPlanResolver) pinRouteProvider(
 	if err != nil || !found {
 		return nil, err
 	}
-	environment, inputRevision, err := resolver.routeProviderEnvironment(ctx, environmentID, projectionRevision, projection, desired, removedRouteID)
+	environment, inputRevision, err := resolver.routeProviderEnvironment(
+		ctx,
+		environmentID,
+		projectionRevision,
+		projection,
+		desired,
+		removedRouteID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +154,10 @@ func (resolver *TaskPlanResolver) routeProviderRegistration(
 				continue
 			}
 			if found {
-				return EnvironmentComponentRegistration{}, core.Component{}, false, errs.New(errs.KindStateConflict, "Environment has multiple enabled HTTP router providers")
+				return EnvironmentComponentRegistration{}, core.Component{}, false, errs.New(
+					errs.KindStateConflict,
+					"Environment has multiple enabled HTTP router providers",
+				)
 			}
 			selected, component, found = registration, candidate, true
 		}
@@ -172,7 +185,11 @@ func (resolver *TaskPlanResolver) routeProviderEnvironment(
 	if projection.EnvironmentID != environmentID || projectionRevision <= 0 {
 		return core.Environment{}, 0, errs.New(errs.KindStateConflict, "Route provider desired projection is invalid")
 	}
-	environment := core.Environment{ID: environmentID, Zones: map[string]core.Zone{}, Services: map[string]core.Service{}}
+	environment := core.Environment{
+		ID:       environmentID,
+		Zones:    map[string]core.Zone{},
+		Services: map[string]core.Service{},
+	}
 	for _, record := range projection.Components {
 		component, err := etcd.ProjectComponentRecord(record)
 		if err != nil {
@@ -204,14 +221,23 @@ func (resolver *TaskPlanResolver) routeProviderEnvironment(
 	return environment, projectionRevision, nil
 }
 
-func (resolver *TaskPlanResolver) renderPinnedRouteProvider(pin etcd.RouteProviderPin, projection etcd.EnvironmentComposeProjection) (componentsdk.EnvironmentPlan, core.Component, [sha256.Size]byte, [sha256.Size]byte, error) {
+func (resolver *TaskPlanResolver) renderPinnedRouteProvider(
+	pin etcd.RouteProviderPin,
+	projection etcd.EnvironmentComposeProjection,
+) (componentsdk.EnvironmentPlan, core.Component, [sha256.Size]byte, [sha256.Size]byte, error) {
 	definitionBytes, err := hex.DecodeString(pin.DefinitionDigest)
 	if err != nil || len(definitionBytes) != sha256.Size {
-		return componentsdk.EnvironmentPlan{}, core.Component{}, [sha256.Size]byte{}, [sha256.Size]byte{}, errs.New(errs.KindInternal, "Route provider definition digest is invalid")
+		return componentsdk.EnvironmentPlan{}, core.Component{}, [sha256.Size]byte{}, [sha256.Size]byte{}, errs.New(
+			errs.KindInternal,
+			"Route provider definition digest is invalid",
+		)
 	}
 	catalogBytes, err := hex.DecodeString(pin.CatalogDigest)
 	if err != nil || len(catalogBytes) != sha256.Size {
-		return componentsdk.EnvironmentPlan{}, core.Component{}, [sha256.Size]byte{}, [sha256.Size]byte{}, errs.New(errs.KindInternal, "Route provider catalog digest is invalid")
+		return componentsdk.EnvironmentPlan{}, core.Component{}, [sha256.Size]byte{}, [sha256.Size]byte{}, errs.New(
+			errs.KindInternal,
+			"Route provider catalog digest is invalid",
+		)
 	}
 	var definitionDigest, catalogDigest [sha256.Size]byte
 	copy(definitionDigest[:], definitionBytes)
@@ -225,12 +251,19 @@ func (resolver *TaskPlanResolver) renderPinnedRouteProvider(pin etcd.RouteProvid
 				continue
 			}
 			component, projectErr := etcd.ProjectComponentRecord(record)
-			if projectErr != nil || component.Kind != registration.Kind || !component.Enabled || registration.PlanHTTPRouter == nil {
-				return componentsdk.EnvironmentPlan{}, core.Component{}, [sha256.Size]byte{}, [sha256.Size]byte{}, errs.New(errs.KindStateConflict, "pinned Route provider is unavailable")
+			if projectErr != nil || component.Kind != registration.Kind || !component.Enabled ||
+				registration.PlanHTTPRouter == nil {
+				return componentsdk.EnvironmentPlan{}, core.Component{}, [sha256.Size]byte{}, [sha256.Size]byte{}, errs.New(
+					errs.KindStateConflict,
+					"pinned Route provider is unavailable",
+				)
 			}
 			plan, planErr := registration.PlanHTTPRouter(componentsdk.CloneHTTPRouterInput(pin.Input), component)
 			return componentsdk.CloneEnvironmentPlan(plan), component, definitionDigest, catalogDigest, planErr
 		}
 	}
-	return componentsdk.EnvironmentPlan{}, core.Component{}, [sha256.Size]byte{}, [sha256.Size]byte{}, errs.New(errs.KindStateConflict, "pinned Route provider is not registered")
+	return componentsdk.EnvironmentPlan{}, core.Component{}, [sha256.Size]byte{}, [sha256.Size]byte{}, errs.New(
+		errs.KindStateConflict,
+		"pinned Route provider is not registered",
+	)
 }

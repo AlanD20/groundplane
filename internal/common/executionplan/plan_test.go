@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"errors"
+	"sort"
 	"strings"
 	"testing"
 
@@ -67,7 +68,10 @@ func TestSealRejectsStaleComponentActionGeneration(t *testing.T) {
 	plan.Artifacts[0].OwnerId = plan.TargetId
 	plan.Artifacts[0].AuthorizedVolumeDir = "/var/lib/groundplane/volumes/tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/" + plan.TargetId
 	plan.Artifacts[0].Services[0].OwnerComponentId = "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	plan.Artifacts[0].Services[0].ExpectedLabels[0] = &agentpb.LabelPair{Key: labelComponentID, Value: plan.Artifacts[0].Services[0].OwnerComponentId}
+	plan.Artifacts[0].Services[0].ExpectedLabels[0] = &agentpb.LabelPair{
+		Key:   labelComponentID,
+		Value: plan.Artifacts[0].Services[0].OwnerComponentId,
+	}
 	plan.Steps[0].Payload = &agentpb.ExecutionStep_ComponentApply{ComponentApply: &agentpb.ComponentApply{
 		ComponentId:      plan.Artifacts[0].Services[0].OwnerComponentId,
 		DefinitionDigest: digest[:], CatalogDigest: digest[:], ActionId: "activate-config",
@@ -97,6 +101,7 @@ func TestSealBindsRemoveComponentActionToSelectedServiceGeneration(t *testing.T)
 			{Key: labelServiceID, Value: testServiceID},
 		},
 	}}
+	bindTestComponentImageIdentity(plan.Artifacts[0].Services[0])
 	materialization := plan.Steps[0].GetMaterializeFile()
 	digest := append([]byte(nil), materialization.GetSha256()...)
 	plan.Steps = append(plan.Steps, &agentpb.ExecutionStep{
@@ -110,7 +115,11 @@ func TestSealBindsRemoveComponentActionToSelectedServiceGeneration(t *testing.T)
 	if _, err := Seal(plan); err != nil {
 		t.Fatalf("Seal(current REMOVE Component generation) error = %v", err)
 	}
-	plan.Artifacts[0].Services[0].ExpectedLabels[5].Value = "1"
+	for _, label := range plan.Artifacts[0].Services[0].ExpectedLabels {
+		if label.Key == labelRenderGen {
+			label.Value = "1"
+		}
+	}
 	if _, err := Seal(plan); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("Seal(stale REMOVE Component Service generation) error = %v", err)
 	}
@@ -146,7 +155,11 @@ func TestPlanHashBindsComponentImageConfigDigest(t *testing.T) {
 	changedPlan := validComponentDisablePlan()
 	changedService := changedPlan.Artifacts[0].Services[0]
 	changedService.ImageConfigDigest = bytes.Repeat([]byte{4}, sha256.Size)
-	changedService.ExpectedLabels[0].Value = "sha256:" + strings.Repeat("04", sha256.Size)
+	for _, label := range changedService.ExpectedLabels {
+		if label.Key == labelImageConfigDigest {
+			label.Value = "sha256:" + strings.Repeat("04", sha256.Size)
+		}
+	}
 	changed, err := Seal(changedPlan)
 	if err != nil {
 		t.Fatal(err)
@@ -342,12 +355,22 @@ func validComponentDisablePlan() *agentpb.ExecutionPlan {
 }
 
 func bindTestComponentImageIdentity(service *agentpb.ComposeService) {
+	service.ImageRepository = "example/component"
+	service.ImageReference = service.ImageRepository + "@sha256:" + strings.Repeat("02", sha256.Size)
+	service.ImageOs, service.ImageArchitecture = "linux", "amd64"
 	service.ImageIndexDigest = bytes.Repeat([]byte{1}, sha256.Size)
 	service.ImageChildDigest = bytes.Repeat([]byte{2}, sha256.Size)
 	service.ImageConfigDigest = bytes.Repeat([]byte{3}, sha256.Size)
-	service.ExpectedLabels = append([]*agentpb.LabelPair{{
-		Key: labelImageConfigDigest, Value: "sha256:" + strings.Repeat("03", sha256.Size),
-	}}, service.ExpectedLabels...)
+	service.ExpectedLabels = append([]*agentpb.LabelPair{
+		{Key: labelImageConfigDigest, Value: "sha256:" + strings.Repeat("03", sha256.Size)},
+		{Key: labelImageChildDigest, Value: "sha256:" + strings.Repeat("02", sha256.Size)},
+		{Key: labelImageIndexDigest, Value: "sha256:" + strings.Repeat("01", sha256.Size)},
+		{Key: labelImagePlatform, Value: "linux/amd64"},
+	}, service.ExpectedLabels...)
+	sort.Slice(
+		service.ExpectedLabels,
+		func(i, j int) bool { return service.ExpectedLabels[i].Key < service.ExpectedLabels[j].Key },
+	)
 }
 
 func validComponentServiceEnsurePlan(

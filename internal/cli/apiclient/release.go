@@ -33,7 +33,12 @@ func (c *Client) ListReleases(
 	}
 	response, err := client.ReleaseListWithResponse(ctx, params)
 	if err != nil {
-		return apiTypes.Page[apiTypes.ReleaseSummary]{}, generatedCallError(ctx, http.MethodGet, "/api/v1/releases", err)
+		return apiTypes.Page[apiTypes.ReleaseSummary]{}, generatedCallError(
+			ctx,
+			http.MethodGet,
+			"/api/v1/releases",
+			err,
+		)
 	}
 	if err := generatedResponseError(
 		http.MethodGet, "/api/v1/releases", response.HTTPResponse, response.Body, http.StatusOK,

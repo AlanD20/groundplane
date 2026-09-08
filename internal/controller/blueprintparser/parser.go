@@ -336,7 +336,8 @@ func normalizeEntries(entries map[string]core.EntrySpec) (map[string]core.EntryS
 		if err != nil {
 			return nil, validationError(err.Error())
 		}
-		if projected.Kind == core.EntryKindFile && entrymaterialization.ValidateDesiredDestination(projected.Path) != nil {
+		if projected.Kind == core.EntryKindFile &&
+			entrymaterialization.ValidateDesiredDestination(projected.Path) != nil {
 			return nil, validationError("Blueprint file Entry destination is invalid")
 		}
 		spec.Exposure = append([]string(nil), projected.Exposure...)
@@ -363,13 +364,17 @@ func normalizeAttachments(
 			}
 		case "existing":
 			if attachment.Credential.Attach == "" || len(attachment.Grants) != 0 {
-				return nil, validationError("existing Blueprint Attachment credential requires an Attach and rejects grants")
+				return nil, validationError(
+					"existing Blueprint Attachment credential requires an Attach and rejects grants",
+				)
 			}
 			owner, exists := attachments[attachment.Credential.Attach]
 			if !exists || owner.Credential.Mode != "new" ||
 				owner.BackingProject != attachment.BackingProject ||
 				owner.BackingService != attachment.BackingService {
-				return nil, validationError("existing Blueprint Attachment credential must reference a direct owner on the same Backing Service")
+				return nil, validationError(
+					"existing Blueprint Attachment credential must reference a direct owner on the same Backing Service",
+				)
 			}
 		default:
 			return nil, validationError("Blueprint Attachment credential mode must be new or existing")

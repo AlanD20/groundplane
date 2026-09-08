@@ -6,14 +6,31 @@ import (
 	"io"
 	"iter"
 	"reflect"
+	"strings"
 	"testing"
 
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	containerderrdefs "github.com/containerd/errdefs"
+	imagetypes "github.com/moby/moby/api/types/image"
 	"github.com/moby/moby/api/types/jsonstream"
 	"github.com/moby/moby/client"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 const pinnedValidatorImage = "coredns/coredns@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+const pinnedValidatorID = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+func validatorTestImage() ValidatorImage {
+	return ValidatorImage{
+		Reference: pinnedValidatorImage,
+		Platform: componentsdk.OCIPlatform{
+			OS:           "linux",
+			Architecture: "amd64",
+			ChildDigest:  strings.Split(pinnedValidatorImage, "@sha256:")[1],
+			ConfigDigest: strings.TrimPrefix(pinnedValidatorID, "sha256:"),
+		},
+	}
+}
 
 // Rationale: low-port validation needs one capability without weakening any existing validator isolation control.
 func TestValidationCreateOptionsGrantOnlyNetBindService(t *testing.T) {
@@ -53,10 +70,19 @@ func TestValidationCreateOptionsGrantOnlyNetBindService(t *testing.T) {
 
 // Rationale: a clean host must acquire the already-authorized immutable validator image before container creation.
 func TestExecutorValidatePullsMissingPinnedImageBeforeCreate(t *testing.T) {
-	engine := &fakeEngine{inspectErr: containerderrdefs.ErrNotFound, createErr: errors.New("stop after create")}
+	engine := &fakeEngine{
+		imageID:    pinnedValidatorID,
+		inspectErr: containerderrdefs.ErrNotFound,
+		createErr:  errors.New("stop after create"),
+	}
 	executor := mustExecutor(t, engine)
 
-	err := executor.Validate(t.Context(), pinnedValidatorImage, []string{"-conf", "/dev/stdin"}, []byte(".:53 {}"))
+	err := executor.Validate(
+		t.Context(),
+		validatorTestImage(),
+		[]string{"-conf", "/dev/stdin"},
+		[]byte(".:53 {}"),
+	)
 
 	if err == nil {
 		t.Fatal("Validate() error = nil, want container create error")
@@ -66,7 +92,8 @@ func TestExecutorValidatePullsMissingPinnedImageBeforeCreate(t *testing.T) {
 		"pull:" + pinnedValidatorImage,
 		"pull-wait",
 		"pull-close",
-		"create:" + pinnedValidatorImage,
+		"inspect:" + pinnedValidatorImage,
+		"create:" + pinnedValidatorID,
 	}
 	if !reflect.DeepEqual(engine.events, wantEvents) {
 		t.Fatalf("events = %#v, want %#v", engine.events, wantEvents)
@@ -75,15 +102,20 @@ func TestExecutorValidatePullsMissingPinnedImageBeforeCreate(t *testing.T) {
 
 // Rationale: a cached immutable validator image must not incur a registry pull before validation.
 func TestExecutorValidateCreatesFromCachedPinnedImageWithoutPull(t *testing.T) {
-	engine := &fakeEngine{createErr: errors.New("stop after create")}
+	engine := &fakeEngine{imageID: pinnedValidatorID, createErr: errors.New("stop after create")}
 	executor := mustExecutor(t, engine)
 
-	err := executor.Validate(t.Context(), pinnedValidatorImage, []string{"-conf", "/dev/stdin"}, []byte(".:53 {}"))
+	err := executor.Validate(
+		t.Context(),
+		validatorTestImage(),
+		[]string{"-conf", "/dev/stdin"},
+		[]byte(".:53 {}"),
+	)
 
 	if err == nil {
 		t.Fatal("Validate() error = nil, want container create error")
 	}
-	wantEvents := []string{"inspect:" + pinnedValidatorImage, "create:" + pinnedValidatorImage}
+	wantEvents := []string{"inspect:" + pinnedValidatorImage, "create:" + pinnedValidatorID}
 	if !reflect.DeepEqual(engine.events, wantEvents) {
 		t.Fatalf("events = %#v, want %#v", engine.events, wantEvents)
 	}
@@ -95,7 +127,12 @@ func TestExecutorValidateDoesNotCreateWhenPinnedImagePullFails(t *testing.T) {
 	engine := &fakeEngine{inspectErr: containerderrdefs.ErrNotFound, pullErr: pullErr}
 	executor := mustExecutor(t, engine)
 
-	err := executor.Validate(t.Context(), pinnedValidatorImage, []string{"-conf", "/dev/stdin"}, []byte(".:53 {}"))
+	err := executor.Validate(
+		t.Context(),
+		validatorTestImage(),
+		[]string{"-conf", "/dev/stdin"},
+		[]byte(".:53 {}"),
+	)
 
 	if !errors.Is(err, pullErr) {
 		t.Fatalf("Validate() error = %v, want cause %v", err, pullErr)
@@ -115,7 +152,12 @@ func TestExecutorValidateDoesNotCreateWhenPinnedImagePullWaitFails(t *testing.T)
 	}
 	executor := mustExecutor(t, engine)
 
-	err := executor.Validate(t.Context(), pinnedValidatorImage, []string{"-conf", "/dev/stdin"}, []byte(".:53 {}"))
+	err := executor.Validate(
+		t.Context(),
+		validatorTestImage(),
+		[]string{"-conf", "/dev/stdin"},
+		[]byte(".:53 {}"),
+	)
 
 	if !errors.Is(err, waitErr) {
 		t.Fatalf("Validate() error = %v, want cause %v", err, waitErr)
@@ -140,7 +182,12 @@ func TestExecutorValidateDoesNotCreateWhenPinnedImagePullCloseFails(t *testing.T
 	engine := &fakeEngine{inspectErr: containerderrdefs.ErrNotFound, pullCloseErr: closeErr}
 	executor := mustExecutor(t, engine)
 
-	err := executor.Validate(t.Context(), pinnedValidatorImage, []string{"-conf", "/dev/stdin"}, []byte(".:53 {}"))
+	err := executor.Validate(
+		t.Context(),
+		validatorTestImage(),
+		[]string{"-conf", "/dev/stdin"},
+		[]byte(".:53 {}"),
+	)
 
 	if !errors.Is(err, closeErr) {
 		t.Fatalf("Validate() error = %v, want cause %v", err, closeErr)
@@ -162,7 +209,12 @@ func TestExecutorValidateDoesNotPullOrCreateAfterImageInspectFailure(t *testing.
 	engine := &fakeEngine{inspectErr: inspectErr}
 	executor := mustExecutor(t, engine)
 
-	err := executor.Validate(t.Context(), pinnedValidatorImage, []string{"-conf", "/dev/stdin"}, []byte(".:53 {}"))
+	err := executor.Validate(
+		t.Context(),
+		validatorTestImage(),
+		[]string{"-conf", "/dev/stdin"},
+		[]byte(".:53 {}"),
+	)
 
 	if !errors.Is(err, inspectErr) {
 		t.Fatalf("Validate() error = %v, want cause %v", err, inspectErr)
@@ -183,12 +235,17 @@ func mustExecutor(t *testing.T, engine Engine) *Executor {
 }
 
 type fakeEngine struct {
+	imageID      string
+	descriptor   *ocispec.Descriptor
+	platform     *ocispec.Platform
 	events       []string
 	inspectErr   error
 	pullErr      error
 	pullWaitErr  error
 	pullCloseErr error
 	createErr    error
+	createdID    string
+	attachErr    error
 }
 
 func (engine *fakeEngine) ImageInspect(
@@ -197,7 +254,19 @@ func (engine *fakeEngine) ImageInspect(
 	_ ...client.ImageInspectOption,
 ) (client.ImageInspectResult, error) {
 	engine.events = append(engine.events, "inspect:"+image)
-	return client.ImageInspectResult{}, engine.inspectErr
+	platform := ocispec.Platform{OS: "linux", Architecture: "amd64"}
+	if engine.platform != nil {
+		platform = *engine.platform
+	}
+	return client.ImageInspectResult{
+		InspectResponse: imagetypes.InspectResponse{
+			ID:           engine.imageID,
+			Descriptor:   engine.descriptor,
+			Os:           platform.OS,
+			Architecture: platform.Architecture,
+			Variant:      platform.Variant,
+		},
+	}, engine.inspectErr
 }
 
 func (engine *fakeEngine) ImagePull(
@@ -217,15 +286,16 @@ func (engine *fakeEngine) ContainerCreate(
 	options client.ContainerCreateOptions,
 ) (client.ContainerCreateResult, error) {
 	engine.events = append(engine.events, "create:"+options.Config.Image)
-	return client.ContainerCreateResult{}, engine.createErr
+	return client.ContainerCreateResult{ID: engine.createdID}, engine.createErr
 }
 
-func (*fakeEngine) ContainerAttach(
+func (engine *fakeEngine) ContainerAttach(
 	context.Context,
 	string,
 	client.ContainerAttachOptions,
 ) (client.ContainerAttachResult, error) {
-	panic("unexpected ContainerAttach call")
+	engine.events = append(engine.events, "attach")
+	return client.ContainerAttachResult{}, engine.attachErr
 }
 
 func (*fakeEngine) ContainerWait(
@@ -252,12 +322,13 @@ func (*fakeEngine) ContainerStop(
 	panic("unexpected ContainerStop call")
 }
 
-func (*fakeEngine) ContainerRemove(
+func (engine *fakeEngine) ContainerRemove(
 	context.Context,
 	string,
 	client.ContainerRemoveOptions,
 ) (client.ContainerRemoveResult, error) {
-	panic("unexpected ContainerRemove call")
+	engine.events = append(engine.events, "remove")
+	return client.ContainerRemoveResult{}, nil
 }
 
 func (*fakeEngine) Close() error { return nil }
@@ -274,6 +345,9 @@ func (*fakeImagePullResponse) JSONMessages(context.Context) iter.Seq2[jsonstream
 
 func (response *fakeImagePullResponse) Wait(context.Context) error {
 	response.engine.events = append(response.engine.events, "pull-wait")
+	if response.engine.pullWaitErr == nil {
+		response.engine.inspectErr = nil
+	}
 	return response.engine.pullWaitErr
 }
 

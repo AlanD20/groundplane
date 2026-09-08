@@ -18,6 +18,7 @@ import { CopyButton } from '@/components/common/copy-button'
 import { EmptyState } from '@/components/common/empty-state'
 import { toYAML } from '@/lib/yaml'
 import type { ConsumerLink, Project } from '@/lib/types'
+import { valkeyAuthenticationDetails } from '@/lib/valkey-authentication'
 
 type PlatformTab = 'service' | 'connections' | 'state' | 'backups'
 
@@ -50,6 +51,7 @@ export default function BackingServiceDetailPage() {
 
   const running = g.status !== 'stopped'
   const adapter = store.adapters.find((a) => a.key === svc.adapter)
+  const authenticationDetails = valkeyAuthenticationDetails(svc.authentication)
   const port = adapter?.urlScheme === 'redis' ? 6379 : 5432
   // Backups are per consumer: count the attach-backed sources across all
   // environments that attach this backing project.
@@ -105,6 +107,7 @@ export default function BackingServiceDetailPage() {
             <MetaPill icon={<Server />}>
               {svc.serviceName}:{port}
             </MetaPill>
+            {authenticationDetails && <MetaPill>{authenticationDetails.label} authentication</MetaPill>}
             <MetaPill icon={<Boxes />}>{env.name} environment</MetaPill>
           </>
         }
@@ -166,6 +169,7 @@ function ServiceTab({ env, svc }: { env: NonNullable<Project['environments']>[nu
   const adapter = store.adapters.find((a) => a.key === svc.adapter)
   const port = adapter?.urlScheme === 'redis' ? 6379 : 5432
   const volume = env.volumes[0]
+  const authenticationDetails = valkeyAuthenticationDetails(svc.authentication)
   return (
     <>
       <Card>
@@ -179,6 +183,9 @@ function ServiceTab({ env, svc }: { env: NonNullable<Project['environments']>[nu
           <Row label="Adapter" value={adapter ? `${adapter.label} · ${adapter.key}${adapter.manual ? ' · manual (no auto-provisioning)' : ''}` : svc.adapter ?? '—'} mono />
           <Row label="Service name" value={svc.serviceName ?? svc.name} mono />
           <Row label="Prefix (facts keys)" value={svc.prefix ?? adapter?.prefix ?? '—'} mono />
+          {svc.adapter === 'valkey:9' && (
+            <Row label="Authentication" value={authenticationDetails?.label ?? 'Unavailable'} mono />
+          )}
           <Row label="Status" value={svc.status} mono />
           <Row label="Strategy" value={svc.strategy} mono />
           <Row label="Network" value={env.zones.map((z) => `${z.name} · ${z.subnet}${z.internal ? ' · internal' : ''}`).join(', ') || '—'} mono />
@@ -217,6 +224,13 @@ function ServiceTab({ env, svc }: { env: NonNullable<Project['environments']>[nu
 function ConnectionsTab({ g, env, svc }: { g: Project; env: NonNullable<Project['environments']>[number]; svc: NonNullable<Project['environments']>[number]['services'][number] }) {
   const store = useStore()
   const adapter = store.adapters.find((a) => a.key === svc.adapter)
+  const authenticationDetails = valkeyAuthenticationDetails(svc.authentication)
+  const authenticationUnavailable = svc.adapter === 'valkey:9' && !authenticationDetails
+  const exposedFacts = authenticationDetails
+    ? authenticationDetails.factSuffixes.map((suffix) => `${svc.prefix ?? adapter?.prefix}_${suffix}`)
+    : authenticationUnavailable ? [] : adapter?.envVars ?? []
+  const provision = authenticationDetails?.provision ?? (authenticationUnavailable ? [] : adapter?.provision ?? [])
+  const exposesRole = adapter?.requires.role && (svc.adapter !== 'valkey:9' || svc.authentication === 'username_password')
 
   return (
     <>
@@ -235,6 +249,15 @@ function ConnectionsTab({ g, env, svc }: { g: Project; env: NonNullable<Project[
                 Groundplane-managed backups. The operator runs and manages this service themselves; Groundplane only wires
                 connectivity. Consumers reach it at{' '}
                 <span className="font-mono">{svc.serviceName ?? svc.name}</span> on the zone.
+              </p>
+            ) : authenticationUnavailable ? (
+              <p role="alert" className="text-xs text-destructive">
+                The Controller did not return this Valkey backing instance&apos;s authentication mode. Refresh before using connection guidance.
+              </p>
+            ) : authenticationDetails ? (
+              <p className="text-xs text-muted-foreground">
+                Every Attach <span className="font-medium text-foreground">inherits the backing instance&apos;s immutable {authenticationDetails.label.toLowerCase()} authentication mode</span>; there is no per-Attach authentication selector.{' '}
+                {authenticationDetails.summary} Attaching always joins this backing network and publishes the mode&apos;s facts; nothing is injected automatically.
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
@@ -268,14 +291,19 @@ function ConnectionsTab({ g, env, svc }: { g: Project; env: NonNullable<Project[
             {!adapter?.manual && (
               <>
                 <div className="flex flex-wrap gap-1.5">
-                  {adapter?.envVars.map((v) => (
+                  {exposedFacts.map((v) => (
                     <span key={v} className="rounded-full bg-primary/10 px-2.5 py-1 font-mono text-xs text-primary">
                       {v}
                     </span>
                   ))}
                 </div>
                 <div className="flex flex-col gap-1 border-t border-border pt-3">
-                  {adapter?.provision.map((op) => (
+                  {authenticationUnavailable ? (
+                    <p className="text-xs text-muted-foreground">Mode-specific provisioning is unavailable until the Controller returns the authentication mode.</p>
+                  ) : provision.length === 0 && (
+                    <p className="text-xs text-muted-foreground">No credential provisioning steps. Attach manages network membership and fact ownership only.</p>
+                  )}
+                  {provision.map((op) => (
                     <div key={op.op} className="flex items-baseline gap-2.5 text-xs">
                       <span className="size-1.5 shrink-0 translate-y-[-2px] rounded-full bg-success" />
                       <span className="w-36 shrink-0 font-mono text-primary">{op.op}</span>
@@ -309,7 +337,7 @@ function ConnectionsTab({ g, env, svc }: { g: Project; env: NonNullable<Project[
                 </span>
                 {!adapter?.manual && (
                   <div className="flex items-center gap-1">
-                    <ConsumerConnectionActions consumer={c} />
+                    <ConsumerConnectionActions consumer={c} authentication={svc.authentication} />
                   </div>
                 )}
               </div>
@@ -321,24 +349,29 @@ function ConnectionsTab({ g, env, svc }: { g: Project; env: NonNullable<Project[
               ) : (
                 <div className="mt-2 flex flex-col gap-1.5 text-sm">
                   <Row label="Service" value={c.service} mono />
-                  <Row label="Database" value={c.database} mono />
-                  <Row label="Role" value={c.role} mono />
+                  {adapter?.requires.database && <Row label="Database" value={c.database} mono />}
+                  {exposesRole && <Row label="Role" value={c.role} mono />}
                   <Row label="Host" value={`${svc.serviceName}:${adapter?.urlScheme === 'redis' ? 6379 : 5432}`} mono />
                   <Row
                     label="Connection"
                     value={c.connectionFactKey ? 'available through explicit reveal' : 'unavailable'}
                     mono
-                    masked
+                    masked={svc.authentication !== 'none'}
                   />
                 </div>
               )}
               {!adapter?.manual && (
                 <details className="mt-2">
                   <summary className="cursor-pointer text-xs text-primary">
-                    procedure the Agent runs · {adapter?.provision.length ?? 0} steps
+                    procedure the Agent runs · {provision.length} steps
                   </summary>
                   <div className="mt-2 flex flex-col gap-1 border-t border-border pt-2">
-                    {(adapter?.provision ?? []).map((op) => (
+                    {authenticationUnavailable ? (
+                      <p className="text-xs text-muted-foreground">Mode-specific provisioning is unavailable until the Controller returns the authentication mode.</p>
+                    ) : provision.length === 0 && (
+                      <p className="text-xs text-muted-foreground">No credential procedure; the Attach joins the network and publishes credential-free facts.</p>
+                    )}
+                    {provision.map((op) => (
                       <div key={op.op} className="flex items-baseline gap-2.5 text-xs">
                         <span className="size-1.5 shrink-0 translate-y-[-2px] rounded-full bg-success" />
                         <span className="w-32 shrink-0 font-mono text-primary">{op.op}</span>
@@ -373,6 +406,8 @@ function Row({ label, value, mono, masked }: { label: string; value: string; mon
 function DesiredStateTab({ g, env, svc }: { g: Project; env: NonNullable<Project['environments']>[number]; svc: NonNullable<Project['environments']>[number]['services'][number] }) {
   const store = useStore()
   const adapter = store.adapters.find((a) => a.key === svc.adapter)
+  const authenticationDetails = valkeyAuthenticationDetails(svc.authentication)
+  const authenticationUnavailable = svc.adapter === 'valkey:9' && !authenticationDetails
   const doc: Record<string, unknown> = {
     kind: 'backing',
     schema: 1,
@@ -383,14 +418,17 @@ function DesiredStateTab({ g, env, svc }: { g: Project; env: NonNullable<Project
     backing: {
       name: svc.serviceName,
       adapter: svc.adapter,
+      ...(svc.adapter === 'valkey:9' ? { authentication: svc.authentication } : {}),
       image: svc.image,
       prefix: svc.prefix ?? adapter?.prefix,
       host: svc.serviceName,
       port: adapter?.urlScheme === 'redis' ? 6379 : 5432,
       zones: env.zones.map((z) => ({ name: z.name, subnet: z.subnet, internal: z.internal })),
       manual: adapter?.manual ?? false,
-      provision: adapter?.provision ?? [],
-      exposes: adapter?.envVars ?? [],
+      provision: authenticationDetails?.provision ?? (authenticationUnavailable ? [] : adapter?.provision ?? []),
+      exposes: authenticationDetails
+        ? authenticationDetails.factSuffixes.map((suffix) => `${svc.prefix ?? adapter?.prefix}_${suffix}`)
+        : authenticationUnavailable ? [] : adapter?.envVars ?? [],
       healthcheck: svc.healthcheck ? { kind: svc.healthcheck.kind, target: svc.healthcheck.target } : undefined,
       volume: 'volumes/data',
     },
@@ -416,13 +454,20 @@ function DesiredStateTab({ g, env, svc }: { g: Project; env: NonNullable<Project
 // ---- Backups ----
 // Backups are PER CONSUMER: the backing environment itself never backs up.
 // Every attached environment's Backup page selects its own attach databases
-function ConsumerConnectionActions({ consumer }: { consumer: ConsumerLink }) {
+function ConsumerConnectionActions({ consumer, authentication }: { consumer: ConsumerLink; authentication?: string }) {
   const store = useStore()
   if (!consumer.connectionFactKey) {
     return <span className="text-xs text-muted-foreground">Connection fact unavailable</span>
   }
   const factKey = consumer.connectionFactKey
-  return <RevealValue loadValue={() => store.revealAttachFact(consumer.attachId, factKey)} label="connection" confirmWord={consumer.role} />
+  return (
+    <RevealValue
+      loadValue={() => store.revealAttachFact(consumer.attachId, factKey)}
+      label="connection"
+      confirmWord={consumer.role || consumer.service}
+      sensitive={authentication !== 'none'}
+    />
+  )
 }
 
 // and the adapter dumps exactly that database. This tab shows what consumers

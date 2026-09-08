@@ -89,10 +89,10 @@ export const adapters: Adapter[] = [
     prefix: 'valkey9',
     urlScheme: 'redis',
     requires: { database: false, role: true },
-    envVars: ['valkey9_URL', 'valkey9_HOST', 'valkey9_PORT', 'valkey9_PASSWORD'],
+    envVars: ['valkey9_URL', 'valkey9_HOST', 'valkey9_PORT', 'valkey9_ROLE', 'valkey9_PASSWORD'],
     provision: [
-      { op: 'generate_password', detail: 'requirepass <generated>' },
-      { op: 'set_acl', detail: 'ACL SETUSER <role> on >‹generated› ~* +@all' },
+      { op: 'create_acl_user', detail: 'ACL SETUSER <role> on >‹generated› ~* &* +@all -@admin' },
+      { op: 'save_acl', detail: 'ACL SAVE' },
     ],
   },
   {
@@ -376,6 +376,7 @@ export const backingProjects: Project[] = [
             runtimeIntent: 'running',
             status: 'healthy' as const,
             adapter: 'valkey:9',
+            authentication: 'username_password',
             serviceName: 'valkey',
             prefix: 'valkey9',
           },
@@ -724,7 +725,7 @@ function storefrontEnv(env: 'staging' | 'production'): Environment {
       {
         caddy: {
           enabled: true,
-          zoneId: fixtureId('net', `storefront-${env}-frontend`),
+          zoneIds: [fixtureId('net', `storefront-${env}-frontend`)],
           pinnedIPv4: prod ? '10.200.10.2' : '10.200.11.2',
           caddyfile_template: '{routes}',
         },
@@ -905,7 +906,7 @@ function sampleSiteEnv(env: 'staging' | 'production'): Environment {
         : {
             caddy: {
               enabled: true,
-              zoneId: fixtureId('net', `sample-site-${env}-sample-site`),
+              zoneIds: [fixtureId('net', `sample-site-${env}-sample-site`)],
               pinnedIPv4: '10.201.11.2',
               caddyfile_template: '{routes}',
             },

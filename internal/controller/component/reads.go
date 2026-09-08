@@ -137,7 +137,9 @@ func projectComponent(record etcd.ComponentRecord) (apiTypes.Component, error) {
 	return apiTypes.Component{
 		ID: component.ID, Owner: string(component.Owner), OwnerID: component.OwnerID,
 		EnvironmentID: environmentID, Kind: string(component.Kind), Enabled: component.Enabled,
-		Config: projectComponentConfig(component), GeneratedServices: append([]string(nil), component.GeneratedServices...),
+		Config: projectComponentConfig(
+			component,
+		), GeneratedServices: append([]string(nil), component.GeneratedServices...),
 		PinnedIPv4: component.PinnedIPv4, Healthy: component.Healthy, Status: componentStatus(component),
 	}, nil
 }
@@ -160,13 +162,16 @@ func projectComponentConfig(component core.Component) *apiTypes.ComponentConfig 
 	if config.Caddy != nil {
 		result := &apiTypes.ComponentConfig{
 			Caddy: &apiTypes.CaddyComponentConfig{
-				ZoneID: config.Caddy.ZoneID, CaddyfileTemplate: config.Caddy.CaddyfileTemplate,
+				ZoneIDs: append(
+					[]string(nil),
+					config.Caddy.ZoneIDs...), CaddyfileTemplate: config.Caddy.CaddyfileTemplate,
 			},
 		}
 		return result
 	}
 	if config.CloudflareTunnel != nil {
 		return &apiTypes.ComponentConfig{CloudflareTunnel: &apiTypes.CloudflareTunnelComponentConfig{
+			ZoneIDs:  append([]string(nil), config.CloudflareTunnel.ZoneIDs...),
 			SecretID: config.CloudflareTunnel.SecretID,
 		}}
 	}

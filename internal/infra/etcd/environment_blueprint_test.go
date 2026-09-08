@@ -338,7 +338,8 @@ func TestEnvironmentBlueprintCompletionPromotesAppliedComposeProjection(t *testi
 		task,
 		environmentBlueprintTestMarker(task, environment.Record.ID),
 	)
-	if applied, found, err := hierarchy.GetEnvironmentAppliedComposeProjection(ctx, environment.Record.ID); err != nil || found {
+	if applied, found, err := hierarchy.GetEnvironmentAppliedComposeProjection(ctx, environment.Record.ID); err != nil ||
+		found {
 		t.Fatalf("applied projection before acknowledgement = %#v, %v, %v", applied, found, err)
 	}
 

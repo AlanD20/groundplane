@@ -116,7 +116,11 @@ func (s *Server) registerServices() {
 			},
 		},
 	}, s.editService)
-	taskSchema := s.API.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted")
+	taskSchema := s.API.OpenAPI().Components.Schemas.Schema(
+		reflect.TypeFor[apiTypes.TaskAccepted](),
+		true,
+		"TaskAccepted",
+	)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "service.remove", Method: http.MethodDelete, Path: "/services/{id}",
 		Summary: "Remove a service", Tags: []string{"Service"}, DefaultStatus: http.StatusAccepted,
@@ -198,7 +202,11 @@ func (s *Server) createService(ctx context.Context, request *serviceCreateInput)
 	if err != nil {
 		normalized := normalizeProjectError(err)
 		if kind, ok := errs.KindOf(normalized); ok && kind == errs.KindInternal && s.Logger != nil {
-			s.Logger.Error("controller: create Service", slog.String("service_name", request.Body.Name), slog.Any("error", err))
+			s.Logger.Error(
+				"controller: create Service",
+				slog.String("service_name", request.Body.Name),
+				slog.Any("error", err),
+			)
 		}
 		return nil, normalized
 	}

@@ -118,14 +118,20 @@ func (repository *ScriptRepository) GetScriptExecution(
 		return Versioned[ScriptExecutionRecord]{}, err
 	}
 	if repository == nil || repository.store == nil || !validRawScriptExecutionID(executionID) {
-		return Versioned[ScriptExecutionRecord]{}, errs.New(errs.KindValidationFailed, "Script execution request is invalid")
+		return Versioned[ScriptExecutionRecord]{}, errs.New(
+			errs.KindValidationFailed,
+			"Script execution request is invalid",
+		)
 	}
 	result, err := repository.store.Get(ctx, scriptExecutionKey(executionID))
 	if err != nil {
 		return Versioned[ScriptExecutionRecord]{}, err
 	}
 	if result == nil || result.Entry == nil {
-		return Versioned[ScriptExecutionRecord]{}, errs.New(errs.KindStateConflict, "Script execution record is missing")
+		return Versioned[ScriptExecutionRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"Script execution record is missing",
+		)
 	}
 	defer clear(result.Entry.Value)
 	record, err := decodeEnvelope[ScriptExecutionRecord](result.Entry.Value, "script-execution")
@@ -145,7 +151,10 @@ func (repository *ScriptRepository) CheckpointScriptExecution(
 		return Versioned[ScriptExecutionRecord]{}, err
 	}
 	if repository == nil || repository.store == nil || validateScriptCheckpointInput(input) != nil {
-		return Versioned[ScriptExecutionRecord]{}, errs.New(errs.KindValidationFailed, "Script checkpoint input is invalid")
+		return Versioned[ScriptExecutionRecord]{}, errs.New(
+			errs.KindValidationFailed,
+			"Script checkpoint input is invalid",
+		)
 	}
 	for attempt := 0; attempt < 2; attempt++ {
 		anchor, err := repository.loadScriptCheckpointAnchor(ctx, input)
@@ -179,7 +188,10 @@ func (repository *ScriptRepository) CheckpointScriptExecution(
 			}, nil
 		}
 	}
-	return Versioned[ScriptExecutionRecord]{}, errs.New(errs.KindStateConflict, "Script checkpoint changed concurrently")
+	return Versioned[ScriptExecutionRecord]{}, errs.New(
+		errs.KindStateConflict,
+		"Script checkpoint changed concurrently",
+	)
 }
 
 func (repository *ScriptRepository) loadScriptCheckpointAnchor(
@@ -201,7 +213,8 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 	execution, executionErr := decodeEnvelope[ScriptExecutionRecord](primary.Values[0].Value, "script-execution")
 	task, taskErr := decodeTaskRecord(primary.Values[1].Value)
 	assignment, assignmentErr := decodeTaskAssignment(primary.Values[2].Value)
-	if executionErr != nil || taskErr != nil || assignmentErr != nil || validateScriptExecutionRecord(execution) != nil {
+	if executionErr != nil || taskErr != nil || assignmentErr != nil ||
+		validateScriptExecutionRecord(execution) != nil {
 		return scriptCheckpointAnchor{}, errs.New(errs.KindInternal, "Script checkpoint durable state is corrupt")
 	}
 	if execution.ID != input.ExecutionID || execution.CurrentTaskID != input.TaskID ||
@@ -212,7 +225,10 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 		!taskOwnsScriptExecution(task, execution) || assignment.TaskID != input.TaskID ||
 		assignment.AssignmentID != input.AssignmentID || assignment.Executor != TaskExecutorAgent ||
 		assignment.AgentID != input.AgentID || assignment.AgentGeneration != input.AgentGeneration {
-		return scriptCheckpointAnchor{}, errs.New(errs.KindStateConflict, "Script checkpoint does not own the running assignment")
+		return scriptCheckpointAnchor{}, errs.New(
+			errs.KindStateConflict,
+			"Script checkpoint does not own the running assignment",
+		)
 	}
 	var blueprintConditions []Condition
 	if task.Type == TaskUpdate {
@@ -285,7 +301,10 @@ func advanceScriptExecutionRecord(
 	input ScriptCheckpointInput,
 ) (ScriptExecutionRecord, error) {
 	if current.State != input.ExpectedState {
-		return ScriptExecutionRecord{}, errs.New(errs.KindStateConflict, "Script checkpoint expected state does not match")
+		return ScriptExecutionRecord{}, errs.New(
+			errs.KindStateConflict,
+			"Script checkpoint expected state does not match",
+		)
 	}
 	next := current
 	if next.AssignmentID == "" {
@@ -356,11 +375,16 @@ func advanceScriptExecutionRecord(
 
 func validateScriptCheckpointInput(input ScriptCheckpointInput) error {
 	if ids.Validate(ids.KindTask, input.TaskID) != nil || ids.Validate(ids.KindOperation, input.OperationID) != nil ||
-		ids.Validate(ids.KindAssignment, input.AssignmentID) != nil || ids.Validate(ids.KindAgent, input.AgentID) != nil ||
+		ids.Validate(
+			ids.KindAssignment,
+			input.AssignmentID,
+		) != nil || ids.Validate(ids.KindAgent, input.AgentID) != nil ||
 		input.AgentGeneration == 0 || ids.Validate(ids.KindStep, input.StepID) != nil ||
 		!validRawScriptExecutionID(input.ExecutionID) || !validLowerSHA256(input.PlanHash) ||
 		!validLowerSHA256(input.PayloadSHA256) || !validScriptExecutionState(input.ExpectedState) ||
-		!validScriptExecutionState(input.State) || !validScriptCheckpointEvidenceShape(input.Evidence) || input.At.IsZero() {
+		!validScriptExecutionState(
+			input.State,
+		) || !validScriptCheckpointEvidenceShape(input.Evidence) || input.At.IsZero() {
 		return errs.New(errs.KindValidationFailed, "Script checkpoint input is invalid")
 	}
 	return nil
@@ -446,15 +470,21 @@ func validateScriptExecutionCheckpointShape(record ScriptExecutionRecord) error 
 	}
 	switch record.State {
 	case ScriptExecutionStartAuthorized:
-		if !record.StartAuthorized || record.BodyPrepared != nil || record.ContainerCreated != nil || record.Outcome != nil || record.Cleanup != nil {
+		if !record.StartAuthorized || record.BodyPrepared != nil || record.ContainerCreated != nil ||
+			record.Outcome != nil ||
+			record.Cleanup != nil {
 			return invalidScriptCheckpointRecord()
 		}
 	case ScriptExecutionBodyPrepared:
-		if !record.StartAuthorized || record.BodyPrepared == nil || record.ContainerCreated != nil || record.Outcome != nil || record.Cleanup != nil {
+		if !record.StartAuthorized || record.BodyPrepared == nil || record.ContainerCreated != nil ||
+			record.Outcome != nil ||
+			record.Cleanup != nil {
 			return invalidScriptCheckpointRecord()
 		}
 	case ScriptExecutionContainerCreated:
-		if !record.StartAuthorized || record.BodyPrepared == nil || record.ContainerCreated == nil || record.Outcome != nil || record.Cleanup != nil {
+		if !record.StartAuthorized || record.BodyPrepared == nil || record.ContainerCreated == nil ||
+			record.Outcome != nil ||
+			record.Cleanup != nil {
 			return invalidScriptCheckpointRecord()
 		}
 	case ScriptExecutionOutcomeRecorded:

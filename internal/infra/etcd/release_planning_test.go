@@ -95,7 +95,8 @@ func TestReleasePlanningLoadsPublishedBlueprintProjection(t *testing.T) {
 		t.Fatalf("unrelated write: %v", err)
 	}
 	fixed, err := ledger.LoadPlanningScopeAtRevision(ctx, environment.Record.ID, scope.ReadRevision)
-	if err != nil || fixed.ReadRevision != scope.ReadRevision || fixed.EnvironmentEpochRevision != scope.EnvironmentEpochRevision {
+	if err != nil || fixed.ReadRevision != scope.ReadRevision ||
+		fixed.EnvironmentEpochRevision != scope.EnvironmentEpochRevision {
 		t.Fatalf("LoadPlanningScopeAtRevision() = %#v, %v", fixed, err)
 	}
 	planning, err := ledger.LoadPlanningServices(ctx, scope, []string{projection.DesiredServices[0].Desired.ID})

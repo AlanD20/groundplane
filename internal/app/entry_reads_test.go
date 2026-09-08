@@ -81,14 +81,20 @@ func TestEntryListPagesCurrentProjection(t *testing.T) {
 		var err error
 		records[index], err = etcd.NewBlueprintEntryRecord(environmentID, string(rune('a'+index)), core.EnvEntry{
 			ID: ids.NewAt(ids.KindEnvEntry, now, int64(33+index)), Kind: core.EntryKindEnv,
-			Key: string(rune('A' + index)), Source: core.EntrySource{Kind: core.SourceLiteral}, Exposure: []string{"all"},
+			Key: string(
+				rune('A' + index),
+			), Source: core.EntrySource{Kind: core.SourceLiteral}, Exposure: []string{"all"},
 		}, ids.NewAt(ids.KindConfig, now, int64(35+index)))
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 	projection := etcd.Versioned[etcd.EnvironmentComposeProjection]{
-		Record:   etcd.EnvironmentComposeProjection{EnvironmentID: environmentID, RevisionID: revisionID, Entries: records},
+		Record: etcd.EnvironmentComposeProjection{
+			EnvironmentID: environmentID,
+			RevisionID:    revisionID,
+			Entries:       records,
+		},
 		Revision: 12, ReadRevision: 12,
 	}
 	repository := &fakeEntryReadRepository{
@@ -103,7 +109,11 @@ func TestEntryListPagesCurrentProjection(t *testing.T) {
 	if err != nil || len(first.Items) != 1 || first.NextCursor == "" {
 		t.Fatalf("first projection page = %#v, %v", first, err)
 	}
-	second, err := service.ListEntries(context.Background(), environmentID, etcd.PageRequest{Limit: 1, Cursor: first.NextCursor})
+	second, err := service.ListEntries(
+		context.Background(),
+		environmentID,
+		etcd.PageRequest{Limit: 1, Cursor: first.NextCursor},
+	)
 	if err != nil || len(second.Items) != 1 || second.NextCursor != "" {
 		t.Fatalf("second projection page = %#v, %v", second, err)
 	}

@@ -19,7 +19,12 @@ func TestRouteRepositoryCreatesReadsAndPagesScopedRecords(t *testing.T) {
 		routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1010, "/api/*"),
 		routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1011, "/admin/*"),
 	}
-	projection := routeRepositoryTestProjection(t, environment.Record.ID, target.Record.Desired.ID, ids.NewAt(ids.KindTask, environment.Record.CreatedAt, 1005))
+	projection := routeRepositoryTestProjection(
+		t,
+		environment.Record.ID,
+		target.Record.Desired.ID,
+		ids.NewAt(ids.KindTask, environment.Record.CreatedAt, 1005),
+	)
 	for _, record := range records {
 		var err error
 		projection, err = ApplyEnvironmentRoute(projection, record)

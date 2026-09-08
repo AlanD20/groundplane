@@ -6,9 +6,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"slices"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -25,7 +25,10 @@ func (ledger *ReleaseLedger) GetBlueprintTaskRenderInput(
 	publicationID := task.Params[TaskReleasePublicationParam]
 	if ctx == nil || ledger == nil || validatePublicationID(publicationID) != nil ||
 		task.Type != TaskUpdate || ids.Validate(ids.KindPlan, task.PlanID) != nil {
-		return ReleaseTaskRenderInput{}, errs.New(errs.KindValidationFailed, "Blueprint Release render input request is invalid")
+		return ReleaseTaskRenderInput{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint Release render input request is invalid",
+		)
 	}
 	keys := []string{releaseManifestStagingKey(publicationID), releasePublicationKey(publicationID)}
 	loaded, err := ledger.store.GetMany(ctx, GetManyRequest{Keys: keys})
@@ -40,7 +43,8 @@ func (ledger *ReleaseLedger) GetBlueprintTaskRenderInput(
 		return ReleaseTaskRenderInput{}, corruptReleaseRecord()
 	}
 	marker, err := decodeReleaseRecord[ReleasePublicationMarker](loaded.Values[1].Value, "release-publication")
-	if err != nil || marker.PublicationID != publicationID || marker.OperationID != task.OperationID || marker.ManifestDigest != manifest.Digest {
+	if err != nil || marker.PublicationID != publicationID || marker.OperationID != task.OperationID ||
+		marker.ManifestDigest != manifest.Digest {
 		return ReleaseTaskRenderInput{}, corruptReleaseRecord()
 	}
 	memberKeys := make([]string, 0, len(manifest.Members)*2)
@@ -54,10 +58,15 @@ func (ledger *ReleaseLedger) GetBlueprintTaskRenderInput(
 	if err != nil {
 		return ReleaseTaskRenderInput{}, err
 	}
-	if loadedMembers == nil || loadedMembers.ReadRevision != loaded.ReadRevision || len(loadedMembers.Values) != len(memberKeys) {
+	if loadedMembers == nil || loadedMembers.ReadRevision != loaded.ReadRevision ||
+		len(loadedMembers.Values) != len(memberKeys) {
 		return ReleaseTaskRenderInput{}, corruptReleaseRecord()
 	}
-	result := ReleaseTaskRenderInput{PublicationID: publicationID, Members: make([]ReleaseTaskRenderMember, len(manifest.Members))}
+	result := ReleaseTaskRenderInput{
+		PublicationID:      publicationID,
+		Members:            make([]ReleaseTaskRenderMember, len(manifest.Members)),
+		NativePredecessors: marker.NativePredecessors,
+	}
 	for index, reference := range manifest.Members {
 		intentValue, renderValue := loadedMembers.Values[index*2], loadedMembers.Values[index*2+1]
 		if intentValue == nil || renderValue == nil {
@@ -76,7 +85,7 @@ func (ledger *ReleaseLedger) GetBlueprintTaskRenderInput(
 		render, decodeErr := decodeReleaseRenderInput(raw)
 		if decodeErr != nil || render.ReleaseID != intent.ID || render.PlanID != task.PlanID ||
 			render.ArtifactID != intent.RenderInputID || render.ServiceID != intent.ServiceID ||
-			render.Image != intent.Image || render.Strategy != intent.Strategy {
+			render.CandidateWorkload != intent.CandidateWorkload || render.Strategy != intent.Strategy {
 			return ReleaseTaskRenderInput{}, corruptReleaseRecord()
 		}
 		digest, _ := domain.Digest(raw)
@@ -85,7 +94,7 @@ func (ledger *ReleaseLedger) GetBlueprintTaskRenderInput(
 		}
 		result.Members[index] = ReleaseTaskRenderMember{Intent: intent, Render: render}
 	}
-	return result, nil
+	return result, validateBlueprintNativeRenderInput(result, marker, task)
 }
 
 // BlueprintReleasePublication is the opaque bounded fragment appended to the
@@ -100,6 +109,7 @@ type BlueprintReleasePublication struct {
 	sources       ScriptSourcePublicationFragment
 	authority     *ScriptSourceReferenceAuthority
 	members       []ScriptSourcePreparationMember
+	retained      *blueprintRuntimeRetention
 }
 
 type blueprintReleasePublicationInput struct {
@@ -113,14 +123,20 @@ type blueprintReleasePublicationInput struct {
 }
 
 func newBlueprintReleasePublication(input blueprintReleasePublicationInput) (BlueprintReleasePublication, error) {
-	if ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil || ids.Validate(ids.KindOperation, input.OperationID) != nil {
-		return BlueprintReleasePublication{}, errs.New(errs.KindValidationFailed, "Blueprint Release publication identity is invalid")
+	if ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil ||
+		ids.Validate(ids.KindOperation, input.OperationID) != nil {
+		return BlueprintReleasePublication{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint Release publication identity is invalid",
+		)
 	}
 	publication := BlueprintReleasePublication{
 		environmentID: input.EnvironmentID, operationID: input.OperationID,
 		conditions: append(append([]Condition(nil), input.Conditions...), input.SourceFragment.conditions...),
-		mutations:  append(cloneBlueprintReleaseMutations(input.Mutations), cloneBlueprintReleaseMutations(input.SourceFragment.mutations)...),
-		sources:    input.SourceFragment, authority: input.SourceAuthority,
+		mutations: append(
+			cloneBlueprintReleaseMutations(input.Mutations),
+			cloneBlueprintReleaseMutations(input.SourceFragment.mutations)...),
+		sources: input.SourceFragment, authority: input.SourceAuthority,
 		members: cloneScriptSourcePreparationMembers(input.SourceMembers),
 	}
 	return publication, nil
@@ -128,10 +144,38 @@ func newBlueprintReleasePublication(input blueprintReleasePublicationInput) (Blu
 
 func (publication BlueprintReleasePublication) IsZero() bool {
 	return publication.environmentID == "" && publication.operationID == "" &&
-		len(publication.conditions) == 0 && len(publication.mutations) == 0
+		len(publication.conditions) == 0 && len(publication.mutations) == 0 && publication.retained == nil
 }
 
 func (publication BlueprintReleasePublication) validate(environmentID string, task TaskRecord) error {
+	if publication.retained != nil {
+		if publication.environmentID != environmentID || publication.operationID != task.OperationID ||
+			len(
+				publication.retained.conditions,
+			) < 2 || publication.retained.conditions[0] != (Condition{Key: environmentComposeProjectionKey(environmentID), ModRevision: publication.retained.sourceRevision}) ||
+			publication.retained.sourceRevision < 0 || publication.retained.sourceReadRevision <= 0 || publication.retained.sourceReadRevision < publication.retained.sourceRevision {
+			return errs.New(errs.KindValidationFailed, "Blueprint retained runtime publication does not match its Task")
+		}
+		for _, condition := range publication.retained.conditions {
+			if !slices.Contains(publication.conditions, condition) {
+				return errs.New(errs.KindValidationFailed, "Blueprint retained runtime source comparison is absent")
+			}
+		}
+		if task.Params[TaskReleasePublicationParam] == "" {
+			if len(publication.mutations) != 0 ||
+				!slices.Equal(publication.conditions, publication.retained.conditions) ||
+				publication.authority != nil ||
+				len(publication.members) != 0 ||
+				len(publication.sources.conditions) != 0 ||
+				len(publication.sources.mutations) != 0 {
+				return errs.New(
+					errs.KindValidationFailed,
+					"Blueprint retained runtime publication does not match its Task",
+				)
+			}
+			return nil
+		}
+	}
 	if publication.IsZero() {
 		if task.Params[TaskReleasePublicationParam] != "" {
 			return errs.New(errs.KindValidationFailed, "Blueprint Task has no candidate Release publication")
@@ -196,7 +240,11 @@ type blueprintReleaseHookStage struct {
 	Count       int
 }
 
-func (ledger *ReleaseLedger) PrepareBlueprintReleaseHooks(ctx context.Context, task TaskRecord, hooks []ReleaseHookExecutionPublication) (PreparedBlueprintReleaseHooks, error) {
+func (ledger *ReleaseLedger) PrepareBlueprintReleaseHooks(
+	ctx context.Context,
+	task TaskRecord,
+	hooks []ReleaseHookExecutionPublication,
+) (PreparedBlueprintReleaseHooks, error) {
 	if len(hooks) == 0 {
 		return PreparedBlueprintReleaseHooks{}, nil
 	}
@@ -211,7 +259,13 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleaseHooks(ctx context.Context, t
 		hash.Write([]byte{0})
 		hash.Write(mutation.Value)
 	}
-	stage := blueprintReleaseHookStage{Schema: 1, OperationID: task.OperationID, TaskID: task.ID, Digest: hex.EncodeToString(hash.Sum(nil)), Count: len(hooks)}
+	stage := blueprintReleaseHookStage{
+		Schema:      1,
+		OperationID: task.OperationID,
+		TaskID:      task.ID,
+		Digest:      hex.EncodeToString(hash.Sum(nil)),
+		Count:       len(hooks),
+	}
 	value, err := json.Marshal(stage)
 	if err != nil {
 		return PreparedBlueprintReleaseHooks{}, errs.Wrap(errs.KindInternal, err)
@@ -223,7 +277,11 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleaseHooks(ctx context.Context, t
 	}
 	var revision int64
 	if read == nil || read.Entry == nil {
-		result, txErr := ledger.store.Transact(ctx, []Condition{{Key: key}}, []Mutation{{Type: MutationPut, Key: key, Value: value}})
+		result, txErr := ledger.store.Transact(
+			ctx,
+			[]Condition{{Key: key}},
+			[]Mutation{{Type: MutationPut, Key: key, Value: value}},
+		)
 		if txErr != nil {
 			return PreparedBlueprintReleaseHooks{}, txErr
 		}
@@ -238,11 +296,18 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleaseHooks(ctx context.Context, t
 	}
 	if revision == 0 {
 		if read == nil || read.Entry == nil || !bytes.Equal(read.Entry.Value, value) {
-			return PreparedBlueprintReleaseHooks{}, errs.New(errs.KindStateConflict, "Blueprint hook preparation is occupied")
+			return PreparedBlueprintReleaseHooks{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint hook preparation is occupied",
+			)
 		}
 		revision = read.Entry.ModRevision
 	}
-	prepared := PreparedBlueprintReleaseHooks{key: key, revision: revision, snapshotRevisions: make(map[string]int64, len(hooks))}
+	prepared := PreparedBlueprintReleaseHooks{
+		key:               key,
+		revision:          revision,
+		snapshotRevisions: make(map[string]int64, len(hooks)),
+	}
 	for i := 0; i < len(fragment.mutations); i += 2 {
 		pair := fragment.mutations[i : i+2]
 		loaded, loadErr := ledger.store.GetMany(ctx, GetManyRequest{Keys: []string{pair[0].Key, pair[1].Key}})
@@ -250,10 +315,17 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleaseHooks(ctx context.Context, t
 			return PreparedBlueprintReleaseHooks{}, loadErr
 		}
 		if loaded == nil || len(loaded.Values) != 2 {
-			return PreparedBlueprintReleaseHooks{}, errs.New(errs.KindInternal, "Blueprint hook preparation evidence is incomplete")
+			return PreparedBlueprintReleaseHooks{}, errs.New(
+				errs.KindInternal,
+				"Blueprint hook preparation evidence is incomplete",
+			)
 		}
 		if loaded.Values[0] == nil && loaded.Values[1] == nil {
-			result, txErr := ledger.store.Transact(ctx, []Condition{{Key: key, ModRevision: revision}, {Key: pair[0].Key}, {Key: pair[1].Key}}, pair)
+			result, txErr := ledger.store.Transact(
+				ctx,
+				[]Condition{{Key: key, ModRevision: revision}, {Key: pair[0].Key}, {Key: pair[1].Key}},
+				pair,
+			)
 			if txErr != nil {
 				return PreparedBlueprintReleaseHooks{}, txErr
 			}
@@ -267,8 +339,12 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleaseHooks(ctx context.Context, t
 				continue
 			}
 		}
-		if loaded.Values[0] == nil || loaded.Values[1] == nil || !bytes.Equal(loaded.Values[0].Value, pair[0].Value) || !bytes.Equal(loaded.Values[1].Value, pair[1].Value) {
-			return PreparedBlueprintReleaseHooks{}, errs.New(errs.KindStateConflict, "Blueprint hook preparation changed")
+		if loaded.Values[0] == nil || loaded.Values[1] == nil || !bytes.Equal(loaded.Values[0].Value, pair[0].Value) ||
+			!bytes.Equal(loaded.Values[1].Value, pair[1].Value) {
+			return PreparedBlueprintReleaseHooks{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint hook preparation changed",
+			)
 		}
 		prepared.snapshotRevisions[hooks[i/2].Execution.SnapshotID] = loaded.Values[1].ModRevision
 	}
@@ -277,18 +353,6 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleaseHooks(ctx context.Context, t
 
 func (prepared PreparedBlueprintReleaseHooks) SnapshotRevision(id string) int64 {
 	return prepared.snapshotRevisions[id]
-}
-
-type BlueprintReleasePublicationEvidence struct {
-	Manifest                   VersionedReleaseManifest
-	EnvironmentID              string
-	Task                       TaskRecord
-	CandidateReleaseDescriptor executionplan.CandidateReleaseDescriptor
-	Hooks                      []ReleaseHookExecutionPublication
-	PublishedAt                time.Time
-	SourcePrepared             PreparedSourceSet
-	SourceMembers              []ScriptSourcePreparationMember
-	HookPrepared               PreparedBlueprintReleaseHooks
 }
 
 // BlueprintReleaseSourceMembers derives the immutable ADR 0062 authority for
@@ -415,7 +479,15 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 		if hook.SnapshotRevision <= 0 {
 			return nil, errs.New(errs.KindValidationFailed, "Blueprint Script runner snapshot is not prepared")
 		}
-		members = append(members, ScriptSourcePreparationMember{Reference: snapshotReference, Evidence: ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{SourceKey: scriptRunnerSnapshotKey(execution.SnapshotID)}}})
+		members = append(
+			members,
+			ScriptSourcePreparationMember{
+				Reference: snapshotReference,
+				Evidence: ScriptSourceEvidence{
+					Existing: &ScriptExistingSourceEvidence{SourceKey: scriptRunnerSnapshotKey(execution.SnapshotID)},
+				},
+			},
+		)
 
 		snapshotKey := scriptRunnerSnapshotKey(execution.SnapshotID)
 		seenNetworks := make(map[string]struct{}, len(snapshot.Networks))
@@ -620,90 +692,6 @@ func blueprintStagedSourceEvidenceFromStage(
 	}}, nil
 }
 
-// PrepareBlueprintReleasePublication seals the release marker, indexes,
-// Script checkpoints, and prepared source root into one opaque fragment.
-func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
-	ctx context.Context,
-	authority *ScriptSourceReferenceAuthority,
-	evidence BlueprintReleasePublicationEvidence,
-) (BlueprintReleasePublication, error) {
-	if ctx == nil || ledger == nil || ledger.store == nil || evidence.Manifest.Revision <= 0 ||
-		evidence.Manifest.Record.OperationID != evidence.Task.OperationID ||
-		evidence.Manifest.Record.PublicationID != evidence.Task.Params[TaskReleasePublicationParam] ||
-		evidence.Task.Owner.EnvironmentID != evidence.EnvironmentID || evidence.Task.Type != TaskUpdate ||
-		evidence.PublishedAt.IsZero() || evidence.PublishedAt.Location() != time.UTC {
-		return BlueprintReleasePublication{}, errs.New(errs.KindValidationFailed, "Blueprint Release publication evidence is invalid")
-	}
-	if _, err := validateReleaseCandidateDescriptor(evidence.CandidateReleaseDescriptor, evidence.Task, evidence.Manifest.Record); err != nil {
-		return BlueprintReleasePublication{}, err
-	}
-	conditions := []Condition{
-		{Key: releaseManifestStagingKey(evidence.Manifest.Record.PublicationID), ModRevision: evidence.Manifest.Revision},
-		{Key: releasePublicationKey(evidence.Manifest.Record.PublicationID)},
-	}
-	publicationValue, err := encodeReleaseRecord("release-publication", ReleasePublicationMarker{
-		PublicationID:              evidence.Manifest.Record.PublicationID,
-		OperationID:                evidence.Manifest.Record.OperationID,
-		ManifestDigest:             evidence.Manifest.Record.Digest,
-		CandidateReleaseDescriptor: executionplan.CloneCandidateReleaseDescriptor(evidence.CandidateReleaseDescriptor),
-		PublishedAt:                evidence.PublishedAt,
-	})
-	if err != nil {
-		return BlueprintReleasePublication{}, err
-	}
-	mutations := []Mutation{{Type: MutationPut, Key: releasePublicationKey(evidence.Manifest.Record.PublicationID), Value: publicationValue}}
-	for _, member := range evidence.Manifest.Record.Members {
-		environmentValue, encodeErr := json.Marshal(releaseEnvironmentIndexValue{
-			Schema: 1, ServiceID: member.ServiceID, PublicationID: evidence.Manifest.Record.PublicationID,
-		})
-		if encodeErr != nil {
-			clearMutations(mutations)
-			return BlueprintReleasePublication{}, errs.Wrap(errs.KindInternal, encodeErr)
-		}
-		serviceValue, encodeErr := json.Marshal(releaseServiceIndexValue{Schema: 1, PublicationID: evidence.Manifest.Record.PublicationID})
-		if encodeErr != nil {
-			clear(environmentValue)
-			clearMutations(mutations)
-			return BlueprintReleasePublication{}, errs.Wrap(errs.KindInternal, encodeErr)
-		}
-		mutations = append(mutations,
-			Mutation{Type: MutationPut, Key: releaseEnvironmentIndexKey(evidence.EnvironmentID, member.ReleaseID), Value: environmentValue},
-			Mutation{Type: MutationPut, Key: releaseServiceIndexKey(evidence.EnvironmentID, member.ServiceID, member.ReleaseID), Value: serviceValue},
-		)
-	}
-	if len(evidence.Hooks) != 0 {
-		if evidence.HookPrepared.key != blueprintReleaseHookStageKey(evidence.Task.OperationID) || evidence.HookPrepared.revision <= 0 {
-			clearMutations(mutations)
-			return BlueprintReleasePublication{}, errs.New(errs.KindValidationFailed, "Blueprint hook preparation is incomplete")
-		}
-		conditions = append(conditions, Condition{Key: evidence.HookPrepared.key, ModRevision: evidence.HookPrepared.revision})
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: evidence.HookPrepared.key})
-	}
-	var sourceFragment ScriptSourcePublicationFragment
-	if !evidence.SourcePrepared.IsZero() {
-		if authority == nil || len(evidence.SourceMembers) == 0 {
-			clearMutations(mutations)
-			return BlueprintReleasePublication{}, errs.New(errs.KindValidationFailed, "Blueprint Script source publication is incomplete")
-		}
-		sourceFragment, err = authority.FinalPublicationFragment(ctx, evidence.SourcePrepared)
-		if err != nil {
-			clearMutations(mutations)
-			return BlueprintReleasePublication{}, err
-		}
-	}
-	publication, err := newBlueprintReleasePublication(blueprintReleasePublicationInput{
-		EnvironmentID: evidence.EnvironmentID, OperationID: evidence.Task.OperationID,
-		Conditions: conditions, Mutations: mutations, SourceFragment: sourceFragment,
-		SourceAuthority: authority, SourceMembers: evidence.SourceMembers,
-	})
-	clearMutations(mutations)
-	if err != nil {
-		sourceFragment.Clear()
-		return BlueprintReleasePublication{}, err
-	}
-	return publication, nil
-}
-
 func prepareBlueprintReleaseHookPublicationFragment(
 	task TaskRecord,
 	hooks []ReleaseHookExecutionPublication,
@@ -718,7 +706,10 @@ func prepareBlueprintReleaseHookPublicationFragment(
 			!execution.ActiveReference || execution.CurrentTaskID != task.ID || execution.OperationID != task.OperationID ||
 			execution.PlanHash != task.PlanHash || task.Params[ReleaseHookStepExecutionParam(execution.StepID)] != execution.ID {
 			clearReleaseHookPublicationFragment(fragment)
-			return releaseHookPublicationFragment{}, errs.New(errs.KindValidationFailed, "Blueprint release hook execution evidence is invalid")
+			return releaseHookPublicationFragment{}, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint release hook execution evidence is invalid",
+			)
 		}
 		executionValue, err := encodeEnvelope("script-execution", execution)
 		if err != nil {

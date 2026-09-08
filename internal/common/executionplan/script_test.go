@@ -102,7 +102,10 @@ func TestSealManualScriptPlanRejectsStagedSourceAuthorityAnywhere(t *testing.T) 
 		t.Run(location.name, func(t *testing.T) {
 			candidate := proto.Clone(snapshot).(*agentpb.ResolvedRunnerSnapshot)
 			*location.get(candidate) = stagedScriptSourceAuthorityForTest(candidate, byte(index+2))
-			if err := validateManualScriptSourceAuthorities(candidate); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+			if err := validateManualScriptSourceAuthorities(candidate); !errors.Is(
+				err,
+				errs.New(errs.KindValidationFailed, ""),
+			) {
 				t.Fatalf("validateManualScriptSourceAuthorities(staged %s) error = %v", location.name, err)
 			}
 		})
@@ -232,91 +235,69 @@ func TestSealAcceptsBlueprintCandidatePostDeployScript(t *testing.T) {
 	}
 }
 
-// Rationale: permitting the typed Blueprint sequence must not grant Script
-// execution to another reconcile target or to a candidate with no Release binding.
-// Rationale: a Blueprint Compose tag remains desired Release intent, while the
-// post-deploy runner is authorized only by the exact Controller-acknowledged
-// image selected by its earlier candidate ComposeApply step.
-func TestSealAcceptsBlueprintTaggedCandidatePostDeployScriptResultAuthority(t *testing.T) {
-	plan := validBlueprintScriptReconcilePlan(t)
-	applyStep := plan.Steps[0]
-	runStep := plan.Steps[1]
-	run := runStep.GetRunScript()
-	snapshot := plan.ScriptRunnerSnapshots[0]
-	projection := plan.ScriptRunnerProjections[0]
-	service := plan.Artifacts[0].Services[0]
-	requested := "registry.example/app:candidate"
-
-	snapshot.ImageReference = ""
-	snapshot.ImageDigest = nil
-	snapshot.ProcedureServiceImage = &agentpb.ProcedureServiceImageAuthority{
-		ComposeApplyStepId: applyStep.GetStepId(),
-		ArtifactId:         applyStep.GetComposeApply().GetArtifactId(),
-		ServiceId:          run.GetServiceId(),
-		ReleaseId:          run.GetReleaseId(),
-		RequestedReference: requested,
-	}
-	projection.Image = requested
-	projectionDigest, err := scriptMessageDigest(projection)
-	if err != nil {
-		t.Fatal(err)
-	}
-	snapshot.RunnerProjectionSha256 = projectionDigest
-	snapshotDigest, err := scriptMessageDigest(snapshot)
-	if err != nil {
-		t.Fatal(err)
-	}
-	run.RunnerSnapshotSha256 = snapshotDigest
-	service.ImageReference = requested
-	service.ImageIndexDigest = nil
-	service.ImageChildDigest = nil
-	plan.Artifacts[0].CanonicalYaml = []byte("services:\n  api:\n    image: " + requested + "\n")
-	yamlDigest := sha256.Sum256(plan.Artifacts[0].CanonicalYaml)
-	plan.Artifacts[0].YamlSha256 = yamlDigest[:]
-
-	sealed, err := Seal(plan)
-	if err != nil {
-		t.Fatalf("Seal(Blueprint tagged candidate authority) error = %v", err)
-	}
-	if _, err := Validate(sealed); err != nil {
-		t.Fatalf("Validate(Blueprint tagged candidate authority) error = %v", err)
+// Rationale: candidate and historical Script runs use a presealed local config
+// ID, never a mutable tag or a registry manifest digest.
+func TestSealScriptUsesPresealedLocalImage(t *testing.T) {
+	for _, build := range []struct {
+		name string
+		plan func(*testing.T) *agentpb.ExecutionPlan
+	}{{"historical", validManualScriptPlan}, {"candidate", validBlueprintScriptReconcilePlan}} {
+		t.Run(build.name, func(t *testing.T) {
+			plan := build.plan(t)
+			sealed, err := Seal(plan)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Validate(sealed); err != nil {
+				t.Fatal(err)
+			}
+			if sealed.ScriptRunnerSnapshots[0].LocalImageId != "sha256:"+strings.Repeat("a", 64) ||
+				sealed.ScriptRunnerProjections[0].Image != sealed.ScriptRunnerSnapshots[0].LocalImageId {
+				t.Fatal("sealed Script changed its local image identity")
+			}
+		})
 	}
 }
 
-func TestSealRejectsBlueprintProcedureImageAuthorityMismatch(t *testing.T) {
-	for _, test := range []struct {
+// Rationale: rehashing a forged candidate snapshot must not grant execution
+// against another image, Release, Service, or candidate application.
+func TestSealRejectsBlueprintSealedImageAuthorityMismatch(t *testing.T) {
+	tests := []struct {
 		name   string
 		mutate func(*agentpb.ExecutionPlan)
 	}{
-		{name: "forward step", mutate: func(plan *agentpb.ExecutionPlan) {
-			plan.ScriptRunnerSnapshots[0].ProcedureServiceImage.ComposeApplyStepId = plan.Steps[1].StepId
+		{"wrong local image", func(plan *agentpb.ExecutionPlan) {
+			plan.ScriptRunnerSnapshots[0].LocalImageId = "sha256:" + strings.Repeat("b", 64)
 		}},
-		{name: "wrong step", mutate: func(plan *agentpb.ExecutionPlan) {
-			plan.ScriptRunnerSnapshots[0].ProcedureServiceImage.ComposeApplyStepId = "step_01ARZ3NDEKTSV4RRFFQ69G5FAZ"
+		{"mutable reference", func(plan *agentpb.ExecutionPlan) {
+			plan.ScriptRunnerSnapshots[0].LocalImageId = "registry.example/app:candidate"
 		}},
-		{name: "wrong artifact", mutate: func(plan *agentpb.ExecutionPlan) {
-			plan.ScriptRunnerSnapshots[0].ProcedureServiceImage.ArtifactId = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAZ"
+		{"registry manifest", func(plan *agentpb.ExecutionPlan) {
+			plan.ScriptRunnerSnapshots[0].LocalImageId = "registry.example/app@sha256:" + strings.Repeat("a", 64)
 		}},
-		{name: "wrong service", mutate: func(plan *agentpb.ExecutionPlan) {
-			plan.ScriptRunnerSnapshots[0].ProcedureServiceImage.ServiceId = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAZ"
+		{"wrong service", func(plan *agentpb.ExecutionPlan) {
+			plan.ScriptRunnerSnapshots[0].ServiceId = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAZ"
 		}},
-		{name: "wrong Release", mutate: func(plan *agentpb.ExecutionPlan) {
-			plan.ScriptRunnerSnapshots[0].ProcedureServiceImage.ReleaseId = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAZ"
+		{"wrong Release", func(plan *agentpb.ExecutionPlan) {
+			plan.ScriptRunnerSnapshots[0].ReleaseId = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAZ"
 		}},
-		{name: "dual authority", mutate: func(plan *agentpb.ExecutionPlan) {
-			plan.ScriptRunnerSnapshots[0].ImageReference = "registry.example/app@sha256:" + strings.Repeat("a", 64)
-			plan.ScriptRunnerSnapshots[0].ImageDigest = bytes.Repeat([]byte{0xaa}, sha256.Size)
+		{"missing apply prerequisite", func(plan *agentpb.ExecutionPlan) {
+			plan.Steps[1].PrerequisiteStepId = ""
 		}},
-		{name: "prefilled pinned field", mutate: func(plan *agentpb.ExecutionPlan) {
-			plan.ScriptRunnerSnapshots[0].ImageReference = "registry.example/app@sha256:" + strings.Repeat("a", 64)
+		{"forward prerequisite", func(plan *agentpb.ExecutionPlan) {
+			plan.Steps[1].PrerequisiteStepId = plan.Steps[2].StepId
 		}},
-	} {
+	}
+	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			plan := validBlueprintScriptReconcilePlan(t)
+			if _, err := Seal(plan); err != nil {
+				t.Fatalf("invalid baseline: %v", err)
+			}
 			test.mutate(plan)
 			refreshBlueprintSnapshotDigestForTest(t, plan)
 			if _, err := Seal(plan); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
-				t.Fatalf("Seal(invalid procedure image authority) error = %v, want validation.failed", err)
+				t.Fatalf("Seal(forged candidate authority) = %v", err)
 			}
 		})
 	}
@@ -392,7 +373,7 @@ func validBlueprintScriptReconcilePlan(t *testing.T) *agentpb.ExecutionPlan {
 	healthStepID := "step_01ARZ3NDEKTSV4RRFFQ69G5FAZ"
 	probeStepID := "step_01ARZ3NDEKTSV4RRFFQ69G5FB0"
 	compensateStepID := "step_01ARZ3NDEKTSV4RRFFQ69G5FB1"
-	yaml := []byte("services:\n  api:\n    image: registry.example/app@sha256:" + strings.Repeat("a", 64) + "\n")
+	yaml := []byte("services:\n  api:\n    image: " + snapshot.LocalImageId + "\n")
 	yamlDigest := sha256.Sum256(yaml)
 	artifact := &agentpb.ComposeArtifact{
 		ArtifactId:  "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -405,8 +386,7 @@ func validBlueprintScriptReconcilePlan(t *testing.T) *agentpb.ExecutionPlan {
 		YamlSha256:    yamlDigest[:],
 		Services: []*agentpb.ComposeService{{
 			ServiceId: run.ServiceId, ComposeName: "api", ExpectedReplicas: 1,
-			ImageReference: snapshot.ImageReference, ImageIndexDigest: append([]byte(nil), snapshot.ImageDigest...),
-			ImageChildDigest: bytes.Repeat([]byte{0xbb}, sha256.Size),
+			ImageReference: snapshot.LocalImageId,
 			ExpectedLabels: []*agentpb.LabelPair{
 				{Key: labelEnvironmentID, Value: run.EnvironmentId},
 				{Key: labelKind, Value: "service"},
@@ -442,58 +422,36 @@ func validBlueprintScriptReconcilePlan(t *testing.T) *agentpb.ExecutionPlan {
 		&agentpb.ExecutionStep{
 			StepId: probeStepID, TimeoutSeconds: 30,
 			Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
-			Payload: &agentpb.ExecutionStep_CandidateRestorationProbe{CandidateRestorationProbe: &agentpb.CandidateRestorationProbe{
-				CandidateArtifactId: artifact.ArtifactId, ServiceId: run.ServiceId, CandidateReleaseId: run.ReleaseId,
-			}},
+			Payload: &agentpb.ExecutionStep_CandidateRestorationProbe{
+				CandidateRestorationProbe: &agentpb.CandidateRestorationProbe{
+					CandidateArtifactId: artifact.ArtifactId, ServiceId: run.ServiceId, CandidateReleaseId: run.ReleaseId,
+				},
+			},
 		},
 		&agentpb.ExecutionStep{
 			StepId: compensateStepID, TimeoutSeconds: 30, PrerequisiteStepId: applyStepID,
 			Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
-			Payload: &agentpb.ExecutionStep_CandidateRestorationCompensate{CandidateRestorationCompensate: &agentpb.CandidateRestorationCompensate{
-				CandidateArtifactId: artifact.ArtifactId, ServiceId: run.ServiceId, CandidateReleaseId: run.ReleaseId,
-			}},
+			Payload: &agentpb.ExecutionStep_CandidateRestorationCompensate{
+				CandidateRestorationCompensate: &agentpb.CandidateRestorationCompensate{
+					CandidateArtifactId: artifact.ArtifactId, ServiceId: run.ServiceId, CandidateReleaseId: run.ReleaseId,
+				},
+			},
 		},
 	)
 	plan.CandidateReleaseProcedure = &agentpb.CandidateReleaseProcedure{Members: []*agentpb.CandidateReleaseMember{{
 		ServiceId: run.ServiceId, CandidateReleaseId: run.ReleaseId, CandidateArtifactId: artifact.ArtifactId,
-		ForwardStepIds:     []string{applyStepID, healthStepID},
-		ServingPredecessor: &agentpb.ServingPredecessorRestoration{ProbeStepId: probeStepID, CompensateStepId: compensateStepID},
+		ForwardStepIds: []string{applyStepID, healthStepID},
+		ServingPredecessor: &agentpb.ServingPredecessorRestoration{
+			ProbeStepId:      probeStepID,
+			CompensateStepId: compensateStepID,
+		},
 		CandidateAbsence: &agentpb.CandidateAbsenceRestoration{
 			ComposeProjectName: artifact.ProjectName, ProbeStepId: probeStepID, CompensateStepId: compensateStepID,
 			Services: []*agentpb.CandidateReleaseService{{ServiceId: run.ServiceId, ReleaseId: run.ReleaseId}},
 		},
 	}}}
-	bindBlueprintProcedureAuthorityForTest(t, plan)
-	return plan
-}
-
-func bindBlueprintProcedureAuthorityForTest(t *testing.T, plan *agentpb.ExecutionPlan) {
-	t.Helper()
-	applyStep := plan.Steps[0]
-	run := plan.Steps[1].GetRunScript()
-	snapshot := plan.ScriptRunnerSnapshots[0]
-	projection := plan.ScriptRunnerProjections[0]
-	service := plan.Artifacts[0].Services[0]
-	requested := "registry.example/app:candidate"
-	snapshot.ImageReference = ""
-	snapshot.ImageDigest = nil
-	snapshot.ProcedureServiceImage = &agentpb.ProcedureServiceImageAuthority{
-		ComposeApplyStepId: applyStep.GetStepId(), ArtifactId: applyStep.GetComposeApply().GetArtifactId(),
-		ServiceId: run.GetServiceId(), ReleaseId: run.GetReleaseId(), RequestedReference: requested,
-	}
-	projection.Image = requested
-	projectionDigest, err := scriptMessageDigest(projection)
-	if err != nil {
-		t.Fatal(err)
-	}
-	snapshot.RunnerProjectionSha256 = projectionDigest
-	service.ImageReference = requested
-	service.ImageIndexDigest = nil
-	service.ImageChildDigest = nil
-	plan.Artifacts[0].CanonicalYaml = []byte("services:\n  api:\n    image: " + requested + "\n")
-	yamlDigest := sha256.Sum256(plan.Artifacts[0].CanonicalYaml)
-	plan.Artifacts[0].YamlSha256 = yamlDigest[:]
 	refreshBlueprintSnapshotDigestForTest(t, plan)
+	return plan
 }
 
 func refreshBlueprintSnapshotDigestForTest(t *testing.T, plan *agentpb.ExecutionPlan) {
@@ -527,13 +485,12 @@ func TestSealBlueprintCandidatePostDeployScriptBeforeReadiness(t *testing.T) {
 
 func validManualScriptPlan(t *testing.T) *agentpb.ExecutionPlan {
 	t.Helper()
-	imageDigest := bytes.Repeat([]byte{0xaa}, sha256.Size)
 	bodyDigest := sha256.Sum256([]byte("php artisan migrate\n"))
 	serviceDigest := sha256.Sum256([]byte("service definition"))
 	projection := &agentpb.ScriptRunnerProjection{
 		SnapshotId: testScriptSnapshotID,
 		Name:       "gp-script-" + strings.ToLower(testScriptExecutionID),
-		Image:      "registry.example/app@sha256:" + strings.Repeat("a", 64),
+		Image:      "sha256:" + strings.Repeat("a", 64),
 		Labels: []*agentpb.ScriptStringPair{
 			{Key: "com.groundplane.environment-id", Value: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
 			{Key: "com.groundplane.kind", Value: "script-runner"},
@@ -565,8 +522,7 @@ func validManualScriptPlan(t *testing.T) *agentpb.ExecutionPlan {
 		ServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", ServiceSource: existingScriptSourceAuthorityForTest(4),
 		ServiceDefinitionSha256: serviceDigest[:],
 		ReleaseId:               "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", ReleaseModRevision: 5,
-		ImageReference:            "registry.example/app@sha256:" + strings.Repeat("a", 64),
-		ImageDigest:               imageDigest,
+		LocalImageId:              "sha256:" + strings.Repeat("a", 64),
 		BlueprintBundleGeneration: "task_01ARZ3NDEKTSV4RRFFQ69G5FAX",
 		RenderGeneration:          7, NetworkTopologySource: existingScriptSourceAuthorityForTest(6),
 		AppliedEnvironmentRevisionId:       "task_01ARZ3NDEKTSV4RRFFQ69G5FAY",
@@ -632,7 +588,10 @@ func validStagedScriptPlan(t *testing.T) *agentpb.ExecutionPlan {
 	return plan
 }
 
-func stagedScriptSourceAuthorityForTest(snapshot *agentpb.ResolvedRunnerSnapshot, seed byte) *agentpb.ScriptSourceAuthority {
+func stagedScriptSourceAuthorityForTest(
+	snapshot *agentpb.ResolvedRunnerSnapshot,
+	seed byte,
+) *agentpb.ScriptSourceAuthority {
 	return &agentpb.ScriptSourceAuthority{Staged: &agentpb.ScriptStagedSourceAuthority{
 		EnvironmentId: snapshot.EnvironmentId, RevisionId: snapshot.AppliedEnvironmentRevisionId,
 		RenderGeneration: snapshot.AppliedEnvironmentRenderGeneration, FixedReadRevision: 42,

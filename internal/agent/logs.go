@@ -39,7 +39,10 @@ func (manager *logManager) Subscribe(parent context.Context, request *agentpb.Lo
 		return
 	}
 	if request.GetTail() > 1000 || len(request.GetTargets()) > 128 {
-		manager.send(parent, logEndMessage(request.GetRequestId(), agentpb.LogEndReason_LOG_END_REASON_AVAILABILITY_FAILED))
+		manager.send(
+			parent,
+			logEndMessage(request.GetRequestId(), agentpb.LogEndReason_LOG_END_REASON_AVAILABILITY_FAILED),
+		)
 		return
 	}
 
@@ -94,7 +97,12 @@ func (manager *logManager) run(ctx context.Context, request *agentpb.LogSubscrib
 		}
 	}()
 
-	if !manager.send(ctx, &agentpb.AgentMessage{Payload: &agentpb.AgentMessage_LogReady{LogReady: &agentpb.LogReady{RequestId: requestID}}}) {
+	if !manager.send(
+		ctx,
+		&agentpb.AgentMessage{
+			Payload: &agentpb.AgentMessage_LogReady{LogReady: &agentpb.LogReady{RequestId: requestID}},
+		},
+	) {
 		return
 	}
 

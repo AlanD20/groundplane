@@ -780,6 +780,129 @@ wait_for_agent_task() {
     settle_timed_out_agent_task "$task_id"
 }
 
+load_agent_list() {
+    if ! agent_list_output=$(/usr/local/bin/groundplane \
+        --host http://127.0.0.1:8080 \
+        --output json \
+        agent list 2>&1); then
+        printf '%s\n' "$agent_list_output" >&2
+        echo "Agent list could not be read; refusing Agent update" >&2
+        return 1
+    fi
+    if ! agent_list_state_output=$(
+        printf '%s\n' "$agent_list_output" |
+            python3 -c '
+import json
+import sys
+
+try:
+    document = json.load(sys.stdin)
+except (TypeError, ValueError):
+    raise SystemExit(1)
+
+if not isinstance(document, dict):
+    raise SystemExit(1)
+items = document.get("items")
+if not isinstance(items, list):
+    raise SystemExit(1)
+if len(items) == 0:
+    print("absent")
+    raise SystemExit(0)
+if len(items) != 1 or not isinstance(items[0], dict):
+    raise SystemExit(1)
+agent = items[0]
+agent_id = agent.get("id")
+in_flight = agent.get("in_flight")
+if not isinstance(agent_id, str) or not agent_id or "\n" in agent_id or "\r" in agent_id:
+    raise SystemExit(1)
+if type(in_flight) is not int or in_flight < 0:
+    raise SystemExit(1)
+print("present")
+print(agent_id)
+print(in_flight)
+'
+    ); then
+        printf '%s\n' "$agent_list_output" >&2
+        echo "Agent list response was missing or malformed; refusing Agent update" >&2
+        return 1
+    fi
+    agent_list_state=$(printf '%s\n' "$agent_list_state_output" | sed -n '1p')
+    case "$agent_list_state" in
+        absent)
+            agent_id=""
+            agent_in_flight=""
+            ;;
+        present)
+            agent_id=$(printf '%s\n' "$agent_list_state_output" | sed -n '2p')
+            agent_in_flight=$(printf '%s\n' "$agent_list_state_output" | sed -n '3p')
+            ;;
+        *)
+            echo "Agent list parser returned unknown state: $agent_list_state" >&2
+            return 1
+            ;;
+    esac
+}
+
+dispatch_agent_update() {
+    update_settled=0
+    attempt=0
+    while test "$attempt" -lt 330; do
+        if test "$agent_list_state" != present ||
+            test "$agent_id" != "$selected_agent_id"; then
+            echo "Agent singleton changed while waiting for idle; refusing Agent update" >&2
+            exit 1
+        fi
+        if test "$agent_in_flight" -eq 0; then
+            if update_output=$(/usr/local/bin/groundplane \
+                --host http://127.0.0.1:8080 \
+                --output json \
+                agent update --all 2>&1); then
+                retain_recovery=1
+                unresolved_task_state=dispatched
+                printf '%s\n' "$update_output"
+                agent_task_id=$(printf '%s\n' "$update_output" |
+                    sed -n 's/^[[:space:]]*"task_id":[[:space:]]*"\([^"]*\)".*$/\1/p')
+                unresolved_task_id=$agent_task_id
+                if test -z "$agent_task_id"; then
+                    unresolved_task_state=unknown
+                    echo "Agent update did not return a Task id" >&2
+                    exit 1
+                fi
+                update_settled=1
+                break
+            fi
+            case "$update_output" in
+                'error: state.conflict: Agent already runs configured agent.image')
+                    printf 'Agent: already running configured image\n'
+                    update_settled=1
+                    break
+                    ;;
+                'error: resource.in_use:'*)
+                    ;;
+                *)
+                    printf '%s\n' "$update_output" >&2
+                    retain_recovery=1
+                    unresolved_task_state=unknown
+                    echo "Agent update outcome is unknown; refusing to race it with rollback" >&2
+                    exit 1
+                    ;;
+            esac
+        fi
+        attempt=$((attempt + 1))
+        if test "$attempt" -ge 330; then
+            break
+        fi
+        sleep 1
+        if ! load_agent_list; then
+            exit 1
+        fi
+    done
+    if test "$update_settled" -ne 1; then
+        echo "Agent remained busy for 330 seconds; its lifecycle may still be in flight" >&2
+        exit 1
+    fi
+}
+
 wait_for_agent_ready() {
     attempt=0
     while test "$attempt" -lt 150; do
@@ -813,61 +936,15 @@ wait_for_agent_ready() {
 }
 
 agent_task_id=""
-if ! agent_list_output=$(/usr/local/bin/groundplane \
-    --host http://127.0.0.1:8080 \
-    --output json \
-    agent list 2>&1); then
-    printf '%s\n' "$agent_list_output" >&2
+if ! load_agent_list; then
     exit 1
 fi
-if printf '%s\n' "$agent_list_output" | grep -Eq '"id"[[:space:]]*:'; then
-    update_settled=0
-    attempt=0
-    while test "$attempt" -lt 330; do
-        if update_output=$(/usr/local/bin/groundplane \
-            --host http://127.0.0.1:8080 \
-            --output json \
-            agent update --all 2>&1); then
-            retain_recovery=1
-            unresolved_task_state=dispatched
-            printf '%s\n' "$update_output"
-            agent_task_id=$(printf '%s\n' "$update_output" |
-                sed -n 's/^[[:space:]]*"task_id":[[:space:]]*"\([^"]*\)".*$/\1/p')
-            unresolved_task_id=$agent_task_id
-            if test -z "$agent_task_id"; then
-                unresolved_task_state=unknown
-                echo "Agent update did not return a Task id" >&2
-                exit 1
-            fi
-            update_settled=1
-            break
-        fi
-        case "$update_output" in
-            'error: state.conflict: Agent already runs configured agent.image')
-                printf 'Agent: already running configured image\n'
-                update_settled=1
-                break
-                ;;
-            'error: resource.in_use:'*)
-                ;;
-            *)
-                printf '%s\n' "$update_output" >&2
-                retain_recovery=1
-                unresolved_task_state=unknown
-                echo "Agent update outcome is unknown; refusing to race it with rollback" >&2
-                exit 1
-                ;;
-        esac
-        attempt=$((attempt + 1))
-        sleep 1
-    done
-    if test "$update_settled" -ne 1; then
-        retain_recovery=1
-        unresolved_task_state=in_flight
-        echo "Agent remained busy for 330 seconds; its lifecycle may still be in flight" >&2
-        exit 1
-    fi
-else
+case "$agent_list_state" in
+present)
+    selected_agent_id=$agent_id
+    dispatch_agent_update
+    ;;
+absent)
     if join_output=$(/usr/local/bin/groundplane \
         --host http://127.0.0.1:8080 \
         --output json \
@@ -890,7 +967,12 @@ else
         echo "Agent enrollment did not return a Task id" >&2
         exit 1
     fi
-fi
+    ;;
+*)
+    echo "Agent list returned unknown state: $agent_list_state" >&2
+    exit 1
+    ;;
+esac
 if test -n "$agent_task_id"; then
     wait_for_agent_task "$agent_task_id"
 else

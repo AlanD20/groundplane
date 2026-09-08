@@ -43,7 +43,13 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	expectedHeadRevision, generation, err := serviceDesiredState(environment.Record.ID, head, hasHead, projection, hasProjection)
+	expectedHeadRevision, generation, err := serviceDesiredState(
+		environment.Record.ID,
+		head,
+		hasHead,
+		projection,
+		hasProjection,
+	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -172,7 +178,10 @@ func (service *serviceMutationService) claimServiceDesiredRevision(
 		claim.SourceKind != etcd.EnvironmentBlueprintSourceMutation ||
 		claim.RenderGeneration != projection.RenderGeneration ||
 		claim.ProjectionSchema != etcd.EnvironmentDesiredProjectionSchema {
-		return etcd.EnvironmentBlueprintStageClaim{}, errs.New(errs.KindStateConflict, "Service staged baseline changed")
+		return etcd.EnvironmentBlueprintStageClaim{}, errs.New(
+			errs.KindStateConflict,
+			"Service staged baseline changed",
+		)
 	}
 	return claim, nil
 }
@@ -250,7 +259,10 @@ func buildServiceDesiredProjection(
 	}
 	if hasCurrent {
 		if err := proto.Unmarshal(current.ComposeArtifact, artifact); err != nil {
-			return etcd.EnvironmentComposeProjection{}, errs.New(errs.KindInternal, "Service baseline artifact is corrupt")
+			return etcd.EnvironmentComposeProjection{}, errs.New(
+				errs.KindInternal,
+				"Service baseline artifact is corrupt",
+			)
 		}
 	}
 	action := controller.ServiceArtifactEdit
@@ -274,13 +286,16 @@ func buildServiceDesiredProjection(
 			return etcd.EnvironmentComposeProjection{}, err
 		}
 	}
-	normalizedArtifact, err = controller.MutateEnvironmentServiceArtifact(normalizedArtifact, controller.ServiceArtifactMutation{
-		Action: action, Desired: record.Desired,
-		Zones:      serviceArtifactZones(references),
-		ArtifactID: serviceStableIDFromRevision(ids.KindConfig, revisionID),
-		PlanID:     serviceStableIDFromRevision(ids.KindPlan, revisionID), TenantID: tenantID, ProjectID: projectID,
-		RenderGeneration: generation,
-	})
+	normalizedArtifact, err = controller.MutateEnvironmentServiceArtifact(
+		normalizedArtifact,
+		controller.ServiceArtifactMutation{
+			Action: action, Desired: record.Desired,
+			Zones:      serviceArtifactZones(references),
+			ArtifactID: serviceStableIDFromRevision(ids.KindConfig, revisionID),
+			PlanID:     serviceStableIDFromRevision(ids.KindPlan, revisionID), TenantID: tenantID, ProjectID: projectID,
+			RenderGeneration: generation,
+		},
+	)
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, err
 	}
@@ -352,12 +367,15 @@ func buildServiceRemovalProjection(
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, err
 	}
-	normalizedArtifact, err = controller.MutateEnvironmentServiceArtifact(normalizedArtifact, controller.ServiceArtifactMutation{
-		Action: controller.ServiceArtifactRemove, Desired: record.Desired,
-		ArtifactID: serviceStableIDFromRevision(ids.KindConfig, revisionID),
-		PlanID:     serviceStableIDFromRevision(ids.KindPlan, revisionID), TenantID: tenantID, ProjectID: projectID,
-		RenderGeneration: generation,
-	})
+	normalizedArtifact, err = controller.MutateEnvironmentServiceArtifact(
+		normalizedArtifact,
+		controller.ServiceArtifactMutation{
+			Action: controller.ServiceArtifactRemove, Desired: record.Desired,
+			ArtifactID: serviceStableIDFromRevision(ids.KindConfig, revisionID),
+			PlanID:     serviceStableIDFromRevision(ids.KindPlan, revisionID), TenantID: tenantID, ProjectID: projectID,
+			RenderGeneration: generation,
+		},
+	)
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, err
 	}
@@ -390,7 +408,7 @@ func cloneEnvironmentDesiredProjection(current etcd.EnvironmentComposeProjection
 	for index, file := range current.RuntimeFiles {
 		runtimeFiles[index] = core.BlueprintFile{Path: file.Path, Content: append([]byte(nil), file.Content...)}
 	}
-	return etcd.EnvironmentComposeProjection{
+	result := etcd.EnvironmentComposeProjection{
 		EnvironmentID: current.EnvironmentID, RevisionID: current.RevisionID,
 		RenderGeneration:       current.RenderGeneration,
 		ComposeArtifact:        append([]byte(nil), current.ComposeArtifact...),
@@ -406,6 +424,10 @@ func cloneEnvironmentDesiredProjection(current etcd.EnvironmentComposeProjection
 		Entries:                append([]etcd.EntryRecord(nil), current.Entries...),
 		ServiceDependencyPlans: current.ServiceDependencyPlans.Clone(),
 	}
+	result.ManagedComponentRuntimeSources = append(
+		[]etcd.ManagedComponentRuntimeSource(nil), current.ManagedComponentRuntimeSources...,
+	)
+	return result
 }
 
 func cloneDirectServiceExtensions(source map[string]core.ServiceExtensionSpec) map[string]core.ServiceExtensionSpec {

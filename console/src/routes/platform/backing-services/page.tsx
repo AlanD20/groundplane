@@ -13,6 +13,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Drawer, DrawerContent } from '@/components/ui/drawer'
+import { valkeyAuthenticationDetails } from '@/lib/valkey-authentication'
+import type { ValkeyAuthentication } from '@/lib/types'
 
 export default function PlatformBackingServicesPage() {
   const store = useStore()
@@ -20,6 +22,7 @@ export default function PlatformBackingServicesPage() {
   const { name, slug, setName, setSlug, reset: resetBackingIdentity } = useLinkedSlug()
   const [description, setDescription] = useState('')
   const [adapter, setAdapter] = useState<'postgres:16' | 'valkey:9'>('postgres:16')
+  const [authentication, setAuthentication] = useState<ValkeyAuthentication>('username_password')
   const [networkPool, setNetworkPool] = useState('10.200.0.0/16')
   const [zoneName, setZoneName] = useState('data')
   const [zoneSubnet, setZoneSubnet] = useState('10.200.20.0/24')
@@ -71,6 +74,7 @@ export default function PlatformBackingServicesPage() {
             const env = g.environments?.[0]
             const svc = env?.services[0]
             const adapter = store.adapters.find((a) => a.key === svc?.adapter)
+            const authenticationDetails = valkeyAuthenticationDetails(svc?.authentication)
             const port = adapter?.urlScheme === 'redis' ? 6379 : 5432
             const backupSourceCount = store.tenantProjects.reduce(
               (count, project) => count + (project.environments ?? []).reduce(
@@ -101,6 +105,7 @@ export default function PlatformBackingServicesPage() {
                       </div>
                       <span className="font-mono text-xs text-muted-foreground">
                         {svc?.serviceName}:{port} · {svc?.adapter}
+                        {authenticationDetails ? ` · ${authenticationDetails.label}` : ''}
                       </span>
                     </div>
                   </div>
@@ -149,6 +154,22 @@ export default function PlatformBackingServicesPage() {
                 <option value="valkey:9">Valkey 9</option>
               </select>
             </div>
+            {adapter === 'valkey:9' && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="backing-authentication">Authentication</Label>
+                <select
+                  id="backing-authentication"
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                  value={authentication}
+                  onChange={(event) => setAuthentication(event.target.value as ValkeyAuthentication)}
+                >
+                  <option value="username_password">Username + password (default)</option>
+                  <option value="password">Password only · shared default user</option>
+                  <option value="none">None · no authentication</option>
+                </select>
+                <p className="text-xs text-muted-foreground">Immutable for this backing instance. Every Attach inherits this mode.</p>
+              </div>
+            )}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="backing-zone-name">Zone name</Label>
               <Input id="backing-zone-name" value={zoneName} onChange={(event) => setZoneName(event.target.value)} placeholder="data" />
@@ -165,6 +186,11 @@ export default function PlatformBackingServicesPage() {
               <input type="checkbox" checked={zoneInternal} onChange={(event) => setZoneInternal(event.target.checked)} />
               Isolate this backing Zone from outbound host traffic
             </label>
+            {adapter === 'valkey:9' && authentication === 'none' && (
+              <p role="status" className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning sm:col-span-2">
+                Any client that can reach this backing service can access it without authentication.
+              </p>
+            )}
             {createError && <p role="alert" className="text-xs text-destructive sm:col-span-2">{createError}</p>}
           </div>
           <DialogFooter>
@@ -180,12 +206,14 @@ export default function PlatformBackingServicesPage() {
                     name: name.trim(),
                     description: description.trim() || undefined,
                     adapter,
+                    ...(adapter === 'valkey:9' ? { authentication } : {}),
                     network_pool: networkPool.trim(),
                     zone: { name: zoneName.trim(), subnet: zoneSubnet.trim(), internal: zoneInternal },
                   })
                   setCreateOpen(false)
                   resetBackingIdentity()
                   setDescription('')
+                  setAuthentication('username_password')
                 } catch (error) {
                   setCreateError(error instanceof Error ? error.message : 'Unable to create backing service')
                 } finally {

@@ -24,7 +24,10 @@ func (repository *TaskRepository) prepareReleaseTaskPublicationFragment(
 	}
 	if task.Executor != TaskExecutorAgent || task.Status != TaskStatusPending ||
 		(task.Type != TaskDeploy && task.Type != TaskRollback) || task.Owner.EnvironmentID == "" {
-		return releaseTaskPublicationFragment{}, errs.New(errs.KindValidationFailed, "release task publication shape is invalid")
+		return releaseTaskPublicationFragment{}, errs.New(
+			errs.KindValidationFailed,
+			"release task publication shape is invalid",
+		)
 	}
 	taskValue, err := encodeTaskRecord(task)
 	if err != nil {
@@ -44,7 +47,10 @@ func (repository *TaskRepository) prepareReleaseTaskPublicationFragment(
 	if len(ownerKeys) != 2 {
 		clear(taskValue)
 		clear(reference)
-		return releaseTaskPublicationFragment{}, errs.New(errs.KindInternal, "release task owner indexes are incomplete")
+		return releaseTaskPublicationFragment{}, errs.New(
+			errs.KindInternal,
+			"release task owner indexes are incomplete",
+		)
 	}
 	mutations := []Mutation{
 		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},

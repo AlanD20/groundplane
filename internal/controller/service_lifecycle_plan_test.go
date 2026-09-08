@@ -10,11 +10,119 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
 )
+
+// Rationale: lifecycle planning must select the sealed runtime represented by
+// the applied artifact, never reconstruct a workload from normalized desired.
+func TestServiceLifecyclePlanSelectsAppliedSealedAddressableRuntime(t *testing.T) {
+	t.Parallel()
+	reader, _ := blueprintPlanTestState(t)
+	const (
+		serviceID = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		releaseID = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	)
+	replicas := 2
+	project := &composetypes.Project{
+		Services: composetypes.Services{"api": {
+			Name: "api", Image: "example/api:desired", Expose: []string{"8080"},
+			Deploy:   &composetypes.DeployConfig{Replicas: &replicas},
+			Networks: map[string]*composetypes.ServiceNetworkConfig{"frontend": {}},
+		}},
+		Networks: composetypes.Networks{"frontend": {}},
+	}
+	normalized, err := project.MarshalYAML()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader.projection.NormalizedCompose = normalized
+	reader.projection.DesiredServices[0].Desired.Image = "example/api:desired"
+	reader.projection.DesiredServices[0].Desired.Expose = []string{"8080"}
+	reader.projection.DesiredServices[0].Desired.Replicas = 2
+	reader.projection.Volumes = nil
+	seal := domain.WorkloadSeal{
+		RequestedReference: "example/api:deployed",
+		LocalImageID:       "sha256:" + strings.Repeat("d", 64), ReplicaCount: 2,
+	}
+	source, err := RenderCompose(ComposeRenderInput{
+		Project: project, ArtifactID: "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAY",
+		ProjectOwnerKind: ComposeProjectOwnerTenant,
+		TenantID:         reader.tenant.ID, ProjectID: reader.project.ID, EnvironmentID: reader.environment.ID,
+		PlanID: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAX", RenderGeneration: reader.projection.RenderGeneration,
+		AuthorizedVolumeDir: reader.environment.VolumeDir,
+		Identities:          mustComposeIdentitySnapshotFromProjection(t, reader.projection),
+		Releases: map[string]ComposeReleaseIdentity{serviceID: {
+			ProxyImage: testServiceProxyImage(), ReleaseID: releaseID,
+			Target: domain.WorkloadSingleton, Image: seal.LocalImageID,
+			ServingReleaseID: releaseID, ServingTarget: domain.WorkloadSingleton,
+			ServingProxyGeneration: 4, Strategy: domain.StrategyRecreate,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader.projection.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	releaseRender := etcd.ReleaseRenderInput{
+		ReleaseID: releaseID, PlanID: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAX",
+		ArtifactID: source.ArtifactId, ServiceID: serviceID, ServiceName: "api",
+		CandidateWorkload: seal, Strategy: domain.StrategyRecreate, PriorStrategy: domain.StrategyRecreate,
+		CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
+		ProxyGeneration: 4, ProxyPorts: []uint16{8080}, ProxyConfigDigest: "sealed",
+		ProxyImage: testServiceProxyImage(),
+		TenantID:   reader.tenant.ID, TenantSlug: reader.tenant.Slug,
+		ProjectID: reader.project.ID, ProjectSlug: reader.project.Slug,
+		EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
+		AuthorizedVolumeDir: reader.environment.VolumeDir, Projection: reader.projection,
+	}
+	input := etcd.ServiceLifecycleRenderInput{
+		PlanID: "plan_01ARZ3NDEKTSV4RRFFQ69G5FAW", ServiceID: serviceID,
+		TenantID: reader.tenant.ID, TenantSlug: reader.tenant.Slug,
+		ProjectID: reader.project.ID, ProjectSlug: reader.project.Slug,
+		EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
+		AuthorizedVolumeDir: reader.environment.VolumeDir,
+		ArtifactID:          source.ArtifactId, Projection: reader.projection, AppliedProjectionRevision: 20,
+		Release: etcd.ServiceLifecycleRelease{
+			ServingReleaseID: releaseID, ProjectionRevision: 21, IntentRevision: 22,
+			RenderRevision: 23, Current: releaseRender,
+		},
+	}
+	task := etcd.TaskRecord{
+		ID: "task_01ARZ3NDEKTSV4RRFFQ69G5FAW", OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+		Executor: etcd.TaskExecutorAgent, PlanID: input.PlanID, Type: etcd.TaskStart,
+		Target: serviceID, TimeoutSeconds: 120, Status: etcd.TaskStatusPending,
+		Params: map[string]string{
+			etcd.TaskServiceEnvironmentParam: input.EnvironmentID,
+			etcd.TaskComposeArtifactParam:    input.ArtifactID,
+		},
+		Steps:            []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"}},
+		RenderGeneration: int32(reader.projection.RenderGeneration),
+	}
+	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := resolver.buildServiceLifecyclePlan(context.Background(), task, input)
+	if err != nil {
+		t.Fatalf("buildServiceLifecyclePlan() error = %v", err)
+	}
+	services := make(map[string]*agentpb.ComposeService, len(plan.GetArtifacts()[0].GetServices()))
+	for _, service := range plan.GetArtifacts()[0].GetServices() {
+		services[service.GetComposeName()] = service
+	}
+	if len(services) != 2 || services["api"] == nil ||
+		services["api"].GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY ||
+		services["api--singleton"] == nil || services["api--singleton"].GetExpectedReplicas() != 2 ||
+		services["api--singleton"].GetImageReference() != seal.LocalImageID {
+		t.Fatalf("lifecycle selected services = %#v", services)
+	}
+}
 
 func TestServiceLifecycleProcedureUsesTargetedComposeOperations(t *testing.T) {
 	// Rationale: Start, Stop, and Destroy intentionally preserve different
@@ -48,11 +156,11 @@ func TestServiceLifecycleProcedureUsesTargetedComposeOperations(t *testing.T) {
 			Type: test.taskType, Target: serviceID, TimeoutSeconds: 120,
 			Steps: []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}},
 		}
-		operation, step, err := serviceLifecycleProcedure(task, artifactID)
-		if err != nil || operation != test.operation || step.TimeoutSeconds != 120 {
-			t.Fatalf("serviceLifecycleProcedure(%s) = %v, %#v, %v", test.taskType, operation, step, err)
+		operation, steps, err := serviceLifecycleProcedure(task, []*agentpb.ComposeArtifact{{ArtifactId: artifactID}})
+		if err != nil || operation != test.operation || len(steps) != 1 || steps[0].TimeoutSeconds != 120 {
+			t.Fatalf("serviceLifecycleProcedure(%s) = %v, %#v, %v", test.taskType, operation, steps, err)
 		}
-		test.assert(t, step)
+		test.assert(t, steps[0])
 	}
 }
 
@@ -119,6 +227,25 @@ func TestServiceLifecyclePlanCompilesPinnedStartDependenciesAcrossRestart(t *tes
 		t.Fatal(err)
 	}
 	input.Projection = reader.projection
+	workload := domain.WorkloadSeal{
+		RequestedReference: "example/api:deployed",
+		LocalImageID:       "sha256:" + strings.Repeat("a", 64), ReplicaCount: 1,
+	}
+	input.AppliedProjectionRevision = 20
+	input.Release = etcd.ServiceLifecycleRelease{
+		ServingReleaseID:   "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		ProjectionRevision: 21, IntentRevision: 22, RenderRevision: 23,
+		Current: etcd.ReleaseRenderInput{
+			ReleaseID: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", PlanID: input.PlanID,
+			ArtifactID: input.ArtifactID, ServiceID: apiID, ServiceName: "api",
+			CandidateWorkload: workload, Strategy: domain.StrategyRecreate, PriorStrategy: domain.StrategyRecreate,
+			CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
+			TenantID: input.TenantID, TenantSlug: input.TenantSlug,
+			ProjectID: input.ProjectID, ProjectSlug: input.ProjectSlug,
+			EnvironmentID: input.EnvironmentID, EnvironmentName: input.EnvironmentName,
+			AuthorizedVolumeDir: input.AuthorizedVolumeDir, Projection: reader.projection,
+		},
+	}
 	task := etcd.TaskRecord{
 		ID: "task_01ARZ3NDEKTSV4RRFFQ69G5FAW", OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Executor: etcd.TaskExecutorAgent, PlanID: input.PlanID, Type: etcd.TaskStart,
@@ -129,7 +256,7 @@ func TestServiceLifecyclePlanCompilesPinnedStartDependenciesAcrossRestart(t *tes
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
 	}
 	prepared, err := firstResolver.PrepareServiceLifecycleTask(
-		context.Background(), task, input, "step_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		context.Background(), task, input, []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
 	)
 	if err != nil {
 		t.Fatalf("PrepareServiceLifecycleTask() error = %v", err)
@@ -151,9 +278,8 @@ func TestServiceLifecyclePlanCompilesPinnedStartDependenciesAcrossRestart(t *tes
 		t.Fatalf("restart plans changed: %x / %x", first.PlanHash, second.PlanHash)
 	}
 	yaml := string(first.Artifacts[0].CanonicalYaml)
-	if !strings.Contains(yaml, "depends_on:") ||
-		!strings.Contains(yaml, "condition: service_completed_successfully") {
-		t.Fatalf("compiled start artifact omitted dependency:\n%s", yaml)
+	if !strings.Contains(yaml, workload.LocalImageID) || strings.Contains(yaml, "example/api:deployed") {
+		t.Fatalf("compiled start artifact did not preserve sealed image authority:\n%s", yaml)
 	}
 }
 

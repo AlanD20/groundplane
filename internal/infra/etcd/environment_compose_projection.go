@@ -43,23 +43,37 @@ type EnvironmentRouteProjection struct {
 	DesiredGeneration uint64     `json:"desired_generation"`
 }
 
+// ManagedComponentRuntimeSource pins the one Compose service that may still
+// exist for an Environment Component after the source revision was attempted.
+// A projection contains at most one source per fixed Component singleton.
+type ManagedComponentRuntimeSource struct {
+	ComponentKind  core.ComponentKind `json:"component_kind"`
+	ComponentID    string             `json:"component_id"`
+	ServiceID      string             `json:"service_id"`
+	ComposeName    string             `json:"compose_service_name"`
+	RevisionID     string             `json:"source_revision_id"`
+	ArtifactID     string             `json:"source_artifact_id"`
+	ArtifactSHA256 string             `json:"source_artifact_sha256"`
+}
+
 // EnvironmentComposeProjection is the sorted durable input for one Environment render.
 type EnvironmentComposeProjection struct {
-	EnvironmentID     string                               `json:"environment_id"`
-	RevisionID        string                               `json:"blueprint_revision_id"`
-	RenderGeneration  uint64                               `json:"render_generation"`
-	ComposeArtifact   []byte                               `json:"compose_artifact"`
-	NormalizedCompose []byte                               `json:"normalized_compose"`
-	RuntimeFiles      []core.BlueprintFile                 `json:"runtime_files,omitempty"`
-	ServiceExtensions map[string]core.ServiceExtensionSpec `json:"service_extensions,omitempty"`
-	DesiredZones      []EnvironmentZoneProjection          `json:"desired_zones,omitempty"`
-	DesiredServices   []EnvironmentServiceProjection       `json:"desired_services,omitempty"`
-	DesiredRoutes     []EnvironmentRouteProjection         `json:"desired_routes,omitempty"`
-	Volumes           []EnvironmentVolumeIdentity          `json:"volumes,omitempty"`
-	VolumeMounts      []EnvironmentServiceVolumeMount      `json:"volume_mounts,omitempty"`
-	Components        []ComponentRecord                    `json:"components,omitempty"`
-	Entries           []EntryRecord                        `json:"entries,omitempty"`
-	Backup            *EnvironmentBlueprintBackupPolicy    `json:"backup,omitempty"`
+	EnvironmentID                  string                               `json:"environment_id"`
+	RevisionID                     string                               `json:"blueprint_revision_id"`
+	RenderGeneration               uint64                               `json:"render_generation"`
+	ComposeArtifact                []byte                               `json:"compose_artifact"`
+	NormalizedCompose              []byte                               `json:"normalized_compose"`
+	RuntimeFiles                   []core.BlueprintFile                 `json:"runtime_files,omitempty"`
+	ServiceExtensions              map[string]core.ServiceExtensionSpec `json:"service_extensions,omitempty"`
+	DesiredZones                   []EnvironmentZoneProjection          `json:"desired_zones,omitempty"`
+	DesiredServices                []EnvironmentServiceProjection       `json:"desired_services,omitempty"`
+	DesiredRoutes                  []EnvironmentRouteProjection         `json:"desired_routes,omitempty"`
+	Volumes                        []EnvironmentVolumeIdentity          `json:"volumes,omitempty"`
+	VolumeMounts                   []EnvironmentServiceVolumeMount      `json:"volume_mounts,omitempty"`
+	Components                     []ComponentRecord                    `json:"components,omitempty"`
+	ManagedComponentRuntimeSources []ManagedComponentRuntimeSource      `json:"managed_component_runtime_sources,omitempty"`
+	Entries                        []EntryRecord                        `json:"entries,omitempty"`
+	Backup                         *EnvironmentBlueprintBackupPolicy    `json:"backup,omitempty"`
 	core.ServiceDependencyPlans
 	core.BlueprintRequirements
 }
@@ -435,6 +449,9 @@ func validateEnvironmentComposeProjection(projection EnvironmentComposeProjectio
 	if err := validateEnvironmentComponentProjection(projection.EnvironmentID, projection.Components); err != nil {
 		return err
 	}
+	if err := validateManagedComponentRuntimeSources(projection); err != nil {
+		return err
+	}
 	if err := validateEnvironmentProjectionArtifact(projection); err != nil {
 		return err
 	}
@@ -563,7 +580,8 @@ func validateEnvironmentServiceProjections(
 				ServiceID: value.Desired.ID, RuntimeIntent: core.ServiceRuntimeIntentRunning,
 			},
 		}
-		if value.EnvironmentID != environmentID || value.Desired.Name <= previousName || validateServiceRecord(record) != nil {
+		if value.EnvironmentID != environmentID || value.Desired.Name <= previousName ||
+			validateServiceRecord(record) != nil {
 			return errs.New(errs.KindValidationFailed, "Environment desired Service projection is invalid or unsorted")
 		}
 		if _, duplicate := seenIDs[value.Desired.ID]; duplicate {
@@ -659,6 +677,9 @@ func cloneEnvironmentComposeProjection(source EnvironmentComposeProjection) Envi
 			clone.Components[index] = cloneComponentTaskRecord(component)
 		}
 	}
+	clone.ManagedComponentRuntimeSources = append(
+		[]ManagedComponentRuntimeSource(nil), source.ManagedComponentRuntimeSources...,
+	)
 	if source.Entries != nil {
 		clone.Entries = make([]EntryRecord, len(source.Entries))
 		for index, entry := range source.Entries {
@@ -779,41 +800,20 @@ func validateEnvironmentProjectionArtifact(projection EnvironmentComposeProjecti
 		for _, serviceID := range component.Runtime.GeneratedServices {
 			expected := expectedServices[serviceID]
 			if expected.componentID != "" {
-				return errs.New(errs.KindValidationFailed, "Environment normalized Compose Service identity is duplicated")
+				return errs.New(
+					errs.KindValidationFailed,
+					"Environment normalized Compose Service identity is duplicated",
+				)
 			}
 			expected.componentID = component.Desired.ID
 			expectedServices[serviceID] = expected
 		}
 	}
-	if len(artifact.GetServices()) != len(expectedServices) || len(artifact.GetVolumes()) != len(projection.Volumes) {
+	if len(artifact.GetVolumes()) != len(projection.Volumes) {
 		return errs.New(errs.KindValidationFailed, "Environment normalized Compose artifact coverage is incomplete")
 	}
-	services := make(map[string]string, len(artifact.GetServices()))
-	serviceNames := make(map[string]string, len(artifact.GetServices()))
-	for _, service := range artifact.GetServices() {
-		if service == nil || service.GetComposeName() == "" {
-			return errs.New(errs.KindValidationFailed, "Environment normalized Compose Service is invalid")
-		}
-		if _, duplicate := services[service.GetServiceId()]; duplicate {
-			return errs.New(errs.KindValidationFailed, "Environment normalized Compose Service is duplicated")
-		}
-		if _, duplicate := serviceNames[service.GetComposeName()]; duplicate {
-			return errs.New(errs.KindValidationFailed, "Environment normalized Compose Service is duplicated")
-		}
-		expected, covered := expectedServices[service.GetServiceId()]
-		if !covered {
-			return errs.New(errs.KindValidationFailed, "Environment normalized Compose artifact coverage is incomplete")
-		}
-		if (expected.name != "" && expected.name != service.GetComposeName()) ||
-			expected.componentID != service.GetOwnerComponentId() {
-			return errs.New(errs.KindValidationFailed, "Environment normalized Compose Service identity changed")
-		}
-		services[service.GetServiceId()] = service.GetComposeName()
-		serviceNames[service.GetComposeName()] = service.GetServiceId()
-		delete(expectedServices, service.GetServiceId())
-	}
-	if len(expectedServices) != 0 {
-		return errs.New(errs.KindValidationFailed, "Environment normalized Compose artifact coverage is incomplete")
+	if err := validateEnvironmentArtifactServices(artifact, expectedServices); err != nil {
+		return err
 	}
 	volumes := make(map[string]string, len(artifact.GetVolumes()))
 	for _, volume := range artifact.GetVolumes() {

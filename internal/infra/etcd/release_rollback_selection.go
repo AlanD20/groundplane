@@ -33,9 +33,15 @@ func (ledger *ReleaseLedger) SelectRollback(
 		return ReleaseRollbackSelection{}, err
 	}
 	if projectionRead == nil || len(projectionRead.Values) != 1 || projectionRead.Values[0] == nil {
-		return ReleaseRollbackSelection{}, errs.New(errs.KindRollbackNoPreviousRelease, "service has no serving release")
+		return ReleaseRollbackSelection{}, errs.New(
+			errs.KindRollbackNoPreviousRelease,
+			"service has no serving release",
+		)
 	}
-	projection, err := decodeReleaseRecord[domain.ServiceProjection](projectionRead.Values[0].Value, "service-release-projection")
+	projection, err := decodeReleaseRecord[domain.ServiceProjection](
+		projectionRead.Values[0].Value,
+		"service-release-projection",
+	)
 	if err != nil || projection.EnvironmentID != environmentID || projection.ServiceID != serviceID {
 		return ReleaseRollbackSelection{}, corruptReleaseRecord()
 	}
@@ -110,9 +116,15 @@ func (ledger *ReleaseLedger) SelectRollback(
 		start = page.Values[len(page.Values)-1].Key
 	}
 	if structural && materialUnavailable {
-		return ReleaseRollbackSelection{}, errs.New(errs.KindRollbackSourceExpired, "rollback source material is expired")
+		return ReleaseRollbackSelection{}, errs.New(
+			errs.KindRollbackSourceExpired,
+			"rollback source material is expired",
+		)
 	}
-	return ReleaseRollbackSelection{}, errs.New(errs.KindRollbackNoPreviousRelease, "no eligible previous release exists")
+	return ReleaseRollbackSelection{}, errs.New(
+		errs.KindRollbackNoPreviousRelease,
+		"no eligible previous release exists",
+	)
 }
 
 func rollbackIntentMatches(view ReleaseView, environmentID, serviceID string) bool {

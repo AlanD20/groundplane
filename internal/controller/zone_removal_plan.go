@@ -52,7 +52,10 @@ func (resolver *TaskPlanResolver) PrepareZoneRemovalTask(
 		}
 		prepared.Steps = append(prepared.Steps, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: stepID})
 	}
-	prepared.Steps = append(prepared.Steps, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: procedure.NetworkStepID})
+	prepared.Steps = append(
+		prepared.Steps,
+		etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: procedure.NetworkStepID},
+	)
 	plan, err := resolver.buildZoneRemovalPlan(prepared, intent)
 	if err != nil {
 		return etcd.TaskRecord{}, err
@@ -61,7 +64,10 @@ func (resolver *TaskPlanResolver) PrepareZoneRemovalTask(
 	return prepared, nil
 }
 
-func (resolver *TaskPlanResolver) resolveZoneRemovalPlan(ctx context.Context, task etcd.TaskRecord) (*agentpb.ExecutionPlan, error) {
+func (resolver *TaskPlanResolver) resolveZoneRemovalPlan(
+	ctx context.Context,
+	task etcd.TaskRecord,
+) (*agentpb.ExecutionPlan, error) {
 	reader, ok := resolver.blueprints.(zoneRemovalPlanReader)
 	if !ok || reader == nil {
 		return nil, errs.New(errs.KindInternal, "Zone removal intent reader is not configured")
@@ -77,7 +83,10 @@ func (resolver *TaskPlanResolver) resolveZoneRemovalPlan(ctx context.Context, ta
 	return resolver.buildZoneRemovalPlan(task, stored.Record)
 }
 
-func (resolver *TaskPlanResolver) buildZoneRemovalPlan(task etcd.TaskRecord, intent etcd.ZoneRemovalIntent) (*agentpb.ExecutionPlan, error) {
+func (resolver *TaskPlanResolver) buildZoneRemovalPlan(
+	task etcd.TaskRecord,
+	intent etcd.ZoneRemovalIntent,
+) (*agentpb.ExecutionPlan, error) {
 	if resolver == nil || task.Executor != etcd.TaskExecutorAgent || task.Type != etcd.TaskRemove ||
 		task.Target != intent.ZoneID || task.ID != intent.ActiveTaskID || intent.Status != etcd.TaskStatusPending ||
 		len(task.Params) != 4 || len(task.Materializations) != 0 ||
@@ -91,7 +100,10 @@ func (resolver *TaskPlanResolver) buildZoneRemovalPlan(task etcd.TaskRecord, int
 	artifactID := task.Params[etcd.TaskComposeArtifactParam]
 	artifact := &agentpb.ComposeArtifact{}
 	if ids.Validate(ids.KindConfig, artifactID) != nil ||
-		(proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(intent.CandidateProjection.ComposeArtifact, artifact) != nil ||
+		(proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(
+			intent.CandidateProjection.ComposeArtifact,
+			artifact,
+		) != nil ||
 		artifact.GetArtifactId() != artifactID {
 		return nil, errs.New(errs.KindInternal, "Zone removal candidate artifact changed")
 	}

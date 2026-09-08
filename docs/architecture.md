@@ -546,6 +546,29 @@ observed state. Both sides therefore understand how an operation is applied,
 but semantic ownership stays on the Controller and execution ownership stays
 on the Agent.
 
+Blueprint execution preserves unselected serving native physical entries from
+the exact acknowledged runtime artifact captured before Claim. Only resources
+referenced by those entries are retained; current Component configuration is
+rendered independently. Publication compares the captured applied key and every
+unselected native Release projection, including absence, and binds the resulting
+mixed artifact bytes. Candidate publication retains its own Task and mutation
+authority alongside these source comparisons. Replay consumes the stored
+artifact; successful managed-only execution does not replace native applied
+acknowledgement. Candidate completion records the exact executed mixed artifact.
+Candidate rendering consumes the frozen resolved runtime for selected native
+Services and generated Components, preserving Entry fields, env-file paths and
+Attach networks. Generated Services never enter authored desired membership.
+Reconstruction neither interpolates again nor injects new Compose defaults;
+unselected acknowledged native runtime remains byte-identical after merging.
+
+Historical native labels are read-only authority in a Blueprint: the shared
+plan validator requires sealed workload/proxy identity and rejects selection
+of any retained Service, dependency-expanding/full-project execution, and steps
+outside closed managed/resource setup or other declared candidates. Candidate
+re-rendering copies unselected runtime from the immutable captured projection;
+it does not regenerate historical ownership. This does not relax the Docker
+observer's exact ownership checks.
+
 `x-gp-depends_on` is compiled to native Compose `depends_on` only for
 services in the same Compose project. `x-gp-requires` becomes a Controller
 task-DAG edge and handles backing-service readiness, attach provisioning,
@@ -566,6 +589,18 @@ The Controller keeps five distinct categories of state:
 | observed | containers, health, local image ids, networks, files | Agent reports |
 | task | lifecycle, step progress, result, timeout, abort | Controller journal |
 
+Registered managed Services may declare a typed SDK `ManagedHealthcheck`: exec
+argv and bounded whole-second interval, timeout, start period, and retry count.
+It is cloned and included in the Environment plan digest, then projected as a
+Compose `CMD` healthcheck. It is not arbitrary host execution or a new wire
+operation. `WaitHealthy` still requires an actual healthcheck and healthy
+runtime observation. Cloudflared uses its native `tunnel --metrics
+127.0.0.1:2000 ready` probe with a matching loopback metrics listener; Caddy
+queries its running loopback admin API at `/config/`. These prove connector
+readiness and local Caddy responsiveness respectively, not public routing or
+backend application health. Caddy's managed admin endpoint must remain enabled
+at its default loopback address, also required by managed config activation.
+
 The canonical environment env file is generated as
 `secrets/.env.<environment-id>` and explicitly attached to every service
 with Compose `env_file`. Service-specific files append the service name.
@@ -583,6 +618,15 @@ same-filesystem sibling, an exclusive ownership marker, fsync, and
 runtime destruction, proves consumer detachment, and traverses the leaf
 descriptor-relatively in bounded resumable calls. Volume runtime states and
 removal locks never become desired authority.
+
+Before Blueprint pre-hooks mount a managed Volume, a separate resource-only
+`ManagedVolumeEnsure` step binds its stable id to the immutable rendered Volume,
+managed directory leaf, local bind options, and Groundplane plus Compose
+ownership labels. It creates only an absent Docker volume and verifies the
+result. Existing divergent or unlabeled volumes reject; they are never adopted,
+relabeled, or recreated. Directory preparation alone is not Docker volume
+preparation, and neither operation may start a consumer. Published preparation
+step identities and order survive durable Task replay.
 
 Service `runtime_intent` is Controller-owned operational state outside the
 Blueprint. Start, Stop, and Destroy set it to `running`, `stopped`, and
@@ -710,6 +754,12 @@ platform child manifest, and local Docker image/config id are distinct identitie
 Their preparation and historical-retention authority is separate from the
 workload seal, and current compiled catalog authority never substitutes for a
 sealed historical proxy identity.
+
+Release publication freezes the stable proxy's repository, index digest and
+selected platform child/config identities in its immutable render input. The
+application composition root supplies the first compiled asset; subsequent
+releases retain their captured serving predecessor's image. Plan reconstruction
+does not consult the current catalog or select a replacement for missing history.
 
 A Release Group is one ordered coordinated action over 2 through 32 logical
 Services, not a simultaneous or atomic switch. For group deploy, a request tag
@@ -966,6 +1016,14 @@ manual).
 
 The durable Service record, rather than an Attach request or Docker discovery,
 owns the selected stable `backing_network_id` for every adapter-backed Service.
+It also owns immutable backing `authentication` policy. Adapter-declared
+authentication-mode support selects the pure mode validator; core does not
+switch on adapter kinds. Fact schemas and creation/provision/detach inputs
+carry that typed mode. Valkey supports named credentials, password-only default
+user credentials, and explicit no-auth. The compiled workload retains a separate
+bootstrap administrator and persists ACL changes; no-auth bindings emit no
+adapter mutation. Password detach carries only its sealed owner's password and
+never deletes or resets the shared default user. See ADR 0068.
 Ordinary tenant Services have no such binding. Each Attach copies and pins that
 id, and publication plus plan reconstruction reject any mismatch.
 
@@ -1039,6 +1097,13 @@ capabilities. Each owning module independently validates and contributes its
 transaction fragment; one Controller transaction publishes the desired change,
 management ownership, replay evidence, candidate, Task, and queue entry.
 
+Each Blueprint Task retains its immutable prior Managed Component runtime
+sources as teardown authority, separate from the candidate or current runtime
+projection. These sources remain attached to the Task across terminalization
+and retries for its lifetime. Reconnect reconstructs teardown from those exact
+Task sources, never mutable current state or a candidate that may have been
+deleted. Future runtime publication cannot replace prior teardown authority.
+
 Component management ownership is separate from Tenant/Project/Environment/
 Platform product ownership. Operator-owned mutation requires authorization
 from the exact human request. Secret capabilities expose only metadata and
@@ -1101,10 +1166,21 @@ ADR 0064 adds one shared pure `internal/common/executionplan` candidate
 procedure used by ordinary Release and Blueprint. Its immutable plan projection
 contains exact candidate and forward anchors plus the complete closed lawful
 `serving_predecessor` and `candidate_absence` restoration alternatives. The
-Controller claim selects exactly one from the already-sealed nullable applied
-predecessor and persists that choice plus its canonical digest with the
-assignment, writer, and execution epoch. The Agent receives a selection; it
-never derives one from Docker or current Controller projections.
+Controller claim selects exactly one per Service from the already-sealed
+nullable applied predecessor (ADR 0066). It persists the complete sorted member
+map and independently fenced nullable witness plus their canonical digest with
+the assignment, writer, and execution epoch. Configured-only members select
+absence, not serving restoration. The Agent receives selections; it never
+derives them from Docker or current Controller projections.
+
+Each helper call restores or removes only its selected member. A serving probe
+may return the closed proof-free `restoration_required` result, which reaches
+only already-declared compensation. It cannot satisfy terminal proof. After
+helper restoration, independent Moby observation consumes a concrete read-only
+`executionplan.RestorationObservation` bound to the unchanged validated plan,
+selected step and canonical predecessor witness. Historical labels remain
+exact; no synthetic execution plan or current-plan validation exception is
+created. Only observation accepts this descriptor, never a mutation helper.
 
 The private release-recovery record at
 `/v1/records/release-recoveries/{task_id}` is continuation authority for the
@@ -1137,7 +1213,30 @@ transaction publishes the ordinary Task, operation, executions, snapshots,
 sealed plan, and active reverse root. Retry keeps that source set unchanged.
 After every execution is `cleanup_proven` and retry is impossible, the source
 root becomes `releasing`; bounded transactions remove exact membership pairs
-and decrement counts before the ordinary final Task transaction.
+and decrement counts before the final Task transaction. Blueprint candidate
+completion uses ADR 0067's closed terminal envelope; other Task paths retain
+their ordinary transaction limits.
+
+The Task repository alone constructs `BlueprintTaskTerminalTransaction` after
+composing all existing Task, candidate, materialization, Environment and source
+authority. Its consumer-owned persistence seam exposes separate read-only
+physical-budget validation and terminal commit methods, not a selectable
+transaction budget or desired-publication fallback. Before source writes,
+budget-only projections reserve maximum positive revision encoding widths and
+cannot expose executable operations. Validation and actual commits share the
+same physical-key and serialized-request preparation: 256 operations per arm,
+1 MiB per request, with ordinary 96-operation protection unchanged.
+
+The Task repository owns temporary
+`/v1/records/blueprint-closing-reports/{task_id}` continuation records. Normal
+source closure captures the original report atomically, binding Task/assignment
+ModRevisions, plan, operation, Agent generation, execution epoch, recovery digest
+and observation time. Source batches compare it; final completion removes it
+with the root and keeps generic terminal receipts unchanged. Reconnect consumes
+this authority before effect classification or epoch exhaustion checks. The
+Agent-channel dispatcher skips Controller-completed assignments without artifact
+resolution, quarantine or capacity consumption. No closed Script is reactivated
+or dispatched, and no absent legacy report is manufactured.
 
 The key families are closed:
 

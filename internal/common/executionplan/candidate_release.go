@@ -3,6 +3,7 @@ package executionplan
 import (
 	"bytes"
 	"crypto/sha256"
+	"slices"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -20,10 +21,11 @@ const (
 // CandidateReleaseDescriptor is the bounded immutable portion of a sealed
 // execution plan required to claim and recover one candidate Release.
 type CandidateReleaseDescriptor struct {
-	PlanID         string                `json:"plan_id"`
-	PlanHash       []byte                `json:"plan_hash"`
-	Operation      agentpb.PlanOperation `json:"operation"`
-	ProcedureBytes []byte                `json:"procedure"`
+	PlanID                 string                `json:"plan_id"`
+	PlanHash               []byte                `json:"plan_hash"`
+	Operation              agentpb.PlanOperation `json:"operation"`
+	ProcedureBytes         []byte                `json:"procedure"`
+	ComponentActionStepIDs []string              `json:"component_action_step_ids"`
 }
 
 // DescribeCandidateRelease extracts a canonical descriptor only from a fully
@@ -35,7 +37,10 @@ func DescribeCandidateRelease(plan *agentpb.ExecutionPlan) (CandidateReleaseDesc
 	}
 	procedure := sealed.GetCandidateReleaseProcedure()
 	if procedure == nil || len(procedure.GetMembers()) > maximumCandidateReleaseMembers {
-		return CandidateReleaseDescriptor{}, errs.New(errs.KindValidationFailed, "candidate Release descriptor member bound is invalid")
+		return CandidateReleaseDescriptor{}, errs.New(
+			errs.KindValidationFailed,
+			"candidate Release descriptor member bound is invalid",
+		)
 	}
 	hooks := 0
 	for _, step := range sealed.GetSteps() {
@@ -44,28 +49,39 @@ func DescribeCandidateRelease(plan *agentpb.ExecutionPlan) (CandidateReleaseDesc
 		}
 	}
 	if hooks > maximumCandidateReleaseHooks {
-		return CandidateReleaseDescriptor{}, errs.New(errs.KindValidationFailed, "candidate Release descriptor hook bound is invalid")
+		return CandidateReleaseDescriptor{}, errs.New(
+			errs.KindValidationFailed,
+			"candidate Release descriptor hook bound is invalid",
+		)
 	}
 	procedureBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(procedure)
 	if err != nil || len(procedureBytes) == 0 || len(procedureBytes) > maximumCandidateReleaseProcedureBytes {
-		return CandidateReleaseDescriptor{}, errs.New(errs.KindValidationFailed, "candidate Release descriptor procedure is invalid")
+		return CandidateReleaseDescriptor{}, errs.New(
+			errs.KindValidationFailed,
+			"candidate Release descriptor procedure is invalid",
+		)
 	}
 	return CandidateReleaseDescriptor{
 		PlanID: sealed.GetPlanId(), PlanHash: append([]byte(nil), sealed.GetPlanHash()...),
 		Operation: sealed.GetOperation(), ProcedureBytes: append([]byte(nil), procedureBytes...),
+		ComponentActionStepIDs: componentActionStepIDs(sealed),
 	}, nil
 }
 
 // OpenCandidateReleaseDescriptor validates a stored descriptor and returns an
 // owned procedure. It never supplies defaults or consults mutable state.
 func OpenCandidateReleaseDescriptor(descriptor CandidateReleaseDescriptor) (*agentpb.CandidateReleaseProcedure, error) {
+	if err := ValidateComponentActionStepIDs(descriptor.ComponentActionStepIDs); err != nil {
+		return nil, err
+	}
 	if ids.Validate(ids.KindPlan, descriptor.PlanID) != nil || len(descriptor.PlanHash) != sha256.Size ||
 		!candidateReleaseOperation(descriptor.Operation) || len(descriptor.ProcedureBytes) == 0 ||
 		len(descriptor.ProcedureBytes) > maximumCandidateReleaseProcedureBytes {
 		return nil, errs.New(errs.KindValidationFailed, "candidate Release descriptor is invalid")
 	}
 	procedure := new(agentpb.CandidateReleaseProcedure)
-	if err := proto.Unmarshal(descriptor.ProcedureBytes, procedure); err != nil || len(procedure.ProtoReflect().GetUnknown()) != 0 ||
+	if err := proto.Unmarshal(descriptor.ProcedureBytes, procedure); err != nil ||
+		len(procedure.ProtoReflect().GetUnknown()) != 0 ||
 		len(procedure.GetMembers()) > maximumCandidateReleaseMembers {
 		return nil, errs.New(errs.KindValidationFailed, "candidate Release descriptor procedure is invalid")
 	}
@@ -85,7 +101,10 @@ func CandidateReleaseDescriptorMatchesPlan(descriptor CandidateReleaseDescriptor
 		return err
 	}
 	if descriptor.PlanID != expected.PlanID || descriptor.Operation != expected.Operation ||
-		!bytes.Equal(descriptor.PlanHash, expected.PlanHash) || !bytes.Equal(descriptor.ProcedureBytes, expected.ProcedureBytes) {
+		!bytes.Equal(
+			descriptor.PlanHash,
+			expected.PlanHash,
+		) || !bytes.Equal(descriptor.ProcedureBytes, expected.ProcedureBytes) || !slices.Equal(descriptor.ComponentActionStepIDs, expected.ComponentActionStepIDs) {
 		return errs.New(errs.KindValidationFailed, "candidate Release descriptor does not match execution plan")
 	}
 	return nil
@@ -96,6 +115,7 @@ func CandidateReleaseDescriptorMatchesPlan(descriptor CandidateReleaseDescriptor
 func CloneCandidateReleaseDescriptor(descriptor CandidateReleaseDescriptor) CandidateReleaseDescriptor {
 	descriptor.PlanHash = append([]byte(nil), descriptor.PlanHash...)
 	descriptor.ProcedureBytes = append([]byte(nil), descriptor.ProcedureBytes...)
+	descriptor.ComponentActionStepIDs = slices.Clone(descriptor.ComponentActionStepIDs)
 	return descriptor
 }
 
@@ -116,8 +136,12 @@ type CandidateReleaseMemberInput struct {
 }
 
 type ServingPredecessorInput struct {
-	ProbeStepID      string
-	CompensateStepID string
+	ProbeStepID             string
+	CompensateStepID        string
+	PriorArtifactID         string
+	PriorReleaseID          string
+	PriorTarget             string
+	RetainedPriorArtifactID string
 }
 
 type CandidateAbsenceInput struct {
@@ -147,6 +171,8 @@ func BuildCandidateReleaseProcedure(input CandidateReleaseProcedureInput) (*agen
 		if value := inputMember.ServingPredecessor; value != nil {
 			member.ServingPredecessor = &agentpb.ServingPredecessorRestoration{
 				ProbeStepId: value.ProbeStepID, CompensateStepId: value.CompensateStepID,
+				PriorArtifactId: value.PriorArtifactID, PriorReleaseId: value.PriorReleaseID,
+				PriorTarget: value.PriorTarget, RetainedPriorArtifactId: value.RetainedPriorArtifactID,
 			}
 		}
 		if value := inputMember.CandidateAbsence; value != nil {
@@ -193,7 +219,10 @@ func validateCandidateReleasePlan(plan *agentpb.ExecutionPlan, artifacts map[str
 		}
 		for _, step := range plan.GetSteps() {
 			if step.GetCandidateRestorationProbe() != nil || step.GetCandidateRestorationCompensate() != nil {
-				return errs.New(errs.KindValidationFailed, "candidate restoration step is not referenced by its procedure")
+				return errs.New(
+					errs.KindValidationFailed,
+					"candidate restoration step is not referenced by its procedure",
+				)
 			}
 		}
 		return nil
@@ -221,21 +250,26 @@ func validateCandidateReleasePlan(plan *agentpb.ExecutionPlan, artifacts map[str
 			steps := stepsByID[stepID]
 			if len(steps) != 1 ||
 				steps[0].GetPolicy() != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD {
-				return errs.New(errs.KindValidationFailed, "candidate Release forward anchor is not exactly one forward step")
+				return errs.New(
+					errs.KindValidationFailed,
+					"candidate Release forward anchor is not exactly one forward step",
+				)
 			}
 		}
 		probeID, compensateID := restorationStepIDs(member.GetServingPredecessor(), member.GetCandidateAbsence())
-		if err := validateCandidateRestorationAnchor(member, stepsByID[probeID], true); err != nil {
+		if err := validateCandidateRestorationPair(member, stepsByID[probeID], stepsByID[compensateID]); err != nil {
 			return err
 		}
-		if err := validateCandidateRestorationAnchor(member, stepsByID[compensateID], false); err != nil {
+		if err := validateCandidateServingPredecessorReferences(
+			member.GetServingPredecessor(), member.GetServiceId(), member.GetCandidateArtifactId(), artifacts,
+		); err != nil {
 			return err
 		}
 		referencedRestorationIDs[probeID] = struct{}{}
 		referencedRestorationIDs[compensateID] = struct{}{}
 	}
 	for _, step := range plan.GetSteps() {
-		if step.GetCandidateRestorationProbe() == nil && step.GetCandidateRestorationCompensate() == nil {
+		if !candidateRestorationStep(step) {
 			continue
 		}
 		if _, referenced := referencedRestorationIDs[step.GetStepId()]; !referenced {
@@ -248,14 +282,127 @@ func validateCandidateReleasePlan(plan *agentpb.ExecutionPlan, artifacts map[str
 			continue
 		}
 		artifact := artifacts[member.GetCandidateArtifactId()]
-		if artifact.GetProjectName() != absence.GetComposeProjectName() || len(absence.GetServices()) != len(identities) {
-			return errs.New(errs.KindValidationFailed, "candidate absence authority does not bind the complete candidate set")
+		if artifact.GetProjectName() != absence.GetComposeProjectName() ||
+			len(absence.GetServices()) != len(identities) {
+			return errs.New(
+				errs.KindValidationFailed,
+				"candidate absence authority does not bind the complete candidate set",
+			)
 		}
 		for index, service := range absence.GetServices() {
 			if service.GetServiceId()+"\x00"+service.GetReleaseId() != identities[index] {
-				return errs.New(errs.KindValidationFailed, "candidate absence authority does not bind the complete candidate set")
+				return errs.New(
+					errs.KindValidationFailed,
+					"candidate absence authority does not bind the complete candidate set",
+				)
 			}
 		}
+	}
+	return nil
+}
+
+// validateCandidateServingPredecessorReferences accepts either an unbound
+// claim-time alternative or one complete, explicitly plan-bound historical
+// reference. It deliberately does not compare the prior artifact with any
+// source render artifact: a compiler may allocate a fresh prior topology.
+func validateCandidateServingPredecessorReferences(
+	serving *agentpb.ServingPredecessorRestoration,
+	serviceID string,
+	candidateArtifactID string,
+	artifacts map[string]*agentpb.ComposeArtifact,
+) error {
+	if serving == nil {
+		return nil
+	}
+	hasPrior := serving.GetPriorArtifactId() != "" || serving.GetPriorReleaseId() != "" ||
+		serving.GetPriorTarget() != ""
+	if !hasPrior {
+		if serving.GetRetainedPriorArtifactId() != "" {
+			return errs.New(errs.KindValidationFailed, "serving predecessor retained artifact lacks prior authority")
+		}
+		return nil
+	}
+	if ids.Validate(ids.KindConfig, serving.GetPriorArtifactId()) != nil ||
+		ids.Validate(ids.KindDeployment, serving.GetPriorReleaseId()) != nil ||
+		!validReleaseTarget(serving.GetPriorTarget()) ||
+		serving.GetPriorArtifactId() == candidateArtifactID ||
+		artifacts[serving.GetPriorArtifactId()] == nil {
+		return errs.New(errs.KindValidationFailed, "serving predecessor prior artifact reference is invalid")
+	}
+	if retained := serving.GetRetainedPriorArtifactId(); retained != "" &&
+		(ids.Validate(ids.KindConfig, retained) != nil || retained == serving.GetPriorArtifactId() ||
+			retained == candidateArtifactID || artifacts[retained] == nil) {
+		return errs.New(errs.KindValidationFailed, "serving predecessor retained artifact reference is invalid")
+	}
+	if err := validateNativePlanArtifactBinding(serving, serviceID, artifacts[serving.GetPriorArtifactId()]); err != nil {
+		return err
+	}
+	if retained := serving.GetRetainedPriorArtifactId(); retained != "" {
+		if err := validateNativePlanArtifactPair(
+			serviceID, artifacts[serving.GetPriorArtifactId()], artifacts[retained],
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateNativePlanArtifactPair closes a populated current/inactive
+// blue-green pair without pretending the inactive artifact has the current
+// Release or slot. The shared witness validator owns the pair invariants.
+func validateNativePlanArtifactPair(
+	serviceID string,
+	current, retained *agentpb.ComposeArtifact,
+) error {
+	if current == nil || retained == nil || len(current.GetServices()) == 0 || len(retained.GetServices()) == 0 {
+		return nil
+	}
+	currentBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(current)
+	if err != nil {
+		return errs.New(errs.KindValidationFailed, "serving predecessor current artifact is invalid")
+	}
+	retainedBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(retained)
+	if err != nil {
+		return errs.New(errs.KindValidationFailed, "serving predecessor retained artifact is invalid")
+	}
+	if err := ValidateNativePredecessorWitness(current.GetOwnerId(), serviceID, currentBytes, retainedBytes); err != nil {
+		return errs.New(errs.KindValidationFailed, "serving predecessor artifact pair is invalid")
+	}
+	return nil
+}
+
+// validateNativePlanArtifactBinding validates populated native predecessor
+// artifacts when a plan carries their concrete service topology. Empty
+// artifacts remain legal claim-time placeholders for non-Blueprint callers.
+func validateNativePlanArtifactBinding(
+	serving *agentpb.ServingPredecessorRestoration,
+	serviceID string,
+	artifact *agentpb.ComposeArtifact,
+) error {
+	if artifact == nil || len(artifact.GetServices()) == 0 {
+		return nil
+	}
+	var selected *agentpb.ComposeService
+	for _, service := range artifact.GetServices() {
+		if service.GetServiceId() == serviceID {
+			if service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+				continue
+			}
+			if selected != nil {
+				return errs.New(errs.KindValidationFailed, "serving predecessor artifact service is ambiguous")
+			}
+			selected = service
+		}
+	}
+	if selected == nil || expectedReleaseLabel(selected) != serving.GetPriorReleaseId() {
+		return errs.New(errs.KindValidationFailed, "serving predecessor artifact service identity diverges")
+	}
+	target := selected.GetSlot()
+	if target == "" {
+		target = "singleton"
+	}
+	if target != serving.GetPriorTarget() {
+		return errs.New(errs.KindValidationFailed, "serving predecessor artifact target diverges")
 	}
 	return nil
 }
@@ -272,7 +419,8 @@ func validateCandidateRestorationAnchor(
 	artifactID, serviceID, releaseID := "", "", ""
 	if probe {
 		value := step.GetCandidateRestorationProbe()
-		if step.GetPolicy() != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE || value == nil {
+		if step.GetPolicy() != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE ||
+			value == nil {
 			return errs.New(errs.KindValidationFailed, "candidate restoration probe policy or payload is invalid")
 		}
 		artifactID, serviceID, releaseID = value.GetCandidateArtifactId(), value.GetServiceId(), value.GetCandidateReleaseId()
@@ -290,22 +438,30 @@ func validateCandidateRestorationAnchor(
 	return nil
 }
 
-func validateCandidateReleaseProcedure(operation agentpb.PlanOperation, procedure *agentpb.CandidateReleaseProcedure) error {
+func validateCandidateReleaseProcedure(
+	operation agentpb.PlanOperation,
+	procedure *agentpb.CandidateReleaseProcedure,
+) error {
 	if !candidateReleaseOperation(operation) || procedure == nil || len(procedure.GetMembers()) == 0 {
 		return errs.New(errs.KindValidationFailed, "candidate Release procedure is invalid")
 	}
 	previous := ""
 	for _, member := range procedure.GetMembers() {
-		if member == nil || member.GetServiceId() <= previous || ids.Validate(ids.KindService, member.GetServiceId()) != nil ||
+		if member == nil || member.GetServiceId() <= previous ||
+			ids.Validate(ids.KindService, member.GetServiceId()) != nil ||
 			ids.Validate(ids.KindDeployment, member.GetCandidateReleaseId()) != nil ||
-			ids.Validate(ids.KindConfig, member.GetCandidateArtifactId()) != nil || len(member.GetForwardStepIds()) == 0 {
+			ids.Validate(ids.KindConfig, member.GetCandidateArtifactId()) != nil ||
+			len(member.GetForwardStepIds()) == 0 {
 			return errs.New(errs.KindValidationFailed, "candidate Release member identity is invalid")
 		}
 		previous = member.GetServiceId()
 		serving, absence := member.GetServingPredecessor(), member.GetCandidateAbsence()
 		if operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY {
 			if serving == nil || absence == nil {
-				return errs.New(errs.KindValidationFailed, "Blueprint candidate Release must declare both restoration alternatives")
+				return errs.New(
+					errs.KindValidationFailed,
+					"Blueprint candidate Release must declare both restoration alternatives",
+				)
 			}
 		} else if (serving == nil) == (absence == nil) {
 			return errs.New(errs.KindValidationFailed, "ordinary candidate Release must declare exactly one restoration alternative")
@@ -321,7 +477,8 @@ func validateCandidateReleaseProcedure(operation agentpb.PlanOperation, procedur
 			seen[stepID] = struct{}{}
 		}
 		probeID, compensateID := restorationStepIDs(serving, absence)
-		if ids.Validate(ids.KindStep, probeID) != nil || ids.Validate(ids.KindStep, compensateID) != nil || probeID == compensateID {
+		if ids.Validate(ids.KindStep, probeID) != nil || ids.Validate(ids.KindStep, compensateID) != nil ||
+			probeID == compensateID {
 			return errs.New(errs.KindValidationFailed, "candidate Release restoration step identity is invalid")
 		}
 		if _, overlaps := seen[probeID]; overlaps {
@@ -352,7 +509,10 @@ func validateCandidateReleaseProcedure(operation agentpb.PlanOperation, procedur
 	return nil
 }
 
-func restorationStepIDs(serving *agentpb.ServingPredecessorRestoration, absence *agentpb.CandidateAbsenceRestoration) (string, string) {
+func restorationStepIDs(
+	serving *agentpb.ServingPredecessorRestoration,
+	absence *agentpb.CandidateAbsenceRestoration,
+) (string, string) {
 	if serving != nil {
 		return serving.GetProbeStepId(), serving.GetCompensateStepId()
 	}
@@ -402,9 +562,16 @@ func artifactContainsCandidate(artifact *agentpb.ComposeArtifact, serviceID, rel
 	return false
 }
 
-func validateCandidateRestorationStep(operation agentpb.PlanOperation, artifactID, serviceID, releaseID string, artifacts map[string]*agentpb.ComposeArtifact) error {
+func validateCandidateRestorationStep(
+	operation agentpb.PlanOperation,
+	artifactID, serviceID, releaseID string,
+	artifacts map[string]*agentpb.ComposeArtifact,
+) error {
 	if !candidateReleaseOperation(operation) || ids.Validate(ids.KindService, serviceID) != nil ||
-		ids.Validate(ids.KindDeployment, releaseID) != nil || !artifactContainsCandidate(artifacts[artifactID], serviceID, releaseID) {
+		ids.Validate(
+			ids.KindDeployment,
+			releaseID,
+		) != nil || !artifactContainsCandidate(artifacts[artifactID], serviceID, releaseID) {
 		return errs.New(errs.KindValidationFailed, "candidate restoration step authority is invalid")
 	}
 	return nil

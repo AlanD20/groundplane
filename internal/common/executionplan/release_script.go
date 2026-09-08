@@ -32,6 +32,11 @@ func validateReleaseScriptPlan(
 		}
 		return nil
 	}
+	if blueprintApply {
+		if err := validateBlueprintHookPhases(plan); err != nil {
+			return err
+		}
+	}
 	if len(runs) > maximumReleaseScriptExecutions || len(plan.ScriptRunnerSnapshots) != len(runs) ||
 		len(plan.ScriptRunnerProjections) != len(runs) || len(plan.ScriptBodyArtifacts) != len(runs) {
 		return errs.New(errs.KindValidationFailed, "release Script execution set is incomplete")
@@ -79,8 +84,7 @@ func validateReleaseScriptPlan(
 			if err != nil {
 				return err
 			}
-			if step.Policy != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_POST_HOOK ||
-				run.EnvironmentId != plan.TargetId ||
+			if run.EnvironmentId != plan.TargetId ||
 				!blueprintCandidateReleaseBound(run, snapshot, applyStep, artifact) {
 				return errs.New(errs.KindValidationFailed, "Blueprint Script candidate authority is invalid")
 			}
@@ -112,25 +116,84 @@ func blueprintScriptCandidateArtifact(
 	run *agentpb.ExecutionStep,
 	artifacts map[string]*agentpb.ComposeArtifact,
 ) (*agentpb.ExecutionStep, *agentpb.ComposeArtifact, error) {
-	byID := make(map[string]*agentpb.ExecutionStep, len(plan.Steps))
-	for _, step := range plan.Steps {
-		byID[step.StepId] = step
+	runIndex, applyIndex := -1, -1
+	var selected *agentpb.ExecutionStep
+	for index, step := range plan.Steps {
+		if step == run {
+			runIndex = index
+		}
+		apply := step.GetComposeApply()
+		if apply == nil || step.Policy != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD ||
+			!composeApplySelectsService(apply, run.GetRunScript().GetServiceId()) {
+			continue
+		}
+		if selected != nil {
+			return nil, nil, errs.New(errs.KindValidationFailed, "Blueprint Script candidate apply is ambiguous")
+		}
+		selected, applyIndex = step, index
 	}
-	predecessor := byID[run.PrerequisiteStepId]
-	for predecessor != nil && predecessor.GetRunScript() != nil {
-		predecessor = byID[predecessor.PrerequisiteStepId]
+	if selected == nil || runIndex < 0 ||
+		run.Policy == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK && runIndex >= applyIndex ||
+		run.Policy == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_POST_HOOK && runIndex <= applyIndex {
+		return nil, nil, errs.New(errs.KindValidationFailed, "Blueprint Script candidate apply is outside its phase")
 	}
-	if predecessor == nil {
-		return nil, nil, errs.New(errs.KindValidationFailed, "Blueprint Script procedure has no candidate prerequisite")
-	}
-	apply := predecessor.GetComposeApply()
-	artifact := artifacts[apply.GetArtifactId()]
-	if apply == nil || artifact == nil ||
-		artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
+	artifact := artifacts[selected.GetComposeApply().GetArtifactId()]
+	if artifact == nil || artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
 		artifact.GetOwnerId() != plan.GetTargetId() {
-		return nil, nil, errs.New(errs.KindValidationFailed, "Blueprint Script predecessor is not its candidate apply")
+		return nil, nil, errs.New(errs.KindValidationFailed, "Blueprint Script candidate artifact is invalid")
 	}
-	return predecessor, artifact, nil
+	return selected, artifact, nil
+}
+
+// validateBlueprintHookPhases enforces one global consumer barrier, rather
+// than allowing each Service to start while another Service's pre-hook waits.
+func validateBlueprintHookPhases(plan *agentpb.ExecutionPlan) error {
+	phase := 0
+	var preceding *agentpb.ExecutionStep
+	seen := make(map[string]*agentpb.ExecutionStep, len(plan.Steps))
+	candidateForward := make(map[string]bool)
+	for _, member := range plan.GetCandidateReleaseProcedure().GetMembers() {
+		for _, stepID := range member.GetForwardStepIds() {
+			candidateForward[stepID] = true
+		}
+	}
+	for _, step := range plan.Steps {
+		next := 0
+		switch {
+		case step.GetRunScript() != nil:
+			switch step.Policy {
+			case agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK:
+				next = 1
+			case agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_POST_HOOK:
+				next = 3
+			default:
+				return errs.New(errs.KindValidationFailed, "Blueprint Script phase is invalid")
+			}
+			if prerequisite := step.GetPrerequisiteStepId(); prerequisite != "" {
+				prior := seen[prerequisite]
+				if prior == nil ||
+					prior.Policy == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE ||
+					prior.Policy == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE {
+					return errs.New(
+						errs.KindValidationFailed,
+						"Blueprint Script prerequisite is not an earlier forward step",
+					)
+				}
+			}
+		case step.GetComposeApply() != nil && candidateForward[step.GetStepId()]:
+			next = 2
+		case step.GetWaitHealthy() != nil && candidateForward[step.GetStepId()]:
+			next = 4
+		}
+		if next != 0 {
+			if next < phase || preceding != nil && step.GetPrerequisiteStepId() != preceding.GetStepId() {
+				return errs.New(errs.KindValidationFailed, "Blueprint Script global phase barrier is invalid")
+			}
+			phase, preceding = next, step
+		}
+		seen[step.GetStepId()] = step
+	}
+	return nil
 }
 
 func blueprintCandidateReleaseBound(
@@ -139,24 +202,30 @@ func blueprintCandidateReleaseBound(
 	applyStep *agentpb.ExecutionStep,
 	artifact *agentpb.ComposeArtifact,
 ) bool {
-	authority := snapshot.GetProcedureServiceImage()
 	apply := applyStep.GetComposeApply()
-	if authority == nil || apply == nil || snapshot.GetImageReference() != "" ||
-		len(snapshot.GetImageDigest()) != 0 ||
-		authority.GetComposeApplyStepId() != applyStep.GetStepId() ||
-		authority.GetArtifactId() != apply.GetArtifactId() ||
-		authority.GetServiceId() != run.GetServiceId() ||
-		authority.GetReleaseId() != run.GetReleaseId() ||
-		!composeApplySelectsService(apply, run.GetServiceId()) {
+	if apply == nil || snapshot.GetLocalImageId() == "" || snapshot.GetServiceId() != run.GetServiceId() ||
+		snapshot.GetReleaseId() != run.GetReleaseId() || !composeApplySelectsService(apply, run.GetServiceId()) {
 		return false
 	}
 	matches := 0
 	for _, service := range artifact.GetServices() {
 		if service.GetServiceId() == run.GetServiceId() &&
 			expectedReleaseLabel(service) == run.GetReleaseId() &&
-			service.GetImageReference() == authority.GetRequestedReference() {
+			service.GetImageReference() == snapshot.GetLocalImageId() {
 			matches++
 		}
 	}
 	return matches == 1
+}
+
+func composeApplySelectsService(apply *agentpb.ComposeApply, serviceID string) bool {
+	if apply.GetFullReconcile() {
+		return true
+	}
+	for _, candidate := range apply.GetServiceIds() {
+		if candidate == serviceID {
+			return true
+		}
+	}
+	return false
 }

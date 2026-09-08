@@ -60,6 +60,9 @@ func (repository *HierarchyRepository) prepareComponentTaskPublication(
 		appliedProjectionCondition.ModRevision = preparation.appliedProjectionRevision
 	}
 	publication.conditions = append(publication.conditions, appliedProjectionCondition)
+	publication.conditions = append(publication.conditions, Condition{
+		Key: environmentBlueprintHeadKey(environment.Record.ID), ModRevision: preparation.desiredProjectionRevision,
+	})
 	for _, candidate := range preparation.Intent.Candidates {
 		publication.conditions = append(publication.conditions, Condition{
 			Key:         componentKey(candidate.Current.Desired.ID),
@@ -126,25 +129,52 @@ func componentTaskPreparationIsZero(preparation ComponentTaskPreparation) bool {
 		preparation.Intent.Status == "" && len(preparation.Intent.Candidates) == 0 &&
 		preparation.Intent.RouteProjection == nil &&
 		preparation.Intent.CreatedAt.IsZero() && preparation.Intent.TerminalAt == nil &&
+		len(preparation.managedRuntimeSources) == 0 &&
 		!preparation.appliedProjectionPresent && preparation.appliedProjectionRevision == 0 &&
+		preparation.desiredProjectionRevision == 0 &&
 		len(preparation.addresses) == 0
 }
 
-func classifyEnvironmentBlueprintComponentPublication(
+func composeEnvironmentBlueprintComponentPublication(
+	existing []Condition,
 	base idempotencyPlanClassifier,
 	publication preparedComponentTaskPublication,
-) idempotencyPlanClassifier {
-	return func(revision int64, values []*KeyValue) error {
-		publicationCount := len(publication.conditions)
-		if len(values) < publicationCount {
+) ([]Condition, idempotencyPlanClassifier, error) {
+	conditions := append([]Condition(nil), existing...)
+	indices := make(map[string]int, len(existing)+len(publication.conditions))
+	for index, condition := range conditions {
+		indices[condition.Key] = index
+	}
+	publicationIndices := make([]int, len(publication.conditions))
+	for index, condition := range publication.conditions {
+		position, found := indices[condition.Key]
+		if found {
+			if conditions[position] != condition {
+				return nil, nil, errs.New(errs.KindStateConflict, "Blueprint Component source revisions disagree")
+			}
+		} else {
+			position = len(conditions)
+			indices[condition.Key] = position
+			conditions = append(conditions, condition)
+		}
+		publicationIndices[index] = position
+	}
+	classify := func(revision int64, values []*KeyValue) error {
+		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "Blueprint Component compare evidence is incomplete")
 		}
-		baseValues := values[:len(values)-publicationCount]
-		if err := base(revision, baseValues); err != nil {
+		if err := base(revision, values[:len(existing)]); err != nil {
 			return err
 		}
-		return publication.classify(values[len(baseValues):])
+		// Both owners classify the same authoritative read at a shared key;
+		// deduplication must not shift the Component's positional evidence.
+		componentValues := make([]*KeyValue, len(publicationIndices))
+		for index, position := range publicationIndices {
+			componentValues[index] = values[position]
+		}
+		return publication.classify(componentValues)
 	}
+	return conditions, classify, nil
 }
 
 func (publication preparedComponentTaskPublication) classify(values []*KeyValue) error {
@@ -169,7 +199,10 @@ func (publication preparedComponentTaskPublication) classify(values []*KeyValue)
 	} else if appliedProjectionValue != nil {
 		return errs.New(errs.KindStateConflict, "Component candidate applied projection was published")
 	}
-	offset := 3
+	if keyValueRevision(values[3]) != publication.preparation.desiredProjectionRevision {
+		return errs.New(errs.KindStateConflict, "Component candidate desired projection changed")
+	}
+	offset := 4
 	for index, candidate := range publication.preparation.Intent.Candidates {
 		value := values[offset+index]
 		if value == nil {

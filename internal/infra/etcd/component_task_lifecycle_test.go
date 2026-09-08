@@ -30,6 +30,7 @@ func TestComponentTaskIntentCodecIsStrictAndCanonical(t *testing.T) {
 		ID: tunnelCurrent.Desired.ID, Owner: core.ComponentOwnerEnvironment,
 		OwnerID: environmentID, Kind: core.ComponentKindEdgeCloudflare, Enabled: true,
 		Config: core.ComponentConfig{CloudflareTunnel: &core.CloudflareTunnelComponentConfig{
+			ZoneIDs:  []string{ids.NewAt(ids.KindNetwork, now, 1012)},
 			SecretID: ids.NewAt(ids.KindSecret, now, 1011),
 		}},
 		GeneratedServices: []string{ids.NewAt(ids.KindService, now, 1012)},
@@ -74,7 +75,7 @@ func TestComponentTaskIntentAcceptsEnabledHealthRepair(t *testing.T) {
 		ID: ids.NewAt(ids.KindComponent, now, 1052), Owner: core.ComponentOwnerEnvironment,
 		OwnerID: environmentID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
 		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-			ZoneID: ids.NewAt(ids.KindNetwork, now, 1053),
+			ZoneIDs: []string{ids.NewAt(ids.KindNetwork, now, 1053)},
 		}},
 		GeneratedServices: []string{ids.NewAt(ids.KindService, now, 1054)}, PinnedIPv4: "10.40.12.2",
 	})
@@ -378,7 +379,7 @@ func componentTaskLifecycleRecords(
 	if currentEnabled {
 		currentComponent.Enabled = true
 		currentComponent.Config = core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-			ZoneID: currentZone.Desired.ID,
+			ZoneIDs: []string{currentZone.Desired.ID},
 		}}
 		currentComponent.GeneratedServices = []string{serviceID}
 		currentComponent.PinnedIPv4 = "10.40.10.2"
@@ -392,7 +393,7 @@ func componentTaskLifecycleRecords(
 		ID: componentID, Owner: core.ComponentOwnerEnvironment,
 		OwnerID: environmentID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
 		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-			ZoneID: candidateZone.Desired.ID,
+			ZoneIDs: []string{candidateZone.Desired.ID},
 		}},
 		GeneratedServices: []string{serviceID}, PinnedIPv4: "10.40.11.2",
 	})
@@ -620,16 +621,29 @@ func TestComponentTaskAcknowledgementProjectionRootConditionOwnership(t *testing
 		materializes  string
 		wantCondition bool
 	}{
-		{name: "successful materialization delegates condition", status: TaskStatusCompleted, materializes: environmentID},
+		{
+			name:         "successful materialization delegates condition",
+			status:       TaskStatusCompleted,
+			materializes: environmentID,
+		},
 		{name: "successful non-materialization retains condition", status: TaskStatusCompleted, wantCondition: true},
-		{name: "failed materialization retains condition", status: TaskStatusFailed, materializes: environmentID, wantCondition: true},
+		{
+			name:          "failed materialization retains condition",
+			status:        TaskStatusFailed,
+			materializes:  environmentID,
+			wantCondition: true,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			task := TaskRecord{Params: map[string]string{TaskMaterializationEnvironmentParam: test.materializes}}
 			got := componentTaskAcknowledgementRequiresBlueprintRootCondition(task, test.status, environmentID)
 			if got != test.wantCondition {
-				t.Fatalf("componentTaskAcknowledgementRequiresBlueprintRootCondition() = %t, want %t", got, test.wantCondition)
+				t.Fatalf(
+					"componentTaskAcknowledgementRequiresBlueprintRootCondition() = %t, want %t",
+					got,
+					test.wantCondition,
+				)
 			}
 		})
 	}

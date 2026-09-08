@@ -25,7 +25,10 @@ func ValidateScriptCheckpointRequest(
 		return nil, err
 	}
 	if ids.Validate(ids.KindTask, owned.TaskId) != nil || ids.Validate(ids.KindOperation, owned.OperationId) != nil ||
-		ids.Validate(ids.KindAssignment, owned.AssignmentId) != nil || ids.Validate(ids.KindStep, owned.StepId) != nil ||
+		ids.Validate(
+			ids.KindAssignment,
+			owned.AssignmentId,
+		) != nil || ids.Validate(ids.KindStep, owned.StepId) != nil ||
 		!validScriptCheckpointExecutionID(owned.ScriptExecutionId) || len(owned.PlanHash) != sha256.Size ||
 		len(owned.ControlPayloadSha256) != sha256.Size {
 		return nil, errs.New(errs.KindValidationFailed, "Script checkpoint delivery identity is invalid")
@@ -149,19 +152,27 @@ func ValidateScriptExecutionCheckpoint(
 	}
 	switch owned.State {
 	case agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_NOT_STARTED:
-		if owned.StartAuthorized || owned.BodyPrepared != nil || owned.ContainerCreated != nil || owned.Outcome != nil || owned.Cleanup != nil {
+		if owned.StartAuthorized || owned.BodyPrepared != nil || owned.ContainerCreated != nil ||
+			owned.Outcome != nil ||
+			owned.Cleanup != nil {
 			return nil, errs.New(errs.KindValidationFailed, "Script not-started checkpoint is invalid")
 		}
 	case agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_START_AUTHORIZED:
-		if !owned.StartAuthorized || owned.BodyPrepared != nil || owned.ContainerCreated != nil || owned.Outcome != nil || owned.Cleanup != nil {
+		if !owned.StartAuthorized || owned.BodyPrepared != nil || owned.ContainerCreated != nil ||
+			owned.Outcome != nil ||
+			owned.Cleanup != nil {
 			return nil, errs.New(errs.KindValidationFailed, "Script start checkpoint is invalid")
 		}
 	case agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_BODY_PREPARED:
-		if !owned.StartAuthorized || owned.BodyPrepared == nil || owned.ContainerCreated != nil || owned.Outcome != nil || owned.Cleanup != nil {
+		if !owned.StartAuthorized || owned.BodyPrepared == nil || owned.ContainerCreated != nil ||
+			owned.Outcome != nil ||
+			owned.Cleanup != nil {
 			return nil, errs.New(errs.KindValidationFailed, "Script body-prepared checkpoint is invalid")
 		}
 	case agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_CONTAINER_CREATED:
-		if !owned.StartAuthorized || owned.BodyPrepared == nil || owned.ContainerCreated == nil || owned.Outcome != nil || owned.Cleanup != nil {
+		if !owned.StartAuthorized || owned.BodyPrepared == nil || owned.ContainerCreated == nil ||
+			owned.Outcome != nil ||
+			owned.Cleanup != nil {
 			return nil, errs.New(errs.KindValidationFailed, "Script container-created checkpoint is invalid")
 		}
 	case agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_OUTCOME_RECORDED:
@@ -178,7 +189,8 @@ func ValidateScriptExecutionCheckpoint(
 
 func validScriptOutcomeForCheckpoint(checkpoint *agentpb.ScriptExecutionCheckpoint) bool {
 	outcome := checkpoint.Outcome
-	if outcome == nil || outcome.ObservedAt == nil || outcome.ObservedAt.CheckValid() != nil || outcome.ObservedAt.AsTime().IsZero() {
+	if outcome == nil || outcome.ObservedAt == nil || outcome.ObservedAt.CheckValid() != nil ||
+		outcome.ObservedAt.AsTime().IsZero() {
 		return false
 	}
 	from := agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_NOT_STARTED

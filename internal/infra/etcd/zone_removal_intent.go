@@ -74,7 +74,10 @@ func (repository *HierarchyRepository) GetZoneRemovalIntent(
 		return Versioned[ZoneRemovalIntent]{}, false, err
 	}
 	if ids.Validate(ids.KindOperation, operationID) != nil {
-		return Versioned[ZoneRemovalIntent]{}, false, errs.New(errs.KindValidationFailed, "Zone removal operation id is invalid")
+		return Versioned[ZoneRemovalIntent]{}, false, errs.New(
+			errs.KindValidationFailed,
+			"Zone removal operation id is invalid",
+		)
 	}
 	result, err := repository.store.Get(ctx, zoneRemovalIntentKey(operationID))
 	if err != nil {
@@ -90,10 +93,18 @@ func (repository *HierarchyRepository) GetZoneRemovalIntent(
 	if err != nil || intent.OperationID != operationID {
 		return Versioned[ZoneRemovalIntent]{}, false, corruptZoneRemovalIntent()
 	}
-	return Versioned[ZoneRemovalIntent]{Record: intent, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision}, true, nil
+	return Versioned[ZoneRemovalIntent]{
+		Record:       intent,
+		Revision:     result.Entry.ModRevision,
+		ReadRevision: result.ReadRevision,
+	}, true, nil
 }
 
-func TransferZoneRemovalIntent(intent ZoneRemovalIntent, taskID string, createdAt time.Time) (ZoneRemovalIntent, error) {
+func TransferZoneRemovalIntent(
+	intent ZoneRemovalIntent,
+	taskID string,
+	createdAt time.Time,
+) (ZoneRemovalIntent, error) {
 	if !isTerminalTaskStatus(intent.Status) && intent.Status != TaskStatusPending {
 		return ZoneRemovalIntent{}, errs.New(errs.KindStateConflict, "Zone removal intent cannot transfer")
 	}
@@ -124,12 +135,17 @@ func terminalZoneRemovalIntent(intent ZoneRemovalIntent, status TaskStatus, at t
 }
 
 func validateZoneRemovalIntent(intent ZoneRemovalIntent) error {
-	if ids.Validate(ids.KindOperation, intent.OperationID) != nil || ids.Validate(ids.KindTask, intent.ActiveTaskID) != nil ||
-		ids.Validate(ids.KindEnvironment, intent.EnvironmentID) != nil || ids.Validate(ids.KindNetwork, intent.ZoneID) != nil ||
-		intent.ZoneName == "" || intent.ZoneRevision <= 0 || intent.DesiredHeadRevision <= 0 ||
+	if ids.Validate(ids.KindOperation, intent.OperationID) != nil ||
+		ids.Validate(ids.KindTask, intent.ActiveTaskID) != nil ||
+		ids.Validate(ids.KindEnvironment, intent.EnvironmentID) != nil ||
+		ids.Validate(ids.KindNetwork, intent.ZoneID) != nil ||
+		intent.ZoneName == "" ||
+		intent.ZoneRevision <= 0 ||
+		intent.DesiredHeadRevision <= 0 ||
 		intent.AppliedProjectionRevision <= 0 ||
 		validateEnvironmentBlueprintStageClaim(intent.Claim) != nil ||
-		intent.Claim.EnvironmentID != intent.EnvironmentID || intent.Claim.RevisionID != intent.Claim.TaskID ||
+		intent.Claim.EnvironmentID != intent.EnvironmentID ||
+		intent.Claim.RevisionID != intent.Claim.TaskID ||
 		intent.Claim.BaselineHeadRevision != intent.DesiredHeadRevision ||
 		intent.Claim.SourceKind != EnvironmentBlueprintSourceMutation ||
 		intent.DesiredProjection.EnvironmentID != intent.EnvironmentID ||
@@ -145,7 +161,8 @@ func validateZoneRemovalIntent(intent ZoneRemovalIntent) error {
 		validateTimestamp("Zone removal created_at", intent.CreatedAt) != nil ||
 		validateTimestamp("Zone removal active Task created_at", intent.ActiveTaskCreatedAt) != nil ||
 		validateTimestamp("Zone removal updated_at", intent.UpdatedAt) != nil ||
-		intent.ActiveTaskCreatedAt.Before(intent.CreatedAt) || intent.UpdatedAt.Before(intent.ActiveTaskCreatedAt) {
+		intent.ActiveTaskCreatedAt.Before(intent.CreatedAt) ||
+		intent.UpdatedAt.Before(intent.ActiveTaskCreatedAt) {
 		return errs.New(errs.KindValidationFailed, "Zone removal intent identity is invalid")
 	}
 	if intent.Status == TaskStatusPending {
@@ -224,7 +241,9 @@ func sameZoneRemovalProjection(left, right EnvironmentComposeProjection) bool {
 
 func validateZoneRemovalTaskOwner(task TaskRecord, intent ZoneRemovalIntent) error {
 	if task.ID != intent.ActiveTaskID || task.Target != intent.ZoneID || task.Type != TaskRemove ||
-		!task.CreatedAt.Equal(intent.ActiveTaskCreatedAt) || task.Params[TaskZoneRemovalOperationParam] != intent.OperationID ||
+		!task.CreatedAt.Equal(
+			intent.ActiveTaskCreatedAt,
+		) || task.Params[TaskZoneRemovalOperationParam] != intent.OperationID ||
 		task.Params[TaskZoneEnvironmentParam] != intent.EnvironmentID ||
 		task.Params[EnvironmentDesiredRevisionParam] != intent.Claim.RevisionID {
 		return errs.New(errs.KindStateConflict, "Zone removal intent does not belong to its Task")

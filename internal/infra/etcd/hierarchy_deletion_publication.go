@@ -75,7 +75,10 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 		root.rootSlug = environment.Name
 		root, err = repository.readEnvironmentParentsAtRevision(ctx, result.ReadRevision, environment, root)
 	default:
-		return hierarchyDeletionRoot{}, 0, errs.New(errs.KindValidationFailed, "hierarchy deletion target kind is invalid")
+		return hierarchyDeletionRoot{}, 0, errs.New(
+			errs.KindValidationFailed,
+			"hierarchy deletion target kind is invalid",
+		)
 	}
 	if err != nil {
 		clear(root.targetValue)

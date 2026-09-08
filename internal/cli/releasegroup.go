@@ -75,7 +75,8 @@ func newReleaseGroupCmd() *cobra.Command {
 			return runCreate(cmd, "/api/v1/release-groups", body)
 		},
 	}
-	add.Flags().StringSliceVar(&services, "services", nil, "comma-separated stable member service ids; 2 to 32 required")
+	add.Flags().
+		StringSliceVar(&services, "services", nil, "comma-separated stable member service ids; 2 to 32 required")
 	add.Flags().StringSliceVar(&order, "order", nil, "comma-separated stable service ids in deploy order")
 	add.Flags().StringVar(&tag, "tag", "", "default image tag for group deploys")
 	add.Flags().

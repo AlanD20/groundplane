@@ -215,7 +215,8 @@ func newServiceCmd() *cobra.Command {
 	deploy.Flags().StringVar(&deployTag, "tag", "", "immutable image tag (defaults to the current tag)")
 	deploy.Flags().
 		StringVar(&deployStrategy, "strategy", "", "blue-green | recreate | rolling (rolling is declared-deferred)")
-	deploy.Flags().StringVar(&deployOnFailure, "on-failure", "", "switch_back | leave_active (defaults to the Service declaration)")
+	deploy.Flags().
+		StringVar(&deployOnFailure, "on-failure", "", "switch_back | leave_active (defaults to the Service declaration)")
 	cmd.AddCommand(deploy)
 
 	var rollbackTag string
@@ -373,7 +374,8 @@ func newServiceCmd() *cobra.Command {
 	attach.Flags().
 		StringVar(&attachName, "name", "", "attach name (default: Controller-suggested, unique within the environment)")
 	attach.Flags().BoolVar(&newCredential, "new-credential", false, "provision a new backing-service credential")
-	attach.Flags().StringVar(&credentialAttach, "credential", "", "reuse the credential owned by an existing attach id/name")
+	attach.Flags().
+		StringVar(&credentialAttach, "credential", "", "reuse the credential owned by an existing attach id/name")
 	attach.Flags().StringSliceVar(&grants, "grant", nil, "other attach id/name(s) this attach's role may also access")
 	cmd.AddCommand(attach)
 

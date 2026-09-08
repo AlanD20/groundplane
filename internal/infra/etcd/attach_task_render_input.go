@@ -45,6 +45,7 @@ type AttachTaskRenderInput struct {
 	BackingServiceID    string                           `json:"backing_service_id"`
 	BackingProjectID    string                           `json:"backing_project_id"`
 	AdapterKey          string                           `json:"adapter_key"`
+	Authentication      core.BackingAuthentication       `json:"authentication,omitempty"`
 	DesiredRevisionID   string                           `json:"desired_revision_id"`
 	ArtifactID          string                           `json:"artifact_id"`
 	RenderGeneration    uint64                           `json:"render_generation"`
@@ -121,6 +122,12 @@ func validateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 		validateStableID(ids.KindTask, input.DesiredRevisionID) != nil ||
 		validateStableID(ids.KindConfig, input.ArtifactID) != nil || input.RenderGeneration == 0 {
 		return errs.New(errs.KindValidationFailed, "Attach Task render input identity is invalid")
+	}
+	switch input.Authentication {
+	case "", core.BackingAuthenticationUsernamePassword,
+		core.BackingAuthenticationPassword, core.BackingAuthenticationNone:
+	default:
+		return errs.New(errs.KindValidationFailed, "Attach Task authentication mode is invalid")
 	}
 	if !validAttachTaskRenderLabel(input.TenantSlug) || !validAttachTaskRenderLabel(input.ProjectSlug) ||
 		!validAttachTaskRenderLabel(input.EnvironmentName) ||
@@ -219,6 +226,7 @@ func validateAttachTaskRenderInputScope(
 		input.BackingServiceID != scope.BackingService.Record.Desired.ID ||
 		input.BackingProjectID != record.BackingProjectID ||
 		input.AdapterKey != scope.BackingService.Record.Desired.Adapter ||
+		input.Authentication != scope.BackingService.Record.Desired.Authentication ||
 		input.DesiredRevisionID != scope.DesiredHead.Record.RevisionID ||
 		input.RenderGeneration != scope.ComposeProjection.Record.RenderGeneration ||
 		input.RenderGeneration != uint64(task.RenderGeneration) ||

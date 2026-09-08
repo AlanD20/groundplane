@@ -34,11 +34,16 @@ func (repository *EntryRepository) BindBlueprintEntryEnvironment(
 	if err := validateContext(ctx); err != nil {
 		return err
 	}
-	if validateStableID(ids.KindEnvironment, environmentID) != nil || validateStableID(ids.KindEnvEntry, entryID) != nil {
+	if validateStableID(ids.KindEnvironment, environmentID) != nil ||
+		validateStableID(ids.KindEnvEntry, entryID) != nil {
 		return errs.New(errs.KindValidationFailed, "Blueprint Entry lookup identity is invalid")
 	}
 	key := blueprintEntryEnvironmentPrefix + entryID
-	result, err := repository.store.Transact(ctx, []Condition{{Key: key}}, []Mutation{{Type: MutationPut, Key: key, Value: []byte(environmentID)}})
+	result, err := repository.store.Transact(
+		ctx,
+		[]Condition{{Key: key}},
+		[]Mutation{{Type: MutationPut, Key: key, Value: []byte(environmentID)}},
+	)
 	if err != nil {
 		return err
 	}

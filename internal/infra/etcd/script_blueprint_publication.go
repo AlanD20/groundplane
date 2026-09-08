@@ -20,7 +20,10 @@ type BlueprintScriptPublication struct {
 	mutations     []Mutation
 }
 
-func (publication BlueprintScriptPublication) validate(environmentID string, source EnvironmentBlueprintSourceKind) error {
+func (publication BlueprintScriptPublication) validate(
+	environmentID string,
+	source EnvironmentBlueprintSourceKind,
+) error {
 	if publication.IsZero() {
 		return nil
 	}
@@ -76,27 +79,39 @@ func (repository *ScriptRepository) PrepareBlueprintScriptPublication(
 		return BlueprintScriptPublication{}, err
 	}
 	if len(current) > 64 || len(desired) > 64 {
-		return BlueprintScriptPublication{}, errs.New(errs.KindValidationFailed, "Environment exceeds the 64 Script limit")
+		return BlueprintScriptPublication{}, errs.New(
+			errs.KindValidationFailed,
+			"Environment exceeds the 64 Script limit",
+		)
 	}
 	active, err := readActiveScriptSet(ctx, repository.store, environmentID, readRevision)
 	if err != nil {
 		return BlueprintScriptPublication{}, err
 	}
 	if active.Record.GenerationID == nextGenerationID {
-		return BlueprintScriptPublication{}, errs.New(errs.KindStateConflict, "next Script-set generation is already active")
+		return BlueprintScriptPublication{}, errs.New(
+			errs.KindStateConflict,
+			"next Script-set generation is already active",
+		)
 	}
 
 	currentByID := make(map[string]Versioned[ScriptRecord], len(current))
 	for _, versioned := range current {
 		if versioned.ReadRevision != readRevision || versioned.Record.EnvironmentID != environmentID ||
 			versioned.Record.ScriptSetGeneration != active.Record.GenerationID {
-			return BlueprintScriptPublication{}, errs.New(errs.KindInternal, "Blueprint Script snapshot is inconsistent")
+			return BlueprintScriptPublication{}, errs.New(
+				errs.KindInternal,
+				"Blueprint Script snapshot is inconsistent",
+			)
 		}
 		if err := validateScriptVersion(versioned); err != nil {
 			return BlueprintScriptPublication{}, err
 		}
 		if versioned.Record.ActiveReferences != 0 {
-			return BlueprintScriptPublication{}, errs.New(errs.KindStateConflict, "active Script executions fence Blueprint publication")
+			return BlueprintScriptPublication{}, errs.New(
+				errs.KindStateConflict,
+				"active Script executions fence Blueprint publication",
+			)
 		}
 		if _, duplicate := currentByID[versioned.Record.Desired.ID]; duplicate {
 			return BlueprintScriptPublication{}, errs.New(errs.KindInternal, "Blueprint Script snapshot repeats an id")
@@ -110,20 +125,32 @@ func (repository *ScriptRepository) PrepareBlueprintScriptPublication(
 	for index := range ordered {
 		record := &ordered[index]
 		if err := validateScriptRecord(*record); err != nil || record.EnvironmentID != environmentID {
-			return BlueprintScriptPublication{}, errs.New(errs.KindValidationFailed, "Blueprint Script publication record is invalid")
+			return BlueprintScriptPublication{}, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint Script publication record is invalid",
+			)
 		}
 		if record.ActiveReferences != 0 {
-			return BlueprintScriptPublication{}, errs.New(errs.KindValidationFailed, "Blueprint Script publication cannot synthesize active references")
+			return BlueprintScriptPublication{}, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint Script publication cannot synthesize active references",
+			)
 		}
 		if _, duplicate := desiredByID[record.Desired.ID]; duplicate {
-			return BlueprintScriptPublication{}, errs.New(errs.KindValidationFailed, "Blueprint Script publication repeats an id")
+			return BlueprintScriptPublication{}, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint Script publication repeats an id",
+			)
 		}
 		desiredByID[record.Desired.ID] = struct{}{}
 		record.ScriptSetGeneration = nextGenerationID
 	}
 	for id := range currentByID {
 		if _, retained := desiredByID[id]; !retained {
-			return BlueprintScriptPublication{}, errs.New(errs.KindStateConflict, "Blueprint Script projection omits durable state")
+			return BlueprintScriptPublication{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Script projection omits durable state",
+			)
 		}
 	}
 	if err := validateBlueprintBodyGenerationInputs(currentByID, ordered, generations); err != nil {
@@ -227,14 +254,17 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 		locatorCondition := Condition{Key: scriptLocatorKey(record.Desired.ID)}
 		if locatorValue != nil {
 			locator, decodeErr := decodeScriptLocator(locatorValue.Value)
-			if decodeErr != nil || locator.ScriptID != record.Desired.ID || locator.EnvironmentID != record.EnvironmentID {
+			if decodeErr != nil || locator.ScriptID != record.Desired.ID ||
+				locator.EnvironmentID != record.EnvironmentID {
 				return false, errs.New(errs.KindStateConflict, "Script stable identity is already in use")
 			}
 			locatorCondition.ModRevision = locatorValue.ModRevision
 		} else if _, existed := current[record.Desired.ID]; existed {
 			return false, errs.New(errs.KindInternal, "active Script locator is missing")
 		}
-		environmentLocatorCondition := Condition{Key: scriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID)}
+		environmentLocatorCondition := Condition{
+			Key: scriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID),
+		}
 		if environmentLocatorValue != nil {
 			if string(environmentLocatorValue.Value) != record.Desired.ID {
 				return false, errs.New(errs.KindInternal, "Script Environment locator is corrupt")
@@ -279,12 +309,17 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 			Mutation{Type: MutationPut, Key: slugKey, Value: []byte(record.Desired.ID)},
 		)
 		if _, existed := current[record.Desired.ID]; !existed {
-			locator, locatorErr := encodeScriptLocator(scriptLocatorRecord{ScriptID: record.Desired.ID, EnvironmentID: record.EnvironmentID})
+			locator, locatorErr := encodeScriptLocator(
+				scriptLocatorRecord{ScriptID: record.Desired.ID, EnvironmentID: record.EnvironmentID},
+			)
 			if locatorErr != nil {
 				clearMutationValues(mutations)
 				return false, locatorErr
 			}
-			mutations = append(mutations, Mutation{Type: MutationPut, Key: scriptLocatorKey(record.Desired.ID), Value: locator})
+			mutations = append(
+				mutations,
+				Mutation{Type: MutationPut, Key: scriptLocatorKey(record.Desired.ID), Value: locator},
+			)
 			mutations = append(mutations, Mutation{
 				Type: MutationPut, Key: scriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID),
 				Value: []byte(record.Desired.ID),

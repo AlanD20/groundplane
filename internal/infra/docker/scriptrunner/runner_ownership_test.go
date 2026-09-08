@@ -20,7 +20,7 @@ func TestValidateOwnedContainer(t *testing.T) {
 	request := scriptexecution.Request{
 		Projection: &agentpb.ScriptRunnerProjection{
 			Name:       "gp-script-01k5v8k8yr0000000000000000",
-			Image:      "registry.example.test/app@sha256:" + strings.Repeat("b", 64),
+			Image:      "sha256:" + strings.Repeat("b", 64),
 			Uid:        1000,
 			Gid:        1000,
 			WorkingDir: "/srv/app",
@@ -38,8 +38,9 @@ func TestValidateOwnedContainer(t *testing.T) {
 	effectiveLabels := pairMap(request.Projection.Labels)
 	effectiveLabels["org.opencontainers.image.title"] = "application-base"
 	inspected := client.ContainerInspectResult{Container: container.InspectResponse{
-		ID:   containerID,
-		Name: "/" + request.Projection.Name,
+		ID:    containerID,
+		Image: request.Projection.Image,
+		Name:  "/" + request.Projection.Name,
 		Config: &container.Config{
 			Image: request.Projection.Image, User: "1000:1000",
 			Entrypoint: request.Projection.Entrypoint, Cmd: request.Projection.Command,
@@ -60,6 +61,15 @@ func TestValidateOwnedContainer(t *testing.T) {
 
 	if err := validateOwnedContainer(inspected, containerID, request, prepared); err != nil {
 		t.Fatalf("validate matching container: %v", err)
+	}
+
+	// Rationale: matching Config.Image does not prove the actual container image.
+	for _, imageID := range []string{"", "sha256:" + strings.Repeat("c", 64)} {
+		candidate := inspected
+		candidate.Container.Image = imageID
+		if err := validateOwnedContainer(candidate, containerID, request, prepared); err == nil {
+			t.Fatal("accepted container with incorrect actual image identity")
+		}
 	}
 
 	tests := []struct {
@@ -108,7 +118,7 @@ func TestValidateOwnedContainerAllowsInheritedImageDefaults(t *testing.T) {
 	containerID := strings.Repeat("a", 64)
 	prepared := preparedBody{hostPath: "/var/lib/groundplane/agent/tasks/assignment/execution/body"}
 	request := scriptexecution.Request{Projection: &agentpb.ScriptRunnerProjection{
-		Name: "gp-script-01k5v8k8yr0000000000000000", Image: "app@sha256:" + strings.Repeat("b", 64),
+		Name: "gp-script-01k5v8k8yr0000000000000000", Image: "sha256:" + strings.Repeat("b", 64),
 		Entrypoint: []string{"/bin/sh"}, Command: []string{bodyTarget},
 		Labels: []*agentpb.ScriptStringPair{
 			{Key: "com.groundplane.managed", Value: "true"},
@@ -118,7 +128,7 @@ func TestValidateOwnedContainerAllowsInheritedImageDefaults(t *testing.T) {
 	labels := pairMap(request.Projection.Labels)
 	labels["org.opencontainers.image.title"] = "application-base"
 	inspected := client.ContainerInspectResult{Container: container.InspectResponse{
-		ID: containerID, Name: "/" + request.Projection.Name,
+		ID: containerID, Image: request.Projection.Image, Name: "/" + request.Projection.Name,
 		Config: &container.Config{
 			Image: request.Projection.Image, User: "0:0", WorkingDir: "/usr/src/app",
 			Entrypoint: request.Projection.Entrypoint, Cmd: request.Projection.Command,
@@ -142,15 +152,22 @@ func TestValidateOwnedContainerRejectsBodyMountMismatch(t *testing.T) {
 	containerID := strings.Repeat("a", 64)
 	prepared := preparedBody{hostPath: "/var/lib/groundplane/agent/tasks/assignment/execution/body"}
 	request := scriptexecution.Request{Projection: &agentpb.ScriptRunnerProjection{
-		Name: "gp-script-01k5v8k8yr0000000000000000", Image: "app@sha256:" + strings.Repeat("b", 64),
+		Name: "gp-script-01k5v8k8yr0000000000000000", Image: "sha256:" + strings.Repeat("b", 64),
 		Entrypoint: []string{"/bin/sh"}, Command: []string{bodyTarget},
 	}}
 	inspected := client.ContainerInspectResult{Container: container.InspectResponse{
-		ID: containerID, Name: "/" + request.Projection.Name,
-		Config:     &container.Config{Image: request.Projection.Image, User: "0:0", Entrypoint: request.Projection.Entrypoint, Cmd: request.Projection.Command},
+		ID: containerID, Image: request.Projection.Image, Name: "/" + request.Projection.Name,
+		Config: &container.Config{
+			Image:      request.Projection.Image,
+			User:       "0:0",
+			Entrypoint: request.Projection.Entrypoint,
+			Cmd:        request.Projection.Command,
+		},
 		HostConfig: &container.HostConfig{LogConfig: container.LogConfig{Type: "none"}},
 		State:      &container.State{Status: container.StateCreated},
-		Mounts:     []container.MountPoint{{Type: mount.TypeBind, Source: prepared.hostPath + ".other", Destination: bodyTarget}},
+		Mounts: []container.MountPoint{
+			{Type: mount.TypeBind, Source: prepared.hostPath + ".other", Destination: bodyTarget},
+		},
 	}}
 
 	if err := validateOwnedContainer(inspected, containerID, request, prepared); err == nil {

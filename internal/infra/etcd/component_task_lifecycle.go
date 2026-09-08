@@ -105,7 +105,10 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 			return componentTaskChange{}, projectionErr
 		}
 		if !found {
-			return componentTaskChange{}, errs.New(errs.KindStateConflict, "Blueprint retry desired projection is unavailable")
+			return componentTaskChange{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint retry desired projection is unavailable",
+			)
 		}
 		blueprintProjection = desiredProjection.Record
 	}
@@ -185,9 +188,15 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 			{Key: componentTaskIntentKey(source.ID), ModRevision: intentValue.ModRevision},
 			{Key: componentTaskIntentKey(retry.ID)},
 			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
-			{Key: environmentComposeProjectionKey(intent.EnvironmentID), ModRevision: keyValueRevision(state.Values[1])},
+			{
+				Key:         environmentComposeProjectionKey(intent.EnvironmentID),
+				ModRevision: keyValueRevision(state.Values[1]),
+			},
 			{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[2].ModRevision},
-			{Key: environmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID), ModRevision: state.Values[3].ModRevision},
+			{
+				Key:         environmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID),
+				ModRevision: state.Values[3].ModRevision,
+			},
 		},
 	}
 	for index, candidate := range intent.Candidates {
@@ -303,7 +312,10 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	}
 	if environmentState == nil || len(environmentState.Values) != 1 || environmentState.Values[0] == nil {
 		clearComponentTaskChange(change)
-		return componentTaskChange{}, errs.New(errs.KindEnvironmentNotFound, "Component retry Environment was not found")
+		return componentTaskChange{}, errs.New(
+			errs.KindEnvironmentNotFound,
+			"Component retry Environment was not found",
+		)
 	}
 	environment, err := decodeEnvironment(environmentState.Values[0].Value)
 	if err != nil || environment.ID != intent.EnvironmentID {
@@ -489,7 +501,10 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	}
 	if componentTaskAcknowledgementRequiresBlueprintRootCondition(task, terminalStatus, intent.EnvironmentID) {
 		change.conditions = append(change.conditions, Condition{
-			Key: environmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID), ModRevision: state.Values[2].ModRevision,
+			Key: environmentBlueprintRootKey(
+				intent.EnvironmentID,
+				desiredRevisionID,
+			), ModRevision: state.Values[2].ModRevision,
 		})
 	}
 	for index, candidate := range intent.Candidates {

@@ -13,7 +13,7 @@ import (
 // componentConfigWire deliberately keeps raw fields so that an explicitly
 // supplied null cannot be mistaken for an omitted discriminator field.
 type componentConfigWire struct {
-	ZoneID            json.RawMessage `json:"zone_id"`
+	ZoneIDs           json.RawMessage `json:"zone_ids"`
 	CaddyfileTemplate json.RawMessage `json:"caddyfile_template"`
 	SecretID          json.RawMessage `json:"secret_id"`
 	UpstreamAuto      json.RawMessage `json:"upstream_auto"`
@@ -30,13 +30,14 @@ func (config ComponentConfig) MarshalJSON() ([]byte, error) {
 	switch {
 	case config.Caddy != nil:
 		return json.Marshal(struct {
-			ZoneID            string `json:"zone_id"`
-			CaddyfileTemplate string `json:"caddyfile_template,omitempty"`
-		}{config.Caddy.ZoneID, config.Caddy.CaddyfileTemplate})
+			ZoneIDs           []string `json:"zone_ids"`
+			CaddyfileTemplate string   `json:"caddyfile_template,omitempty"`
+		}{config.Caddy.ZoneIDs, config.Caddy.CaddyfileTemplate})
 	case config.CloudflareTunnel != nil:
 		return json.Marshal(struct {
-			SecretID string `json:"secret_id"`
-		}{config.CloudflareTunnel.SecretID})
+			ZoneIDs  []string `json:"zone_ids"`
+			SecretID string   `json:"secret_id"`
+		}{config.CloudflareTunnel.ZoneIDs, config.CloudflareTunnel.SecretID})
 	default:
 		// Do not use omitempty here: empty resolver and forwarder lists are
 		// meaningful configured state and must remain JSON arrays.
@@ -65,31 +66,47 @@ func (config *ComponentConfig) UnmarshalJSON(data []byte) error {
 		return malformedComponentConfig("component config requires exactly one variant")
 	}
 	switch {
-	case present(wire.ZoneID) || present(wire.CaddyfileTemplate):
-		if present(wire.SecretID) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) || present(wire.Forwarders) || present(wire.TailnetDelegation) {
+	case !present(wire.SecretID) && (present(wire.ZoneIDs) || present(wire.CaddyfileTemplate)):
+		if present(wire.SecretID) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) ||
+			present(wire.Forwarders) ||
+			present(wire.TailnetDelegation) {
 			return malformedComponentConfig("component config Caddy variant is incomplete or mixed")
 		}
-		var zoneID, template string
-		if err := decodeRequiredField(wire.ZoneID, "zone_id", &zoneID); err != nil {
+		zoneIDs, err := decodeStringArray(wire.ZoneIDs, "zone_ids")
+		if err != nil {
 			return err
 		}
+		var template string
 		if present(wire.CaddyfileTemplate) {
 			if err := decodeRequiredField(wire.CaddyfileTemplate, "caddyfile_template", &template); err != nil {
 				return err
 			}
 		}
-		*config = ComponentConfig{Caddy: &CaddyComponentConfig{ZoneID: zoneID, CaddyfileTemplate: template}}
+		*config = ComponentConfig{Caddy: &CaddyComponentConfig{ZoneIDs: zoneIDs, CaddyfileTemplate: template}}
 	case present(wire.SecretID):
-		if present(wire.ZoneID) || present(wire.CaddyfileTemplate) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) || present(wire.Forwarders) || present(wire.TailnetDelegation) {
+		if present(wire.CaddyfileTemplate) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) ||
+			present(wire.Forwarders) ||
+			present(wire.TailnetDelegation) {
 			return malformedComponentConfig("component config Cloudflare Tunnel variant is mixed")
 		}
 		var secretID string
 		if err := decodeRequiredField(wire.SecretID, "secret_id", &secretID); err != nil {
 			return err
 		}
-		*config = ComponentConfig{CloudflareTunnel: &CloudflareTunnelComponentConfig{SecretID: secretID}}
+		zoneIDs, err := decodeStringArray(wire.ZoneIDs, "zone_ids")
+		if err != nil {
+			return err
+		}
+		*config = ComponentConfig{
+			CloudflareTunnel: &CloudflareTunnelComponentConfig{ZoneIDs: zoneIDs, SecretID: secretID},
+		}
 	default:
-		if present(wire.ZoneID) || present(wire.CaddyfileTemplate) || present(wire.SecretID) || !present(wire.CorefileTemplate) || !present(wire.UpstreamAuto) || !present(wire.UpstreamResolvers) || !present(wire.Forwarders) || !present(wire.TailnetDelegation) {
+		if present(wire.ZoneIDs) || present(wire.CaddyfileTemplate) || present(wire.SecretID) ||
+			!present(wire.CorefileTemplate) ||
+			!present(wire.UpstreamAuto) ||
+			!present(wire.UpstreamResolvers) ||
+			!present(wire.Forwarders) ||
+			!present(wire.TailnetDelegation) {
 			return malformedComponentConfig("component config CoreDNS variant is incomplete or mixed")
 		}
 		var corefileTemplate string
@@ -134,14 +151,16 @@ func (config ComponentConfig) validate() error {
 	if branches != 1 {
 		return invalidComponentConfig("component config requires exactly one variant")
 	}
-	if config.Caddy != nil && !validStableID(config.Caddy.ZoneID, "net_") {
-		return invalidComponentConfig("component config Caddy zone_id is invalid")
+	if config.Caddy != nil && !validComponentZoneIDs(config.Caddy.ZoneIDs) {
+		return invalidComponentConfig("component config Caddy zone_ids is invalid")
 	}
-	if config.CloudflareTunnel != nil && !validStableID(config.CloudflareTunnel.SecretID, "sec_") {
-		return invalidComponentConfig("component config Cloudflare Tunnel secret_id is invalid")
+	if config.CloudflareTunnel != nil && (!validStableID(config.CloudflareTunnel.SecretID, "sec_") ||
+		!validComponentZoneIDs(config.CloudflareTunnel.ZoneIDs)) {
+		return invalidComponentConfig("component config Cloudflare Tunnel zone_ids or secret_id is invalid")
 	}
 	if config.CoreDNS != nil {
-		if config.CoreDNS.CorefileTemplate == "" || config.CoreDNS.UpstreamResolvers == nil || config.CoreDNS.Forwarders == nil {
+		if config.CoreDNS.CorefileTemplate == "" || config.CoreDNS.UpstreamResolvers == nil ||
+			config.CoreDNS.Forwarders == nil {
 			return invalidComponentConfig("component config CoreDNS arrays are required")
 		}
 		for _, forwarder := range config.CoreDNS.Forwarders {
@@ -157,13 +176,15 @@ func (config ComponentConfig) Validate() error { return config.validate() }
 
 func componentConfigBranches(wire componentConfigWire) int {
 	branches := 0
-	if present(wire.ZoneID) || present(wire.CaddyfileTemplate) {
+	if present(wire.CaddyfileTemplate) || present(wire.ZoneIDs) && !present(wire.SecretID) {
 		branches++
 	}
 	if present(wire.SecretID) {
 		branches++
 	}
-	if present(wire.CorefileTemplate) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) || present(wire.Forwarders) || present(wire.TailnetDelegation) {
+	if present(wire.CorefileTemplate) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) ||
+		present(wire.Forwarders) ||
+		present(wire.TailnetDelegation) {
 		branches++
 	}
 	return branches
@@ -264,7 +285,7 @@ func validStableID(value, prefix string) bool {
 }
 
 type componentConfigMutationWire struct {
-	ZoneID            json.RawMessage `json:"zone_id"`
+	ZoneIDs           json.RawMessage `json:"zone_ids"`
 	CaddyfileTemplate json.RawMessage `json:"caddyfile_template"`
 	Credential        json.RawMessage `json:"credential"`
 	UpstreamAuto      json.RawMessage `json:"upstream_auto"`
@@ -281,13 +302,14 @@ func (input ComponentConfigMutationInput) MarshalJSON() ([]byte, error) {
 	switch {
 	case input.Caddy != nil:
 		return json.Marshal(struct {
-			ZoneID            string `json:"zone_id"`
-			CaddyfileTemplate string `json:"caddyfile_template,omitempty"`
-		}{input.Caddy.ZoneID, input.Caddy.CaddyfileTemplate})
+			ZoneIDs           []string `json:"zone_ids"`
+			CaddyfileTemplate string   `json:"caddyfile_template,omitempty"`
+		}{input.Caddy.ZoneIDs, input.Caddy.CaddyfileTemplate})
 	case input.CloudflareTunnel != nil:
 		return json.Marshal(struct {
+			ZoneIDs    []string                        `json:"zone_ids"`
 			Credential CloudflareTunnelCredentialInput `json:"credential"`
-		}{input.CloudflareTunnel.Credential})
+		}{input.CloudflareTunnel.ZoneIDs, input.CloudflareTunnel.Credential})
 	default:
 		return json.Marshal(struct {
 			CorefileTemplate  string                  `json:"corefile_template"`
@@ -309,44 +331,64 @@ func (input *ComponentConfigMutationInput) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	branches := 0
-	if present(wire.ZoneID) || present(wire.CaddyfileTemplate) {
+	if present(wire.CaddyfileTemplate) || present(wire.ZoneIDs) && !present(wire.Credential) {
 		branches++
 	}
 	if present(wire.Credential) {
 		branches++
 	}
-	if present(wire.CorefileTemplate) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) || present(wire.Forwarders) || present(wire.TailnetDelegation) {
+	if present(wire.CorefileTemplate) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) ||
+		present(wire.Forwarders) ||
+		present(wire.TailnetDelegation) {
 		branches++
 	}
 	if branches != 1 {
 		return malformedComponentConfig("component config mutation requires exactly one variant")
 	}
 	switch {
-	case present(wire.ZoneID) || present(wire.CaddyfileTemplate):
-		if present(wire.Credential) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) || present(wire.Forwarders) || present(wire.TailnetDelegation) {
+	case !present(wire.Credential) && (present(wire.ZoneIDs) || present(wire.CaddyfileTemplate)):
+		if present(wire.Credential) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) ||
+			present(wire.Forwarders) ||
+			present(wire.TailnetDelegation) {
 			return malformedComponentConfig("component config mutation Caddy variant is incomplete or mixed")
 		}
-		var zoneID, template string
-		if err := decodeRequiredField(wire.ZoneID, "zone_id", &zoneID); err != nil {
+		zoneIDs, err := decodeStringArray(wire.ZoneIDs, "zone_ids")
+		if err != nil {
 			return err
 		}
+		var template string
 		if present(wire.CaddyfileTemplate) {
 			if err := decodeRequiredField(wire.CaddyfileTemplate, "caddyfile_template", &template); err != nil {
 				return err
 			}
 		}
-		*input = ComponentConfigMutationInput{Caddy: &CaddyComponentConfigMutationInput{ZoneID: zoneID, CaddyfileTemplate: template}}
+		*input = ComponentConfigMutationInput{
+			Caddy: &CaddyComponentConfigMutationInput{ZoneIDs: zoneIDs, CaddyfileTemplate: template},
+		}
 	case present(wire.Credential):
-		if present(wire.ZoneID) || present(wire.CaddyfileTemplate) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) || present(wire.Forwarders) || present(wire.TailnetDelegation) {
+		if present(wire.CaddyfileTemplate) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) ||
+			present(wire.Forwarders) ||
+			present(wire.TailnetDelegation) {
 			return malformedComponentConfig("component config mutation Cloudflare Tunnel variant is mixed")
 		}
 		var credential CloudflareTunnelCredentialInput
 		if err := decodeRequiredField(wire.Credential, "credential", &credential); err != nil {
 			return err
 		}
-		*input = ComponentConfigMutationInput{CloudflareTunnel: &CloudflareTunnelComponentConfigMutationInput{Credential: credential}}
+		zoneIDs, err := decodeStringArray(wire.ZoneIDs, "zone_ids")
+		if err != nil {
+			return err
+		}
+		*input = ComponentConfigMutationInput{
+			CloudflareTunnel: &CloudflareTunnelComponentConfigMutationInput{ZoneIDs: zoneIDs, Credential: credential},
+		}
 	default:
-		if present(wire.ZoneID) || present(wire.CaddyfileTemplate) || present(wire.Credential) || !present(wire.CorefileTemplate) || !present(wire.UpstreamAuto) || !present(wire.UpstreamResolvers) || !present(wire.Forwarders) || !present(wire.TailnetDelegation) {
+		if present(wire.ZoneIDs) || present(wire.CaddyfileTemplate) || present(wire.Credential) ||
+			!present(wire.CorefileTemplate) ||
+			!present(wire.UpstreamAuto) ||
+			!present(wire.UpstreamResolvers) ||
+			!present(wire.Forwarders) ||
+			!present(wire.TailnetDelegation) {
 			return malformedComponentConfig("component config mutation CoreDNS variant is incomplete or mixed")
 		}
 		var corefileTemplate string
@@ -391,19 +433,26 @@ func (input ComponentConfigMutationInput) validate() error {
 	if branches != 1 {
 		return invalidComponentConfig("component config mutation requires exactly one variant")
 	}
-	if input.Caddy != nil && !validStableID(input.Caddy.ZoneID, "net_") {
-		return invalidComponentConfig("component config mutation Caddy zone_id is invalid")
+	if input.Caddy != nil && !validComponentZoneIDs(input.Caddy.ZoneIDs) {
+		return invalidComponentConfig("component config mutation Caddy zone_ids is invalid")
 	}
 	if input.CloudflareTunnel != nil {
+		if !validComponentZoneIDs(input.CloudflareTunnel.ZoneIDs) {
+			return invalidComponentConfig("component config mutation Cloudflare Tunnel zone_ids is invalid")
+		}
 		if err := input.CloudflareTunnel.Credential.Validate(); err != nil {
 			return err
 		}
 	}
 	if input.CoreDNS != nil {
-		if input.CoreDNS.CorefileTemplate == nil || input.CoreDNS.UpstreamAuto == nil || input.CoreDNS.UpstreamResolvers == nil || input.CoreDNS.Forwarders == nil || input.CoreDNS.TailnetDelegation == nil {
+		if input.CoreDNS.CorefileTemplate == nil || input.CoreDNS.UpstreamAuto == nil ||
+			input.CoreDNS.UpstreamResolvers == nil ||
+			input.CoreDNS.Forwarders == nil ||
+			input.CoreDNS.TailnetDelegation == nil {
 			return invalidComponentConfig("component config mutation CoreDNS variant requires every field")
 		}
-		if *input.CoreDNS.CorefileTemplate == "" || *input.CoreDNS.UpstreamResolvers == nil || *input.CoreDNS.Forwarders == nil {
+		if *input.CoreDNS.CorefileTemplate == "" || *input.CoreDNS.UpstreamResolvers == nil ||
+			*input.CoreDNS.Forwarders == nil {
 			return invalidComponentConfig("component config mutation CoreDNS arrays are required")
 		}
 		for _, forwarder := range *input.CoreDNS.Forwarders {

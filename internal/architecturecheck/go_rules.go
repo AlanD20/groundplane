@@ -548,7 +548,10 @@ func forbiddenComponentModuleImport(source, importPath string) (string, string) 
 			strings.HasPrefix(importPath, registeredComponentsModule+"/")
 		allowed := standard || inSDK && ownSDK || inRegistered && (ownSDK || ownRegistered)
 		if !allowed {
-			return importPath, fmt.Sprintf("%s may import only component-sdk and approved standard library", sourceDirectory)
+			return importPath, fmt.Sprintf(
+				"%s may import only component-sdk and approved standard library",
+				sourceDirectory,
+			)
 		}
 	}
 	importsRegistered := importPath == registeredComponentsModule ||

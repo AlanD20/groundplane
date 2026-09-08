@@ -29,7 +29,6 @@ type Assignment struct {
 	Plan                        *agentpb.ExecutionPlan
 	ScriptArtifacts             *agentpb.ScriptAssignmentArtifacts
 	ScriptCheckpoints           []*agentpb.ScriptExecutionCheckpoint
-	AcknowledgedStepResults     []*agentpb.ExecutionStepResult
 	AutomaticReconcile          bool
 	ExecutionEpoch              uint32
 	ExecutionMode               agentpb.TaskExecutionMode
@@ -87,11 +86,10 @@ type TaskProgress struct {
 // WorkerOutput is a closed ordered union. Exactly one member is non-nil, and
 // each Task's terminal step progress is emitted before its final result.
 type WorkerOutput struct {
-	Progress            *TaskProgress
-	Result              *TaskResult
-	BackupCheckpoint    *agentpb.BackupCheckpointRequest
-	ScriptCheckpoint    *agentpb.ScriptCheckpointRequest
-	ExecutionStepResult *agentpb.ExecutionStepResultRequest
+	Progress         *TaskProgress
+	Result           *TaskResult
+	BackupCheckpoint *agentpb.BackupCheckpointRequest
+	ScriptCheckpoint *agentpb.ScriptCheckpointRequest
 }
 
 type taskReservation struct {
@@ -138,7 +136,6 @@ type WorkerPool struct {
 	backupSecrets          *backupSecretSlotInbox
 	backupCheckpoints      *backupCheckpointInbox
 	scriptCheckpoints      *scriptCheckpointInbox
-	executionStepResults   *executionStepResultInbox
 	taskEventAcks          *taskEventAckInbox
 
 	mu           sync.Mutex
@@ -149,21 +146,20 @@ type WorkerPool struct {
 
 func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger *slog.Logger) *WorkerPool {
 	pool := &WorkerPool{
-		size:                 size,
-		volumeRoot:           volumeRoot,
-		runner:               taskRunner,
-		logger:               logger,
-		work:                 make(chan *taskReservation, size),
-		outputs:              make(chan WorkerOutput, size),
-		reservations:         make(map[string]*taskReservation, size),
-		materializations:     newMaterializationInbox(),
-		managedConfigs:       newManagedConfigInbox(),
-		backupSecrets:        newBackupSecretSlotInbox(),
-		backupCheckpoints:    newBackupCheckpointInbox(),
-		scriptCheckpoints:    newScriptCheckpointInbox(),
-		executionStepResults: newExecutionStepResultInbox(),
-		taskEventAcks:        &taskEventAckInbox{receipts: make(map[taskEventAckKey]*taskEventReceipt)},
-		adapter:              NewAdapterRuntime(taskRunner),
+		size:              size,
+		volumeRoot:        volumeRoot,
+		runner:            taskRunner,
+		logger:            logger,
+		work:              make(chan *taskReservation, size),
+		outputs:           make(chan WorkerOutput, size),
+		reservations:      make(map[string]*taskReservation, size),
+		materializations:  newMaterializationInbox(),
+		managedConfigs:    newManagedConfigInbox(),
+		backupSecrets:     newBackupSecretSlotInbox(),
+		backupCheckpoints: newBackupCheckpointInbox(),
+		scriptCheckpoints: newScriptCheckpointInbox(),
+		taskEventAcks:     &taskEventAckInbox{receipts: make(map[taskEventAckKey]*taskEventReceipt)},
+		adapter:           NewAdapterRuntime(taskRunner),
 	}
 	pool.executeStep = pool.runStep
 	return pool
@@ -384,9 +380,6 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			}
 			reconciliationRequired = reconciliationRequired || stepResult.ReconciliationRequired
 			mutationAttempted = mutationAttempted || stepResult.MutationAttempted
-			if err == nil && stepResult.ExecutionStepResult != nil {
-				err = p.CheckpointExecutionStepResult(stepCtx, &reservation.assignment, stepResult.ExecutionStepResult)
-			}
 		}
 		cancel()
 		if err != nil {
@@ -623,7 +616,10 @@ func componentLifecycleComposeAssignment(
 	compensationStep *agentpb.ExecutionStep,
 ) (Assignment, *agentpb.ExecutionStep, error) {
 	if assignment.Plan == nil || compensationStep == nil {
-		return Assignment{}, nil, errs.New(errs.KindInternal, "agent: Component lifecycle Compose compensation is invalid")
+		return Assignment{}, nil, errs.New(
+			errs.KindInternal,
+			"agent: Component lifecycle Compose compensation is invalid",
+		)
 	}
 	artifactID := ""
 	switch payload := compensationStep.GetPayload().(type) {
@@ -691,7 +687,10 @@ func attemptedComponentComposeApply(
 	return nil
 }
 
-func componentRollbackComposeArtifact(plan *agentpb.ExecutionPlan, candidateArtifactID string) *agentpb.ComposeArtifact {
+func componentRollbackComposeArtifact(
+	plan *agentpb.ExecutionPlan,
+	candidateArtifactID string,
+) *agentpb.ComposeArtifact {
 	if plan == nil || len(plan.GetArtifacts()) != 2 {
 		return nil
 	}
@@ -1198,7 +1197,10 @@ func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assign
 			deadline = assignment.Deadline
 		}
 		if assignment.ReleaseRecoveryDirective == nil || len(assignment.ReleaseRecoveryRecordSHA256) != 32 ||
-			!bytes.Equal(assignment.ReleaseRecoveryDirective.GetReleaseRecoveryRecordSha256(), assignment.ReleaseRecoveryRecordSHA256) ||
+			!bytes.Equal(
+				assignment.ReleaseRecoveryDirective.GetReleaseRecoveryRecordSha256(),
+				assignment.ReleaseRecoveryRecordSHA256,
+			) ||
 			assignment.RecoveryProofRequired && !assignment.Deadline.After(assignment.RecoveryDeadline) {
 			return Assignment{}, errs.New(errs.KindInternal, "agent: recovery assignment authority is incomplete")
 		}
@@ -1237,13 +1239,6 @@ func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assign
 	if err != nil {
 		return Assignment{}, err
 	}
-	acknowledgedStepResults, err := executionplan.ValidateExecutionStepResults(
-		plan, assignment.AcknowledgedStepResults,
-	)
-	if err != nil {
-		clearScriptArtifacts(scriptArtifacts)
-		return Assignment{}, errs.Wrap(errs.KindInternal, err)
-	}
 	scriptCheckpoints := make([]*agentpb.ScriptExecutionCheckpoint, len(assignment.ScriptCheckpoints))
 	if len(assignment.ScriptCheckpoints) != len(plan.ScriptBodyArtifacts) {
 		clearScriptArtifacts(scriptArtifacts)
@@ -1266,11 +1261,17 @@ func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assign
 		}
 		if _, expected := expectedCheckpoints[scriptCheckpoints[index].ScriptExecutionId]; !expected {
 			clearScriptArtifacts(scriptArtifacts)
-			return Assignment{}, errs.New(errs.KindInternal, "agent: Script checkpoint does not belong to the execution plan")
+			return Assignment{}, errs.New(
+				errs.KindInternal,
+				"agent: Script checkpoint does not belong to the execution plan",
+			)
 		}
 		if _, duplicate := seenCheckpoints[scriptCheckpoints[index].ScriptExecutionId]; duplicate {
 			clearScriptArtifacts(scriptArtifacts)
-			return Assignment{}, errs.New(errs.KindInternal, "agent: Script checkpoint set contains a duplicate execution")
+			return Assignment{}, errs.New(
+				errs.KindInternal,
+				"agent: Script checkpoint set contains a duplicate execution",
+			)
 		}
 		seenCheckpoints[scriptCheckpoints[index].ScriptExecutionId] = struct{}{}
 	}
@@ -1286,108 +1287,14 @@ func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assign
 		AssignmentID: assignment.AssignmentID,
 		TaskID:       assignment.TaskID, OperationID: assignment.OperationID,
 		RetryOf: assignment.RetryOf, Plan: plan, ScriptArtifacts: scriptArtifacts,
-		ScriptCheckpoints: scriptCheckpoints, AcknowledgedStepResults: acknowledgedStepResults,
-		Deadline: deadline, ForwardDeadline: assignment.ForwardDeadline, RecoveryDeadline: assignment.RecoveryDeadline,
+		ScriptCheckpoints: scriptCheckpoints,
+		Deadline:          deadline, ForwardDeadline: assignment.ForwardDeadline, RecoveryDeadline: assignment.RecoveryDeadline,
 		RecoveryProofRequired: assignment.RecoveryProofRequired,
 		ExecutionMode:         assignment.ExecutionMode, ExecutionEpoch: assignment.ExecutionEpoch,
 		RestorationAuthority: restorationAuthority, ReleaseRecoveryDirective: recoveryDirective,
 		ReleaseRecoveryRecordSHA256: append([]byte(nil), assignment.ReleaseRecoveryRecordSHA256...),
 		AutomaticReconcile:          assignment.AutomaticReconcile,
 	}, nil
-}
-
-func validateCandidateReleaseAssignmentAuthority(assignment Assignment, plan *agentpb.ExecutionPlan) error {
-	procedure := plan.GetCandidateReleaseProcedure()
-	if procedure == nil {
-		if assignment.RestorationAuthority != nil || assignment.ReleaseRecoveryDirective != nil ||
-			len(assignment.ReleaseRecoveryRecordSHA256) != 0 {
-			return errs.New(errs.KindInternal, "agent: non-release assignment carries restoration authority")
-		}
-		return nil
-	}
-	authority := assignment.RestorationAuthority
-	if authority == nil || len(authority.GetPlanHash()) != 32 || !bytes.Equal(authority.GetPlanHash(), plan.GetPlanHash()) ||
-		len(authority.GetAuthoritySha256()) != 32 || authority.GetTaskId() != assignment.TaskID ||
-		authority.GetOperationId() != assignment.OperationID || len(authority.GetCandidates()) != len(procedure.GetMembers()) {
-		return errs.New(errs.KindInternal, "agent: candidate Release restoration authority is invalid")
-	}
-	selectedStepIDs := make([]string, 0, len(procedure.GetMembers())*2)
-	compensateStepIDs := make([]string, 0, len(procedure.GetMembers()))
-	for index, member := range procedure.GetMembers() {
-		candidate := authority.GetCandidates()[index]
-		if candidate.GetServiceId() != member.GetServiceId() || candidate.GetReleaseId() != member.GetCandidateReleaseId() ||
-			authority.GetCandidateArtifactId() != member.GetCandidateArtifactId() {
-			return errs.New(errs.KindInternal, "agent: candidate Release restoration members diverge")
-		}
-		var probeID, compensateID string
-		switch authority.GetTarget() {
-		case agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR:
-			selected := member.GetServingPredecessor()
-			if selected == nil || authority.GetServingPredecessor() == nil ||
-				authority.GetServingPredecessor().GetKeyRevision() <= 0 ||
-				len(authority.GetServingPredecessor().GetComposeArtifactSha256()) != 32 ||
-				len(authority.GetServingPredecessor().GetComposeArtifact()) == 0 {
-				return errs.New(errs.KindInternal, "agent: serving predecessor authority is incomplete")
-			}
-			artifactDigest := sha256.Sum256(authority.GetServingPredecessor().GetComposeArtifact())
-			if !bytes.Equal(artifactDigest[:], authority.GetServingPredecessor().GetComposeArtifactSha256()) {
-				return errs.New(errs.KindInternal, "agent: serving predecessor artifact digest diverges")
-			}
-			probeID, compensateID = selected.GetProbeStepId(), selected.GetCompensateStepId()
-		case agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE:
-			selected := member.GetCandidateAbsence()
-			if selected == nil || authority.GetServingPredecessor() != nil {
-				return errs.New(errs.KindInternal, "agent: candidate absence authority is incomplete")
-			}
-			probeID, compensateID = selected.GetProbeStepId(), selected.GetCompensateStepId()
-		default:
-			return errs.New(errs.KindInternal, "agent: candidate Release restoration target is invalid")
-		}
-		selectedStepIDs = append(selectedStepIDs, probeID)
-		compensateStepIDs = append(compensateStepIDs, compensateID)
-	}
-	for index := len(compensateStepIDs) - 1; index >= 0; index-- {
-		selectedStepIDs = append(selectedStepIDs, compensateStepIDs[index])
-	}
-	if assignment.ExecutionMode != agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY {
-		return nil
-	}
-	directive := assignment.ReleaseRecoveryDirective
-	if directive.GetCursor() > uint32(len(directive.GetStepIds())) || len(directive.GetStepIds()) != len(selectedStepIDs) {
-		return errs.New(errs.KindInternal, "agent: candidate Release recovery cursor is invalid")
-	}
-	for index := range selectedStepIDs {
-		if directive.GetStepIds()[index] != selectedStepIDs[index] {
-			return errs.New(errs.KindInternal, "agent: candidate Release recovery procedure diverges")
-		}
-	}
-	applicableIndex := 0
-	for _, compensationStepID := range selectedStepIDs[len(procedure.GetMembers()):] {
-		if applicableIndex < len(directive.GetApplicableCompensationStepIds()) &&
-			directive.GetApplicableCompensationStepIds()[applicableIndex] == compensationStepID {
-			applicableIndex++
-		}
-	}
-	if applicableIndex != len(directive.GetApplicableCompensationStepIds()) {
-		return errs.New(errs.KindInternal, "agent: recovery compensation obligation is not canonical")
-	}
-	switch directive.GetPhase() {
-	case agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROBE:
-		if int(directive.GetCursor()) >= len(procedure.GetMembers()) {
-			return errs.New(errs.KindInternal, "agent: recovery probe phase cursor is invalid")
-		}
-	case agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_COMPENSATE:
-		if int(directive.GetCursor()) < len(procedure.GetMembers()) || int(directive.GetCursor()) >= len(selectedStepIDs) {
-			return errs.New(errs.KindInternal, "agent: recovery compensation phase cursor is invalid")
-		}
-	case agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROVEN:
-		if int(directive.GetCursor()) != len(selectedStepIDs) {
-			return errs.New(errs.KindInternal, "agent: recovery proven phase cursor is invalid")
-		}
-	default:
-		return errs.New(errs.KindInternal, "agent: recovery assignment phase is invalid")
-	}
-	return nil
 }
 
 // runStep fails closed until the corresponding typed procedure is accepted.

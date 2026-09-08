@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runner"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -40,11 +41,18 @@ func (runtime *AdapterRuntime) executeStep(
 	if !found || adapter.Manual() {
 		return adapterStepResult{}, errs.New(errs.KindValidationFailed, "agent: adapter procedure is not registered")
 	}
+	authentication, err := decodeBackingAuthentication(
+		procedure.Authentication, adapter.SupportsAuthenticationModes(),
+	)
+	if err != nil || authentication == core.BackingAuthenticationNone {
+		return adapterStepResult{}, errs.New(errs.KindValidationFailed, "agent: adapter authentication mode is invalid")
+	}
 	params := adapters.ProvisionParams{
-		Database: procedure.Database,
-		Role:     procedure.Role,
-		Password: append([]byte(nil), procedure.Password...),
-		GrantOn:  procedure.GrantOn,
+		Authentication: authentication,
+		Database:       procedure.Database,
+		Role:           procedure.Role,
+		Password:       append([]byte(nil), procedure.Password...),
+		GrantOn:        procedure.GrantOn,
 	}
 	defer clear(params.Password)
 	compiled := compileAdapterProcedure(adapter, procedure.Phase, params)
@@ -125,12 +133,9 @@ func (runtime *AdapterRuntime) backingContainer(ctx context.Context, runtimeServ
 }
 
 func adapterCommand(step adapters.Step) (string, []string, []byte, error) {
-	if len(step.Stdin) == 0 {
-		return "", nil, nil, errs.New(errs.KindValidationFailed, "agent: compiled adapter input is empty")
-	}
 	switch step.Op {
 	case adapters.StepSQL:
-		if step.Database == "" || step.Program != "" || len(step.Args) != 0 {
+		if step.Database == "" || step.Program != "" || len(step.Args) != 0 || len(step.Stdin) == 0 {
 			return "", nil, nil, errs.New(errs.KindValidationFailed, "agent: compiled SQL operation is invalid")
 		}
 		return "psql", []string{

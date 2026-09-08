@@ -18,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/dnsname"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 )
 
 // Document is implemented by every top-level Blueprint document.
@@ -433,12 +434,15 @@ func (c Component) Validate() error {
 	switch c.Kind {
 	case ComponentKindIngressCaddy:
 		if c.Owner != ComponentOwnerEnvironment || c.Config.CloudflareTunnel != nil || c.Config.CoreDNS != nil ||
-			(c.Enabled && (c.Config.Caddy == nil || c.Config.Caddy.ZoneID == "")) {
+			(c.Enabled && (c.Config.Caddy == nil || len(c.Config.Caddy.ZoneIDs) == 0)) ||
+			(c.Config.Caddy != nil && validateComponentZoneIDs(c.Config.Caddy.ZoneIDs) != nil) {
 			return fmt.Errorf("component %s: Caddy ownership or config is invalid", c.ID)
 		}
 	case ComponentKindEdgeCloudflare:
 		if c.Owner != ComponentOwnerEnvironment || c.Config.Caddy != nil || c.Config.CoreDNS != nil ||
-			(c.Enabled && (c.Config.CloudflareTunnel == nil || c.Config.CloudflareTunnel.SecretID == "")) {
+			(c.Enabled && (c.Config.CloudflareTunnel == nil || c.Config.CloudflareTunnel.SecretID == "" ||
+				len(c.Config.CloudflareTunnel.ZoneIDs) == 0)) ||
+			(c.Config.CloudflareTunnel != nil && validateComponentZoneIDs(c.Config.CloudflareTunnel.ZoneIDs) != nil) {
 			return fmt.Errorf("component %s: Cloudflare Tunnel ownership or config is invalid", c.ID)
 		}
 	case ComponentKindCoreDNS:
@@ -449,6 +453,20 @@ func (c Component) Validate() error {
 		}
 	default:
 		return fmt.Errorf("component %s: unknown kind %q", c.ID, c.Kind)
+	}
+	return nil
+}
+
+func validateComponentZoneIDs(zoneIDs []string) error {
+	seen := make(map[string]struct{}, len(zoneIDs))
+	for _, zoneID := range zoneIDs {
+		if ids.Validate(ids.KindNetwork, zoneID) != nil {
+			return fmt.Errorf("Component Zone id is invalid")
+		}
+		if _, duplicate := seen[zoneID]; duplicate {
+			return fmt.Errorf("Component Zone id is repeated")
+		}
+		seen[zoneID] = struct{}{}
 	}
 	return nil
 }

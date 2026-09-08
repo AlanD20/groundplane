@@ -24,7 +24,11 @@ func (change *releaseTaskRetryChange) clear() {
 	change.mutations = nil
 }
 
-func (repository *TaskRepository) prepareReleaseTaskRetry(ctx context.Context, source, retry TaskRecord, revision int64) (releaseTaskRetryChange, error) {
+func (repository *TaskRepository) prepareReleaseTaskRetry(
+	ctx context.Context,
+	source, retry TaskRecord,
+	revision int64,
+) (releaseTaskRetryChange, error) {
 	publicationID := source.Params[TaskReleasePublicationParam]
 	if publicationID == "" {
 		return releaseTaskRetryChange{}, nil
@@ -36,7 +40,10 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(ctx context.Context, s
 		(source.Type != TaskDeploy && source.Type != TaskRollback) || retry.Type != source.Type ||
 		retry.OperationID != source.OperationID || retry.Params[TaskReleasePublicationParam] != publicationID ||
 		source.Result == nil || !source.Result.ReconciliationRequired {
-		return releaseTaskRetryChange{}, errs.New(errs.KindTaskNotRetryable, "release Task does not own a recoverable ledger attempt")
+		return releaseTaskRetryChange{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"release Task does not own a recoverable ledger attempt",
+		)
 	}
 	baseKeys := []string{
 		releasePublicationKey(publicationID), releaseManifestStagingKey(publicationID),
@@ -60,7 +67,8 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(ctx context.Context, s
 		return releaseTaskRetryChange{}, corruptReleaseRecord()
 	}
 	manifest, err := decodeReleaseRecord[ReleaseStagedManifest](base.Values[1].Value, "release-staged-manifest")
-	if err != nil || manifest.PublicationID != publicationID || manifest.OperationID != source.OperationID || len(manifest.Members) == 0 {
+	if err != nil || manifest.PublicationID != publicationID || manifest.OperationID != source.OperationID ||
+		len(manifest.Members) == 0 {
 		return releaseTaskRetryChange{}, corruptReleaseRecord()
 	}
 	if _, err := validateReleaseCandidateMarker(source, marker, manifest); err != nil {
@@ -74,7 +82,10 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(ctx context.Context, s
 		head.EnvironmentID != source.Owner.EnvironmentID || head.LatestTaskID != source.ID ||
 		head.State != domain.StateRecoveryRequired || len(head.Members) != len(manifest.Members) ||
 		head.RecoveryOutcome == "" || head.FailedMemberOrdinal == 0 {
-		return releaseTaskRetryChange{}, errs.New(errs.KindTaskNotRetryable, "release operation is not awaiting recovery")
+		return releaseTaskRetryChange{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"release operation is not awaiting recovery",
+		)
 	}
 	fence, err := decodeReleaseRecord[ReleaseFenceSet](base.Values[3].Value, "release-fence-set")
 	if err != nil || fence.OperationID != source.OperationID || fence.AttemptTaskID != source.ID ||
@@ -83,7 +94,11 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(ctx context.Context, s
 	}
 	memberKeys := make([]string, 0, len(manifest.Members)*2)
 	for _, member := range manifest.Members {
-		memberKeys = append(memberKeys, releaseIntentStagingKey(publicationID, member.ReleaseID), releaseRenderInputStagingKey(publicationID, member.ReleaseID))
+		memberKeys = append(
+			memberKeys,
+			releaseIntentStagingKey(publicationID, member.ReleaseID),
+			releaseRenderInputStagingKey(publicationID, member.ReleaseID),
+		)
 	}
 	members, err := repository.store.GetMany(ctx, GetManyRequest{Keys: memberKeys, Revision: revision})
 	if err != nil {
@@ -128,7 +143,10 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(ctx context.Context, s
 	}
 	head.State = domain.StateRecovering
 	head.LatestTaskID = retry.ID
-	head.Attempts = append(slices.Clone(head.Attempts), domain.Attempt{ID: retry.ID, TaskID: retry.ID, RetryOf: source.ID, StartedAt: retry.CreatedAt})
+	head.Attempts = append(
+		slices.Clone(head.Attempts),
+		domain.Attempt{ID: retry.ID, TaskID: retry.ID, RetryOf: source.ID, StartedAt: retry.CreatedAt},
+	)
 	head.UpdatedAt = retry.CreatedAt
 	if head.Progress != nil {
 		progress := *head.Progress

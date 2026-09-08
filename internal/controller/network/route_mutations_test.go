@@ -117,7 +117,11 @@ func TestRouteCreationDerivesIdentityAndCommitsExactReplayResponse(t *testing.T)
 			Record: etcd.EnvironmentRecord{ID: environmentID, ProjectID: projectID}, Revision: 7, ReadRevision: 7,
 		},
 		project: etcd.Versioned[etcd.ProjectRecord]{
-			Record: etcd.ProjectRecord{ID: projectID, TenantID: tenantID, Kind: etcd.ProjectKindTenant}, Revision: 8, ReadRevision: 8,
+			Record: etcd.ProjectRecord{
+				ID:       projectID,
+				TenantID: tenantID,
+				Kind:     etcd.ProjectKindTenant,
+			}, Revision: 8, ReadRevision: 8,
 		},
 		target: etcd.Versioned[etcd.ServiceRecord]{
 			Record: etcd.ServiceRecord{EnvironmentID: environmentID}, Revision: 9, ReadRevision: 9,
@@ -147,9 +151,13 @@ func TestRouteCreationDerivesIdentityAndCommitsExactReplayResponse(t *testing.T)
 		t.Fatalf("CreateRoute() body = %s, %v", response.Body, err)
 	}
 	route := accepted.Route
-	if response.Status != http.StatusAccepted || accepted.TaskID == "" || route.ID == "" || route.EnvironmentID != environmentID ||
-		route.Host != input.Host || route.Path != input.Path || route.Exposure != input.Exposure ||
-		route.TargetServiceID != targetID || route.TargetPort != input.TargetPort {
+	if response.Status != http.StatusAccepted || accepted.TaskID == "" || route.ID == "" ||
+		route.EnvironmentID != environmentID ||
+		route.Host != input.Host ||
+		route.Path != input.Path ||
+		route.Exposure != input.Exposure ||
+		route.TargetServiceID != targetID ||
+		route.TargetPort != input.TargetPort {
 		t.Fatalf("CreateRoute() response = %#v/%#v", response, route)
 	}
 	if repository.record.Desired.ID != route.ID || repository.record.EnvironmentID != environmentID ||
@@ -196,7 +204,11 @@ func TestRouteCreationRejectsUnexposedTargetPort(t *testing.T) {
 			Record: etcd.EnvironmentRecord{ID: environmentID, ProjectID: projectID}, Revision: 7, ReadRevision: 7,
 		},
 		project: etcd.Versioned[etcd.ProjectRecord]{
-			Record: etcd.ProjectRecord{ID: projectID, TenantID: tenantID, Kind: etcd.ProjectKindTenant}, Revision: 8, ReadRevision: 8,
+			Record: etcd.ProjectRecord{
+				ID:       projectID,
+				TenantID: tenantID,
+				Kind:     etcd.ProjectKindTenant,
+			}, Revision: 8, ReadRevision: 8,
 		},
 		target: etcd.Versioned[etcd.ServiceRecord]{
 			Record: etcd.ServiceRecord{EnvironmentID: environmentID}, Revision: 9, ReadRevision: 9,

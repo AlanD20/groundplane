@@ -219,6 +219,18 @@ type fakeEngine struct {
 	removeErr   error
 }
 
+func (*fakeEngine) ImageInspect(
+	context.Context,
+	string,
+	...client.ImageInspectOption,
+) (client.ImageInspectResult, error) {
+	return client.ImageInspectResult{}, errors.New("unexpected image inspection")
+}
+
+func (*fakeEngine) ImagePull(context.Context, string, client.ImagePullOptions) (client.ImagePullResponse, error) {
+	return nil, errors.New("unexpected image pull")
+}
+
 func newFakeEngine(t *testing.T, response *agentpb.ComposeHelperResponse) *fakeEngine {
 	t.Helper()
 	var framed bytes.Buffer

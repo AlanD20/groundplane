@@ -155,8 +155,12 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		return routeTaskChange{}, err
 	}
 	change.values = append(change.values, publication.publishedDescriptor, headReference, candidateValue)
-	change.conditions = append(change.conditions,
-		Condition{Key: environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID), ModRevision: publication.rootRevision},
+	change.conditions = append(
+		change.conditions,
+		Condition{
+			Key:         environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
+			ModRevision: publication.rootRevision,
+		},
 		Condition{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		Condition{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 	)

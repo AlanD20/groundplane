@@ -13,7 +13,7 @@ func TestBackingCreationSpecs(t *testing.T) {
 	valkey9.Register()
 
 	for _, key := range []string{"postgres:16", "valkey:9"} {
-		spec, err := adapters.BackingCreationSpec(key)
+		spec, err := adapters.BackingCreationSpec(key, "")
 		if err != nil {
 			t.Fatalf("BackingCreationSpec(%q): %v", key, err)
 		}
@@ -24,14 +24,14 @@ func TestBackingCreationSpecs(t *testing.T) {
 }
 
 func TestBackingCreationSpecReturnsOwnedSlices(t *testing.T) {
-	first, err := adapters.BackingCreationSpec("postgres:16")
+	first, err := adapters.BackingCreationSpec("postgres:16", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	first.Expose[0] = "changed"
 	first.Environment[0].Name = "CHANGED"
 
-	second, err := adapters.BackingCreationSpec("postgres:16")
+	second, err := adapters.BackingCreationSpec("postgres:16", "")
 	if err != nil {
 		t.Fatal(err)
 	}

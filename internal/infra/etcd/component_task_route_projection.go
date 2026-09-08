@@ -44,7 +44,10 @@ func WithComponentTaskRouteProjection(
 	for index, route := range routes {
 		if validateRouteRecord(route) != nil ||
 			route.EnvironmentID != preparation.Intent.EnvironmentID {
-			return ComponentTaskPreparation{}, errs.New(errs.KindInternal, "Component Route projection input is invalid")
+			return ComponentTaskPreparation{}, errs.New(
+				errs.KindInternal,
+				"Component Route projection input is invalid",
+			)
 		}
 		projection.Routes[index] = ComponentTaskRouteCandidate{
 			Desired: route.Desired, DesiredGeneration: route.DesiredGeneration,
@@ -158,7 +161,10 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationStatus(
 		return componentTaskRouteObservationChange{}, err
 	}
 	if !found {
-		return componentTaskRouteObservationChange{}, errs.New(errs.KindStateConflict, "Component Route desired head is missing")
+		return componentTaskRouteObservationChange{}, errs.New(
+			errs.KindStateConflict,
+			"Component Route desired head is missing",
+		)
 	}
 	change := componentTaskRouteObservationChange{}
 	for _, candidate := range projection.Routes {
@@ -172,7 +178,10 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationStatus(
 		if desired == nil || desired.EnvironmentID != intent.EnvironmentID ||
 			desired.DesiredGeneration != candidate.DesiredGeneration ||
 			!routeDesiredEqual(desired.Desired, candidate.Desired) {
-			return componentTaskRouteObservationChange{}, errs.New(errs.KindStateConflict, "Component Route desired state changed during reconciliation")
+			return componentTaskRouteObservationChange{}, errs.New(
+				errs.KindStateConflict,
+				"Component Route desired state changed during reconciliation",
+			)
 		}
 		observation := RouteObservation{Status: status, DesiredGeneration: candidate.DesiredGeneration}
 		if projection.Provider != nil {
@@ -202,12 +211,16 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationStatus(
 		}
 		if read == nil || read.ReadRevision != revision || len(read.Values) != 1 {
 			clear(encoded)
-			return componentTaskRouteObservationChange{}, errs.New(errs.KindInternal, "Component Route observation read is incomplete")
+			return componentTaskRouteObservationChange{}, errs.New(
+				errs.KindInternal,
+				"Component Route observation read is incomplete",
+			)
 		}
 		condition := Condition{Key: key}
 		if read.Values[0] != nil {
 			prior, decodeErr := decodeRouteObservation(read.Values[0].Value)
-			if decodeErr != nil || prior.EnvironmentID != intent.EnvironmentID || prior.RouteID != candidate.Desired.ID {
+			if decodeErr != nil || prior.EnvironmentID != intent.EnvironmentID ||
+				prior.RouteID != candidate.Desired.ID {
 				clear(encoded)
 				return componentTaskRouteObservationChange{}, corruptRecord()
 			}

@@ -284,7 +284,10 @@ func applyRouteMutationTaskMarkers(
 		return IdempotencyTransactionResult{kind: idempotencyTransactionApplied, revision: result.Revision}, nil
 	}
 	if len(result.FailureReads) != len(conditions) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Route mutation compare evidence is incomplete")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"Route mutation compare evidence is incomplete",
+		)
 	}
 	if result.FailureReads[baseConditionCount] != nil || result.FailureReads[baseConditionCount+1] != nil {
 		return IdempotencyTransactionResult{

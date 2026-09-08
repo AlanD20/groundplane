@@ -97,7 +97,10 @@ func prepareHostResolutionProjectionPublication(
 			return hostResolutionProjectionPublication{}, err
 		}
 		if inputRevision < stored.InputRevision {
-			return hostResolutionProjectionPublication{}, errs.New(errs.KindStateConflict, "host-resolution input revision is stale")
+			return hostResolutionProjectionPublication{}, errs.New(
+				errs.KindStateConflict,
+				"host-resolution input revision is stale",
+			)
 		}
 		condition.ModRevision = current.ModRevision
 	}
@@ -147,7 +150,10 @@ func validateHostResolutionProjectionRecord(record HostResolutionProjectionRecor
 	for _, route := range record.Routes {
 		if validateStableID(ids.KindEnvironment, route.EnvironmentID) != nil ||
 			validateStableID(ids.KindTask, route.DesiredRevisionID) != nil || route.AppliedRevision <= 0 ||
-			validateStableID(ids.KindRoute, route.RouteID) != nil || validateStableID(ids.KindService, route.ServiceID) != nil ||
+			validateStableID(
+				ids.KindRoute,
+				route.RouteID,
+			) != nil || validateStableID(ids.KindService, route.ServiceID) != nil ||
 			!validHostResolutionName(route.Hostname) || !validHostResolutionAddress(route.IPv4) {
 			return errs.New(errs.KindValidationFailed, "host-resolution Route record is invalid")
 		}

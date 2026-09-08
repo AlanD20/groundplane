@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
 
@@ -39,7 +40,8 @@ func (fake *fakeBackingServiceReader) ListBackingServices(
 func TestBackingServiceRoutesProjectExactFacade(t *testing.T) {
 	t.Parallel()
 	record := etcd.BackingServiceRecord{
-		ProjectID: ids.New(ids.KindProject), EnvironmentID: ids.New(ids.KindEnvironment),
+		Authentication: core.BackingAuthenticationPassword,
+		ProjectID:      ids.New(ids.KindProject), EnvironmentID: ids.New(ids.KindEnvironment),
 		ServiceID: ids.New(ids.KindService), BackingNetworkID: ids.New(ids.KindNetwork),
 	}
 	request := etcd.PageRequest{Limit: 3, Cursor: "opaque"}
@@ -67,5 +69,8 @@ func TestBackingServiceRoutesProjectExactFacade(t *testing.T) {
 	)
 	if err != nil || !reflect.DeepEqual(detail.Body, want) {
 		t.Fatalf("showBackingService() = %#v, %v, want %#v", detail, err, want)
+	}
+	if detail.Body.Authentication != "password" {
+		t.Fatalf("backing-service authentication = %q", detail.Body.Authentication)
 	}
 }

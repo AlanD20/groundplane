@@ -26,9 +26,18 @@ const (
 type zoneCreationRepository interface {
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
-	GetEnvironmentComposeProjection(context.Context, string) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
-	ClaimEnvironmentBlueprintStage(context.Context, etcd.EnvironmentBlueprintStageClaimRequest) (etcd.EnvironmentBlueprintStageClaim, error)
-	StageEnvironmentBlueprintRevision(context.Context, etcd.EnvironmentBlueprintStageRequest) (etcd.EnvironmentBlueprintSeal, error)
+	GetEnvironmentComposeProjection(
+		context.Context,
+		string,
+	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	ClaimEnvironmentBlueprintStage(
+		context.Context,
+		etcd.EnvironmentBlueprintStageClaimRequest,
+	) (etcd.EnvironmentBlueprintStageClaim, error)
+	StageEnvironmentBlueprintRevision(
+		context.Context,
+		etcd.EnvironmentBlueprintStageRequest,
+	) (etcd.EnvironmentBlueprintSeal, error)
 	PublishEnvironmentZoneDesiredRevisionDirect(
 		context.Context,
 		etcd.EnvironmentZoneDesiredPublication,
@@ -220,7 +229,10 @@ func (service *zoneCreationService) createZoneOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if !found {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Environment has no current desired revision")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict,
+			"Environment has no current desired revision",
+		)
 	}
 	environment, err := service.repository.GetEnvironment(ctx, input.EnvironmentID)
 	if err != nil {
@@ -232,12 +244,18 @@ func (service *zoneCreationService) createZoneOnce(
 	}
 	if environment.ReadRevision <= 0 || projection.ReadRevision != environment.ReadRevision ||
 		project.ReadRevision != environment.ReadRevision {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Zone creation hierarchy changed during selection")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict,
+			"Zone creation hierarchy changed during selection",
+		)
 	}
 	if environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady ||
 		environment.Record.ID != input.EnvironmentID || projection.Record.EnvironmentID != input.EnvironmentID ||
 		project.Record.ID != environment.Record.ProjectID {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Zone creation requires a ready Environment hierarchy")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict,
+			"Zone creation requires a ready Environment hierarchy",
+		)
 	}
 	environmentPool, err := ipam.ParseIPv4Prefix(environment.Record.NetworkPool)
 	if err != nil || environmentPool.String() != environment.Record.NetworkPool {
@@ -245,10 +263,16 @@ func (service *zoneCreationService) createZoneOnce(
 	}
 	requestedSubnet, _ := ipam.ParseIPv4Prefix(input.Subnet)
 	if requestedSubnet.Bits() < environmentPool.Bits() || !environmentPool.Contains(requestedSubnet.Addr()) {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Zone subnet must be inside the Environment network pool")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"Zone subnet must be inside the Environment network pool",
+		)
 	}
 	if projection.Record.RenderGeneration == ^uint64(0) {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Environment render generation is exhausted")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict,
+			"Environment render generation is exhausted",
+		)
 	}
 	createdAt := service.now().UTC()
 	claim, err := desiredrevision.Claim(ctx, service.repository, desiredrevision.ClaimInput{
@@ -324,14 +348,17 @@ func (service *zoneCreationService) createZoneOnce(
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	result, createErr := service.repository.PublishEnvironmentZoneDesiredRevisionDirect(ctx, etcd.EnvironmentZoneDesiredPublication{
-		Project: project, Environment: environment, ExpectedHeadRevision: projection.Revision,
-		Claim: claim,
-		Revision: etcd.EnvironmentDesiredRevisionIdentity{
-			EnvironmentID: environment.Record.ID, RevisionID: claim.RevisionID,
+	result, createErr := service.repository.PublishEnvironmentZoneDesiredRevisionDirect(
+		ctx,
+		etcd.EnvironmentZoneDesiredPublication{
+			Project: project, Environment: environment, ExpectedHeadRevision: projection.Revision,
+			Claim: claim,
+			Revision: etcd.EnvironmentDesiredRevisionIdentity{
+				EnvironmentID: environment.Record.ID, RevisionID: claim.RevisionID,
+			},
+			Projection: candidate, Zone: record, Marker: marker,
 		},
-		Projection: candidate, Zone: record, Marker: marker,
-	})
+	)
 	if createErr != nil {
 		if !isUnknownZoneCreationOutcome(createErr) {
 			return etcd.IdempotencyResponse{}, createErr

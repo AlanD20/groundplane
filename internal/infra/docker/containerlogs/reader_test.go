@@ -109,11 +109,39 @@ func TestOpenSelectsOwnedServingSourcesInDeterministicOrder(t *testing.T) {
 		{ID: "container-z", Names: []string{"/api-2"}, Labels: ownedLabels("slot", "green")},
 	}
 	excluded := []container.Summary{
-		{ID: "unmanaged", Names: []string{"/ignored-1"}, Labels: changedLabel(ownedLabels("slot", "blue"), "com.groundplane.managed", "false")},
-		{ID: "wrong-environment", Names: []string{"/ignored-2"}, Labels: changedLabel(ownedLabels("slot", "blue"), "com.groundplane.environment-id", "env_01ARZ3NDEKTSV4RRFFQ69G5FAW")},
-		{ID: "inactive-release", Names: []string{"/ignored-3"}, Labels: changedLabel(ownedLabels("slot", "blue"), "com.groundplane.release-id", "dep_01ARZ3NDEKTSV4RRFFQ69G5FAW")},
-		{ID: "stable-proxy", Names: []string{"/ignored-4"}, Labels: changedLabel(ownedLabels("slot", "blue"), "com.groundplane.runtime-role", "proxy")},
-		{ID: "wrong-kind", Names: []string{"/ignored-5"}, Labels: changedLabel(ownedLabels("slot", "blue"), "com.groundplane.kind", "component")},
+		{
+			ID:     "unmanaged",
+			Names:  []string{"/ignored-1"},
+			Labels: changedLabel(ownedLabels("slot", "blue"), "com.groundplane.managed", "false"),
+		},
+		{
+			ID:    "wrong-environment",
+			Names: []string{"/ignored-2"},
+			Labels: changedLabel(
+				ownedLabels("slot", "blue"),
+				"com.groundplane.environment-id",
+				"env_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+			),
+		},
+		{
+			ID:    "inactive-release",
+			Names: []string{"/ignored-3"},
+			Labels: changedLabel(
+				ownedLabels("slot", "blue"),
+				"com.groundplane.release-id",
+				"dep_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+			),
+		},
+		{
+			ID:     "stable-proxy",
+			Names:  []string{"/ignored-4"},
+			Labels: changedLabel(ownedLabels("slot", "blue"), "com.groundplane.runtime-role", "proxy"),
+		},
+		{
+			ID:     "wrong-kind",
+			Names:  []string{"/ignored-5"},
+			Labels: changedLabel(ownedLabels("slot", "blue"), "com.groundplane.kind", "component"),
+		},
 	}
 	docker := &fakeDocker{
 		containers: append(matching, excluded...),

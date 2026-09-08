@@ -3,6 +3,8 @@ package controller
 import (
 	"sort"
 
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -10,9 +12,18 @@ import (
 
 // ComposeResourceIdentity binds one mutable Compose key to its durable id.
 type ComposeResourceIdentity struct {
-	ID          string
-	Name        string
-	ComponentID string
+	ID             string
+	Name           string
+	ComponentID    string
+	ComponentImage *SelectedComponentImage
+}
+
+// SelectedComponentImage preserves one compiled selection across persisted rerenders.
+type SelectedComponentImage struct {
+	Repository  string
+	IndexDigest string
+	Reference   string
+	Platform    componentsdk.OCIPlatform
 }
 
 // ComposeIdentitySnapshot is the durable identity projection for resources owned by one Compose project.

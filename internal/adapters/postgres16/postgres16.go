@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
+	"github.com/AlanD20/groundplane/internal/core"
 )
 
 // Register adds this adapter to the registry. Called once, explicitly,
@@ -23,13 +24,14 @@ func Register() {
 
 type adapter struct{}
 
-func (a *adapter) Key() string          { return "postgres:16" }
-func (a *adapter) Label() string        { return "PostgreSQL 16" }
-func (a *adapter) DefaultImage() string { return "postgres:16-alpine" }
-func (a *adapter) FactsPrefix() string  { return "pg16_" }
-func (a *adapter) URLScheme() string    { return "pgsql://" }
-func (a *adapter) Port() string         { return "5432" }
-func (a *adapter) FactSchema() []adapters.FactDefinition {
+func (a *adapter) Key() string                       { return "postgres:16" }
+func (a *adapter) Label() string                     { return "PostgreSQL 16" }
+func (a *adapter) DefaultImage() string              { return "postgres:16-alpine" }
+func (a *adapter) FactsPrefix() string               { return "pg16_" }
+func (a *adapter) URLScheme() string                 { return "pgsql://" }
+func (a *adapter) Port() string                      { return "5432" }
+func (a *adapter) SupportsAuthenticationModes() bool { return false }
+func (a *adapter) FactSchema(core.BackingAuthentication) []adapters.FactDefinition {
 	return []adapters.FactDefinition{
 		{Field: adapters.FactURL, Secret: true},
 		{Field: adapters.FactHost},

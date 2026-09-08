@@ -194,8 +194,14 @@ func (service *durableAttachMutationIdempotency) PrepareCreate(
 			idempotentintent.Field{
 				Name: "credential",
 				Value: idempotentintent.Object(
-					idempotentintent.Field{Name: "attach_id", Value: idempotentintent.String(request.Credential.AttachID)},
-					idempotentintent.Field{Name: "mode", Value: idempotentintent.String(string(request.Credential.Mode))},
+					idempotentintent.Field{
+						Name:  "attach_id",
+						Value: idempotentintent.String(request.Credential.AttachID),
+					},
+					idempotentintent.Field{
+						Name:  "mode",
+						Value: idempotentintent.String(string(request.Credential.Mode)),
+					},
 				),
 			},
 			idempotentintent.Field{Name: "grant_attach_ids", Value: idempotentintent.List(grants...)},
@@ -428,7 +434,10 @@ func (service *attachMutationService) createAttachOnce(
 		scope.Project.Record, scope.Environment.Record,
 		taskID, record.ID, record.EnvironmentID, etcd.TaskAttach,
 		scope.ComposeProjection.Record.RenderGeneration,
-		attachTaskStepCount(adapter, len(grantIDs), record.OwnsCredential()),
+		attachTaskStepCount(
+			adapter, scope.BackingService.Record.Desired.Authentication,
+			len(grantIDs), record.OwnsCredential(),
+		),
 		idempotencyKey, now,
 	)
 	if err != nil {
@@ -570,7 +579,10 @@ func (service *attachMutationService) detachAttachOnce(
 		scope.Project.Record, scope.Environment.Record,
 		taskID, current.Record.ID, current.Record.EnvironmentID, etcd.TaskDetach,
 		scope.ComposeProjection.Record.RenderGeneration,
-		attachTaskStepCount(adapter, len(current.Record.GrantAttachIDs), current.Record.OwnsCredential()),
+		attachTaskStepCount(
+			adapter, scope.BackingService.Record.Desired.Authentication,
+			len(current.Record.GrantAttachIDs), current.Record.OwnsCredential(),
+		),
 		idempotencyKey, now,
 	)
 	if err != nil {
@@ -685,6 +697,15 @@ func (service *attachMutationService) resolveAttachScope(
 		return etcd.AttachCreateScope{}, nil, nil, errs.New(
 			errs.KindValidationFailed,
 			"Attach backing Service adapter is not registered",
+		)
+	}
+	authentication, authErr := core.ResolveBackingAuthentication(
+		adapter.SupportsAuthenticationModes(), backingService.Record.Desired.Authentication,
+	)
+	if authErr != nil || authentication != backingService.Record.Desired.Authentication {
+		return etcd.AttachCreateScope{}, nil, nil, errs.New(
+			errs.KindStateConflict,
+			"Attach backing Service authentication policy is invalid",
 		)
 	}
 	if len(grantIDs) != 0 && !adapter.SupportsGrants() {
@@ -810,22 +831,34 @@ func (service *attachMutationService) prepareAttachFacts(
 		)
 		return nil, metadata, encrypted, err
 	}
+	authentication := scope.BackingService.Record.Desired.Authentication
 	identityName, err := attachProvisionIdentity(attachID, consumer.Record.Desired.Name)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	password, err := generateAttachPassword(service.random)
-	if err != nil {
-		return nil, nil, nil, err
+	role := identityName
+	var password []byte
+	if authentication == core.BackingAuthenticationPassword {
+		role = "default"
+	}
+	if authentication == core.BackingAuthenticationNone {
+		role = ""
+	} else {
+		password, err = generateAttachPassword(service.random)
+		if err != nil {
+			return nil, nil, nil, err
+		}
 	}
 	defer clear(password)
 	own := adapters.FactParams{
-		Host: scope.BackingService.Record.Desired.Name, Port: adapter.Port(),
-		Database: identityName, Role: identityName, Password: password,
+		Authentication: authentication,
+		Host:           scope.BackingService.Record.Desired.Name, Port: adapter.Port(),
+		Database: identityName, Role: role, Password: password,
 	}
 	grantFacts := make([]AttachGrantFactParams, 0, len(scope.Grants))
 	planIdentity := &controllerpkg.AttachPlanIdentity{
-		Database: identityName, Role: identityName, Password: append([]byte(nil), password...),
+		Authentication: authentication,
+		Database:       identityName, Role: role, Password: append([]byte(nil), password...),
 		Grants: make([]controllerpkg.AttachPlanGrantIdentity, 0, len(scope.Grants)),
 	}
 	failed := true
@@ -845,8 +878,9 @@ func (service *attachMutationService) prepareAttachFacts(
 		grantFacts = append(grantFacts, AttachGrantFactParams{
 			AttachID: grant.Record.ID,
 			Params: adapters.FactParams{
-				Host: scope.BackingService.Record.Desired.Name, Port: adapter.Port(),
-				Database: database, Role: identityName, Password: password,
+				Authentication: authentication,
+				Host:           scope.BackingService.Record.Desired.Name, Port: adapter.Port(),
+				Database: database, Role: role, Password: password,
 			},
 		})
 		planIdentity.Grants = append(planIdentity.Grants, controllerpkg.AttachPlanGrantIdentity{
@@ -873,17 +907,29 @@ func normalizeAttachRequest(request apiTypes.AttachRequest) (apiTypes.AttachRequ
 	switch request.Credential.Mode {
 	case apiTypes.AttachCredentialNew:
 		if request.Credential.AttachID != "" {
-			return apiTypes.AttachRequest{}, errs.New(errs.KindValidationFailed, "New Attach credential cannot reference another Attach")
+			return apiTypes.AttachRequest{}, errs.New(
+				errs.KindValidationFailed,
+				"New Attach credential cannot reference another Attach",
+			)
 		}
 	case apiTypes.AttachCredentialExisting:
 		if ids.Validate(ids.KindAttach, request.Credential.AttachID) != nil {
-			return apiTypes.AttachRequest{}, errs.New(errs.KindValidationFailed, "Existing Attach credential requires a valid owner Attach id")
+			return apiTypes.AttachRequest{}, errs.New(
+				errs.KindValidationFailed,
+				"Existing Attach credential requires a valid owner Attach id",
+			)
 		}
 		if len(request.GrantAttachIDs) != 0 {
-			return apiTypes.AttachRequest{}, errs.New(errs.KindValidationFailed, "Existing Attach credential cannot declare grants")
+			return apiTypes.AttachRequest{}, errs.New(
+				errs.KindValidationFailed,
+				"Existing Attach credential cannot declare grants",
+			)
 		}
 	default:
-		return apiTypes.AttachRequest{}, errs.New(errs.KindValidationFailed, "Attach credential mode must be new or existing")
+		return apiTypes.AttachRequest{}, errs.New(
+			errs.KindValidationFailed,
+			"Attach credential mode must be new or existing",
+		)
 	}
 	if request.Name != "" {
 		if err := etcd.ValidateAttachName(request.Name); err != nil {
@@ -976,8 +1022,13 @@ func attachGrantIDs(grants []etcd.Versioned[etcd.AttachRecord]) []string {
 	return values
 }
 
-func attachTaskStepCount(adapter adapters.Adapter, grantCount int, ownsCredential bool) int {
-	if adapter.Manual() || !ownsCredential {
+func attachTaskStepCount(
+	adapter adapters.Adapter,
+	authentication core.BackingAuthentication,
+	grantCount int,
+	ownsCredential bool,
+) int {
+	if adapter.Manual() || !ownsCredential || authentication == core.BackingAuthenticationNone {
 		return 1
 	}
 	return grantCount + 2

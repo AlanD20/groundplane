@@ -175,12 +175,16 @@ Command tree:
     │                    points [--cursor <token>]
     │                    rotate-key | export-key [--file <path>|-]
     ├── component         list [--env NAME | --platform]
-    │                    show <id> | enable <id> | disable <id>
-    │                    config show <id> | config set <id> [--template-file <path|->] | update <id>
+    │                    show <id> | disable <id> | update <id>
+    │                    enable <id> [--file <path|->] [--zone <name>]...
+    │                      [--create-zone <name=cidr>]... [--create-internal-zone <name=cidr>]...
+    │                    config show <id> | config set <id> [--file <path|->]
+    │                      [--zone <name>]... [--template-file <path|->]
     ├── backing-service (bs)
     │                    list | show
     │                    create --slug --name [--description]
     │                      --adapter postgres:16|valkey:9
+    │                      [--authentication username_password|password|none]
     │                      --network-pool --zone-name --zone-subnet
     │                      [--zone-internal]
     │                    start | stop | destroy
@@ -283,9 +287,10 @@ Conventions:
   `POST /services` takes `{environment_id, name, image, zones, strategy,
   on_failure, healthcheck, resources, expose, restart, replicas}`. `PATCH
   /services/{id}` takes the same direct-edit fields without identity or owner.
-  The body is the complete Console-editable subset: an empty healthcheck
-  object removes it, empty lists clear zones/expose, and Service name is
-  immutable. Blueprint-native fields with no specialized Console control are
+  The body is the complete Console-editable subset: an empty healthcheck object
+  removes an exactly representable typed check; unsupported native checks are
+  preserved and edited through Blueprint. Empty lists clear zones/expose, and
+  Service name is immutable. Blueprint-native fields with no specialized Console control are
   preserved outside this mutation rather than silently dropped. Both responses
   return the complete Service projection plus Controller-owned runtime intent.
   `GET /services/{id}` returns that projection as a Service detail plus
@@ -535,10 +540,20 @@ Project responses contain `{id, tenant_id, slug, name, description, kind}`.
 edit action.
 
 Backing-service responses contain exactly `{project_id, environment_id,
-service_id}`. The backing Project id is the facade's stable public identity;
+service_id, backing_network_id, authentication?}`. `authentication` is present
+for Valkey and is the immutable instance mode; it is never inferred from the
+adapter Service or Attach facts. The backing Project id is the facade's stable public identity;
 the other ids address its sole `main` Environment and sole adapter Service.
 Project labels and metadata remain on the ordinary Project resource rather
 than being duplicated into this read-only facade.
+
+A Valkey Attach always inherits the backing instance's immutable authentication
+mode; the existing Attach request has no authentication selector. In
+`username_password` mode it exposes HOST, PORT, ROLE, PASSWORD, and a secret
+URL. In `password` mode it exposes HOST, PORT, PASSWORD, and a secret URL with
+no ROLE. In `none` mode it generates no credential and exposes HOST, PORT, and
+a credential-free non-secret URL. The existing new/existing owner relationship
+also governs fact reuse in `none` mode.
 
 Environment responses contain `{id, project_id, name, network_pool,
 network_capacity, volume_dir, provisioning_state, create_task_id,
@@ -603,7 +618,7 @@ attachment on every authorized request.
 | --- | --- |
 | tenant | `GET /tenants` and `GET /tenants/{id}` → `200` · `POST /tenants` → `201` · `PATCH /tenants/{id}` and `POST /tenants/{id}/rename` → `200` · destructive `DELETE /tenants/{id}` → `202 {task_id}` |
 | project | `GET /projects` (`?kind=tenant\|backing`) and `GET /projects/{id}` → `200` · `POST /projects` → `201` · `PATCH /projects/{id}` and `POST /projects/{id}/rename` → `200` · destructive `DELETE /projects/{id}` → `202 {task_id}` |
-| backing-service | `GET /backing-services` and `GET /backing-services/{project_id}` → `200` · protected `POST /backing-services` body `{slug,name,description?,adapter:"postgres:16"\|"valkey:9",network_pool,zone:{name,subnet,internal}}` → `201 {backing_service,task_id}` atomically creates the backing Project, `main` Environment, dedicated backing-owned Zone, adapter Service, adapter data Volume, and Agent Task; the Zone subnet must be inside the Environment pool and globally unreserved · bodyless `POST /backing-services/{project_id}/start\|stop\|destroy` → `202 {task_id}` and delegates to the facade's immutable adapter Service; there is no Backing-service delete endpoint, existing-Zone create branch, uploaded Blueprint, or omitted subnet default |
+| backing-service | `GET /backing-services` and `GET /backing-services/{project_id}` → `200` · protected `POST /backing-services` body `{slug,name,description?,adapter:"postgres:16"\|"valkey:9",authentication?:"username_password"\|"password"\|"none",network_pool,zone:{name,subnet,internal}}` → `201 {backing_service,task_id}` atomically creates the backing Project, `main` Environment, dedicated backing-owned Zone, adapter Service, adapter data Volume, and Agent Task; `authentication` is accepted only for Valkey, omission selects `username_password`, and the selected mode is immutable and returned by the facade; PostgreSQL rejects a nonempty value; the Zone subnet must be inside the Environment pool and globally unreserved · bodyless `POST /backing-services/{project_id}/start\|stop\|destroy` → `202 {task_id}` and delegates to the facade's immutable adapter Service; there is no Backing-service delete endpoint, existing-Zone create branch, uploaded Blueprint, or omitted subnet default |
 | environment | `GET /environments` (`?project=`), `GET /environments/{id}`, and `GET /environments/{id}/logs?tail=0..1000&follow=true|false` → `200` · `POST /environments` body `{project_id, name, network_pool}` → `202 {task_id}` and atomically publishes the provisioning Environment, globally exclusive pool reservation, and directory-creation Task · `PATCH /environments/{id}` body `{network_pool}` → `200` only when the replacement contains every Zone and overlaps no reservation · `POST /environments/{id}/rename` → `200` · `GET /environments/{id}/blueprint` → `200 {environment_id,revision,document}` plus `ETag` · side-effect-free `POST /environments/{id}/blueprint/validate` with `If-Match` and a multipart closed bundle → `200 {revision,changes}` · revision-fenced `PUT /environments/{id}/blueprint` with `If-Match`, ordered sources, explicit interpolation, and deterministic file-part identities → `202 {task_id}` · destructive `DELETE /environments/{id}` → `202 {task_id}`, retaining the pool fence until physical network cleanup succeeds and retaining Connector credentials/key material until every Recovery Point and orphan object is checkpointed, deleted, and verified absent |
 | service | `GET /services` (`?environment=`), `GET /services/{id}`, and `GET /services/{id}/logs?tail=0..1000&follow=true|false` (non-resumable SSE) → `200` · `POST /services` → `201` · `PATCH /services/{id}` → `200` · `DELETE /services/{id}` and `POST /services/{id}/deploy\|rollback\|start\|stop\|destroy` → `202 {task_id}`; native `replicas` is an integer `N >= 1`; recreate preserves `N` through deploy, rollback, restart, and reapply, while blue-green rejects `N > 1` before mutation; lifecycle actions set `runtime_intent` to `running\|stopped\|absent`; `service show <name>` includes the release ledger and runtime intent |
 | release-group | `GET /release-groups` (`?environment_id=` with opaque revision cursors) and `GET /release-groups/{id}` → `200` · read-only `GET /release-groups/{id}/rollback-preview` with an optional presence-aware `tag` query → `200 ReleaseGroupRollbackPreview` · `POST /release-groups` → `201` · `PATCH /release-groups/{id}` → `200` · destructive `DELETE /release-groups/{id}` and `POST /release-groups/{id}/deploy\|rollback` → `202 {task_id}`; rollback accepts `ReleaseGroupRollbackRequest`, while create and deploy retain their existing request contracts; create includes an exact ordered 2..32 Service membership, optional persisted `tag`, and `on_failure: switch_back\|leave_active`, default `switch_back`; for group deploy, the request tag wins over the persisted group tag and absence of both is rejected, while each member resolves the selected tag against its own declared image, pins its exact immutable host-local Docker image identity before workload mutation, and retains independent Release history; registry or manifest digest metadata is optional and never substitutes for that local identity; group rollback never consults the persisted default and rejects the whole group if any ordered member has no valid source; the group failure policy overrides member defaults; execution is ordered and coordinated, not simultaneous or atomic; selected hooks run once per logical Service, never per replica, with no group-hook resource; retry preserves the same operation/candidate lineage |
@@ -807,8 +822,8 @@ the only MVP implementations.
 
 Component reads include `config: null` while a Component is disabled or
 unconfigured. An enabled Component is configured and has a non-null `config`
-containing exactly one complete variant: Caddy (`zone_id` and optional
-`caddyfile_template`), Cloudflare Tunnel (`secret_id`), or CoreDNS
+containing exactly one complete variant: Caddy (ordered `zone_ids` and optional
+`caddyfile_template`), Cloudflare Tunnel (`zone_ids` and `secret_id`), or CoreDNS
 (`upstream_auto`, `upstream_resolvers`, `forwarders`, `tailnet_delegation`, and
 required `corefile_template`). CoreDNS `component config set` requires
 `--template-file <path|->`; `-` reads bounded stdin. CoreDNS resolver and
@@ -825,15 +840,41 @@ Each generic managed-file projection contains `path`, the durable authored
 config, the already-persisted host resolver baseline, and current host
 resolution through the registered renderer. Other Components return `[]`
 until they provide the generic projection. `component config show` prints both
-fields; `component config set` and the existing PUT remain the sole mutation.
+fields; `component config set` and the existing PUT replace configuration.
+The existing enable action also accepts configuration as described below.
 
-Cloudflare Tunnel config reads return only `{secret_id}`. Config replacement
-accepts exactly one write shape: `{credential:{mode:"existing",secret_id}}` or
-`{credential:{mode:"new",secret_name,token}}`. `new` creates a Project env-var
+Cloudflare Tunnel config reads return `{zone_ids,secret_id}`. Config replacement
+accepts exactly one write shape: `{zone_ids,credential:{mode:"existing",secret_id}}` or
+`{zone_ids,credential:{mode:"new",secret_name,token}}`. `new` creates a Project env-var
 Secret whose `key` is `secret_name`, then persists only its stable id. The token
 is write-only. The selected Secret may be owned by the Environment's Project or
 the Platform. Deleting a Secret referenced by an enabled Cloudflare Tunnel
 returns `resource.in_use`.
+
+Both Environment Components require a nonempty, duplicate-free ordered list
+of stable Zone ids from their own Environment. Caddy's first Zone is primary:
+it owns the single pinned IPv4 used by host/LAN DNS; secondary interfaces use
+dynamic addresses. Routes require a target sharing at least one selected Zone.
+Tunnel placement is independent and requires at least one non-internal Zone;
+the first selected non-internal Zone supplies its outbound default gateway.
+
+`POST /components/{id}/enable` accepts an optional `{config:<mutation-variant>}`
+body. Supplied configuration and `enabled:true` are authored in one Blueprint
+Apply and return one Task. An omitted body reuses retained desired configuration;
+it does not invent Zone membership. Platform enable rejects supplied config.
+Disable and update remain bodyless. Console Enable and Configure both offer
+multi-selection, explicit Router primary selection, and inline ordinary Zone
+creation. Creation uses existing `POST /zones` first and selects its returned
+stable id; created Zones remain if enable fails or is cancelled. This is not an
+atomic cross-resource operation and never rolls back by deleting a Zone.
+CLI enable/config set use repeatable `--zone` labels (`--id` selects ids).
+Enable also offers repeatable `--create-zone name=cidr` and
+`--create-internal-zone name=cidr`, using that same Zone-create endpoint before
+enable. Existing kind-specific file semantics supply templates/credentials;
+for Tunnel, a credential-only file is accepted when explicit placement flags
+supply or create its Zones. The completed HTTP config always contains their
+real stable ids. Credential errors reject before creating a Zone.
+the superseded singular `--zone-id` and `zone_id` config are invalid.
 
 Registered planners may return authorized typed intents for Services, Routes,
 Volumes, Secrets, Scripts, Backups, Networks, Entries, and Tasks. Groundplane

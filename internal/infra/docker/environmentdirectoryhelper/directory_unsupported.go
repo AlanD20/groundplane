@@ -18,8 +18,14 @@ func (Creator) EnsureManagedVolumes(context.Context, ManagedVolumeEnsureRequest)
 	return errs.New(errs.KindNotImplemented, "Managed volume directory creation requires Linux")
 }
 
-func (Creator) RemoveManagedVolume(context.Context, ManagedVolumeDirectoryRemoveRequest) (ManagedVolumeDirectoryRemoveResult, error) {
-	return ManagedVolumeDirectoryRemoveResult{}, errs.New(errs.KindNotImplemented, "Managed volume directory removal requires Linux")
+func (Creator) RemoveManagedVolume(
+	context.Context,
+	ManagedVolumeDirectoryRemoveRequest,
+) (ManagedVolumeDirectoryRemoveResult, error) {
+	return ManagedVolumeDirectoryRemoveResult{}, errs.New(
+		errs.KindNotImplemented,
+		"Managed volume directory removal requires Linux",
+	)
 }
 
 func (Creator) Remove(context.Context, string, string) error {

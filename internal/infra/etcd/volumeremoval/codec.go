@@ -243,7 +243,9 @@ func decodeEnvironmentVolumeRemovalRuntime(value []byte) (EnvironmentVolumeRemov
 		return EnvironmentVolumeRemovalRuntimeRecord{}, err
 	}
 	record := EnvironmentVolumeRemovalRuntimeRecord{
-		OperationID: reader.string(128), EnvironmentID: reader.string(128), VolumeID: reader.string(128), Key: reader.string(255),
+		OperationID: reader.string(
+			128,
+		), EnvironmentID: reader.string(128), VolumeID: reader.string(128), Key: reader.string(255),
 		DesiredRevisionID: reader.string(128), DesiredGeneration: reader.uint64(),
 		ImpactSHA256: reader.digest(), EvidenceManifestSHA256: reader.digest(), IntentSHA256: reader.digest(),
 		RootLocator: decodeVolumeRemovalLocator(&reader), RootResponseSHA256: reader.digest(),
@@ -277,7 +279,14 @@ func decodeEnvironmentVolumeRemovalAttempt(value []byte) (EnvironmentVolumeRemov
 	if err != nil {
 		return EnvironmentVolumeRemovalAttemptRecord{}, err
 	}
-	record := EnvironmentVolumeRemovalAttemptRecord{OperationID: reader.string(128), OriginTaskID: reader.string(128), TaskID: reader.string(128), PredecessorTaskID: reader.string(128), Ordinal: reader.uint32(), CreatedAt: reader.timestamp()}
+	record := EnvironmentVolumeRemovalAttemptRecord{
+		OperationID:       reader.string(128),
+		OriginTaskID:      reader.string(128),
+		TaskID:            reader.string(128),
+		PredecessorTaskID: reader.string(128),
+		Ordinal:           reader.uint32(),
+		CreatedAt:         reader.timestamp(),
+	}
 	if reader.done() != nil || validateEnvironmentVolumeRemovalAttempt(record) != nil {
 		return EnvironmentVolumeRemovalAttemptRecord{}, corruptEnvironmentVolumeRemovalRuntime()
 	}
@@ -304,7 +313,14 @@ func decodeEnvironmentVolumeRemovalProgress(value []byte) (EnvironmentVolumeRemo
 	if err != nil {
 		return EnvironmentVolumeRemovalPathProgress{}, err
 	}
-	record := EnvironmentVolumeRemovalPathProgress{OperationID: reader.string(128), NextRequestOrdinal: reader.uint64(), ComponentStack: reader.strings(128, 255), Cursor: reader.bytes(environmentVolumeRemovalCursorBytes), DirectoryAbsent: reader.boolean(), UpdatedAt: reader.timestamp()}
+	record := EnvironmentVolumeRemovalPathProgress{
+		OperationID:        reader.string(128),
+		NextRequestOrdinal: reader.uint64(),
+		ComponentStack:     reader.strings(128, 255),
+		Cursor:             reader.bytes(environmentVolumeRemovalCursorBytes),
+		DirectoryAbsent:    reader.boolean(),
+		UpdatedAt:          reader.timestamp(),
+	}
 	if reader.done() != nil || validateEnvironmentVolumeRemovalProgress(record) != nil {
 		return EnvironmentVolumeRemovalPathProgress{}, corruptEnvironmentVolumeRemovalRuntime()
 	}
@@ -339,7 +355,22 @@ func decodeEnvironmentVolumeRemovalPendingPath(value []byte) (EnvironmentVolumeR
 	if err != nil {
 		return EnvironmentVolumeRemovalPendingPath{}, err
 	}
-	record := EnvironmentVolumeRemovalPendingPath{OperationID: reader.string(128), VolumeID: reader.string(128), Key: reader.string(255), IntentSHA256: reader.digest(), RequestOrdinal: reader.uint64(), MutationBudget: reader.uint32(), ComponentStack: reader.strings(128, 255), Cursor: reader.bytes(environmentVolumeRemovalCursorBytes), RequestSHA256: reader.digest(), TaskID: reader.string(128), AssignmentID: reader.string(128), AgentID: reader.string(128), AgentGeneration: reader.uint64(), CreatedAt: reader.timestamp()}
+	record := EnvironmentVolumeRemovalPendingPath{
+		OperationID:     reader.string(128),
+		VolumeID:        reader.string(128),
+		Key:             reader.string(255),
+		IntentSHA256:    reader.digest(),
+		RequestOrdinal:  reader.uint64(),
+		MutationBudget:  reader.uint32(),
+		ComponentStack:  reader.strings(128, 255),
+		Cursor:          reader.bytes(environmentVolumeRemovalCursorBytes),
+		RequestSHA256:   reader.digest(),
+		TaskID:          reader.string(128),
+		AssignmentID:    reader.string(128),
+		AgentID:         reader.string(128),
+		AgentGeneration: reader.uint64(),
+		CreatedAt:       reader.timestamp(),
+	}
 	if reader.done() != nil || validateEnvironmentVolumeRemovalPendingPath(record) != nil {
 		return EnvironmentVolumeRemovalPendingPath{}, corruptEnvironmentVolumeRemovalRuntime()
 	}
@@ -370,7 +401,18 @@ func decodeEnvironmentVolumeRemovalCompletion(value []byte) (EnvironmentVolumeRe
 	if err != nil {
 		return EnvironmentVolumeRemovalPathCompletion{}, err
 	}
-	record := EnvironmentVolumeRemovalPathCompletion{OperationID: reader.string(128), RequestOrdinal: reader.uint64(), RequestSHA256: reader.digest(), ResponseSHA256: reader.digest(), ResponseBytes: reader.uint32(), MutationCount: reader.uint32(), NextComponentStack: reader.strings(128, 255), NextCursor: reader.bytes(environmentVolumeRemovalCursorBytes), DirectoryAbsent: reader.boolean(), CompletedAt: reader.timestamp()}
+	record := EnvironmentVolumeRemovalPathCompletion{
+		OperationID:        reader.string(128),
+		RequestOrdinal:     reader.uint64(),
+		RequestSHA256:      reader.digest(),
+		ResponseSHA256:     reader.digest(),
+		ResponseBytes:      reader.uint32(),
+		MutationCount:      reader.uint32(),
+		NextComponentStack: reader.strings(128, 255),
+		NextCursor:         reader.bytes(environmentVolumeRemovalCursorBytes),
+		DirectoryAbsent:    reader.boolean(),
+		CompletedAt:        reader.timestamp(),
+	}
 	if reader.done() != nil || validateEnvironmentVolumeRemovalCompletion(record) != nil {
 		return EnvironmentVolumeRemovalPathCompletion{}, corruptEnvironmentVolumeRemovalRuntime()
 	}
@@ -386,7 +428,13 @@ func encodeVolumeRemovalLocator(writer *volumeRemovalWriter, locator etcd.Idempo
 }
 
 func decodeVolumeRemovalLocator(reader *volumeRemovalReader) etcd.IdempotencyLocator {
-	return etcd.IdempotencyLocator{ScopeKind: etcd.IdempotencyScopeKind(reader.string(32)), ScopeID: reader.string(128), Method: reader.string(16), Route: reader.string(1024), Key: reader.string(1024)}
+	return etcd.IdempotencyLocator{
+		ScopeKind: etcd.IdempotencyScopeKind(reader.string(32)),
+		ScopeID:   reader.string(128),
+		Method:    reader.string(16),
+		Route:     reader.string(1024),
+		Key:       reader.string(1024),
+	}
 }
 
 func newVolumeRemovalReader(value []byte, magic string) (volumeRemovalReader, error) {

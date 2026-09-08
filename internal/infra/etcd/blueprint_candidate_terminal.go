@@ -2,7 +2,6 @@ package etcd
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"slices"
 	"time"
@@ -40,7 +39,10 @@ func (store *blueprintCandidateTerminalCaptureStore) Transact(
 	mutations []Mutation,
 ) (TransactionResult, error) {
 	if store.called {
-		return TransactionResult{}, errs.New(errs.KindInternal, "Blueprint candidate terminal contribution split across transactions")
+		return TransactionResult{}, errs.New(
+			errs.KindInternal,
+			"Blueprint candidate terminal contribution split across transactions",
+		)
 	}
 	store.called = true
 	store.conditions = slices.Clone(conditions)
@@ -334,13 +336,6 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 		attempts = slices.Clone(authority.Attempts)
 	}
 	expectedAttemptIDs := blueprintAttemptIDs(attempts)
-	resolved := map[string]blueprintReleaseResolvedRecord{}
-	if terminalStatus == TaskStatusCompleted {
-		resolved, err = repository.blueprintReleaseResolvedRecords(ctx, task.OperationID, task.PlanHash, revision)
-		if err != nil {
-			return err
-		}
-	}
 	detailWidth := 2
 	if terminalStatus == TaskStatusCompleted {
 		detailWidth = 5
@@ -366,9 +361,7 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 	if details == nil || details.ReadRevision != revision || len(details.Values) != len(detailKeys) {
 		return corruptReleaseRecord()
 	}
-	memberReleaseIDs := make(map[string]struct{}, len(manifest.Members))
 	for index, member := range manifest.Members {
-		memberReleaseIDs[member.ReleaseID] = struct{}{}
 		values := details.Values[index*detailWidth : index*detailWidth+detailWidth]
 		if values[0] == nil || values[1] == nil {
 			return corruptReleaseRecord()
@@ -429,52 +422,8 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 			!terminal.CompletedAt.Equal(*task.FinishedAt) {
 			return corruptReleaseRecord()
 		}
-		resolvedRecord, hasResolved := resolved[intent.ID]
-		if !hasResolved {
-			if intent.Digest == "" || terminal.ResolvedImage != nil {
-				return corruptReleaseRecord()
-			}
-		} else {
-			if terminal.ResolvedImage == nil ||
-				domain.ValidateResolvedImageEvidence(*terminal.ResolvedImage, intent) != nil {
-				return corruptReleaseRecord()
-			}
-			wire, wireErr := resolvedRecord.record.Proto()
-			evidence := wire.GetProcedureServiceImage()
-			if wireErr != nil || wire.GetOperationId() != task.OperationID ||
-				hex.EncodeToString(wire.GetPlanHash()) != task.PlanHash ||
-				evidence.GetReleaseId() != intent.ID || evidence.GetServiceId() != intent.ServiceID ||
-				terminal.ResolvedImage.RequestedReference != evidence.GetRequestedReference() ||
-				terminal.ResolvedImage.ImmutableReference != evidence.GetImmutableReference() ||
-				terminal.ResolvedImage.Digest != hex.EncodeToString(evidence.GetImageDigest()) ||
-				terminal.ResolvedImage.LocalImageID != evidence.GetLocalImageId() ||
-				terminal.ResolvedImage.ComposeApplyStepID != wire.GetStepId() ||
-				terminal.ResolvedImage.ControlPayloadDigest != hex.EncodeToString(wire.GetControlPayloadSha256()) {
-				return corruptReleaseRecord()
-			}
-		}
 		expectedRetention := releaseRollbackMaterial(intent, domain.StateCompleted, *task.FinishedAt)
-		if terminal.ResolvedImage != nil {
-			replaced := false
-			for referenceIndex, reference := range expectedRetention.References {
-				if reference == intent.Image {
-					expectedRetention.References[referenceIndex] = terminal.ResolvedImage.ImmutableReference
-					replaced = true
-				}
-			}
-			if !replaced {
-				expectedRetention.References = append(
-					expectedRetention.References, terminal.ResolvedImage.ImmutableReference,
-				)
-			}
-			expectedRetention.Digest, _ = domain.Digest(expectedRetention.References)
-		}
 		if !blueprintCompletedRollbackMaterialEqual(retention, expectedRetention) {
-			return corruptReleaseRecord()
-		}
-	}
-	for releaseID := range resolved {
-		if _, present := memberReleaseIDs[releaseID]; !present {
 			return corruptReleaseRecord()
 		}
 	}
@@ -498,9 +447,16 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 		retry.Params[TaskReleasePublicationParam] != publicationID ||
 		source.Result == nil || source.Result.ReconciliationRequired ||
 		(source.Status != TaskStatusFailed && source.Status != TaskStatusAborted && source.Status != TaskStatusTimedOut) {
-		return releaseTaskRetryChange{}, errs.New(errs.KindTaskNotRetryable, "Blueprint Task does not own a retryable candidate")
+		return releaseTaskRetryChange{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"Blueprint Task does not own a retryable candidate",
+		)
 	}
-	sourceAuthority, sourceAuthorityCondition, err := repository.blueprintCandidateAttemptAuthority(ctx, source, revision)
+	sourceAuthority, sourceAuthorityCondition, err := repository.blueprintCandidateAttemptAuthority(
+		ctx,
+		source,
+		revision,
+	)
 	if err != nil {
 		return releaseTaskRetryChange{}, err
 	}
@@ -512,8 +468,13 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 		return releaseTaskRetryChange{}, err
 	}
 	descriptor, procedure, err := repository.candidateReleaseDescriptorAtRevision(ctx, source, revision)
-	if err != nil || validateSelectedRestorationTarget(procedure, sourceAuthority.AppliedPredecessor.Present) != nil {
+	if err != nil {
 		return releaseTaskRetryChange{}, corruptReleaseRecord()
+	}
+	for _, member := range procedure.GetMembers() {
+		if member.GetServingPredecessor() == nil || member.GetCandidateAbsence() == nil {
+			return releaseTaskRetryChange{}, corruptReleaseRecord()
+		}
 	}
 	if _, err := validateReleaseCandidateDescriptor(descriptor, retry, manifest); err != nil {
 		return releaseTaskRetryChange{}, err
@@ -587,12 +548,18 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 			return releaseTaskRetryChange{}, readErr
 		}
 		if rootRead == nil || len(rootRead.Values) != 1 || rootRead.Values[0] == nil {
-			return releaseTaskRetryChange{}, errs.New(errs.KindScriptRetryUnsafe, "Blueprint Script source authority is unknown")
+			return releaseTaskRetryChange{}, errs.New(
+				errs.KindScriptRetryUnsafe,
+				"Blueprint Script source authority is unknown",
+			)
 		}
 		root, decodeErr := decodeScriptOperationSourceRoot(rootRead.Values[0].Value)
 		if decodeErr != nil || root.OperationID != source.OperationID || root.Phase != "active" ||
 			root.ReleasePath != "absent" || root.MembershipCount == 0 || root.MembershipSHA256 == "" {
-			return releaseTaskRetryChange{}, errs.New(errs.KindScriptRetryUnsafe, "Blueprint Script source authority is not active")
+			return releaseTaskRetryChange{}, errs.New(
+				errs.KindScriptRetryUnsafe,
+				"Blueprint Script source authority is not active",
+			)
 		}
 		conditions = append(conditions, Condition{Key: rootKey, ModRevision: rootRead.Values[0].ModRevision})
 	}

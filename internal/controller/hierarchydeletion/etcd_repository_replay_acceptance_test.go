@@ -60,7 +60,11 @@ func TestEtcdRepositoryReplayAfterRetryRejectsCorruptTaskLocator(t *testing.T) {
 	}
 	taskID := ids.NewAt(ids.KindTask, now, 903)
 	service := NewService(repository, controllerReplayExecutor{}, fixedIDs{task: taskID}, fixedClock{now: now})
-	request := DeleteRequest{TargetKind: TargetTenant, TargetID: tenantID, IdempotencyKey: "controller-hierarchy-replay-0001"}
+	request := DeleteRequest{
+		TargetKind:     TargetTenant,
+		TargetID:       tenantID,
+		IdempotencyKey: "controller-hierarchy-replay-0001",
+	}
 	accepted, err := service.Delete(ctx, request)
 	if err != nil {
 		t.Fatalf("Delete() error = %v", err)
@@ -80,16 +84,23 @@ func TestEtcdRepositoryReplayAfterRetryRejectsCorruptTaskLocator(t *testing.T) {
 		t.Fatalf("AcknowledgeControllerTask() error = %v", err)
 	}
 	retryID := ids.NewAt(ids.KindTask, now, 904)
-	retryMarker := controllerReplayRetryMarker(tenantID, retryID, now.Add(3*time.Second), "controller-hierarchy-retry-0001")
+	retryMarker := controllerReplayRetryMarker(
+		tenantID,
+		retryID,
+		now.Add(3*time.Second),
+		"controller-hierarchy-retry-0001",
+	)
 	retry, err := tasks.RetryTask(ctx, accepted.TaskID, retryID, etcdinfra.TaskActorOperator, retryMarker)
 	if err != nil {
 		t.Fatalf("RetryTask() error = %v", err)
 	}
-	if outcome, _, conflict, classifyErr := retry.Classify(); classifyErr != nil || conflict != nil || outcome != etcdinfra.IdempotencyKnownApplied {
+	if outcome, _, conflict, classifyErr := retry.Classify(); classifyErr != nil || conflict != nil ||
+		outcome != etcdinfra.IdempotencyKnownApplied {
 		t.Fatalf("RetryTask() classification = %v/%v/%v", outcome, conflict, classifyErr)
 	}
 	replayed, found, err := repository.ResolveDeletionReplay(ctx, request)
-	if err != nil || !found || replayed.Operation.TaskID != accepted.TaskID || replayed.Operation.ID != accepted.OperationID {
+	if err != nil || !found || replayed.Operation.TaskID != accepted.TaskID ||
+		replayed.Operation.ID != accepted.OperationID {
 		t.Fatalf("ResolveDeletionReplay() = %#v/%t/%v, want original Task", replayed, found, err)
 	}
 
@@ -104,7 +115,8 @@ func TestEtcdRepositoryReplayAfterRetryRejectsCorruptTaskLocator(t *testing.T) {
 	if bytes.Equal(corrupt, stored.Entry.Value) {
 		t.Fatal("root Task marker locator was not changed")
 	}
-	if result, err := store.Transact(ctx, []etcdinfra.Condition{{Key: taskKey, ModRevision: stored.Entry.ModRevision}}, []etcdinfra.Mutation{{Type: etcdinfra.MutationPut, Key: taskKey, Value: corrupt}}); err != nil || !result.Succeeded {
+	if result, err := store.Transact(ctx, []etcdinfra.Condition{{Key: taskKey, ModRevision: stored.Entry.ModRevision}}, []etcdinfra.Mutation{{Type: etcdinfra.MutationPut, Key: taskKey, Value: corrupt}}); err != nil ||
+		!result.Succeeded {
 		t.Fatalf("corrupt Task locator write = %#v/%v", result, err)
 	}
 	_, _, replayErr := repository.ResolveDeletionReplay(ctx, request)
@@ -213,8 +225,12 @@ func controllerReplayRetryMarker(tenantID, taskID string, at time.Time, key stri
 			EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
 			CiphertextDigest: hex.EncodeToString(digest[:]), Ciphertext: ciphertext,
 		},
-		Response: etcdinfra.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body},
-		TaskID:   taskID, CreatedAt: at, UpdatedAt: at,
+		Response: etcdinfra.IdempotencyResponse{
+			Status:      http.StatusAccepted,
+			ContentKind: "application/json",
+			Body:        body,
+		},
+		TaskID: taskID, CreatedAt: at, UpdatedAt: at,
 	}
 }
 
@@ -229,7 +245,11 @@ func etcdAcceptanceEndpoint(t *testing.T) string {
 
 func etcdAcceptanceStore(t *testing.T, ctx context.Context, endpoint, prefix string) etcdinfra.Store {
 	t.Helper()
-	store, err := etcdinfra.New(ctx, []string{endpoint}, prefix+time.Now().UTC().Format("20060102T150405.000000000")+"/")
+	store, err := etcdinfra.New(
+		ctx,
+		[]string{endpoint},
+		prefix+time.Now().UTC().Format("20060102T150405.000000000")+"/",
+	)
 	if err != nil {
 		t.Fatalf("New(real etcd) error = %v", err)
 	}

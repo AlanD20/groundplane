@@ -98,7 +98,13 @@ func (store *bodyStore) Prepare(
 		!validBodyExecutionID(executionID) || len(body) == 0 {
 		return preparedBody{}, errs.New(errs.KindInternal, "Script body store: preparation request is invalid")
 	}
-	assignmentFD, err := openOrCreateDirectory(store.tasksFD, assignmentID, store.ownerUID, store.ownerGID, store.device)
+	assignmentFD, err := openOrCreateDirectory(
+		store.tasksFD,
+		assignmentID,
+		store.ownerUID,
+		store.ownerGID,
+		store.device,
+	)
 	if err != nil {
 		return preparedBody{}, err
 	}
@@ -196,7 +202,10 @@ func (store *bodyStore) publishBody(
 			return bodyIdentity{}, bodyStoreError("write temporary body", writeErr)
 		}
 		if written <= 0 {
-			return bodyIdentity{}, errs.New(errs.KindInternal, "Script body store: temporary body write did not advance")
+			return bodyIdentity{}, errs.New(
+				errs.KindInternal,
+				"Script body store: temporary body write did not advance",
+			)
 		}
 		remaining = remaining[written:]
 	}
@@ -237,7 +246,13 @@ func (store *bodyStore) Remove(prepared preparedBody) error {
 		prepared.identity.Leaf != bodyLeaf {
 		return errs.New(errs.KindInternal, "Script body store: cleanup evidence is invalid")
 	}
-	assignmentFD, err := openDirectory(store.tasksFD, prepared.assignmentID, store.ownerUID, store.ownerGID, store.device)
+	assignmentFD, err := openDirectory(
+		store.tasksFD,
+		prepared.assignmentID,
+		store.ownerUID,
+		store.ownerGID,
+		store.device,
+	)
 	if errors.Is(err, unix.ENOENT) {
 		return nil
 	}
@@ -303,7 +318,10 @@ func (store *bodyStore) Remove(prepared preparedBody) error {
 	if err := unix.Fsync(assignmentFD); err != nil {
 		return bodyStoreError("sync execution directory removal", err)
 	}
-	if fd, err := openDirectory(assignmentFD, prepared.executionID, store.ownerUID, store.ownerGID, store.device); !errors.Is(err, unix.ENOENT) {
+	if fd, err := openDirectory(assignmentFD, prepared.executionID, store.ownerUID, store.ownerGID, store.device); !errors.Is(
+		err,
+		unix.ENOENT,
+	) {
 		if err == nil {
 			_ = unix.Close(fd)
 			return errs.New(errs.KindInternal, "Script body store: execution directory remains after cleanup")

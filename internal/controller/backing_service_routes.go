@@ -53,7 +53,10 @@ type backingServiceOutput struct {
 
 func (s *Server) registerBackingServices() {
 	taskAcceptedSchema := openAPISchema[apiTypes.TaskAccepted](s.API.OpenAPI().Components.Schemas, "TaskAccepted")
-	createdSchema := openAPISchema[apiTypes.BackingServiceCreated](s.API.OpenAPI().Components.Schemas, "BackingServiceCreated")
+	createdSchema := openAPISchema[apiTypes.BackingServiceCreated](
+		s.API.OpenAPI().Components.Schemas,
+		"BackingServiceCreated",
+	)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "backing-service.list", Method: http.MethodGet, Path: "/backing-services",
 		Summary: "List backing services", Tags: []string{"Backing service"},
@@ -223,7 +226,8 @@ func backingServiceListRequest(limit int, cursor string) (etcd.PageRequest, erro
 
 func backingServiceResponse(record etcd.BackingServiceRecord) apiTypes.BackingService {
 	return apiTypes.BackingService{
-		ProjectID: record.ProjectID, EnvironmentID: record.EnvironmentID, ServiceID: record.ServiceID,
+		Authentication: string(record.Authentication),
+		ProjectID:      record.ProjectID, EnvironmentID: record.EnvironmentID, ServiceID: record.ServiceID,
 		BackingNetworkID: record.BackingNetworkID,
 	}
 }

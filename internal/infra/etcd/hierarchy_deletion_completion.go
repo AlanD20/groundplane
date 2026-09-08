@@ -47,9 +47,16 @@ func (repository *HierarchyDeletionRepository) ConsumeAgentTerminal(
 		return HierarchyDeletionOperation{}, err
 	}
 	receiptKey, _ := HierarchyDeletionReceiptKey(current.Tombstone.OperationID, proof.ChildOperationID, proof.AttemptID)
-	progressKey, _ := HierarchyDeletionProgressKey(current.Tombstone.OperationID, proof.ChildOperationID, proof.AttemptID)
+	progressKey, _ := HierarchyDeletionProgressKey(
+		current.Tombstone.OperationID,
+		proof.ChildOperationID,
+		proof.AttemptID,
+	)
 	if proof.ProgressKey != progressKey {
-		return HierarchyDeletionOperation{}, errs.New(errs.KindStateConflict, "hierarchy deletion progress evidence changed")
+		return HierarchyDeletionOperation{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion progress evidence changed",
+		)
 	}
 	receiptSnapshot, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{receiptKey}, Revision: proof.ReceiptRevision,
@@ -61,7 +68,10 @@ func (repository *HierarchyDeletionRepository) ConsumeAgentTerminal(
 		len(receiptSnapshot.Values) != 1 || receiptSnapshot.Values[0] == nil ||
 		receiptSnapshot.Values[0].ModRevision != proof.ReceiptRevision ||
 		hierarchyDeletionBytesDigest(receiptSnapshot.Values[0].Value) != proof.ReceiptDigest {
-		return HierarchyDeletionOperation{}, errs.New(errs.KindStateConflict, "hierarchy deletion terminal evidence changed")
+		return HierarchyDeletionOperation{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion terminal evidence changed",
+		)
 	}
 	receiptRead := receiptSnapshot.Values[0]
 	defer clear(receiptRead.Value)
@@ -70,7 +80,10 @@ func (repository *HierarchyDeletionRepository) ConsumeAgentTerminal(
 		return HierarchyDeletionOperation{}, err
 	}
 	if progressRead.Entry == nil || hierarchyDeletionBytesDigest(progressRead.Entry.Value) != proof.ProgressDigest {
-		return HierarchyDeletionOperation{}, errs.New(errs.KindStateConflict, "hierarchy deletion terminal progress changed")
+		return HierarchyDeletionOperation{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion terminal progress changed",
+		)
 	}
 	defer clear(progressRead.Entry.Value)
 	var receipt HierarchyDeletionTerminalAttemptReceipt
@@ -82,7 +95,10 @@ func (repository *HierarchyDeletionRepository) ConsumeAgentTerminal(
 		receipt.AttemptGeneration != proof.AttemptGeneration || receipt.TerminalTaskDigest != proof.TerminalTaskDigest ||
 		receipt.Terminal != proof.Terminal || receipt.ResultDigest != proof.ResultDigest ||
 		receipt.ErrorDigest != proof.ErrorDigest || receipt.CheckpointDigest != proof.CheckpointDigest {
-		return HierarchyDeletionOperation{}, errs.New(errs.KindStateConflict, "hierarchy deletion terminal receipt does not match proof")
+		return HierarchyDeletionOperation{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion terminal receipt does not match proof",
+		)
 	}
 	var progress HierarchyDeletionChildProgress
 	wantConsumed := HierarchyDeletionConsumedRetry
@@ -98,10 +114,20 @@ func (repository *HierarchyDeletionRepository) ConsumeAgentTerminal(
 		progress.ErrorDigest != proof.ErrorDigest || progress.CheckpointDigest != proof.CheckpointDigest ||
 		progress.ReceiptRevision != proof.ReceiptRevision || progress.ReceiptDigest != proof.ReceiptDigest ||
 		progress.ConsumedAction != wantConsumed {
-		return HierarchyDeletionOperation{}, errs.New(errs.KindStateConflict, "hierarchy deletion progress does not match proof")
+		return HierarchyDeletionOperation{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion progress does not match proof",
+		)
 	}
 	if proof.Terminal != HierarchyDeletionAgentCompleted {
-		return repository.releaseFailedAgentAction(ctx, current, action, receiptKey, receiptRead.ModRevision, completedAt)
+		return repository.releaseFailedAgentAction(
+			ctx,
+			current,
+			action,
+			receiptKey,
+			receiptRead.ModRevision,
+			completedAt,
+		)
 	}
 	return repository.completeAgentAction(
 		ctx, current, action, proof, receiptKey, receiptRead.ModRevision,
@@ -151,8 +177,17 @@ func (repository *HierarchyDeletionRepository) completeAgentAction(
 		current, action, completion.ActionDigest, proof.ReceiptDigest, completedAt,
 	)
 	return repository.commitHierarchyDeletionCompletion(
-		ctx, current, nextTombstone, nextFence, action.Ordinal, completionValue,
-		[]Condition{{Key: receiptKey, ModRevision: receiptRevision}, {Key: progressKey, ModRevision: progressRevision}}, nil,
+		ctx,
+		current,
+		nextTombstone,
+		nextFence,
+		action.Ordinal,
+		completionValue,
+		[]Condition{
+			{Key: receiptKey, ModRevision: receiptRevision},
+			{Key: progressKey, ModRevision: progressRevision},
+		},
+		nil,
 	)
 }
 
@@ -189,7 +224,10 @@ func (repository *HierarchyDeletionRepository) releaseFailedAgentAction(
 	}
 	clearKeyValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return HierarchyDeletionOperation{}, errs.New(errs.KindStateConflict, "hierarchy deletion action ownership changed")
+		return HierarchyDeletionOperation{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion action ownership changed",
+		)
 	}
 	current.Fence = nextFence
 	current.FenceRevision = transaction.Revision
@@ -305,7 +343,9 @@ func validateHierarchyDeletionAgentTerminal(
 		proof.TaskID == "" || proof.AssignmentID == "" || proof.AttemptGeneration <= 0 ||
 		proof.ReceiptRevision <= 0 || proof.ProgressKey == "" ||
 		!validHierarchyDeletionDigest(proof.ReceiptDigest) || !validHierarchyDeletionDigest(proof.ProgressDigest) ||
-		!validHierarchyDeletionDigest(proof.TerminalTaskDigest) || !validHierarchyDeletionDigest(proof.CheckpointDigest) {
+		!validHierarchyDeletionDigest(
+			proof.TerminalTaskDigest,
+		) || !validHierarchyDeletionDigest(proof.CheckpointDigest) {
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion Agent terminal proof is invalid")
 	}
 	switch proof.Terminal {

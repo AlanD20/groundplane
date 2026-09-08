@@ -21,7 +21,8 @@ type managedVolumeInspection struct {
 
 func needsManagedVolumeEnsure(step *agentpb.ExecutionStep, artifact *agentpb.ComposeArtifact) bool {
 	apply := step.GetComposeApply()
-	if apply == nil || !apply.FullReconcile || artifact.GetAuthorizedVolumeDir() == "" || len(artifact.GetVolumes()) == 0 {
+	if apply == nil || !apply.FullReconcile || artifact.GetAuthorizedVolumeDir() == "" ||
+		len(artifact.GetVolumes()) == 0 {
 		return false
 	}
 	for _, service := range artifact.GetServices() {
@@ -48,7 +49,7 @@ func ensureManagedComposeVolumes(
 		}
 		device := filepath.Join(artifact.GetAuthorizedVolumeDir(), volume.GetComposeName())
 		if exists {
-			if !managedVolumeMatches(inspection, volume, device) {
+			if !managedVolumeMatches(inspection, volume, device, artifact.GetProjectName()) {
 				return failedResponse(1), nil
 			}
 			continue
@@ -56,7 +57,7 @@ func ensureManagedComposeVolumes(
 		result, runErr, err := runManagedVolumeCommand(
 			ctx,
 			taskRunner,
-			managedVolumeCreateArgs(volume, device),
+			managedVolumeCreateArgs(volume, device, artifact.GetProjectName()),
 		)
 		if err != nil {
 			return nil, err
@@ -68,7 +69,7 @@ func ensureManagedComposeVolumes(
 		if err != nil || failure != nil {
 			return failure, err
 		}
-		if !exists || !managedVolumeMatches(inspection, volume, device) {
+		if !exists || !managedVolumeMatches(inspection, volume, device, artifact.GetProjectName()) {
 			return failedResponse(1), nil
 		}
 	}
@@ -122,10 +123,12 @@ func runManagedVolumeCommand(
 	return result, runErr, nil
 }
 
-func managedVolumeCreateArgs(volume *agentpb.ComposeVolume, device string) []string {
+func managedVolumeCreateArgs(volume *agentpb.ComposeVolume, device, projectName string) []string {
 	args := []string{
 		"volume", "create", "--driver", "local",
 		"--opt", "type=none", "--opt", "o=bind", "--opt", "device=" + device,
+		"--label", "com.docker.compose.project=" + projectName,
+		"--label", "com.docker.compose.volume=" + volume.GetComposeName(),
 	}
 	labels := append([]*agentpb.LabelPair(nil), volume.GetExpectedLabels()...)
 	sort.Slice(labels, func(left, right int) bool { return labels[left].GetKey() < labels[right].GetKey() })
@@ -138,9 +141,11 @@ func managedVolumeCreateArgs(volume *agentpb.ComposeVolume, device string) []str
 func managedVolumeMatches(
 	inspection managedVolumeInspection,
 	volume *agentpb.ComposeVolume,
-	device string,
+	device, projectName string,
 ) bool {
 	if inspection.Name != volume.GetDockerName() || inspection.Driver != "local" || len(inspection.Options) != 3 ||
+		inspection.Labels["com.docker.compose.project"] != projectName ||
+		inspection.Labels["com.docker.compose.volume"] != volume.GetComposeName() ||
 		inspection.Options["type"] != "none" || inspection.Options["o"] != "bind" || inspection.Options["device"] != device {
 		return false
 	}

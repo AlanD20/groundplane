@@ -16,8 +16,11 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
+// Rationale: a Script consumes its presealed local image without a preceding
+// Compose mutation or image-result ACK, while retaining every execution checkpoint.
 func TestDockerScriptRuntimeCheckpointsBeforeEachSideEffect(t *testing.T) {
 	t.Parallel()
+	const localImageID = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
 	body := []byte("echo migration\n")
 	bodyDigest := sha256.Sum256(body)
@@ -32,8 +35,10 @@ func TestDockerScriptRuntimeCheckpointsBeforeEachSideEffect(t *testing.T) {
 		OperationID:  ids.New(ids.KindOperation),
 		Plan: &agentpb.ExecutionPlan{
 			PlanHash:                append([]byte(nil), planDigest[:]...),
-			ScriptRunnerProjections: []*agentpb.ScriptRunnerProjection{{SnapshotId: snapshotID}},
-			ScriptRunnerSnapshots:   []*agentpb.ResolvedRunnerSnapshot{{SnapshotId: snapshotID}},
+			ScriptRunnerProjections: []*agentpb.ScriptRunnerProjection{{SnapshotId: snapshotID, Image: localImageID}},
+			ScriptRunnerSnapshots: []*agentpb.ResolvedRunnerSnapshot{
+				{SnapshotId: snapshotID, LocalImageId: localImageID},
+			},
 		},
 		ScriptArtifacts: &agentpb.ScriptAssignmentArtifacts{
 			Bodies: []*agentpb.ScriptBodyArtifact{{
@@ -71,7 +76,8 @@ func TestDockerScriptRuntimeCheckpointsBeforeEachSideEffect(t *testing.T) {
 		events = append(events, "checkpoint:"+request.State.String())
 		return nil
 	}
-	if exitCode, err := runtime.ExecuteScript(context.Background(), assignment, step, checkpoint); err != nil || exitCode != 0 {
+	if exitCode, err := runtime.ExecuteScript(context.Background(), assignment, step, checkpoint); err != nil ||
+		exitCode != 0 {
 		t.Fatalf("execute Script: exit=%d err=%v", exitCode, err)
 	}
 
@@ -89,6 +95,9 @@ func TestDockerScriptRuntimeCheckpointsBeforeEachSideEffect(t *testing.T) {
 	}
 	if !slices.Equal(events, want) {
 		t.Fatalf("events = %v, want %v", events, want)
+	}
+	if engine.createdImage != localImageID {
+		t.Fatalf("runner created with image %q, want presealed local image %q", engine.createdImage, localImageID)
 	}
 }
 
@@ -415,6 +424,7 @@ func TestDockerScriptRuntimeCompletesNoServingReleaseWithoutStarting(t *testing.
 }
 
 type checkpointOrderScriptEngine struct {
+	createdImage       string
 	events             *[]string
 	bodyDigest         [sha256.Size]byte
 	createErr          error
@@ -445,10 +455,11 @@ func (engine *checkpointOrderScriptEngine) RecoverContainer(
 }
 
 func (engine *checkpointOrderScriptEngine) CreateContainer(
-	context.Context,
-	scriptexecution.Request,
-	scriptexecution.BodyEvidence,
+	_ context.Context,
+	request scriptexecution.Request,
+	_ scriptexecution.BodyEvidence,
 ) (scriptexecution.ContainerEvidence, error) {
+	engine.createdImage = request.Projection.GetImage()
 	*engine.events = append(*engine.events, "engine:create")
 	if engine.cancelCreate != nil {
 		engine.cancelCreate()

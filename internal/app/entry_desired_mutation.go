@@ -31,7 +31,10 @@ type entryDesiredMutationRepository interface {
 	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
 	GetEnvironmentBlueprintHead(context.Context, string) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
-	GetEnvironmentComposeProjection(context.Context, string) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	GetEnvironmentComposeProjection(
+		context.Context,
+		string,
+	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
 	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
 	ListEnvironmentComponents(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ComponentRecord], error)
 	ResolveBlueprintEntryEnvironment(context.Context, string) (string, bool, error)
@@ -281,7 +284,13 @@ func (service *entryDesiredMutationService) EditEntry(
 		return etcd.IdempotencyResponse{}, err
 	}
 	target := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetEntry, ID: entryID}
-	locator, indexed, err := service.edit.ResolveReplayLocator(ctx, target, http.MethodPatch, entryEditRoute, idempotencyKey)
+	locator, indexed, err := service.edit.ResolveReplayLocator(
+		ctx,
+		target,
+		http.MethodPatch,
+		entryEditRoute,
+		idempotencyKey,
+	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -366,7 +375,10 @@ func (service *entryDesiredMutationService) RemoveEntry(
 			return entrycontroller.RemovalOutcome{}, err
 		}
 		if !existing || resolution.Kind != idempotentintent.ResolutionReplay {
-			return entrycontroller.RemovalOutcome{}, errs.New(errs.KindInternal, "Entry removal replay resolution is invalid")
+			return entrycontroller.RemovalOutcome{}, errs.New(
+				errs.KindInternal,
+				"Entry removal replay resolution is invalid",
+			)
 		}
 		return entryDesiredRemovalOutcome(resolution.Response)
 	}
@@ -446,7 +458,10 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	}
 	if existing {
 		if resolution.Kind != idempotentintent.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry mutation replay resolution is invalid")
+			return etcd.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Entry mutation replay resolution is invalid",
+			)
 		}
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}
@@ -463,7 +478,10 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	}
 	if project.Record.Kind != etcd.ProjectKindTenant ||
 		environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindResourceInUse, "Environment is not ready for Entry mutation")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindResourceInUse,
+			"Environment is not ready for Entry mutation",
+		)
 	}
 	if request.action != entryDesiredMutationRemove {
 		if err := service.validateExposure(ctx, request.environmentID, request.desired.Exposure); err != nil {
@@ -485,7 +503,10 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if !hasCurrent || generation > math.MaxInt32 {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Entry mutation requires initialized Environment desired state")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict,
+			"Entry mutation requires initialized Environment desired state",
+		)
 	}
 	now := service.now().UTC()
 	candidateTaskID := ids.New(ids.KindTask)
@@ -493,22 +514,30 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	candidate, _, err := controller.ProjectEnvironmentEntryMutation(current.Record, controller.EnvironmentEntryArtifactMutation{
-		RevisionID: candidateTaskID, ArtifactID: entryStableIDFromRevision(ids.KindConfig, candidateTaskID),
-		PlanID: entryStableIDFromRevision(ids.KindPlan, candidateTaskID), RenderGeneration: generation,
-		Entries: replaceProjectedEntry(current.Record.Entries, previous, candidateRecord),
-	})
+	candidate, _, err := controller.ProjectEnvironmentEntryMutation(
+		current.Record,
+		controller.EnvironmentEntryArtifactMutation{
+			RevisionID: candidateTaskID, ArtifactID: entryStableIDFromRevision(ids.KindConfig, candidateTaskID),
+			PlanID: entryStableIDFromRevision(ids.KindPlan, candidateTaskID), RenderGeneration: generation,
+			Entries: replaceProjectedEntry(current.Record.Entries, previous, candidateRecord),
+		},
+	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	candidate = cloneEnvironmentDesiredProjection(candidate)
-	claim, _, err := controllerrevision.PreflightAndClaim(ctx, service.repository, candidate, controllerrevision.ClaimInput{
-		EnvironmentID: request.environmentID, CandidateTaskID: candidateTaskID,
-		Locator: request.locator, Intent: request.evidence.durable,
-		MatchExistingIntent:  request.evidence.matchesStaged,
-		BaselineHeadRevision: expectedHeadRevision, SourceKind: etcd.EnvironmentBlueprintSourceMutation,
-		RenderGeneration: generation, CreatedAt: now,
-	})
+	claim, _, err := controllerrevision.PreflightAndClaim(
+		ctx,
+		service.repository,
+		candidate,
+		controllerrevision.ClaimInput{
+			EnvironmentID: request.environmentID, CandidateTaskID: candidateTaskID,
+			Locator: request.locator, Intent: request.evidence.durable,
+			MatchExistingIntent:  request.evidence.matchesStaged,
+			BaselineHeadRevision: expectedHeadRevision, SourceKind: etcd.EnvironmentBlueprintSourceMutation,
+			RenderGeneration: generation, CreatedAt: now,
+		},
+	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -524,11 +553,14 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		}
 	}
 	entries := replaceProjectedEntry(current.Record.Entries, previous, candidateRecord)
-	candidate, materializations, err := controller.ProjectEnvironmentEntryMutation(current.Record, controller.EnvironmentEntryArtifactMutation{
-		RevisionID: claim.RevisionID, ArtifactID: entryStableIDFromRevision(ids.KindConfig, claim.RevisionID),
-		PlanID: entryStableIDFromRevision(ids.KindPlan, claim.RevisionID), RenderGeneration: generation,
-		Entries: entries,
-	})
+	candidate, materializations, err := controller.ProjectEnvironmentEntryMutation(
+		current.Record,
+		controller.EnvironmentEntryArtifactMutation{
+			RevisionID: claim.RevisionID, ArtifactID: entryStableIDFromRevision(ids.KindConfig, claim.RevisionID),
+			PlanID: entryStableIDFromRevision(ids.KindPlan, claim.RevisionID), RenderGeneration: generation,
+			Entries: entries,
+		},
+	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -679,7 +711,8 @@ func entryDesiredServiceIdentities(
 	seenIDs := make(map[string]string, len(projection.DesiredServices))
 	seenNames := make(map[string]string, len(projection.DesiredServices))
 	for index, service := range projection.DesiredServices {
-		if service.EnvironmentID != projection.EnvironmentID || ids.Validate(ids.KindService, service.Desired.ID) != nil ||
+		if service.EnvironmentID != projection.EnvironmentID ||
+			ids.Validate(ids.KindService, service.Desired.ID) != nil ||
 			service.Desired.Name == "" {
 			return nil, errs.New(errs.KindInternal, "Environment desired projection has an invalid Service identity")
 		}
@@ -814,7 +847,11 @@ func (service *entryDesiredMutationService) entryMaterializations(
 			Length: uint64(len(content)), SHA256: hex.EncodeToString(digest[:]), Source: input.Source,
 		}
 		clear(content)
-		step, err := controller.BuildTaskMaterializationStep(record, artifactID, uint32(environmentBlueprintTimeoutSeconds))
+		step, err := controller.BuildTaskMaterializationStep(
+			record,
+			artifactID,
+			uint32(environmentBlueprintTimeoutSeconds),
+		)
 		if err != nil {
 			return nil, nil, err
 		}

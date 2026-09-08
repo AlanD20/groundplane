@@ -312,7 +312,12 @@ func assignEnvironmentVolumeRemovalTask(
 	if err != nil {
 		t.Fatal(err)
 	}
-	running, err := etcd.TransitionCapabilityTaskStatus(task, etcd.TaskStatusPending, etcd.TaskStatusRunning, assignedAt)
+	running, err := etcd.TransitionCapabilityTaskStatus(
+		task,
+		etcd.TaskStatusPending,
+		etcd.TaskStatusRunning,
+		assignedAt,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -340,7 +345,11 @@ func assignEnvironmentVolumeRemovalTask(
 		{Type: etcd.MutationPut, Key: etcd.CapabilityTaskKey(task.ID), Value: runningValue},
 		{Type: etcd.MutationPut, Key: claimKey, Value: assignmentValue},
 		{Type: etcd.MutationPut, Key: etcd.CapabilityTaskAssignmentIndexKey(task.ID), Value: assignmentValue},
-		{Type: etcd.MutationPut, Key: etcd.CapabilityTaskTimeoutIndexKey(task.ID, assignment.Deadline), Value: assignmentValue},
+		{
+			Type:  etcd.MutationPut,
+			Key:   etcd.CapabilityTaskTimeoutIndexKey(task.ID, assignment.Deadline),
+			Value: assignmentValue,
+		},
 	})
 	if err != nil || !result.Succeeded {
 		t.Fatalf("assign Task = %#v, %v", result, err)
@@ -435,7 +444,10 @@ func (store *memoryHierarchyStore) Get(_ context.Context, key string) (*etcd.Get
 	return &etcd.GetResult{Entry: store.valueAt(key, store.revision), ReadRevision: store.revision}, nil
 }
 
-func (store *memoryHierarchyStore) GetMany(_ context.Context, request etcd.GetManyRequest) (*etcd.GetManyResult, error) {
+func (store *memoryHierarchyStore) GetMany(
+	_ context.Context,
+	request etcd.GetManyRequest,
+) (*etcd.GetManyResult, error) {
 	revision := request.Revision
 	if revision == 0 {
 		revision = store.revision
@@ -447,7 +459,11 @@ func (store *memoryHierarchyStore) GetMany(_ context.Context, request etcd.GetMa
 	return &etcd.GetManyResult{Values: values, ReadRevision: revision, ResponseRevision: store.revision}, nil
 }
 
-func (store *memoryHierarchyStore) Transact(_ context.Context, conditions []etcd.Condition, mutations []etcd.Mutation) (etcd.TransactionResult, error) {
+func (store *memoryHierarchyStore) Transact(
+	_ context.Context,
+	conditions []etcd.Condition,
+	mutations []etcd.Mutation,
+) (etcd.TransactionResult, error) {
 	for _, condition := range conditions {
 		value := store.valueAt(condition.Key, store.revision)
 		actual := int64(0)
@@ -492,7 +508,12 @@ func (store *memoryHierarchyStore) valueAt(key string, revision int64) *etcd.Key
 		for previous := index; previous >= 0 && versions[previous].present; previous-- {
 			keyVersion++
 		}
-		return &etcd.KeyValue{Key: key, Value: append([]byte(nil), version.value...), Version: keyVersion, ModRevision: version.revision}
+		return &etcd.KeyValue{
+			Key:         key,
+			Value:       append([]byte(nil), version.value...),
+			Version:     keyVersion,
+			ModRevision: version.revision,
+		}
 	}
 	return nil
 }

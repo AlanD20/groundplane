@@ -407,7 +407,13 @@ func actionFromEtcd(
 	}
 	domainOperation := operationFromEtcd(operation)
 	return Action{
-		ID:     stableActionID(domainOperation.ID, int(value.Ordinal), ActionKind(value.ActionKind), ActionTargetKind(value.TargetKind), value.TargetID),
+		ID: stableActionID(
+			domainOperation.ID,
+			int(value.Ordinal),
+			ActionKind(value.ActionKind),
+			ActionTargetKind(value.TargetKind),
+			value.TargetID,
+		),
 		NodeID: value.NodeID, Ordinal: int(value.Ordinal), OperationID: value.ParentOperationID,
 		Kind: ActionKind(value.ActionKind), TargetKind: ActionTargetKind(value.TargetKind), TargetID: value.TargetID,
 		TargetRevision: value.TargetRevision, PrerequisiteOrdinals: prerequisites,

@@ -12,13 +12,17 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Rationale: normalized input must not read host env files or interpolate
+// literal dollar expressions for a second time while reconstructing a plan.
 func TestLoadNormalizedEnvironmentProjectDoesNotResolveEnvFiles(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "service.env")
 	if err := os.WriteFile(path, []byte("EXPANDED=${APP_NAME}\n"), 0o600); err != nil {
 		t.Fatalf("write env file: %v", err)
 	}
-	canonical := []byte("services:\n  api:\n    image: example/api:1\n    env_file:\n      - " + path + "\n")
+	canonical := []byte(
+		"services:\n  api:\n    image: example/api:1\n    environment:\n      LITERAL: '$GP_RUNTIME_LITERAL'\n    env_file:\n      - " + path + "\n",
+	)
 	artifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
 		ArtifactId:    "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		OwnerKind:     agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
@@ -38,6 +42,9 @@ func TestLoadNormalizedEnvironmentProjectDoesNotResolveEnvFiles(t *testing.T) {
 		t.Fatalf("loadNormalizedEnvironmentProject() error = %v", err)
 	}
 	service := project.Services["api"]
+	if literal := service.Environment["LITERAL"]; literal == nil || *literal != "$GP_RUNTIME_LITERAL" {
+		t.Fatal("normalized literal was interpolated during reconstruction")
+	}
 	if _, resolved := service.Environment["EXPANDED"]; resolved {
 		t.Fatalf("loadNormalizedEnvironmentProject() resolved env_file contents: %#v", service.Environment)
 	}

@@ -311,7 +311,8 @@ func TestBlueprintClaimCrashReplayResumesWithStableTaskAndReleaseGroupIDs(t *tes
 	if err != nil {
 		t.Fatalf("Stage(recovered) error = %v", err)
 	}
-	if staged.TaskID() != recovered.TaskID || staged.state.seal.DependencyDigest != recoveredProjectionEvidence.DependencyDigest {
+	if staged.TaskID() != recovered.TaskID ||
+		staged.state.seal.DependencyDigest != recoveredProjectionEvidence.DependencyDigest {
 		t.Fatalf("staged authority = %q/%x", staged.TaskID(), staged.state.seal.DependencyDigest)
 	}
 	if _, err := repository.PublishEnvironmentBlueprintDesiredRevision(
@@ -436,7 +437,10 @@ func TestPublishKnownConflictAbandonsButUnresolvedUnknownCannotRetry(t *testing.
 	unknownRepository.publicationErr = context.DeadlineExceeded
 	unresolved := errors.New("publication outcome remains unknown")
 	unknownIdempotency := &boundaryPublicationIdempotency{unknownErr: unresolved}
-	if _, err := Publish(context.Background(), unknownRepository, unknownIdempotency, unknownInput); !errors.Is(err, unresolved) {
+	if _, err := Publish(context.Background(), unknownRepository, unknownIdempotency, unknownInput); !errors.Is(
+		err,
+		unresolved,
+	) {
 		t.Fatalf("Publish(unresolved unknown) error = %v", err)
 	}
 	if _, err := Publish(context.Background(), unknownRepository, unknownIdempotency, unknownInput); !errors.Is(

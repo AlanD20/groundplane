@@ -4,6 +4,7 @@ import type { EnvironmentNetworkCapacity } from './environment-types'
 export type HealthState = 'healthy' | 'degraded' | 'failed' | 'stopped' | 'pending' | 'unknown'
 export type ServiceStrategy = 'blue-green' | 'recreate' | 'rolling'
 export type ServiceRuntimeIntent = 'running' | 'stopped' | 'absent'
+export type ValkeyAuthentication = 'username_password' | 'password' | 'none'
 
 export type Slot = 'blue' | 'green'
 
@@ -63,6 +64,7 @@ export type Service = {
   adapter?: string // adapter registry key, e.g. "postgres:16"
   serviceName?: string // unique DNS name consumers connect to, e.g. "postgres"
   prefix?: string // fact prefix override (defaults to the adapter's)
+  authentication?: string // raw immutable Valkey instance policy, projected from the backing facade and validated before use
 }
 
 export type Zone = {
@@ -117,13 +119,13 @@ type EnvironmentComponentBase = {
 
 export type CaddyComponent = EnvironmentComponentBase & {
   kind: 'caddy'
-  config: { zone_id: string; caddyfile_template?: string } | null
+  config: { zone_ids: string[]; caddyfile_template?: string } | null
   state: { pinnedIPv4?: string }
 }
 
 export type CloudflareTunnelComponent = EnvironmentComponentBase & {
   kind: 'cloudflare-tunnel'
-  config: { secret_id: string } | null
+  config: { zone_ids: string[]; secret_id: string } | null
   state: Record<string, never>
 }
 

@@ -91,7 +91,10 @@ func TestBuildVolumeMutationProjectionAndPlansRoundTripAddRemove(t *testing.T) {
 // Task word pending, and a slug edit must not make active data look new.
 func TestVolumeMutationResponseUsesPublicLifecycleStates(t *testing.T) {
 	t.Parallel()
-	environment := etcd.EnvironmentRecord{ID: "env_01K7T8AFR0ABCDEF0123456789", VolumeDir: "/var/lib/groundplane/vol/test"}
+	environment := etcd.EnvironmentRecord{
+		ID:        "env_01K7T8AFR0ABCDEF0123456789",
+		VolumeDir: "/var/lib/groundplane/vol/test",
+	}
 	request := volumeMutationRequest{
 		action: volumeMutationActionAdd, environmentID: environment.ID,
 		volumeID: "vol_01K7T8AFR0ABCDEF0123456789", slug: "data", key: "data",

@@ -26,11 +26,13 @@ export function RevealValue({
   label,
   className,
   confirmWord = 'reveal',
+  sensitive = true,
 }: {
   loadValue: () => Promise<string>
   label?: string
   className?: string
   confirmWord?: string
+  sensitive?: boolean
 }) {
   const { requireRevealConfirm } = useStore()
   const [open, setOpen] = useState(false)
@@ -66,7 +68,7 @@ export function RevealValue({
   return (
     <div className={cn('flex items-center gap-1', className)}>
       <code className="truncate rounded-md bg-muted px-2 py-1 font-mono text-xs">
-        {revealed ? displayedValue : '•'.repeat(12)}
+        {revealed ? displayedValue : sensitive ? '•'.repeat(12) : 'not loaded'}
       </code>
       {revealed ? (
         <>
@@ -84,7 +86,7 @@ export function RevealValue({
         <button
           type="button"
           onClick={() => {
-            if (requireRevealConfirm) {
+            if (sensitive && requireRevealConfirm) {
               setTyped('')
               setOpen(true)
             } else {
@@ -92,7 +94,7 @@ export function RevealValue({
             }
           }}
           className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          aria-label="Reveal value"
+          aria-label={sensitive ? 'Reveal value' : 'Show value'}
           disabled={loading}
         >
           <Eye className="size-3.5" />

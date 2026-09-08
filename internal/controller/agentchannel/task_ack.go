@@ -42,7 +42,9 @@ func (s *Server) acknowledge(
 		}
 		if terminalReplay {
 			if task.Record.Result.ExecutionEpoch != acknowledgement.GetExecutionEpoch() ||
-				task.Record.Result.ReleaseRecoveryRecordSHA256 != hex.EncodeToString(acknowledgement.GetReleaseRecoveryRecordSha256()) {
+				task.Record.Result.ReleaseRecoveryRecordSHA256 != hex.EncodeToString(
+					acknowledgement.GetReleaseRecoveryRecordSha256(),
+				) {
 				return errs.New(errs.KindStateConflict, "Agent terminal acknowledgement replay authority changed")
 			}
 		} else {
@@ -196,7 +198,10 @@ func validateDNSResolverResultShape(acknowledgement *agentpb.TaskAck, plan *agen
 		if rollback != nil && !dnsResolverProofMatches(
 			rollback, rollbackAction, plan.GetArtifacts()[0].GetServices()[0], rollbackAction.GetArtifactDigest(),
 		) {
-			return errs.New(errs.KindValidationFailed, "Component disable rollback observation does not match its sealed plan")
+			return errs.New(
+				errs.KindValidationFailed,
+				"Component disable rollback observation does not match its sealed plan",
+			)
 		}
 		return nil
 	default:
@@ -208,11 +213,17 @@ func validateDNSResolverResultShape(acknowledgement *agentpb.TaskAck, plan *agen
 		candidateService,
 		observation.GetArtifactDigest(),
 	) {
-		return errs.New(errs.KindValidationFailed, "Component Task candidate observation does not match its sealed plan")
+		return errs.New(
+			errs.KindValidationFailed,
+			"Component Task candidate observation does not match its sealed plan",
+		)
 	}
 	if acknowledgement.GetTerminal() == agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED {
 		if rollback != nil {
-			return errs.New(errs.KindValidationFailed, "completed Component Task returned rollback observation evidence")
+			return errs.New(
+				errs.KindValidationFailed,
+				"completed Component Task returned rollback observation evidence",
+			)
 		}
 		if candidate == nil {
 			return errs.New(
@@ -242,10 +253,16 @@ func validateDNSResolverResultShape(acknowledgement *agentpb.TaskAck, plan *agen
 		failurePosition > 0 &&
 		len(managed.GetExpectedPreviousArtifactDigest()) == sha256.Size
 	if requiresRollback && rollback == nil {
-		return errs.New(errs.KindValidationFailed, "compensated Component Task is missing rollback observation evidence")
+		return errs.New(
+			errs.KindValidationFailed,
+			"compensated Component Task is missing rollback observation evidence",
+		)
 	}
 	if len(managed.GetExpectedPreviousArtifactDigest()) == 0 && rollback != nil {
-		return errs.New(errs.KindValidationFailed, "Component Task returned rollback evidence without an applied candidate")
+		return errs.New(
+			errs.KindValidationFailed,
+			"Component Task returned rollback evidence without an applied candidate",
+		)
 	}
 	if mode == agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_ENABLE && rollback != nil {
 		return errs.New(errs.KindValidationFailed, "failed Component enable returned serving rollback evidence")
@@ -277,7 +294,10 @@ func dnsResolverProofPlan(
 		}
 		if action.GetManagedConfigContent() {
 			if managed != nil {
-				return nil, nil, nil, nil, errs.New(errs.KindValidationFailed, "Component Task has ambiguous managed-config action")
+				return nil, nil, nil, nil, errs.New(
+					errs.KindValidationFailed,
+					"Component Task has ambiguous managed-config action",
+				)
 			}
 			managed = action
 		} else {
@@ -288,7 +308,10 @@ func dnsResolverProofPlan(
 		}
 	}
 	if managed == nil || observation == nil || len(plan.GetArtifacts()) < 1 || len(plan.GetArtifacts()) > 2 {
-		return nil, nil, nil, nil, errs.New(errs.KindValidationFailed, "Component Task DNS resolver proof plan is invalid")
+		return nil, nil, nil, nil, errs.New(
+			errs.KindValidationFailed,
+			"Component Task DNS resolver proof plan is invalid",
+		)
 	}
 	candidateArtifact := componentObservationComposeArtifact(plan)
 	if candidateArtifact == nil || len(candidateArtifact.GetServices()) != 1 {
@@ -297,7 +320,10 @@ func dnsResolverProofPlan(
 	rollbackService := candidateArtifact.GetServices()[0]
 	if rollbackArtifact := componentRollbackComposeArtifact(plan, candidateArtifact.GetArtifactId()); rollbackArtifact != nil {
 		if len(rollbackArtifact.GetServices()) != 1 {
-			return nil, nil, nil, nil, errs.New(errs.KindValidationFailed, "Component Task rollback artifact is invalid")
+			return nil, nil, nil, nil, errs.New(
+				errs.KindValidationFailed,
+				"Component Task rollback artifact is invalid",
+			)
 		}
 		rollbackService = rollbackArtifact.GetServices()[0]
 	}

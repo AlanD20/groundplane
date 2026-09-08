@@ -27,12 +27,39 @@ type hierarchyDeleteOutput struct {
 }
 
 func registerHierarchyDeletionRoutes(api huma.API, service HierarchyDeletionService, logger *slog.Logger) {
-	registerHierarchyDeletionRoute(api, service, logger, "tenant.delete", hierarchydeletion.TenantDeleteRoute, hierarchydeletion.TargetTenant)
-	registerHierarchyDeletionRoute(api, service, logger, "project.delete", hierarchydeletion.ProjectDeleteRoute, hierarchydeletion.TargetProject)
-	registerHierarchyDeletionRoute(api, service, logger, "environment.delete", hierarchydeletion.EnvironmentDeleteRoute, hierarchydeletion.TargetEnvironment)
+	registerHierarchyDeletionRoute(
+		api,
+		service,
+		logger,
+		"tenant.delete",
+		hierarchydeletion.TenantDeleteRoute,
+		hierarchydeletion.TargetTenant,
+	)
+	registerHierarchyDeletionRoute(
+		api,
+		service,
+		logger,
+		"project.delete",
+		hierarchydeletion.ProjectDeleteRoute,
+		hierarchydeletion.TargetProject,
+	)
+	registerHierarchyDeletionRoute(
+		api,
+		service,
+		logger,
+		"environment.delete",
+		hierarchydeletion.EnvironmentDeleteRoute,
+		hierarchydeletion.TargetEnvironment,
+	)
 }
 
-func registerHierarchyDeletionRoute(api huma.API, service HierarchyDeletionService, logger *slog.Logger, operationID, path string, target hierarchydeletion.TargetKind) {
+func registerHierarchyDeletionRoute(
+	api huma.API,
+	service HierarchyDeletionService,
+	logger *slog.Logger,
+	operationID, path string,
+	target hierarchydeletion.TargetKind,
+) {
 	tag := "Tenant"
 	if target == hierarchydeletion.TargetProject {
 		tag = "Project"
@@ -50,7 +77,14 @@ func registerHierarchyDeletionRoute(api huma.API, service HierarchyDeletionServi
 		if service == nil {
 			return nil, hierarchyDeletionUnavailable()
 		}
-		accepted, err := service.Delete(ctx, hierarchydeletion.DeleteRequest{TargetKind: target, TargetID: input.ID, IdempotencyKey: input.IdempotencyKey})
+		accepted, err := service.Delete(
+			ctx,
+			hierarchydeletion.DeleteRequest{
+				TargetKind:     target,
+				TargetID:       input.ID,
+				IdempotencyKey: input.IdempotencyKey,
+			},
+		)
 		if err != nil {
 			if logger != nil {
 				logger.Error(

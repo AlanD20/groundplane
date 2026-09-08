@@ -32,7 +32,11 @@ func TestReconcileBlueprintEntriesPreservesIdentityAndRemovesOnlyBlueprintOwnedR
 		return ids.NewAt(kind, now, sequence)
 	}
 	got, err := ReconcileBlueprintEntries(environmentID, map[string]core.EntrySpec{
-		"APP_MODE": {Kind: core.EntryKindEnv, Source: core.EntrySourceSpec{Literal: "production"}, Exposure: []string{"all"}},
+		"APP_MODE": {
+			Kind:     core.EntryKindEnv,
+			Source:   core.EntrySourceSpec{Literal: "production"},
+			Exposure: []string{"all"},
+		},
 	}, []etcd.EntryRecord{direct, removed}, allocate)
 	if err != nil {
 		t.Fatal(err)
@@ -49,7 +53,11 @@ func TestReconcileBlueprintEntriesPreservesIdentityAndRemovesOnlyBlueprintOwnedR
 		t.Fatal("direct Entry was not preserved")
 	}
 	got, err = ReconcileBlueprintEntries(environmentID, map[string]core.EntrySpec{
-		"APP_MODE": {Kind: core.EntryKindEnv, Source: core.EntrySourceSpec{Literal: "production"}, Exposure: []string{"all"}},
+		"APP_MODE": {
+			Kind:     core.EntryKindEnv,
+			Source:   core.EntrySourceSpec{Literal: "production"},
+			Exposure: []string{"all"},
+		},
 	}, got.Current, allocate)
 	if err != nil || len(got.Values) != 0 || len(got.Removed) != 0 {
 		t.Fatalf("unchanged reconciliation = %#v, %v", got, err)

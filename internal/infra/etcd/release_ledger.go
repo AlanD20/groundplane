@@ -123,7 +123,10 @@ func (ledger *ReleaseLedger) Stage(ctx context.Context, input ReleaseStage) (Ver
 			return VersionedReleaseManifest{}, err
 		}
 		if !result.Succeeded {
-			return VersionedReleaseManifest{}, errs.New(errs.KindStateConflict, "release staging identity already exists")
+			return VersionedReleaseManifest{}, errs.New(
+				errs.KindStateConflict,
+				"release staging identity already exists",
+			)
 		}
 	}
 	manifest := ReleaseStagedManifest{
@@ -218,7 +221,10 @@ func (ledger *ReleaseLedger) Publish(
 		{Key: desiredKey, ModRevision: evidence.DesiredRevision},
 		{Key: releaseFenceSetKey(evidence.EnvironmentID), ModRevision: evidence.FenceRevision},
 		{Key: markerKey},
-		{Key: releaseManifestStagingKey(evidence.Manifest.Record.PublicationID), ModRevision: evidence.Manifest.Revision},
+		{
+			Key:         releaseManifestStagingKey(evidence.Manifest.Record.PublicationID),
+			ModRevision: evidence.Manifest.Revision,
+		},
 		{Key: releasePublicationKey(evidence.Manifest.Record.PublicationID)},
 		{Key: releaseOperationKey(evidence.Manifest.Record.OperationID)},
 		fragment.condition,
@@ -233,33 +239,61 @@ func (ledger *ReleaseLedger) Publish(
 			clearMutations(mutations)
 			return ReleasePublicationResult{}, errs.Wrap(errs.KindInternal, encodeErr)
 		}
-		serviceValue, encodeErr := json.Marshal(releaseServiceIndexValue{Schema: 1, PublicationID: evidence.Manifest.Record.PublicationID})
+		serviceValue, encodeErr := json.Marshal(
+			releaseServiceIndexValue{Schema: 1, PublicationID: evidence.Manifest.Record.PublicationID},
+		)
 		if encodeErr != nil {
 			clear(environmentValue)
 			clearMutations(mutations)
 			return ReleasePublicationResult{}, errs.Wrap(errs.KindInternal, encodeErr)
 		}
-		mutations = append(mutations,
-			Mutation{Type: MutationPut, Key: releaseEnvironmentIndexKey(evidence.EnvironmentID, member.ReleaseID), Value: environmentValue},
-			Mutation{Type: MutationPut, Key: releaseServiceIndexKey(evidence.EnvironmentID, member.ServiceID, member.ReleaseID), Value: serviceValue},
+		mutations = append(
+			mutations,
+			Mutation{
+				Type:  MutationPut,
+				Key:   releaseEnvironmentIndexKey(evidence.EnvironmentID, member.ReleaseID),
+				Value: environmentValue,
+			},
+			Mutation{
+				Type:  MutationPut,
+				Key:   releaseServiceIndexKey(evidence.EnvironmentID, member.ServiceID, member.ReleaseID),
+				Value: serviceValue,
+			},
 		)
 	}
 	defer clearMutations(mutations)
-	mutations = append(mutations,
-		Mutation{Type: MutationPut, Key: releasePublicationKey(evidence.Manifest.Record.PublicationID), Value: publicationValue},
+	mutations = append(
+		mutations,
+		Mutation{
+			Type:  MutationPut,
+			Key:   releasePublicationKey(evidence.Manifest.Record.PublicationID),
+			Value: publicationValue,
+		},
 		Mutation{Type: MutationPut, Key: releaseFenceSetKey(evidence.EnvironmentID), Value: fenceValue},
-		Mutation{Type: MutationPut, Key: releaseOperationKey(evidence.Manifest.Record.OperationID), Value: operationValue},
+		Mutation{
+			Type:  MutationPut,
+			Key:   releaseOperationKey(evidence.Manifest.Record.OperationID),
+			Value: operationValue,
+		},
 	)
 	mutations = append(mutations, cloneReleaseTaskMutations(fragment)...)
 	mutations = append(mutations, hookFragment.mutations...)
-	mutations = append(mutations,
+	mutations = append(
+		mutations,
 		Mutation{Type: MutationPut, Key: markerKey, Value: markerValue},
-		Mutation{Type: MutationPut, Key: environmentMutationEpochKey(evidence.EnvironmentID), Value: slices.Clone(evidence.EnvironmentEpochValue)},
+		Mutation{
+			Type:  MutationPut,
+			Key:   environmentMutationEpochKey(evidence.EnvironmentID),
+			Value: slices.Clone(evidence.EnvironmentEpochValue),
+		},
 	)
 	if len(conditions) != 11+len(hookFragment.conditions) ||
 		len(mutations) != len(evidence.Manifest.Record.Members)*2+11+len(hookFragment.mutations) ||
 		len(conditions)+len(mutations) > maximumTransactionOperations {
-		return ReleasePublicationResult{}, errs.New(errs.KindInternal, "release publication operation budget is invalid")
+		return ReleasePublicationResult{}, errs.New(
+			errs.KindInternal,
+			"release publication operation budget is invalid",
+		)
 	}
 	result, err := ledger.store.Transact(ctx, conditions, mutations)
 	if err != nil {
@@ -275,7 +309,10 @@ func (ledger *ReleaseLedger) Publish(
 		}, nil
 	}
 	if len(result.FailureReads) != len(conditions) {
-		return ReleasePublicationResult{}, errs.New(errs.KindInternal, "release publication conflict evidence is incomplete")
+		return ReleasePublicationResult{}, errs.New(
+			errs.KindInternal,
+			"release publication conflict evidence is incomplete",
+		)
 	}
 	if result.FailureReads[6] != nil {
 		existing, err := decodeIdempotencyMarker(result.FailureReads[6].Value, evidence.Marker.Locator)
@@ -298,8 +335,12 @@ func (ledger *ReleaseLedger) Publish(
 	}, nil
 }
 
-func (ledger *ReleaseLedger) GetIntent(ctx context.Context, publicationID, releaseID string) (Versioned[domain.Intent], error) {
-	if ctx == nil || ledger == nil || validatePublicationID(publicationID) != nil || ids.Validate(ids.KindDeployment, releaseID) != nil {
+func (ledger *ReleaseLedger) GetIntent(
+	ctx context.Context,
+	publicationID, releaseID string,
+) (Versioned[domain.Intent], error) {
+	if ctx == nil || ledger == nil || validatePublicationID(publicationID) != nil ||
+		ids.Validate(ids.KindDeployment, releaseID) != nil {
 		return Versioned[domain.Intent]{}, errs.New(errs.KindValidationFailed, "release read identity is invalid")
 	}
 	result, err := ledger.store.GetMany(ctx, GetManyRequest{Keys: []string{
@@ -318,17 +359,29 @@ func (ledger *ReleaseLedger) GetIntent(ctx context.Context, publicationID, relea
 	if err != nil || domain.ValidateIntent(intent) != nil || intent.ID != releaseID {
 		return Versioned[domain.Intent]{}, corruptReleaseRecord()
 	}
-	return Versioned[domain.Intent]{Record: intent, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision}, nil
+	return Versioned[domain.Intent]{
+		Record:       intent,
+		Revision:     result.Values[0].ModRevision,
+		ReadRevision: result.ReadRevision,
+	}, nil
 }
 
 func validateReleasePublicationEvidence(value ReleasePublicationEvidence) error {
 	manifest := value.Manifest.Record
-	if validatePublicationID(manifest.PublicationID) != nil || ids.Validate(ids.KindOperation, manifest.OperationID) != nil ||
-		value.Manifest.Revision <= 0 || value.Manifest.ReadRevision < value.Manifest.Revision || len(manifest.Members) == 0 ||
-		len(manifest.Members) > maximumReleasePublicationMembers || ids.Validate(ids.KindEnvironment, value.EnvironmentID) != nil ||
-		ids.Validate(ids.KindProject, value.ProjectID) != nil || ids.Validate(ids.KindTenant, value.TenantID) != nil ||
-		value.DesiredRevision <= 0 || value.EnvironmentEpochRevision <= 0 || len(value.EnvironmentEpochValue) == 0 ||
-		value.PublishedAt.IsZero() || value.PublishedAt.Location() != time.UTC {
+	if validatePublicationID(manifest.PublicationID) != nil ||
+		ids.Validate(ids.KindOperation, manifest.OperationID) != nil ||
+		value.Manifest.Revision <= 0 ||
+		value.Manifest.ReadRevision < value.Manifest.Revision ||
+		len(manifest.Members) == 0 ||
+		len(manifest.Members) > maximumReleasePublicationMembers ||
+		ids.Validate(ids.KindEnvironment, value.EnvironmentID) != nil ||
+		ids.Validate(ids.KindProject, value.ProjectID) != nil ||
+		ids.Validate(ids.KindTenant, value.TenantID) != nil ||
+		value.DesiredRevision <= 0 ||
+		value.EnvironmentEpochRevision <= 0 ||
+		len(value.EnvironmentEpochValue) == 0 ||
+		value.PublishedAt.IsZero() ||
+		value.PublishedAt.Location() != time.UTC {
 		return errs.New(errs.KindValidationFailed, "release publication evidence is invalid")
 	}
 	if value.DesiredID != value.Task.Target {

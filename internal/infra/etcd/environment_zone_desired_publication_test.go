@@ -163,7 +163,9 @@ func zonePublicationTestArtifact(
 	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(projection.ComposeArtifact, artifact); err != nil {
 		t.Fatal(err)
 	}
-	canonical := []byte("networks:\n  frontend:\n    internal: true\n    ipam:\n      config:\n        - subnet: 10.40.20.0/24\nservices: {}\n")
+	canonical := []byte(
+		"networks:\n  frontend:\n    internal: true\n    ipam:\n      config:\n        - subnet: 10.40.20.0/24\nservices: {}\n",
+	)
 	digest := sha256.Sum256(canonical)
 	artifact.ArtifactId = ids.NewAt(ids.KindConfig, time.Date(2026, time.August, 31, 22, 0, 0, 0, time.UTC), 3)
 	artifact.CanonicalYaml = canonical

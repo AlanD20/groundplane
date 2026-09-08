@@ -588,11 +588,15 @@ func TestEnvironmentBlueprintComponentClassifierPreservesRequirementConflict(t *
 	componentPublication := preparedComponentTaskPublication{
 		conditions: []Condition{{Key: "/test/component-publication"}},
 	}
-	classified := classifyEnvironmentBlueprintComponentPublication(
+	_, classified, err := composeEnvironmentBlueprintComponentPublication(
+		[]Condition{{Key: "/test/requirement"}},
 		requirementClassifier,
 		componentPublication,
 	)
-	err := classified(0, []*KeyValue{nil, nil})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = classified(0, []*KeyValue{nil, nil})
 	if !requirementClassified || !isKind(err, errs.KindStateConflict) {
 		t.Fatalf(
 			"Component publication classification called/error = %t/%v, want true/state conflict",

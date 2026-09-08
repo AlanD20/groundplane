@@ -51,7 +51,8 @@ func TestTaskStepOpenAPISchemaRequiresClosedVariant(t *testing.T) {
 		t.Fatal("operation TaskStep exclusion is missing")
 	}
 	script := variants["script"]
-	if script == nil || !slices.Contains(script.Required, "script_id") || !slices.Contains(script.Required, "script_slug") {
+	if script == nil || !slices.Contains(script.Required, "script_id") ||
+		!slices.Contains(script.Required, "script_slug") {
 		t.Fatalf("script TaskStep required fields = %v", script.Required)
 	}
 }

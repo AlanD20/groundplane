@@ -168,21 +168,31 @@ func (c *Client) SetComponentConfig(
 	return result, nil
 }
 
-func (c *Client) EnableComponent(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+func (c *Client) EnableComponent(
+	ctx context.Context,
+	id string,
+	request apiTypes.ComponentEnableRequest,
+) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
 	path := "/api/v1/components/" + id + "/enable"
-	response, err := client.ComponentEnableWithResponse(
+	var body []byte
+	if request.Config != nil {
+		body, err = json.Marshal(request)
+		if err != nil {
+			return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
+		}
+	}
+	response, err := client.ComponentEnableWithBodyWithResponse(
 		ctx, id, &generated.ComponentEnableParams{IdempotencyKey: ids.NewULID()},
+		"application/json", bytes.NewReader(body),
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)
 	}
-	if err := generatedResponseError(
-		http.MethodPost, path, response.HTTPResponse, response.Body, http.StatusAccepted,
-	); err != nil {
+	if err := generatedResponseError(http.MethodPost, path, response.HTTPResponse, response.Body, http.StatusAccepted); err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
 	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)

@@ -74,7 +74,10 @@ type ManagedVolumeDirectoryRemoveResult struct {
 }
 
 type ManagedVolumeDirectoryRemover interface {
-	RemoveManagedVolume(context.Context, ManagedVolumeDirectoryRemoveRequest) (ManagedVolumeDirectoryRemoveResult, error)
+	RemoveManagedVolume(
+		context.Context,
+		ManagedVolumeDirectoryRemoveRequest,
+	) (ManagedVolumeDirectoryRemoveResult, error)
 }
 
 func MarshalRequest(request *agentpb.EnvironmentDirectoryHelperRequest) ([]byte, error) {
@@ -202,14 +205,29 @@ func executeDirectoryMutation(
 	step *agentpb.ExecutionStep,
 ) (ManagedVolumeDirectoryRemoveResult, error) {
 	if create := step.GetEnvironmentDirectoryCreate(); create != nil {
-		return ManagedVolumeDirectoryRemoveResult{Complete: true}, creator.Create(ctx, volumeRoot, create.ExpectedVolumeDir)
+		return ManagedVolumeDirectoryRemoveResult{
+				Complete: true,
+			}, creator.Create(
+				ctx,
+				volumeRoot,
+				create.ExpectedVolumeDir,
+			)
 	}
 	if remove := step.GetEnvironmentDirectoryRemove(); remove != nil {
 		remover, ok := creator.(DirectoryRemover)
 		if !ok {
-			return ManagedVolumeDirectoryRemoveResult{}, errs.New(errs.KindInternal, "Environment directory remover is not configured")
+			return ManagedVolumeDirectoryRemoveResult{}, errs.New(
+				errs.KindInternal,
+				"Environment directory remover is not configured",
+			)
 		}
-		return ManagedVolumeDirectoryRemoveResult{Complete: true}, remover.Remove(ctx, volumeRoot, remove.ExpectedVolumeDir)
+		return ManagedVolumeDirectoryRemoveResult{
+				Complete: true,
+			}, remover.Remove(
+				ctx,
+				volumeRoot,
+				remove.ExpectedVolumeDir,
+			)
 	}
 	ensure := step.GetManagedVolumeDirectoriesEnsure()
 	managedCreator, ok := creator.(ManagedVolumeDirectoryCreator)
@@ -217,7 +235,10 @@ func executeDirectoryMutation(
 		if remove := step.GetManagedVolumeDirectoryRemove(); remove != nil {
 			managedRemover, removerOK := creator.(ManagedVolumeDirectoryRemover)
 			if !removerOK {
-				return ManagedVolumeDirectoryRemoveResult{}, errs.New(errs.KindInternal, "Managed volume directory remover is not configured")
+				return ManagedVolumeDirectoryRemoveResult{}, errs.New(
+					errs.KindInternal,
+					"Managed volume directory remover is not configured",
+				)
 			}
 			for _, artifact := range request.Plan.Artifacts {
 				if artifact.ArtifactId != remove.ArtifactId {
@@ -225,14 +246,22 @@ func executeDirectoryMutation(
 				}
 				return managedRemover.RemoveManagedVolume(ctx, ManagedVolumeDirectoryRemoveRequest{
 					TaskID: request.TaskId, OperationID: request.OperationId,
-					IntentSHA256: append([]byte(nil), remove.IntentSha256...), Cursor: append([]byte(nil), remove.Cursor...),
+					IntentSHA256: append(
+						[]byte(nil),
+						remove.IntentSha256...), Cursor: append([]byte(nil), remove.Cursor...),
 					VolumeRoot: volumeRoot, VolumeDir: artifact.AuthorizedVolumeDir,
 					VolumeID: remove.VolumeId, ComposeKey: remove.ComposeKey,
 				})
 			}
-			return ManagedVolumeDirectoryRemoveResult{}, errs.New(errs.KindInternal, "Managed volume directory removal artifact disappeared after validation")
+			return ManagedVolumeDirectoryRemoveResult{}, errs.New(
+				errs.KindInternal,
+				"Managed volume directory removal artifact disappeared after validation",
+			)
 		}
-		return ManagedVolumeDirectoryRemoveResult{}, errs.New(errs.KindInternal, "Managed volume directory creator is not configured")
+		return ManagedVolumeDirectoryRemoveResult{}, errs.New(
+			errs.KindInternal,
+			"Managed volume directory creator is not configured",
+		)
 	}
 	for _, artifact := range request.Plan.Artifacts {
 		if artifact.ArtifactId != ensure.ArtifactId {
@@ -248,13 +277,21 @@ func executeDirectoryMutation(
 		for _, volumeID := range ensure.VolumeIds {
 			volumes = append(volumes, ManagedVolume{ID: volumeID, Key: byID[volumeID]})
 		}
-		return ManagedVolumeDirectoryRemoveResult{Complete: true}, managedCreator.EnsureManagedVolumes(ctx, ManagedVolumeEnsureRequest{
-			TaskID: request.TaskId, OperationID: request.OperationId,
-			IntentSHA256: append([]byte(nil), ensure.IntentSha256...), VolumeRoot: volumeRoot,
-			VolumeDir: artifact.AuthorizedVolumeDir, Volumes: volumes,
-		})
+		return ManagedVolumeDirectoryRemoveResult{
+				Complete: true,
+			}, managedCreator.EnsureManagedVolumes(
+				ctx,
+				ManagedVolumeEnsureRequest{
+					TaskID: request.TaskId, OperationID: request.OperationId,
+					IntentSHA256: append([]byte(nil), ensure.IntentSha256...), VolumeRoot: volumeRoot,
+					VolumeDir: artifact.AuthorizedVolumeDir, Volumes: volumes,
+				},
+			)
 	}
-	return ManagedVolumeDirectoryRemoveResult{}, errs.New(errs.KindInternal, "Managed volume directory artifact disappeared after validation")
+	return ManagedVolumeDirectoryRemoveResult{}, errs.New(
+		errs.KindInternal,
+		"Managed volume directory artifact disappeared after validation",
+	)
 }
 
 func validateRequest(
@@ -333,7 +370,10 @@ func validateResponse(response *agentpb.EnvironmentDirectoryHelperResponse) erro
 	}
 	digest := sha256.Sum256(encoded)
 	if subtle.ConstantTimeCompare(response.ResponseSha256, digest[:]) != 1 {
-		return errs.New(errs.KindValidationFailed, "Environment directory helper response digest does not match its contents")
+		return errs.New(
+			errs.KindValidationFailed,
+			"Environment directory helper response digest does not match its contents",
+		)
 	}
 	if response.ExitCode == 0 {
 		if response.FailedStepId != "" {
@@ -343,10 +383,16 @@ func validateResponse(response *agentpb.EnvironmentDirectoryHelperResponse) erro
 			)
 		}
 		if response.Complete && len(response.NextCursor) != 0 {
-			return errs.New(errs.KindValidationFailed, "complete Environment directory helper response carries a cursor")
+			return errs.New(
+				errs.KindValidationFailed,
+				"complete Environment directory helper response carries a cursor",
+			)
 		}
 		if !response.Complete && len(response.NextCursor) == 0 && response.MutationCount != 0 {
-			return errs.New(errs.KindValidationFailed, "incomplete Environment directory helper response lacks a cursor")
+			return errs.New(
+				errs.KindValidationFailed,
+				"incomplete Environment directory helper response lacks a cursor",
+			)
 		}
 		return nil
 	}
@@ -356,7 +402,9 @@ func validateResponse(response *agentpb.EnvironmentDirectoryHelperResponse) erro
 	return nil
 }
 
-func withResponseDigest(response *agentpb.EnvironmentDirectoryHelperResponse) (*agentpb.EnvironmentDirectoryHelperResponse, error) {
+func withResponseDigest(
+	response *agentpb.EnvironmentDirectoryHelperResponse,
+) (*agentpb.EnvironmentDirectoryHelperResponse, error) {
 	if response == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Environment directory helper response is required")
 	}

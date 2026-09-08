@@ -49,7 +49,9 @@ func TestControllerConfigRouteRequiresAndForwardsIdempotencyKey(t *testing.T) {
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{
 		ControllerConfig: store,
 	})
-	body := []byte(`{"content":"# exact\n","expected_revision":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`)
+	body := []byte(
+		`{"content":"# exact\n","expected_revision":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`,
+	)
 
 	missing := httptest.NewRecorder()
 	server.HTTPHandler().ServeHTTP(

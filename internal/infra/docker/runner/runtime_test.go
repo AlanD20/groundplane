@@ -173,8 +173,17 @@ func (host *recordingHost) ObserveDaemon(context.Context, corerunner.Plan) (core
 	return observed(corerunner.StepStartDaemon, false)
 }
 func (host *recordingHost) ObserveRunner(context.Context, corerunner.Plan) (corerunner.StepEvidence, error) {
-	ownership := runnerallocation.RunnerRuntimeEvidence{ContainerID: repeatValue("a", 64), DaemonNonce: repeatValue("b", 64), SocketDevice: 1, SocketInode: 2}
-	return corerunner.StepEvidence{Step: corerunner.StepStartRunner, State: corerunner.EffectApplied, Ownership: &ownership}, nil
+	ownership := runnerallocation.RunnerRuntimeEvidence{
+		ContainerID:  repeatValue("a", 64),
+		DaemonNonce:  repeatValue("b", 64),
+		SocketDevice: 1,
+		SocketInode:  2,
+	}
+	return corerunner.StepEvidence{
+		Step:      corerunner.StepStartRunner,
+		State:     corerunner.EffectApplied,
+		Ownership: &ownership,
+	}, nil
 }
 func (host *recordingHost) ObserveRunnerAbsent(context.Context, corerunner.Plan) (corerunner.StepEvidence, error) {
 	return observed(corerunner.StepStopRunner, true)

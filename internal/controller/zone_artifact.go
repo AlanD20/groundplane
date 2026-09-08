@@ -69,8 +69,12 @@ func AddEnvironmentZoneArtifact(
 		return nil, errs.New(errs.KindStateConflict, "Zone network already exists in the current desired revision")
 	}
 	for _, network := range owned.GetNetworks() {
-		if network != nil && (network.GetNetworkId() == addition.Zone.ID || network.GetComposeName() == addition.Zone.Name) {
-			return nil, errs.New(errs.KindStateConflict, "Zone network identity already exists in the current desired revision")
+		if network != nil &&
+			(network.GetNetworkId() == addition.Zone.ID || network.GetComposeName() == addition.Zone.Name) {
+			return nil, errs.New(
+				errs.KindStateConflict,
+				"Zone network identity already exists in the current desired revision",
+			)
 		}
 	}
 
@@ -168,7 +172,8 @@ func MutateEnvironmentZoneArtifact(
 	zoneIndex := mappingIndex(networks, mutation.ZoneName)
 	metadataIndex := -1
 	for index, network := range owned.GetNetworks() {
-		if network != nil && network.GetNetworkId() == mutation.ZoneID && network.GetComposeName() == mutation.ZoneName {
+		if network != nil && network.GetNetworkId() == mutation.ZoneID &&
+			network.GetComposeName() == mutation.ZoneName {
 			if metadataIndex >= 0 {
 				return nil, errs.New(errs.KindInternal, "Zone artifact network identity is duplicated")
 			}

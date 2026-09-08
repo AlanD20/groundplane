@@ -103,13 +103,26 @@ func prepareBlueprintAttachTaskPublication(
 			Condition{Key: environmentKey(record.BackingEnvironmentID), ModRevision: input.BackingEnvironment.Revision},
 			serviceDesiredCondition(input.BackingService),
 		)
-		publication.mutations = append(publication.mutations,
+		publication.mutations = append(
+			publication.mutations,
 			Mutation{Type: MutationPut, Key: attachKey(record.ID), Value: recordValue},
-			Mutation{Type: MutationPut, Key: attachNameKey(record.EnvironmentID, record.Name), Value: []byte(record.ID)},
+			Mutation{
+				Type:  MutationPut,
+				Key:   attachNameKey(record.EnvironmentID, record.Name),
+				Value: []byte(record.ID),
+			},
 			Mutation{Type: MutationPut, Key: attachOwnerKey(record.EnvironmentID, record.ID), Value: []byte(record.ID)},
 			Mutation{Type: MutationPut, Key: attachServiceKey(record.ServiceID, record.ID), Value: []byte(record.ID)},
-			Mutation{Type: MutationPut, Key: attachBackingServiceKey(record.BackingServiceID, record.ID), Value: []byte(record.ID)},
-			Mutation{Type: MutationPut, Key: attachBackingProjectKey(record.BackingProjectID, record.ID), Value: []byte(record.ID)},
+			Mutation{
+				Type:  MutationPut,
+				Key:   attachBackingServiceKey(record.BackingServiceID, record.ID),
+				Value: []byte(record.ID),
+			},
+			Mutation{
+				Type:  MutationPut,
+				Key:   attachBackingProjectKey(record.BackingProjectID, record.ID),
+				Value: []byte(record.ID),
+			},
 		)
 		if input.Facts != nil {
 			factValue, factErr := encodeAttachEncryptedFacts(*input.Facts)
@@ -149,7 +162,10 @@ func prepareBlueprintAttachTaskPublication(
 					}
 				}
 			}
-			publication.conditions = append(publication.conditions, Condition{Key: attachGrantedByKey(grantID, record.ID)})
+			publication.conditions = append(
+				publication.conditions,
+				Condition{Key: attachGrantedByKey(grantID, record.ID)},
+			)
 			publication.mutations = append(publication.mutations, Mutation{
 				Type: MutationPut, Key: attachGrantedByKey(grantID, record.ID), Value: []byte(record.ID),
 			})
@@ -183,7 +199,10 @@ func uniqueBlueprintAttachPublicationConditions(conditions []Condition) ([]Condi
 		existing, duplicate := byKey[condition.Key]
 		if duplicate {
 			if existing != condition {
-				return nil, errs.New(errs.KindStateConflict, "Blueprint Attach backing scope changed during preparation")
+				return nil, errs.New(
+					errs.KindStateConflict,
+					"Blueprint Attach backing scope changed during preparation",
+				)
 			}
 			continue
 		}

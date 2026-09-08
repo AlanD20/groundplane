@@ -66,7 +66,8 @@ func TestReleaseGroupEditPreservesTagPresence(t *testing.T) {
 		if request.Tag.Present != test.present {
 			t.Fatalf("Unmarshal(%s) present = %v, want %v", test.document, request.Tag.Present, test.present)
 		}
-		if (request.Tag.Value == nil) != (test.value == nil) || request.Tag.Value != nil && *request.Tag.Value != *test.value {
+		if (request.Tag.Value == nil) != (test.value == nil) ||
+			request.Tag.Value != nil && *request.Tag.Value != *test.value {
 			t.Fatalf("Unmarshal(%s) value = %v, want %v", test.document, request.Tag.Value, test.value)
 		}
 	}

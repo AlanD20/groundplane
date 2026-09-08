@@ -12,6 +12,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/AlanD20/groundplane/internal/common/scriptexecution"
+	"github.com/AlanD20/groundplane/internal/common/workloadimage"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -26,8 +27,15 @@ func validateOwnedContainer(
 	projection := request.Projection
 	if !validDockerContainerID(containerID) || value.ID != containerID ||
 		value.Name != "/"+projection.Name || value.Config == nil || value.HostConfig == nil || value.State == nil ||
-		value.Config.Image != projection.Image ||
-		value.Config.User != strconv.FormatUint(uint64(projection.Uid), 10)+":"+strconv.FormatUint(uint64(projection.Gid), 10) ||
+		!workloadimage.LocalIDValid(projection.Image) ||
+		value.Config.Image != projection.Image || value.Image != projection.Image ||
+		value.Config.User != strconv.FormatUint(
+			uint64(projection.Uid),
+			10,
+		)+":"+strconv.FormatUint(
+			uint64(projection.Gid),
+			10,
+		) ||
 		!slices.Equal([]string(value.Config.Entrypoint), projection.Entrypoint) ||
 		!slices.Equal([]string(value.Config.Cmd), projection.Command) ||
 		!hasExactSealedEnvironment(value.Config.Env, scriptEnvironment(projection.Environment, request.Entries)) ||
@@ -59,12 +67,18 @@ func validateOwnedContainer(
 			if mounted.Destination == entry.Binding.FileTarget {
 				matches++
 				if mounted.Type != mount.TypeBind || mounted.Source != expectedSource || mounted.RW {
-					return errs.New(errs.KindStateConflict, "Script runner: captured container Entry mount does not match")
+					return errs.New(
+						errs.KindStateConflict,
+						"Script runner: captured container Entry mount does not match",
+					)
 				}
 			}
 		}
 		if matches != 1 {
-			return errs.New(errs.KindStateConflict, "Script runner: captured container Entry mount is missing or ambiguous")
+			return errs.New(
+				errs.KindStateConflict,
+				"Script runner: captured container Entry mount is missing or ambiguous",
+			)
 		}
 	}
 	return nil

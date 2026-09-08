@@ -67,7 +67,10 @@ func (runtime *DockerScriptRuntime) ExecuteScript(
 		durable.State == agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_CONTAINER_CREATED {
 		prepared, prepareErr := runtime.engine.PrepareBody(ctx, request)
 		if durable.BodyPrepared != nil && !sameBodyEvidence(prepared, body) {
-			prepareErr = errors.Join(prepareErr, errs.New(errs.KindStateConflict, "agent: recovered Script body evidence differs"))
+			prepareErr = errors.Join(
+				prepareErr,
+				errs.New(errs.KindStateConflict, "agent: recovered Script body evidence differs"),
+			)
 		}
 		if durable.BodyPrepared == nil && prepared.Device != 0 {
 			if err := checkpointBody(checkpoint, request, durable, prepared); err != nil {
@@ -198,7 +201,10 @@ func scriptExecutionRequest(
 ) (scriptexecution.Request, *agentpb.ScriptExecutionCheckpoint, error) {
 	if ctx == nil || checkpoint == nil || step == nil || step.GetRunScript() == nil || assignment.Plan == nil ||
 		assignment.ScriptArtifacts == nil {
-		return scriptexecution.Request{}, nil, errs.New(errs.KindInternal, "agent: Script execution request is incomplete")
+		return scriptexecution.Request{}, nil, errs.New(
+			errs.KindInternal,
+			"agent: Script execution request is incomplete",
+		)
 	}
 	run := step.GetRunScript()
 	var projection *agentpb.ScriptRunnerProjection
@@ -227,7 +233,10 @@ func scriptExecutionRequest(
 		projection.SnapshotId != run.RunnerSnapshotId ||
 		body.Metadata.ScriptExecutionId != run.ScriptExecutionId || body.Metadata.ScriptId != run.ScriptId ||
 		body.Metadata.Generation != run.ScriptGeneration {
-		return scriptexecution.Request{}, nil, errs.New(errs.KindInternal, "agent: Script execution artifacts do not match RunScript")
+		return scriptexecution.Request{}, nil, errs.New(
+			errs.KindInternal,
+			"agent: Script execution artifacts do not match RunScript",
+		)
 	}
 	var durable *agentpb.ScriptExecutionCheckpoint
 	for _, candidate := range assignment.ScriptCheckpoints {
@@ -240,10 +249,6 @@ func scriptExecutionRequest(
 	if err != nil {
 		return scriptexecution.Request{}, nil, errs.Wrap(errs.KindInternal, err)
 	}
-	projection, err = acknowledgedScriptRunnerProjection(assignment, snapshot, projection)
-	if err != nil {
-		return scriptexecution.Request{}, nil, err
-	}
 	return scriptexecution.Request{
 		TaskID: assignment.TaskID, OperationID: assignment.OperationID, AssignmentID: assignment.AssignmentID,
 		StepID: step.StepId, ExecutionID: run.ScriptExecutionId,
@@ -251,7 +256,11 @@ func scriptExecutionRequest(
 		Projection:   projection,
 		BodyMetadata: proto.Clone(body.Metadata).(*agentpb.ScriptBodyArtifactMetadata),
 		Body:         append([]byte(nil), body.Body...),
-		Entries:      cloneScriptEntriesForSnapshot(assignment.ScriptArtifacts.Entries, assignment.Plan, run.RunnerSnapshotId),
+		Entries: cloneScriptEntriesForSnapshot(
+			assignment.ScriptArtifacts.Entries,
+			assignment.Plan,
+			run.RunnerSnapshotId,
+		),
 	}, durable, nil
 }
 
@@ -491,7 +500,9 @@ func bodyEvidenceFromCheckpoint(value *agentpb.ScriptBodyPreparedCheckpoint) scr
 	}
 }
 
-func containerEvidenceFromCheckpoint(value *agentpb.ScriptContainerCreatedCheckpoint) scriptexecution.ContainerEvidence {
+func containerEvidenceFromCheckpoint(
+	value *agentpb.ScriptContainerCreatedCheckpoint,
+) scriptexecution.ContainerEvidence {
 	return scriptexecution.ContainerEvidence{
 		ID: value.GetContainerId(), OwnershipLabelsSHA256: append([]byte(nil), value.GetOwnershipLabelsSha256()...),
 	}
@@ -529,31 +540,4 @@ func (runtime *DockerScriptRuntime) Close() error {
 		return nil
 	}
 	return runtime.engine.Close()
-}
-
-func acknowledgedScriptRunnerProjection(
-	assignment Assignment,
-	snapshot *agentpb.ResolvedRunnerSnapshot,
-	projection *agentpb.ScriptRunnerProjection,
-) (*agentpb.ScriptRunnerProjection, error) {
-	owned := proto.Clone(projection).(*agentpb.ScriptRunnerProjection)
-	authority := snapshot.GetProcedureServiceImage()
-	if authority == nil {
-		return owned, nil
-	}
-	for _, result := range assignment.AcknowledgedStepResults {
-		if result.GetStepId() != authority.GetComposeApplyStepId() {
-			continue
-		}
-		evidence := result.GetProcedureServiceImage()
-		if evidence == nil ||
-			evidence.GetServiceId() != authority.GetServiceId() ||
-			evidence.GetReleaseId() != authority.GetReleaseId() ||
-			evidence.GetRequestedReference() != authority.GetRequestedReference() {
-			return nil, errs.New(errs.KindStateConflict, "agent: acknowledged procedure image authority conflicts")
-		}
-		owned.Image = evidence.GetImmutableReference()
-		return owned, nil
-	}
-	return nil, errs.New(errs.KindStateConflict, "agent: procedure image result is not durably acknowledged")
 }

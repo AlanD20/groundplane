@@ -1,7 +1,10 @@
 package executionplan
 
 import (
+	"crypto/sha256"
 	"errors"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -52,6 +55,210 @@ func TestBuildCandidateReleaseProcedureBlueprintFirstApplication(t *testing.T) {
 	if member.GetCandidateArtifactId() == "baseline" || member.GetCandidateReleaseId() == "baseline" {
 		t.Fatal("first application fabricated baseline authority")
 	}
+}
+
+// Rationale: a native predecessor is an explicit plan artifact, not the
+// original source render. Its complete identity closure must survive the
+// input-to-protobuf boundary without silently dropping retained history.
+func TestBuildCandidateReleaseProcedureCarriesServingPredecessorReferences(t *testing.T) {
+	t.Parallel()
+
+	const (
+		priorArtifactID    = "cfg_01K4A1B2C3D4E5F6G7H8J9K0MT"
+		priorReleaseID     = "dep_01K4A1B2C3D4E5F6G7H8J9K0MS"
+		retainedArtifactID = "cfg_01K4A1B2C3D4E5F6G7H8J9K0MV"
+	)
+	procedure, err := BuildCandidateReleaseProcedure(CandidateReleaseProcedureInput{
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,
+		Members: []CandidateReleaseMemberInput{{
+			ServiceID: nativeWitnessService, CandidateReleaseID: nativeWitnessCandidate,
+			CandidateArtifactID: "cfg_01K4A1B2C3D4E5F6G7H8J9K0MN",
+			ForwardStepIDs:      []string{"step_01K4A1B2C3D4E5F6G7H8J9K0MN"},
+			ServingPredecessor: &ServingPredecessorInput{
+				ProbeStepID: "step_01K4A1B2C3D4E5F6G7H8J9K0MP", CompensateStepID: "step_01K4A1B2C3D4E5F6G7H8J9K0MQ",
+				PriorArtifactID: priorArtifactID, PriorReleaseID: priorReleaseID,
+				PriorTarget: "blue", RetainedPriorArtifactID: retainedArtifactID,
+			},
+			CandidateAbsence: &CandidateAbsenceInput{
+				ComposeProjectName: "gp-env_01K4A1B2C3D4E5F6G7H8J9K0MN",
+				Services: []CandidateServiceIdentity{
+					{ServiceID: nativeWitnessService, ReleaseID: nativeWitnessCandidate},
+				},
+				ProbeStepID: "step_01K4A1B2C3D4E5F6G7H8J9K0MP", CompensateStepID: "step_01K4A1B2C3D4E5F6G7H8J9K0MQ",
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("build candidate procedure: %v", err)
+	}
+	serving := procedure.GetMembers()[0].GetServingPredecessor()
+	if serving.GetPriorArtifactId() != priorArtifactID || serving.GetPriorReleaseId() != priorReleaseID ||
+		serving.GetPriorTarget() != "blue" || serving.GetRetainedPriorArtifactId() != retainedArtifactID {
+		t.Fatalf("serving predecessor references = %#v", serving)
+	}
+}
+
+func TestValidateCandidateServingPredecessorReferencesRequiresExplicitPlanArtifacts(t *testing.T) {
+	t.Parallel()
+
+	const (
+		candidateArtifactID = "cfg_01K4A1B2C3D4E5F6G7H8J9K0MN"
+		priorArtifactID     = "cfg_01K4A1B2C3D4E5F6G7H8J9K0MP"
+		retainedArtifactID  = "cfg_01K4A1B2C3D4E5F6G7H8J9K0MQ"
+		priorReleaseID      = "dep_01K4A1B2C3D4E5F6G7H8J9K0MR"
+	)
+	artifacts := map[string]*agentpb.ComposeArtifact{
+		candidateArtifactID: &agentpb.ComposeArtifact{}, priorArtifactID: &agentpb.ComposeArtifact{}, retainedArtifactID: &agentpb.ComposeArtifact{},
+	}
+	valid := &agentpb.ServingPredecessorRestoration{
+		PriorArtifactId: priorArtifactID, PriorReleaseId: priorReleaseID,
+		PriorTarget: "blue", RetainedPriorArtifactId: retainedArtifactID,
+	}
+	if err := validateCandidateServingPredecessorReferences(valid, nativeWitnessService, candidateArtifactID, artifacts); err != nil {
+		t.Fatalf("valid fresh prior topology rejected: %v", err)
+	}
+	for name, mutate := range map[string]func(*agentpb.ServingPredecessorRestoration){
+		"partial": func(value *agentpb.ServingPredecessorRestoration) { value.PriorReleaseId = "" },
+		"foreign-prior": func(value *agentpb.ServingPredecessorRestoration) {
+			value.PriorArtifactId = "cfg_01K4A1B2C3D4E5F6G7H8J9K0MS"
+		},
+		"same-candidate": func(value *agentpb.ServingPredecessorRestoration) { value.PriorArtifactId = candidateArtifactID },
+		"same-retained":  func(value *agentpb.ServingPredecessorRestoration) { value.RetainedPriorArtifactId = priorArtifactID },
+	} {
+		t.Run(name, func(t *testing.T) {
+			value := proto.Clone(valid).(*agentpb.ServingPredecessorRestoration)
+			mutate(value)
+			if err := validateCandidateServingPredecessorReferences(value, nativeWitnessService, candidateArtifactID, artifacts); err == nil {
+				t.Fatal("accepted invalid explicit prior topology reference")
+			}
+		})
+	}
+}
+
+// Rationale: full Blueprint validation must bind current C and inactive B as
+// one native pair. The prior artifact is not the source render and the
+// inactive artifact must retain its own Release and slot identity.
+func TestValidateBlueprintPlanBindsCurrentAndRetainedNativePair(t *testing.T) {
+	plan := validBlueprintScriptReconcilePlan(t)
+	member := plan.CandidateReleaseProcedure.Members[0]
+	currentID := "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	retainedID := "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAX"
+	currentRelease := "dep_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	retainedRelease := "dep_01ARZ3NDEKTSV4RRFFQ69G5FAX"
+	current := nativePlanArtifactForTest(t, plan.Artifacts[0], currentID, currentRelease, "green", 6)
+	retained := nativePlanArtifactForTest(t, plan.Artifacts[0], retainedID, retainedRelease, "blue", 5)
+	plan.Artifacts = append(plan.Artifacts, current, retained)
+	member.ServingPredecessor = &agentpb.ServingPredecessorRestoration{
+		ProbeStepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FB0", CompensateStepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FB1",
+		PriorArtifactId: currentID, PriorReleaseId: currentRelease, PriorTarget: "green",
+		RetainedPriorArtifactId: retainedID,
+	}
+	sealed, err := Seal(plan)
+	if err != nil {
+		t.Fatalf("Seal(full native current/inactive Blueprint plan) error = %v", err)
+	}
+	if _, err := Validate(sealed); err != nil {
+		t.Fatalf("Validate(full native current/inactive Blueprint plan) error = %v", err)
+	}
+
+	for name, mutate := range map[string]func(*agentpb.ExecutionPlan){
+		"missing current reference": func(value *agentpb.ExecutionPlan) {
+			value.CandidateReleaseProcedure.Members[0].ServingPredecessor.PriorArtifactId = ""
+			value.CandidateReleaseProcedure.Members[0].ServingPredecessor.PriorReleaseId = ""
+			value.CandidateReleaseProcedure.Members[0].ServingPredecessor.PriorTarget = ""
+		},
+		"wrong current release": func(value *agentpb.ExecutionPlan) {
+			setNativePlanRelease(value.Artifacts[1].Services[0], retainedRelease)
+		},
+		"wrong current target": func(value *agentpb.ExecutionPlan) {
+			setNativePlanSlot(value.Artifacts[1].Services[0], "blue")
+		},
+		"inactive uses current slot": func(value *agentpb.ExecutionPlan) {
+			setNativePlanSlot(value.Artifacts[2].Services[0], "green")
+		},
+		"inactive uses current release": func(value *agentpb.ExecutionPlan) {
+			setNativePlanRelease(value.Artifacts[2].Services[0], currentRelease)
+		},
+		"inactive has proxy": func(value *agentpb.ExecutionPlan) {
+			value.Artifacts[2].Services = append(value.Artifacts[2].Services, &agentpb.ComposeService{
+				ServiceId: member.ServiceId, ComposeName: "api-proxy",
+				Role:           agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+				ExpectedLabels: []*agentpb.LabelPair{{Key: labelRuntimeRole, Value: "proxy"}},
+			})
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			changed := proto.Clone(sealed).(*agentpb.ExecutionPlan)
+			mutate(changed)
+			changed.PlanHash = nil
+			encoded, err := marshalHashInput(changed)
+			if err != nil {
+				t.Fatal(err)
+			}
+			digest := sha256.Sum256(encoded)
+			changed.PlanHash = digest[:]
+			if _, err := Validate(changed); err == nil {
+				t.Fatal("accepted invalid full-plan native current/inactive pair")
+			}
+		})
+	}
+}
+
+func nativePlanArtifactForTest(
+	t *testing.T,
+	source *agentpb.ComposeArtifact,
+	artifactID, releaseID, slot string,
+	generation uint64,
+) *agentpb.ComposeArtifact {
+	t.Helper()
+	artifact := proto.Clone(source).(*agentpb.ComposeArtifact)
+	artifact.ArtifactId = artifactID
+	service := proto.Clone(source.Services[0]).(*agentpb.ComposeService)
+	service.Role = agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT
+	service.Slot = slot
+	service.ComposeName = "api-" + slot
+	service.ExpectedReplicas = 1
+	service.HasHealthcheck = true
+	service.ImageReference = "sha256:" + strings.Repeat("a", 64)
+	service.OwnerComponentId = ""
+	setNativePlanRelease(service, releaseID)
+	setNativePlanSlot(service, slot)
+	setNativePlanGeneration(service, generation)
+	setNativePlanID(service, "plan_01ARZ3NDEKTSV4RRFFQ69G5FAW")
+	artifact.Services = []*agentpb.ComposeService{service}
+	return artifact
+}
+
+func setNativePlanLabel(service *agentpb.ComposeService, key, value string) {
+	for _, label := range service.ExpectedLabels {
+		if label.GetKey() == key {
+			label.Value = value
+			return
+		}
+	}
+	service.ExpectedLabels = append(service.ExpectedLabels, &agentpb.LabelPair{Key: key, Value: value})
+	sort.Slice(service.ExpectedLabels, func(left, right int) bool {
+		return service.ExpectedLabels[left].GetKey() < service.ExpectedLabels[right].GetKey()
+	})
+}
+
+func setNativePlanRelease(service *agentpb.ComposeService, releaseID string) {
+	setNativePlanLabel(service, labelReleaseID, releaseID)
+	setNativePlanLabel(service, labelRuntimeRole, "slot")
+}
+
+func setNativePlanSlot(service *agentpb.ComposeService, slot string) {
+	service.Slot = slot
+	setNativePlanLabel(service, labelSlot, slot)
+	setNativePlanLabel(service, labelRuntimeRole, "slot")
+}
+
+func setNativePlanGeneration(service *agentpb.ComposeService, generation uint64) {
+	setNativePlanLabel(service, labelRenderGen, strconv.FormatUint(generation, 10))
+}
+
+func setNativePlanID(service *agentpb.ComposeService, planID string) {
+	setNativePlanLabel(service, labelPlanID, planID)
 }
 
 // Rationale: mutation-bearing plans must not omit their one hash-covered

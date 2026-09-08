@@ -442,10 +442,14 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 	conditions = append(conditions, fence.transactionConditions()...)
 	conditions = append(conditions, policyFence...)
 	if retrySource != nil {
-		conditions = append(conditions,
+		conditions = append(
+			conditions,
 			Condition{Key: taskKey(retrySource.task.Record.ID), ModRevision: retrySource.task.Revision},
 			Condition{Key: backupRunKey(retrySource.run.Record.TaskID), ModRevision: retrySource.run.Revision},
-			Condition{Key: backupTerminalReceiptKey(retrySource.task.Record.ID), ModRevision: retrySource.receiptRevision},
+			Condition{
+				Key:         backupTerminalReceiptKey(retrySource.task.Record.ID),
+				ModRevision: retrySource.receiptRevision,
+			},
 		)
 	}
 	mutations = append(mutations, Mutation{

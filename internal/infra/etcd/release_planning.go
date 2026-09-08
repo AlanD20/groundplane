@@ -95,7 +95,8 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 	if err != nil {
 		return ReleasePlanningScope{}, err
 	}
-	if projectRead == nil || projectRead.ReadRevision != initial.ReadRevision || len(projectRead.Values) != 1 || projectRead.Values[0] == nil {
+	if projectRead == nil || projectRead.ReadRevision != initial.ReadRevision || len(projectRead.Values) != 1 ||
+		projectRead.Values[0] == nil {
 		return ReleasePlanningScope{}, corruptReleaseRecord()
 	}
 	project, err := decodeProject(projectRead.Values[0].Value)
@@ -132,7 +133,8 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 			return ReleasePlanningScope{}, corruptReleaseRecord()
 		}
 	}
-	if loaded.Values[4] != nil || loaded.Values[5] != nil || loaded.Values[6] != nil || loaded.Values[7] != nil || loaded.Values[8] != nil {
+	if loaded.Values[4] != nil || loaded.Values[5] != nil || loaded.Values[6] != nil || loaded.Values[7] != nil ||
+		loaded.Values[8] != nil {
 		return ReleasePlanningScope{}, errs.New(errs.KindResourceInUse, "release planning scope is locked or deleting")
 	}
 	environment, err = decodeEnvironment(loaded.Values[0].Value)
@@ -152,9 +154,21 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 		return ReleasePlanningScope{}, corruptReleaseRecord()
 	}
 	return ReleasePlanningScope{
-		Environment:              Versioned[EnvironmentRecord]{Record: environment, Revision: loaded.Values[0].ModRevision, ReadRevision: loaded.ReadRevision},
-		Project:                  Versioned[ProjectRecord]{Record: project, Revision: loaded.Values[1].ModRevision, ReadRevision: loaded.ReadRevision},
-		Tenant:                   Versioned[TenantRecord]{Record: tenant, Revision: loaded.Values[2].ModRevision, ReadRevision: loaded.ReadRevision},
+		Environment: Versioned[EnvironmentRecord]{
+			Record:       environment,
+			Revision:     loaded.Values[0].ModRevision,
+			ReadRevision: loaded.ReadRevision,
+		},
+		Project: Versioned[ProjectRecord]{
+			Record:       project,
+			Revision:     loaded.Values[1].ModRevision,
+			ReadRevision: loaded.ReadRevision,
+		},
+		Tenant: Versioned[TenantRecord]{
+			Record:       tenant,
+			Revision:     loaded.Values[2].ModRevision,
+			ReadRevision: loaded.ReadRevision,
+		},
 		Compose:                  compose,
 		EnvironmentEpochRevision: loaded.Values[3].ModRevision,
 		EnvironmentEpochValue:    slices.Clone(loaded.Values[3].Value), ReadRevision: loaded.ReadRevision,
@@ -212,8 +226,12 @@ func (ledger *ReleaseLedger) LoadPlanningServices(
 		}
 		planning := ReleasePlanningService{Service: service}
 		if loaded.Values[base+1] != nil {
-			projection, err := decodeReleaseRecord[domain.ServiceProjection](loaded.Values[base+1].Value, "service-release-projection")
-			if err != nil || projection.EnvironmentID != scope.Environment.Record.ID || projection.ServiceID != serviceID {
+			projection, err := decodeReleaseRecord[domain.ServiceProjection](
+				loaded.Values[base+1].Value,
+				"service-release-projection",
+			)
+			if err != nil || projection.EnvironmentID != scope.Environment.Record.ID ||
+				projection.ServiceID != serviceID {
 				return nil, corruptReleaseRecord()
 			}
 			planning.Projection = projection
@@ -244,7 +262,11 @@ func (ledger *ReleaseLedger) GetPlanningServingIntent(
 		return domain.Intent{}, false, nil
 	}
 	index, err := ledger.store.GetMany(ctx, GetManyRequest{Keys: []string{
-		releaseServiceIndexKey(scope.Environment.Record.ID, service.Service.Record.Desired.ID, service.Projection.ServingReleaseID),
+		releaseServiceIndexKey(
+			scope.Environment.Record.ID,
+			service.Service.Record.Desired.ID,
+			service.Projection.ServingReleaseID,
+		),
 	}, Revision: scope.ReadRevision})
 	if err != nil {
 		return domain.Intent{}, false, err
@@ -310,7 +332,10 @@ func (ledger *ReleaseLedger) rejectSelectedHooks(
 					return corruptReleaseRecord()
 				}
 				if _, selected := services[record.ServiceID]; selected && record.Desired.When != "manual" {
-					return errs.New(errs.KindValidationFailed, "release hook is selected but the MVP hook runner is unavailable")
+					return errs.New(
+						errs.KindValidationFailed,
+						"release hook is selected but the MVP hook runner is unavailable",
+					)
 				}
 			}
 		}

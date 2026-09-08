@@ -26,7 +26,10 @@ func (store *Store) createDirectFixture(ctx context.Context, group domain.Group)
 		if domain.Equal(existing.Group, group) {
 			return existing, nil
 		}
-		return Versioned{}, errs.New(errs.KindStateConflict, "release group id already identifies different desired state")
+		return Versioned{}, errs.New(
+			errs.KindStateConflict,
+			"release group id already identifies different desired state",
+		)
 	}
 
 	evidence, err := store.loadMutationEvidence(ctx, group, "", 0)
@@ -41,7 +44,11 @@ func (store *Store) createDirectFixture(ctx context.Context, group domain.Group)
 		{Type: infraetcd.MutationPut, Key: recordKey(group.ID), Value: value},
 		{Type: infraetcd.MutationPut, Key: ownerKey(group.EnvironmentID, group.ID), Value: []byte(group.ID)},
 		{Type: infraetcd.MutationPut, Key: nameKey(group.EnvironmentID, group.Name), Value: []byte(group.ID)},
-		{Type: infraetcd.MutationPut, Key: environmentMutationEpochKey(group.EnvironmentID), Value: evidence.epochValue},
+		{
+			Type:  infraetcd.MutationPut,
+			Key:   environmentMutationEpochKey(group.EnvironmentID),
+			Value: evidence.epochValue,
+		},
 	})
 	clear(value)
 	if err != nil {
@@ -53,7 +60,11 @@ func (store *Store) createDirectFixture(ctx context.Context, group domain.Group)
 	return Versioned{Group: domain.Clone(group), Revision: result.Revision, ReadRevision: result.Revision}, nil
 }
 
-func (store *Store) updateDirectFixture(ctx context.Context, current Versioned, replacement domain.Group) (Versioned, error) {
+func (store *Store) updateDirectFixture(
+	ctx context.Context,
+	current Versioned,
+	replacement domain.Group,
+) (Versioned, error) {
 	if err := validateVersion(current); err != nil {
 		return Versioned{}, err
 	}
@@ -61,7 +72,10 @@ func (store *Store) updateDirectFixture(ctx context.Context, current Versioned, 
 		return Versioned{}, err
 	}
 	if current.Group.ID != replacement.ID || current.Group.EnvironmentID != replacement.EnvironmentID {
-		return Versioned{}, errs.New(errs.KindValidationFailed, "release group update changed stable identity or ownership")
+		return Versioned{}, errs.New(
+			errs.KindValidationFailed,
+			"release group update changed stable identity or ownership",
+		)
 	}
 	stored, found, err := store.find(ctx, current.Group.ID)
 	if err != nil {
@@ -89,9 +103,17 @@ func (store *Store) updateDirectFixture(ctx context.Context, current Versioned, 
 		Type: infraetcd.MutationPut, Key: environmentMutationEpochKey(replacement.EnvironmentID), Value: evidence.epochValue,
 	})
 	if replacement.Name != current.Group.Name {
-		mutations = append(mutations,
-			infraetcd.Mutation{Type: infraetcd.MutationDelete, Key: nameKey(replacement.EnvironmentID, current.Group.Name)},
-			infraetcd.Mutation{Type: infraetcd.MutationPut, Key: nameKey(replacement.EnvironmentID, replacement.Name), Value: []byte(replacement.ID)},
+		mutations = append(
+			mutations,
+			infraetcd.Mutation{
+				Type: infraetcd.MutationDelete,
+				Key:  nameKey(replacement.EnvironmentID, current.Group.Name),
+			},
+			infraetcd.Mutation{
+				Type:  infraetcd.MutationPut,
+				Key:   nameKey(replacement.EnvironmentID, replacement.Name),
+				Value: []byte(replacement.ID),
+			},
 		)
 	}
 	result, err := store.backend.Transact(ctx, evidence.conditions, mutations)
@@ -120,7 +142,12 @@ type mutationEvidence struct {
 	epochValue []byte
 }
 
-func (store *Store) loadMutationEvidence(ctx context.Context, group domain.Group, oldName string, revision int64) (mutationEvidence, error) {
+func (store *Store) loadMutationEvidence(
+	ctx context.Context,
+	group domain.Group,
+	oldName string,
+	revision int64,
+) (mutationEvidence, error) {
 	baseKeys := []string{
 		environmentKey(group.EnvironmentID), environmentMutationEpochKey(group.EnvironmentID),
 		environmentOperationLockKey(group.EnvironmentID), environmentDeletionKey(group.EnvironmentID),
@@ -154,10 +181,16 @@ func (store *Store) loadMutationEvidence(ctx context.Context, group domain.Group
 		}
 	}()
 	if result.Values[2] != nil || result.Values[3] != nil {
-		return mutationEvidence{}, errs.New(errs.KindResourceInUse, "release group environment has an active operation or deletion")
+		return mutationEvidence{}, errs.New(
+			errs.KindResourceInUse,
+			"release group environment has an active operation or deletion",
+		)
 	}
 	if result.Values[7] == nil {
-		return mutationEvidence{}, errs.New(errs.KindResourceInUse, "release group environment has no enabled compose project")
+		return mutationEvidence{}, errs.New(
+			errs.KindResourceInUse,
+			"release group environment has no enabled compose project",
+		)
 	}
 	projection, err := decodeComposeProjection(result.Values[7].Value)
 	if err != nil || projection.EnvironmentID != group.EnvironmentID {
@@ -177,9 +210,17 @@ func (store *Store) loadMutationEvidence(ctx context.Context, group domain.Group
 			return mutationEvidence{}, errs.New(errs.KindStateConflict, "release group stable id already exists")
 		}
 		if result.Values[6] != nil {
-			return mutationEvidence{}, errs.New(errs.KindNameConflict, "release group name already exists in the environment")
+			return mutationEvidence{}, errs.New(
+				errs.KindNameConflict,
+				"release group name already exists in the environment",
+			)
 		}
-		conditions = append(conditions, infraetcd.Condition{Key: baseKeys[4]}, infraetcd.Condition{Key: baseKeys[5]}, infraetcd.Condition{Key: baseKeys[6]})
+		conditions = append(
+			conditions,
+			infraetcd.Condition{Key: baseKeys[4]},
+			infraetcd.Condition{Key: baseKeys[5]},
+			infraetcd.Condition{Key: baseKeys[6]},
+		)
 	} else {
 		if result.Values[4] == nil || result.Values[4].ModRevision != revision || result.Values[5] == nil {
 			return mutationEvidence{}, errs.New(errs.KindStateConflict, "release group changed before mutation")
@@ -232,9 +273,13 @@ func (store *Store) loadMutationEvidence(ctx context.Context, group domain.Group
 	if projectResult.Values[2] != nil {
 		return mutationEvidence{}, errs.New(errs.KindResourceInUse, "release group project deletion is in progress")
 	}
-	conditions = append(conditions,
+	conditions = append(
+		conditions,
 		infraetcd.Condition{Key: projectKey(project.ID), ModRevision: projectResult.Values[0].ModRevision},
-		infraetcd.Condition{Key: environmentOwnerKey(project.ID, environment.ID), ModRevision: projectResult.Values[1].ModRevision},
+		infraetcd.Condition{
+			Key:         environmentOwnerKey(project.ID, environment.ID),
+			ModRevision: projectResult.Values[1].ModRevision,
+		},
 		infraetcd.Condition{Key: deletionKey("project", project.ID)},
 	)
 	ownerIndex := projectOwnerKey(project)
@@ -250,7 +295,10 @@ func (store *Store) loadMutationEvidence(ctx context.Context, group domain.Group
 		!bytes.Equal(ownerResult.Values[0].Value, []byte(project.ID)) {
 		return mutationEvidence{}, corruptRecord()
 	}
-	conditions = append(conditions, infraetcd.Condition{Key: ownerIndex, ModRevision: ownerResult.Values[0].ModRevision})
+	conditions = append(
+		conditions,
+		infraetcd.Condition{Key: ownerIndex, ModRevision: ownerResult.Values[0].ModRevision},
+	)
 	if project.Kind == infraetcd.ProjectKindTenant {
 		if ownerResult.Values[1] == nil {
 			return mutationEvidence{}, corruptRecord()
@@ -299,7 +347,10 @@ func (store *Store) loadMutationEvidence(ctx context.Context, group domain.Group
 		ownerValue := serviceResult.Values[index*3+1]
 		deletionValue := serviceResult.Values[index*3+2]
 		if recordValue == nil || ownerValue == nil {
-			return mutationEvidence{}, errs.New(errs.KindServiceNotFound, "release group member service was not found in the environment")
+			return mutationEvidence{}, errs.New(
+				errs.KindServiceNotFound,
+				"release group member service was not found in the environment",
+			)
 		}
 		service, decodeErr := decodeService(recordValue.Value)
 		_, enabled := projectionMembers[serviceID]
@@ -324,10 +375,16 @@ func (store *Store) loadMutationEvidence(ctx context.Context, group domain.Group
 			return mutationEvidence{}, corruptRecord()
 		}
 		if !enabled {
-			return mutationEvidence{}, errs.New(errs.KindResourceInUse, "release group member service is not enabled in the environment compose project")
+			return mutationEvidence{}, errs.New(
+				errs.KindResourceInUse,
+				"release group member service is not enabled in the environment compose project",
+			)
 		}
 		if deletionValue != nil {
-			return mutationEvidence{}, errs.New(errs.KindResourceInUse, "release group member service deletion is in progress")
+			return mutationEvidence{}, errs.New(
+				errs.KindResourceInUse,
+				"release group member service deletion is in progress",
+			)
 		}
 		conditions = append(conditions, infraetcd.Condition{Key: deletionKey("service", serviceID)})
 	}

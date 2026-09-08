@@ -370,6 +370,9 @@
             "readOnly": true,
             "type": "string"
           },
+          "authentication": {
+            "type": "string"
+          },
           "backing_network_id": {
             "type": "string"
           },
@@ -404,6 +407,15 @@
             "type": "string"
           },
           "adapter": {
+            "type": "string"
+          },
+          "authentication": {
+            "description": "Immutable Valkey authentication mode; omitted selects username_password. Unsupported for other adapters.",
+            "enum": [
+              "username_password",
+              "password",
+              "none"
+            ],
             "type": "string"
           },
           "description": {
@@ -735,27 +747,44 @@
               "caddyfile_template": {
                 "type": "string"
               },
-              "zone_id": {
-                "pattern": "^net_[0-9A-HJKMNP-TV-Z]{26}$",
-                "type": "string"
+              "zone_ids": {
+                "description": "Ordered selected Environment Zone IDs; the first router Zone is primary.",
+                "items": {
+                  "pattern": "^net_[0-9A-HJKMNP-TV-Z]{26}$",
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
               }
             },
             "required": [
-              "zone_id"
+              "zone_ids"
             ],
             "type": "object"
           },
           {
             "additionalProperties": false,
-            "maxProperties": 1,
-            "minProperties": 1,
+            "maxProperties": 2,
+            "minProperties": 2,
             "properties": {
               "secret_id": {
                 "pattern": "^sec_[0-9A-HJKMNP-TV-Z]{26}$",
                 "type": "string"
+              },
+              "zone_ids": {
+                "description": "Ordered selected Environment Zone IDs; the first router Zone is primary.",
+                "items": {
+                  "pattern": "^net_[0-9A-HJKMNP-TV-Z]{26}$",
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
               }
             },
             "required": [
+              "zone_ids",
               "secret_id"
             ],
             "type": "object"
@@ -838,20 +867,26 @@
                   "caddyfile_template": {
                     "type": "string"
                   },
-                  "zone_id": {
-                    "pattern": "^net_[0-9A-HJKMNP-TV-Z]{26}$",
-                    "type": "string"
+                  "zone_ids": {
+                    "description": "Ordered selected Environment Zone IDs; the first router Zone is primary.",
+                    "items": {
+                      "pattern": "^net_[0-9A-HJKMNP-TV-Z]{26}$",
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
                   }
                 },
                 "required": [
-                  "zone_id"
+                  "zone_ids"
                 ],
                 "type": "object"
               },
               {
                 "additionalProperties": false,
-                "maxProperties": 1,
-                "minProperties": 1,
+                "maxProperties": 2,
+                "minProperties": 2,
                 "properties": {
                   "credential": {
                     "oneOf": [
@@ -905,9 +940,20 @@
                         "type": "object"
                       }
                     ]
+                  },
+                  "zone_ids": {
+                    "description": "Ordered selected Environment Zone IDs; the first router Zone is primary.",
+                    "items": {
+                      "pattern": "^net_[0-9A-HJKMNP-TV-Z]{26}$",
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
                   }
                 },
                 "required": [
+                  "zone_ids",
                   "credential"
                 ],
                 "type": "object"
@@ -1033,6 +1079,124 @@
           "config",
           "managed_files"
         ],
+        "type": "object"
+      },
+      "ComponentEnableRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ComponentEnableRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "config": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "maxProperties": 2,
+                "minProperties": 1,
+                "properties": {
+                  "caddyfile_template": {
+                    "type": "string"
+                  },
+                  "zone_ids": {
+                    "description": "Ordered selected Environment Zone IDs; the first router Zone is primary.",
+                    "items": {
+                      "pattern": "^net_[0-9A-HJKMNP-TV-Z]{26}$",
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "zone_ids"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "maxProperties": 2,
+                "minProperties": 2,
+                "properties": {
+                  "credential": {
+                    "oneOf": [
+                      {
+                        "additionalProperties": false,
+                        "maxProperties": 2,
+                        "minProperties": 2,
+                        "properties": {
+                          "mode": {
+                            "enum": [
+                              "existing"
+                            ],
+                            "type": "string"
+                          },
+                          "secret_id": {
+                            "pattern": "^sec_[0-9A-HJKMNP-TV-Z]{26}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "secret_id"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "maxProperties": 3,
+                        "minProperties": 3,
+                        "properties": {
+                          "mode": {
+                            "enum": [
+                              "new"
+                            ],
+                            "type": "string"
+                          },
+                          "secret_name": {
+                            "type": "string"
+                          },
+                          "token": {
+                            "minLength": 1,
+                            "type": "string",
+                            "writeOnly": true
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "secret_name",
+                          "token"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "zone_ids": {
+                    "description": "Ordered selected Environment Zone IDs; the first router Zone is primary.",
+                    "items": {
+                      "pattern": "^net_[0-9A-HJKMNP-TV-Z]{26}$",
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "zone_ids",
+                  "credential"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
         "type": "object"
       },
       "ComponentProjection": {
@@ -6916,6 +7080,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComponentEnableRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -6945,7 +7118,7 @@
             "description": "Error"
           }
         },
-        "summary": "component.enable",
+        "summary": "Enable a Component with optional configuration",
         "tags": [
           "Component"
         ]

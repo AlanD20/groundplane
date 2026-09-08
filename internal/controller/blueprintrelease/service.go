@@ -16,16 +16,18 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	controller "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
+	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"github.com/distribution/reference"
 )
 
 type Service struct {
+	agents    *etcd.LocalAgentRepository
+	images    workloadseal.Resolver
 	ledger    *etcd.ReleaseLedger
 	scripts   *etcd.ScriptRepository
 	plans     *controller.TaskPlanResolver
@@ -39,29 +41,42 @@ func NewService(
 	plans *controller.TaskPlanResolver,
 	artifacts *controller.ScriptArtifactService,
 	sources *etcd.ScriptSourceReferenceAuthority,
+	agents *etcd.LocalAgentRepository,
+	images workloadseal.Resolver,
 ) (*Service, error) {
-	if ledger == nil || scripts == nil || plans == nil || artifacts == nil || sources == nil {
+	if ledger == nil || scripts == nil || plans == nil || artifacts == nil || sources == nil || agents == nil ||
+		images == nil {
 		return nil, errs.New(errs.KindInternal, "Blueprint Release dependencies are not configured")
 	}
-	return &Service{ledger: ledger, scripts: scripts, plans: plans, artifacts: artifacts, sources: sources}, nil
+	return &Service{
+		ledger:    ledger,
+		scripts:   scripts,
+		plans:     plans,
+		artifacts: artifacts,
+		sources:   sources,
+		agents:    agents,
+		images:    images,
+	}, nil
 }
 
 type PrepareInput struct {
-	VolumeRoot     string
-	Tenant         etcd.Versioned[etcd.TenantRecord]
-	Project        etcd.Versioned[etcd.ProjectRecord]
-	Environment    etcd.Versioned[etcd.EnvironmentRecord]
-	Projection     etcd.EnvironmentComposeProjection
-	ServiceChanges []etcd.EnvironmentBlueprintServiceChange
-	Memberships    NormalizedServiceMemberships
-	Scripts        []etcd.ScriptRecord
-	ReleaseGroups  map[string]core.ReleaseGroupSpec
-	Task           etcd.TaskRecord
-	PrefixSteps    []*agentpb.ExecutionStep
-	ComponentSteps []*agentpb.ExecutionStep
-	Artifact       *agentpb.ComposeArtifact
-	AllocateNamed  func(ids.Kind, string) string
-	CreatedAt      time.Time
+	IntendedAttaches []etcd.Versioned[etcd.AttachRecord]
+	Workloads        WorkloadPreparation
+	VolumeRoot       string
+	Tenant           etcd.Versioned[etcd.TenantRecord]
+	Project          etcd.Versioned[etcd.ProjectRecord]
+	Environment      etcd.Versioned[etcd.EnvironmentRecord]
+	Projection       etcd.EnvironmentComposeProjection
+	ServiceChanges   []etcd.EnvironmentBlueprintServiceChange
+	Memberships      NormalizedServiceMemberships
+	Scripts          []etcd.ScriptRecord
+	ReleaseGroups    map[string]core.ReleaseGroupSpec
+	Task             etcd.TaskRecord
+	PrefixSteps      []*agentpb.ExecutionStep
+	ComponentSteps   []*agentpb.ExecutionStep
+	Artifact         *agentpb.ComposeArtifact
+	AllocateNamed    func(ids.Kind, string) string
+	CreatedAt        time.Time
 }
 
 type Prepared struct {
@@ -71,6 +86,7 @@ type Prepared struct {
 }
 
 type preparedHooks struct {
+	preStepIDs  [][]string
 	task        etcd.TaskRecord
 	members     []etcd.ReleaseTaskRenderMember
 	postStepIDs [][]string
@@ -102,23 +118,66 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 		return Prepared{}, errs.New(errs.KindValidationFailed, "Blueprint Release Task procedure is invalid")
 	}
 	if len(candidates) == 0 {
+		steps := append([]*agentpb.ExecutionStep(nil), input.PrefixSteps...)
+		prerequisite := ""
+		if len(steps) != 0 {
+			prerequisite = steps[len(steps)-1].StepId
+		}
+		teardown, buildErr := service.plans.BlueprintManagedComponentTeardown(
+			ctx,
+			task,
+			input.Projection,
+			input.Artifact,
+			prerequisite,
+			false,
+		)
+		if buildErr != nil {
+			return Prepared{}, buildErr
+		}
+		steps = append(steps, teardown.Steps...)
+		if len(steps) != 0 {
+			prerequisite = steps[len(steps)-1].StepId
+		}
+		managedSteps, buildErr := controller.BlueprintManagedServiceSteps(task, input.Artifact, prerequisite, false)
+		if buildErr != nil {
+			return Prepared{}, buildErr
+		}
+		steps = append(steps, managedSteps...)
+		steps = append(steps, input.ComponentSteps...)
 		plan, buildErr := controller.BuildPlan(controller.PlanBuildInput{
 			VolumeRoot: input.VolumeRoot, PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
 			Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY, TargetID: task.Target,
-			Artifacts: []*agentpb.ComposeArtifact{input.Artifact},
-			Steps:     append(append([]*agentpb.ExecutionStep(nil), input.PrefixSteps...), input.ComponentSteps...),
+			Artifacts:                 teardown.Artifacts,
+			Steps:                     steps,
+			ManagedComponentProcedure: teardown.Procedure,
 		})
 		if buildErr != nil {
 			return Prepared{}, buildErr
 		}
 		task.PlanHash = bytesToHex(plan.PlanHash)
+		task.ComponentActionStepIDs, buildErr = executionplan.ComponentActionStepIDs(plan)
+		if buildErr != nil {
+			return Prepared{}, buildErr
+		}
 		task.Steps = taskStepRecords(plan.Steps)
-		return Prepared{Task: task, Plan: plan}, nil
+		publication, buildErr := service.prepareRetainedPublication(
+			ctx,
+			input,
+			task,
+			etcd.BlueprintReleasePublication{},
+		)
+		if buildErr != nil {
+			return Prepared{}, buildErr
+		}
+		return Prepared{Task: task, Plan: plan, Publication: publication}, nil
 	}
 	task.Params[taskcontract.EnvironmentBlueprintProcedureParam] = string(
 		taskcontract.BlueprintComposeProcedureCandidateReleases,
 	)
-	publicationID := strings.TrimPrefix(input.AllocateNamed(ids.KindDeployment, "blueprint-release-publication"), string(ids.KindDeployment)+"_")
+	publicationID := strings.TrimPrefix(
+		input.AllocateNamed(ids.KindDeployment, "blueprint-release-publication"),
+		string(ids.KindDeployment)+"_",
+	)
 	if len(publicationID) != 26 {
 		return Prepared{}, errs.New(errs.KindInternal, "Blueprint Release publication allocator is invalid")
 	}
@@ -129,14 +188,18 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 	members := make([]etcd.ReleaseTaskRenderMember, len(candidates))
 	for index, candidate := range candidates {
 		releaseID := input.AllocateNamed(ids.KindDeployment, "blueprint-release/"+candidate.Record.Desired.ID)
-		image, tag, digest, imageErr := releaseImage(candidate.Record.Desired.Image)
+		_, tag, _, imageErr := releaseImage(candidate.Record.Desired.Image)
 		if imageErr != nil {
 			return Prepared{}, imageErr
+		}
+		workload, sealErr := sealedCandidate(input.Workloads.candidates, candidate.Record.Desired)
+		if sealErr != nil {
+			return Prepared{}, sealErr
 		}
 		render := etcd.ReleaseRenderInput{
 			ReleaseID: releaseID, PlanID: task.PlanID, ArtifactID: artifactID,
 			ServiceID: candidate.Record.Desired.ID, ServiceName: candidate.Record.Desired.Name,
-			Image: image, Strategy: domain.StrategyRecreate,
+			CandidateWorkload: workload, Strategy: domain.StrategyRecreate,
 			PriorStrategy: domain.StrategyRecreate, CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
 			ServiceDependencyPlans: input.Projection.ServiceDependencyPlans.Clone(),
 			TenantID:               input.Tenant.Record.ID, TenantSlug: input.Tenant.Record.Slug,
@@ -144,21 +207,30 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 			EnvironmentID: input.Environment.Record.ID, EnvironmentName: input.Environment.Record.Name,
 			AuthorizedVolumeDir: input.Environment.Record.VolumeDir, Projection: input.Projection,
 		}
-		raw, encodeErr := etcd.EncodeReleaseRenderInput(render)
-		if encodeErr != nil {
-			return Prepared{}, encodeErr
-		}
-		renderDigest, _ := domain.Digest(json.RawMessage(raw))
 		intent := domain.Intent{
 			ID: releaseID, EnvironmentID: input.Environment.Record.ID, ServiceID: render.ServiceID,
 			OperationID: task.OperationID, OperationKind: domain.OperationBlueprintApply,
-			Image: image, Tag: tag, Digest: digest, Strategy: domain.StrategyRecreate,
+			CandidateWorkload: workload, Tag: tag, Strategy: domain.StrategyRecreate,
 			OnFailure:     domain.OnFailure(candidate.Record.Desired.OnFailure.WithDefault()),
-			RenderInputID: artifactID, RenderInputDigest: renderDigest, CreatedAt: input.CreatedAt,
+			RenderInputID: artifactID, CreatedAt: input.CreatedAt,
 			Actor: "operator", OriginatingTaskID: task.ID,
 			Workspace: domain.Workspace{Kind: domain.WorkspaceTenant, TenantID: input.Tenant.Record.ID,
 				ProjectID: input.Project.Record.ID, EnvironmentID: input.Environment.Record.ID},
 		}
+		if err := service.preparePredecessor(ctx, input, candidate, &render, &intent); err != nil {
+			return Prepared{}, err
+		}
+		if err := configureBlueprintProxy(&render, candidate.Record.Desired.Expose); err != nil {
+			return Prepared{}, err
+		}
+		if err := service.plans.PrepareReleaseProxyImage(&render, nil); err != nil {
+			return Prepared{}, err
+		}
+		raw, encodeErr := etcd.EncodeReleaseRenderInput(render)
+		if encodeErr != nil {
+			return Prepared{}, encodeErr
+		}
+		intent.RenderInputDigest, _ = domain.Digest(json.RawMessage(raw))
 		checkpoint := domain.Checkpoint{ReleaseID: releaseID, State: domain.StatePending, UpdatedAt: input.CreatedAt}
 		stage.Members[index] = etcd.ReleaseStageMember{Intent: intent, RenderInput: raw, Checkpoint: checkpoint}
 		members[index] = etcd.ReleaseTaskRenderMember{Intent: intent, Render: render}
@@ -167,7 +239,7 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 	if err != nil {
 		return Prepared{}, err
 	}
-	hooks, err := service.preparePostDeployHooks(ctx, input, manifest, task, members)
+	hooks, err := service.prepareDeployHooks(ctx, input, manifest, task, members)
 	if err != nil {
 		return Prepared{}, err
 	}
@@ -177,14 +249,21 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 	for index, member := range members {
 		applyStepIDs[index] = input.AllocateNamed(ids.KindStep, "blueprint-candidate-apply/"+member.Render.ServiceID)
 		healthStepIDs[index] = input.AllocateNamed(ids.KindStep, "blueprint-candidate-health/"+member.Render.ServiceID)
-		recoveryProbeStepIDs[index] = input.AllocateNamed(ids.KindStep, "blueprint-candidate-recovery-probe/"+member.Render.ServiceID)
-		recoveryCompensateStepIDs[index] = input.AllocateNamed(ids.KindStep, "blueprint-candidate-recovery-compensate/"+member.Render.ServiceID)
+		recoveryProbeStepIDs[index] = input.AllocateNamed(
+			ids.KindStep,
+			"blueprint-candidate-recovery-probe/"+member.Render.ServiceID,
+		)
+		recoveryCompensateStepIDs[index] = input.AllocateNamed(
+			ids.KindStep,
+			"blueprint-candidate-recovery-compensate/"+member.Render.ServiceID,
+		)
 	}
 	task, plan, err := service.plans.PrepareBlueprintReleaseTask(ctx, task, controller.BlueprintReleasePlanInput{
-		Members: members, PrefixSteps: input.PrefixSteps, ComponentSteps: input.ComponentSteps,
+		NativePredecessors: nativePredecessors(input, members),
+		Members:            members, PrefixSteps: input.PrefixSteps, ComponentSteps: input.ComponentSteps,
 		ApplyStepIDs: applyStepIDs, HealthStepIDs: healthStepIDs,
 		RecoveryProbeStepIDs: recoveryProbeStepIDs, RecoveryCompensateStepIDs: recoveryCompensateStepIDs,
-		PostStepIDs: hooks.postStepIDs,
+		PreStepIDs: hooks.preStepIDs, PostStepIDs: hooks.postStepIDs,
 	})
 	if err != nil {
 		return Prepared{}, err
@@ -193,9 +272,12 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 	if err != nil {
 		return Prepared{}, errs.Wrap(errs.KindInternal, err)
 	}
-	executions, err := etcd.NewScriptExecutionRecords(task, plan, input.CreatedAt)
-	if err != nil {
-		return Prepared{}, err
+	var executions []etcd.ScriptExecutionRecord
+	if len(plan.GetScriptRunnerSnapshots()) != 0 {
+		executions, err = etcd.NewScriptExecutionRecords(task, plan, input.CreatedAt)
+		if err != nil {
+			return Prepared{}, err
+		}
 	}
 	if len(executions) != hooks.executions {
 		return Prepared{}, errs.New(errs.KindInternal, "Blueprint post-deploy execution authority is incomplete")
@@ -213,7 +295,9 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 		return Prepared{}, err
 	}
 	for index := range hookPublications {
-		hookPublications[index].SnapshotRevision = hookPrepared.SnapshotRevision(hookPublications[index].Execution.SnapshotID)
+		hookPublications[index].SnapshotRevision = hookPrepared.SnapshotRevision(
+			hookPublications[index].Execution.SnapshotID,
+		)
 	}
 	sourceMembers, err := service.ledger.BlueprintReleaseSourceMembers(ctx, manifest, hookPublications)
 	if err != nil {
@@ -232,11 +316,17 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 			return Prepared{}, err
 		}
 	}
-	publication, err := service.ledger.PrepareBlueprintReleasePublication(ctx, service.sources, etcd.BlueprintReleasePublicationEvidence{
-		Manifest: manifest, EnvironmentID: input.Environment.Record.ID, Task: task, PublishedAt: input.CreatedAt,
-		CandidateReleaseDescriptor: candidateDescriptor,
-		Hooks:                      hookPublications, HookPrepared: hookPrepared, SourcePrepared: sourcePrepared, SourceMembers: sourceMembers,
-	})
+	publication, err := service.ledger.PrepareBlueprintReleasePublication(
+		ctx,
+		service.sources,
+		etcd.BlueprintReleasePublicationEvidence{
+			NativePredecessors: nativePredecessors(input, members),
+			Manifest:           manifest, EnvironmentID: input.Environment.Record.ID, Task: task, PublishedAt: input.CreatedAt,
+			CandidateReleaseDescriptor: candidateDescriptor,
+			Plan:                       plan,
+			Hooks:                      hookPublications, HookPrepared: hookPrepared, SourcePrepared: sourcePrepared, SourceMembers: sourceMembers,
+		},
+	)
 	if err != nil {
 		if blueprintPublicationOutcomeUnknown(err) {
 			return Prepared{}, err
@@ -248,10 +338,17 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 		}
 		return Prepared{}, err
 	}
-	return Prepared{Task: task, Plan: plan, Publication: publication}, nil
+	retainedPublication, err := service.prepareRetainedPublication(ctx, input, task, publication)
+	if err != nil {
+		if cleanupErr := publication.Abandon(ctx); cleanupErr != nil {
+			return Prepared{}, errors.Join(err, cleanupErr)
+		}
+		return Prepared{}, err
+	}
+	return Prepared{Task: task, Plan: plan, Publication: retainedPublication}, nil
 }
 
-func (service *Service) preparePostDeployHooks(
+func (service *Service) prepareDeployHooks(
 	ctx context.Context,
 	input PrepareInput,
 	manifest etcd.VersionedReleaseManifest,
@@ -259,14 +356,14 @@ func (service *Service) preparePostDeployHooks(
 	members []etcd.ReleaseTaskRenderMember,
 ) (preparedHooks, error) {
 	result := preparedHooks{
-		task: task, members: members, postStepIDs: make([][]string, len(members)),
+		task: task, members: members, preStepIDs: make([][]string, len(members)), postStepIDs: make([][]string, len(members)),
 		sources: make(map[string]etcd.ScriptExecutionSources),
 	}
 	candidateByService := make(map[string]etcd.EnvironmentBlueprintServiceChange, len(input.ServiceChanges))
 	for _, change := range input.ServiceChanges {
 		candidateByService[change.Record.Desired.ID] = change
 	}
-	scriptsByService := postDeployScriptsByService(input.Scripts)
+	scriptsByService := deployScriptsByService(input.Scripts)
 	projectionValue, err := etcd.EncodeEnvironmentComposeProjectionStorage(input.Projection)
 	if err != nil {
 		return preparedHooks{}, err
@@ -290,9 +387,6 @@ func (service *Service) preparePostDeployHooks(
 		serviceDigest := sha256.Sum256(serviceValue)
 		clear(serviceValue)
 		for _, script := range scriptsByService[member.Render.ServiceID] {
-			if script.Desired.When != core.ScriptPostDeploy {
-				continue
-			}
 			sources, err := service.scripts.LoadBlueprintReleaseHookExecutionSources(
 				ctx,
 				manifest.Record.PublicationID,
@@ -303,6 +397,7 @@ func (service *Service) preparePostDeployHooks(
 				input.Project,
 				input.Environment,
 				input.Projection,
+				input.IntendedAttaches,
 				manifest.ReadRevision,
 			)
 			if err != nil {
@@ -314,13 +409,24 @@ func (service *Service) preparePostDeployHooks(
 			}
 			stepID := input.AllocateNamed(
 				ids.KindStep,
-				fmt.Sprintf("blueprint-post-deploy/%s/%s", member.Render.ServiceID, sources.Script.Record.Desired.Slug),
+				fmt.Sprintf(
+					"blueprint-%s/%s/%s",
+					script.Desired.When,
+					member.Render.ServiceID,
+					sources.Script.Record.Desired.Slug,
+				),
 			)
-			executionID, idErr := allocatedRawULID(input.AllocateNamed, "blueprint-script-execution/"+member.Render.ServiceID+"/"+sources.Script.Record.Desired.ID)
+			executionID, idErr := allocatedRawULID(
+				input.AllocateNamed,
+				"blueprint-script-execution/"+member.Render.ServiceID+"/"+sources.Script.Record.Desired.ID,
+			)
 			if idErr != nil {
 				return preparedHooks{}, idErr
 			}
-			snapshotID, idErr := allocatedRawULID(input.AllocateNamed, "blueprint-script-snapshot/"+member.Render.ServiceID+"/"+sources.Script.Record.Desired.ID)
+			snapshotID, idErr := allocatedRawULID(
+				input.AllocateNamed,
+				"blueprint-script-snapshot/"+member.Render.ServiceID+"/"+sources.Script.Record.Desired.ID,
+			)
 			if idErr != nil {
 				return preparedHooks{}, idErr
 			}
@@ -341,13 +447,17 @@ func (service *Service) preparePostDeployHooks(
 				return preparedHooks{}, err
 			}
 			member.Render.Hooks = append(member.Render.Hooks, hook)
-			result.postStepIDs[memberIndex] = append(result.postStepIDs[memberIndex], stepID)
+			if script.Desired.When == core.ScriptPreDeploy {
+				result.preStepIDs[memberIndex] = append(result.preStepIDs[memberIndex], stepID)
+			} else {
+				result.postStepIDs[memberIndex] = append(result.postStepIDs[memberIndex], stepID)
+			}
 			result.sources[executionID] = sources
 			result.task.Params[etcd.ReleaseHookStepMemberParam(stepID)] = strconv.Itoa(memberIndex + 1)
 			result.task.Params[etcd.ReleaseHookStepExecutionParam(stepID)] = executionID
 			result.executions++
 			bodyBytes += uint64(hook.BodySize)
-			if err := validatePostDeployHookBounds(result.executions, bodyBytes); err != nil {
+			if err := validateDeployHookBounds(result.executions, bodyBytes); err != nil {
 				return preparedHooks{}, err
 			}
 		}
@@ -371,12 +481,12 @@ func allocatedRawULID(allocate func(ids.Kind, string) string, name string) (stri
 	return value, nil
 }
 
-func postDeployScriptsByService(
+func deployScriptsByService(
 	scripts []etcd.ScriptRecord,
 ) map[string][]etcd.ScriptRecord {
 	result := make(map[string][]etcd.ScriptRecord)
 	for _, script := range scripts {
-		if script.Desired.When != core.ScriptPostDeploy {
+		if script.Desired.When != core.ScriptPostDeploy && script.Desired.When != core.ScriptPreDeploy {
 			continue
 		}
 		result[script.ServiceID] = append(result[script.ServiceID], script)
@@ -390,70 +500,14 @@ func postDeployScriptsByService(
 	return result
 }
 
-func validatePostDeployHookBounds(executions int, bodyBytes uint64) error {
+func validateDeployHookBounds(executions int, bodyBytes uint64) error {
 	if executions > taskcontract.MaximumBlueprintPostDeployHooks || bodyBytes > 1<<20 {
 		return errs.New(
 			errs.KindValidationFailed,
-			"Blueprint post-deploy Script selection exceeds its operation bounds",
+			"Blueprint deploy Script selection exceeds its operation bounds",
 		)
 	}
 	return nil
-}
-
-type blueprintServiceMembership uint8
-
-const (
-	blueprintServiceActive blueprintServiceMembership = iota + 1
-	blueprintServiceProfileDisabled
-)
-
-type NormalizedServiceMemberships struct {
-	previous    map[string]blueprintServiceMembership
-	candidate   map[string]blueprintServiceMembership
-	initialized bool
-}
-
-func BuildNormalizedServiceMemberships(
-	previous *composetypes.Project,
-	candidate *composetypes.Project,
-) (NormalizedServiceMemberships, error) {
-	if candidate == nil {
-		return NormalizedServiceMemberships{}, errs.New(
-			errs.KindInternal,
-			"Blueprint candidate normalized Service membership is absent",
-		)
-	}
-	previousMemberships := make(map[string]blueprintServiceMembership)
-	if previous != nil {
-		var err error
-		previousMemberships, err = normalizedProjectServiceMemberships(previous)
-		if err != nil {
-			return NormalizedServiceMemberships{}, err
-		}
-	}
-	candidateMemberships, err := normalizedProjectServiceMemberships(candidate)
-	if err != nil {
-		return NormalizedServiceMemberships{}, err
-	}
-	return NormalizedServiceMemberships{
-		previous: previousMemberships, candidate: candidateMemberships, initialized: true,
-	}, nil
-}
-
-func normalizedProjectServiceMemberships(
-	project *composetypes.Project,
-) (map[string]blueprintServiceMembership, error) {
-	memberships := make(map[string]blueprintServiceMembership, len(project.Services)+len(project.DisabledServices))
-	for name := range project.Services {
-		memberships[name] = blueprintServiceActive
-	}
-	for name := range project.DisabledServices {
-		if _, duplicate := memberships[name]; duplicate {
-			return nil, errs.New(errs.KindInternal, "Blueprint normalized Service membership is ambiguous")
-		}
-		memberships[name] = blueprintServiceProfileDisabled
-	}
-	return memberships, nil
 }
 
 func selectCandidates(
@@ -479,12 +533,12 @@ func selectCandidates(
 		}
 		if change.Current != nil && (!previousExists ||
 			(previousMembership != blueprintServiceActive && previousMembership != blueprintServiceProfileDisabled)) {
-			return nil, errs.New(errs.KindInternal, "Blueprint existing Service is absent from its predecessor projection")
+			return nil, errs.New(
+				errs.KindInternal,
+				"Blueprint existing Service is absent from its predecessor projection",
+			)
 		}
 		if candidateMembership == blueprintServiceProfileDisabled {
-			continue
-		}
-		if service.Replicas > 1 {
 			continue
 		}
 		if _, grouped := groupMembers[service.ID]; grouped {
@@ -500,7 +554,8 @@ func selectCandidates(
 			if beforeErr != nil || afterErr != nil {
 				return nil, errs.New(errs.KindInternal, "Blueprint Service material comparison failed")
 			}
-			material = previousMembership != candidateMembership || !bytes.Equal(before, after)
+			material = previousMembership != candidateMembership || !bytes.Equal(before, after) ||
+				memberships.previousNative[service.Name] != memberships.candidateNative[service.Name]
 		}
 		if material {
 			selected[service.Name] = change
@@ -527,7 +582,10 @@ func selectCandidates(
 	return ordered, nil
 }
 
-func releaseGroupMembers(groups map[string]core.ReleaseGroupSpec, changes []etcd.EnvironmentBlueprintServiceChange) map[string]struct{} {
+func releaseGroupMembers(
+	groups map[string]core.ReleaseGroupSpec,
+	changes []etcd.EnvironmentBlueprintServiceChange,
+) map[string]struct{} {
 	byName := make(map[string]string, len(changes))
 	for _, change := range changes {
 		byName[change.Record.Desired.Name] = change.Record.Desired.ID

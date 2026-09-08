@@ -8,10 +8,18 @@ import (
 	registeredtunnel "github.com/AlanD20/groundplane-registered-components/cloudflaretunnel"
 	registeredcoredns "github.com/AlanD20/groundplane-registered-components/coredns"
 	"github.com/AlanD20/groundplane/internal/controller"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 const managedConfigActivateAction = componentsdk.ActionID("activate-config")
+
+func configureReleasePlans(resolver *controller.TaskPlanResolver, ledger *etcd.ReleaseLedger) error {
+	if err := resolver.EnableServiceProxyImage(registeredcaddy.Image); err != nil {
+		return err
+	}
+	return resolver.EnableReleasePlans(ledger)
+}
 
 type registeredActionCatalog struct {
 	catalog  registeredcatalog.Catalog

@@ -94,7 +94,12 @@ func TestLogRouteRejectsAcceptResumeAndBodyViolationsBeforeHeaders(t *testing.T)
 		{name: "missing accept", wantStatus: http.StatusNotAcceptable},
 		{name: "wrong accept", accept: "application/json", wantStatus: http.StatusNotAcceptable},
 		{name: "resume header", accept: "text/event-stream", lastID: "1", wantStatus: http.StatusBadRequest},
-		{name: "request body", accept: "text/event-stream", body: strings.NewReader("{}"), wantStatus: http.StatusBadRequest},
+		{
+			name:       "request body",
+			accept:     "text/event-stream",
+			body:       strings.NewReader("{}"),
+			wantStatus: http.StatusBadRequest,
+		},
 	}
 
 	for _, test := range tests {
@@ -153,18 +158,42 @@ func TestPublicLogEventAcceptsExactShapeAndRejectsInvalidAgentData(t *testing.T)
 		mutate func(*agentpb.LogEvent) *agentpb.LogEvent
 	}{
 		{name: "nil event", mutate: func(*agentpb.LogEvent) *agentpb.LogEvent { return nil }},
-		{name: "missing timestamp", mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent { event.Timestamp = nil; return event }},
+		{
+			name:   "missing timestamp",
+			mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent { event.Timestamp = nil; return event },
+		},
 		{name: "invalid timestamp", mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent {
 			event.Timestamp = &timestamppb.Timestamp{Seconds: 253402300800}
 			return event
 		}},
-		{name: "invalid environment", mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent { event.EnvironmentId = "environment"; return event }},
-		{name: "invalid service", mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent { event.ServiceId = "service"; return event }},
-		{name: "invalid release", mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent { event.ReleaseId = "release"; return event }},
-		{name: "empty service name", mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent { event.ServiceName = ""; return event }},
-		{name: "empty container id", mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent { event.ContainerId = ""; return event }},
-		{name: "empty container name", mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent { event.ContainerName = ""; return event }},
-		{name: "invalid utf8", mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent { event.Line = string([]byte{0xff}); return event }},
+		{
+			name:   "invalid environment",
+			mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent { event.EnvironmentId = "environment"; return event },
+		},
+		{
+			name:   "invalid service",
+			mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent { event.ServiceId = "service"; return event },
+		},
+		{
+			name:   "invalid release",
+			mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent { event.ReleaseId = "release"; return event },
+		},
+		{
+			name:   "empty service name",
+			mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent { event.ServiceName = ""; return event },
+		},
+		{
+			name:   "empty container id",
+			mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent { event.ContainerId = ""; return event },
+		},
+		{
+			name:   "empty container name",
+			mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent { event.ContainerName = ""; return event },
+		},
+		{
+			name:   "invalid utf8",
+			mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent { event.Line = string([]byte{0xff}); return event },
+		},
 		{name: "oversized line", mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent {
 			event.Line = strings.Repeat("x", maximumPublicLogLine+1)
 			return event

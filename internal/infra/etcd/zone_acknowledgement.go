@@ -64,8 +64,12 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		return nil, nil, errs.New(errs.KindInternal, "Zone subnet reservation is inconsistent")
 	}
 	if state.Values[2] != nil {
-		addresses, decodeErr := decodeEnvelope[componentAddressRegistry](state.Values[2].Value, "component_address_registry")
-		if decodeErr != nil || validateComponentAddressRegistry(zone, addresses) != nil || len(addresses.Reservations) != 0 {
+		addresses, decodeErr := decodeEnvelope[componentAddressRegistry](
+			state.Values[2].Value,
+			"component_address_registry",
+		)
+		if decodeErr != nil || validateComponentAddressRegistry(zone, addresses) != nil ||
+			len(addresses.Reservations) != 0 {
 			return nil, nil, errs.New(errs.KindResourceInUse, "Zone gained a Component address reservation")
 		}
 	}
@@ -121,8 +125,12 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		clear(projectionValue)
 		return nil, nil, err
 	}
-	conditions = append(conditions,
-		Condition{Key: environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID), ModRevision: publication.rootRevision},
+	conditions = append(
+		conditions,
+		Condition{
+			Key:         environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
+			ModRevision: publication.rootRevision,
+		},
 		Condition{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		Condition{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 	)

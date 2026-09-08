@@ -107,7 +107,10 @@ func (service *Idempotency) ResolveUnknown(
 
 func IntentManifest(bundle core.BlueprintBundle) (idempotentintent.BlueprintManifestV1, error) {
 	if err := bundle.Validate(); err != nil {
-		return idempotentintent.BlueprintManifestV1{}, errs.New(errs.KindValidationFailed, "Blueprint bundle is invalid")
+		return idempotentintent.BlueprintManifestV1{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint bundle is invalid",
+		)
 	}
 	keys := make([]string, 0, len(bundle.Interpolation))
 	for key := range bundle.Interpolation {

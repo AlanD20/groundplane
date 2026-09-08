@@ -64,7 +64,10 @@ func (c *Client) GetVolume(ctx context.Context, id string) (apiTypes.Volume, err
 	return volume, nil
 }
 
-func (c *Client) CreateVolume(ctx context.Context, input apiTypes.VolumeCreate) (apiTypes.VolumeMutationResponse, error) {
+func (c *Client) CreateVolume(
+	ctx context.Context,
+	input apiTypes.VolumeCreate,
+) (apiTypes.VolumeMutationResponse, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.VolumeMutationResponse{}, err

@@ -2,6 +2,7 @@ package blueprintparser
 
 import (
 	"bytes"
+	"strings"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -57,9 +58,13 @@ func MarshalAuthoringDocument(input AuthoringDocument) ([]byte, error) {
 	}
 	for index := 0; index+1 < len(native.Content); index += 2 {
 		key := native.Content[index].Value
-		if key == "kind" || key == "schema" || key == "metadata" || key == "x-gp-network-pool" ||
+		if key == "name" || key == "kind" || key == "schema" || key == "metadata" || key == "x-gp-network-pool" ||
 			len(key) >= 5 && key[:5] == "x-gp-" {
 			continue
+		}
+		switch key {
+		case "services", "networks", "volumes", "configs", "secrets":
+			omitGeneratedResourceMetadata(native.Content[index+1], key == "volumes")
 		}
 		root.Content = append(root.Content, native.Content[index], native.Content[index+1])
 	}
@@ -109,6 +114,56 @@ func MarshalAuthoringDocument(input AuthoringDocument) ([]byte, error) {
 		return nil, errs.New(errs.KindInternal, "Environment Blueprint authoring projection failed")
 	}
 	return encoded, nil
+}
+
+// Direct resource mutations share runtime artifact builders. Their generated
+// extensions and ownership labels are not authoring decisions. Limit removal
+// to resource metadata fields so environment values and custom data survive.
+func omitGeneratedResourceMetadata(resources *yaml.Node, volumeNames bool) {
+	if resources.Kind != yaml.MappingNode {
+		return
+	}
+	for index := 1; index < len(resources.Content); index += 2 {
+		resource := resources.Content[index]
+		if resource.Kind != yaml.MappingNode {
+			continue
+		}
+		kept := resource.Content[:0]
+		for field := 0; field+1 < len(resource.Content); field += 2 {
+			key, value := resource.Content[field], resource.Content[field+1]
+			_, generated := generatedGroundplaneExtensions[key.Value]
+			if generated || volumeNames && key.Value == "name" {
+				continue
+			}
+			if key.Value == "labels" || key.Value == "annotations" {
+				omitOwnershipMetadata(value)
+			}
+			kept = append(kept, key, value)
+		}
+		resource.Content = kept
+	}
+}
+
+func omitOwnershipMetadata(metadata *yaml.Node) {
+	kept := metadata.Content[:0]
+	switch metadata.Kind {
+	case yaml.MappingNode:
+		for field := 0; field+1 < len(metadata.Content); field += 2 {
+			if !strings.HasPrefix(metadata.Content[field].Value, "com.groundplane.") {
+				kept = append(kept, metadata.Content[field], metadata.Content[field+1])
+			}
+		}
+	case yaml.SequenceNode:
+		for _, value := range metadata.Content {
+			key, _, _ := strings.Cut(value.Value, "=")
+			if !strings.HasPrefix(key, "com.groundplane.") {
+				kept = append(kept, value)
+			}
+		}
+	default:
+		return
+	}
+	metadata.Content = kept
 }
 
 func appendAuthoringField[T any](root *yaml.Node, name string, value T) error {

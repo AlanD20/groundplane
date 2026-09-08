@@ -62,7 +62,7 @@ func componentRecordTestRecord(t *testing.T, offset int64) ComponentRecord {
 		ID: ids.NewAt(ids.KindComponent, at, offset), Owner: core.ComponentOwnerEnvironment,
 		OwnerID: ids.NewAt(ids.KindEnvironment, at, 2), Kind: core.ComponentKindIngressCaddy, Enabled: true,
 		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-			ZoneID: ids.NewAt(ids.KindNetwork, at, 3),
+			ZoneIDs: []string{ids.NewAt(ids.KindNetwork, at, 3)},
 		}},
 		GeneratedServices: []string{ids.NewAt(ids.KindService, at, 4)},
 		PinnedIPv4:        "10.40.10.2",

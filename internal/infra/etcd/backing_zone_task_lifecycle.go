@@ -80,10 +80,18 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 	}
 	hierarchy := &HierarchyRepository{store: repository.store}
 	publication, err := hierarchy.prepareEnvironmentDirectPublication(
-		ctx, retryIntent.Claim,
-		EnvironmentDesiredRevisionIdentity{EnvironmentID: retryIntent.EnvironmentID, RevisionID: retryIntent.Claim.RevisionID},
+		ctx,
+		retryIntent.Claim,
+		EnvironmentDesiredRevisionIdentity{
+			EnvironmentID: retryIntent.EnvironmentID,
+			RevisionID:    retryIntent.Claim.RevisionID,
+		},
 		retryIntent.CandidateProjection,
-		IdempotencyMarker{Locator: retryIntent.Claim.Locator, Intent: retryIntent.Claim.Intent}, retryIntent.DesiredHeadRevision,
+		IdempotencyMarker{
+			Locator: retryIntent.Claim.Locator,
+			Intent:  retryIntent.Claim.Intent,
+		},
+		retryIntent.DesiredHeadRevision,
 	)
 	if err != nil {
 		return backingZoneTaskChange{}, err
@@ -110,7 +118,10 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 			{Key: keys[2], ModRevision: state.Values[2].ModRevision},
 			{Key: keys[3], ModRevision: state.Values[3].ModRevision},
 			{Key: keys[4]},
-			{Key: environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID), ModRevision: publication.rootRevision},
+			{
+				Key:         environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
+				ModRevision: publication.rootRevision,
+			},
 			{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 			{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 		},

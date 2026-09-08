@@ -29,7 +29,13 @@ func TestHierarchyDeletionRealEtcdRootAckIsParentLastAndReplaySafe(t *testing.T)
 	seedHierarchyDeletionTenant(t, ctx, store, tenantID, "root-tenant")
 	journal, _ := NewHierarchyDeletionRepository(store)
 	tasks, _ := NewTaskRepository(store)
-	begin := hierarchyDeletionAcceptanceBegin(now, HierarchyDeletionTargetTenant, tenantID, HierarchyDeletionOperationTenant, "1")
+	begin := hierarchyDeletionAcceptanceBegin(
+		now,
+		HierarchyDeletionTargetTenant,
+		tenantID,
+		HierarchyDeletionOperationTenant,
+		"1",
+	)
 	created, err := journal.Begin(ctx, begin)
 	if err != nil {
 		t.Fatalf("Begin() error = %v", err)
@@ -113,7 +119,10 @@ func TestHierarchyDeletionRealEtcdRootAckIsParentLastAndReplaySafe(t *testing.T)
 	if err != nil || !corruptResult.Succeeded {
 		t.Fatalf("corrupt replay locator write = %#v/%v", corruptResult, err)
 	}
-	if _, err := NewHierarchyDeletionRepositoryForTest(t, restarted).OperationByTask(ctx, begin.TaskID); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+	if _, err := NewHierarchyDeletionRepositoryForTest(t, restarted).OperationByTask(ctx, begin.TaskID); !errors.Is(
+		err,
+		errs.New(errs.KindInternal, ""),
+	) {
 		t.Fatalf("corrupt hierarchy replay locator read error = %v, want internal", err)
 	}
 	completionSummaryKey, _ := HierarchyDeletionCompletionSummaryKey(begin.OperationID)
@@ -176,7 +185,13 @@ func TestHierarchyDeletionRealEtcdFailedAttemptConcurrentRetryTransfersOwnership
 	seedHierarchyDeletionTenant(t, ctx, store, tenantID, "retry-tenant")
 	journal, _ := NewHierarchyDeletionRepository(store)
 	tasks, _ := NewTaskRepository(store)
-	begin := hierarchyDeletionAcceptanceBegin(now, HierarchyDeletionTargetTenant, tenantID, HierarchyDeletionOperationTenant, "6")
+	begin := hierarchyDeletionAcceptanceBegin(
+		now,
+		HierarchyDeletionTargetTenant,
+		tenantID,
+		HierarchyDeletionOperationTenant,
+		"6",
+	)
 	if _, err := journal.Begin(ctx, begin); err != nil {
 		t.Fatalf("Begin() error = %v", err)
 	}
@@ -246,7 +261,11 @@ func TestHierarchyDeletionRealEtcdFailedAttemptConcurrentRetryTransfersOwnership
 		t.Fatalf("NewIdempotencyRepository() error = %v", err)
 	}
 	locator, revision, found, err := idempotency.ResolveReplayLocatorAtRevision(
-		ctx, *begin.Marker.ReplayTarget, begin.Marker.Locator.Method, begin.Marker.Locator.Route, begin.Marker.Locator.Key,
+		ctx,
+		*begin.Marker.ReplayTarget,
+		begin.Marker.Locator.Method,
+		begin.Marker.Locator.Route,
+		begin.Marker.Locator.Key,
 	)
 	if err != nil || !found || revision <= 0 || locator != begin.Marker.Locator {
 		t.Fatalf("replay-after-successor lookup = %#v/%d/%t/%v", locator, revision, found, err)
@@ -260,7 +279,8 @@ func TestHierarchyDeletionRealEtcdFailedAttemptConcurrentRetryTransfersOwnership
 		t.Fatalf("replay-after-successor Task = %#v/%v", retainedMarker, err)
 	}
 	operation, err := NewHierarchyDeletionRepositoryForTest(t, restarted).OperationByTask(ctx, retryID)
-	if err != nil || operation.Tombstone.CurrentTaskID != retryID || operation.Intent.TaskOperationID != begin.TaskOperationID {
+	if err != nil || operation.Tombstone.CurrentTaskID != retryID ||
+		operation.Intent.TaskOperationID != begin.TaskOperationID {
 		t.Fatalf("retry operation ownership = %#v/%v", operation, err)
 	}
 	tenant, err := restarted.Get(ctx, tenantKey(tenantID))
@@ -286,7 +306,13 @@ func TestHierarchyDeletionRealEtcdComponentReceiptsResumeAfterRestart(t *testing
 	seedHierarchyDeletionEnvironment(t, ctx, store, now, tenantID, projectID, environmentID, componentIDs)
 	journal, _ := NewHierarchyDeletionRepository(store)
 	tasks, _ := NewTaskRepository(store)
-	begin := hierarchyDeletionAcceptanceBegin(now, HierarchyDeletionTargetEnvironment, environmentID, HierarchyDeletionOperationEnvironment, "2")
+	begin := hierarchyDeletionAcceptanceBegin(
+		now,
+		HierarchyDeletionTargetEnvironment,
+		environmentID,
+		HierarchyDeletionOperationEnvironment,
+		"2",
+	)
 	created, err := journal.Begin(ctx, begin)
 	if err != nil {
 		t.Fatalf("Begin() error = %v", err)
@@ -304,7 +330,8 @@ func TestHierarchyDeletionRealEtcdComponentReceiptsResumeAfterRestart(t *testing
 	for index, componentID := range componentIDs {
 		var node *HierarchyDeletionMembershipNode
 		for nodeIndex := range frozen.Nodes {
-			if frozen.Nodes[nodeIndex].TargetID == componentID && frozen.Nodes[nodeIndex].ActionKind == HierarchyDeletionComponentRemove {
+			if frozen.Nodes[nodeIndex].TargetID == componentID &&
+				frozen.Nodes[nodeIndex].ActionKind == HierarchyDeletionComponentRemove {
 				node = &frozen.Nodes[nodeIndex]
 				break
 			}
@@ -338,7 +365,18 @@ func TestHierarchyDeletionRealEtcdComponentReceiptsResumeAfterRestart(t *testing
 		t.Fatalf("AppendActions() error = %v", err)
 	}
 	agentID := ids.NewAt(ids.KindAgent, now, 20)
-	operation = consumeHierarchyDeletionComponent(t, ctx, store, journal, tasks, operation, actions[0], agentID, 1, now.Add(time.Second))
+	operation = consumeHierarchyDeletionComponent(
+		t,
+		ctx,
+		store,
+		journal,
+		tasks,
+		operation,
+		actions[0],
+		agentID,
+		1,
+		now.Add(time.Second),
+	)
 	firstCompletionKey, _ := HierarchyDeletionCompletionKey(begin.OperationID, 0)
 	firstCompletion, err := store.Get(ctx, firstCompletionKey)
 	if err != nil || firstCompletion.Entry == nil {
@@ -372,7 +410,8 @@ func TestHierarchyDeletionRealEtcdComponentReceiptsResumeAfterRestart(t *testing
 		t, ctx, restarted, journal, tasks, selected, *ready, agentID, 2, now.Add(7*time.Second),
 	)
 	firstCompletion, err = restarted.Get(ctx, firstCompletionKey)
-	if err != nil || firstCompletion.Entry == nil || hierarchyDeletionBytesDigest(firstCompletion.Entry.Value) != firstDigest {
+	if err != nil || firstCompletion.Entry == nil ||
+		hierarchyDeletionBytesDigest(firstCompletion.Entry.Value) != firstDigest {
 		t.Fatalf("first receipt changed across retry = %#v/%v", firstCompletion, err)
 	}
 	root, operation, err := journal.ReadyAction(ctx, operation)
@@ -386,7 +425,8 @@ func TestHierarchyDeletionRealEtcdComponentReceiptsResumeAfterRestart(t *testing
 		if primary, err := restarted.Get(ctx, componentKey(componentID)); err != nil || primary.Entry != nil {
 			t.Fatalf("component %s survived: %#v/%v", componentID, primary, err)
 		}
-		if owner, err := restarted.Get(ctx, componentEnvironmentOwnerKey(environmentID, componentID)); err != nil || owner.Entry != nil {
+		if owner, err := restarted.Get(ctx, componentEnvironmentOwnerKey(environmentID, componentID)); err != nil ||
+			owner.Entry != nil {
 			t.Fatalf("component owner %s survived: %#v/%v", componentID, owner, err)
 		}
 	}
@@ -412,7 +452,18 @@ func consumeHierarchyDeletionComponent(
 	if _, err := journal.PublishOrResumeAgentAction(ctx, selected, *ready, at); err != nil {
 		t.Fatalf("PublishOrResumeAgentAction(%d) error = %v", action.Ordinal, err)
 	}
-	return consumePublishedHierarchyDeletionComponent(t, ctx, store, journal, tasks, selected, *ready, agentID, generation, at.Add(time.Second))
+	return consumePublishedHierarchyDeletionComponent(
+		t,
+		ctx,
+		store,
+		journal,
+		tasks,
+		selected,
+		*ready,
+		agentID,
+		generation,
+		at.Add(time.Second),
+	)
 }
 
 func consumePublishedHierarchyDeletionComponent(
@@ -489,7 +540,10 @@ func hierarchyDeletionAcceptanceEndpoint(t *testing.T) string {
 
 func hierarchyDeletionAcceptancePrefix(t *testing.T, suffix string) string {
 	t.Helper()
-	return "/groundplane-hierarchy-acceptance/" + suffix + "-" + time.Now().UTC().Format("20060102T150405.000000000") + "/"
+	return "/groundplane-hierarchy-acceptance/" + suffix + "-" + time.Now().
+		UTC().
+		Format("20060102T150405.000000000") +
+		"/"
 }
 
 func hierarchyDeletionAcceptanceStore(t *testing.T, ctx context.Context, endpoint, prefix string) Store {
@@ -567,8 +621,13 @@ func seedHierarchyDeletionTenant(t *testing.T, ctx context.Context, store Store,
 	coordination, _ := encodeHierarchyCoordination(HierarchyCoordinationRecord{
 		Schema: 1, TargetKind: HierarchyDeletionTargetTenant, TargetID: tenantID, MutationEpoch: 1,
 	})
-	transaction, err := store.Transact(ctx,
-		[]Condition{{Key: tenantKey(tenantID)}, {Key: tenantSlugKey(slug)}, {Key: HierarchyCoordinationKey("tenant", tenantID)}},
+	transaction, err := store.Transact(
+		ctx,
+		[]Condition{
+			{Key: tenantKey(tenantID)},
+			{Key: tenantSlugKey(slug)},
+			{Key: HierarchyCoordinationKey("tenant", tenantID)},
+		},
 		[]Mutation{
 			{Type: MutationPut, Key: tenantKey(tenantID), Value: value},
 			{Type: MutationPut, Key: tenantSlugKey(slug), Value: []byte(tenantID)},
@@ -590,7 +649,13 @@ func seedHierarchyDeletionEnvironment(
 ) {
 	t.Helper()
 	tenant := TenantRecord{ID: tenantID, Slug: "tenant", Name: "Tenant"}
-	project := ProjectRecord{ID: projectID, TenantID: tenantID, Slug: "project", Name: "Project", Kind: ProjectKindTenant}
+	project := ProjectRecord{
+		ID:       projectID,
+		TenantID: tenantID,
+		Slug:     "project",
+		Name:     "Project",
+		Kind:     ProjectKindTenant,
+	}
 	environment := EnvironmentRecord{
 		ID: environmentID, ProjectID: projectID, Name: "production", NetworkPool: "10.50.0.0/24",
 		VolumeDir:         "/var/lib/groundplane/vol/" + tenantID + "/" + projectID + "/" + environmentID,
@@ -620,7 +685,14 @@ func seedHierarchyDeletionEnvironment(
 		{Schema: 1, TargetKind: HierarchyDeletionTargetEnvironment, TargetID: environmentID, MutationEpoch: 1},
 	} {
 		value, _ := encodeHierarchyCoordination(coordination)
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: HierarchyCoordinationKey(string(coordination.TargetKind), coordination.TargetID), Value: value})
+		mutations = append(
+			mutations,
+			Mutation{
+				Type:  MutationPut,
+				Key:   HierarchyCoordinationKey(string(coordination.TargetKind), coordination.TargetID),
+				Value: value,
+			},
+		)
 	}
 	for index, componentID := range componentIDs {
 		kind := core.ComponentKindIngressCaddy
@@ -631,10 +703,19 @@ func seedHierarchyDeletionEnvironment(
 			ID: componentID, Owner: core.ComponentOwnerEnvironment, OwnerID: environmentID, Kind: kind, Enabled: true,
 		}}
 		value, _ := encodeComponentRecord(record)
-		mutations = append(mutations,
+		mutations = append(
+			mutations,
 			Mutation{Type: MutationPut, Key: componentKey(componentID), Value: value},
-			Mutation{Type: MutationPut, Key: componentEnvironmentOwnerKey(environmentID, componentID), Value: []byte(componentID)},
-			Mutation{Type: MutationPut, Key: componentEnvironmentKindKey(environmentID, kind), Value: []byte(componentID)},
+			Mutation{
+				Type:  MutationPut,
+				Key:   componentEnvironmentOwnerKey(environmentID, componentID),
+				Value: []byte(componentID),
+			},
+			Mutation{
+				Type:  MutationPut,
+				Key:   componentEnvironmentKindKey(environmentID, kind),
+				Value: []byte(componentID),
+			},
 		)
 	}
 	transaction, err := store.Transact(ctx, nil, mutations)

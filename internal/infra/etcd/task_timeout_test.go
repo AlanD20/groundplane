@@ -79,7 +79,12 @@ func TestTaskRepositoryRecoveryExpiryMovesBoundedRowsToProofRequired(t *testing.
 	if err != nil || count != 23 {
 		t.Fatalf("ExpireTimedOutTasks(first) = %d, %v", count, err)
 	}
-	assertTaskLifecycleValue(t, store, taskTimeoutIndexKey(assignments[0].TaskID, assignments[0].RecoveryDeadline), true)
+	assertTaskLifecycleValue(
+		t,
+		store,
+		taskTimeoutIndexKey(assignments[0].TaskID, assignments[0].RecoveryDeadline),
+		true,
+	)
 	assertTaskLifecycleValue(t, store, taskRecoveryProofRequiredKey(assignments[0].TaskID), false)
 	count, err = repository.ExpireTimedOutTasks(ctx, deadline)
 	if err != nil || count != 2 {
@@ -91,7 +96,9 @@ func TestTaskRepositoryRecoveryExpiryMovesBoundedRowsToProofRequired(t *testing.
 		current, lookupErr := repository.GetTaskAssignment(ctx, assignment.TaskID)
 		if lookupErr != nil || !current.RecoveryProofRequired ||
 			!current.Assignment.Record.RecoveryDeadline.Equal(assignment.RecoveryDeadline) ||
-			!current.Assignment.Record.RecoveryExecutionDeadline.Equal(deadline.Add(releaseRecoveryProofExecutionBudget)) ||
+			!current.Assignment.Record.RecoveryExecutionDeadline.Equal(
+				deadline.Add(releaseRecoveryProofExecutionBudget),
+			) ||
 			current.Assignment.Record.RestorationAuthority == nil ||
 			current.Assignment.Record.RestorationAuthoritySHA256 != assignment.RestorationAuthoritySHA256 {
 			t.Fatalf("proof-required assignment = %#v, %v", current, lookupErr)
@@ -124,11 +131,12 @@ func seedRecoveryTimeoutAssignment(
 	t.Helper()
 	record := claim.Assignment.Record
 	authority := ReleaseRestorationAuthority{
-		Schema: 1, Target: ReleaseRestorationCandidateAbsence,
+		Schema: 1,
 		TaskID: record.TaskID, OperationID: claim.Task.Record.OperationID, PlanHash: claim.Task.Record.PlanHash,
 		EnvironmentID:       ids.NewAt(ids.KindEnvironment, claim.Task.Record.CreatedAt, 9000),
 		CandidateArtifactID: ids.NewAt(ids.KindConfig, claim.Task.Record.CreatedAt, 9001),
 		Candidates: []ReleaseRestorationCandidate{{
+			Target:    ReleaseRestorationCandidateAbsence,
 			ServiceID: ids.NewAt(ids.KindService, claim.Task.Record.CreatedAt, 9002),
 			ReleaseID: ids.NewAt(ids.KindDeployment, claim.Task.Record.CreatedAt, 9003),
 		}},

@@ -23,7 +23,10 @@ func (repository *HierarchyDeletionRepository) PublishOrResumeAgentAction(
 	}
 	if validateTimestamp("hierarchy deletion child dispatch", now) != nil ||
 		action.ProcedureKind != HierarchyDeletionProcedureAgent || action.AgentProcedure == nil {
-		return HierarchyDeletionChildEntry{}, errs.New(errs.KindValidationFailed, "hierarchy deletion child dispatch is invalid")
+		return HierarchyDeletionChildEntry{}, errs.New(
+			errs.KindValidationFailed,
+			"hierarchy deletion child dispatch is invalid",
+		)
 	}
 	current, err := repository.OperationByTask(ctx, operation.Tombstone.CurrentTaskID)
 	if err != nil {
@@ -48,7 +51,14 @@ func (repository *HierarchyDeletionRepository) PublishOrResumeAgentAction(
 			(entry.Terminal != nil && *entry.Terminal == HierarchyDeletionAgentCompleted) {
 			return entry, nil
 		}
-		return repository.publishHierarchyDeletionChildAttempt(ctx, current, action, &entry, stored.Entry.ModRevision, now)
+		return repository.publishHierarchyDeletionChildAttempt(
+			ctx,
+			current,
+			action,
+			&entry,
+			stored.Entry.ModRevision,
+			now,
+		)
 	}
 	return repository.publishHierarchyDeletionChildAttempt(ctx, current, action, nil, 0, now)
 }
@@ -86,7 +96,12 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		generation = previousGeneration + 1
 		retryOf = previous.CurrentTaskID
 	}
-	attemptID := hierarchyDeletionStableRawID("attempt", action.ParentOperationID, action.AgentProcedure.ChildOperationID, strconv.FormatInt(generation, 10))
+	attemptID := hierarchyDeletionStableRawID(
+		"attempt",
+		action.ParentOperationID,
+		action.AgentProcedure.ChildOperationID,
+		strconv.FormatInt(generation, 10),
+	)
 	taskID := hierarchyDeletionChildStableID(ids.KindTask, action.AgentProcedure.ChildOperationID, attemptID)
 	planID := hierarchyDeletionChildStableID(ids.KindPlan, action.AgentProcedure.ChildOperationID, attemptID)
 	stepID := hierarchyDeletionChildStableID(ids.KindStep, action.AgentProcedure.ChildOperationID, attemptID)
@@ -121,7 +136,10 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 			directoryStepID = hierarchyDeletionChildStableID(
 				ids.KindStep, action.AgentProcedure.ChildOperationID, attemptID, "directory",
 			)
-			taskSteps = []TaskStepRecord{{Kind: TaskStepOperation, ID: composeStepID}, {Kind: TaskStepOperation, ID: directoryStepID}}
+			taskSteps = []TaskStepRecord{
+				{Kind: TaskStepOperation, ID: composeStepID},
+				{Kind: TaskStepOperation, ID: directoryStepID},
+			}
 			composeArtifact = projection.Record.ComposeArtifact
 		}
 		plan, planErr := hierarchyplan.EnvironmentCleanup(
@@ -151,7 +169,10 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 	if err != nil || parent.ID != operation.Tombstone.CurrentTaskID || parent.Executor != TaskExecutorController ||
 		parent.Status != TaskStatusRunning || parent.Params[TaskResourceKindParam] != TaskResourceHierarchyDeletion ||
 		parent.Params[TaskHierarchyDeletionOperationParam] != operation.Tombstone.OperationID {
-		return HierarchyDeletionChildEntry{}, errs.New(errs.KindStateConflict, "hierarchy deletion parent Task is not running")
+		return HierarchyDeletionChildEntry{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion parent Task is not running",
+		)
 	}
 	task := TaskRecord{
 		ID: taskID, OperationID: action.AgentProcedure.ChildOperationID, RetryOf: retryOf,
@@ -196,7 +217,10 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		CurrentTaskIdentityDigest: hierarchyDeletionBytesDigest(taskValue),
 		DispatchState:             HierarchyDeletionChildDispatchVisible,
 		CheckpointDigest:          checkpointDigest, RetryInputDigest: action.AgentProcedure.InputDigest,
-		RetrySharedOwner: HierarchyDeletionRetrySharedOwner{Kind: "attempt-generation", AttemptID: strconv.FormatInt(generation, 10)},
+		RetrySharedOwner: HierarchyDeletionRetrySharedOwner{
+			Kind:      "attempt-generation",
+			AttemptID: strconv.FormatInt(generation, 10),
+		},
 	}
 	entryValue, err := encodeHierarchyDeletionRecord(entry, hierarchyDeletionLargeRecordBytes)
 	if err != nil {
@@ -214,7 +238,11 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 	}
 	defer clear(successorValue)
 	childKey, _ := HierarchyDeletionChildKey(operation.Tombstone.OperationID, action.AgentProcedure.ChildOperationID)
-	successorKey, _ := HierarchyDeletionSuccessorKey(operation.Tombstone.OperationID, action.AgentProcedure.ChildOperationID, attemptID)
+	successorKey, _ := HierarchyDeletionSuccessorKey(
+		operation.Tombstone.OperationID,
+		action.AgentProcedure.ChildOperationID,
+		attemptID,
+	)
 	nextTombstone := operation.Tombstone
 	nextTombstone.Checkpoint.ActiveChildOperationID = action.AgentProcedure.ChildOperationID
 	nextTombstone.Checkpoint.ActiveChildAttemptID = attemptID
@@ -239,7 +267,13 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		{Key: taskActiveOperationKey(task.OperationID)}, {Key: taskQueueKey(task.Executor, task.ID)},
 		{Key: childKey, ModRevision: previousRevision}, {Key: successorKey},
 		{Key: taskKey(parent.ID), ModRevision: parentTask.Entry.ModRevision},
-		{Key: HierarchyDeletionTombstoneKey(string(operation.Tombstone.TargetKind), operation.Tombstone.TargetID), ModRevision: operation.TombstoneRevision},
+		{
+			Key: HierarchyDeletionTombstoneKey(
+				string(operation.Tombstone.TargetKind),
+				operation.Tombstone.TargetID,
+			),
+			ModRevision: operation.TombstoneRevision,
+		},
 	}
 	fenceKey, _ := HierarchyDeletionCleanupFenceKey(operation.Tombstone.OperationID)
 	conditions = append(conditions, Condition{Key: fenceKey, ModRevision: operation.FenceRevision})
@@ -250,7 +284,11 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
 		{Type: MutationPut, Key: childKey, Value: entryValue},
 		{Type: MutationPut, Key: successorKey, Value: successorValue},
-		{Type: MutationPut, Key: HierarchyDeletionTombstoneKey(string(operation.Tombstone.TargetKind), operation.Tombstone.TargetID), Value: tombstoneValue},
+		{
+			Type:  MutationPut,
+			Key:   HierarchyDeletionTombstoneKey(string(operation.Tombstone.TargetKind), operation.Tombstone.TargetID),
+			Value: tombstoneValue,
+		},
 		{Type: MutationPut, Key: fenceKey, Value: fenceValue},
 	}
 	ownerKeys, err := taskOwnerIndexKeys(task.Owner, task.ID)
@@ -270,7 +308,10 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 	}
 	clearKeyValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return HierarchyDeletionChildEntry{}, errs.New(errs.KindStateConflict, "hierarchy deletion child dispatch changed")
+		return HierarchyDeletionChildEntry{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion child dispatch changed",
+		)
 	}
 	return entry, nil
 }
@@ -295,11 +336,17 @@ func decodeHierarchyDeletionChildEntry(value []byte) (HierarchyDeletionChildEntr
 }
 
 func hierarchyDeletionChildStableID(kind ids.Kind, values ...string) string {
-	return string(kind) + "_" + hierarchyDeletionStableULID("gp-deletion-stable-id-v1", append([]string{string(kind)}, values...)...)
+	return string(
+		kind,
+	) + "_" + hierarchyDeletionStableULID(
+		"gp-deletion-stable-id-v1",
+		append([]string{string(kind)}, values...)...)
 }
 
 func hierarchyDeletionStableRawID(prefix string, values ...string) string {
-	return prefix + "_" + hierarchyDeletionStableULID("gp-deletion-stable-raw-id-v1", append([]string{prefix}, values...)...)
+	return prefix + "_" + hierarchyDeletionStableULID(
+		"gp-deletion-stable-raw-id-v1",
+		append([]string{prefix}, values...)...)
 }
 
 func hierarchyDeletionStableULID(domain string, values ...string) string {

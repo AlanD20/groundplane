@@ -43,7 +43,11 @@ func TestMutateEnvironmentVolumeArtifactRemovalDetachesConsumers(t *testing.T) {
 	current := &agentpb.ComposeArtifact{
 		OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
 		OwnerId:   environmentID, AuthorizedVolumeDir: "/var/lib/groundplane/vol/tenant/project/" + environmentID,
-		CanonicalYaml: []byte("services:\n  websocket:\n    image: websocket:1\n    volumes:\n      - websocket-data:/app/storage\n      - type: bind\n        source: /tmp/socket\n        target: /run/socket\nvolumes:\n  websocket-data:\n    name: gp_vol_" + strings.ToLower(volumeID) + "\n"),
+		CanonicalYaml: []byte(
+			"services:\n  websocket:\n    image: websocket:1\n    volumes:\n      - websocket-data:/app/storage\n      - type: bind\n        source: /tmp/socket\n        target: /run/socket\nvolumes:\n  websocket-data:\n    name: gp_vol_" + strings.ToLower(
+				volumeID,
+			) + "\n",
+		),
 		Volumes: []*agentpb.ComposeVolume{{
 			VolumeId: volumeID, ComposeName: "websocket-data", DockerName: "gp_vol_" + strings.ToLower(volumeID),
 		}},

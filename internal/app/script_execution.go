@@ -22,7 +22,8 @@ func (service *scriptMutationService) RunScript(
 	scriptID string,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
-	if service == nil || service.repository == nil || service.idempotency == nil || service.artifacts == nil || ctx == nil {
+	if service == nil || service.repository == nil || service.idempotency == nil || service.artifacts == nil ||
+		ctx == nil {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script execution service is not configured")
 	}
 	if ids.Validate(ids.KindScript, scriptID) != nil {

@@ -359,7 +359,10 @@ func (service *scriptMutationService) EditScript(
 		)
 	}
 	if input.Slug == nil && input.Body == nil && input.When == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Script edit requires slug, script, or when")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"Script edit requires slug, script, or when",
+		)
 	}
 	for attempt := 0; attempt < maximumScriptMutationAttempts; attempt++ {
 		response, err := service.editScriptOnce(ctx, scriptID, input, idempotencyKey)

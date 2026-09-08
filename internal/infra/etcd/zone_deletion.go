@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -33,6 +34,12 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	zone = selected
+	if selectedByEnabledComponent(authorities.Desired.Record.Components, zone.Record.Desired.ID) {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindResourceInUse,
+			"Zone is selected by an enabled Component; change or disable the Component first",
+		)
+	}
 	if err := validateZoneDeletionHierarchy(ctx, environment, project, zone); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -161,7 +168,10 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: intent.DesiredHeadRevision},
 		{Key: environmentComposeProjectionKey(intent.EnvironmentID), ModRevision: intent.AppliedProjectionRevision},
 		{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
-		{Key: environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID), ModRevision: publication.rootRevision},
+		{
+			Key:         environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
+			ModRevision: publication.rootRevision,
+		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 	}
@@ -208,6 +218,26 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	return idempotency.Apply(ctx, marker, plan)
+}
+
+func selectedByEnabledComponent(components []ComponentRecord, zoneID string) bool {
+	for _, record := range components {
+		if !record.Desired.Enabled {
+			continue
+		}
+		switch record.Desired.Kind {
+		case core.ComponentKindIngressCaddy:
+			if record.Desired.Config.Caddy != nil && slices.Contains(record.Desired.Config.Caddy.ZoneIDs, zoneID) {
+				return true
+			}
+		case core.ComponentKindEdgeCloudflare:
+			if record.Desired.Config.CloudflareTunnel != nil &&
+				slices.Contains(record.Desired.Config.CloudflareTunnel.ZoneIDs, zoneID) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func classifyZoneDeletionStartConflict(
@@ -343,7 +373,10 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		return IdempotencyTransactionResult{}, err
 	}
 	if len(addresses.Record.Reservations) != 0 {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindResourceInUse, "Zone gained a Component address reservation")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindResourceInUse,
+			"Zone gained a Component address reservation",
+		)
 	}
 	parentResult, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
 		taskKey(parentTaskID), zoneRemovalIntentKey(intent.OperationID),
@@ -448,7 +481,10 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		{Key: environmentComposeProjectionKey(intent.EnvironmentID), ModRevision: parentResult.Values[4].ModRevision},
 		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), intent.EnvironmentID)},
 		{Key: deletionTombstoneKey(string(DeletionTargetProject), zone.Record.Desired.OwnerID)},
-		{Key: environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID), ModRevision: publication.rootRevision},
+		{
+			Key:         environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
+			ModRevision: publication.rootRevision,
+		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 	}
@@ -520,7 +556,10 @@ func selectedZoneDeletionRecord(
 		selected = &joined
 	}
 	if selected == nil || selected.Record != supplied.Record {
-		return Versioned[ZoneRecord]{}, errs.New(errs.KindValidationFailed, "Zone does not match the selected projection")
+		return Versioned[ZoneRecord]{}, errs.New(
+			errs.KindValidationFailed,
+			"Zone does not match the selected projection",
+		)
 	}
 	return *selected, nil
 }

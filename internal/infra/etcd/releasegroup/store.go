@@ -241,7 +241,10 @@ func (store *Store) List(ctx context.Context, environmentID string, request Page
 				nameIndex.Values[0] == nil || !bytes.Equal(nameIndex.Values[0].Value, []byte(group.ID)) {
 				return Page{}, corruptRecord()
 			}
-			items = append(items, Versioned{Group: group, Revision: value.ModRevision, ReadRevision: records.ReadRevision})
+			items = append(
+				items,
+				Versioned{Group: group, Revision: value.ModRevision, ReadRevision: records.ReadRevision},
+			)
 		}
 	}
 	page := Page{Items: items, Revision: ranged.ReadRevision}

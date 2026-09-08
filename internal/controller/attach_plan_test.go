@@ -242,7 +242,10 @@ func newAttachPlanFixture(t *testing.T, adapterKey string, withGrant bool) attac
 	}
 	steps := make([]etcd.TaskStepRecord, stepCount)
 	for index := range steps {
-		steps[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 11+int64(index))}
+		steps[index] = etcd.TaskStepRecord{
+			Kind: etcd.TaskStepOperation,
+			ID:   ids.NewAt(ids.KindStep, now, 11+int64(index)),
+		}
 	}
 	task := etcd.TaskRecord{
 		ID: taskID, Executor: etcd.TaskExecutorAgent, PlanID: input.PlanID,

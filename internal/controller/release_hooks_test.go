@@ -16,15 +16,45 @@ func TestBuildReleaseHookPlanKeepsClosedPhasesAndSlugOrder(t *testing.T) {
 	releaseID := "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	priorReleaseID := "dep_01ARZ3NDEKTSV4RRFFQ69G5FAT"
 	hooks := []etcd.ReleaseHookRenderInput{
-		releaseHookInput(t, releaseID, "z-post", core.ScriptPostDeploy, "01ARZ3NDEKTSV4RRFFQ69G5FAA", "01ARZ3NDEKTSV4RRFFQ69G5FAB"),
-		releaseHookInput(t, releaseID, "a-pre", core.ScriptPreDeploy, "01ARZ3NDEKTSV4RRFFQ69G5FAC", "01ARZ3NDEKTSV4RRFFQ69G5FAD"),
-		releaseHookInput(t, priorReleaseID, "b-failure", core.ScriptOnFailure, "01ARZ3NDEKTSV4RRFFQ69G5FAE", "01ARZ3NDEKTSV4RRFFQ69G5FAF"),
-		releaseHookInput(t, releaseID, "manual", core.ScriptManual, "01ARZ3NDEKTSV4RRFFQ69G5FAS", "01ARZ3NDEKTSV4RRFFQ69G5FAT"),
+		releaseHookInput(
+			t,
+			releaseID,
+			"z-post",
+			core.ScriptPostDeploy,
+			"01ARZ3NDEKTSV4RRFFQ69G5FAA",
+			"01ARZ3NDEKTSV4RRFFQ69G5FAB",
+		),
+		releaseHookInput(
+			t,
+			releaseID,
+			"a-pre",
+			core.ScriptPreDeploy,
+			"01ARZ3NDEKTSV4RRFFQ69G5FAC",
+			"01ARZ3NDEKTSV4RRFFQ69G5FAD",
+		),
+		releaseHookInput(
+			t,
+			priorReleaseID,
+			"b-failure",
+			core.ScriptOnFailure,
+			"01ARZ3NDEKTSV4RRFFQ69G5FAE",
+			"01ARZ3NDEKTSV4RRFFQ69G5FAF",
+		),
+		releaseHookInput(
+			t,
+			releaseID,
+			"manual",
+			core.ScriptManual,
+			"01ARZ3NDEKTSV4RRFFQ69G5FAS",
+			"01ARZ3NDEKTSV4RRFFQ69G5FAT",
+		),
 	}
 	plan, err := BuildReleaseHookPlan(ReleaseHookPlanInput{
 		Operation: domain.OperationDeploy, CandidateReleaseID: releaseID, FailureReleaseID: priorReleaseID,
 		PostHookAnchorStepID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAG", CompensationStepID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAH",
-		PreStepIDs: []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FAJ"}, PostStepIDs: []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FAK"},
+		PreStepIDs: []string{
+			"step_01ARZ3NDEKTSV4RRFFQ69G5FAJ",
+		}, PostStepIDs: []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FAK"},
 		FailureStepIDs: []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FAM"}, Hooks: hooks,
 	})
 	if err != nil {
@@ -36,11 +66,20 @@ func TestBuildReleaseHookPlanKeepsClosedPhasesAndSlugOrder(t *testing.T) {
 	if plan.PreSteps[0].GetPolicy() != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK ||
 		plan.PostSteps[0].GetPolicy() != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_POST_HOOK ||
 		plan.FailureSteps[0].GetPolicy() != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FAILURE_HOOK {
-		t.Fatalf("hook policies = %s/%s/%s", plan.PreSteps[0].GetPolicy(), plan.PostSteps[0].GetPolicy(), plan.FailureSteps[0].GetPolicy())
+		t.Fatalf(
+			"hook policies = %s/%s/%s",
+			plan.PreSteps[0].GetPolicy(),
+			plan.PostSteps[0].GetPolicy(),
+			plan.FailureSteps[0].GetPolicy(),
+		)
 	}
 	if plan.PostSteps[0].GetPrerequisiteStepId() != "step_01ARZ3NDEKTSV4RRFFQ69G5FAG" ||
 		plan.FailureSteps[0].GetPrerequisiteStepId() != "step_01ARZ3NDEKTSV4RRFFQ69G5FAH" {
-		t.Fatalf("hook prerequisites = %q/%q", plan.PostSteps[0].GetPrerequisiteStepId(), plan.FailureSteps[0].GetPrerequisiteStepId())
+		t.Fatalf(
+			"hook prerequisites = %q/%q",
+			plan.PostSteps[0].GetPrerequisiteStepId(),
+			plan.FailureSteps[0].GetPrerequisiteStepId(),
+		)
 	}
 	if plan.PreSteps[0].GetRunScript().GetReleaseId() != releaseID ||
 		plan.PostSteps[0].GetRunScript().GetReleaseId() != releaseID ||
@@ -58,7 +97,10 @@ func TestReleasePostHookAnchorFollowsCandidateStart(t *testing.T) {
 	// Rationale: post-deploy Scripts must run after candidate start and before
 	// readiness or strategy finalization.
 	task := etcd.TaskRecord{Steps: []etcd.TaskStepRecord{
-		{Kind: etcd.TaskStepOperation, ID: "step-0"}, {Kind: etcd.TaskStepOperation, ID: "step-1"}, {Kind: etcd.TaskStepOperation, ID: "step-2"}, {Kind: etcd.TaskStepOperation, ID: "step-3"}, {Kind: etcd.TaskStepOperation, ID: "step-4"},
+		{
+			Kind: etcd.TaskStepOperation,
+			ID:   "step-0",
+		}, {Kind: etcd.TaskStepOperation, ID: "step-1"}, {Kind: etcd.TaskStepOperation, ID: "step-2"}, {Kind: etcd.TaskStepOperation, ID: "step-3"}, {Kind: etcd.TaskStepOperation, ID: "step-4"},
 	}}
 	tests := []struct {
 		name     string

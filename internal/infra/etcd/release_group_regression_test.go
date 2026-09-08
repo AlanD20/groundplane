@@ -190,8 +190,16 @@ func TestReleaseGroupBlueprintCollectionCASRejectsConcurrentInsertion(t *testing
 	}
 	mustReleaseGroupTransaction(t, fixture.store, []Mutation{
 		{Type: MutationPut, Key: releaseGroupRecordKey(concurrent.ID), Value: concurrentValue},
-		{Type: MutationPut, Key: releaseGroupOwnerKey(concurrent.EnvironmentID, concurrent.ID), Value: []byte(concurrent.ID)},
-		{Type: MutationPut, Key: releaseGroupNameKey(concurrent.EnvironmentID, concurrent.Name), Value: []byte(concurrent.ID)},
+		{
+			Type:  MutationPut,
+			Key:   releaseGroupOwnerKey(concurrent.EnvironmentID, concurrent.ID),
+			Value: []byte(concurrent.ID),
+		},
+		{
+			Type:  MutationPut,
+			Key:   releaseGroupNameKey(concurrent.EnvironmentID, concurrent.Name),
+			Value: []byte(concurrent.ID),
+		},
 		{Type: MutationPut, Key: releaseGroupCollectionEpochKey(concurrent.EnvironmentID), Value: collectionValue},
 	})
 	result, err := fixture.store.Transact(
@@ -340,8 +348,13 @@ func newReleaseGroupPublisherFixture(
 	if err != nil {
 		t.Fatalf("encodeReleaseGroupCollectionEpoch() error = %v", err)
 	}
-	mutations = append(mutations,
-		Mutation{Type: MutationPut, Key: environmentComposeProjectionKey(environment.Record.ID), Value: projectionValue},
+	mutations = append(
+		mutations,
+		Mutation{
+			Type:  MutationPut,
+			Key:   environmentComposeProjectionKey(environment.Record.ID),
+			Value: projectionValue,
+		},
 		Mutation{Type: MutationPut, Key: releaseGroupRecordKey(group.ID), Value: groupValue},
 		Mutation{Type: MutationPut, Key: releaseGroupOwnerKey(group.EnvironmentID, group.ID), Value: []byte(group.ID)},
 		Mutation{Type: MutationPut, Key: releaseGroupNameKey(group.EnvironmentID, group.Name), Value: []byte(group.ID)},

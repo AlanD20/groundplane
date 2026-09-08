@@ -94,7 +94,10 @@ func TestReleaseGroupRollbackCanonicalRequestIncludesSelection(t *testing.T) {
 		t.Helper()
 		version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
 			Method: http.MethodPost, Route: releaseGroupRollbackRoute,
-			Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: "env_01J00000000000000000000000"},
+			Scope: idempotentintent.Scope{
+				Kind: idempotentintent.ScopeEnvironment,
+				ID:   "env_01J00000000000000000000000",
+			},
 			Path:  []idempotentintent.PathBinding{{Name: "id", Value: "rg_01J00000000000000000000000"}},
 			Query: idempotentintent.Object(), Body: groupRollbackRequestBody(input),
 		})

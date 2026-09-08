@@ -172,7 +172,9 @@ func TestRecoveryPointReadServiceRejectsTamperedCursor(t *testing.T) {
 func TestRecoveryPointCursorRejectsNonCanonicalPlaintext(t *testing.T) {
 	t.Parallel()
 	cipher := newRecoveryPointCursorTestCipher()
-	plaintext := []byte(`{"e":"env_01J00000000000000000000000","v":1,"l":50,"a":"rp_01J00000000000000000000000","r":41,"o":"recovery_point_id_desc"}`)
+	plaintext := []byte(
+		`{"e":"env_01J00000000000000000000000","v":1,"l":50,"a":"rp_01J00000000000000000000000","r":41,"o":"recovery_point_id_desc"}`,
+	)
 	ciphertext, err := cipher.Seal(context.Background(), plaintext)
 	if err != nil {
 		t.Fatal(err)

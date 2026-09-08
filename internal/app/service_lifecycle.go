@@ -11,6 +11,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	controllerlifecycle "github.com/AlanD20/groundplane/internal/controller/servicelifecycle"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -31,10 +32,12 @@ type serviceLifecycleRepository interface {
 	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
 	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
-	GetEnvironmentComposeProjection(
+	GetEnvironmentAppliedComposeProjection(
 		context.Context,
 		string,
 	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	ResolveServing(context.Context, string, string, int64) (etcd.ServingRelease, error)
+	GetReleaseRenderInputAt(context.Context, string, int64) (etcd.Versioned[etcd.ReleaseRenderInput], error)
 	BeginServiceLifecycleWithTask(
 		context.Context,
 		etcd.Versioned[etcd.TenantRecord],
@@ -56,11 +59,35 @@ func (repository *durableServiceMutationRepository) GetTenant(
 	return repository.hierarchy.GetTenant(ctx, tenantID)
 }
 
+func (repository *durableServiceMutationRepository) GetEnvironmentAppliedComposeProjection(
+	ctx context.Context,
+	environmentID string,
+) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+	return repository.hierarchy.GetEnvironmentAppliedComposeProjection(ctx, environmentID)
+}
+
 func (repository *durableServiceMutationRepository) GetEnvironmentComposeProjection(
 	ctx context.Context,
 	environmentID string,
 ) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
 	return repository.hierarchy.GetEnvironmentComposeProjection(ctx, environmentID)
+}
+
+func (repository *durableServiceMutationRepository) ResolveServing(
+	ctx context.Context,
+	environmentID string,
+	serviceID string,
+	revision int64,
+) (etcd.ServingRelease, error) {
+	return repository.releases.ResolveServing(ctx, environmentID, serviceID, revision)
+}
+
+func (repository *durableServiceMutationRepository) GetReleaseRenderInputAt(
+	ctx context.Context,
+	releaseID string,
+	revision int64,
+) (etcd.Versioned[etcd.ReleaseRenderInput], error) {
+	return repository.releases.GetReleaseRenderInputAt(ctx, releaseID, revision)
 }
 
 func (repository *durableServiceMutationRepository) BeginServiceLifecycleWithTask(
@@ -210,7 +237,7 @@ type serviceLifecyclePlanResolver interface {
 		context.Context,
 		etcd.TaskRecord,
 		etcd.ServiceLifecycleRenderInput,
-		string,
+		[]string,
 	) (etcd.TaskRecord, error)
 	PrepareServiceRemovalTask(
 		context.Context,
@@ -390,7 +417,10 @@ func (service *serviceLifecycleService) runOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	projection, hasProjection, err := service.repository.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
+	projection, hasProjection, err := service.repository.GetEnvironmentAppliedComposeProjection(
+		ctx,
+		environment.Record.ID,
+	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -410,21 +440,31 @@ func (service *serviceLifecycleService) runOnce(
 	}
 	var renderInput *etcd.ServiceLifecycleRenderInput
 	if applied {
+		releaseAuthority, captureErr := controllerlifecycle.CaptureRelease(
+			ctx, service.repository, projection, environment.Record.ID, serviceID,
+		)
+		if captureErr != nil {
+			return etcd.IdempotencyResponse{}, captureErr
+		}
 		projectionInput = &projection
 		input := etcd.ServiceLifecycleRenderInput{
 			PlanID: task.PlanID, ServiceID: serviceID,
 			TenantID: tenant.Record.ID, TenantSlug: tenant.Record.Slug,
 			ProjectID: project.Record.ID, ProjectSlug: project.Record.Slug,
 			EnvironmentID: environment.Record.ID, EnvironmentName: environment.Record.Name,
-			AuthorizedVolumeDir: environment.Record.VolumeDir,
-			ArtifactID:          ids.New(ids.KindConfig),
-			Projection:          projection.Record,
+			AuthorizedVolumeDir:       environment.Record.VolumeDir,
+			ArtifactID:                releaseAuthority.Current.ArtifactID,
+			Projection:                projection.Record,
+			AppliedProjectionRevision: projection.Revision,
+			Release:                   releaseAuthority,
 		}
 		task.Executor = etcd.TaskExecutorAgent
 		task.TimeoutSeconds = serviceLifecycleAgentTimeoutSeconds
-		task, err = service.plans.PrepareServiceLifecycleTask(
-			ctx, task, input, ids.New(ids.KindStep),
-		)
+		stepIDs := []string{ids.New(ids.KindStep)}
+		if input.Release.RetainedPrior != nil {
+			stepIDs = append(stepIDs, ids.New(ids.KindStep))
+		}
+		task, err = service.plans.PrepareServiceLifecycleTask(ctx, task, input, stepIDs)
 		if err != nil {
 			return etcd.IdempotencyResponse{}, err
 		}

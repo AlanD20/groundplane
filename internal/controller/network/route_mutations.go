@@ -620,7 +620,10 @@ func routeAPIResponse(record etcd.RouteRecord) apiTypes.Route {
 	}
 }
 
-func prepareControllerRouteMutationTask(task etcd.TaskRecord, intent etcd.RouteMutationIntent) (etcd.TaskRecord, error) {
+func prepareControllerRouteMutationTask(
+	task etcd.TaskRecord,
+	intent etcd.RouteMutationIntent,
+) (etcd.TaskRecord, error) {
 	if intent.Provider != nil || intent.CurrentProjection != nil || intent.CandidateProjection != nil {
 		return etcd.TaskRecord{}, errs.New(errs.KindInternal, "desired-only Route mutation has provider state")
 	}

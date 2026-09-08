@@ -44,20 +44,42 @@ type Runtime interface {
 	ObserveProxy(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
 	StartDaemon(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
 	ObserveDaemon(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
-	StartRunner(context.Context, runnerallocation.RuntimePlan, []byte) (runnerallocation.RunnerRuntimeStepEvidence, error)
+	StartRunner(
+		context.Context,
+		runnerallocation.RuntimePlan,
+		[]byte,
+	) (runnerallocation.RunnerRuntimeStepEvidence, error)
 	ObserveRunner(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
 	StopRunner(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
-	ObserveRunnerAbsent(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
+	ObserveRunnerAbsent(
+		context.Context,
+		runnerallocation.RuntimePlan,
+	) (runnerallocation.RunnerRuntimeStepEvidence, error)
 	StopDaemon(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
-	ObserveDaemonAbsent(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
+	ObserveDaemonAbsent(
+		context.Context,
+		runnerallocation.RuntimePlan,
+	) (runnerallocation.RunnerRuntimeStepEvidence, error)
 	StopProxy(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
-	ObserveProxyAbsent(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
+	ObserveProxyAbsent(
+		context.Context,
+		runnerallocation.RuntimePlan,
+	) (runnerallocation.RunnerRuntimeStepEvidence, error)
 	RemoveNetwork(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
-	ObserveNetworkAbsent(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
+	ObserveNetworkAbsent(
+		context.Context,
+		runnerallocation.RuntimePlan,
+	) (runnerallocation.RunnerRuntimeStepEvidence, error)
 	RemoveIdentity(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
-	ObserveIdentityAbsent(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
+	ObserveIdentityAbsent(
+		context.Context,
+		runnerallocation.RuntimePlan,
+	) (runnerallocation.RunnerRuntimeStepEvidence, error)
 	RemoveEgress(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
-	ObserveEgressAbsent(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
+	ObserveEgressAbsent(
+		context.Context,
+		runnerallocation.RuntimePlan,
+	) (runnerallocation.RunnerRuntimeStepEvidence, error)
 }
 
 type Lifecycle struct {
@@ -183,7 +205,11 @@ func (lifecycle *Lifecycle) execute(
 		if progress.ActiveStep != nil {
 			if *progress.ActiveStep != step {
 				clear(transient)
-				return lifecycle.fail(ctx, progress, errs.New(errs.KindInternal, "runner lifecycle active step is corrupt"))
+				return lifecycle.fail(
+					ctx,
+					progress,
+					errs.New(errs.KindInternal, "runner lifecycle active step is corrupt"),
+				)
 			}
 			stepEvidence, err = lifecycle.observe(ctx, attempt.Plan, step)
 		} else {
@@ -216,10 +242,18 @@ func (lifecycle *Lifecycle) execute(
 		return lifecycle.journal.Removed(ctx, progress)
 	}
 	if progress.Evidence == nil || !progress.Evidence.Valid() {
-		return lifecycle.fail(ctx, progress, errs.New(errs.KindInternal, "runner runtime returned invalid ownership evidence"))
+		return lifecycle.fail(
+			ctx,
+			progress,
+			errs.New(errs.KindInternal, "runner runtime returned invalid ownership evidence"),
+		)
 	}
 	if result == nil {
-		return lifecycle.fail(ctx, progress, errs.New(errs.KindInternal, "runner creation evidence destination is missing"))
+		return lifecycle.fail(
+			ctx,
+			progress,
+			errs.New(errs.KindInternal, "runner creation evidence destination is missing"),
+		)
 	}
 	*result = *progress.Evidence
 	return lifecycle.journal.Ready(ctx, progress, *progress.Evidence)

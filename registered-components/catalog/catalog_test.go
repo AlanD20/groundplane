@@ -96,7 +96,13 @@ func TestCatalogDigestBindsImageConfigDigest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	base, err := NewRegistered(Registration{Definition: definition, Images: []component.OCIImage{image}, ManagedConfigActions: []ManagedConfigActionRecipe{recipe}})
+	base, err := NewRegistered(
+		Registration{
+			Definition:           definition,
+			Images:               []component.OCIImage{image},
+			ManagedConfigActions: []ManagedConfigActionRecipe{recipe},
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,11 +123,19 @@ func TestCatalogDigestBindsImageConfigDigest(t *testing.T) {
 }
 
 func TestRegistrationImagesAreSoleRecipeAuthority(t *testing.T) {
-	actionOne, err := component.NewActionDefinition("activate-one", component.CapabilityManagedConfig, component.OperationActivate)
+	actionOne, err := component.NewActionDefinition(
+		"activate-one",
+		component.CapabilityManagedConfig,
+		component.OperationActivate,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	actionTwo, err := component.NewActionDefinition("activate-two", component.CapabilityManagedConfig, component.OperationActivate)
+	actionTwo, err := component.NewActionDefinition(
+		"activate-two",
+		component.CapabilityManagedConfig,
+		component.OperationActivate,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,8 +264,19 @@ func testOCIImage(repository, digestCharacter string) component.OCIImage {
 	return component.OCIImage{
 		Repository: repository, IndexDigest: strings.Repeat(digestCharacter, 64),
 		Platforms: []component.OCIPlatform{
-			{OS: "linux", Architecture: "amd64", ChildDigest: strings.Repeat("c", 64), ConfigDigest: strings.Repeat("e", 64)},
-			{OS: "linux", Architecture: "arm64", Variant: "v8", ChildDigest: strings.Repeat("d", 64), ConfigDigest: strings.Repeat("f", 64)},
+			{
+				OS:           "linux",
+				Architecture: "amd64",
+				ChildDigest:  strings.Repeat("c", 64),
+				ConfigDigest: strings.Repeat("e", 64),
+			},
+			{
+				OS:           "linux",
+				Architecture: "arm64",
+				Variant:      "v8",
+				ChildDigest:  strings.Repeat("d", 64),
+				ConfigDigest: strings.Repeat("f", 64),
+			},
 		},
 	}
 }

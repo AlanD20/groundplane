@@ -1,8 +1,11 @@
 package controller
 
 import (
+	"encoding/hex"
 	"errors"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +16,52 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
+
+// Rationale: selected registry child and local image/config identity are distinct
+// and must both survive Component projection into the wire and Compose labels.
+func TestRenderComponentComposeSealsSelectedImageIdentity(t *testing.T) {
+	for _, repository := range []string{"docker.io/library/caddy", "docker.io/cloudflare/cloudflared"} {
+		t.Run(repository, func(t *testing.T) {
+			image := controllerTestOCIImage(repository)
+			platform, reference, selected := image.Select(runtime.GOOS, runtime.GOARCH)
+			if !selected {
+				t.Fatal("fixture lacks test platform")
+			}
+			project := &composetypes.Project{Services: composetypes.Services{"managed": {Image: reference}}}
+			input := composeRenderTestInput(project)
+			selection := SelectedComponentImage{
+				Repository:  repository,
+				IndexDigest: image.IndexDigest,
+				Reference:   reference,
+				Platform:    platform,
+			}
+			input.Identities.Services = []ComposeResourceIdentity{{
+				ID: composeIdentityTestID(ids.KindService, 70), Name: "managed",
+				ComponentID: composeIdentityTestID(ids.KindComponent, 71), ComponentImage: &selection,
+			}}
+			artifact, err := RenderCompose(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			service := artifact.Services[0]
+			if service.GetImageReference() != reference || service.GetImageRepository() != repository ||
+				hex.EncodeToString(service.GetImageIndexDigest()) != image.IndexDigest ||
+				hex.EncodeToString(service.GetImageChildDigest()) != platform.ChildDigest ||
+				hex.EncodeToString(service.GetImageConfigDigest()) != platform.ConfigDigest ||
+				service.GetImageOs() != platform.OS || service.GetImageArchitecture() != platform.Architecture ||
+				service.GetImageVariant() != platform.Variant {
+				t.Fatalf("selected Component image authority changed: %v", service)
+			}
+			if !strings.Contains(string(artifact.GetCanonicalYaml()), "sha256:"+platform.ConfigDigest) {
+				t.Fatal("canonical Compose omitted selected config identity label")
+			}
+			input.Identities.Services[0].ComponentImage = nil
+			if _, err := RenderCompose(input); err == nil {
+				t.Fatal("render accepted missing Component image authority")
+			}
+		})
+	}
+}
 
 type componentComposeTestRenderer struct {
 	unsupported bool
@@ -26,7 +75,7 @@ func (renderer componentComposeTestRenderer) Plan(
 		ID: component.GeneratedServices[0], Name: "router", Image: controllerTestOCIImage("example/router"),
 		NetworkMode: componentsdk.ManagedNetworkModeZones,
 		Networks: []componentsdk.ManagedNetworkAttachment{{
-			Name: "frontend", Aliases: []string{"router"}, StaticIPv4: "10.60.0.2",
+			Name: "frontend", Aliases: []string{"router"}, StaticIPv4: "10.60.0.2", GatewayPriority: 1,
 		}},
 		Dependencies: []componentsdk.ManagedDependency{{ServiceName: "app", Condition: "service_started"}},
 		Command:      []string{"serve"}, Expose: []string{"443"}, Restart: "unless-stopped", Replicas: 1,
@@ -73,7 +122,8 @@ func TestProjectEnvironmentComponentsBuildsComposeAndMaterializationInputs(t *te
 		t.Fatalf("generated Compose Service = %#v", generated)
 	}
 	network := generated.Networks["frontend"]
-	if network == nil || network.Ipv4Address != "10.60.0.2" || len(network.Aliases) != 1 ||
+	if network == nil || network.Ipv4Address != "10.60.0.2" || network.GatewayPriority != 1 ||
+		len(network.Aliases) != 1 ||
 		network.Aliases[0] != "router" {
 		t.Fatalf("generated network attachment = %#v", network)
 	}
@@ -88,7 +138,8 @@ func TestProjectEnvironmentComponentsBuildsComposeAndMaterializationInputs(t *te
 		t.Fatalf("generated dependency = %#v", generated.DependsOn)
 	}
 	if len(projection.Services) != 1 || projection.Services[0].ID != environment.Components[0].GeneratedServices[0] ||
-		projection.Services[0].Name != "router" {
+		projection.Services[0].Name != "router" || projection.Services[0].ComponentImage == nil ||
+		*projection.Services[0].ComponentImage != testSelectedComponentImage("example/router") {
 		t.Fatalf("generated identities = %#v", projection.Services)
 	}
 	if len(projection.PlainFiles) != 2 || projection.PlainFiles[0].Path != "components/router/config" ||
@@ -157,7 +208,7 @@ func componentComposeTestInput(
 			ID: componentID, Owner: core.ComponentOwnerEnvironment, OwnerID: environmentID,
 			Kind: core.ComponentKindIngressCaddy, Enabled: true, GeneratedServices: []string{serviceID},
 			Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-				ZoneID: ids.NewAt(ids.KindNetwork, at, 956),
+				ZoneIDs: []string{ids.NewAt(ids.KindNetwork, at, 956)},
 			}},
 		}},
 		Entries: []core.EnvEntry{{

@@ -42,14 +42,57 @@ func TestNewRejectsInvalidIdentityMembershipOrderAndPolicy(t *testing.T) {
 	serviceB := ids.NewAt(ids.KindService, now, 4)
 
 	tests := map[string]Input{
-		"wrong group id kind":    {ID: environmentID, EnvironmentID: environmentID, Name: "realtime", ServiceIDs: []string{serviceA, serviceB}},
-		"blank name":             {ID: groupID, EnvironmentID: environmentID, Name: " \t", ServiceIDs: []string{serviceA, serviceB}},
-		"one member":             {ID: groupID, EnvironmentID: environmentID, Name: "realtime", ServiceIDs: []string{serviceA}},
-		"duplicate member":       {ID: groupID, EnvironmentID: environmentID, Name: "realtime", ServiceIDs: []string{serviceA, serviceA}},
-		"wrong member id kind":   {ID: groupID, EnvironmentID: environmentID, Name: "realtime", ServiceIDs: []string{serviceA, groupID}},
-		"incomplete order":       {ID: groupID, EnvironmentID: environmentID, Name: "realtime", ServiceIDs: []string{serviceA, serviceB}, Order: []string{serviceA}},
-		"foreign order member":   {ID: groupID, EnvironmentID: environmentID, Name: "realtime", ServiceIDs: []string{serviceA, serviceB}, Order: []string{serviceA, ids.NewAt(ids.KindService, now, 5)}},
-		"unknown failure policy": {ID: groupID, EnvironmentID: environmentID, Name: "realtime", ServiceIDs: []string{serviceA, serviceB}, OnFailure: "continue"},
+		"wrong group id kind": {
+			ID:            environmentID,
+			EnvironmentID: environmentID,
+			Name:          "realtime",
+			ServiceIDs:    []string{serviceA, serviceB},
+		},
+		"blank name": {
+			ID:            groupID,
+			EnvironmentID: environmentID,
+			Name:          " \t",
+			ServiceIDs:    []string{serviceA, serviceB},
+		},
+		"one member": {
+			ID:            groupID,
+			EnvironmentID: environmentID,
+			Name:          "realtime",
+			ServiceIDs:    []string{serviceA},
+		},
+		"duplicate member": {
+			ID:            groupID,
+			EnvironmentID: environmentID,
+			Name:          "realtime",
+			ServiceIDs:    []string{serviceA, serviceA},
+		},
+		"wrong member id kind": {
+			ID:            groupID,
+			EnvironmentID: environmentID,
+			Name:          "realtime",
+			ServiceIDs:    []string{serviceA, groupID},
+		},
+		"incomplete order": {
+			ID:            groupID,
+			EnvironmentID: environmentID,
+			Name:          "realtime",
+			ServiceIDs:    []string{serviceA, serviceB},
+			Order:         []string{serviceA},
+		},
+		"foreign order member": {
+			ID:            groupID,
+			EnvironmentID: environmentID,
+			Name:          "realtime",
+			ServiceIDs:    []string{serviceA, serviceB},
+			Order:         []string{serviceA, ids.NewAt(ids.KindService, now, 5)},
+		},
+		"unknown failure policy": {
+			ID:            groupID,
+			EnvironmentID: environmentID,
+			Name:          "realtime",
+			ServiceIDs:    []string{serviceA, serviceB},
+			OnFailure:     "continue",
+		},
 	}
 	overflow := make([]string, MaximumMembers+1)
 	for index := range overflow {
@@ -93,7 +136,8 @@ func TestReplacePreservesStableIdentityAndCopiesMembership(t *testing.T) {
 	if replacement.ID != current.ID || replacement.EnvironmentID != current.EnvironmentID {
 		t.Fatalf("Replace() changed stable identity: %+v", replacement)
 	}
-	if replacement.Name != "workers" || replacement.ServiceIDs[0] != current.ServiceIDs[1] || replacement.OnFailure != OnFailureLeaveActive {
+	if replacement.Name != "workers" || replacement.ServiceIDs[0] != current.ServiceIDs[1] ||
+		replacement.OnFailure != OnFailureLeaveActive {
 		t.Fatalf("Replace() = %+v", replacement)
 	}
 }

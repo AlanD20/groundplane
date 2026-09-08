@@ -210,8 +210,9 @@ type ReusableSecretCreateInput = {
   | { projectId?: never; platform: true }
 )
 type ComponentConfigInput =
-  | { zone_id: string; caddyfile_template?: string }
+  | { zone_ids: string[]; caddyfile_template?: string }
   | {
+      zone_ids: string[]
       credential:
         | { mode: 'existing'; secret_id: string }
         | { mode: 'new'; secret_name: string; token: string }
@@ -1045,15 +1046,15 @@ function environmentComponentFromAPI(item: ComponentResponse, environmentId: str
 		if (!config) {
 			return { ...common, kind: 'caddy', config: null, state: item.pinned_ipv4 ? { pinnedIPv4: item.pinned_ipv4 } : {} }
 		}
-		const zoneID = 'zone_id' in config ? config.zone_id : undefined
+		const zoneIDs = 'zone_ids' in config ? config.zone_ids : undefined
 		const caddyfileTemplate = 'caddyfile_template' in config ? config.caddyfile_template : undefined
-		if (typeof zoneID !== 'string' || (caddyfileTemplate !== undefined && typeof caddyfileTemplate !== 'string')) {
+		if (!Array.isArray(zoneIDs) || zoneIDs.length === 0 || zoneIDs.some((id) => typeof id !== 'string') || new Set(zoneIDs).size !== zoneIDs.length || (caddyfileTemplate !== undefined && typeof caddyfileTemplate !== 'string')) {
 			throw new Error('Controller returned invalid Caddy Component configuration')
 		}
 		return {
       ...common,
 		kind: 'caddy',
-		config: { zone_id: zoneID, ...(caddyfileTemplate === undefined ? {} : { caddyfile_template: caddyfileTemplate }) },
+		config: { zone_ids: [...zoneIDs], ...(caddyfileTemplate === undefined ? {} : { caddyfile_template: caddyfileTemplate }) },
       state: item.pinned_ipv4 ? { pinnedIPv4: item.pinned_ipv4 } : {},
     }
 	}
@@ -1062,13 +1063,14 @@ function environmentComponentFromAPI(item: ComponentResponse, environmentId: str
 			return { ...common, kind: 'cloudflare-tunnel', config: null, state: {} }
 		}
 		const secretID = 'secret_id' in config ? config.secret_id : undefined
-		if (typeof secretID !== 'string') {
+		const zoneIDs = 'zone_ids' in config ? config.zone_ids : undefined
+		if (typeof secretID !== 'string' || !Array.isArray(zoneIDs) || zoneIDs.length === 0 || zoneIDs.some((id) => typeof id !== 'string') || new Set(zoneIDs).size !== zoneIDs.length) {
 			throw new Error('Controller returned invalid Cloudflare Tunnel Component configuration')
 		}
 		return {
       ...common,
       kind: 'cloudflare-tunnel',
-		config: { secret_id: secretID },
+		config: { zone_ids: [...zoneIDs], secret_id: secretID },
       state: {},
     }
   }
@@ -1183,7 +1185,10 @@ async function listAllBackingProjects(
       listAllZones(facade.environment_id, signal),
       listAllEntries(facade.environment_id, signal),
     ])
-    const service = serviceFromAPI(serviceResponse)
+    const service = {
+      ...serviceFromAPI(serviceResponse),
+      authentication: facade.authentication,
+    }
     const environment = {
       ...environmentFromAPI(environmentResponse),
       zones,
@@ -1678,7 +1683,7 @@ type StoreContext = State & {
   removeRunner: (runnerId: string) => Promise<string>
 	runBackingRuntimeAction: (id: string, action: 'start' | 'stop' | 'destroy') => Promise<string>
   addBackingProject: (input: BackingServiceCreateRequest) => Promise<BackingServiceCreatedResponse>
-  setComponentEnabled: (componentId: string, enabled: boolean) => Promise<string>
+  setComponentEnabled: (componentId: string, enabled: boolean, config?: ComponentConfigInput) => Promise<string>
   reconcileEnvironmentComponent: (componentId: string) => Promise<string>
   updateComponentConfig: (componentId: string, config: ComponentConfigInput) => Promise<string | null>
 }
@@ -3751,12 +3756,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         })
         return created
       },
-      setComponentEnabled: async (componentId, enabled) => {
+      setComponentEnabled: async (componentId, enabled, config) => {
         const action = enabled ? 'enable' : 'disable'
         const accepted = await tenantRequest<ComponentTaskAccepted>(
           `/components/${encodeURIComponent(componentId)}/${action}`,
           202,
-          { method: 'POST' },
+          { method: 'POST', ...(enabled && config ? { body: { config } } : {}) },
         )
         if (!accepted.task_id) throw new Error(`Controller response is missing Component ${action} task_id`)
         return accepted.task_id

@@ -19,7 +19,10 @@ func (repository *HierarchyDeletionRepository) AppendActions(
 	if len(actions) > hierarchyDeletionPlanBatchSize || start < 0 ||
 		operation.Tombstone.Phase != HierarchyDeletionPlanning || operation.Tombstone.PlanCount != nil ||
 		operation.Tombstone.PlanDigest != nil {
-		return HierarchyDeletionOperation{}, errs.New(errs.KindValidationFailed, "hierarchy deletion plan append is invalid")
+		return HierarchyDeletionOperation{}, errs.New(
+			errs.KindValidationFailed,
+			"hierarchy deletion plan append is invalid",
+		)
 	}
 	current, err := repository.OperationByTask(ctx, operation.Tombstone.CurrentTaskID)
 	if err != nil {
@@ -31,7 +34,10 @@ func (repository *HierarchyDeletionRepository) AppendActions(
 		expected := start + int64(index)
 		if action.ParentOperationID != current.Tombstone.OperationID || action.Ordinal != expected {
 			clearByteSlices(encoded)
-			return HierarchyDeletionOperation{}, errs.New(errs.KindValidationFailed, "hierarchy deletion plan is not contiguous")
+			return HierarchyDeletionOperation{}, errs.New(
+				errs.KindValidationFailed,
+				"hierarchy deletion plan is not contiguous",
+			)
 		}
 		encoded[index], err = encodeHierarchyDeletionAction(action)
 		if err != nil {
@@ -70,7 +76,10 @@ func (repository *HierarchyDeletionRepository) AppendActions(
 		defer clear(tombstoneValue)
 		conditions := make([]Condition, 0, len(actions)+1)
 		conditions = append(conditions, Condition{
-			Key:         HierarchyDeletionTombstoneKey(string(current.Tombstone.TargetKind), current.Tombstone.TargetID),
+			Key: HierarchyDeletionTombstoneKey(
+				string(current.Tombstone.TargetKind),
+				current.Tombstone.TargetID,
+			),
 			ModRevision: current.TombstoneRevision,
 		})
 		mutations := make([]Mutation, 0, len(actions)+1)
@@ -96,7 +105,10 @@ func (repository *HierarchyDeletionRepository) AppendActions(
 		}
 		clearKeyValues(transaction.FailureReads)
 		if !transaction.Succeeded {
-			return HierarchyDeletionOperation{}, errs.New(errs.KindStateConflict, "hierarchy deletion plan append changed")
+			return HierarchyDeletionOperation{}, errs.New(
+				errs.KindStateConflict,
+				"hierarchy deletion plan append changed",
+			)
 		}
 		current.Tombstone = nextTombstone
 		current.TombstoneRevision = transaction.Revision
@@ -147,7 +159,10 @@ func (repository *HierarchyDeletionRepository) sealPlan(
 		return current, nil
 	}
 	if current.Tombstone.Phase != HierarchyDeletionPlanning || current.PlanCursor <= 0 {
-		return HierarchyDeletionOperation{}, errs.New(errs.KindStateConflict, "hierarchy deletion plan cannot be sealed")
+		return HierarchyDeletionOperation{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion plan cannot be sealed",
+		)
 	}
 	values := make([][]byte, 0, current.PlanCursor)
 	for ordinal := int64(0); ordinal < current.PlanCursor; ordinal++ {

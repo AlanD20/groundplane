@@ -188,7 +188,7 @@ func cleanupFixture(t *testing.T) (*Runner, *cleanupEngine, scriptexecution.Requ
 			Uid: uid, Gid: gid,
 		},
 		Projection: &agentpb.ScriptRunnerProjection{
-			Name: "gp-script-" + strings.ToLower(prepared.executionID), Image: "app@sha256:" + strings.Repeat("b", 64),
+			Name: "gp-script-" + strings.ToLower(prepared.executionID), Image: "sha256:" + strings.Repeat("b", 64),
 			Uid: uid, Gid: gid, Entrypoint: []string{"/bin/sh"}, Command: []string{bodyTarget},
 			StopGraceSeconds: stopSeconds,
 			Labels: []*agentpb.ScriptStringPair{
@@ -199,7 +199,7 @@ func cleanupFixture(t *testing.T) (*Runner, *cleanupEngine, scriptexecution.Requ
 	containerID := strings.Repeat("a", 64)
 	engine := &cleanupEngine{containerID: containerID}
 	engine.inspected = client.ContainerInspectResult{Container: container.InspectResponse{
-		ID: containerID, Name: "/" + request.Projection.Name,
+		ID: containerID, Image: request.Projection.Image, Name: "/" + request.Projection.Name,
 		Config: &container.Config{
 			Image:      request.Projection.Image,
 			User:       strconv.FormatUint(uint64(uid), 10) + ":" + strconv.FormatUint(uint64(gid), 10),
@@ -226,30 +226,53 @@ type cleanupEngine struct {
 	operations   []string
 }
 
-func (engine *cleanupEngine) ContainerCreate(context.Context, client.ContainerCreateOptions) (client.ContainerCreateResult, error) {
+func (engine *cleanupEngine) ContainerCreate(
+	context.Context,
+	client.ContainerCreateOptions,
+) (client.ContainerCreateResult, error) {
 	if engine.cancelCreate != nil {
 		engine.cancelCreate()
 	}
 	return client.ContainerCreateResult{ID: engine.containerID}, engine.createErr
 }
 
-func (engine *cleanupEngine) NetworkConnect(context.Context, string, client.NetworkConnectOptions) (client.NetworkConnectResult, error) {
+func (engine *cleanupEngine) NetworkConnect(
+	context.Context,
+	string,
+	client.NetworkConnectOptions,
+) (client.NetworkConnectResult, error) {
 	return client.NetworkConnectResult{}, nil
 }
 
-func (engine *cleanupEngine) ContainerAttach(context.Context, string, client.ContainerAttachOptions) (client.ContainerAttachResult, error) {
+func (engine *cleanupEngine) ContainerAttach(
+	context.Context,
+	string,
+	client.ContainerAttachOptions,
+) (client.ContainerAttachResult, error) {
 	return client.ContainerAttachResult{}, nil
 }
 
-func (engine *cleanupEngine) ContainerStart(context.Context, string, client.ContainerStartOptions) (client.ContainerStartResult, error) {
+func (engine *cleanupEngine) ContainerStart(
+	context.Context,
+	string,
+	client.ContainerStartOptions,
+) (client.ContainerStartResult, error) {
 	return client.ContainerStartResult{}, nil
 }
 
-func (engine *cleanupEngine) ContainerWait(context.Context, string, client.ContainerWaitOptions) client.ContainerWaitResult {
+func (engine *cleanupEngine) ContainerWait(
+	context.Context,
+	string,
+	client.ContainerWaitOptions,
+) client.ContainerWaitResult {
 	return client.ContainerWaitResult{}
 }
 
-func (engine *cleanupEngine) ContainerInspect(context.Context, string, client.ContainerInspectOptions) (client.ContainerInspectResult, error) {
+func (engine *cleanupEngine) ContainerInspect(
+	context.Context,
+	string,
+	client.ContainerInspectOptions,
+) (client.ContainerInspectResult, error) {
 	engine.operations = append(engine.operations, "inspect")
 	if engine.removed {
 		return client.ContainerInspectResult{}, containerderrdefs.ErrNotFound
@@ -265,19 +288,31 @@ func (engine *cleanupEngine) ContainerInspect(context.Context, string, client.Co
 	return engine.inspected, nil
 }
 
-func (engine *cleanupEngine) ContainerStop(context.Context, string, client.ContainerStopOptions) (client.ContainerStopResult, error) {
+func (engine *cleanupEngine) ContainerStop(
+	context.Context,
+	string,
+	client.ContainerStopOptions,
+) (client.ContainerStopResult, error) {
 	engine.operations = append(engine.operations, "stop")
 	engine.running = false
 	return client.ContainerStopResult{}, nil
 }
 
-func (engine *cleanupEngine) ContainerKill(context.Context, string, client.ContainerKillOptions) (client.ContainerKillResult, error) {
+func (engine *cleanupEngine) ContainerKill(
+	context.Context,
+	string,
+	client.ContainerKillOptions,
+) (client.ContainerKillResult, error) {
 	engine.operations = append(engine.operations, "kill")
 	engine.running = false
 	return client.ContainerKillResult{}, nil
 }
 
-func (engine *cleanupEngine) ContainerRemove(context.Context, string, client.ContainerRemoveOptions) (client.ContainerRemoveResult, error) {
+func (engine *cleanupEngine) ContainerRemove(
+	context.Context,
+	string,
+	client.ContainerRemoveOptions,
+) (client.ContainerRemoveResult, error) {
 	engine.operations = append(engine.operations, "remove")
 	engine.removed = true
 	return client.ContainerRemoveResult{}, nil

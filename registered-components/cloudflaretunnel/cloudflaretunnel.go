@@ -33,6 +33,7 @@ var Image = component.OCIImage{
 type Input struct {
 	GeneratedServiceID string
 	SecretID           string
+	Zones              []component.NetworkInput
 }
 
 func Definition() (component.Definition, error) {
@@ -52,28 +53,80 @@ func Definition() (component.Definition, error) {
 	if err != nil {
 		return component.Definition{}, err
 	}
+	networks, err := component.NewGrant(component.CapabilityNetworks, component.OperationRead)
+	if err != nil {
+		return component.Definition{}, err
+	}
 	return component.NewDefinition(component.DefinitionInput{
 		Implementation: "cloudflare-tunnel", ConfigVariant: "cloudflare-tunnel-v1",
 		Provides:    []component.Capability{component.CapabilityEdgeTunnel},
-		Grants:      []component.Grant{services, secrets},
+		Grants:      []component.Grant{services, secrets, networks},
 		OwnerScopes: []component.OwnerScope{component.OwnerScopeEnvironment},
 	})
 }
 
 func Plan(input Input) (component.EnvironmentPlan, error) {
-	if input.GeneratedServiceID == "" || input.SecretID == "" {
+	if input.GeneratedServiceID == "" || input.SecretID == "" || len(input.Zones) == 0 {
 		return component.EnvironmentPlan{}, fmt.Errorf("cloudflare tunnel: planner input is incomplete")
+	}
+	networks := make([]component.ManagedNetworkAttachment, len(input.Zones))
+	seenIDs := make(map[string]struct{}, len(input.Zones))
+	seenNames := make(map[string]struct{}, len(input.Zones))
+	gatewaySelected := false
+	for index, zone := range input.Zones {
+		if !validNetworkIdentity(zone.ID) || !validNetworkIdentity(zone.Name) {
+			return component.EnvironmentPlan{}, fmt.Errorf("cloudflare tunnel: Zone identity is invalid")
+		}
+		if _, duplicate := seenIDs[zone.ID]; duplicate {
+			return component.EnvironmentPlan{}, fmt.Errorf("cloudflare tunnel: Zone id is repeated")
+		}
+		if _, duplicate := seenNames[zone.Name]; duplicate {
+			return component.EnvironmentPlan{}, fmt.Errorf("cloudflare tunnel: Zone name is repeated")
+		}
+		seenIDs[zone.ID] = struct{}{}
+		seenNames[zone.Name] = struct{}{}
+		networks[index] = component.ManagedNetworkAttachment{Name: zone.Name}
+		if !zone.Internal && !gatewaySelected {
+			networks[index].GatewayPriority = 1
+			gatewaySelected = true
+		}
+	}
+	if !gatewaySelected {
+		return component.EnvironmentPlan{}, fmt.Errorf("cloudflare tunnel: at least one non-internal Zone is required")
 	}
 	return component.EnvironmentPlan{Services: []component.ManagedService{
 		{
-			ID:                input.GeneratedServiceID,
-			Name:              ServiceName,
-			Image:             Image,
-			NetworkMode:       component.ManagedNetworkModeDefault,
-			Command:           []string{"tunnel", "--no-autoupdate", "run"},
+			ID:          input.GeneratedServiceID,
+			Name:        ServiceName,
+			Image:       Image,
+			NetworkMode: component.ManagedNetworkModeZones,
+			Networks:    networks,
+			Command:     []string{"tunnel", "--no-autoupdate", "--metrics", "127.0.0.1:2000", "run"},
+			// The native ready command checks the local /ready endpoint and
+			// rejects non-200 responses; no shell or extra image tool is needed.
+			// https://github.com/cloudflare/cloudflared/blob/master/cmd/cloudflared/tunnel/subcommands.go
+			Healthcheck: &component.ManagedHealthcheck{
+				Command:         []string{"cloudflared", "tunnel", "--metrics", "127.0.0.1:2000", "ready"},
+				IntervalSeconds: 5, TimeoutSeconds: 3, StartPeriodSeconds: 10, Retries: 3,
+			},
 			Restart:           "unless-stopped",
 			Replicas:          1,
 			SecretEnvironment: []component.ManagedSecretEnvironment{{Name: tokenName, SecretID: input.SecretID}},
 		},
 	}}, nil
+}
+
+func validNetworkIdentity(value string) bool {
+	if value == "" {
+		return false
+	}
+	for index := range len(value) {
+		character := value[index]
+		if character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' ||
+			character >= '0' && character <= '9' || character == '_' || character == '-' || character == '.' {
+			continue
+		}
+		return false
+	}
+	return true
 }

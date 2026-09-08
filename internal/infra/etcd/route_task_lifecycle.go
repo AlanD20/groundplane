@@ -65,9 +65,19 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 	}
 
 	if intent.CurrentProjection == nil {
-		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route desired projection is unavailable for removal retry")
+		return routeTaskChange{}, errs.New(
+			errs.KindStateConflict,
+			"Route desired projection is unavailable for removal retry",
+		)
 	}
-	route, err := routeAtProjection(ctx, repository.store, *intent.CurrentProjection, intent.CurrentProjectionRevision, revision, intent.RouteID)
+	route, err := routeAtProjection(
+		ctx,
+		repository.store,
+		*intent.CurrentProjection,
+		intent.CurrentProjectionRevision,
+		revision,
+		intent.RouteID,
+	)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
@@ -367,7 +377,10 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 		},
 		values: [][]byte{intentBytes},
 	}
-	change.mutations = append(change.mutations, Mutation{Type: MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)})
+	change.mutations = append(
+		change.mutations,
+		Mutation{Type: MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
+	)
 	if terminalStatus == TaskStatusCompleted {
 		change.mutations[0] = Mutation{Type: MutationDelete, Key: routeRemovalIntentKey(task.ID)}
 		promotion, promotionErr := prepareRouteHeadPromotion(ctx, repository.store, intent, revision)
@@ -394,8 +407,14 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 				clearRouteTaskChange(change)
 				return routeTaskChange{}, decodeErr
 			}
-			change.conditions = append(change.conditions, Condition{Key: routeObservationKey(intent.RouteID), ModRevision: observation.Values[0].ModRevision})
-			change.mutations = append(change.mutations, Mutation{Type: MutationDelete, Key: routeObservationKey(intent.RouteID)})
+			change.conditions = append(
+				change.conditions,
+				Condition{Key: routeObservationKey(intent.RouteID), ModRevision: observation.Values[0].ModRevision},
+			)
+			change.mutations = append(
+				change.mutations,
+				Mutation{Type: MutationDelete, Key: routeObservationKey(intent.RouteID)},
+			)
 			clear(observation.Values[0].Value)
 		} else {
 			change.conditions = append(change.conditions, Condition{Key: routeObservationKey(intent.RouteID)})
@@ -445,7 +464,12 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 		string(state.Values[0].Value) != task.ID {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation ownership changed")
 	}
-	desiredProjection, found, err := currentEnvironmentProjectionAtRevision(ctx, repository.store, intent.EnvironmentID, revision)
+	desiredProjection, found, err := currentEnvironmentProjectionAtRevision(
+		ctx,
+		repository.store,
+		intent.EnvironmentID,
+		revision,
+	)
 	if err != nil || !found {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation desired state changed")
 	}
@@ -623,7 +647,12 @@ func (repository *TaskRepository) validateRouteMutationTaskAcknowledgementReplay
 	if state == nil || len(state.Values) != len(stateKeys) || state.Values[0] != nil {
 		return true, errs.New(errs.KindStateConflict, "Route mutation replay state is incomplete")
 	}
-	projection, found, projectionErr := currentEnvironmentProjectionAtRevision(ctx, repository.store, intent.EnvironmentID, revision)
+	projection, found, projectionErr := currentEnvironmentProjectionAtRevision(
+		ctx,
+		repository.store,
+		intent.EnvironmentID,
+		revision,
+	)
 	if projectionErr != nil || !found || !routeMutationSelectedProjection(projection.Record, task, intent) {
 		return true, errs.New(errs.KindStateConflict, "Route mutation terminal projection changed")
 	}

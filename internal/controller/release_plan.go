@@ -99,7 +99,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 	if dependencyPlan.Phase != "" && dependencyPlan.Phase != expectedPhase {
 		return nil, errs.New(errs.KindInternal, "frozen release dependency phase is invalid")
 	}
-	images := make(map[string]string, len(input.Members))
+	images := make(map[string]domain.WorkloadSeal, len(input.Members))
 	labels := make(map[string]ComposeReleaseIdentity, len(input.Members))
 	for _, member := range input.Members {
 		if member.Render.PlanID != task.PlanID || member.Render.ArtifactID != first.ArtifactID ||
@@ -112,9 +112,10 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 		if (member.Intent.PriorServingReleaseID == "") != (member.Render.PriorArtifactID == "") {
 			return nil, errs.New(errs.KindInternal, "ordinary release predecessor authority is partial")
 		}
-		images[member.Render.ServiceName] = member.Render.Image
+		images[member.Render.ServiceName] = member.Render.CandidateWorkload
 		labels[member.Render.ServiceID] = ComposeReleaseIdentity{
-			ReleaseID: member.Render.ReleaseID, Target: member.Render.CandidateTarget, Image: member.Render.Image,
+			ProxyImage: member.Render.ProxyImage,
+			ReleaseID:  member.Render.ReleaseID, Target: member.Render.CandidateTarget, Image: member.Render.CandidateWorkload.LocalImageID,
 			ServingReleaseID:       member.Intent.PriorServingReleaseID,
 			ServingTarget:          member.Render.PriorTarget,
 			ServingProxyGeneration: member.Render.PriorProxyGeneration, Strategy: member.Render.Strategy,
@@ -146,7 +147,9 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 				if !exists {
 					return nil, errs.New(errs.KindInternal, "release service is missing from frozen Blueprint")
 				}
-				service.Image = image
+				if err := applySealedWorkload(&service, image); err != nil {
+					return nil, err
+				}
 				if _, enabled := project.Services[name]; enabled {
 					project.Services[name] = service
 				} else {
@@ -165,12 +168,15 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 	}
 	artifacts := []*agentpb.ComposeArtifact{artifact}
 	priorArtifacts := make(map[string]*agentpb.ComposeArtifact, len(input.Members))
-	priorImages := make(map[string]string)
+	priorImages := make(map[string]domain.WorkloadSeal)
 	priorLabels := make(map[string]ComposeReleaseIdentity)
 	priorArtifactID := ""
 	for _, member := range input.Members {
 		if member.Render.PriorArtifactID == "" {
 			continue
+		}
+		if member.Render.PriorWorkload == nil {
+			return nil, errs.New(errs.KindInternal, "release prior workload seal is missing")
 		}
 		if priorArtifactID == "" {
 			priorArtifactID = member.Render.PriorArtifactID
@@ -178,23 +184,27 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 			return nil, errs.New(errs.KindInternal, "recreate members do not share one sealed prior artifact")
 		}
 		priorReleaseID := member.Intent.PriorServingReleaseID
-		priorImages[member.Render.ServiceName] = member.Render.PriorImage
+		priorImages[member.Render.ServiceName] = *member.Render.PriorWorkload
 		priorLabels[member.Render.ServiceID] = ComposeReleaseIdentity{
-			ReleaseID: priorReleaseID, Target: member.Render.PriorTarget, Image: member.Render.PriorImage,
+			ProxyImage: member.Render.ProxyImage,
+			ReleaseID:  priorReleaseID, Target: member.Render.PriorTarget, Image: member.Render.PriorWorkload.LocalImageID,
 			ServingReleaseID: priorReleaseID, ServingTarget: member.Render.PriorTarget,
 			ServingProxyGeneration: member.Render.PriorProxyGeneration, Strategy: member.Render.PriorStrategy,
 		}
 	}
 	if priorArtifactID != "" {
 		priorArtifact, renderErr := resolver.renderPinnedEnvironmentArtifactWithReleases(
-			ctx, task,
+			ctx,
+			task,
 			pinnedEnvironmentIdentity{
 				TenantID: first.TenantID, TenantSlug: first.TenantSlug,
 				ProjectID: first.ProjectID, ProjectSlug: first.ProjectSlug,
 				EnvironmentID: first.EnvironmentID, EnvironmentName: first.EnvironmentName,
 				AuthorizedVolumeDir: first.AuthorizedVolumeDir,
 			},
-			first.Projection.RevisionID, priorArtifactID, releaseProjection,
+			first.Projection.RevisionID,
+			priorArtifactID,
+			releaseProjection,
 			func(project *composetypes.Project, _ etcd.EnvironmentComposeProjection) ([]ComposeResourceIdentity, error) {
 				if err := projectReleaseWorkloadServices(project, releaseProjection); err != nil {
 					return nil, err
@@ -205,10 +215,15 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 						var disabled bool
 						service, disabled = project.DisabledServices[name]
 						if !disabled {
-							return nil, errs.New(errs.KindInternal, "recreate prior service is missing from frozen Blueprint")
+							return nil, errs.New(
+								errs.KindInternal,
+								"recreate prior service is missing from frozen Blueprint",
+							)
 						}
 					}
-					service.Image = image
+					if err := applySealedWorkload(&service, image); err != nil {
+						return nil, err
+					}
 					if active {
 						project.Services[name] = service
 					} else {
@@ -249,45 +264,161 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 				if priorReleaseID != "" || member.Render.PriorArtifactID != "" {
 					return nil, errs.New(errs.KindInternal, "recreate prior artifact is missing")
 				}
-				steps = append(steps,
-					&agentpb.ExecutionStep{StepId: applyID, TimeoutSeconds: releaseMemberStepTimeoutSeconds, Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
-						Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{ArtifactId: first.ArtifactID, ServiceIds: []string{member.Render.ServiceID}, ForceRecreate: true, NoDependencies: true}}},
-					&agentpb.ExecutionStep{StepId: healthID, TimeoutSeconds: releaseMemberStepTimeoutSeconds, Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD, PrerequisiteStepId: applyID,
-						Payload: &agentpb.ExecutionStep_WaitHealthy{WaitHealthy: &agentpb.WaitHealthy{ArtifactId: first.ArtifactID, ServiceIds: []string{member.Render.ServiceID}}}},
-					&agentpb.ExecutionStep{StepId: switchID, TimeoutSeconds: releaseMemberStepTimeoutSeconds, Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD, PrerequisiteStepId: healthID,
-						Payload: &agentpb.ExecutionStep_ServiceRecreateAcknowledge{ServiceRecreateAcknowledge: &agentpb.ServiceRecreateAcknowledge{ArtifactId: first.ArtifactID, ServiceId: member.Render.ServiceID, ReleaseId: member.Intent.ID}}},
-					&agentpb.ExecutionStep{StepId: probeID, TimeoutSeconds: releaseMemberStepTimeoutSeconds, Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
-						Payload: &agentpb.ExecutionStep_CandidateRestorationProbe{CandidateRestorationProbe: &agentpb.CandidateRestorationProbe{CandidateArtifactId: first.ArtifactID, ServiceId: member.Render.ServiceID, CandidateReleaseId: member.Intent.ID}}},
-					&agentpb.ExecutionStep{StepId: compensateID, TimeoutSeconds: releaseMemberStepTimeoutSeconds, Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE, PrerequisiteStepId: applyID,
-						Payload: &agentpb.ExecutionStep_CandidateRestorationCompensate{CandidateRestorationCompensate: &agentpb.CandidateRestorationCompensate{CandidateArtifactId: first.ArtifactID, ServiceId: member.Render.ServiceID, CandidateReleaseId: member.Intent.ID}}},
+				steps = append(
+					steps,
+					&agentpb.ExecutionStep{
+						StepId:         applyID,
+						TimeoutSeconds: releaseMemberStepTimeoutSeconds,
+						Policy:         agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
+						Payload: &agentpb.ExecutionStep_ComposeApply{
+							ComposeApply: &agentpb.ComposeApply{
+								ArtifactId:     first.ArtifactID,
+								ServiceIds:     []string{member.Render.ServiceID},
+								ForceRecreate:  true,
+								NoDependencies: true,
+							},
+						},
+					},
+					&agentpb.ExecutionStep{
+						StepId:             healthID,
+						TimeoutSeconds:     releaseMemberStepTimeoutSeconds,
+						Policy:             agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
+						PrerequisiteStepId: applyID,
+						Payload: &agentpb.ExecutionStep_WaitHealthy{
+							WaitHealthy: &agentpb.WaitHealthy{
+								ArtifactId: first.ArtifactID,
+								ServiceIds: []string{member.Render.ServiceID},
+							},
+						},
+					},
+					&agentpb.ExecutionStep{
+						StepId:             switchID,
+						TimeoutSeconds:     releaseMemberStepTimeoutSeconds,
+						Policy:             agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
+						PrerequisiteStepId: healthID,
+						Payload: &agentpb.ExecutionStep_ServiceRecreateAcknowledge{
+							ServiceRecreateAcknowledge: &agentpb.ServiceRecreateAcknowledge{
+								ArtifactId: first.ArtifactID,
+								ServiceId:  member.Render.ServiceID,
+								ReleaseId:  member.Intent.ID,
+							},
+						},
+					},
+					&agentpb.ExecutionStep{
+						StepId:         probeID,
+						TimeoutSeconds: releaseMemberStepTimeoutSeconds,
+						Policy:         agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
+						Payload: &agentpb.ExecutionStep_CandidateRestorationProbe{
+							CandidateRestorationProbe: &agentpb.CandidateRestorationProbe{
+								CandidateArtifactId: first.ArtifactID,
+								ServiceId:           member.Render.ServiceID,
+								CandidateReleaseId:  member.Intent.ID,
+							},
+						},
+					},
+					&agentpb.ExecutionStep{
+						StepId:             compensateID,
+						TimeoutSeconds:     releaseMemberStepTimeoutSeconds,
+						Policy:             agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
+						PrerequisiteStepId: applyID,
+						Payload: &agentpb.ExecutionStep_CandidateRestorationCompensate{
+							CandidateRestorationCompensate: &agentpb.CandidateRestorationCompensate{
+								CandidateArtifactId: first.ArtifactID,
+								ServiceId:           member.Render.ServiceID,
+								CandidateReleaseId:  member.Intent.ID,
+							},
+						},
+					},
 				)
 				if index > 0 {
 					steps[len(steps)-5].PrerequisiteStepId = task.Steps[base-3].ID
 				}
 				continue
 			}
-			steps = append(steps,
-				&agentpb.ExecutionStep{StepId: applyID, TimeoutSeconds: releaseMemberStepTimeoutSeconds, Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
-					Payload: &agentpb.ExecutionStep_ComposeRemove{ComposeRemove: &agentpb.ComposeRemove{ArtifactId: member.Render.PriorArtifactID, ServiceIds: []string{member.Render.ServiceID}}}},
-				&agentpb.ExecutionStep{StepId: healthID, TimeoutSeconds: releaseMemberStepTimeoutSeconds, Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD, PrerequisiteStepId: applyID,
-					Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{ArtifactId: first.ArtifactID, ServiceIds: []string{member.Render.ServiceID}, ForceRecreate: true, NoDependencies: true}}},
-				&agentpb.ExecutionStep{StepId: switchID, TimeoutSeconds: releaseMemberStepTimeoutSeconds, Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD, PrerequisiteStepId: healthID,
-					Payload: &agentpb.ExecutionStep_ServiceRecreateAcknowledge{ServiceRecreateAcknowledge: &agentpb.ServiceRecreateAcknowledge{ArtifactId: first.ArtifactID, ServiceId: member.Render.ServiceID, ReleaseId: member.Intent.ID}}},
-				&agentpb.ExecutionStep{StepId: probeID, TimeoutSeconds: releaseMemberStepTimeoutSeconds, Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
-					Payload: &agentpb.ExecutionStep_ServiceRecreateProbe{ServiceRecreateProbe: &agentpb.ServiceRecreateProbe{CandidateArtifactId: first.ArtifactID, PriorArtifactId: member.Render.PriorArtifactID, ServiceId: member.Render.ServiceID, CandidateReleaseId: member.Intent.ID, PriorReleaseId: priorReleaseID}}},
-				&agentpb.ExecutionStep{StepId: compensateID, TimeoutSeconds: releaseMemberStepTimeoutSeconds, Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE, PrerequisiteStepId: healthID,
-					Payload: &agentpb.ExecutionStep_ServiceRecreateCompensate{ServiceRecreateCompensate: &agentpb.ServiceRecreateCompensate{ArtifactId: member.Render.PriorArtifactID, CandidateArtifactId: first.ArtifactID, ServiceId: member.Render.ServiceID, CandidateReleaseId: member.Intent.ID, PriorReleaseId: priorReleaseID, PriorTarget: string(member.Render.PriorTarget), Enabled: input.Operation.FailurePolicy == domain.OnFailureSwitchBack}}},
+			steps = append(
+				steps,
+				&agentpb.ExecutionStep{
+					StepId:         applyID,
+					TimeoutSeconds: releaseMemberStepTimeoutSeconds,
+					Policy:         agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
+					Payload: &agentpb.ExecutionStep_ComposeRemove{
+						ComposeRemove: &agentpb.ComposeRemove{
+							ArtifactId: member.Render.PriorArtifactID,
+							ServiceIds: []string{member.Render.ServiceID},
+						},
+					},
+				},
+				&agentpb.ExecutionStep{
+					StepId:             healthID,
+					TimeoutSeconds:     releaseMemberStepTimeoutSeconds,
+					Policy:             agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
+					PrerequisiteStepId: applyID,
+					Payload: &agentpb.ExecutionStep_ComposeApply{
+						ComposeApply: &agentpb.ComposeApply{
+							ArtifactId:     first.ArtifactID,
+							ServiceIds:     []string{member.Render.ServiceID},
+							ForceRecreate:  true,
+							NoDependencies: true,
+						},
+					},
+				},
+				&agentpb.ExecutionStep{
+					StepId:             switchID,
+					TimeoutSeconds:     releaseMemberStepTimeoutSeconds,
+					Policy:             agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
+					PrerequisiteStepId: healthID,
+					Payload: &agentpb.ExecutionStep_ServiceRecreateAcknowledge{
+						ServiceRecreateAcknowledge: &agentpb.ServiceRecreateAcknowledge{
+							ArtifactId: first.ArtifactID,
+							ServiceId:  member.Render.ServiceID,
+							ReleaseId:  member.Intent.ID,
+						},
+					},
+				},
+				&agentpb.ExecutionStep{
+					StepId:         probeID,
+					TimeoutSeconds: releaseMemberStepTimeoutSeconds,
+					Policy:         agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
+					Payload: &agentpb.ExecutionStep_ServiceRecreateProbe{
+						ServiceRecreateProbe: &agentpb.ServiceRecreateProbe{
+							CandidateArtifactId: first.ArtifactID,
+							PriorArtifactId:     member.Render.PriorArtifactID,
+							ServiceId:           member.Render.ServiceID,
+							CandidateReleaseId:  member.Intent.ID,
+							PriorReleaseId:      priorReleaseID,
+						},
+					},
+				},
+				&agentpb.ExecutionStep{
+					StepId:             compensateID,
+					TimeoutSeconds:     releaseMemberStepTimeoutSeconds,
+					Policy:             agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
+					PrerequisiteStepId: healthID,
+					Payload: &agentpb.ExecutionStep_ServiceRecreateCompensate{
+						ServiceRecreateCompensate: &agentpb.ServiceRecreateCompensate{
+							ArtifactId:          member.Render.PriorArtifactID,
+							CandidateArtifactId: first.ArtifactID,
+							ServiceId:           member.Render.ServiceID,
+							CandidateReleaseId:  member.Intent.ID,
+							PriorReleaseId:      priorReleaseID,
+							PriorTarget:         string(member.Render.PriorTarget),
+							Enabled:             input.Operation.FailurePolicy == domain.OnFailureSwitchBack,
+						},
+					},
+				},
 			)
 			if index > 0 {
 				steps[len(steps)-5].PrerequisiteStepId = task.Steps[base-3].ID
 			}
 			continue
 		}
-		candidateConfig, err := domain.RenderProxyConfig(member.Render.ServiceName, member.Intent.ID, member.Render.CandidateTarget, member.Render.ProxyGeneration, member.Render.ProxyPorts)
-		if err != nil {
-			return nil, err
-		}
-		priorConfig, err := domain.RenderProxyConfig(member.Render.ServiceName, priorReleaseID, member.Render.PriorTarget, member.Render.PriorProxyGeneration, member.Render.ProxyPorts)
+		candidateConfig, err := domain.RenderProxyConfig(
+			member.Render.ServiceName,
+			member.Intent.ID,
+			member.Render.CandidateTarget,
+			member.Render.ProxyGeneration,
+			member.Render.ProxyPorts,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -295,10 +426,12 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 			&agentpb.ExecutionStep{
 				StepId: applyID, TimeoutSeconds: releaseMemberStepTimeoutSeconds,
 				Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
-				Payload: &agentpb.ExecutionStep_ComposeWorkloadApply{ComposeWorkloadApply: &agentpb.ComposeWorkloadApply{
-					ArtifactId: first.ArtifactID, ServiceId: member.Render.ServiceID, Target: string(member.Render.CandidateTarget),
-					EnsureProxy: member.Render.PriorStrategy == domain.StrategyRecreate,
-				}},
+				Payload: &agentpb.ExecutionStep_ComposeWorkloadApply{
+					ComposeWorkloadApply: &agentpb.ComposeWorkloadApply{
+						ArtifactId: first.ArtifactID, ServiceId: member.Render.ServiceID, Target: string(member.Render.CandidateTarget),
+						EnsureProxy: member.Render.PriorStrategy == domain.StrategyRecreate,
+					},
+				},
 			},
 			&agentpb.ExecutionStep{
 				StepId: healthID, TimeoutSeconds: releaseMemberStepTimeoutSeconds,
@@ -318,15 +451,62 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 					ConfigSha256: candidateConfig.SHA256[:], ReleaseId: member.Intent.ID,
 				}},
 			},
+		)
+		if priorReleaseID == "" {
+			if member.Render.PriorWorkload != nil || member.Render.PriorArtifactID != "" ||
+				member.Render.PriorProxyGeneration != 0 || member.Render.PriorProxyDigest != "" {
+				return nil, errs.New(errs.KindInternal, "first blue-green release has unexpected predecessor authority")
+			}
+			steps = append(
+				steps,
+				&agentpb.ExecutionStep{StepId: probeID, TimeoutSeconds: releaseMemberStepTimeoutSeconds,
+					Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
+					Payload: &agentpb.ExecutionStep_CandidateRestorationProbe{
+						CandidateRestorationProbe: &agentpb.CandidateRestorationProbe{
+							CandidateArtifactId: first.ArtifactID, ServiceId: member.Render.ServiceID, CandidateReleaseId: member.Intent.ID,
+						},
+					}},
+				&agentpb.ExecutionStep{
+					StepId:             compensateID,
+					TimeoutSeconds:     releaseMemberStepTimeoutSeconds,
+					PrerequisiteStepId: applyID,
+					Policy:             agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
+					Payload: &agentpb.ExecutionStep_CandidateRestorationCompensate{
+						CandidateRestorationCompensate: &agentpb.CandidateRestorationCompensate{
+							CandidateArtifactId: first.ArtifactID, ServiceId: member.Render.ServiceID, CandidateReleaseId: member.Intent.ID,
+						},
+					},
+				},
+			)
+			if index > 0 {
+				steps[len(steps)-5].PrerequisiteStepId = task.Steps[base-3].ID
+			}
+			continue
+		}
+		priorConfig, err := domain.RenderProxyConfig(
+			member.Render.ServiceName,
+			priorReleaseID,
+			member.Render.PriorTarget,
+			member.Render.PriorProxyGeneration,
+			member.Render.ProxyPorts,
+		)
+		if err != nil {
+			return nil, err
+		}
+		steps = append(steps,
 			&agentpb.ExecutionStep{
 				StepId: probeID, TimeoutSeconds: releaseMemberStepTimeoutSeconds,
 				Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
 				Payload: &agentpb.ExecutionStep_ServiceProxyProbe{ServiceProxyProbe: &agentpb.ServiceProxyProbe{
 					CandidateArtifactId: first.ArtifactID, PriorArtifactId: member.Render.PriorArtifactID,
-					ServiceId:      member.Render.ServiceID,
-					ExpectedTarget: string(member.Render.PriorTarget), ProxyGeneration: member.Render.PriorProxyGeneration,
+					ServiceId: member.Render.ServiceID,
+					ExpectedTarget: string(
+						member.Render.PriorTarget,
+					), ProxyGeneration: member.Render.PriorProxyGeneration,
 					ConfigJson: priorConfig.JSON, ConfigSha256: priorConfig.SHA256[:], ReleaseId: priorReleaseID,
-					AlternateTarget: string(member.Render.CandidateTarget), AlternateProxyGeneration: member.Render.ProxyGeneration,
+					AlternateTarget: string(
+						member.Render.CandidateTarget,
+					), AlternateProxyGeneration: member.Render.ProxyGeneration,
 					AlternateConfigJson: candidateConfig.JSON, AlternateConfigSha256: candidateConfig.SHA256[:],
 					AlternateReleaseId: member.Intent.ID,
 				}},
@@ -335,14 +515,18 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 				StepId: compensateID, TimeoutSeconds: releaseMemberStepTimeoutSeconds,
 				Policy:             agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
 				PrerequisiteStepId: applyID,
-				Payload: &agentpb.ExecutionStep_ServiceProxyCompensate{ServiceProxyCompensate: &agentpb.ServiceProxyCompensate{
-					CandidateArtifactId: first.ArtifactID, PriorArtifactId: member.Render.PriorArtifactID,
-					ServiceId:       member.Render.ServiceID,
-					CandidateTarget: string(member.Render.CandidateTarget), PriorTarget: string(member.Render.PriorTarget),
-					ProxyGeneration: member.Render.PriorProxyGeneration, ConfigJson: priorConfig.JSON,
-					ConfigSha256: priorConfig.SHA256[:], PriorReleaseId: priorReleaseID,
-					Enabled: input.Operation.FailurePolicy == domain.OnFailureSwitchBack,
-				}},
+				Payload: &agentpb.ExecutionStep_ServiceProxyCompensate{
+					ServiceProxyCompensate: &agentpb.ServiceProxyCompensate{
+						CandidateArtifactId: first.ArtifactID, PriorArtifactId: member.Render.PriorArtifactID,
+						ServiceId: member.Render.ServiceID,
+						CandidateTarget: string(
+							member.Render.CandidateTarget,
+						), PriorTarget: string(member.Render.PriorTarget),
+						ProxyGeneration: member.Render.PriorProxyGeneration, ConfigJson: priorConfig.JSON,
+						ConfigSha256: priorConfig.SHA256[:], PriorReleaseId: priorReleaseID,
+						Enabled: input.Operation.FailurePolicy == domain.OnFailureSwitchBack,
+					},
+				},
 			},
 		)
 		if index > 0 {
@@ -409,8 +593,20 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 		if err != nil {
 			return nil, err
 		}
-		preSteps, postSteps, failureSteps = append(preSteps, hooks.PreSteps...), append(postSteps, hooks.PostSteps...), append(failureSteps, hooks.FailureSteps...)
-		snapshots, projections, bodies = append(snapshots, hooks.Snapshots...), append(projections, hooks.Projections...), append(bodies, hooks.Bodies...)
+		preSteps, postSteps, failureSteps = append(
+			preSteps,
+			hooks.PreSteps...), append(
+			postSteps,
+			hooks.PostSteps...), append(
+			failureSteps,
+			hooks.FailureSteps...)
+		snapshots, projections, bodies = append(
+			snapshots,
+			hooks.Snapshots...), append(
+			projections,
+			hooks.Projections...), append(
+			bodies,
+			hooks.Bodies...)
 	}
 	steps = append(steps, preSteps...)
 	steps = append(steps, postSteps...)
@@ -418,7 +614,10 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 	procedureMembers := make([]executionplan.CandidateReleaseMemberInput, len(input.Members))
 	candidateServices := make([]executionplan.CandidateServiceIdentity, len(input.Members))
 	for index, member := range input.Members {
-		candidateServices[index] = executionplan.CandidateServiceIdentity{ServiceID: member.Render.ServiceID, ReleaseID: member.Intent.ID}
+		candidateServices[index] = executionplan.CandidateServiceIdentity{
+			ServiceID: member.Render.ServiceID,
+			ReleaseID: member.Intent.ID,
+		}
 	}
 	for index, member := range input.Members {
 		base := index * 5

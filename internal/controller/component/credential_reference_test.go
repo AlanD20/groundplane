@@ -17,7 +17,10 @@ type credentialHierarchyStub struct {
 	environment etcd.Versioned[etcd.EnvironmentRecord]
 }
 
-func (stub credentialHierarchyStub) GetEnvironment(_ context.Context, _ string) (etcd.Versioned[etcd.EnvironmentRecord], error) {
+func (stub credentialHierarchyStub) GetEnvironment(
+	_ context.Context,
+	_ string,
+) (etcd.Versioned[etcd.EnvironmentRecord], error) {
 	return stub.environment, nil
 }
 
@@ -34,7 +37,11 @@ type credentialCreatorStub struct {
 	secret  apiTypes.Secret
 }
 
-func (stub *credentialCreatorStub) CreateSecret(_ context.Context, request apiTypes.SecretCreateRequest, _ string) (etcd.IdempotencyResponse, error) {
+func (stub *credentialCreatorStub) CreateSecret(
+	_ context.Context,
+	request apiTypes.SecretCreateRequest,
+	_ string,
+) (etcd.IdempotencyResponse, error) {
 	stub.request = request
 	body, _ := json.Marshal(stub.secret)
 	return etcd.IdempotencyResponse{Status: http.StatusCreated, Body: body}, nil
@@ -47,8 +54,13 @@ func TestCredentialReferenceResolverCreatesProjectSecretWithoutReturningToken(t 
 	secretID := ids.NewAt(ids.KindSecret, now, 3)
 	creator := &credentialCreatorStub{secret: apiTypes.Secret{ID: secretID, ProjectID: projectID}}
 	resolver, err := NewCredentialReferenceResolver(
-		credentialHierarchyStub{environment: etcd.Versioned[etcd.EnvironmentRecord]{Record: etcd.EnvironmentRecord{ID: environmentID, ProjectID: projectID}}},
-		credentialSecretsStub{}, creator,
+		credentialHierarchyStub{
+			environment: etcd.Versioned[etcd.EnvironmentRecord]{
+				Record: etcd.EnvironmentRecord{ID: environmentID, ProjectID: projectID},
+			},
+		},
+		credentialSecretsStub{},
+		creator,
 	)
 	if err != nil {
 		t.Fatalf("NewCredentialReferenceResolver() error = %v", err)
@@ -72,7 +84,11 @@ func TestCredentialReferenceResolverAcceptsOnlyProjectOrPlatformEnvSecret(t *tes
 	projectID := ids.NewAt(ids.KindProject, now, 5)
 	secretID := ids.NewAt(ids.KindSecret, now, 6)
 	resolver, err := NewCredentialReferenceResolver(
-		credentialHierarchyStub{environment: etcd.Versioned[etcd.EnvironmentRecord]{Record: etcd.EnvironmentRecord{ID: environmentID, ProjectID: projectID}}},
+		credentialHierarchyStub{
+			environment: etcd.Versioned[etcd.EnvironmentRecord]{
+				Record: etcd.EnvironmentRecord{ID: environmentID, ProjectID: projectID},
+			},
+		},
 		credentialSecretsStub{secret: etcd.Versioned[etcd.SecretRecord]{Record: etcd.SecretRecord{Secret: core.Secret{
 			ID: secretID, Scope: core.SecretScopeProject, ProjectID: projectID, Kind: core.SecretKindEnvVar,
 		}}}},

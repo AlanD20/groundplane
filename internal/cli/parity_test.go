@@ -401,7 +401,7 @@ func TestComponentConfigSetImportsCaddyTemplateWithoutErasingZone(t *testing.T) 
 			if request.Method != http.MethodGet || request.URL.Path != "/api/v1/components/cmp_1/config" {
 				t.Fatalf("config request = %s %s", request.Method, request.URL.Path)
 			}
-			_, _ = io.WriteString(writer, `{"config":{"zone_id":"`+zoneID+`","caddyfile_template":"old {routes}"}}`)
+			_, _ = io.WriteString(writer, `{"config":{"zone_ids":["`+zoneID+`"],"caddyfile_template":"old {routes}"}}`)
 		case 3:
 			if request.Method != http.MethodPut || request.URL.Path != "/api/v1/components/cmp_1/config" {
 				t.Fatalf("set request = %s %s", request.Method, request.URL.Path)
@@ -410,13 +410,13 @@ func TestComponentConfigSetImportsCaddyTemplateWithoutErasingZone(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			want := `{"config":{"zone_id":"` + zoneID + `","caddyfile_template":"{\n\t{routes}\n}\n"}}`
+			want := `{"config":{"zone_ids":["` + zoneID + `"],"caddyfile_template":"{\n\t{routes}\n}\n"}}`
 			if string(body) != want {
 				t.Fatalf("body = %s, want %s", body, want)
 			}
 			_, _ = io.WriteString(
 				writer,
-				`{"resource":{"zone_id":"`+zoneID+`","caddyfile_template":"{\n\t{routes}\n}\n"},"reconcile_task_id":null}`,
+				`{"resource":{"zone_ids":["`+zoneID+`"],"caddyfile_template":"{\n\t{routes}\n}\n"},"reconcile_task_id":null}`,
 			)
 		default:
 			t.Fatalf("unexpected request %d", requests)

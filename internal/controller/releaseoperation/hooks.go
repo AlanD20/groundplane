@@ -92,7 +92,10 @@ func (service *Service) prepareReleaseHooks(
 	}
 	total := len(preSteps) + len(postSteps) + len(failureSteps)
 	if total > 16 || bodyBytes > 1<<20 {
-		return preparedReleaseHooks{}, errs.New(errs.KindValidationFailed, "release hook selection exceeds its operation bounds")
+		return preparedReleaseHooks{}, errs.New(
+			errs.KindValidationFailed,
+			"release hook selection exceeds its operation bounds",
+		)
 	}
 	task.Steps = append(task.Steps, preSteps...)
 	task.Steps = append(task.Steps, postSteps...)

@@ -85,7 +85,9 @@ func (routeRemovalPlanProviderRenderer) ProjectHTTPRouter(
 ) (componentsdk.HTTPRouterInput, error) {
 	input := componentsdk.HTTPRouterInput{
 		ComponentID: component.ID, Enabled: true, GeneratedServiceID: component.GeneratedServices[0],
-		ZoneID: ids.New(ids.KindNetwork), ZoneName: "frontend", PinnedIPv4: component.PinnedIPv4,
+		Zones: []componentsdk.HTTPRouterZoneInput{{
+			ID: ids.New(ids.KindNetwork), Name: "frontend", StaticIPv4: component.PinnedIPv4,
+		}},
 		Origin: componentsdk.HTTPRouterOrigin{ServiceName: "caddy", URL: "http://caddy:80"},
 	}
 	for _, route := range environment.Routes {
@@ -309,7 +311,7 @@ func routeRemovalPlanTestState(
 			Implementation: core.ComponentKindIngressCaddy,
 			Enabled:        true,
 			Settings: core.ComponentCapabilitySettings{
-				ZoneID: projection.DesiredZones[0].Desired.ID,
+				ZoneIDs: []string{projection.DesiredZones[0].Desired.ID},
 			},
 		}},
 		nil,
@@ -347,13 +349,17 @@ func routeRemovalPlanTestState(
 		t.Fatalf("marshal Route removal fixture normalized Compose: %v", err)
 	}
 	projection.NormalizedCompose = normalized
+	sort.Slice(
+		identities.Services,
+		func(left, right int) bool { return identities.Services[left].Name < identities.Services[right].Name },
+	)
 	artifact, err := RenderCompose(ComposeRenderInput{
 		Project: componentProjection.Project, ArtifactID: ids.NewAt(ids.KindConfig, at, 90),
 		ProjectOwnerKind: ComposeProjectOwnerTenant,
 		TenantID:         identity.TenantID, ProjectID: identity.ProjectID, EnvironmentID: identity.EnvironmentID,
 		PlanID: ids.NewAt(ids.KindPlan, at, 91), RenderGeneration: projection.RenderGeneration,
 		AuthorizedVolumeDir: identity.AuthorizedVolumeDir,
-		Identities:          mustComposeIdentitySnapshotFromProjection(t, projection),
+		Identities:          identities,
 	})
 	if err != nil {
 		t.Fatalf("RenderCompose(Route removal fixture) error = %v", err)
@@ -387,7 +393,7 @@ x-gp-components:
     implementation: caddy
     enabled: true
     settings:
-		zone_id: ` + projection.DesiredZones[0].Desired.ID + "\n")
+      zone_ids: [` + projection.DesiredZones[0].Desired.ID + "]\n")
 	base := &blueprintPlanReader{
 		tenant: etcd.TenantRecord{ID: identity.TenantID, Slug: identity.TenantSlug, Name: "Acme"},
 		project: etcd.ProjectRecord{

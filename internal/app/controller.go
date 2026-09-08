@@ -313,7 +313,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Service desired revision repository: %w", err)
 	}
 	serviceMutationRepository, err := newDurableServiceMutationRepository(
-		hierarchyRecords, serviceRecords, zoneRecords, serviceDesiredRevisionRecords,
+		hierarchyRecords, serviceRecords, zoneRecords, serviceDesiredRevisionRecords, releaseLedger,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -466,7 +466,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize execution plan resolver: %w", err)
 	}
-	if err := planResolver.EnableReleasePlans(releaseLedger); err != nil {
+	if err := configureReleasePlans(planResolver, releaseLedger); err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize release plan resolver: %w", err)
 	}
@@ -498,17 +498,6 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script source-reference authority: %w", err)
-	}
-	blueprintReleases, err := blueprintrelease.NewService(
-		releaseLedger,
-		scriptRecords,
-		planResolver,
-		scriptArtifacts,
-		scriptSourceReferences,
-	)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Blueprint candidate-release service: %w", err)
 	}
 	backupSecretEvidence, err := etcd.NewBackupSecretResolutionReader(store)
 	if err != nil {
@@ -591,6 +580,14 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		authenticator, tasks, planResolver, materializationResolver, backupSecrets, backupCheckpoints,
 		platformComponentExecution, scriptArtifacts, scriptCheckpoints,
 	)
+	blueprintReleases, err := blueprintrelease.NewService(
+		releaseLedger, scriptRecords, planResolver, scriptArtifacts, scriptSourceReferences,
+		agents, agentRuntime.registry,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Blueprint candidate-release service: %w", err)
+	}
 	staleTasks, err := newStaleAgentTaskMaintenance(agents, agentRuntime.registry, tasks)
 	if err != nil {
 		_ = store.Close()
@@ -635,6 +632,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	releaseOperations, err := releaseoperation.NewService(
 		releaseLedger, serviceRecords, releaseGroups, idempotency, intentCoordinator,
 		planResolver, scriptRecords, scriptArtifacts, releaseExecutionTimeout,
+		agents, agentRuntime.registry,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -1059,7 +1057,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Platform Component mutations: %w", err)
 	}
 	componentMutations, err := componentcapability.NewMutationService(
-		componentRecords, environmentBlueprintRepository, environmentBlueprints,
+		componentRecords, environmentBlueprints,
 		componentCredentials, platformComponentMutations,
 	)
 	if err != nil {

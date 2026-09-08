@@ -161,7 +161,10 @@ func newVolumeCmd() *cobra.Command {
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if (impactToken == "") != (confirmKey == "") {
-				return errs.New(errs.KindValidationFailed, "volume remove requires both --impact-token and --confirm-key")
+				return errs.New(
+					errs.KindValidationFailed,
+					"volume remove requires both --impact-token and --confirm-key",
+				)
 			}
 			id, err := resolveVolumeTarget(cmd, args[0])
 			if err != nil {
@@ -273,7 +276,13 @@ func renderVolumeImpact(cmd *cobra.Command, pages []apiTypes.VolumeDeletionImpac
 		return fromContext(cmd).Out.RenderOne(
 			[]string{"volume_id", "slug", "key", "items", "data_handling"},
 			[]string{pages[0].VolumeID, pages[0].Slug, pages[0].Key, fmt.Sprint(len(items)), pages[0].DataHandling},
-			map[string]any{"volume_id": pages[0].VolumeID, "slug": pages[0].Slug, "key": pages[0].Key, "items": items, "data_handling": pages[0].DataHandling},
+			map[string]any{
+				"volume_id":     pages[0].VolumeID,
+				"slug":          pages[0].Slug,
+				"key":           pages[0].Key,
+				"items":         items,
+				"data_handling": pages[0].DataHandling,
+			},
 		)
 	}
 	for _, page := range pages {

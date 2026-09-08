@@ -56,7 +56,10 @@ func (resolverSecretValueReader) GetSecret(context.Context, string) (etcd.Versio
 	return etcd.Versioned[etcd.SecretRecord]{}, nil
 }
 
-func (resolverSecretValueReader) GetSecretValue(context.Context, etcd.Versioned[etcd.SecretRecord]) (etcd.SecretEncryptedValue, error) {
+func (resolverSecretValueReader) GetSecretValue(
+	context.Context,
+	etcd.Versioned[etcd.SecretRecord],
+) (etcd.SecretEncryptedValue, error) {
 	return etcd.SecretEncryptedValue{}, nil
 }
 

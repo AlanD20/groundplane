@@ -203,7 +203,10 @@ func (repository *Repository) releaseAbandonedPage(
 	if err != nil {
 		return err
 	}
-	mutations = append(mutations, Mutation{Type: MutationPut, Key: PreparationKey(descriptor.OperationID), Value: descriptorValue})
+	mutations = append(
+		mutations,
+		Mutation{Type: MutationPut, Key: PreparationKey(descriptor.OperationID), Value: descriptorValue},
+	)
 	if len(page) > releaseBatchSize || len(conditions)+len(mutations) > 96 {
 		return corruption("source abandonment batch exceeds transaction ceiling")
 	}

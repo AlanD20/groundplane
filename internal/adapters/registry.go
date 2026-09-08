@@ -12,6 +12,8 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
+
+	"github.com/AlanD20/groundplane/internal/core"
 )
 
 // StepOp is a member of the known step catalog the Agent executes. A
@@ -69,10 +71,11 @@ type Step struct {
 // ProvisionParams contains the Controller-resolved identity transported by a
 // typed Agent procedure. The Agent passes it to the same compiled adapter.
 type ProvisionParams struct {
-	Database string // <service-name>_<first-6-of-attach-id>
-	Role     string // same as Database in the MVP (one role per attach)
-	Password []byte // Controller-generated, URL-safe; caller-owned and mutable
-	GrantOn  string // set only for grant steps: the OTHER attach's database
+	Authentication core.BackingAuthentication
+	Database       string // <service-name>_<first-6-of-attach-id>
+	Role           string // same as Database in the MVP (one role per attach)
+	Password       []byte // Controller-generated, URL-safe; caller-owned and mutable
+	GrantOn        string // set only for grant steps: the OTHER attach's database
 }
 
 // BackupStrategy names the dump/restore commands the adapter's steps
@@ -103,11 +106,12 @@ type FactDefinition struct {
 // FactParams is the complete resolved identity used to render one own or
 // granted Attach fact set. Password remains caller-owned mutable bytes.
 type FactParams struct {
-	Host     string
-	Port     string
-	Database string
-	Role     string
-	Password []byte
+	Authentication core.BackingAuthentication
+	Host           string
+	Port           string
+	Database       string
+	Role           string
+	Password       []byte
 }
 
 // Fact owns its Value. Callers must ClearFacts after encryption or consumption.
@@ -125,7 +129,8 @@ type Adapter interface {
 	FactsPrefix() string  // e.g. "pg16_" — empty for Manual()
 	URLScheme() string    // e.g. "pgsql://" — empty for Manual()
 	Port() string         // e.g. "5432" — empty for Manual()
-	FactSchema() []FactDefinition
+	FactSchema(core.BackingAuthentication) []FactDefinition
+	SupportsAuthenticationModes() bool
 	Manual() bool // true => network-only attach, no facts, no backups (see mvp.md, "The manual adapter")
 	SupportsGrants() bool
 
@@ -152,16 +157,23 @@ func BuildFacts(adapter Adapter, params FactParams) ([]Fact, error) {
 	if adapter == nil {
 		return nil, fmt.Errorf("adapter is required")
 	}
-	schema := adapter.FactSchema()
+	authentication, err := core.ResolveBackingAuthentication(
+		adapter.SupportsAuthenticationModes(),
+		params.Authentication,
+	)
+	if err != nil {
+		return nil, err
+	}
+	params.Authentication = authentication
+	schema := adapter.FactSchema(authentication)
 	if adapter.Manual() {
 		if len(schema) != 0 || adapter.FactsPrefix() != "" || adapter.URLScheme() != "" {
 			return nil, fmt.Errorf("manual adapter must not declare facts")
 		}
 		return []Fact{}, nil
 	}
-	if len(schema) == 0 || !validFactPrefix(adapter.FactsPrefix()) || len(params.Password) == 0 ||
-		!validFactAtom(params.Host) || !validFactAtom(params.Port) || !validFactAtom(params.Role) ||
-		!validFactBytes(params.Password) {
+	if len(schema) == 0 || !validFactPrefix(adapter.FactsPrefix()) ||
+		!validFactAtom(params.Host) || !validFactAtom(params.Port) || !validFactAuthentication(params) {
 		return nil, fmt.Errorf("adapter fact input is invalid")
 	}
 
@@ -228,10 +240,14 @@ func renderFactURL(scheme string, params FactParams) ([]byte, error) {
 	output.Grow(len(scheme) + len(params.Role) + len(params.Password) + len(params.Host) + len(params.Port) +
 		len(params.Database) + 4)
 	output.WriteString(scheme)
-	output.WriteString(params.Role)
-	output.WriteByte(':')
-	output.Write(params.Password)
-	output.WriteByte('@')
+	if params.Authentication != core.BackingAuthenticationNone {
+		if params.Authentication != core.BackingAuthenticationPassword {
+			output.WriteString(params.Role)
+		}
+		output.WriteByte(':')
+		output.Write(params.Password)
+		output.WriteByte('@')
+	}
 	output.WriteString(params.Host)
 	output.WriteByte(':')
 	output.WriteString(params.Port)
@@ -243,6 +259,19 @@ func renderFactURL(scheme string, params FactParams) ([]byte, error) {
 		output.WriteString(params.Database)
 	}
 	return output.Bytes(), nil
+}
+
+func validFactAuthentication(params FactParams) bool {
+	if params.Authentication == core.BackingAuthenticationNone {
+		return params.Role == "" && len(params.Password) == 0
+	}
+	if len(params.Password) == 0 || !validFactBytes(params.Password) {
+		return false
+	}
+	if params.Authentication == core.BackingAuthenticationPassword {
+		return params.Role == "default"
+	}
+	return validFactAtom(params.Role)
 }
 
 func validFactPrefix(value string) bool {

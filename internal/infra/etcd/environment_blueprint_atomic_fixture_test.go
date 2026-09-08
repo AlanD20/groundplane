@@ -196,8 +196,18 @@ func publishEnvironmentBlueprintAtomicShape(
 		if repositoryErr != nil {
 			t.Fatal(repositoryErr)
 		}
+		var desiredScripts []ScriptRecord
+		if shape.realHookSources {
+			desiredScripts = []ScriptRecord{blueprintTerminalFixtureScript(t, task)}
+		}
 		scriptPublication, err = scripts.PrepareBlueprintScriptPublication(
-			ctx, fixture.environment.Record.ID, fixedRevision, task.ID, nil, nil, nil,
+			ctx,
+			fixture.environment.Record.ID,
+			fixedRevision,
+			task.ID,
+			nil,
+			desiredScripts,
+			scriptBlueprintGenerations(desiredScripts),
 		)
 		if err != nil {
 			t.Fatalf("PrepareBlueprintScriptPublication() error = %v", err)
@@ -288,6 +298,7 @@ func publishEnvironmentBlueprintAtomicShape(
 			fixture.environment.Record.ID,
 			shape.releases,
 			shape.hooks,
+			shape.realHookSources,
 			releaseSourceMembers,
 		)
 		defer releasePublication.Clear()

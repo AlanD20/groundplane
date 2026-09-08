@@ -244,15 +244,6 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 }
 
-func (c *Client) sendExecutionStepResult(
-	stream agentStream,
-	request *agentpb.ExecutionStepResultRequest,
-) error {
-	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_ExecutionStepResultRequest{
-		ExecutionStepResultRequest: proto.Clone(request).(*agentpb.ExecutionStepResultRequest),
-	}})
-}
-
 func (c *Client) sendBackupCheckpoint(
 	stream agentStream,
 	request *agentpb.BackupCheckpointRequest,
@@ -374,7 +365,10 @@ func (c *Client) sendReady(stream agentStream) error {
 func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.ControllerMessage) (bool, error) {
 	if acknowledgement := message.GetTaskEventAck(); acknowledgement != nil {
 		if c.pool == nil {
-			return false, errs.New(errs.KindInternal, "agent: Task event acknowledgement arrived before worker configuration")
+			return false, errs.New(
+				errs.KindInternal,
+				"agent: Task event acknowledgement arrived before worker configuration",
+			)
 		}
 		return false, c.pool.AcceptTaskEventAck(ctx, acknowledgement)
 	}
@@ -411,9 +405,8 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 			AssignmentID: assignment.AssignmentId,
 			TaskID:       assignment.TaskId, OperationID: assignment.OperationId,
 			RetryOf: assignment.RetryOf, Plan: assignment.Plan, ScriptArtifacts: assignment.ScriptArtifacts,
-			ScriptCheckpoints:       assignment.ScriptCheckpoints,
-			AcknowledgedStepResults: assignment.AcknowledgedStepResults,
-			AutomaticReconcile:      assignment.GetAutomaticReconcile(), ExecutionEpoch: assignment.GetExecutionEpoch(),
+			ScriptCheckpoints:  assignment.ScriptCheckpoints,
+			AutomaticReconcile: assignment.GetAutomaticReconcile(), ExecutionEpoch: assignment.GetExecutionEpoch(),
 			ExecutionMode: assignment.GetExecutionMode(), ForwardDeadline: assignment.ForwardDeadline.AsTime(),
 			RecoveryDeadline:            assignment.RecoveryDeadline.AsTime(),
 			Deadline:                    executionDeadline,
@@ -536,13 +529,19 @@ func connectGRPC(ctx context.Context, socketPath string) (agentStream, io.Closer
 	return stream, connection, nil
 }
 
-func agentChannelTransportResult(ctx context.Context, cause error, message string, authenticatedReceive bool) (bool, error) {
+func agentChannelTransportResult(
+	ctx context.Context,
+	cause error,
+	message string,
+	authenticatedReceive bool,
+) (bool, error) {
 	if ctx.Err() != nil {
 		return false, nil
 	}
 	grpcStatus, hasGRPCStatus := status.FromError(cause)
 	code := grpcStatus.Code()
-	if errors.Is(cause, io.EOF) || authenticatedReceive && hasGRPCStatus && (code == codes.Internal || code == codes.Unknown) {
+	if errors.Is(cause, io.EOF) ||
+		authenticatedReceive && hasGRPCStatus && (code == codes.Internal || code == codes.Unknown) {
 		return true, nil
 	}
 	switch code {

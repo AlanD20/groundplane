@@ -101,8 +101,10 @@ func ensureManagedVolumeDirectoriesAs(
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if ids.Validate(ids.KindTask, request.TaskID) != nil || ids.Validate(ids.KindOperation, request.OperationID) != nil ||
-		len(request.IntentSHA256) != 32 || len(request.Volumes) == 0 {
+	if ids.Validate(ids.KindTask, request.TaskID) != nil ||
+		ids.Validate(ids.KindOperation, request.OperationID) != nil ||
+		len(request.IntentSHA256) != 32 ||
+		len(request.Volumes) == 0 {
 		return errs.New(errs.KindValidationFailed, "managed volume directory request identity is invalid")
 	}
 	parentFD, environmentFD, err := openEnvironmentDirectory(request.VolumeRoot, request.VolumeDir, expectedUID)
@@ -152,15 +154,24 @@ func removeManagedVolume(
 	expectedUID uint32,
 ) (ManagedVolumeDirectoryRemoveResult, error) {
 	if ctx == nil {
-		return ManagedVolumeDirectoryRemoveResult{}, errs.New(errs.KindInternal, "managed volume removal context is required")
+		return ManagedVolumeDirectoryRemoveResult{}, errs.New(
+			errs.KindInternal,
+			"managed volume removal context is required",
+		)
 	}
 	if err := ctx.Err(); err != nil {
 		return ManagedVolumeDirectoryRemoveResult{}, err
 	}
-	if ids.Validate(ids.KindTask, request.TaskID) != nil || ids.Validate(ids.KindOperation, request.OperationID) != nil ||
-		ids.Validate(ids.KindVolume, request.VolumeID) != nil || !validComposeKey(request.ComposeKey) ||
-		len(request.IntentSHA256) != 32 || len(request.Cursor) > 16*1024 {
-		return ManagedVolumeDirectoryRemoveResult{}, errs.New(errs.KindValidationFailed, "managed volume removal identity is invalid")
+	if ids.Validate(ids.KindTask, request.TaskID) != nil ||
+		ids.Validate(ids.KindOperation, request.OperationID) != nil ||
+		ids.Validate(ids.KindVolume, request.VolumeID) != nil ||
+		!validComposeKey(request.ComposeKey) ||
+		len(request.IntentSHA256) != 32 ||
+		len(request.Cursor) > 16*1024 {
+		return ManagedVolumeDirectoryRemoveResult{}, errs.New(
+			errs.KindValidationFailed,
+			"managed volume removal identity is invalid",
+		)
 	}
 	parentFD, environmentFD, err := openEnvironmentDirectory(request.VolumeRoot, request.VolumeDir, expectedUID)
 	if err != nil {
@@ -173,7 +184,10 @@ func removeManagedVolume(
 		return ManagedVolumeDirectoryRemoveResult{Complete: true}, nil
 	}
 	if err != nil {
-		return ManagedVolumeDirectoryRemoveResult{}, errs.Wrap(errs.KindValidationFailed, fmt.Errorf("open managed volume directory: %w", err))
+		return ManagedVolumeDirectoryRemoveResult{}, errs.Wrap(
+			errs.KindValidationFailed,
+			fmt.Errorf("open managed volume directory: %w", err),
+		)
 	}
 	defer unix.Close(leafFD)
 	var leafStat unix.Stat_t
@@ -192,7 +206,10 @@ func removeManagedVolume(
 		current := &cursor.Frames[len(cursor.Frames)-1]
 		currentFD, openErr := openRelativeDirectory(leafFD, current.Path)
 		if openErr != nil {
-			return ManagedVolumeDirectoryRemoveResult{}, errs.Wrap(errs.KindInternal, fmt.Errorf("open managed volume traversal directory: %w", openErr))
+			return ManagedVolumeDirectoryRemoveResult{}, errs.Wrap(
+				errs.KindInternal,
+				fmt.Errorf("open managed volume traversal directory: %w", openErr),
+			)
 		}
 		names, readErr := readDirectoryNames(currentFD)
 		if readErr != nil {
@@ -207,8 +224,12 @@ func removeManagedVolume(
 		}
 		if nextName == "" {
 			if len(cursor.Frames) == 1 {
-				if err := unix.Unlinkat(environmentFD, request.ComposeKey, unix.AT_REMOVEDIR); err != nil && !errors.Is(err, syscall.ENOENT) {
-					return ManagedVolumeDirectoryRemoveResult{}, errs.Wrap(errs.KindInternal, fmt.Errorf("remove managed volume directory: %w", err))
+				if err := unix.Unlinkat(environmentFD, request.ComposeKey, unix.AT_REMOVEDIR); err != nil &&
+					!errors.Is(err, syscall.ENOENT) {
+					return ManagedVolumeDirectoryRemoveResult{}, errs.Wrap(
+						errs.KindInternal,
+						fmt.Errorf("remove managed volume directory: %w", err),
+					)
 				}
 				if err := unix.Fsync(environmentFD); err != nil {
 					return ManagedVolumeDirectoryRemoveResult{}, errs.Wrap(errs.KindInternal, err)
@@ -226,7 +247,10 @@ func removeManagedVolume(
 			if !errors.Is(removeErr, syscall.ENOENT) {
 				if removeErr != nil {
 					_ = unix.Close(parentDirectoryFD)
-					return ManagedVolumeDirectoryRemoveResult{}, errs.Wrap(errs.KindInternal, fmt.Errorf("remove managed volume child directory: %w", removeErr))
+					return ManagedVolumeDirectoryRemoveResult{}, errs.Wrap(
+						errs.KindInternal,
+						fmt.Errorf("remove managed volume child directory: %w", removeErr),
+					)
 				}
 				if fsyncErr := unix.Fsync(parentDirectoryFD); fsyncErr != nil {
 					_ = unix.Close(parentDirectoryFD)
@@ -256,11 +280,17 @@ func removeManagedVolume(
 			continue
 		}
 		if statErr != nil {
-			return ManagedVolumeDirectoryRemoveResult{}, errs.Wrap(errs.KindInternal, fmt.Errorf("inspect managed volume entry: %w", statErr))
+			return ManagedVolumeDirectoryRemoveResult{}, errs.Wrap(
+				errs.KindInternal,
+				fmt.Errorf("inspect managed volume entry: %w", statErr),
+			)
 		}
 		if entryStat.Mode&unix.S_IFMT == unix.S_IFDIR {
 			if entryStat.Dev != leafStat.Dev {
-				return ManagedVolumeDirectoryRemoveResult{}, errs.New(errs.KindValidationFailed, "managed volume traversal crosses a mount boundary")
+				return ManagedVolumeDirectoryRemoveResult{}, errs.New(
+					errs.KindValidationFailed,
+					"managed volume traversal crosses a mount boundary",
+				)
 			}
 			cursor.Frames = append(cursor.Frames, volumeRemovalFrame{
 				Path: path.Join(current.Path, nextName),
@@ -276,7 +306,10 @@ func removeManagedVolume(
 		if !errors.Is(unlinkErr, syscall.ENOENT) {
 			if unlinkErr != nil {
 				_ = unix.Close(currentFD)
-				return ManagedVolumeDirectoryRemoveResult{}, errs.Wrap(errs.KindInternal, fmt.Errorf("remove managed volume entry: %w", unlinkErr))
+				return ManagedVolumeDirectoryRemoveResult{}, errs.Wrap(
+					errs.KindInternal,
+					fmt.Errorf("remove managed volume entry: %w", unlinkErr),
+				)
 			}
 			if fsyncErr := unix.Fsync(currentFD); fsyncErr != nil {
 				_ = unix.Close(currentFD)
@@ -307,12 +340,18 @@ func decodeRemovalCursor(encoded []byte, volumeID, composeKey string, intent []b
 	}
 	for _, frame := range cursor.Frames {
 		if frame.Path != "" && (path.IsAbs(frame.Path) || path.Clean(frame.Path) != frame.Path) {
-			return volumeRemovalCursor{}, errs.New(errs.KindValidationFailed, "managed volume removal cursor path is invalid")
+			return volumeRemovalCursor{}, errs.New(
+				errs.KindValidationFailed,
+				"managed volume removal cursor path is invalid",
+			)
 		}
 		if frame.Path != "" {
 			for _, component := range strings.Split(frame.Path, "/") {
 				if component == "." || component == ".." || component == "" || strings.ContainsRune(component, '\x00') {
-					return volumeRemovalCursor{}, errs.New(errs.KindValidationFailed, "managed volume removal cursor path is invalid")
+					return volumeRemovalCursor{}, errs.New(
+						errs.KindValidationFailed,
+						"managed volume removal cursor path is invalid",
+					)
 				}
 			}
 		}
@@ -422,7 +461,10 @@ func ensureManagedVolumeDirectory(
 	if errors.Is(err, syscall.EACCES) {
 		var leafStat unix.Stat_t
 		if statErr := unix.Fstatat(environmentFD, volume.Key, &leafStat, unix.AT_SYMLINK_NOFOLLOW); statErr != nil {
-			return errs.Wrap(errs.KindInternal, fmt.Errorf("inspect unreadable managed volume destination: %w", statErr))
+			return errs.Wrap(
+				errs.KindInternal,
+				fmt.Errorf("inspect unreadable managed volume destination: %w", statErr),
+			)
 		}
 		if leafStat.Mode&unix.S_IFMT != unix.S_IFDIR {
 			return errs.New(errs.KindValidationFailed, "managed volume destination is not a directory")
@@ -435,7 +477,8 @@ func ensureManagedVolumeDirectory(
 	siblingFD, siblingErr := openDirectoryAt(environmentFD, sibling)
 	created := false
 	if errors.Is(siblingErr, syscall.ENOENT) {
-		if mkdirErr := unix.Mkdirat(environmentFD, sibling, 0o700); mkdirErr != nil && !errors.Is(mkdirErr, syscall.EEXIST) {
+		if mkdirErr := unix.Mkdirat(environmentFD, sibling, 0o700); mkdirErr != nil &&
+			!errors.Is(mkdirErr, syscall.EEXIST) {
 			return errs.Wrap(errs.KindInternal, fmt.Errorf("create managed volume private sibling: %w", mkdirErr))
 		}
 		siblingFD, siblingErr = openDirectoryAt(environmentFD, sibling)
@@ -471,7 +514,10 @@ func ensureManagedVolumeDirectory(
 	if errors.Is(err, syscall.EEXIST) {
 		leafFD, openErr := openDirectoryAt(environmentFD, volume.Key)
 		if openErr != nil {
-			return errs.New(errs.KindValidationFailed, "managed volume destination appeared without task-owned evidence")
+			return errs.New(
+				errs.KindValidationFailed,
+				"managed volume destination appeared without task-owned evidence",
+			)
 		}
 		defer unix.Close(leafFD)
 		if markerErr := verifyMarker(leafFD, marker); markerErr != nil {

@@ -55,7 +55,11 @@ func (repository *BackupPolicyRepository) GetEnvironmentBlueprintBackupPolicySna
 		keys = append(keys, backupSourceKey(sourceID), backupSourceEnvironmentKey(environmentID, sourceID))
 	}
 	if policy.ConnectorID != "" {
-		keys = append(keys, connectorRecordKey(policy.ConnectorID), connectorEnvironmentKey(environmentID, policy.ConnectorID))
+		keys = append(
+			keys,
+			connectorRecordKey(policy.ConnectorID),
+			connectorEnvironmentKey(environmentID, policy.ConnectorID),
+		)
 	}
 	support := &GetManyResult{ReadRevision: base.ReadRevision}
 	if len(keys) != 0 {

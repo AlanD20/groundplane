@@ -109,7 +109,10 @@ func (repository *Repository) ClaimEnvironmentBlueprintStage(
 		return etcd.EnvironmentBlueprintStageClaim{}, err
 	}
 	existingKey := etcd.EnvironmentBlueprintDescriptorPrefix + etcd.EncodeCapabilityKeySegment(existingID)
-	existing, err := repository.store.GetMany(ctx, etcd.GetManyRequest{Keys: []string{existingKey}, Revision: result.Revision})
+	existing, err := repository.store.GetMany(
+		ctx,
+		etcd.GetManyRequest{Keys: []string{existingKey}, Revision: result.Revision},
+	)
 	if err != nil {
 		return etcd.EnvironmentBlueprintStageClaim{}, err
 	}
@@ -180,7 +183,10 @@ func (repository *Repository) bindEnvironmentBlueprintStage(
 		return etcd.EnvironmentBlueprintStageDescriptor{}, 0, err
 	}
 	if result == nil || result.Entry == nil {
-		return etcd.EnvironmentBlueprintStageDescriptor{}, 0, errs.New(errs.KindStateConflict, "Blueprint staging claim is unavailable")
+		return etcd.EnvironmentBlueprintStageDescriptor{}, 0, errs.New(
+			errs.KindStateConflict,
+			"Blueprint staging claim is unavailable",
+		)
 	}
 	defer clear(result.Entry.Value)
 	stored, err := etcd.DecodeDesiredRevisionDescriptor(result.Entry.Value)
@@ -188,11 +194,17 @@ func (repository *Repository) bindEnvironmentBlueprintStage(
 		return etcd.EnvironmentBlueprintStageDescriptor{}, 0, etcd.CorruptDesiredRevisionStage()
 	}
 	if stored.State == etcd.EnvironmentBlueprintStageAbandoned {
-		return etcd.EnvironmentBlueprintStageDescriptor{}, 0, errs.New(errs.KindStateConflict, "Blueprint staging claim was abandoned")
+		return etcd.EnvironmentBlueprintStageDescriptor{}, 0, errs.New(
+			errs.KindStateConflict,
+			"Blueprint staging claim was abandoned",
+		)
 	}
 	if stored.Bound {
 		if !etcd.SameDesiredRevisionStreams(stored, want) {
-			return etcd.EnvironmentBlueprintStageDescriptor{}, 0, errs.New(errs.KindInternal, "Blueprint staging stream input changed")
+			return etcd.EnvironmentBlueprintStageDescriptor{}, 0, errs.New(
+				errs.KindInternal,
+				"Blueprint staging stream input changed",
+			)
 		}
 		return stored, result.Entry.ModRevision, nil
 	}
@@ -314,7 +326,10 @@ func (repository *Repository) reloadEnvironmentBlueprintStage(
 		return etcd.EnvironmentBlueprintStageDescriptor{}, 0, err
 	}
 	if result == nil || result.Entry == nil {
-		return etcd.EnvironmentBlueprintStageDescriptor{}, 0, errs.New(errs.KindStateConflict, "Blueprint staging state changed")
+		return etcd.EnvironmentBlueprintStageDescriptor{}, 0, errs.New(
+			errs.KindStateConflict,
+			"Blueprint staging state changed",
+		)
 	}
 	defer clear(result.Entry.Value)
 	stored, err := etcd.DecodeDesiredRevisionDescriptor(result.Entry.Value)
@@ -324,7 +339,10 @@ func (repository *Repository) reloadEnvironmentBlueprintStage(
 		return etcd.EnvironmentBlueprintStageDescriptor{}, 0, etcd.CorruptDesiredRevisionStage()
 	}
 	if !stored.Bound || stored.State == etcd.EnvironmentBlueprintStageAbandoned {
-		return etcd.EnvironmentBlueprintStageDescriptor{}, 0, errs.New(errs.KindStateConflict, "Blueprint staging state changed")
+		return etcd.EnvironmentBlueprintStageDescriptor{}, 0, errs.New(
+			errs.KindStateConflict,
+			"Blueprint staging state changed",
+		)
 	}
 	if minimum != 0 {
 		progress := stored.NextAuditChunk
@@ -332,7 +350,10 @@ func (repository *Repository) reloadEnvironmentBlueprintStage(
 			progress = stored.NextProjectionChunk
 		}
 		if progress < minimum {
-			return etcd.EnvironmentBlueprintStageDescriptor{}, 0, errs.New(errs.KindStateConflict, "Blueprint staging batch kept changing")
+			return etcd.EnvironmentBlueprintStageDescriptor{}, 0, errs.New(
+				errs.KindStateConflict,
+				"Blueprint staging batch kept changing",
+			)
 		}
 		if err := repository.verifyEnvironmentBlueprintChunkRange(ctx, stored, family, start, progress, stream, result.ReadRevision); err != nil {
 			return etcd.EnvironmentBlueprintStageDescriptor{}, 0, err
@@ -389,12 +410,16 @@ func (repository *Repository) sealEnvironmentBlueprintStage(
 	descriptorRevision int64,
 ) (etcd.EnvironmentBlueprintSeal, error) {
 	seal := etcd.DesiredRevisionSealFromDescriptor(descriptor)
-	if descriptor.State == etcd.EnvironmentBlueprintStageSealed || descriptor.State == etcd.EnvironmentBlueprintStagePublished {
+	if descriptor.State == etcd.EnvironmentBlueprintStageSealed ||
+		descriptor.State == etcd.EnvironmentBlueprintStagePublished {
 		return repository.requireEnvironmentBlueprintSeal(ctx, seal)
 	}
 	if descriptor.State != etcd.EnvironmentBlueprintStageOpen || descriptor.NextAuditChunk != descriptor.AuditChunks ||
 		descriptor.NextProjectionChunk != descriptor.ProjectionChunks {
-		return etcd.EnvironmentBlueprintSeal{}, errs.New(errs.KindStateConflict, "Blueprint staging descriptor is not sealable")
+		return etcd.EnvironmentBlueprintSeal{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint staging descriptor is not sealable",
+		)
 	}
 	keys := etcd.DesiredRevisionChunkKeys(descriptor)
 	chunks, err := repository.store.GetMany(ctx, etcd.GetManyRequest{Keys: keys})

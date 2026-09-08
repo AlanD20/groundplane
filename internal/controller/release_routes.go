@@ -59,16 +59,20 @@ func (s *Server) registerReleases() {
 	huma.Register(s.API, huma.Operation{
 		OperationID: "service.deploy", Method: http.MethodPost, Path: "/services/{id}/deploy",
 		Summary: "Deploy a service", Tags: []string{"Service"}, DefaultStatus: http.StatusAccepted,
-		Responses: map[string]*huma.Response{"202": {Description: http.StatusText(http.StatusAccepted), Content: map[string]*huma.MediaType{
-			"application/json": {Schema: taskSchema},
-		}}},
+		Responses: map[string]*huma.Response{
+			"202": {Description: http.StatusText(http.StatusAccepted), Content: map[string]*huma.MediaType{
+				"application/json": {Schema: taskSchema},
+			}},
+		},
 	}, s.deployService)
 	huma.Register(s.API, huma.Operation{
 		OperationID: "service.rollback", Method: http.MethodPost, Path: "/services/{id}/rollback",
 		Summary: "Roll back a service", Tags: []string{"Service"}, DefaultStatus: http.StatusAccepted,
-		Responses: map[string]*huma.Response{"202": {Description: http.StatusText(http.StatusAccepted), Content: map[string]*huma.MediaType{
-			"application/json": {Schema: taskSchema},
-		}}},
+		Responses: map[string]*huma.Response{
+			"202": {Description: http.StatusText(http.StatusAccepted), Content: map[string]*huma.MediaType{
+				"application/json": {Schema: taskSchema},
+			}},
+		},
 	}, s.rollbackService)
 	s.setRoutePolicy("POST /api/v1/services/{id}/deploy", routePolicy{body: jsonBody})
 	s.setRoutePolicy("POST /api/v1/services/{id}/rollback", routePolicy{body: jsonBody})
@@ -112,11 +116,23 @@ func (s *Server) showRelease(ctx context.Context, input *releaseShowInput) (*rel
 	return &releaseOutput{Body: releaseDetail(view)}, nil
 }
 
-func (s *Server) deployService(ctx context.Context, input *releaseServiceDeployInput) (*releaseGroupMutationOutput, error) {
+func (s *Server) deployService(
+	ctx context.Context,
+	input *releaseServiceDeployInput,
+) (*releaseGroupMutationOutput, error) {
 	if s.releaseOperations == nil {
 		return nil, errs.New(errs.KindInternal, "release operator is not configured")
 	}
-	response, err := s.releaseOperations.DeployService(ctx, input.ID, domain.ServiceDeployInput{Tag: input.Body.Tag, Strategy: domain.Strategy(input.Body.Strategy), OnFailure: domain.OnFailure(input.Body.OnFailure)}, input.IdempotencyKey)
+	response, err := s.releaseOperations.DeployService(
+		ctx,
+		input.ID,
+		domain.ServiceDeployInput{
+			Tag:       input.Body.Tag,
+			Strategy:  domain.Strategy(input.Body.Strategy),
+			OnFailure: domain.OnFailure(input.Body.OnFailure),
+		},
+		input.IdempotencyKey,
+	)
 	if err != nil {
 		if s.Logger != nil {
 			s.Logger.Error(
@@ -130,11 +146,19 @@ func (s *Server) deployService(ctx context.Context, input *releaseServiceDeployI
 	return s.releaseGroupMutationResponse(response), nil
 }
 
-func (s *Server) rollbackService(ctx context.Context, input *releaseServiceRollbackInput) (*releaseGroupMutationOutput, error) {
+func (s *Server) rollbackService(
+	ctx context.Context,
+	input *releaseServiceRollbackInput,
+) (*releaseGroupMutationOutput, error) {
 	if s.releaseOperations == nil {
 		return nil, errs.New(errs.KindInternal, "release operator is not configured")
 	}
-	response, err := s.releaseOperations.RollbackService(ctx, input.ID, domain.ServiceRollbackInput{Tag: input.Body.Tag}, input.IdempotencyKey)
+	response, err := s.releaseOperations.RollbackService(
+		ctx,
+		input.ID,
+		domain.ServiceRollbackInput{Tag: input.Body.Tag},
+		input.IdempotencyKey,
+	)
 	if err != nil {
 		if s.Logger != nil {
 			s.Logger.Error(
@@ -150,10 +174,6 @@ func (s *Server) rollbackService(ctx context.Context, input *releaseServiceRollb
 
 func releaseSummary(view etcd.ReleaseView) apiTypes.ReleaseSummary {
 	completedAt := (*string)(nil)
-	digest := view.Intent.Digest
-	if view.Terminal != nil && view.Terminal.ResolvedImage != nil {
-		digest = view.Terminal.ResolvedImage.Digest
-	}
 	if view.Terminal != nil {
 		formatted := view.Terminal.CompletedAt.Format(time.RFC3339Nano)
 		completedAt = &formatted
@@ -162,7 +182,7 @@ func releaseSummary(view etcd.ReleaseView) apiTypes.ReleaseSummary {
 		ID: view.Intent.ID, EnvironmentID: view.Intent.EnvironmentID, ServiceID: view.Intent.ServiceID,
 		OperationID: view.Intent.OperationID, OperationKind: string(view.Intent.OperationKind),
 		GroupOperationID: view.Intent.GroupOperationID, GroupMemberOrdinal: view.Intent.GroupMemberOrdinal,
-		Image: view.Intent.Image, Tag: view.Intent.Tag, Digest: digest,
+		Image: view.Intent.CandidateWorkload.RequestedReference, Tag: view.Intent.Tag,
 		Strategy: string(view.Intent.Strategy), Slot: string(view.Intent.Slot),
 		OnFailure: apiTypes.OnFailure(view.Intent.OnFailure), State: apiTypes.ReleaseState(view.Checkpoint.State),
 		CreatedAt: view.Intent.CreatedAt.Format(time.RFC3339Nano), CompletedAt: completedAt,

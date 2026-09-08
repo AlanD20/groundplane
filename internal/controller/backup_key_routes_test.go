@@ -26,7 +26,11 @@ func (service *fakeBackupKeyService) ExportBackupKey(context.Context, string) (b
 	return backupkey.Export{Identity: service.exported, Era: 7}, nil
 }
 
-func (service *fakeBackupKeyService) RotateBackupKey(context.Context, string, string) (etcd.IdempotencyResponse, error) {
+func (service *fakeBackupKeyService) RotateBackupKey(
+	context.Context,
+	string,
+	string,
+) (etcd.IdempotencyResponse, error) {
 	service.rotates++
 	service.rotated = []byte("{\"task_id\":\"task_01ARZ3NDEKTSV4RRFFQ69G5FAV\"}")
 	return etcd.IdempotencyResponse{

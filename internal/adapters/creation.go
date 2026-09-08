@@ -3,6 +3,8 @@ package adapters
 import (
 	"strings"
 
+	"github.com/AlanD20/groundplane/internal/core"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -30,22 +32,30 @@ type CreationEnvironment struct {
 }
 
 type creationAdapter interface {
-	CreationSpec() CreationSpec
+	CreationSpec(core.BackingAuthentication) CreationSpec
 }
 
 // BackingCreationSpec resolves the immutable creation contract for one
 // registered adapter. Manual and attach-only adapters cannot be created as
 // managed backing services.
-func BackingCreationSpec(key string) (CreationSpec, error) {
+func BackingCreationSpec(key string, authentication core.BackingAuthentication) (CreationSpec, error) {
 	adapter, ok := Get(key)
 	if !ok {
 		return CreationSpec{}, errs.Newf(errs.KindValidationFailed, "unsupported backing-service adapter %q", key)
 	}
 	creator, ok := adapter.(creationAdapter)
 	if !ok || adapter.Manual() {
-		return CreationSpec{}, errs.Newf(errs.KindValidationFailed, "adapter %q cannot create a managed backing service", key)
+		return CreationSpec{}, errs.Newf(
+			errs.KindValidationFailed,
+			"adapter %q cannot create a managed backing service",
+			key,
+		)
 	}
-	spec := creator.CreationSpec()
+	authentication, err := core.ResolveBackingAuthentication(adapter.SupportsAuthenticationModes(), authentication)
+	if err != nil {
+		return CreationSpec{}, err
+	}
+	spec := creator.CreationSpec(authentication)
 	if err := validateCreationSpec(spec); err != nil {
 		return CreationSpec{}, err
 	}
@@ -55,7 +65,9 @@ func BackingCreationSpec(key string) (CreationSpec, error) {
 func validateCreationSpec(spec CreationSpec) error {
 	if strings.TrimSpace(spec.ServiceName) == "" || strings.TrimSpace(spec.VolumeSlug) == "" ||
 		strings.TrimSpace(spec.VolumeKey) == "" || strings.TrimSpace(spec.MountPath) == "" ||
-		strings.TrimSpace(spec.HealthTCP) == "" || len(spec.HealthCommand) < 2 || len(spec.Expose) == 0 || len(spec.Environment) == 0 {
+		strings.TrimSpace(
+			spec.HealthTCP,
+		) == "" || len(spec.HealthCommand) < 2 || len(spec.Expose) == 0 || len(spec.Environment) == 0 {
 		return errs.New(errs.KindInternal, "backing-service adapter has an incomplete creation spec")
 	}
 	seenNames := make(map[string]struct{}, len(spec.Environment))

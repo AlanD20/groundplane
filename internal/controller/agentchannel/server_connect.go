@@ -300,22 +300,6 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				}
 				continue
 			}
-			if request := result.message.GetExecutionStepResultRequest(); request != nil {
-				acknowledgement, err := s.acknowledgeExecutionStepResult(
-					stream.Context(), authenticate.AgentId, authorization.Generation, request,
-				)
-				if err != nil {
-					return taskStoreStatus(err)
-				}
-				if err := stream.Send(&agentpb.ControllerMessage{
-					Payload: &agentpb.ControllerMessage_ExecutionStepResultAck{
-						ExecutionStepResultAck: acknowledgement,
-					},
-				}); err != nil {
-					return err
-				}
-				continue
-			}
 			if request := result.message.GetBackupCheckpointRequest(); request != nil {
 				if s.checkpoints == nil {
 					return status.Error(codes.Internal, "Backup checkpoint service is not configured")

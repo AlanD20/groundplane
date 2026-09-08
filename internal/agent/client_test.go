@@ -72,7 +72,9 @@ func TestClientSendsExactFailedTaskAcknowledgement(t *testing.T) {
 				TaskId: workerTestTaskID, AssignmentId: assignment.AssignmentID,
 				OperationId: assignment.OperationID,
 				Plan:        assignment.Plan, ForwardDeadline: timestamppb.New(assignment.ForwardDeadline),
-				RecoveryDeadline: timestamppb.New(assignment.RecoveryDeadline), ExecutionDeadline: timestamppb.New(assignment.ForwardDeadline), ExecutionEpoch: 7,
+				RecoveryDeadline: timestamppb.New(
+					assignment.RecoveryDeadline,
+				), ExecutionDeadline: timestamppb.New(assignment.ForwardDeadline), ExecutionEpoch: 7,
 				ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
 			}},
 		},
@@ -120,7 +122,8 @@ func TestClientSendsOwnedDNSResolverObservationEvidence(t *testing.T) {
 	stream := newFakeStream()
 	client := &Client{}
 	evidence := &agentpb.DNSResolverObservationEvidence{
-		ComponentId: "cmp_exact", RenderGeneration: 11,
+		ImageConfigDigest: bytes.Repeat([]byte{7}, 32),
+		ComponentId:       "cmp_exact", RenderGeneration: 11,
 		CatchAllQuery: &agentpb.DNSQueryProof{
 			Name: ".", Type: agentpb.DNSQueryType_DNS_QUERY_TYPE_NS, RecursionAvailable: true,
 			SelectedUpstream: "1.1.1.1:53", Attempts: 1,
@@ -145,9 +148,14 @@ func TestClientSendsOwnedDNSResolverObservationEvidence(t *testing.T) {
 		t.Fatalf("sendTaskAck() error = %v", err)
 	}
 	evidence.ComponentId = "changed"
+	evidence.ImageConfigDigest[0] = 8
 	acks := stream.taskAcknowledgements()
 	if len(acks) != 1 ||
 		acks[0].GetComposeResult().GetDnsResolverCandidateObservation().GetComponentId() != "cmp_exact" ||
+		!bytes.Equal(
+			acks[0].GetComposeResult().GetDnsResolverCandidateObservation().GetImageConfigDigest(),
+			bytes.Repeat([]byte{7}, 32),
+		) ||
 		acks[0].GetComposeResult().GetDnsResolverCandidateObservation().GetRenderGeneration() != 11 {
 		t.Fatalf("TaskAck evidence = %#v", acks)
 	}
@@ -287,7 +295,9 @@ func TestClientReconnectsSameInstanceAndExecutesRedispatchOnReplacementPool(t *t
 						TaskId: workerTestTaskID, AssignmentId: assignment.AssignmentID,
 						OperationId: assignment.OperationID,
 						Plan:        assignment.Plan, ForwardDeadline: timestamppb.New(assignment.ForwardDeadline),
-						RecoveryDeadline: timestamppb.New(assignment.RecoveryDeadline), ExecutionDeadline: timestamppb.New(assignment.ForwardDeadline), ExecutionEpoch: 1,
+						RecoveryDeadline: timestamppb.New(
+							assignment.RecoveryDeadline,
+						), ExecutionDeadline: timestamppb.New(assignment.ForwardDeadline), ExecutionEpoch: 1,
 						ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
 					}},
 				},
@@ -568,7 +578,10 @@ func startAgentChannelClientTransportServer(
 
 func shortUnixSocketPath(t *testing.T) string {
 	t.Helper()
-	directory, err := os.MkdirTemp("/tmp", "gp-uds-")
+	// Keep the test socket inside the worktree so repository-managed temporary
+	// state never spills into the system temporary directory. The short prefix
+	// leaves room for the worktree path under Unix's socket path limit.
+	directory, err := os.MkdirTemp("../../.tmp", "u-")
 	if err != nil {
 		t.Fatalf("create short Unix socket directory: %v", err)
 	}

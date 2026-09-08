@@ -69,10 +69,14 @@ func NewGroupExecutor(manifest GroupManifest) (*GroupExecutor, error) {
 }
 
 func ValidateGroupManifest(value GroupManifest) error {
-	if ids.Validate(ids.KindOperation, value.OperationID) != nil || ids.Validate(ids.KindReleaseGroup, value.ReleaseGroupID) != nil ||
-		ids.Validate(ids.KindEnvironment, value.EnvironmentID) != nil || len(value.Members) < MinimumGroupMembers ||
-		len(value.Members) > MaximumGroupMembers || value.ConfiguredTimeoutSeconds <= 0 ||
-		value.ComputedBudgetSeconds <= 0 || value.ConfiguredTimeoutSeconds < value.ComputedBudgetSeconds {
+	if ids.Validate(ids.KindOperation, value.OperationID) != nil ||
+		ids.Validate(ids.KindReleaseGroup, value.ReleaseGroupID) != nil ||
+		ids.Validate(ids.KindEnvironment, value.EnvironmentID) != nil ||
+		len(value.Members) < MinimumGroupMembers ||
+		len(value.Members) > MaximumGroupMembers ||
+		value.ConfiguredTimeoutSeconds <= 0 ||
+		value.ComputedBudgetSeconds <= 0 ||
+		value.ConfiguredTimeoutSeconds < value.ComputedBudgetSeconds {
 		return invalid("release group execution manifest is invalid")
 	}
 	if value.FailurePolicy != OnFailureSwitchBack && value.FailurePolicy != OnFailureLeaveActive {
@@ -101,15 +105,28 @@ func (executor *GroupExecutor) Begin(attemptID string, now time.Time) (GroupProg
 	if executor == nil || ids.Validate(ids.KindTask, attemptID) != nil || now.IsZero() || now.Location() != time.UTC {
 		return GroupProgress{}, invalid("release group attempt is invalid")
 	}
-	return GroupProgress{OperationID: executor.manifest.OperationID, AttemptID: attemptID, NextMemberOrdinal: 1, UpdatedAt: now}, nil
+	return GroupProgress{
+		OperationID:       executor.manifest.OperationID,
+		AttemptID:         attemptID,
+		NextMemberOrdinal: 1,
+		UpdatedAt:         now,
+	}, nil
 }
 
-func (executor *GroupExecutor) RecordServing(progress GroupProgress, result MemberResult, now time.Time) (GroupProgress, error) {
+func (executor *GroupExecutor) RecordServing(
+	progress GroupProgress,
+	result MemberResult,
+	now time.Time,
+) (GroupProgress, error) {
 	if err := executor.validateProgress(progress); err != nil {
 		return GroupProgress{}, err
 	}
 	if progress.Compensating || result.Ordinal != progress.NextMemberOrdinal || result.Outcome != MemberServing ||
-		int(result.Ordinal) > len(executor.manifest.Members) || !sameMember(executor.manifest.Members[result.Ordinal-1], result) {
+		int(
+			result.Ordinal,
+		) > len(
+			executor.manifest.Members,
+		) || !sameMember(executor.manifest.Members[result.Ordinal-1], result) {
 		return GroupProgress{}, errs.New(errs.KindStateConflict, "release group member checkpoint is out of order")
 	}
 	progress.Results = append(slices.Clone(progress.Results), result)
@@ -118,7 +135,11 @@ func (executor *GroupExecutor) RecordServing(progress GroupProgress, result Memb
 	return progress, nil
 }
 
-func (executor *GroupExecutor) RecordFailure(progress GroupProgress, result MemberResult, now time.Time) (GroupProgress, error) {
+func (executor *GroupExecutor) RecordFailure(
+	progress GroupProgress,
+	result MemberResult,
+	now time.Time,
+) (GroupProgress, error) {
 	if err := executor.validateProgress(progress); err != nil {
 		return GroupProgress{}, err
 	}
@@ -136,7 +157,11 @@ func (executor *GroupExecutor) RecordFailure(progress GroupProgress, result Memb
 	return progress, nil
 }
 
-func (executor *GroupExecutor) RecordCompensation(progress GroupProgress, result MemberResult, now time.Time) (GroupProgress, error) {
+func (executor *GroupExecutor) RecordCompensation(
+	progress GroupProgress,
+	result MemberResult,
+	now time.Time,
+) (GroupProgress, error) {
 	if err := executor.validateProgress(progress); err != nil {
 		return GroupProgress{}, err
 	}
@@ -144,7 +169,10 @@ func (executor *GroupExecutor) RecordCompensation(progress GroupProgress, result
 	if !progress.Compensating || ordinal == 0 || result.Ordinal != ordinal ||
 		(result.Outcome != MemberCompensated && result.Outcome != MemberRecoveryRequired) ||
 		!sameMember(executor.manifest.Members[ordinal-1], result) {
-		return GroupProgress{}, errs.New(errs.KindStateConflict, "release group compensation checkpoint is out of order")
+		return GroupProgress{}, errs.New(
+			errs.KindStateConflict,
+			"release group compensation checkpoint is out of order",
+		)
 	}
 	results := slices.Clone(progress.Results)
 	for index := range results {
@@ -168,7 +196,8 @@ func (executor *GroupExecutor) Complete(progress GroupProgress, now time.Time) (
 	if err := executor.validateProgress(progress); err != nil {
 		return GroupProgress{}, err
 	}
-	if progress.Compensating || progress.NextMemberOrdinal != uint32(len(executor.manifest.Members)+1) || len(progress.Results) != len(executor.manifest.Members) {
+	if progress.Compensating || progress.NextMemberOrdinal != uint32(len(executor.manifest.Members)+1) ||
+		len(progress.Results) != len(executor.manifest.Members) {
 		return GroupProgress{}, errs.New(errs.KindStateConflict, "release group operation is not complete")
 	}
 	for index := range progress.Results {
@@ -183,13 +212,17 @@ func (executor *GroupExecutor) Complete(progress GroupProgress, now time.Time) (
 }
 
 func (executor *GroupExecutor) validateProgress(value GroupProgress) error {
-	if executor == nil || value.OperationID != executor.manifest.OperationID || ids.Validate(ids.KindTask, value.AttemptID) != nil ||
-		value.UpdatedAt.IsZero() || value.UpdatedAt.Location() != time.UTC || len(value.Results) > len(executor.manifest.Members) {
+	if executor == nil || value.OperationID != executor.manifest.OperationID ||
+		ids.Validate(ids.KindTask, value.AttemptID) != nil ||
+		value.UpdatedAt.IsZero() ||
+		value.UpdatedAt.Location() != time.UTC ||
+		len(value.Results) > len(executor.manifest.Members) {
 		return invalid("release group progress is invalid")
 	}
 	return nil
 }
 
 func sameMember(member GroupMember, result MemberResult) bool {
-	return member.Ordinal == result.Ordinal && member.ServiceID == result.ServiceID && member.ReleaseID == result.ReleaseID
+	return member.Ordinal == result.Ordinal && member.ServiceID == result.ServiceID &&
+		member.ReleaseID == result.ReleaseID
 }

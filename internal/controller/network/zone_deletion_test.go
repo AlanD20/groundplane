@@ -181,15 +181,25 @@ func (*fakeZoneDeletionPlans) PrepareZoneRemovalTask(
 	return task, nil
 }
 
-func zoneDeletionTestProjection(t *testing.T, now time.Time, zone etcd.ZoneRecord) etcd.Versioned[etcd.EnvironmentComposeProjection] {
+func zoneDeletionTestProjection(
+	t *testing.T,
+	now time.Time,
+	zone etcd.ZoneRecord,
+) etcd.Versioned[etcd.EnvironmentComposeProjection] {
 	t.Helper()
 	yaml := []byte("services: {}\nnetworks:\n  " + zone.Desired.Name + ": {}\n")
 	digest := sha256.Sum256(yaml)
 	artifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
-		ArtifactId: ids.NewAt(ids.KindConfig, now, 90), OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		ArtifactId: ids.NewAt(
+			ids.KindConfig,
+			now,
+			90,
+		), OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
 		OwnerId: zone.EnvironmentID, AuthorizedVolumeDir: "/var/lib/groundplane/environments/" + zone.EnvironmentID,
 		CanonicalYaml: yaml, YamlSha256: digest[:],
-		Networks: []*agentpb.ComposeNetwork{{NetworkId: zone.Desired.ID, ComposeName: zone.Desired.Name, DockerName: "gp_net_" + zone.Desired.ID}},
+		Networks: []*agentpb.ComposeNetwork{
+			{NetworkId: zone.Desired.ID, ComposeName: zone.Desired.Name, DockerName: "gp_net_" + zone.Desired.ID},
+		},
 	})
 	if err != nil {
 		t.Fatalf("Marshal() error = %v", err)

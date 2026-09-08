@@ -47,7 +47,13 @@ func TestHierarchyCreateResolveAndRenamePreserveIdentity(t *testing.T) {
 	}
 	assertHierarchyCoordinationRecord(t, store, HierarchyDeletionTargetTenant, tenant.Record.ID, tenant.Revision)
 	assertHierarchyCoordinationRecord(t, store, HierarchyDeletionTargetProject, project.Record.ID, project.Revision)
-	assertHierarchyCoordinationRecord(t, store, HierarchyDeletionTargetEnvironment, environment.Record.ID, environment.Revision)
+	assertHierarchyCoordinationRecord(
+		t,
+		store,
+		HierarchyDeletionTargetEnvironment,
+		environment.Record.ID,
+		environment.Revision,
+	)
 	epochResult, err := repository.store.Get(ctx, environmentMutationEpochKey(environment.Record.ID))
 	if err != nil || epochResult.Entry == nil || epochResult.Entry.ModRevision != environment.Revision {
 		t.Fatalf("Environment mutation epoch = %#v, %v", epochResult, err)

@@ -82,7 +82,10 @@ func (authority *ReleaseCheckpointAuthority) prepareAdvance(
 ) (releaseCheckpointTransaction, error) {
 	if ctx == nil || authority == nil || authority.store == nil || validatePublicationID(input.PublicationID) != nil ||
 		input.Now.IsZero() || input.Now.Location() != time.UTC {
-		return releaseCheckpointTransaction{}, errs.New(errs.KindValidationFailed, "release checkpoint advance is invalid")
+		return releaseCheckpointTransaction{}, errs.New(
+			errs.KindValidationFailed,
+			"release checkpoint advance is invalid",
+		)
 	}
 	if err := ctx.Err(); err != nil {
 		return releaseCheckpointTransaction{}, err
@@ -111,7 +114,10 @@ func (authority *ReleaseCheckpointAuthority) prepareAdvance(
 	head, err := decodeReleaseRecord[ReleaseOperationHead](loaded.Values[1].Value, "release-operation")
 	if err != nil || head.OperationID != input.OperationID || head.EnvironmentID != input.EnvironmentID ||
 		head.State.Terminal() || head.State == domain.StateRecoveryRequired {
-		return releaseCheckpointTransaction{}, errs.New(errs.KindStateConflict, "release operation does not accept checkpoints")
+		return releaseCheckpointTransaction{}, errs.New(
+			errs.KindStateConflict,
+			"release operation does not accept checkpoints",
+		)
 	}
 	checkpoint, err := decodeReleaseRecord[domain.Checkpoint](loaded.Values[2].Value, "release-checkpoint")
 	if err != nil || checkpoint.ReleaseID != input.ReleaseID || domain.ValidateCheckpoint(checkpoint) != nil {
@@ -119,11 +125,17 @@ func (authority *ReleaseCheckpointAuthority) prepareAdvance(
 	}
 	fence, err := decodeReleaseRecord[ReleaseFenceSet](loaded.Values[3].Value, "release-fence-set")
 	if err != nil || fence.OperationID != input.OperationID || fence.EnvironmentID != input.EnvironmentID {
-		return releaseCheckpointTransaction{}, errs.New(errs.KindStateConflict, "release checkpoint fence ownership changed")
+		return releaseCheckpointTransaction{}, errs.New(
+			errs.KindStateConflict,
+			"release checkpoint fence ownership changed",
+		)
 	}
 	member, found := releaseFenceMember(fence, input.ReleaseID)
 	if !found {
-		return releaseCheckpointTransaction{}, errs.New(errs.KindStateConflict, "release checkpoint candidate is not fenced")
+		return releaseCheckpointTransaction{}, errs.New(
+			errs.KindStateConflict,
+			"release checkpoint candidate is not fenced",
+		)
 	}
 	if input.Evidence != nil {
 		if err := domain.ValidateEvidence(*input.Evidence, input.ReleaseID); err != nil {
@@ -134,7 +146,10 @@ func (authority *ReleaseCheckpointAuthority) prepareAdvance(
 				continue
 			}
 			if existing != *input.Evidence || checkpoint.State != input.NextState {
-				return releaseCheckpointTransaction{}, errs.New(errs.KindStateConflict, "release acknowledgement evidence changed")
+				return releaseCheckpointTransaction{}, errs.New(
+					errs.KindStateConflict,
+					"release acknowledgement evidence changed",
+				)
 			}
 			projection, _, err := authority.loadProjectionAt(ctx, member.ServiceID, loaded.ReadRevision)
 			return releaseCheckpointTransaction{
@@ -144,7 +159,10 @@ func (authority *ReleaseCheckpointAuthority) prepareAdvance(
 		}
 	}
 	if !domain.CanTransition(checkpoint.State, input.NextState) {
-		return releaseCheckpointTransaction{}, errs.New(errs.KindStateConflict, "release checkpoint transition is not monotonic")
+		return releaseCheckpointTransaction{}, errs.New(
+			errs.KindStateConflict,
+			"release checkpoint transition is not monotonic",
+		)
 	}
 	next := domain.CloneCheckpoint(checkpoint)
 	next.State = input.NextState
@@ -160,7 +178,12 @@ func (authority *ReleaseCheckpointAuthority) prepareAdvance(
 		return releaseCheckpointTransaction{}, err
 	}
 	if projection.EnvironmentID == "" {
-		projection = domain.ServiceProjection{EnvironmentID: input.EnvironmentID, ServiceID: member.ServiceID, ActiveOperationID: input.OperationID, Revision: 1}
+		projection = domain.ServiceProjection{
+			EnvironmentID:     input.EnvironmentID,
+			ServiceID:         member.ServiceID,
+			ActiveOperationID: input.OperationID,
+			Revision:          1,
+		}
 	} else if projection.EnvironmentID != input.EnvironmentID || projection.ServiceID != member.ServiceID ||
 		(projection.ActiveOperationID != "" && projection.ActiveOperationID != input.OperationID) {
 		return releaseCheckpointTransaction{}, errs.New(errs.KindStateConflict, "service release projection ownership changed")
@@ -191,7 +214,10 @@ func (authority *ReleaseCheckpointAuthority) prepareAdvance(
 	}
 	mutations := []Mutation{{Type: MutationPut, Key: keys[2], Value: checkpointValue}}
 	if input.NextState == domain.StateServing {
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: releaseProjectionKey(member.ServiceID), Value: projectionValue})
+		mutations = append(
+			mutations,
+			Mutation{Type: MutationPut, Key: releaseProjectionKey(member.ServiceID), Value: projectionValue},
+		)
 	} else {
 		clear(projectionValue)
 	}
@@ -215,7 +241,10 @@ func (authority *ReleaseCheckpointAuthority) loadProjectionAt(
 	serviceID string,
 	revision int64,
 ) (domain.ServiceProjection, int64, error) {
-	result, err := authority.store.GetMany(ctx, GetManyRequest{Keys: []string{releaseProjectionKey(serviceID)}, Revision: revision})
+	result, err := authority.store.GetMany(
+		ctx,
+		GetManyRequest{Keys: []string{releaseProjectionKey(serviceID)}, Revision: revision},
+	)
 	if err != nil {
 		return domain.ServiceProjection{}, 0, err
 	}

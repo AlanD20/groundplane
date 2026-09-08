@@ -275,8 +275,13 @@ func (repository *AttachRepository) CreateAttachWithTask(
 			Condition{Key: attachCredentialByKey(owner.Record.ID, record.ID)},
 			Condition{Key: deletionTombstoneKey("attach", owner.Record.ID)},
 		)
-		mutations = append(mutations,
-			Mutation{Type: MutationPut, Key: attachCredentialByKey(owner.Record.ID, record.ID), Value: []byte(record.ID)},
+		mutations = append(
+			mutations,
+			Mutation{
+				Type:  MutationPut,
+				Key:   attachCredentialByKey(owner.Record.ID, record.ID),
+				Value: []byte(record.ID),
+			},
 			Mutation{Type: MutationPut, Key: attachKey(owner.Record.ID), Value: credentialOwnerValue},
 		)
 	}

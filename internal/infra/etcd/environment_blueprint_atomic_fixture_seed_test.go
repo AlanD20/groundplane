@@ -14,7 +14,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
 )
 
 func seedEnvironmentBlueprintBackingScope(
@@ -397,6 +396,7 @@ func prepareEnvironmentBlueprintReleaseShape(
 	environmentID string,
 	releaseCount int,
 	hookCount int,
+	realHookSources bool,
 	sourceMembers []ScriptSourcePreparationMember,
 ) (BlueprintReleasePublication, string) {
 	t.Helper()
@@ -452,7 +452,10 @@ func prepareEnvironmentBlueprintReleaseShape(
 			TaskStepRecord{Kind: TaskStepOperation, ID: probeStepID},
 			TaskStepRecord{Kind: TaskStepOperation, ID: compensateStepID},
 		)
-		absenceServices[index] = executionplan.CandidateServiceIdentity{ServiceID: member.ServiceID, ReleaseID: member.ReleaseID}
+		absenceServices[index] = executionplan.CandidateServiceIdentity{
+			ServiceID: member.ServiceID,
+			ReleaseID: member.ReleaseID,
+		}
 		procedureMembers[index] = executionplan.CandidateReleaseMemberInput{
 			ServiceID: member.ServiceID, CandidateReleaseID: member.ReleaseID, CandidateArtifactID: artifactID,
 			ForwardStepIDs: []string{forwardStepID},
@@ -460,7 +463,7 @@ func prepareEnvironmentBlueprintReleaseShape(
 				ProbeStepID: probeStepID, CompensateStepID: compensateStepID,
 			},
 			CandidateAbsence: &executionplan.CandidateAbsenceInput{
-				ComposeProjectName: "gp-" + environmentID, Services: absenceServices,
+				ComposeProjectName: "gp-" + strings.ToLower(environmentID), Services: absenceServices,
 				ProbeStepID: probeStepID, CompensateStepID: compensateStepID,
 			},
 		}
@@ -471,17 +474,11 @@ func prepareEnvironmentBlueprintReleaseShape(
 	if err != nil {
 		t.Fatal(err)
 	}
-	procedureBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(procedure)
+	plan := environmentBlueprintAtomicFixturePlan(t, *task, environmentID, manifest, procedure)
+	task.PlanHash = hex.EncodeToString(plan.GetPlanHash())
+	descriptor, err := executionplan.DescribeCandidateRelease(plan)
 	if err != nil {
-		t.Fatal(err)
-	}
-	planHash, err := hex.DecodeString(task.PlanHash)
-	if err != nil {
-		t.Fatal(err)
-	}
-	descriptor := executionplan.CandidateReleaseDescriptor{
-		PlanID: task.PlanID, PlanHash: planHash, Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,
-		ProcedureBytes: procedureBytes,
+		t.Fatalf("describe sealed Blueprint fixture plan: %v", err)
 	}
 
 	hooks := make([]ReleaseHookExecutionPublication, hookCount)
@@ -494,6 +491,28 @@ func prepareEnvironmentBlueprintReleaseShape(
 		record.ReleaseID = manifest.Members[index%len(manifest.Members)].ReleaseID
 		record.ServiceID = manifest.Members[index%len(manifest.Members)].ServiceID
 		record.StepID = ids.NewAt(ids.KindStep, task.CreatedAt, int64(7700+index))
+		if realHookSources {
+			script := blueprintTerminalFixtureScript(t, *task)
+			generation := scriptBlueprintGeneration(script)
+			record.ScriptSetGeneration, record.BodySHA256 = task.ID, generation.BodySHA256
+			key := scriptSetBodyGenerationKey(environmentID, task.ID, record.ScriptID, 1)
+			body, readErr := store.Get(ctx, key)
+			if readErr != nil || body.Entry == nil {
+				t.Fatalf("staged Script body = %v, %v", body, readErr)
+			}
+			sourceMembers = append(sourceMembers, ScriptSourcePreparationMember{
+				Reference: ScriptSourceReference{OperationID: task.OperationID, ScriptExecutionID: record.ID,
+					Source: ScriptSourceIdentity{
+						Kind:                ScriptSourceBody,
+						EnvironmentID:       environmentID,
+						ScriptSetGeneration: task.ID,
+						ScriptID:            record.ScriptID,
+						BodyGeneration:      1,
+					},
+					SourceOwnerID: environmentID, SourceModRevision: body.Entry.ModRevision, SourceDigest: generation.BodySHA256},
+				Evidence: ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{SourceKey: key}},
+			})
+		}
 		task.Params[ReleaseHookStepExecutionParam(record.StepID)] = record.ID
 		task.Steps = append(task.Steps, TaskStepRecord{Kind: TaskStepOperation, ID: record.StepID})
 		hooks[index] = ReleaseHookExecutionPublication{Execution: record}
@@ -523,6 +542,7 @@ func prepareEnvironmentBlueprintReleaseShape(
 			EnvironmentID:              environmentID,
 			Task:                       *task,
 			CandidateReleaseDescriptor: descriptor,
+			Plan:                       plan,
 			Hooks:                      hooks,
 			PublishedAt:                task.CreatedAt.Add(time.Minute),
 			SourcePrepared:             sourcePrepared,

@@ -557,6 +557,21 @@ Their preparation and historical-retention contract is separate from
 `WorkloadSeal`; current catalog authority never substitutes for a sealed
 historical proxy identity.
 
+The immutable Release render input retains the proxy repository, compiled index
+digest, and selected platform child/config digests independently of the workload
+seal. First publication obtains that asset from application composition;
+successors retain the serving Release's exact proxy identity at the captured
+read revision. Dispatch and historical rerender consume only that frozen input.
+Missing historical image authority is rejected, never filled from the catalog.
+
+Docker image-store representation is not itself OCI config authority. Classic
+Docker reports the config digest as its local ID; the containerd store reports
+the target descriptor digest. Managed preparation, observation, validation and
+activation accept that descriptor only when it is the exact sealed platform
+child image manifest (never an index), with matching reported platform metadata.
+Execution uses the verified observed ID; it does not relabel a child digest as
+an observed config digest.
+
 ### 9. Blue-green checkpoints
 
 A blue-green attempt executes one closed five-step procedure per group member:

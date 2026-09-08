@@ -17,7 +17,10 @@ func (repository *HierarchyDeletionRepository) PrepareRootFinalization(
 		return HierarchyDeletionOperation{}, err
 	}
 	if validateTimestamp("hierarchy deletion root finalization", preparedAt) != nil {
-		return HierarchyDeletionOperation{}, errs.New(errs.KindValidationFailed, "hierarchy deletion root finalization time is invalid")
+		return HierarchyDeletionOperation{}, errs.New(
+			errs.KindValidationFailed,
+			"hierarchy deletion root finalization time is invalid",
+		)
 	}
 	current, err := repository.OperationByTask(ctx, operation.Tombstone.CurrentTaskID)
 	if err != nil {
@@ -38,7 +41,10 @@ func (repository *HierarchyDeletionRepository) PrepareRootFinalization(
 		action.ProcedureKind != HierarchyDeletionProcedureController || action.ControllerProcedure == nil ||
 		action.TargetKind != HierarchyDeletionActionTargetKind(current.Tombstone.TargetKind) ||
 		action.TargetID != current.Tombstone.TargetID || !hierarchyDeletionRootFinalizerMatches(current.Tombstone.TargetKind, action.ActionKind) {
-		return HierarchyDeletionOperation{}, errs.New(errs.KindStateConflict, "hierarchy deletion root finalizer is not ready")
+		return HierarchyDeletionOperation{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion root finalizer is not ready",
+		)
 	}
 	nextTombstone := current.Tombstone
 	nextTombstone.Phase = HierarchyDeletionFinalizing
@@ -75,7 +81,10 @@ func (repository *HierarchyDeletionRepository) PrepareRootFinalization(
 	}
 	clearKeyValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return HierarchyDeletionOperation{}, errs.New(errs.KindStateConflict, "hierarchy deletion root finalization changed")
+		return HierarchyDeletionOperation{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion root finalization changed",
+		)
 	}
 	current.Tombstone = nextTombstone
 	current.TombstoneRevision = transaction.Revision

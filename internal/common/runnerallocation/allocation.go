@@ -92,7 +92,8 @@ func (config RunnerAllocationConfig) ValidateAllocation(allocation RunnerHostAll
 	if err != nil {
 		return err
 	}
-	if allocation.Slot >= slots || allocation.HostUID == 0 || allocation.SubUIDStart == 0 || allocation.SubGIDStart == 0 {
+	if allocation.Slot >= slots || allocation.HostUID == 0 || allocation.SubUIDStart == 0 ||
+		allocation.SubGIDStart == 0 {
 		return errs.New(errs.KindValidationFailed, "runner allocation is outside its configured slot pool")
 	}
 	prefix, err := ipam.ParseIPv4Prefix(allocation.NetworkCIDR)

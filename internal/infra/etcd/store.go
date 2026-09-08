@@ -154,16 +154,6 @@ type Store interface {
 	Close() error
 }
 
-// EnvironmentBlueprintStore owns the privileged final Blueprint transaction
-// envelope without widening ordinary Store transactions.
-type EnvironmentBlueprintStore interface {
-	Store
-	TransactEnvironmentBlueprint(
-		ctx context.Context,
-		conditions []Condition,
-		mutations []Mutation,
-	) (TransactionResult, error)
-}
 type client interface {
 	Get(context.Context, string, ...clientv3.OpOption) (*clientv3.GetResponse, error)
 	Put(context.Context, string, string, ...clientv3.OpOption) (*clientv3.PutResponse, error)
@@ -492,80 +482,18 @@ func (s *store) transact(
 	mutations []Mutation,
 ) (TransactionResult, error) {
 
-	comparisons := make([]clientv3.Cmp, 0, len(conditions))
-	failureReads := make([]clientv3.Op, 0, len(conditions))
-	physicalConditions := make([]string, 0, len(conditions))
-	for _, condition := range conditions {
-		if condition.ModRevision < 0 {
-			return TransactionResult{}, errs.New(
-				errs.KindValidationFailed,
-				"etcd transaction revisions must not be negative",
-			)
-		}
-		key, err := s.physicalKey(condition.Key)
-		if err != nil {
-			return TransactionResult{}, err
-		}
-		comparison := clientv3.Compare(clientv3.ModRevision(key), "=", condition.ModRevision)
-		failureRead := clientv3.OpGet(key)
-		if condition.Prefix {
-			if condition.ModRevision != 0 {
-				return TransactionResult{}, errs.New(
-					errs.KindValidationFailed,
-					"etcd prefix transaction condition requires a zero revision",
-				)
-			}
-			end := clientv3.GetPrefixRangeEnd(key)
-			comparison = comparison.WithRange(end)
-			failureRead = clientv3.OpGet(key, clientv3.WithRange(end), clientv3.WithLimit(1))
-		}
-		comparisons = append(comparisons, comparison)
-		failureReads = append(failureReads, failureRead)
-		physicalConditions = append(physicalConditions, key)
-	}
-
-	operations := make([]clientv3.Op, 0, len(mutations))
-	physicalMutations := make([]string, 0, len(mutations))
-	for _, mutation := range mutations {
-		key, err := s.physicalKey(mutation.Key)
-		if err != nil {
-			return TransactionResult{}, err
-		}
-		switch mutation.Type {
-		case MutationPut:
-			if mutation.Prefix {
-				return TransactionResult{}, errs.New(
-					errs.KindValidationFailed,
-					"etcd put mutation must not use prefix semantics",
-				)
-			}
-			operations = append(operations, clientv3.OpPut(key, string(mutation.Value)))
-		case MutationDelete:
-			if mutation.Prefix {
-				operations = append(operations, clientv3.OpDelete(key, clientv3.WithPrefix()))
-			} else {
-				operations = append(operations, clientv3.OpDelete(key))
-			}
-		default:
-			return TransactionResult{}, errs.New(errs.KindValidationFailed, "invalid etcd transaction mutation")
-		}
-		physicalMutations = append(physicalMutations, key)
-	}
-	request := transactionRequest(conditions, mutations, physicalConditions, physicalMutations)
-	if request.Size() > maximumTransactionBytes {
-		return TransactionResult{}, errs.New(
-			errs.KindValidationFailed,
-			"etcd transaction exceeds the 1 MiB serialized request limit",
-		)
+	prepared, err := s.prepareTransaction(conditions, mutations)
+	if err != nil {
+		return TransactionResult{}, err
 	}
 
 	transaction := s.client.Txn(ctx)
-	if len(comparisons) > 0 {
-		transaction = transaction.If(comparisons...)
+	if len(prepared.comparisons) > 0 {
+		transaction = transaction.If(prepared.comparisons...)
 	}
-	transaction = transaction.Then(operations...)
-	if len(failureReads) > 0 {
-		transaction = transaction.Else(failureReads...)
+	transaction = transaction.Then(prepared.operations...)
+	if len(prepared.failureReads) > 0 {
+		transaction = transaction.Else(prepared.failureReads...)
 	}
 	response, err := transaction.Commit()
 	if err != nil {
@@ -576,7 +504,7 @@ func (s *store) transact(
 	}
 	result := TransactionResult{Succeeded: response.Succeeded, Revision: response.Header.Revision}
 	if !response.Succeeded {
-		reads, err := transactionFailureReads(response, conditions, physicalConditions, s.root)
+		reads, err := transactionFailureReads(response, conditions, prepared.physicalConditions, s.root)
 		if err != nil {
 			return TransactionResult{}, err
 		}
@@ -625,7 +553,13 @@ func executeEnvironmentBlueprintTransaction(
 	for index := range mutations {
 		physicalMutations[index] = mutations[index].Key
 	}
-	if transactionRequest(conditions, mutations, physicalConditions, physicalMutations).Size() > maximumTransactionBytes {
+	if transactionRequest(
+		conditions,
+		mutations,
+		physicalConditions,
+		physicalMutations,
+	).Size() >
+		maximumTransactionBytes {
 		return TransactionResult{}, errs.New(
 			errs.KindValidationFailed, "etcd transaction exceeds the 1 MiB serialized request limit",
 		)

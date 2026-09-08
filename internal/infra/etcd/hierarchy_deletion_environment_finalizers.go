@@ -78,7 +78,10 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 		if revisions != nil {
 			clearRangeValues(revisions.Values)
 		}
-		return hierarchyDeletionControllerEffects{}, errs.New(errs.KindStateConflict, "hierarchy deletion Environment retained Blueprint revisions")
+		return hierarchyDeletionControllerEffects{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion Environment retained Blueprint revisions",
+		)
 	}
 	conditions := []Condition{
 		{Key: primary.Key, ModRevision: primary.ModRevision},
@@ -88,7 +91,9 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 		{Key: environmentComposeProjectionKey(record.ID), ModRevision: keyValueRevision(indexes.Values[3])},
 		{Key: releaseGroupCollectionEpochKey(record.ID), ModRevision: keyValueRevision(indexes.Values[4])},
 	}
-	conditions = append(conditions, environmentDeletionLiveAuthorityConditions(record.ID, operation.Tombstone.OperationID)...)
+	conditions = append(
+		conditions,
+		environmentDeletionLiveAuthorityConditions(record.ID, operation.Tombstone.OperationID)...)
 	conditions = append(conditions, Condition{Key: environmentBlueprintRevisionsPrefix(record.ID), Prefix: true})
 	conditions = append(conditions, Condition{Key: scriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true})
 	mutations := []Mutation{

@@ -10,11 +10,9 @@ import (
 	"errors"
 	"net/http"
 	"net/netip"
-	"path/filepath"
 	"sort"
 	"time"
 
-	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
@@ -37,8 +35,14 @@ const backingServiceCreateRoute = "/backing-services"
 type backingServiceCreationRepository interface {
 	desiredrevision.Repository
 	GetEnvironmentPoolRegistry(context.Context) (etcd.Versioned[etcd.EnvironmentPoolRegistry], error)
-	ClaimBackingServiceCreationStage(context.Context, etcd.BackingServiceCreationStage) (etcd.Versioned[etcd.BackingServiceCreationStage], error)
-	PublishBackingServiceWithTask(context.Context, etcd.BackingServiceCreation) (etcd.IdempotencyTransactionResult, error)
+	ClaimBackingServiceCreationStage(
+		context.Context,
+		etcd.BackingServiceCreationStage,
+	) (etcd.Versioned[etcd.BackingServiceCreationStage], error)
+	PublishBackingServiceWithTask(
+		context.Context,
+		etcd.BackingServiceCreation,
+	) (etcd.IdempotencyTransactionResult, error)
 }
 
 type backingServiceCreationService struct {
@@ -81,6 +85,19 @@ func (service *backingServiceCreationService) CreateBackingService(
 	if idempotencyKey == "" {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Idempotency-Key is required")
 	}
+	adapter, ok := adapters.Get(input.Adapter)
+	if !ok {
+		return etcd.IdempotencyResponse{}, errs.Newf(
+			errs.KindValidationFailed, "unsupported backing-service adapter %q", input.Adapter,
+		)
+	}
+	authentication, err := core.ResolveBackingAuthentication(
+		adapter.SupportsAuthenticationModes(), core.BackingAuthentication(input.Authentication),
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	input.Authentication = string(authentication)
 	requestBytes, err := json.Marshal(input)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
@@ -127,18 +144,25 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 	}
 	if existing {
 		if resolution.Kind != idempotentintent.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Backing-service replay resolution is invalid")
+			return etcd.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Backing-service replay resolution is invalid",
+			)
 		}
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}
 
-	spec, err := adapters.BackingCreationSpec(input.Adapter)
+	authentication := core.BackingAuthentication(input.Authentication)
+	spec, err := adapters.BackingCreationSpec(input.Adapter, authentication)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	adapter, ok := adapters.Get(input.Adapter)
 	if !ok {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Backing-service adapter disappeared after validation")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Backing-service adapter disappeared after validation",
+		)
 	}
 	blueprintLocator := stage.Record.Locator
 	blueprintLocator.ScopeKind = etcd.IdempotencyScopeEnvironment
@@ -160,7 +184,10 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if claim.TaskID != stage.Record.TaskID || !claim.CreatedAt.Equal(stage.Record.CreatedAt) {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Backing-service desired claim changed creation authority")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Backing-service desired claim changed creation authority",
+		)
 	}
 
 	project := etcd.ProjectRecord{
@@ -215,7 +242,8 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 		Command: append([]string(nil), spec.Command...),
 		Mounts:  []core.Mount{{Volume: volumeID, Mount: spec.MountPath}},
 		Expose:  append([]string(nil), spec.Expose...), Restart: "unless-stopped",
-		Adapter: input.Adapter, FactsPrefix: adapter.FactsPrefix(), Label: input.Name,
+		Adapter: input.Adapter, Authentication: authentication,
+		FactsPrefix: adapter.FactsPrefix(), Label: input.Name,
 	}
 	serviceRecord, err := etcd.NewServiceRecord(environment.ID, desiredService, zone.Desired.ID)
 	if err != nil {
@@ -272,18 +300,52 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 	}
 	intentDigest, err := hex.DecodeString(claim.Intent.CiphertextDigest)
 	if err != nil || len(intentDigest) != sha256.Size {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Backing-service protected intent digest is invalid")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Backing-service protected intent digest is invalid",
+		)
 	}
 	environmentStepID := allocator.Named(ids.KindStep, "environment-directory")
 	volumeStepID := allocator.Named(ids.KindStep, "managed-volume-directories")
 	applyStepID := allocator.Named(ids.KindStep, "compose-apply")
 	healthStepID := allocator.Named(ids.KindStep, "wait-healthy")
 	steps := []*agentpb.ExecutionStep{
-		{StepId: environmentStepID, TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds), Payload: &agentpb.ExecutionStep_EnvironmentDirectoryCreate{EnvironmentDirectoryCreate: &agentpb.EnvironmentDirectoryCreate{EnvironmentId: environment.ID, ExpectedVolumeDir: environment.VolumeDir}}},
-		{StepId: volumeStepID, TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds), Payload: &agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure{ManagedVolumeDirectoriesEnsure: &agentpb.ManagedVolumeDirectoriesEnsure{ArtifactId: artifactID, VolumeIds: []string{volumeID}, IntentSha256: append([]byte(nil), intentDigest...)}}},
+		{
+			StepId:         environmentStepID,
+			TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds),
+			Payload: &agentpb.ExecutionStep_EnvironmentDirectoryCreate{
+				EnvironmentDirectoryCreate: &agentpb.EnvironmentDirectoryCreate{
+					EnvironmentId:     environment.ID,
+					ExpectedVolumeDir: environment.VolumeDir,
+				},
+			},
+		},
+		{
+			StepId:         volumeStepID,
+			TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds),
+			Payload: &agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure{
+				ManagedVolumeDirectoriesEnsure: &agentpb.ManagedVolumeDirectoriesEnsure{
+					ArtifactId:   artifactID,
+					VolumeIds:    []string{volumeID},
+					IntentSha256: append([]byte(nil), intentDigest...),
+				},
+			},
+		},
 		materializeStep,
-		{StepId: applyStepID, TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds), Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{ArtifactId: artifactID, FullReconcile: true}}},
-		{StepId: healthStepID, TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds), Payload: &agentpb.ExecutionStep_WaitHealthy{WaitHealthy: &agentpb.WaitHealthy{ArtifactId: artifactID, ServiceIds: []string{serviceID}}}},
+		{
+			StepId:         applyStepID,
+			TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds),
+			Payload: &agentpb.ExecutionStep_ComposeApply{
+				ComposeApply: &agentpb.ComposeApply{ArtifactId: artifactID, FullReconcile: true},
+			},
+		},
+		{
+			StepId:         healthStepID,
+			TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds),
+			Payload: &agentpb.ExecutionStep_WaitHealthy{
+				WaitHealthy: &agentpb.WaitHealthy{ArtifactId: artifactID, ServiceIds: []string{serviceID}},
+			},
+		},
 	}
 	plan, err := controller.BuildPlan(controller.PlanBuildInput{
 		VolumeRoot: service.volumeRoot, PlanID: planID, RenderGeneration: 1,
@@ -314,12 +376,20 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 				taskcontract.BlueprintComposeProcedureFullReconcile,
 			),
 		},
-		Steps:            []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: environmentStepID}, {Kind: etcd.TaskStepOperation, ID: volumeStepID}, {Kind: etcd.TaskStepOperation, ID: materializeStep.StepId}, {Kind: etcd.TaskStepOperation, ID: applyStepID}, {Kind: etcd.TaskStepOperation, ID: healthStepID}},
+		Steps: []etcd.TaskStepRecord{
+			{Kind: etcd.TaskStepOperation, ID: environmentStepID},
+			{Kind: etcd.TaskStepOperation, ID: volumeStepID},
+			{Kind: etcd.TaskStepOperation, ID: materializeStep.StepId},
+			{Kind: etcd.TaskStepOperation, ID: applyStepID},
+			{Kind: etcd.TaskStepOperation, ID: healthStepID},
+		},
 		Materializations: []etcd.TaskMaterializationRecord{materialization},
 		TimeoutSeconds:   environmentBlueprintTimeoutSeconds, Status: etcd.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: stage.Record.CreatedAt, UpdatedAt: stage.Record.CreatedAt,
 	}
-	volumeMounts := []etcd.EnvironmentServiceVolumeMount{{ServiceID: serviceID, VolumeID: volumeID, Target: spec.MountPath}}
+	volumeMounts := []etcd.EnvironmentServiceVolumeMount{
+		{ServiceID: serviceID, VolumeID: volumeID, Target: spec.MountPath},
+	}
 	normalizedCompose, err := controller.MarshalNormalizedEnvironmentProject(baseProject)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -341,7 +411,8 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 	}
 	responseBody, err := json.Marshal(apiTypes.BackingServiceCreated{
 		BackingService: apiTypes.BackingService{
-			ProjectID: project.ID, EnvironmentID: environment.ID,
+			Authentication: input.Authentication,
+			ProjectID:      project.ID, EnvironmentID: environment.ID,
 			ServiceID: serviceID, BackingNetworkID: zone.Desired.ID,
 		},
 		TaskID: task.ID,
@@ -349,7 +420,11 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
-	response := etcd.IdempotencyResponse{Status: http.StatusCreated, ContentKind: "application/json", Body: responseBody}
+	response := etcd.IdempotencyResponse{
+		Status:      http.StatusCreated,
+		ContentKind: "application/json",
+		Body:        responseBody,
+	}
 	marker := etcd.IdempotencyMarker{
 		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
 		Locator: stage.Record.Locator, Intent: claim.Intent, Response: response,
@@ -420,7 +495,14 @@ func (service *backingServiceCreationService) backingCreationEntries(
 		}
 		bootstrapValues[declaration.BootstrapKey] = value
 		secretID := allocator.Named(ids.KindSecret, "bootstrap-secret-"+declaration.BootstrapKey)
-		secret, err := etcd.NewProjectSecretRecord(secretID, projectID, declaration.Name, core.SecretKindEnvVar, "", createdAt)
+		secret, err := etcd.NewProjectSecretRecord(
+			secretID,
+			projectID,
+			declaration.Name,
+			core.SecretKindEnvVar,
+			"",
+			createdAt,
+		)
 		if err != nil {
 			return nil, nil, nil, nil, nil, err
 		}
@@ -462,7 +544,15 @@ func (service *backingServiceCreationService) backingCreationEntries(
 		}
 		var generation etcd.EntryValueGeneration
 		if declaration.Secret {
-			encrypted, err := sealBackingEntry(ctx, service.protector, environmentID, entryID, generationID, value, createdAt)
+			encrypted, err := sealBackingEntry(
+				ctx,
+				service.protector,
+				environmentID,
+				entryID,
+				generationID,
+				value,
+				createdAt,
+			)
 			if err != nil {
 				return nil, nil, nil, nil, nil, err
 			}
@@ -506,7 +596,12 @@ func randomBackingCredential() ([]byte, error) {
 	return encoded, nil
 }
 
-func sealBackingSecret(ctx context.Context, protector *secretvalue.Protector, secretID string, value []byte) (etcd.SecretEncryptedValue, error) {
+func sealBackingSecret(
+	ctx context.Context,
+	protector *secretvalue.Protector,
+	secretID string,
+	value []byte,
+) (etcd.SecretEncryptedValue, error) {
 	envelope, err := protector.Seal(ctx, value)
 	if err != nil {
 		return etcd.SecretEncryptedValue{}, err
@@ -520,7 +615,13 @@ func sealBackingSecret(ctx context.Context, protector *secretvalue.Protector, se
 	}, nil
 }
 
-func sealBackingEntry(ctx context.Context, protector *secretvalue.Protector, environmentID, entryID, generationID string, value []byte, createdAt time.Time) (etcd.SecretEntryValueGeneration, error) {
+func sealBackingEntry(
+	ctx context.Context,
+	protector *secretvalue.Protector,
+	environmentID, entryID, generationID string,
+	value []byte,
+	createdAt time.Time,
+) (etcd.SecretEntryValueGeneration, error) {
 	envelope, err := protector.Seal(ctx, value)
 	if err != nil {
 		return etcd.SecretEntryValueGeneration{}, err
@@ -533,29 +634,6 @@ func sealBackingEntry(ctx context.Context, protector *secretvalue.Protector, env
 		DigestAlgorithm: string(metadata.Digest.Algorithm), CiphertextSHA256: metadata.Digest.Value,
 		Ciphertext: envelope.Ciphertext(), CreatedAt: createdAt,
 	}, nil
-}
-
-func backingComposeProject(
-	spec adapters.CreationSpec,
-	image string,
-	zone core.Zone,
-	volume core.Volume,
-	environment etcd.EnvironmentRecord,
-) *composetypes.Project {
-	environmentFile := controller.EnvFileName(environment.ID)
-	return &composetypes.Project{
-		Name: "groundplane-backing",
-		Services: composetypes.Services{spec.ServiceName: {
-			Name: spec.ServiceName, Image: image, Command: composetypes.ShellCommand(spec.Command),
-			Expose: composetypes.StringOrNumberList(spec.Expose), Restart: "unless-stopped",
-			Networks:    map[string]*composetypes.ServiceNetworkConfig{zone.Name: {}},
-			Volumes:     []composetypes.ServiceVolumeConfig{{Type: "volume", Source: volume.Key, Target: spec.MountPath}},
-			EnvFiles:    []composetypes.EnvFile{{Path: filepath.Join(environment.VolumeDir, filepath.FromSlash(environmentFile)), Required: true}},
-			HealthCheck: &composetypes.HealthCheckConfig{Test: composetypes.HealthCheckTest(spec.HealthCommand)},
-		}},
-		Networks: composetypes.Networks{zone.Name: {Internal: zone.Internal, Ipam: composetypes.IPAMConfig{Config: []*composetypes.IPAMPool{{Subnet: zone.Subnet}}}}},
-		Volumes:  composetypes.Volumes{volume.Key: {}},
-	}
 }
 
 func backingEnvironmentMaterialization(
@@ -574,8 +652,12 @@ func backingEnvironmentMaterialization(
 			storage = etcd.TaskEntryValueStorageSecret
 		}
 		references[index] = etcd.TaskGeneratedEnvironmentEntryReference{
-			Name:  entry.Entry.Key,
-			Value: etcd.TaskEntryValueReference{EntryID: entry.Entry.ID, ValueGenerationID: entry.CurrentValueGenerationID, Storage: storage},
+			Name: entry.Entry.Key,
+			Value: etcd.TaskEntryValueReference{
+				EntryID:           entry.Entry.ID,
+				ValueGenerationID: entry.CurrentValueGenerationID,
+				Storage:           storage,
+			},
 		}
 	}
 	sort.Slice(references, func(left, right int) bool { return references[left].Name < references[right].Name })
@@ -594,7 +676,9 @@ func backingEnvironmentMaterialization(
 		MaterializationID: allocator.Named(ids.KindConfig, "bootstrap-environment-materialization"),
 		EnvironmentID:     environmentID, Destination: destination,
 		OutputKind: etcd.TaskMaterializationOutputGeneratedEnvironment,
-		Mode:       uint32(entrymaterialization.ModePrivate), Length: uint64(len(content)), SHA256: hex.EncodeToString(digest[:]),
+		Mode: uint32(
+			entrymaterialization.ModePrivate,
+		), Length: uint64(len(content)), SHA256: hex.EncodeToString(digest[:]),
 		Source: etcd.TaskMaterializationSource{
 			Kind:                 etcd.TaskMaterializationSourceGeneratedEnvironment,
 			GeneratedEnvironment: &etcd.TaskGeneratedEnvironmentValueReference{FormatVersion: 1, Values: references},

@@ -10,22 +10,59 @@ import (
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
 
+func TestProjectCandidateScriptIncludesRetainedAttachNetwork(t *testing.T) {
+	// Rationale: an existing Attach is absent from authored Compose, but its
+	// backing network must be usable by a pre-hook before consumer startup.
+	const owned = "net_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	const backing = "net_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	sources := etcd.ScriptExecutionSources{Revision: 20,
+		DesiredProjection: etcd.Versioned[etcd.EnvironmentComposeProjection]{Record: etcd.EnvironmentComposeProjection{
+			DesiredZones: []etcd.EnvironmentZoneProjection{{Desired: core.Zone{ID: owned, Name: "backend"}}},
+		}},
+		AttachSources: etcd.ScriptAttachSources{
+			Networks: []etcd.Versioned[etcd.ZoneRecord]{
+				{
+					Record:       etcd.ZoneRecord{Desired: core.Zone{ID: backing, Name: "database"}},
+					Revision:     7,
+					ReadRevision: 20,
+				},
+			},
+		},
+	}
+	networks, err := projectScriptNetworks(
+		composetypes.ServiceConfig{Networks: map[string]*composetypes.ServiceNetworkConfig{"backend": {}}},
+		sources,
+		&BlueprintScriptCandidateSources{},
+	)
+	if err != nil || len(networks) != 2 {
+		t.Fatalf("candidate omitted retained Attach network: networks=%v error=%v", networks, err)
+	}
+	if networks[1].NetworkId != backing || networks[1].Source.GetExisting().GetModRevision() != 7 ||
+		networks[1].Source.GetStaged() != nil || networks[1].RenderedAttachment.DockerNetworkName != "gp_net_"+backing {
+		t.Fatalf("backing network lost existing-source authority: %v", networks[1])
+	}
+	sources.AttachSources.Networks[0].ReadRevision = 21
+	if _, err := projectScriptNetworks(composetypes.ServiceConfig{}, sources, &BlueprintScriptCandidateSources{}); err == nil {
+		t.Fatal("accepted backing network read from another snapshot")
+	}
+}
+
 func TestValidateScriptRunnerReleaseSourceAllowsStagedPinnedCandidate(t *testing.T) {
 	// Rationale: lifecycle hooks are authorized from the staged candidate
 	// before it can become the current successful Release.
 	image := "registry.example.invalid/app@sha256:" + strings.Repeat("a", 64)
 	sources := etcd.ScriptExecutionSources{
-		Release: etcd.CurrentSuccessfulRelease{},
+		Release: etcd.ServingRelease{},
 		RenderInput: etcd.Versioned[etcd.ReleaseRenderInput]{Record: etcd.ReleaseRenderInput{
-			Image: image,
+			CandidateWorkload: releaseTestWorkload(image),
 			Projection: etcd.EnvironmentComposeProjection{
 				RevisionID: "task-staged", RenderGeneration: 1,
 			},
 		}},
 	}
-	sources.Release.Intent.Image = image
+	sources.Release.Intent.CandidateWorkload = releaseTestWorkload(image)
 
-	if err := validateScriptRunnerReleaseSource(sources, false); err != nil {
+	if err := validateScriptRunnerReleaseSource(sources); err != nil {
 		t.Fatalf("validateScriptRunnerReleaseSource() error = %v", err)
 	}
 }
@@ -238,16 +275,22 @@ func TestScriptDeployResourcesRejectsPresentEmptyFields(t *testing.T) {
 			deploy: &composetypes.DeployConfig{Placement: composetypes.Placement{Constraints: []string{}}},
 		},
 		{
-			name:   "placement preferences",
-			deploy: &composetypes.DeployConfig{Placement: composetypes.Placement{Preferences: []composetypes.PlacementPreferences{}}},
+			name: "placement preferences",
+			deploy: &composetypes.DeployConfig{
+				Placement: composetypes.Placement{Preferences: []composetypes.PlacementPreferences{}},
+			},
 		},
 		{
-			name:   "placement extensions",
-			deploy: &composetypes.DeployConfig{Placement: composetypes.Placement{Extensions: composetypes.Extensions{}}},
+			name: "placement extensions",
+			deploy: &composetypes.DeployConfig{
+				Placement: composetypes.Placement{Extensions: composetypes.Extensions{}},
+			},
 		},
 		{
-			name:   "resource extensions",
-			deploy: &composetypes.DeployConfig{Resources: composetypes.Resources{Extensions: composetypes.Extensions{}}},
+			name: "resource extensions",
+			deploy: &composetypes.DeployConfig{
+				Resources: composetypes.Resources{Extensions: composetypes.Extensions{}},
+			},
 		},
 		{name: "deploy extensions", deploy: &composetypes.DeployConfig{Extensions: composetypes.Extensions{}}},
 	}
@@ -260,29 +303,30 @@ func TestScriptDeployResourcesRejectsPresentEmptyFields(t *testing.T) {
 	}
 }
 
-func TestScriptRunnerReleaseImageUsesDurableResolvedEvidence(t *testing.T) {
+// Rationale: manual and hook runners consume the full prepublished seal, not
+// mutable requested tags or post-start repository digest observations.
+func TestScriptRunnerReleaseImageUsesSealedLocalIdentity(t *testing.T) {
 	requested := "registry.example.invalid/app:stable"
-	immutable := "registry.example.invalid/app@sha256:" + strings.Repeat("b", 64)
+	seal := releaseTestWorkload(requested)
 	sources := etcd.ScriptExecutionSources{
-		Release: etcd.CurrentSuccessfulRelease{
-			Intent: release.Intent{Image: requested},
-			ResolvedImage: &release.ResolvedImageEvidence{
-				RequestedReference: requested, ImmutableReference: immutable,
-				Digest: strings.Repeat("b", 64), LocalImageID: "sha256:" + strings.Repeat("c", 64),
-				ComposeApplyStepID: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV", ControlPayloadDigest: strings.Repeat("d", 64),
-			},
+		Release: etcd.ServingRelease{
+			Intent: release.Intent{CandidateWorkload: seal},
 		},
 		RenderInput: etcd.Versioned[etcd.ReleaseRenderInput]{Record: etcd.ReleaseRenderInput{
-			Image: requested, Projection: etcd.EnvironmentComposeProjection{
+			CandidateWorkload: seal, Projection: etcd.EnvironmentComposeProjection{
 				RevisionID: "tsk_01ARZ3NDEKTSV4RRFFQ69G5FAV", RenderGeneration: 1,
 			},
 		}},
 	}
-	if err := validateScriptRunnerReleaseSource(sources, false); err != nil {
+	if err := validateScriptRunnerReleaseSource(sources); err != nil {
 		t.Fatalf("validateScriptRunnerReleaseSource() error = %v", err)
 	}
-	image, err := scriptRunnerReleaseImage(sources, false)
-	if err != nil || image != immutable {
+	image, err := scriptRunnerReleaseImage(sources)
+	if err != nil || image != seal.LocalImageID {
 		t.Fatalf("script runner Release image = %q, %v", image, err)
+	}
+	sources.RenderInput.Record.CandidateWorkload.ReplicaCount++
+	if err := validateScriptRunnerReleaseSource(sources); err == nil {
+		t.Fatal("runner accepted a render seal differing from its Release")
 	}
 }

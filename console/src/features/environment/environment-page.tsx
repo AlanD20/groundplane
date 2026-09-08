@@ -64,7 +64,9 @@ import { ReleaseGroupsPanel } from '@/features/release-group/release-group-surfa
 import { ServiceStateBadges } from '@/features/service/service-runtime-actions'
 import { ServiceDetailsDrawer, DetailRow } from './service-details-drawer'
 import { ServicesList } from './services-list'
+import { ComponentZonePicker } from './component-zone-picker'
 import { cn, newId } from '@/lib/utils'
+import { valkeyAuthenticationDetails } from '@/lib/valkey-authentication'
 import type { ActivityEntry, Attach, BackupPolicyReplacement, BackupPolicySourceInput, BackupPolicySourceRecord, Environment, EnvironmentEntry, Route, Service, TaskJournalScope, TaskStep, Zone } from '@/lib/types'
 
 type EnvTab =
@@ -1171,7 +1173,9 @@ function RouterCard({ env }: { env: Environment }) {
     component: Environment['components'][number]
     action: 'enable' | 'disable' | 'update' | 'config'
   } | null>(null)
-  const [caddyZone, setCaddyZone] = useState(caddy?.config?.zone_id ?? '')
+  const [selectedZoneIds, setSelectedZoneIds] = useState<string[]>([])
+  const [createdComponentZones, setCreatedComponentZones] = useState<Zone[]>([])
+  const [creatingComponentZone, setCreatingComponentZone] = useState(false)
   const [caddyTemplate, setCaddyTemplate] = useState(caddy?.config?.caddyfile_template ?? '')
   const [caddyTemplateFileReading, setCaddyTemplateFileReading] = useState(false)
   const [caddyTemplateFileError, setCaddyTemplateFileError] = useState<string | null>(null)
@@ -1181,9 +1185,10 @@ function RouterCard({ env }: { env: Environment }) {
   const [tunnelToken, setTunnelToken] = useState('')
   if (!routerReady) return <EnvironmentRouterUnavailable />
 
-  const openConfig = (component: Environment['components'][number]) => {
+  const openConfig = (component: Environment['components'][number], action: 'config' | 'enable' = 'config') => {
+    setSelectedZoneIds(component.config?.zone_ids ?? [])
+    setCreatedComponentZones([])
     if (component.kind === 'caddy') {
-      setCaddyZone(component.config?.zone_id ?? '')
       setCaddyTemplate(component.config?.caddyfile_template ?? '')
       setCaddyTemplateFileReading(false)
       setCaddyTemplateFileError(null)
@@ -1192,18 +1197,21 @@ function RouterCard({ env }: { env: Environment }) {
       setTunnelSecret(component.config?.secret_id ?? '')
       setTunnelToken('')
     }
-    setOperation({ component, action: 'config' })
+    setOperation({ component, action })
   }
 
   const caddyTemplateMarkerCount = caddyTemplate.match(/\{routes\}/g)?.length ?? 0
-  const operationDisabled = operation?.action === 'config' && (
+  const configuring = operation?.action === 'config' || operation?.action === 'enable'
+  const availableComponentZones = [...env.zones, ...createdComponentZones.filter((zone) => !env.zones.some((current) => current.id === zone.id))]
+  const tunnelHasEgress = selectedZoneIds.some((id) => availableComponentZones.some((zone) => zone.id === id && !zone.internal))
+  const operationDisabled = configuring && (creatingComponentZone || selectedZoneIds.length === 0 || (
     operation.component.kind === 'caddy'
-      ? caddyTemplateFileReading || caddyTemplateFileError !== null || !caddyZone ||
+      ? caddyTemplateFileReading || caddyTemplateFileError !== null ||
         (caddyTemplate.length > 0 && caddyTemplateMarkerCount !== 1)
-      : tunnelCredentialMode === 'existing'
+      : !tunnelHasEgress || (tunnelCredentialMode === 'existing'
         ? !tunnelSecret
-        : !tunnelSecretName || !tunnelToken
-  )
+        : !tunnelSecretName || !tunnelToken)
+  ))
 
   return (
     <>
@@ -1215,9 +1223,6 @@ function RouterCard({ env }: { env: Environment }) {
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {env.components.map((component) => {
-            const enableBlocked = component.kind === 'caddy'
-              ? !component.config?.zone_id
-              : !component.config?.secret_id
             return (
               <div key={component.id} className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1234,9 +1239,7 @@ function RouterCard({ env }: { env: Environment }) {
                     <Button
                       size="sm"
                       variant={component.enabled ? 'destructive' : 'default'}
-                      disabled={!component.enabled && enableBlocked}
-                      title={!component.enabled && enableBlocked ? 'Configure required dependencies first' : undefined}
-                      onClick={() => setOperation({ component, action: component.enabled ? 'disable' : 'enable' })}
+                      onClick={() => component.enabled ? setOperation({ component, action: 'disable' }) : openConfig(component, 'enable')}
                     >
                       {component.enabled ? 'Disable' : 'Enable'}
                     </Button>
@@ -1244,12 +1247,13 @@ function RouterCard({ env }: { env: Environment }) {
                 </div>
                 {component.kind === 'caddy' ? (
                   <div className="grid gap-1 font-mono text-xs text-muted-foreground sm:grid-cols-2">
-                    <span>zone={component.config?.zone_id || 'not configured'}</span>
+                    <span>zones={component.config?.zone_ids.join(', ') || 'not configured'}</span>
                     <span>ipv4={component.state.pinnedIPv4 || 'not allocated'}</span>
                   </div>
                 ) : (
                   <div className="grid gap-1 font-mono text-xs text-muted-foreground sm:grid-cols-2">
                     <span>secret={component.config?.secret_id || 'not configured'}</span>
+                    <span>zones={component.config?.zone_ids.join(', ') || 'not configured'}</span>
                     <span>routing=provider managed</span>
                   </div>
                 )}
@@ -1271,7 +1275,7 @@ function RouterCard({ env }: { env: Environment }) {
         <TaskRunnerDialog
           open
           onOpenChange={(open) => { if (!open) setOperation(null) }}
-          variant={operation.action === 'config' ? 'drawer' : 'dialog'}
+          variant={configuring ? 'drawer' : 'dialog'}
           title={`${operation.action === 'config' ? 'Configure' : operation.action} ${operation.component.kind}`}
           description="The Controller updates the Environment Blueprint, renders the complete candidate, and assigns one reconciliation Task to the Agent."
           type="run"
@@ -1279,17 +1283,40 @@ function RouterCard({ env }: { env: Environment }) {
           workspace={params.tenant}
           startLabel={operation.action === 'config' ? 'Save and reconcile' : `${operation.action} component`}
           startDisabled={operationDisabled}
-          review={operation.action === 'config' ? (
-            operation.component.kind === 'caddy' ? (
-              <div className="flex flex-col gap-3">
+          review={configuring ? (
+            <div className="flex flex-col gap-4">
+              <ComponentZonePicker
+                zones={availableComponentZones}
+                selectedZoneIds={selectedZoneIds}
+                onChange={setSelectedZoneIds}
+                networkPool={env.networkPool}
+                onCreate={async (input) => {
+                  setCreatingComponentZone(true)
+                  try {
+                    const zone = await store.addZone(env.id, input)
+                    setCreatedComponentZones((current) => [...current, zone])
+                    return zone
+                  } finally {
+                    setCreatingComponentZone(false)
+                  }
+                }}
+              />
+              {operation.component.kind === 'caddy' ? (
                 <div className="flex flex-col gap-1">
-                  <Label>Router Zone</Label>
+                  <Label htmlFor="component-primary-zone">Primary Router Zone</Label>
                   <Select
-                    value={caddyZone}
-                    onValueChange={setCaddyZone}
-                    options={env.zones.map((zone) => ({ value: zone.id, label: `${zone.name} · ${zone.subnet}` }))}
+                    id="component-primary-zone"
+                    value={selectedZoneIds[0] ?? ''}
+                    onValueChange={(id) => setSelectedZoneIds((current) => [id, ...current.filter((value) => value !== id)])}
+                    options={selectedZoneIds.map((id) => ({ value: id, label: availableComponentZones.find((zone) => zone.id === id)?.name ?? id }))}
                   />
+                  <p className="text-xs text-muted-foreground">The pinned IPv4 and host/LAN DNS address belong to this Zone. Other selected interfaces use dynamic addresses.</p>
                 </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Select at least one non-internal Zone. The first selected non-internal Zone supplies outbound connectivity.</p>
+              )}
+              {operation.component.kind === 'caddy' ? (
+              <div className="flex flex-col gap-3">
                 <div className="flex flex-col gap-1">
                   <Label htmlFor="caddy-template">Caddyfile template</Label>
                   <textarea
@@ -1347,8 +1374,9 @@ function RouterCard({ env }: { env: Environment }) {
             ) : (
               <div className="flex flex-col gap-3">
                 <div className="flex flex-col gap-1">
-                  <Label>Credential source</Label>
+                  <Label htmlFor="component-credential-source">Credential source</Label>
                   <Select
+                    id="component-credential-source"
                     value={tunnelCredentialMode}
                     onValueChange={(value) => setTunnelCredentialMode(value as 'existing' | 'new')}
                     options={[
@@ -1359,8 +1387,9 @@ function RouterCard({ env }: { env: Environment }) {
                 </div>
                 {tunnelCredentialMode === 'existing' ? (
                   <div className="flex flex-col gap-1">
-                    <Label>Reusable Secret</Label>
+                    <Label htmlFor="component-reusable-secret">Reusable Secret</Label>
                     <Select
+                      id="component-reusable-secret"
                       value={tunnelSecret}
                       onValueChange={setTunnelSecret}
                       options={tunnelSecrets.map((secret) => ({
@@ -1399,7 +1428,8 @@ function RouterCard({ env }: { env: Environment }) {
                   </>
                 )}
               </div>
-            )
+            )}
+            </div>
           ) : undefined}
           steps={[
             { label: 'Validate Component desired state', state: 'pending' },
@@ -1408,19 +1438,22 @@ function RouterCard({ env }: { env: Environment }) {
             { label: 'Publish observed Component state', state: 'pending' },
           ]}
           onDispatch={() => {
-            if (operation.action === 'enable') return store.setComponentEnabled(operation.component.id, true)
             if (operation.action === 'disable') return store.setComponentEnabled(operation.component.id, false)
             if (operation.action === 'update') return store.reconcileEnvironmentComponent(operation.component.id)
-            return operation.component.kind === 'caddy'
-              ? store.updateComponentConfig(operation.component.id, {
-                  zone_id: caddyZone,
+            const config = operation.component.kind === 'caddy'
+              ? {
+                  zone_ids: selectedZoneIds,
                   ...(caddyTemplate ? { caddyfile_template: caddyTemplate } : {}),
-                })
-              : store.updateComponentConfig(operation.component.id, {
+                }
+              : {
+                  zone_ids: selectedZoneIds,
                   credential: tunnelCredentialMode === 'existing'
-                    ? { mode: 'existing', secret_id: tunnelSecret }
-                    : { mode: 'new', secret_name: tunnelSecretName, token: tunnelToken },
-                })
+                    ? { mode: 'existing' as const, secret_id: tunnelSecret }
+                    : { mode: 'new' as const, secret_name: tunnelSecretName, token: tunnelToken },
+                }
+            return operation.action === 'enable'
+              ? store.setComponentEnabled(operation.component.id, true, config)
+              : store.updateComponentConfig(operation.component.id, config)
           }}
           onCommit={() => { void store.refreshEnvironmentComponents(env.id).catch(() => undefined) }}
         />
@@ -3562,6 +3595,8 @@ function AttachFormDialog({ env, open, onOpenChange }: { env: Environment; open:
   const svc = g?.environments?.[0]?.services[0]
   const adapter = store.adapters.find((a) => a.key === svc?.adapter)
   const manual = !!adapter?.manual
+  const authenticationDetails = valkeyAuthenticationDetails(svc?.authentication)
+  const authenticationUnavailable = svc?.adapter === 'valkey:9' && !authenticationDetails
   const needsDatabase = adapter?.requires.database ?? true
   const attachName = name.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-')
   const alreadyAttached = env.attaches.filter((a) => a.projectId === gid)
@@ -3571,14 +3606,18 @@ function AttachFormDialog({ env, open, onOpenChange }: { env: Environment; open:
   const grantOptions = env.attaches.filter((a) => a.projectId === gid && a.database !== '—')
   const factRows = manual
     ? []
-    : [
-        `${adapter?.prefix ?? 'service'}_HOST`,
-        `${adapter?.prefix ?? 'service'}_PORT`,
-        ...(needsDatabase ? [`${adapter?.prefix ?? 'service'}_DATABASE`] : []),
-        `${adapter?.prefix ?? 'service'}_ROLE`,
-        `${adapter?.prefix ?? 'service'}_PASSWORD`,
-        `${adapter?.prefix ?? 'service'}_URL`,
-      ]
+    : authenticationDetails
+      ? authenticationDetails.factSuffixes.map((suffix) => `${adapter?.prefix ?? 'service'}_${suffix}`)
+      : authenticationUnavailable
+        ? []
+        : [
+            `${adapter?.prefix ?? 'service'}_HOST`,
+            `${adapter?.prefix ?? 'service'}_PORT`,
+            ...(needsDatabase ? [`${adapter?.prefix ?? 'service'}_DATABASE`] : []),
+            `${adapter?.prefix ?? 'service'}_ROLE`,
+            `${adapter?.prefix ?? 'service'}_PASSWORD`,
+            `${adapter?.prefix ?? 'service'}_URL`,
+          ]
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
@@ -3596,6 +3635,13 @@ function AttachFormDialog({ env, open, onOpenChange }: { env: Environment; open:
                 <span className="font-medium text-foreground">manual</span> adapter, no auto-provisioning, no facts, no
                 credentials. Reach the service at <span className="font-mono">{svc?.serviceName}</span> from the joining
                 service.
+              </>
+            ) : authenticationDetails ? (
+              <>
+                Attaching grants a <span className="font-medium text-foreground">specific service</span> access to{' '}
+                <span className="font-mono">{g?.name}</span> and inherits the backing instance&apos;s immutable{' '}
+                <span className="font-medium text-foreground">{authenticationDetails.label.toLowerCase()}</span> authentication mode.{' '}
+                {authenticationDetails.summary} The attach name below is only the spec key; the mode cannot be changed here.
               </>
             ) : (
               <>
@@ -3621,6 +3667,13 @@ function AttachFormDialog({ env, open, onOpenChange }: { env: Environment; open:
                 the Controller generates the collision-resistant database, role, password, and URL
               </p>
             )}
+            {attachName && authenticationDetails && (
+              <p className="text-xs text-muted-foreground">
+                {svc?.authentication === 'none'
+                  ? 'the Controller creates a self-owned fact binding; it generates no credential'
+                  : `the Controller provisions the ${authenticationDetails.label.toLowerCase()} identity and mode-appropriate facts`}
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Backing service</Label>
@@ -3644,6 +3697,10 @@ function AttachFormDialog({ env, open, onOpenChange }: { env: Environment; open:
                 {alreadyAttached.map((a) => a.name).join(', ')} —{' '}
                 {manual
                   ? 'attaching again joins the network again (still no provisioning)'
+                  : authenticationDetails
+                    ? svc?.authentication === 'none'
+                      ? 'attaching again creates another fact owner and network membership, with no credential'
+                      : `attaching again provisions another ${authenticationDetails.label.toLowerCase()} identity`
                   : 'attaching again provisions another database + role'}
               </p>
             )}
@@ -3661,7 +3718,7 @@ function AttachFormDialog({ env, open, onOpenChange }: { env: Environment; open:
           </div>
           {!manual && (
             <div className="flex flex-col gap-1.5">
-              <Label>Credential</Label>
+              <Label>{authenticationDetails?.credentialLabel ?? 'Credential'}</Label>
               <Select
                 value={credentialMode}
                 onValueChange={(value) => {
@@ -3671,8 +3728,8 @@ function AttachFormDialog({ env, open, onOpenChange }: { env: Environment; open:
                   if (mode === 'new') setCredentialAttachId('')
                 }}
                 options={[
-                  { value: 'new', label: 'Create new credential' },
-                  { value: 'existing', label: 'Use existing credential' },
+                  { value: 'new', label: authenticationDetails?.newOwnerLabel ?? 'Create new credential' },
+                  { value: 'existing', label: authenticationDetails?.existingOwnerLabel ?? 'Use existing credential' },
                 ]}
               />
               {credentialMode === 'existing' && (
@@ -3706,6 +3763,29 @@ function AttachFormDialog({ env, open, onOpenChange }: { env: Environment; open:
               </div>
             </div>
           )}
+          {authenticationDetails && (
+            <div className="flex flex-col gap-1.5">
+              <Label>{credentialMode === 'new' ? 'Provisioning for this mode' : 'Existing owner behavior'}</Label>
+              <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2">
+                {credentialMode === 'existing' ? (
+                  <p className="text-xs text-muted-foreground">
+                    Reuses the selected owner&apos;s facts and only reconciles this Service&apos;s network membership. It provisions no new identity.
+                  </p>
+                ) : authenticationDetails.provision.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No credential is generated and no ACL identity is provisioned. The Attach creates the self-owned fact binding and joins the network.
+                  </p>
+                ) : (
+                  authenticationDetails.provision.map((operation) => (
+                    <div key={operation.op} className="flex items-baseline gap-2.5 text-xs">
+                      <span className="w-36 shrink-0 font-mono text-primary">{operation.op}</span>
+                      <span className="break-all font-mono text-muted-foreground">{operation.detail}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
           {manual ? (
             <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-muted-foreground">
               <span>
@@ -3716,6 +3796,10 @@ function AttachFormDialog({ env, open, onOpenChange }: { env: Environment; open:
                 service themselves.
               </span>
             </div>
+          ) : authenticationUnavailable ? (
+            <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              The Controller did not return this Valkey backing instance&apos;s authentication mode. Refresh before attaching.
+            </p>
           ) : (
             (
               <div className="flex flex-col gap-1.5">
@@ -3743,7 +3827,7 @@ function AttachFormDialog({ env, open, onOpenChange }: { env: Environment; open:
           </Button>
           {saveError ? <p className="text-xs text-destructive">{saveError}</p> : null}
           <Button
-            disabled={saving || !gid || !attachName || !svc?.id || !service || (credentialMode === 'existing' && !credentialAttachId)}
+            disabled={saving || authenticationUnavailable || !gid || !attachName || !svc?.id || !service || (credentialMode === 'existing' && !credentialAttachId)}
             onClick={() => {
               if (!svc?.id) return
               setSaving(true)

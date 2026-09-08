@@ -37,7 +37,10 @@ func (authority *ReleaseGroupExecutionAuthority) RecordMemberServing(
 	input ReleaseGroupMemberCheckpoint,
 ) (domain.GroupProgress, error) {
 	if ctx == nil || authority == nil || input.Member.Outcome != domain.MemberServing {
-		return domain.GroupProgress{}, errs.New(errs.KindValidationFailed, "release group member serving checkpoint is invalid")
+		return domain.GroupProgress{}, errs.New(
+			errs.KindValidationFailed,
+			"release group member serving checkpoint is invalid",
+		)
 	}
 	return authority.advanceProgress(ctx, input, domain.StateServing, false)
 }
@@ -47,7 +50,10 @@ func (authority *ReleaseGroupExecutionAuthority) RecordMemberFailure(
 	input ReleaseGroupMemberCheckpoint,
 ) (domain.GroupProgress, error) {
 	if ctx == nil || authority == nil || input.Member.Outcome != domain.MemberFailed {
-		return domain.GroupProgress{}, errs.New(errs.KindValidationFailed, "release group member failure checkpoint is invalid")
+		return domain.GroupProgress{}, errs.New(
+			errs.KindValidationFailed,
+			"release group member failure checkpoint is invalid",
+		)
 	}
 	return authority.advanceProgress(ctx, input, domain.StateFailed, true)
 }

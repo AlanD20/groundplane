@@ -194,20 +194,36 @@ func ReconcileBlueprintReleaseGroups(
 	allocate ReleaseGroupIDAllocator,
 ) (ReleaseGroupBlueprintReconciliation, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return ReleaseGroupBlueprintReconciliation{}, errs.New(errs.KindValidationFailed, "release group environment id is invalid")
+		return ReleaseGroupBlueprintReconciliation{}, errs.New(
+			errs.KindValidationFailed,
+			"release group environment id is invalid",
+		)
 	}
 
 	serviceIDsByName := make(map[string]string, len(services))
 	serviceNamesByID := make(map[string]string, len(services))
 	for _, service := range services {
 		if ids.Validate(ids.KindService, service.ID) != nil || strings.TrimSpace(service.Name) == "" {
-			return ReleaseGroupBlueprintReconciliation{}, errs.New(errs.KindInternal, "release group reconciliation received an invalid service")
+			return ReleaseGroupBlueprintReconciliation{}, errs.New(
+				errs.KindInternal,
+				"release group reconciliation received an invalid service",
+			)
 		}
 		if _, exists := serviceIDsByName[service.Name]; exists {
-			return ReleaseGroupBlueprintReconciliation{}, errs.Newf(errs.KindInternal, "service name %q is not unique in the environment", service.Name)
+			return ReleaseGroupBlueprintReconciliation{}, errs.Newf(
+				errs.KindInternal,
+				"service name %q is not unique in the environment",
+				service.Name,
+			)
 		}
 		if existingName, exists := serviceNamesByID[service.ID]; exists {
-			return ReleaseGroupBlueprintReconciliation{}, errs.Newf(errs.KindInternal, "service id %q is shared by %q and %q", service.ID, existingName, service.Name)
+			return ReleaseGroupBlueprintReconciliation{}, errs.Newf(
+				errs.KindInternal,
+				"service id %q is shared by %q and %q",
+				service.ID,
+				existingName,
+				service.Name,
+			)
 		}
 		serviceIDsByName[service.Name] = service.ID
 		serviceNamesByID[service.ID] = service.Name
@@ -217,13 +233,24 @@ func ReconcileBlueprintReleaseGroups(
 	previousIDs := make(map[string]struct{}, len(previous))
 	for _, identity := range previous {
 		if ids.Validate(ids.KindReleaseGroup, identity.ID) != nil || invalidReleaseGroupName(identity.Name) {
-			return ReleaseGroupBlueprintReconciliation{}, errs.New(errs.KindInternal, "release group previous identity is invalid")
+			return ReleaseGroupBlueprintReconciliation{}, errs.New(
+				errs.KindInternal,
+				"release group previous identity is invalid",
+			)
 		}
 		if _, exists := previousByName[identity.Name]; exists {
-			return ReleaseGroupBlueprintReconciliation{}, errs.Newf(errs.KindInternal, "release group name %q is not unique", identity.Name)
+			return ReleaseGroupBlueprintReconciliation{}, errs.Newf(
+				errs.KindInternal,
+				"release group name %q is not unique",
+				identity.Name,
+			)
 		}
 		if _, exists := previousIDs[identity.ID]; exists {
-			return ReleaseGroupBlueprintReconciliation{}, errs.Newf(errs.KindInternal, "release group id %q is not unique", identity.ID)
+			return ReleaseGroupBlueprintReconciliation{}, errs.Newf(
+				errs.KindInternal,
+				"release group id %q is not unique",
+				identity.ID,
+			)
 		}
 		previousByName[identity.Name] = identity
 		previousIDs[identity.ID] = struct{}{}
@@ -256,7 +283,12 @@ func ReconcileBlueprintReleaseGroups(
 		for index, serviceName := range spec.Services {
 			serviceID, exists := serviceIDsByName[serviceName]
 			if !exists {
-				return ReleaseGroupBlueprintReconciliation{}, errs.Newf(errs.KindServiceNotFound, "release group %q references unknown service %q", name, serviceName)
+				return ReleaseGroupBlueprintReconciliation{}, errs.Newf(
+					errs.KindServiceNotFound,
+					"release group %q references unknown service %q",
+					name,
+					serviceName,
+				)
 			}
 			serviceIDs[index] = serviceID
 			serviceIDByName[serviceName] = serviceID

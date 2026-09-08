@@ -50,8 +50,19 @@ func testPlatformImage(identity string) componentsdk.OCIImage {
 	return componentsdk.OCIImage{
 		Repository: identity, IndexDigest: hex.EncodeToString(index[:]),
 		Platforms: []componentsdk.OCIPlatform{
-			{OS: "linux", Architecture: "amd64", ChildDigest: hex.EncodeToString(amd64[:]), ConfigDigest: hex.EncodeToString(amd64Config[:])},
-			{OS: "linux", Architecture: "arm64", Variant: "v8", ChildDigest: hex.EncodeToString(arm64[:]), ConfigDigest: hex.EncodeToString(arm64Config[:])},
+			{
+				OS:           "linux",
+				Architecture: "amd64",
+				ChildDigest:  hex.EncodeToString(amd64[:]),
+				ConfigDigest: hex.EncodeToString(amd64Config[:]),
+			},
+			{
+				OS:           "linux",
+				Architecture: "arm64",
+				Variant:      "v8",
+				ChildDigest:  hex.EncodeToString(arm64[:]),
+				ConfigDigest: hex.EncodeToString(arm64Config[:]),
+			},
 		},
 	}
 }

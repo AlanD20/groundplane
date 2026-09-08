@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/workloadimage"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -62,8 +63,18 @@ func observedRecreateSetEvidence(
 	compensated bool,
 ) *agentpb.ServiceRecreateEvidence {
 	if artifact == nil || observed == nil || artifact.GetArtifactId() == "" || serviceID == "" || releaseID == "" ||
-		artifact.GetProjectName() == "" || observed.GetProjectName() != artifact.GetProjectName() ||
-		len(observed.GetCollisions()) != 0 {
+		artifact.GetProjectName() == "" || observed.GetProjectName() != artifact.GetProjectName() {
+		return nil
+	}
+	selectedServices := make([]*agentpb.ComposeService, 0, len(artifact.GetServices()))
+	for _, service := range artifact.GetServices() {
+		if service != nil && service.GetServiceId() == serviceID {
+			selectedServices = append(selectedServices, service)
+		}
+	}
+	if scoped := scopeLifecycleComposeObservation(artifact, observed, selectedServices); len(
+		scoped.GetCollisions(),
+	) != 0 {
 		return nil
 	}
 	var workload *agentpb.ComposeService
@@ -80,12 +91,15 @@ func observedRecreateSetEvidence(
 		workload = service
 		target = serviceTarget
 	}
-	if workload == nil || workload.GetExpectedReplicas() < 1 || workload.GetImageReference() == "" ||
-		!workload.GetHasHealthcheck() || !hasCanonicalRecreateRole(workload, target) {
+	if workload == nil || workload.GetExpectedReplicas() < 1 ||
+		!workloadimage.LocalIDValid(workload.GetImageReference()) ||
+		!workload.GetHasHealthcheck() ||
+		!hasCanonicalRecreateRole(workload, target) {
 		return nil
 	}
 
 	var replicas uint32
+	containerIDs := make(map[string]struct{})
 	for _, container := range observed.GetContainers() {
 		if container.GetServiceId() != serviceID {
 			continue
@@ -94,9 +108,18 @@ func observedRecreateSetEvidence(
 		if role == "proxy" {
 			continue
 		}
+		containerID := container.GetContainerId()
+		if len(containerID) != 64 || !validContainerID(containerID) {
+			return nil
+		}
+		if _, duplicate := containerIDs[containerID]; duplicate {
+			return nil
+		}
+		containerIDs[containerID] = struct{}{}
 		if role != observedRecreateRuntimeRole(target) ||
 			!containerHasExpectedLabels(container, workload.GetExpectedLabels()) ||
 			container.GetImageReference() != workload.GetImageReference() ||
+			container.GetImageId() != workload.GetImageReference() ||
 			container.GetState() != agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING ||
 			container.GetHealth() != agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY {
 			return nil

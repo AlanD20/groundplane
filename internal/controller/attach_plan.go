@@ -19,10 +19,11 @@ type AttachPlanGrantIdentity struct {
 }
 
 type AttachPlanIdentity struct {
-	Database string
-	Role     string
-	Password []byte
-	Grants   []AttachPlanGrantIdentity
+	Authentication core.BackingAuthentication
+	Database       string
+	Role           string
+	Password       []byte
+	Grants         []AttachPlanGrantIdentity
 }
 
 func (identity *AttachPlanIdentity) Clear() {
@@ -140,12 +141,19 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 		return nil, errs.New(errs.KindStateConflict, "Attach backing Service is not runnable")
 	}
 	if renderInput.Record.BackingServiceID != backing.Record.Desired.ID ||
-		renderInput.Record.AdapterKey != backing.Record.Desired.Adapter {
+		renderInput.Record.AdapterKey != backing.Record.Desired.Adapter ||
+		renderInput.Record.Authentication != backing.Record.Desired.Authentication {
 		return nil, errs.New(errs.KindStateConflict, "Attach backing Service changed after Task publication")
 	}
 	adapter, found := adapters.Get(renderInput.Record.AdapterKey)
 	if !found {
 		return nil, errs.New(errs.KindValidationFailed, "Attach backing Service adapter is not registered")
+	}
+	authentication, authErr := core.ResolveBackingAuthentication(
+		adapter.SupportsAuthenticationModes(), renderInput.Record.Authentication,
+	)
+	if authErr != nil || authentication != renderInput.Record.Authentication {
+		return nil, errs.New(errs.KindStateConflict, "Attach backing Service authentication mode is invalid")
 	}
 	if err := resolver.validateAttachGrantTargets(ctx, current.Record); err != nil {
 		return nil, err
@@ -199,8 +207,42 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 			},
 		})
 	}
+	if authentication == core.BackingAuthenticationNone {
+		if len(task.Steps) != 1 {
+			return nil, errs.New(errs.KindInternal, "no-auth Attach Task step count is invalid")
+		}
+		if err := resolver.attachIdentities.ResolveTaskIdentity(
+			ctx,
+			current,
+			task.ID,
+			func(identity AttachPlanIdentity) error {
+				if identity.Authentication != authentication {
+					return errs.New(errs.KindStateConflict, "Attach encrypted authentication mode changed")
+				}
+				procedureTask := task
+				procedureTask.Steps = nil
+				_, buildErr := attachProcedureSteps(
+					procedureTask, current.Record, renderInput.Record.AdapterKey, identity,
+				)
+				return buildErr
+			},
+		); err != nil {
+			return nil, err
+		}
+		return BuildPlan(PlanBuildInput{
+			VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
+			RenderGeneration: uint64(task.RenderGeneration), Operation: operation,
+			TargetID: task.Target, Artifacts: []*agentpb.ComposeArtifact{artifact},
+			Steps: []*agentpb.ExecutionStep{
+				attachComposeStep(task, 0, artifact, []string{current.Record.ServiceID}),
+			},
+		})
+	}
 	var plan *agentpb.ExecutionPlan
 	err = resolver.attachIdentities.ResolveTaskIdentity(ctx, current, task.ID, func(identity AttachPlanIdentity) error {
+		if identity.Authentication != authentication {
+			return errs.New(errs.KindStateConflict, "Attach encrypted authentication mode changed")
+		}
 		steps, buildErr := attachNetworkProcedureSteps(
 			task, current.Record, renderInput.Record.AdapterKey, artifact, identity,
 		)
@@ -336,6 +378,23 @@ func attachProcedureSteps(
 	adapterKey string,
 	identity AttachPlanIdentity,
 ) ([]*agentpb.ExecutionStep, error) {
+	adapter, found := adapters.Get(adapterKey)
+	if !found {
+		return nil, errs.New(errs.KindValidationFailed, "Attach task adapter is not registered")
+	}
+	authentication, err := core.ResolveBackingAuthentication(
+		adapter.SupportsAuthenticationModes(), identity.Authentication,
+	)
+	if err != nil || authentication != identity.Authentication {
+		return nil, errs.New(errs.KindInternal, "Attach task authentication mode is invalid")
+	}
+	if authentication == core.BackingAuthenticationNone {
+		if identity.Role != "" || len(identity.Password) != 0 || len(identity.Grants) != 0 ||
+			len(record.GrantAttachIDs) != 0 || len(task.Steps) != 0 {
+			return nil, errs.New(errs.KindInternal, "no-auth Attach task identity or step count is invalid")
+		}
+		return nil, nil
+	}
 	if identity.Role == "" || len(identity.Password) == 0 || len(identity.Grants) != len(record.GrantAttachIDs) ||
 		len(task.Steps) != len(record.GrantAttachIDs)+1 {
 		return nil, errs.New(errs.KindInternal, "Attach task identity or step count is invalid")
@@ -346,6 +405,10 @@ func attachProcedureSteps(
 		}
 	}
 	steps := make([]*agentpb.ExecutionStep, 0, len(task.Steps))
+	wireAuthentication, err := encodeBackingAuthentication(authentication)
+	if err != nil {
+		return nil, err
+	}
 	appendProcedure := func(index int, phase agentpb.AdapterProcedurePhase, database, grantOn string, password []byte) {
 		steps = append(steps, &agentpb.ExecutionStep{
 			StepId: task.Steps[index].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
@@ -353,6 +416,7 @@ func attachProcedureSteps(
 				AdapterKey: adapterKey, Phase: phase, AttachId: record.ID,
 				BackingServiceId: record.BackingServiceID, Role: identity.Role,
 				Password: append([]byte(nil), password...), Database: database, GrantOn: grantOn,
+				Authentication: wireAuthentication,
 			}},
 		})
 	}
@@ -371,8 +435,12 @@ func attachProcedureSteps(
 		appendProcedure(stepIndex, agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_REVOKE,
 			"", grant.Database, nil)
 	}
+	detachPassword := []byte(nil)
+	if authentication == core.BackingAuthenticationPassword {
+		detachPassword = identity.Password
+	}
 	appendProcedure(len(identity.Grants), agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_DETACH,
-		identity.Database, "", nil)
+		identity.Database, "", detachPassword)
 	return steps, nil
 }
 

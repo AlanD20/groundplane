@@ -22,7 +22,8 @@ func ProxyConfigGeneration(config []byte, releaseID string) (uint64, error) {
 			} `json:"http"`
 		} `json:"apps"`
 	}
-	if ids.Validate(ids.KindDeployment, releaseID) != nil || json.Unmarshal(config, &document) != nil || len(document.Apps.HTTP.Servers) == 0 {
+	if ids.Validate(ids.KindDeployment, releaseID) != nil || json.Unmarshal(config, &document) != nil ||
+		len(document.Apps.HTTP.Servers) == 0 {
 		return 0, errs.New(errs.KindValidationFailed, "release proxy config generation is invalid")
 	}
 	wantSuffix := "_" + strings.ToLower(releaseID) + "_p"
@@ -45,7 +46,11 @@ func ProxyConfigGeneration(config []byte, releaseID string) (uint64, error) {
 	return generation, nil
 }
 
-func validateReleaseWorkloadStep(operation agentpb.PlanOperation, artifactID, serviceID, target string, artifacts map[string]*agentpb.ComposeArtifact) error {
+func validateReleaseWorkloadStep(
+	operation agentpb.PlanOperation,
+	artifactID, serviceID, target string,
+	artifacts map[string]*agentpb.ComposeArtifact,
+) error {
 	if !releaseOperation(operation) || validateID(ids.KindService, serviceID) != nil || !validReleaseTarget(target) {
 		return errs.New(errs.KindValidationFailed, "release workload step is invalid")
 	}
@@ -56,9 +61,15 @@ func validateReleaseWorkloadStep(operation agentpb.PlanOperation, artifactID, se
 	return nil
 }
 
-func validateServiceProxySwitch(operation agentpb.PlanOperation, value *agentpb.ServiceProxySwitch, artifacts map[string]*agentpb.ComposeArtifact) error {
+func validateServiceProxySwitch(
+	operation agentpb.PlanOperation,
+	value *agentpb.ServiceProxySwitch,
+	artifacts map[string]*agentpb.ComposeArtifact,
+) error {
 	if value == nil || !releaseOperation(operation) || validateID(ids.KindService, value.ServiceId) != nil ||
-		!validReleaseTarget(value.FromTarget) || !validReleaseTarget(value.ToTarget) || value.FromTarget == value.ToTarget ||
+		!validReleaseTarget(
+			value.FromTarget,
+		) || !validReleaseTarget(value.ToTarget) || value.FromTarget == value.ToTarget ||
 		value.ProxyGeneration == 0 || ids.Validate(ids.KindDeployment, value.ReleaseId) != nil ||
 		!validSealedProxyConfig(value.ConfigJson, value.ConfigSha256) {
 		return errs.New(errs.KindValidationFailed, "release proxy switch is invalid")
@@ -66,7 +77,11 @@ func validateServiceProxySwitch(operation agentpb.PlanOperation, value *agentpb.
 	return validateProxyArtifacts(value.CandidateArtifactId, value.PriorArtifactId, value.ServiceId, artifacts)
 }
 
-func validateServiceProxyProbe(operation agentpb.PlanOperation, value *agentpb.ServiceProxyProbe, artifacts map[string]*agentpb.ComposeArtifact) error {
+func validateServiceProxyProbe(
+	operation agentpb.PlanOperation,
+	value *agentpb.ServiceProxyProbe,
+	artifacts map[string]*agentpb.ComposeArtifact,
+) error {
 	if value == nil || !releaseOperation(operation) || validateID(ids.KindService, value.ServiceId) != nil ||
 		!validReleaseTarget(value.ExpectedTarget) || value.ProxyGeneration == 0 || value.ReleaseId == "" ||
 		!validSealedProxyConfig(value.ConfigJson, value.ConfigSha256) || !validReleaseTarget(value.AlternateTarget) ||
@@ -78,7 +93,11 @@ func validateServiceProxyProbe(operation agentpb.PlanOperation, value *agentpb.S
 	return validateProxyArtifacts(value.CandidateArtifactId, value.PriorArtifactId, value.ServiceId, artifacts)
 }
 
-func validateServiceProxyCompensate(operation agentpb.PlanOperation, value *agentpb.ServiceProxyCompensate, artifacts map[string]*agentpb.ComposeArtifact) error {
+func validateServiceProxyCompensate(
+	operation agentpb.PlanOperation,
+	value *agentpb.ServiceProxyCompensate,
+	artifacts map[string]*agentpb.ComposeArtifact,
+) error {
 	if value == nil || !releaseOperation(operation) || validateID(ids.KindService, value.ServiceId) != nil ||
 		!validReleaseTarget(value.CandidateTarget) || !validReleaseTarget(value.PriorTarget) ||
 		value.CandidateTarget == value.PriorTarget || value.ProxyGeneration == 0 || value.PriorReleaseId == "" ||
@@ -88,10 +107,19 @@ func validateServiceProxyCompensate(operation agentpb.PlanOperation, value *agen
 	return validateProxyArtifacts(value.CandidateArtifactId, value.PriorArtifactId, value.ServiceId, artifacts)
 }
 
-func validateProxyArtifacts(candidateArtifactID, priorArtifactID, serviceID string, artifacts map[string]*agentpb.ComposeArtifact) error {
+func validateProxyArtifacts(
+	candidateArtifactID, priorArtifactID, serviceID string,
+	artifacts map[string]*agentpb.ComposeArtifact,
+) error {
 	artifactID := candidateArtifactID
 	artifact := artifacts[artifactID]
-	if artifact == nil || releaseRuntimeService(artifact, serviceID, "", agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY) == nil {
+	if artifact == nil ||
+		releaseRuntimeService(
+			artifact,
+			serviceID,
+			"",
+			agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+		) == nil {
 		return errs.New(errs.KindValidationFailed, "stable release proxy is absent from its Compose artifact")
 	}
 	if priorArtifactID != "" && artifacts[priorArtifactID] == nil {
@@ -100,7 +128,11 @@ func validateProxyArtifacts(candidateArtifactID, priorArtifactID, serviceID stri
 	return nil
 }
 
-func validateServiceRecreateAcknowledge(operation agentpb.PlanOperation, value *agentpb.ServiceRecreateAcknowledge, artifacts map[string]*agentpb.ComposeArtifact) error {
+func validateServiceRecreateAcknowledge(
+	operation agentpb.PlanOperation,
+	value *agentpb.ServiceRecreateAcknowledge,
+	artifacts map[string]*agentpb.ComposeArtifact,
+) error {
 	if value == nil || !releaseOperation(operation) || validateID(ids.KindService, value.ServiceId) != nil ||
 		ids.Validate(ids.KindDeployment, value.ReleaseId) != nil ||
 		validateRecreateArtifact(value.ArtifactId, value.ServiceId, value.ReleaseId, artifacts) != nil {
@@ -109,21 +141,51 @@ func validateServiceRecreateAcknowledge(operation agentpb.PlanOperation, value *
 	return nil
 }
 
-func validateServiceRecreateProbe(operation agentpb.PlanOperation, value *agentpb.ServiceRecreateProbe, artifacts map[string]*agentpb.ComposeArtifact) error {
+func validateServiceRecreateProbe(
+	operation agentpb.PlanOperation,
+	value *agentpb.ServiceRecreateProbe,
+	artifacts map[string]*agentpb.ComposeArtifact,
+) error {
 	if value == nil || !releaseOperation(operation) || validateID(ids.KindService, value.ServiceId) != nil ||
-		ids.Validate(ids.KindDeployment, value.CandidateReleaseId) != nil || !validPriorReleaseID(value.PriorReleaseId) ||
-		validateRecreateArtifact(value.CandidateArtifactId, value.ServiceId, value.CandidateReleaseId, artifacts) != nil ||
-		validatePriorTopologyArtifact(value.PriorArtifactId, value.ServiceId, value.PriorReleaseId, "", artifacts) != nil {
+		ids.Validate(
+			ids.KindDeployment,
+			value.CandidateReleaseId,
+		) != nil || !validPriorReleaseID(value.PriorReleaseId) ||
+		validateRecreateArtifact(
+			value.CandidateArtifactId,
+			value.ServiceId,
+			value.CandidateReleaseId,
+			artifacts,
+		) != nil ||
+		validatePriorTopologyArtifact(
+			value.PriorArtifactId,
+			value.ServiceId,
+			value.PriorReleaseId,
+			"",
+			artifacts,
+		) != nil {
 		return errs.New(errs.KindValidationFailed, "release recreate probe is invalid")
 	}
 	return nil
 }
 
-func validateServiceRecreateCompensate(operation agentpb.PlanOperation, value *agentpb.ServiceRecreateCompensate, artifacts map[string]*agentpb.ComposeArtifact) error {
+func validateServiceRecreateCompensate(
+	operation agentpb.PlanOperation,
+	value *agentpb.ServiceRecreateCompensate,
+	artifacts map[string]*agentpb.ComposeArtifact,
+) error {
 	if value == nil || !releaseOperation(operation) || validateID(ids.KindService, value.ServiceId) != nil ||
-		ids.Validate(ids.KindDeployment, value.CandidateReleaseId) != nil || !validPriorReleaseID(value.PriorReleaseId) ||
+		ids.Validate(
+			ids.KindDeployment,
+			value.CandidateReleaseId,
+		) != nil || !validPriorReleaseID(value.PriorReleaseId) ||
 		!validReleaseTarget(value.PriorTarget) ||
-		validateRecreateArtifact(value.CandidateArtifactId, value.ServiceId, value.CandidateReleaseId, artifacts) != nil ||
+		validateRecreateArtifact(
+			value.CandidateArtifactId,
+			value.ServiceId,
+			value.CandidateReleaseId,
+			artifacts,
+		) != nil ||
 		validatePriorTopologyArtifact(
 			value.ArtifactId, value.ServiceId, value.PriorReleaseId, value.PriorTarget, artifacts,
 		) != nil {
@@ -143,7 +205,8 @@ func validatePriorTopologyArtifact(
 	workloads := 0
 	var selected *agentpb.ComposeService
 	for _, service := range artifact.GetServices() {
-		if service.GetServiceId() == serviceID && (service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON || service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT) {
+		if service.GetServiceId() == serviceID &&
+			(service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON || service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT) {
 			workloads++
 			serviceTarget := service.GetSlot()
 			if serviceTarget == "" {
@@ -163,9 +226,17 @@ func validatePriorTopologyArtifact(
 	return nil
 }
 
-func validateRecreateArtifact(artifactID, serviceID, releaseID string, artifacts map[string]*agentpb.ComposeArtifact) error {
+func validateRecreateArtifact(
+	artifactID, serviceID, releaseID string,
+	artifacts map[string]*agentpb.ComposeArtifact,
+) error {
 	artifact := artifacts[artifactID]
-	service := releaseRuntimeService(artifact, serviceID, "", agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON)
+	service := releaseRuntimeService(
+		artifact,
+		serviceID,
+		"",
+		agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
+	)
 	if artifact == nil || service == nil || expectedReleaseLabel(service) != releaseID ||
 		!validObservedRecreateService(service) {
 		return errs.New(errs.KindValidationFailed, "release recreate singleton is absent from its Compose artifact")
@@ -195,7 +266,11 @@ func validPriorReleaseID(value string) bool {
 	return ids.Validate(ids.KindDeployment, value) == nil
 }
 
-func releaseRuntimeService(artifact *agentpb.ComposeArtifact, serviceID, slot string, role agentpb.ComposeServiceRole) *agentpb.ComposeService {
+func releaseRuntimeService(
+	artifact *agentpb.ComposeArtifact,
+	serviceID, slot string,
+	role agentpb.ComposeServiceRole,
+) *agentpb.ComposeService {
 	for _, service := range artifact.GetServices() {
 		if service.GetServiceId() == serviceID && service.GetRole() == role && service.GetSlot() == slot {
 			return service
@@ -216,11 +291,22 @@ func validReleaseTarget(target string) bool {
 
 func releaseTargetService(artifact *agentpb.ComposeArtifact, serviceID, target string) *agentpb.ComposeService {
 	if target == "singleton" {
-		return releaseRuntimeService(artifact, serviceID, "", agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON)
+		return releaseRuntimeService(
+			artifact,
+			serviceID,
+			"",
+			agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
+		)
 	}
-	return releaseRuntimeService(artifact, serviceID, target, agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT)
+	return releaseRuntimeService(
+		artifact,
+		serviceID,
+		target,
+		agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
+	)
 }
 
 func releaseOperation(operation agentpb.PlanOperation) bool {
-	return operation == agentpb.PlanOperation_PLAN_OPERATION_DEPLOY || operation == agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK
+	return operation == agentpb.PlanOperation_PLAN_OPERATION_DEPLOY ||
+		operation == agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK
 }

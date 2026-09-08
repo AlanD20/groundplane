@@ -34,7 +34,10 @@ func TestVolumeMutationsUseADR0049Shapes(t *testing.T) {
 				t.Errorf("create input = %#v", input)
 			}
 			writer.WriteHeader(http.StatusCreated)
-			_, _ = io.WriteString(writer, `{"volume":{"id":"vol_1","environment_id":"env_1","slug":"uploads","key":"uploads-data"},"task_id":"tsk_create"}`)
+			_, _ = io.WriteString(
+				writer,
+				`{"volume":{"id":"vol_1","environment_id":"env_1","slug":"uploads","key":"uploads-data"},"task_id":"tsk_create"}`,
+			)
 		case request.Method == http.MethodPatch && request.URL.Path == "/api/v1/volumes/vol_1":
 			var input apiTypes.VolumeEdit
 			if err := json.Unmarshal(body, &input); err != nil {
@@ -44,7 +47,10 @@ func TestVolumeMutationsUseADR0049Shapes(t *testing.T) {
 				t.Errorf("edit input = %#v", input)
 			}
 			writer.WriteHeader(http.StatusOK)
-			_, _ = io.WriteString(writer, `{"volume":{"id":"vol_1","environment_id":"env_1","slug":"archive","key":"uploads-data"},"task_id":"tsk_edit"}`)
+			_, _ = io.WriteString(
+				writer,
+				`{"volume":{"id":"vol_1","environment_id":"env_1","slug":"archive","key":"uploads-data"},"task_id":"tsk_edit"}`,
+			)
 		case request.Method == http.MethodDelete && request.URL.Path == "/api/v1/volumes/vol_1":
 			query := request.URL.Query()
 			if query.Get("impact_token") != "impact" || query.Get("confirm_key") != "uploads-data" {
@@ -124,7 +130,10 @@ func TestGetVolumeDeletionImpactPreservesFixedRevisionPage(t *testing.T) {
 			t.Errorf("query = %q", request.URL.RawQuery)
 		}
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(writer, `{"volume_id":"vol_1","slug":"uploads","key":"uploads-data","environment_id":"env_1","revision":12,"environment_head":"head","items":[],"complete":true,"item_count":0,"rolling_digest":"digest","impact_token":"token","data_handling":"recursive_destroy"}`)
+		_, _ = io.WriteString(
+			writer,
+			`{"volume_id":"vol_1","slug":"uploads","key":"uploads-data","environment_id":"env_1","revision":12,"environment_head":"head","items":[],"complete":true,"item_count":0,"rolling_digest":"digest","impact_token":"token","data_handling":"recursive_destroy"}`,
+		)
 	}))
 	defer server.Close()
 

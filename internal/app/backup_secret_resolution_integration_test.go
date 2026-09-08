@@ -667,6 +667,13 @@ func (store *appBackupSecretTaskStore) ListAgentAssignments(
 	return []etcd.TaskAssignment{store.claim}, nil
 }
 
+func (*appBackupSecretTaskStore) ReconnectAgentAssignment(
+	context.Context,
+	etcd.TaskAssignment,
+) (etcd.TaskAssignment, error) {
+	return etcd.TaskAssignment{}, errs.New(errs.KindInternal, "unexpected assignment reconnect")
+}
+
 func (*appBackupSecretTaskStore) ClaimNextTask(
 	context.Context,
 	string,

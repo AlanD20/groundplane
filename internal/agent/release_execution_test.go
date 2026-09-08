@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -54,10 +56,13 @@ func TestExecuteReleaseCompensatesPriorSuccessfulSwitch(t *testing.T) {
 		"compensate-api": releaseExecutionSuccess("api", true),
 	}}
 	pool := releaseExecutionPool(t, helper)
-	plan := &agentpb.ExecutionPlan{Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, Steps: []*agentpb.ExecutionStep{
-		releaseForwardSwitch("switch-api"), releaseForwardSwitch("switch-worker"),
-		releaseCompensate("compensate-api", "switch-api"),
-	}}
+	plan := &agentpb.ExecutionPlan{
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
+		Steps: []*agentpb.ExecutionStep{
+			releaseForwardSwitch("switch-api"), releaseForwardSwitch("switch-worker"),
+			releaseCompensate("compensate-api", "switch-api"),
+		},
+	}
 	result := runReleaseExecution(t, pool, "task-initial", "", plan)
 	if result.Terminal != TaskTerminalFailed || result.Compose.GetReconciliationRequired() ||
 		len(result.Compose.GetProxyEvidence()) != 1 || !result.Compose.GetProxyEvidence()[0].GetCompensated() {
@@ -80,9 +85,12 @@ func TestExecuteReleaseZeroApplicableCompensationRemainsReconciliationRequired(t
 			Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED,
 		},
 	}}
-	plan := &agentpb.ExecutionPlan{Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, Steps: []*agentpb.ExecutionStep{
-		releaseForwardSwitch("switch-api"),
-	}}
+	plan := &agentpb.ExecutionPlan{
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
+		Steps: []*agentpb.ExecutionStep{
+			releaseForwardSwitch("switch-api"),
+		},
+	}
 	result := runReleaseExecution(t, releaseExecutionPool(t, helper), "task-zero-compensation", "", plan)
 	if result.Terminal != TaskTerminalFailed || !result.Compose.GetReconciliationRequired() {
 		t.Fatalf("release result = %#v, want failed reconciliation-required", result)
@@ -192,8 +200,10 @@ func TestExecuteReleaseRecoveryProofFailurePublishesFailedProgress(t *testing.T)
 	reservation := &taskReservation{assignment: Assignment{
 		AssignmentID: "assignment-proof-progress", TaskID: "task-proof-progress", OperationID: "operation-proof-progress",
 		Plan: plan, ExecutionEpoch: 1, ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY,
-		ReleaseRecoveryDirective: &agentpb.ReleaseRecoveryDirective{Phase: agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROBE,
-			StepIds: []string{"probe-api"}},
+		ReleaseRecoveryDirective: &agentpb.ReleaseRecoveryDirective{
+			Phase:   agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROBE,
+			StepIds: []string{"probe-api"},
+		},
 	}, ctx: ctx, cancel: cancel, eventsDurable: true}
 	go pool.executeRelease(context.Background(), reservation)
 	running := <-pool.Outputs()
@@ -263,46 +273,39 @@ func TestExecuteReleaseRejectedRunningEventRemainsTerminalWithoutRecovery(t *tes
 	assertReleaseExecutionCalls(t, helper, nil)
 }
 
-// Rationale: invalid sealed configuration rejected before Compose helper
-// dispatch is a proved pre-effect failure, not an ambiguous host mutation.
-func TestExecuteReleasePreEffectConfigFailureRemainsTerminalWithoutRecovery(t *testing.T) {
-	helper := &releaseExecutionHelper{responses: map[string]*agentpb.ComposeHelperResponse{}}
-	step := releaseForwardApply("apply-worker")
-	authority := func(reference string) *agentpb.ResolvedRunnerSnapshot {
-		return &agentpb.ResolvedRunnerSnapshot{ProcedureServiceImage: &agentpb.ProcedureServiceImageAuthority{
-			ComposeApplyStepId: step.GetStepId(), ArtifactId: "candidate-artifact",
-			ServiceId: "worker", ReleaseId: "release-worker", RequestedReference: reference,
-		}}
-	}
-	plan := &agentpb.ExecutionPlan{
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, Steps: []*agentpb.ExecutionStep{step},
-		ScriptRunnerSnapshots: []*agentpb.ResolvedRunnerSnapshot{authority("image:one"), authority("image:two")},
-	}
-	result := runReleaseExecution(t, releaseExecutionPool(t, helper), "task-config-rejected", "", plan)
-	if result.Terminal != TaskTerminalFailed || result.Compose.GetReconciliationRequired() {
-		t.Fatalf("pre-effect config failure = %#v", result)
-	}
-	assertReleaseExecutionCalls(t, helper, nil)
-}
-
 func TestExecuteReleaseRecreateCompensatesSingletonReplacement(t *testing.T) {
 	t.Parallel()
 	helper := &releaseExecutionHelper{responses: map[string]*agentpb.ComposeHelperResponse{
-		"apply-worker": {Schema: 1, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED, Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE},
+		"apply-worker": {
+			Schema:     1,
+			Outcome:    agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,
+			Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
+		},
 		"fail-next": {
 			Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED, ExitCode: 17,
 			Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
 		},
 		"restore-worker": {
 			Schema: 1, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,
-			Diagnostic:       agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
-			RecreateEvidence: &agentpb.ServiceRecreateEvidence{ServiceId: "worker", ReleaseId: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", ArtifactId: "prior-artifact", Compensated: true, Target: "singleton"},
+			Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
+			RecreateEvidence: &agentpb.ServiceRecreateEvidence{
+				ServiceId:   "worker",
+				ReleaseId:   "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+				ArtifactId:  "prior-artifact",
+				Compensated: true,
+				Target:      "singleton",
+			},
 		},
 	}}
 	pool := releaseExecutionPool(t, helper)
-	plan := &agentpb.ExecutionPlan{Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, Steps: []*agentpb.ExecutionStep{
-		releaseForwardApply("apply-worker"), releaseForwardSwitch("fail-next"), releaseRecreateCompensate("restore-worker", "apply-worker"),
-	}}
+	plan := &agentpb.ExecutionPlan{
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
+		Steps: []*agentpb.ExecutionStep{
+			releaseForwardApply(
+				"apply-worker",
+			), releaseForwardSwitch("fail-next"), releaseRecreateCompensate("restore-worker", "apply-worker"),
+		},
+	}
 	result := runReleaseExecution(t, pool, "task-recreate", "", plan)
 	if result.Terminal != TaskTerminalFailed || result.Compose.GetReconciliationRequired() ||
 		len(result.Compose.GetRecreateEvidence()) != 1 || !result.Compose.GetRecreateEvidence()[0].GetCompensated() {
@@ -336,7 +339,11 @@ func TestExecuteReleaseCandidateAbsenceCompensationClosesWithExactProof(t *testi
 	}
 	plan := &agentpb.ExecutionPlan{
 		PlanHash: planHash, Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
-		Steps: []*agentpb.ExecutionStep{releaseForwardApply("apply-api"), releaseForwardSwitch("fail-next"), compensate},
+		Steps: []*agentpb.ExecutionStep{
+			releaseForwardApply("apply-api"),
+			releaseForwardSwitch("fail-next"),
+			compensate,
+		},
 		CandidateReleaseProcedure: &agentpb.CandidateReleaseProcedure{Members: []*agentpb.CandidateReleaseMember{{
 			ServiceId: "api", CandidateReleaseId: "release-api", CandidateArtifactId: "candidate-artifact",
 			CandidateAbsence: &agentpb.CandidateAbsenceRestoration{
@@ -349,9 +356,14 @@ func TestExecuteReleaseCandidateAbsenceCompensationClosesWithExactProof(t *testi
 		Plan: plan, Deadline: time.Now().Add(5 * time.Second), ExecutionEpoch: 1,
 		ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
 		RestorationAuthority: &agentpb.ReleaseRestorationAuthority{
-			Target:   agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE,
 			PlanHash: planHash, CandidateArtifactId: "candidate-artifact", AuthoritySha256: authorityDigest,
-			Candidates: []*agentpb.ReleaseRestorationCandidate{{ServiceId: "api", ReleaseId: "release-api"}},
+			Candidates: []*agentpb.ReleaseRestorationCandidate{
+				{
+					ServiceId: "api",
+					ReleaseId: "release-api",
+					Target:    agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE,
+				},
+			},
 		},
 	}
 	helper := &releaseExecutionHelper{responses: map[string]*agentpb.ComposeHelperResponse{
@@ -399,9 +411,14 @@ func TestExecuteReleaseRetryAfterRestartRunsRecoveryOnly(t *testing.T) {
 	t.Parallel()
 	post := releaseHookStep("post-deploy-api", agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_POST_HOOK)
 	post.PrerequisiteStepId = "switch-api"
-	plan := &agentpb.ExecutionPlan{Operation: agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK, Steps: []*agentpb.ExecutionStep{
-		releaseForwardSwitch("switch-api"), post, releaseProbe("probe-api"), releaseCompensate("compensate-api", "switch-api"),
-	}}
+	plan := &agentpb.ExecutionPlan{
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK,
+		Steps: []*agentpb.ExecutionStep{
+			releaseForwardSwitch(
+				"switch-api",
+			), post, releaseProbe("probe-api"), releaseCompensate("compensate-api", "switch-api"),
+		},
+	}
 	for _, taskID := range []string{"task-retry-one", "task-retry-two"} {
 		helper := &releaseExecutionHelper{responses: map[string]*agentpb.ComposeHelperResponse{
 			"probe-api": releaseExecutionSuccess("api", false), "compensate-api": releaseExecutionSuccess("api", true),
@@ -435,9 +452,12 @@ func TestExecuteReleaseRetryCompensatesOnlyTouchedMember(t *testing.T) {
 		"compensate-api":    releaseExecutionSuccess("api", true),
 		"compensate-worker": releaseExecutionSuccess("worker", true),
 	}}
-	plan := &agentpb.ExecutionPlan{Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, Steps: []*agentpb.ExecutionStep{
-		apiProbe, workerProbe, apiCompensate, workerCompensate,
-	}}
+	plan := &agentpb.ExecutionPlan{
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
+		Steps: []*agentpb.ExecutionStep{
+			apiProbe, workerProbe, apiCompensate, workerCompensate,
+		},
+	}
 	result := runReleaseExecution(t, releaseExecutionPool(t, helper), "task-selective-recovery", "task-original", plan)
 	if result.Terminal != TaskTerminalCompleted || result.Compose.GetReconciliationRequired() {
 		t.Fatalf("selective recovery result = %#v", result)
@@ -458,9 +478,12 @@ func TestExecuteReleaseRestartCompensatesAfterAmbiguousTransitionProbe(t *testin
 		},
 		"restore-prior": releaseExecutionSuccess("api", true),
 	}}
-	plan := &agentpb.ExecutionPlan{Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, Steps: []*agentpb.ExecutionStep{
-		releaseProbe("probe-transition"), releaseCompensate("restore-prior", ""),
-	}}
+	plan := &agentpb.ExecutionPlan{
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
+		Steps: []*agentpb.ExecutionStep{
+			releaseProbe("probe-transition"), releaseCompensate("restore-prior", ""),
+		},
+	}
 	result := runReleaseExecution(t, releaseExecutionPool(t, helper), "task-transition-retry", "task-original", plan)
 	if result.Terminal != TaskTerminalFailed || !result.Compose.GetReconciliationRequired() ||
 		len(result.Compose.GetProxyEvidence()) != 0 {
@@ -479,9 +502,12 @@ func TestExecuteReleaseConcurrentRetriesKeepEvidenceIsolated(t *testing.T) {
 		"probe-api": releaseExecutionSuccess("api", false),
 	}}
 	pool := releaseExecutionPool(t, helper)
-	plan := &agentpb.ExecutionPlan{Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, Steps: []*agentpb.ExecutionStep{
-		releaseForwardSwitch("switch-api"), releaseProbe("probe-api"),
-	}}
+	plan := &agentpb.ExecutionPlan{
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
+		Steps: []*agentpb.ExecutionStep{
+			releaseForwardSwitch("switch-api"), releaseProbe("probe-api"),
+		},
+	}
 	var wait sync.WaitGroup
 	for _, taskID := range []string{"task-a", "task-b"} {
 		wait.Add(1)
@@ -578,12 +604,21 @@ func releaseForwardSwitch(stepID string) *agentpb.ExecutionStep {
 func releaseForwardApply(stepID string) *agentpb.ExecutionStep {
 	return &agentpb.ExecutionStep{
 		StepId: stepID, TimeoutSeconds: 5, Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
-		Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{ArtifactId: "candidate-artifact", ServiceIds: []string{"worker"}, ForceRecreate: true, NoDependencies: true}},
+		Payload: &agentpb.ExecutionStep_ComposeApply{
+			ComposeApply: &agentpb.ComposeApply{
+				ArtifactId:     "candidate-artifact",
+				ServiceIds:     []string{"worker"},
+				ForceRecreate:  true,
+				NoDependencies: true,
+			},
+		},
 	}
 }
 
 func TestComposeRemoveIsCandidateMutation(t *testing.T) {
-	step := &agentpb.ExecutionStep{Payload: &agentpb.ExecutionStep_ComposeRemove{ComposeRemove: &agentpb.ComposeRemove{}}}
+	step := &agentpb.ExecutionStep{
+		Payload: &agentpb.ExecutionStep_ComposeRemove{ComposeRemove: &agentpb.ComposeRemove{}},
+	}
 	if !candidateMutationStep(step) {
 		t.Fatal("ComposeRemove did not require the durable running-event barrier")
 	}
@@ -599,13 +634,23 @@ func TestRecoveryLeaveActiveAllowsProbeProvenNoop(t *testing.T) {
 	helper := &releaseExecutionHelper{responses: map[string]*agentpb.ComposeHelperResponse{
 		"probe-api": releaseExecutionSuccess("api", false),
 	}}
-	result := runReleaseExecution(t, releaseExecutionPool(t, helper), "task-leave-active-noop", "task-original", &agentpb.ExecutionPlan{
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, Steps: []*agentpb.ExecutionStep{probe, compensate},
-	})
+	result := runReleaseExecution(
+		t,
+		releaseExecutionPool(t, helper),
+		"task-leave-active-noop",
+		"task-original",
+		&agentpb.ExecutionPlan{
+			Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, Steps: []*agentpb.ExecutionStep{probe, compensate},
+		},
+	)
 	if result.Terminal != TaskTerminalCompleted || result.Compose.GetReconciliationRequired() {
 		t.Fatalf("probe-proven leave_active recovery = %#v", result)
 	}
-	assertReleaseExecutionCalls(t, helper, []releaseExecutionCall{{taskID: "task-leave-active-noop", stepID: "probe-api"}})
+	assertReleaseExecutionCalls(
+		t,
+		helper,
+		[]releaseExecutionCall{{taskID: "task-leave-active-noop", stepID: "probe-api"}},
+	)
 }
 
 func releaseProbe(stepID string) *agentpb.ExecutionStep {
@@ -637,10 +682,12 @@ func releaseRecreateCompensate(stepID string, prerequisite string) *agentpb.Exec
 	return &agentpb.ExecutionStep{
 		StepId: stepID, PrerequisiteStepId: prerequisite, TimeoutSeconds: 5,
 		Policy: agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
-		Payload: &agentpb.ExecutionStep_ServiceRecreateCompensate{ServiceRecreateCompensate: &agentpb.ServiceRecreateCompensate{
-			Enabled: true, ArtifactId: "prior-artifact", ServiceId: "worker",
-			PriorReleaseId: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", PriorTarget: "singleton",
-		}},
+		Payload: &agentpb.ExecutionStep_ServiceRecreateCompensate{
+			ServiceRecreateCompensate: &agentpb.ServiceRecreateCompensate{
+				Enabled: true, ArtifactId: "prior-artifact", ServiceId: "worker",
+				PriorReleaseId: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", PriorTarget: "singleton",
+			},
+		},
 	}
 }
 
@@ -664,16 +711,49 @@ func releaseTestArtifact(artifactID string) *agentpb.ComposeArtifact {
 		if slot != "" {
 			labels = append(labels, &agentpb.LabelPair{Key: "com.groundplane.slot", Value: slot})
 		}
+		imageID := fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(releaseID)))
 		return &agentpb.ComposeService{ServiceId: serviceID, ComposeName: name, Role: kind, Slot: slot,
-			ExpectedReplicas: 1, HasHealthcheck: true, ImageReference: "example/" + serviceID + ":sealed",
+			ExpectedReplicas: 1, HasHealthcheck: true, ImageReference: imageID,
 			ExpectedLabels: labels}
 	}
-	return &agentpb.ComposeArtifact{ArtifactId: artifactID, ProjectName: "gp-release", Services: []*agentpb.ComposeService{
-		service("api", "api-blue", "slot", "blue", "release-api", agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT),
-		service("api", "api-green", "slot", "green", "prior-api", agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT),
-		service("worker", "worker-blue", "slot", "blue", "release-worker", agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT),
-		service("worker", "worker", "singleton", "", "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON),
-	}}
+	return &agentpb.ComposeArtifact{
+		ArtifactId:  artifactID,
+		ProjectName: "gp-release",
+		Services: []*agentpb.ComposeService{
+			service(
+				"api",
+				"api-blue",
+				"slot",
+				"blue",
+				"release-api",
+				agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
+			),
+			service(
+				"api",
+				"api-green",
+				"slot",
+				"green",
+				"prior-api",
+				agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
+			),
+			service(
+				"worker",
+				"worker-blue",
+				"slot",
+				"blue",
+				"release-worker",
+				agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
+			),
+			service(
+				"worker",
+				"worker",
+				"singleton",
+				"",
+				"dep_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+				agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
+			),
+		},
+	}
 }
 
 func releaseObservedContainer(name, serviceID, role, slot, releaseID string) *agentpb.ObservedContainer {
@@ -684,8 +764,11 @@ func releaseObservedContainer(name, serviceID, role, slot, releaseID string) *ag
 	if slot != "" {
 		labels = append(labels, &agentpb.LabelPair{Key: "com.groundplane.slot", Value: slot})
 	}
-	return &agentpb.ObservedContainer{ContainerId: name, Name: name, ServiceId: serviceID, Labels: labels,
-		ImageReference: "example/" + serviceID + ":sealed",
+	containerID := fmt.Sprintf("%x", sha256.Sum256([]byte(name)))
+	imageID := fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(releaseID)))
+	return &agentpb.ObservedContainer{ContainerId: containerID, Name: name, ServiceId: serviceID, Labels: labels,
+		ImageReference: imageID,
+		ImageId:        imageID,
 		State:          agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING,
 		Health:         agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY}
 }

@@ -875,14 +875,16 @@ func (repository *TaskRepository) claimNextTask(
 			})
 			if taskHasBlueprintCandidateAppliedAuthority(task) {
 				authority, authorityDigest, authorityConditions, authorityErr := repository.prepareBlueprintRestorationAuthority(
-					ctx, task, writer, candidate.readRevision,
+					ctx,
+					task,
+					writer,
+					candidate.readRevision,
 				)
 				if authorityErr != nil {
 					clearMutationValues(mutations)
 					return TaskAssignment{}, false, authorityErr
 				}
-				assignment.RestorationAuthority = &authority
-				assignment.RestorationAuthoritySHA256 = authorityDigest
+				assignment.RestorationAuthority, assignment.RestorationAuthoritySHA256 = &authority, authorityDigest
 				updatedAssignmentValue, encodeErr := encodeTaskAssignment(assignment)
 				if encodeErr != nil {
 					clearMutationValues(mutations)
@@ -903,27 +905,29 @@ func (repository *TaskRepository) claimNextTask(
 				}
 				conditions = append(conditions, epochCondition)
 				mutations = append(mutations, epochMutation)
-			} else if task.Params[TaskReleasePublicationParam] != "" {
-				authority, authorityDigest, authorityConditions, authorityErr := repository.prepareOrdinaryRestorationAuthority(
-					ctx, task, candidate.readRevision,
-				)
-				if authorityErr != nil {
-					clearMutationValues(mutations)
-					return TaskAssignment{}, false, authorityErr
-				}
-				assignment.RestorationAuthority = &authority
-				assignment.RestorationAuthoritySHA256 = authorityDigest
-				updatedAssignmentValue, encodeErr := encodeTaskAssignment(assignment)
-				if encodeErr != nil {
-					clearMutationValues(mutations)
-					return TaskAssignment{}, false, encodeErr
-				}
-				clear(assignmentValue)
-				assignmentValue = updatedAssignmentValue
-				mutations[2].Value, mutations[3].Value, mutations[4].Value = assignmentValue, assignmentValue, assignmentValue
-				conditions = append(conditions, authorityConditions...)
-				conditions = append(conditions, Condition{Key: releaseRecoveryKey(task.ID)})
 			}
+		}
+		if !taskHasBlueprintCandidateAppliedAuthority(task) && task.Params[TaskReleasePublicationParam] != "" {
+			authority, authorityDigest, authorityConditions, authorityErr := repository.prepareOrdinaryRestorationAuthority(
+				ctx,
+				task,
+				candidate.readRevision,
+			)
+			if authorityErr != nil {
+				clearMutationValues(mutations)
+				return TaskAssignment{}, false, authorityErr
+			}
+			assignment.RestorationAuthority, assignment.RestorationAuthoritySHA256 = &authority, authorityDigest
+			updatedAssignmentValue, encodeErr := encodeTaskAssignment(assignment)
+			if encodeErr != nil {
+				clearMutationValues(mutations)
+				return TaskAssignment{}, false, encodeErr
+			}
+			clear(assignmentValue)
+			assignmentValue = updatedAssignmentValue
+			mutations[2].Value, mutations[3].Value, mutations[4].Value = assignmentValue, assignmentValue, assignmentValue
+			conditions = append(conditions, authorityConditions...)
+			conditions = append(conditions, Condition{Key: releaseRecoveryKey(task.ID)})
 		}
 		attachChange, err := repository.prepareAttachTaskClaim(ctx, task, candidate.readRevision)
 		if err != nil {
@@ -1577,7 +1581,14 @@ func (repository *TaskRepository) acknowledgeTask(
 			}
 			if executor == TaskExecutorAgent && result != nil && task.Params[TaskReleasePublicationParam] != "" {
 				normalizedStatus, normalizedResult, handled, normalizeErr := repository.normalizeReleaseRecoveryTerminalReplay(
-					ctx, task, terminalStatus, *result, agentID, agentGeneration, assignmentID, primaryAndAssignment.ReadRevision,
+					ctx,
+					task,
+					terminalStatus,
+					*result,
+					agentID,
+					agentGeneration,
+					assignmentID,
+					primaryAndAssignment.ReadRevision,
 				)
 				if normalizeErr != nil {
 					return Versioned[TaskRecord]{}, normalizeErr
@@ -1745,33 +1756,19 @@ func (repository *TaskRepository) acknowledgeTask(
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
-		var timeoutEvidenceConditions []Condition
-		if executor == TaskExecutorAgent && result != nil && task.Params[TaskReleasePublicationParam] != "" &&
-			assignment.ExecutionMode == TaskExecutionModeForward &&
-			result.Diagnostic == TaskResultDiagnosticTimeoutBeforeEffect && !result.ReconciliationRequired {
-			_, procedure, descriptorErr := repository.candidateReleaseDescriptorAtRevision(
-				ctx, task, primaryAndAssignment.ReadRevision,
-			)
-			if descriptorErr != nil || validateAssignmentRestorationDescriptor(task, assignment, procedure) != nil {
-				return Versioned[TaskRecord]{}, corruptTaskAssignment()
-			}
-			effect, evidenceConditions, classifyErr := repository.releaseEffectEvidenceAtRevision(
-				ctx, task, assignment, procedure, primaryAndAssignment.ReadRevision,
-			)
-			if classifyErr != nil {
-				return Versioned[TaskRecord]{}, classifyErr
-			}
-			timeoutEvidenceConditions = evidenceConditions
-			if effect {
-				result.Diagnostic = TaskResultDiagnosticNone
-				result.ReconciliationRequired = true
-			}
-			if err := validateTaskResult(*result, task.Steps, terminalStatus); err != nil {
-				return Versioned[TaskRecord]{}, err
-			}
+		timeoutEvidenceConditions, err := repository.prepareReleaseTerminalReport(ctx, TaskAssignment{
+			Task: Versioned[TaskRecord]{
+				Record:       task,
+				Revision:     taskValue.ModRevision,
+				ReadRevision: primaryAndAssignment.ReadRevision,
+			},
+			Assignment: Versioned[TaskAssignmentRecord]{Record: assignment, Revision: assignmentValue.ModRevision},
+		}, terminalStatus, result)
+		if err != nil {
+			return Versioned[TaskRecord]{}, err
 		}
 		var recoveryAcknowledgement releaseRecoveryAcknowledgement
-		var recoveryScriptSourceRelease blueprintRecoveryScriptSourceRelease
+		var terminalScriptSourceRelease blueprintTerminalScriptSourceRelease
 		if executor == TaskExecutorAgent && result != nil && task.Params[TaskReleasePublicationParam] != "" &&
 			assignment.ExecutionMode == TaskExecutionModeRecoveryOnly {
 			recoveryAcknowledgement, err = repository.releaseRecoveryAcknowledgementAtRevision(
@@ -1781,24 +1778,33 @@ func (repository *TaskRepository) acknowledgeTask(
 				return Versioned[TaskRecord]{}, err
 			}
 			if !recoveryAcknowledgement.final {
-				return Versioned[TaskRecord]{Record: task, Revision: taskValue.ModRevision, ReadRevision: primaryAndAssignment.ReadRevision}, nil
+				return Versioned[TaskRecord]{
+					Record:       task,
+					Revision:     taskValue.ModRevision,
+					ReadRevision: primaryAndAssignment.ReadRevision,
+				}, nil
 			}
 			terminalStatus = recoveryAcknowledgement.status
 			resolved := recoveryAcknowledgement.result
 			result = &resolved
+		}
+		if executor == TaskExecutorAgent && result != nil &&
+			(task.Type == TaskUpdate || recoveryAcknowledgement.final) &&
+			task.Params[TaskReleasePublicationParam] != "" &&
+			!result.ReconciliationRequired {
 			var processed bool
-			var releaseErr error
-			recoveryScriptSourceRelease, processed, releaseErr = repository.prepareBlueprintRecoveryScriptSourceRelease(
+			terminalScriptSourceRelease, processed, err = repository.prepareBlueprintTerminalScriptSourceRelease(
 				ctx, task, taskValue, assignment, assignmentValue, assignmentIndexValue,
-				recoveryAcknowledgement, terminalAt, primaryAndAssignment.ReadRevision,
+				recoveryAcknowledgement, terminalStatus, &terminalAt, primaryAndAssignment.ReadRevision,
+				submittedTerminalStatus, *submittedResult, false,
 			)
-			if releaseErr != nil {
-				return Versioned[TaskRecord]{}, releaseErr
+			if err != nil {
+				return Versioned[TaskRecord]{}, err
 			}
 			if processed {
 				continue
 			}
-			defer recoveryScriptSourceRelease.clear()
+			defer terminalScriptSourceRelease.clear()
 		}
 		if executor == TaskExecutorAgent && result != nil && task.Params[TaskReleasePublicationParam] != "" &&
 			result.ReconciliationRequired {
@@ -1818,7 +1824,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			task.Type != TaskUpdate {
 			processed, err := repository.finalizeReleaseTaskBatch(
 				ctx, task, assignment, terminalStatus, *result, agentID, terminalAt,
-				primaryAndAssignment.ReadRevision,
+				primaryAndAssignment.ReadRevision, recoveryAcknowledgement.conditions...,
 			)
 			if err != nil {
 				return Versioned[TaskRecord]{}, err
@@ -1958,11 +1964,11 @@ func (repository *TaskRepository) acknowledgeTask(
 			{Type: MutationDelete, Key: lifecycleKey},
 		}
 		if recoveryAcknowledgement.final {
-			conditions = append(conditions, Condition{Key: releaseRecoveryKey(task.ID), ModRevision: recoveryAcknowledgement.value.ModRevision})
+			conditions = append(conditions, recoveryAcknowledgement.conditions...)
 			mutations = append(mutations, Mutation{Type: MutationDelete, Key: releaseRecoveryKey(task.ID)})
-			conditions = append(conditions, recoveryScriptSourceRelease.conditions...)
-			mutations = append(mutations, recoveryScriptSourceRelease.mutations...)
 		}
+		conditions = append(conditions, terminalScriptSourceRelease.conditions...)
+		mutations = append(mutations, terminalScriptSourceRelease.mutations...)
 		if materializes {
 			conditions = append(conditions, Condition{Key: writerKey, ModRevision: companions.Values[5].ModRevision})
 			mutations = append(mutations, Mutation{Type: MutationDelete, Key: writerKey})
@@ -2359,7 +2365,14 @@ func (repository *TaskRepository) acknowledgeTask(
 		if terminalStatus == TaskStatusCompleted {
 			phase = zoneRemovalTransactionCompletedAcknowledgement
 		}
-		transaction, err := repository.transactZoneRemovalTaskLifecycle(ctx, task, phase, conditions, mutations)
+		transaction, err := repository.transactTaskTerminal(
+			ctx,
+			terminal,
+			phase,
+			conditions,
+			mutations,
+			terminalScriptSourceRelease.advance,
+		)
 		clear(terminalValue)
 		clear(markerValue)
 		clear(retentionValue)
@@ -3868,7 +3881,7 @@ func (repository *TaskRepository) bindOrdinaryTaskEnvironmentMutation(
 		readRevision:  readRevision,
 		fence:         fence,
 	}
-	return mutationContext.bind(ctx, repository.store, conditions, mutations, advanceEpoch)
+	return mutationContext.bindTaskLifecycle(ctx, repository.store, task, conditions, mutations, advanceEpoch)
 }
 
 func ordinaryTaskEnvironmentMutationTarget(

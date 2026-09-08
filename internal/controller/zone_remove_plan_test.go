@@ -24,7 +24,9 @@ func TestZoneRemovalPlanRebuildsAffectedServicesBeforeManagedNetworkRemoval(t *t
 	operationID := ids.NewAt(ids.KindOperation, now, 6)
 	artifactID := ids.NewAt(ids.KindConfig, now, 7)
 	planID := ids.NewAt(ids.KindPlan, now, 8)
-	yaml := []byte("services:\n  api:\n    image: example.invalid/api:1\n  worker:\n    image: example.invalid/worker:1\nnetworks: {}\n")
+	yaml := []byte(
+		"services:\n  api:\n    image: example.invalid/api:1\n  worker:\n    image: example.invalid/worker:1\nnetworks: {}\n",
+	)
 	digest := sha256.Sum256(yaml)
 	artifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
 		ArtifactId: artifactID, OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
@@ -32,8 +34,16 @@ func TestZoneRemovalPlanRebuildsAffectedServicesBeforeManagedNetworkRemoval(t *t
 		ProjectName:   "gp-" + strings.ToLower(environmentID),
 		CanonicalYaml: yaml, YamlSha256: digest[:],
 		Services: []*agentpb.ComposeService{
-			{ServiceId: firstServiceID, ComposeName: "api", ExpectedLabels: zoneRemovalPlanTestLabels(environmentID, firstServiceID, planID)},
-			{ServiceId: secondServiceID, ComposeName: "worker", ExpectedLabels: zoneRemovalPlanTestLabels(environmentID, secondServiceID, planID)},
+			{
+				ServiceId:      firstServiceID,
+				ComposeName:    "api",
+				ExpectedLabels: zoneRemovalPlanTestLabels(environmentID, firstServiceID, planID),
+			},
+			{
+				ServiceId:      secondServiceID,
+				ComposeName:    "worker",
+				ExpectedLabels: zoneRemovalPlanTestLabels(environmentID, secondServiceID, planID),
+			},
 		},
 	})
 	if err != nil {
@@ -47,7 +57,10 @@ func TestZoneRemovalPlanRebuildsAffectedServicesBeforeManagedNetworkRemoval(t *t
 			etcd.EnvironmentDesiredRevisionParam: taskID, etcd.TaskComposeArtifactParam: artifactID,
 		},
 		Steps: []etcd.TaskStepRecord{
-			{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 9)}, {Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 10)},
+			{
+				Kind: etcd.TaskStepOperation,
+				ID:   ids.NewAt(ids.KindStep, now, 9),
+			}, {Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 10)},
 			{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 11)},
 		},
 		TimeoutSeconds: 120,

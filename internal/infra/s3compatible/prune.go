@@ -81,7 +81,9 @@ func (adapter *Adapter) headPruneAuthority(
 		return backupobject.Discriminator{}, false, providerError(err)
 	}
 	if output == nil || output.ContentLength == nil || *output.ContentLength < 0 ||
-		uint64(*output.ContentLength) != authority.StoredSizeBytes || !matchesStoredSHA256(output.ChecksumSHA256, output.Metadata, authority.StoredSHA256) {
+		uint64(
+			*output.ContentLength,
+		) != authority.StoredSizeBytes || !matchesStoredSHA256(output.ChecksumSHA256, output.Metadata, authority.StoredSHA256) {
 		return backupobject.Discriminator{}, false, conflictError()
 	}
 	discriminator, err := outputDiscriminator(output.VersionId, output.ETag)

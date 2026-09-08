@@ -31,12 +31,21 @@ type serviceMutationRepository interface {
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
 	GetEnvironmentBlueprintHead(context.Context, string) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
-	GetEnvironmentComposeProjection(context.Context, string) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	GetEnvironmentComposeProjection(
+		context.Context,
+		string,
+	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
 	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
 	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
 	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ZoneRecord], error)
-	ClaimEnvironmentBlueprintStage(context.Context, etcd.EnvironmentBlueprintStageClaimRequest) (etcd.EnvironmentBlueprintStageClaim, error)
-	StageEnvironmentBlueprintRevision(context.Context, etcd.EnvironmentBlueprintStageRequest) (etcd.EnvironmentBlueprintSeal, error)
+	ClaimEnvironmentBlueprintStage(
+		context.Context,
+		etcd.EnvironmentBlueprintStageClaimRequest,
+	) (etcd.EnvironmentBlueprintStageClaim, error)
+	StageEnvironmentBlueprintRevision(
+		context.Context,
+		etcd.EnvironmentBlueprintStageRequest,
+	) (etcd.EnvironmentBlueprintSeal, error)
 	PublishEnvironmentServiceDesiredRevisionDirect(
 		context.Context,
 		etcd.EnvironmentServiceDesiredPublication,
@@ -65,6 +74,7 @@ type durableServiceMutationRepository struct {
 	services  *etcd.ServiceRepository
 	zones     *etcd.ZoneRepository
 	desired   *desiredrevisionstore.Repository
+	releases  *etcd.ReleaseLedger
 }
 
 func newDurableServiceMutationRepository(
@@ -72,11 +82,18 @@ func newDurableServiceMutationRepository(
 	services *etcd.ServiceRepository,
 	zones *etcd.ZoneRepository,
 	desired *desiredrevisionstore.Repository,
+	releases *etcd.ReleaseLedger,
 ) (*durableServiceMutationRepository, error) {
-	if hierarchy == nil || services == nil || zones == nil || desired == nil {
+	if hierarchy == nil || services == nil || zones == nil || desired == nil || releases == nil {
 		return nil, errs.New(errs.KindInternal, "Service mutation repositories are not configured")
 	}
-	return &durableServiceMutationRepository{hierarchy: hierarchy, services: services, zones: zones, desired: desired}, nil
+	return &durableServiceMutationRepository{
+		hierarchy: hierarchy,
+		services:  services,
+		zones:     zones,
+		desired:   desired,
+		releases:  releases,
+	}, nil
 }
 
 func (repository *durableServiceMutationRepository) GetEnvironment(
@@ -488,7 +505,10 @@ func (service *serviceMutationService) removeServiceOnce(
 	}
 	if project.Record.Kind != etcd.ProjectKindTenant ||
 		environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindResourceInUse, "Environment is not ready for Service removal")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindResourceInUse,
+			"Environment is not ready for Service removal",
+		)
 	}
 	head, hasHead, err := service.repository.GetEnvironmentBlueprintHead(ctx, environment.Record.ID)
 	if err != nil {
@@ -505,7 +525,10 @@ func (service *serviceMutationService) removeServiceOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if !hasProjection || generation > math.MaxInt32 {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Service removal requires initialized desired state")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict,
+			"Service removal requires initialized desired state",
+		)
 	}
 	if err := service.repository.ValidateServiceRemovalReferences(ctx, current, projection); err != nil {
 		return etcd.IdempotencyResponse{}, err

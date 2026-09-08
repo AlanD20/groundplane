@@ -2,6 +2,8 @@ package adapters
 
 import (
 	"testing"
+
+	"github.com/AlanD20/groundplane/internal/core"
 )
 
 func TestBuildFactsRendersTypedOwnAndGrantInputs(t *testing.T) {
@@ -85,9 +87,12 @@ func (adapter factTestAdapter) Port() string {
 	}
 	return "5432"
 }
-func (adapter factTestAdapter) FactSchema() []FactDefinition { return adapter.schema }
-func (adapter factTestAdapter) Manual() bool                 { return adapter.manual }
-func (adapter factTestAdapter) SupportsGrants() bool         { return false }
+func (adapter factTestAdapter) FactSchema(core.BackingAuthentication) []FactDefinition {
+	return adapter.schema
+}
+func (adapter factTestAdapter) SupportsAuthenticationModes() bool { return false }
+func (adapter factTestAdapter) Manual() bool                      { return adapter.manual }
+func (adapter factTestAdapter) SupportsGrants() bool              { return false }
 func (adapter factTestAdapter) ProvisionSteps(ProvisionParams) []Step {
 	return nil
 }

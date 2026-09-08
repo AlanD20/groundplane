@@ -82,7 +82,11 @@ func (repository *Repository) ensurePreparation(
 	ctx context.Context,
 	expected Preparation,
 ) (Preparation, int64, error) {
-	read, err := repository.store.GetMany(ctx, []string{PreparationKey(expected.OperationID), RootKey(expected.OperationID)}, 0)
+	read, err := repository.store.GetMany(
+		ctx,
+		[]string{PreparationKey(expected.OperationID), RootKey(expected.OperationID)},
+		0,
+	)
 	if err != nil {
 		return Preparation{}, 0, err
 	}
@@ -224,7 +228,10 @@ func (repository *Repository) prepareBatch(
 		if adjustErr != nil {
 			return Preparation{}, 0, adjustErr
 		}
-		conditions = append(conditions, Condition{Key: ScriptPrimaryKey(source.source), ModRevision: current.ModRevision})
+		conditions = append(
+			conditions,
+			Condition{Key: ScriptPrimaryKey(source.source), ModRevision: current.ModRevision},
+		)
 		mutations = append(mutations, Mutation{Type: MutationPut, Key: ScriptPrimaryKey(source.source), Value: value})
 	}
 	descriptor.PreparationCursor += uint64(len(members))
@@ -232,7 +239,10 @@ func (repository *Repository) prepareBatch(
 	if err != nil {
 		return Preparation{}, 0, err
 	}
-	mutations = append(mutations, Mutation{Type: MutationPut, Key: PreparationKey(descriptor.OperationID), Value: descriptorValue})
+	mutations = append(
+		mutations,
+		Mutation{Type: MutationPut, Key: PreparationKey(descriptor.OperationID), Value: descriptorValue},
+	)
 	if len(members) > 16 || len(conditions)+len(mutations) > 96 {
 		return Preparation{}, 0, corruption("source preparation batch exceeds transaction ceiling")
 	}

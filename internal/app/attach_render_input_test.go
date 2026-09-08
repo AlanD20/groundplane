@@ -51,7 +51,8 @@ func TestBuildAttachTaskRenderInputCreatesCompleteNetworkUnion(t *testing.T) {
 		t.Fatalf("buildAttachTaskRenderInput() joins = %#v", input.NetworkJoins)
 	}
 	if input.PlanID != fixture.createTask.PlanID || input.DesiredRevisionID != fixture.revisionID ||
-		input.ArtifactID != fixture.artifactID || input.BackingServiceID != fixture.backingServiceID {
+		input.ArtifactID != fixture.artifactID || input.BackingServiceID != fixture.backingServiceID ||
+		input.Authentication != core.BackingAuthenticationPassword {
 		t.Fatalf("buildAttachTaskRenderInput() identity = %#v", input)
 	}
 	if len(input.Volumes) != 1 || len(input.VolumeMounts) != 1 ||
@@ -208,7 +209,10 @@ func newAttachRenderFixture(t *testing.T) attachRenderFixture {
 		BackingService: etcd.Versioned[etcd.ServiceRecord]{
 			Record: etcd.ServiceRecord{
 				EnvironmentID: fixture.backingEnvID, BackingNetworkID: fixture.networkA,
-				Desired: core.Service{ID: fixture.backingServiceID, Name: "postgres", Adapter: "manual"},
+				Desired: core.Service{
+					ID: fixture.backingServiceID, Name: "valkey", Adapter: "valkey:9",
+					Authentication: core.BackingAuthenticationPassword,
+				},
 			},
 			Revision: 8,
 		},

@@ -83,7 +83,10 @@ func (runtime *EnvironmentDirectoryRuntime) executeStep(
 	if step.GetManagedVolumeDirectoryRemove() != nil && response.ExitCode == 0 {
 		if response.MutationCount > 128 || len(response.ResponseSha256) != 32 ||
 			(response.Complete && len(response.NextCursor) != 0) || (!response.Complete && len(response.NextCursor) == 0) {
-			return result, errs.New(errs.KindInternal, "agent: managed volume directory helper returned invalid progress")
+			return result, errs.New(
+				errs.KindInternal,
+				"agent: managed volume directory helper returned invalid progress",
+			)
 		}
 	}
 	if response.ExitCode == 0 {

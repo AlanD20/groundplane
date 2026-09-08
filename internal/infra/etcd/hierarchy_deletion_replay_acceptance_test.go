@@ -37,7 +37,12 @@ func TestHierarchyDeletionRealEtcdProjectReplayIndexOwnerIsolationAndCorruption(
 		if err != nil {
 			return "", err
 		}
-		targetKey, err := idempotencyReplayTargetKey(*marker.ReplayTarget, marker.Locator.Method, marker.Locator.Route, marker.Locator.Key)
+		targetKey, err := idempotencyReplayTargetKey(
+			*marker.ReplayTarget,
+			marker.Locator.Method,
+			marker.Locator.Route,
+			marker.Locator.Key,
+		)
 		if err != nil {
 			return "", err
 		}
@@ -70,7 +75,12 @@ func TestHierarchyDeletionRealEtcdProjectReplayIndexOwnerIsolationAndCorruption(
 	if err != nil {
 		t.Fatalf("encode second marker = %v", err)
 	}
-	markerTwoTargetKey, err := idempotencyReplayTargetKey(*markerTwo.ReplayTarget, markerTwo.Locator.Method, markerTwo.Locator.Route, markerTwo.Locator.Key)
+	markerTwoTargetKey, err := idempotencyReplayTargetKey(
+		*markerTwo.ReplayTarget,
+		markerTwo.Locator.Method,
+		markerTwo.Locator.Route,
+		markerTwo.Locator.Key,
+	)
 	if err != nil {
 		t.Fatalf("idempotencyReplayTargetKey(second) error = %v", err)
 	}
@@ -97,7 +107,8 @@ func TestHierarchyDeletionRealEtcdProjectReplayIndexOwnerIsolationAndCorruption(
 
 	// Simulate finalization removing the target primary while the retained
 	// reverse locator and marker remain replayable.
-	if result, err := store.Transact(ctx, nil, []Mutation{{Type: MutationDelete, Key: projectKey(projectOne)}}); err != nil || !result.Succeeded {
+	if result, err := store.Transact(ctx, nil, []Mutation{{Type: MutationDelete, Key: projectKey(projectOne)}}); err != nil ||
+		!result.Succeeded {
 		t.Fatalf("remove finalized Project primary = %#v/%v", result, err)
 	}
 	locator, revision, found, err := repository.ResolveReplayLocatorAtRevision(
@@ -117,7 +128,12 @@ func TestHierarchyDeletionRealEtcdProjectReplayIndexOwnerIsolationAndCorruption(
 
 	// Repointing the Project-1 index at Project-2's marker is corruption, not
 	// a valid replay or a fallback to the requested target primary.
-	targetKey, err := idempotencyReplayTargetKey(*markerOne.ReplayTarget, markerOne.Locator.Method, markerOne.Locator.Route, markerOne.Locator.Key)
+	targetKey, err := idempotencyReplayTargetKey(
+		*markerOne.ReplayTarget,
+		markerOne.Locator.Method,
+		markerOne.Locator.Route,
+		markerOne.Locator.Key,
+	)
 	if err != nil {
 		t.Fatalf("idempotencyReplayTargetKey(corrupt) error = %v", err)
 	}
@@ -125,7 +141,8 @@ func TestHierarchyDeletionRealEtcdProjectReplayIndexOwnerIsolationAndCorruption(
 	if err != nil {
 		t.Fatalf("encode corrupt target reference = %v", err)
 	}
-	if result, err := store.Transact(ctx, nil, []Mutation{{Type: MutationPut, Key: targetKey, Value: badReference}}); err != nil || !result.Succeeded {
+	if result, err := store.Transact(ctx, nil, []Mutation{{Type: MutationPut, Key: targetKey, Value: badReference}}); err != nil ||
+		!result.Succeeded {
 		t.Fatalf("write corrupt replay link = %#v/%v", result, err)
 	}
 	if _, _, _, err := repository.ResolveReplayLocatorAtRevision(

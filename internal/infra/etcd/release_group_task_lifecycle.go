@@ -54,12 +54,17 @@ func decodeReleaseGroupStored(value []byte) (domain.Group, error) {
 	return group, nil
 }
 
-func (repository *TaskRepository) prepareReleaseGroupTaskRetry(ctx context.Context, source, retry TaskRecord, revision int64) (releaseGroupTaskChange, error) {
+func (repository *TaskRepository) prepareReleaseGroupTaskRetry(
+	ctx context.Context,
+	source, retry TaskRecord,
+	revision int64,
+) (releaseGroupTaskChange, error) {
 	applies, err := taskOwnsReleaseGroupRemoval(source)
 	if err != nil || !applies {
 		return releaseGroupTaskChange{}, err
 	}
-	if retry.Type != TaskRemove || retry.Target != source.Target || retry.Params[TaskResourceKindParam] != TaskResourceReleaseGroup {
+	if retry.Type != TaskRemove || retry.Target != source.Target ||
+		retry.Params[TaskResourceKindParam] != TaskResourceReleaseGroup {
 		return releaseGroupTaskChange{}, errs.New(errs.KindInternal, "release group retry changed its durable target")
 	}
 	stored, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
@@ -69,7 +74,10 @@ func (repository *TaskRepository) prepareReleaseGroupTaskRetry(ctx context.Conte
 		return releaseGroupTaskChange{}, err
 	}
 	if stored == nil || len(stored.Values) != 2 || stored.Values[0] == nil || stored.Values[1] != nil {
-		return releaseGroupTaskChange{}, errs.New(errs.KindStateConflict, "release group is not available for deletion retry")
+		return releaseGroupTaskChange{}, errs.New(
+			errs.KindStateConflict,
+			"release group is not available for deletion retry",
+		)
 	}
 	group, err := decodeReleaseGroupStored(stored.Values[0].Value)
 	if err != nil || group.ID != source.Target {
@@ -116,12 +124,19 @@ func (repository *TaskRepository) prepareReleaseGroupTaskRetry(ctx context.Conte
 			{Key: deletionTombstoneKey(string(DeletionTargetTenant), source.Owner.TenantID)},
 			{Key: deletionTombstoneKey(string(DeletionTargetReleaseGroup), group.ID)},
 		},
-		mutations: []Mutation{{Type: MutationPut, Key: deletionTombstoneKey(string(DeletionTargetReleaseGroup), group.ID), Value: value}},
-		values:    [][]byte{value},
+		mutations: []Mutation{
+			{Type: MutationPut, Key: deletionTombstoneKey(string(DeletionTargetReleaseGroup), group.ID), Value: value},
+		},
+		values: [][]byte{value},
 	}, nil
 }
 
-func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(ctx context.Context, task TaskRecord, terminal TaskStatus, revision int64) (releaseGroupTaskChange, error) {
+func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
+	ctx context.Context,
+	task TaskRecord,
+	terminal TaskStatus,
+	revision int64,
+) (releaseGroupTaskChange, error) {
 	applies, err := taskOwnsReleaseGroupRemoval(task)
 	if err != nil || !applies {
 		return releaseGroupTaskChange{}, err
@@ -142,7 +157,10 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(ctx con
 	tombstone, err := decodeDeletionTombstone(stored.Values[1].Value)
 	if err != nil || tombstone.TargetKind != DeletionTargetReleaseGroup || tombstone.TargetID != task.Target ||
 		tombstone.TargetRevision != stored.Values[0].ModRevision || tombstone.TaskID != task.ID || tombstone.Phase != DeletionPhaseFinalizing {
-		return releaseGroupTaskChange{}, errs.New(errs.KindStateConflict, "release group deletion tombstone does not match its task")
+		return releaseGroupTaskChange{}, errs.New(
+			errs.KindStateConflict,
+			"release group deletion tombstone does not match its task",
+		)
 	}
 	indexes, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
 		releaseGroupOwnerKey(group.EnvironmentID, group.ID), releaseGroupNameKey(group.EnvironmentID, group.Name),
@@ -154,10 +172,15 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(ctx con
 	if err != nil {
 		return releaseGroupTaskChange{}, err
 	}
-	if indexes == nil || len(indexes.Values) != 7 || indexes.Values[0] == nil || indexes.Values[1] == nil || indexes.Values[2] == nil ||
-		indexes.Values[3] == nil || indexes.Values[4] != nil || indexes.Values[5] != nil || indexes.Values[6] != nil ||
+	if indexes == nil || len(indexes.Values) != 7 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
+		indexes.Values[2] == nil ||
+		indexes.Values[3] == nil ||
+		indexes.Values[4] != nil ||
+		indexes.Values[5] != nil ||
+		indexes.Values[6] != nil ||
 		task.Owner.EnvironmentID != group.EnvironmentID ||
-		string(indexes.Values[0].Value) != group.ID || string(indexes.Values[1].Value) != group.ID {
+		string(indexes.Values[0].Value) != group.ID ||
+		string(indexes.Values[1].Value) != group.ID {
 		return releaseGroupTaskChange{}, errs.New(errs.KindInternal, "release group deletion indexes are corrupt")
 	}
 	epoch, err := decodeEnvironmentMutationEpochRecord(indexes.Values[2].Value)
@@ -172,7 +195,10 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(ctx con
 		applies: true,
 		conditions: []Condition{
 			{Key: releaseGroupRecordKey(group.ID), ModRevision: stored.Values[0].ModRevision},
-			{Key: deletionTombstoneKey(string(DeletionTargetReleaseGroup), group.ID), ModRevision: stored.Values[1].ModRevision},
+			{
+				Key:         deletionTombstoneKey(string(DeletionTargetReleaseGroup), group.ID),
+				ModRevision: stored.Values[1].ModRevision,
+			},
 			{Key: releaseGroupOwnerKey(group.EnvironmentID, group.ID), ModRevision: indexes.Values[0].ModRevision},
 			{Key: releaseGroupNameKey(group.EnvironmentID, group.Name), ModRevision: indexes.Values[1].ModRevision},
 			{Key: environmentKey(group.EnvironmentID), ModRevision: indexes.Values[3].ModRevision},
@@ -180,7 +206,9 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(ctx con
 			{Key: deletionTombstoneKey(string(DeletionTargetProject), task.Owner.ProjectID)},
 			{Key: deletionTombstoneKey(string(DeletionTargetTenant), task.Owner.TenantID)},
 		},
-		mutations: []Mutation{{Type: MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetReleaseGroup), group.ID)}},
+		mutations: []Mutation{
+			{Type: MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetReleaseGroup), group.ID)},
+		},
 	}
 	if terminal == TaskStatusCompleted {
 		collectionCondition, collectionMutation, collectionErr := loadReleaseGroupCollectionEpoch(
@@ -195,7 +223,10 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(ctx con
 		}
 		change.conditions = append(
 			change.conditions,
-			Condition{Key: environmentMutationEpochKey(group.EnvironmentID), ModRevision: indexes.Values[2].ModRevision},
+			Condition{
+				Key:         environmentMutationEpochKey(group.EnvironmentID),
+				ModRevision: indexes.Values[2].ModRevision,
+			},
 			collectionCondition,
 		)
 		change.mutations = append(change.mutations,
@@ -212,7 +243,12 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(ctx con
 	return change, nil
 }
 
-func (repository *TaskRepository) validateReleaseGroupTaskAcknowledgementReplay(ctx context.Context, task TaskRecord, terminal TaskStatus, revision int64) error {
+func (repository *TaskRepository) validateReleaseGroupTaskAcknowledgementReplay(
+	ctx context.Context,
+	task TaskRecord,
+	terminal TaskStatus,
+	revision int64,
+) error {
 	applies, err := taskOwnsReleaseGroupRemoval(task)
 	if err != nil || !applies {
 		return err

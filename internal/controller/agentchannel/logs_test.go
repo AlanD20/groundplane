@@ -231,12 +231,16 @@ func TestRecordLogEventOverflowRetainsSlotUntilCancelDelivery(t *testing.T) {
 	}
 
 	registry.mu.Lock()
-	if registry.logs[overflowed.ID] != overflowed || !overflowed.canceling || len(registry.logs) != maximumLogSubscriptions {
+	if registry.logs[overflowed.ID] != overflowed || !overflowed.canceling ||
+		len(registry.logs) != maximumLogSubscriptions {
 		registry.mu.Unlock()
 		t.Fatal("overflow did not retain the canceling subscription and its slot")
 	}
 	registry.mu.Unlock()
-	if _, openErr := registry.OpenLogs(context.Background(), testLogScope(), []LogTarget{testLogTarget()}, 0, true); !errors.Is(openErr, errs.New(errs.KindStateConflict, "")) {
+	if _, openErr := registry.OpenLogs(context.Background(), testLogScope(), []LogTarget{testLogTarget()}, 0, true); !errors.Is(
+		openErr,
+		errs.New(errs.KindStateConflict, ""),
+	) {
 		t.Fatalf("OpenLogs() while overflow cancellation is pending = %v, want state conflict", openErr)
 	}
 	if err := session.RecordLogCancelDelivered(overflowed.ID); err != nil {
@@ -257,7 +261,13 @@ func openReadyLogSubscription(t *testing.T, registry *Registry, session *Session
 	result := make(chan *LogSubscription, 1)
 	errResult := make(chan error, 1)
 	go func() {
-		subscription, err := registry.OpenLogs(context.Background(), testLogScope(), []LogTarget{testLogTarget()}, 0, true)
+		subscription, err := registry.OpenLogs(
+			context.Background(),
+			testLogScope(),
+			[]LogTarget{testLogTarget()},
+			0,
+			true,
+		)
 		result <- subscription
 		errResult <- err
 	}()

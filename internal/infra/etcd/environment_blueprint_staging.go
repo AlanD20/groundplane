@@ -322,7 +322,10 @@ func environmentBlueprintLocatorKey(locator IdempotencyLocator) (string, [sha256
 	key := environmentBlueprintLocatorPrefix + encodeBlueprintDynamicBytes(scope) + "/" +
 		encodeBlueprintDynamicBytes(keyDigest[:])
 	if len(key) > EnvironmentBlueprintKeyMaxBytes {
-		return "", [sha256.Size]byte{}, errs.New(errs.KindValidationFailed, "Blueprint staging locator key exceeds 2 KiB")
+		return "", [sha256.Size]byte{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint staging locator key exceeds 2 KiB",
+		)
 	}
 	return key, keyDigest, nil
 }
@@ -365,7 +368,10 @@ func buildEnvironmentBlueprintStreams(request EnvironmentBlueprintStageRequest) 
 	}
 	if request.Projection.EnvironmentID != claim.EnvironmentID ||
 		request.Projection.RevisionID != claim.RevisionID || zeroDigest(request.DependencyDigest) {
-		return EnvironmentBlueprintStreams{}, errs.New(errs.KindValidationFailed, "Blueprint staging input does not match its claim")
+		return EnvironmentBlueprintStreams{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint staging input does not match its claim",
+		)
 	}
 	var audit []byte
 	if claim.SourceKind == EnvironmentBlueprintSourceApply {
@@ -373,7 +379,10 @@ func buildEnvironmentBlueprintStreams(request EnvironmentBlueprintStageRequest) 
 			request.Blueprint.EnvironmentID != claim.EnvironmentID ||
 			request.Blueprint.RevisionID != claim.RevisionID ||
 			!request.Blueprint.CreatedAt.Equal(claim.CreatedAt) {
-			return EnvironmentBlueprintStreams{}, errs.New(errs.KindValidationFailed, "Blueprint apply audit does not match its claim")
+			return EnvironmentBlueprintStreams{}, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint apply audit does not match its claim",
+			)
 		}
 		var err error
 		audit, err = encodeEnvironmentBlueprintAuditStream(*request.Blueprint)
@@ -768,7 +777,8 @@ func validateEnvironmentBlueprintStageClaim(claim EnvironmentBlueprintStageClaim
 }
 
 func validateEnvironmentBlueprintStageDescriptor(value EnvironmentBlueprintStageDescriptor) error {
-	if err := validateEnvironmentBlueprintStageClaim(value.Claim); err != nil || !validBlueprintRecordTime(value.UpdatedAt) ||
+	if err := validateEnvironmentBlueprintStageClaim(value.Claim); err != nil ||
+		!validBlueprintRecordTime(value.UpdatedAt) ||
 		value.UpdatedAt.Before(value.Claim.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "Blueprint staging descriptor is invalid")
 	}

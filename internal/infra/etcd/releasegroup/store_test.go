@@ -127,13 +127,17 @@ func TestStoreRemoveCannotBypassTaskFinalization(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	if _, err = store.removeDirectForbidden(context.Background(), created); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+	if _, err = store.removeDirectForbidden(context.Background(), created); !errors.Is(
+		err,
+		errs.New(errs.KindInternal, ""),
+	) {
 		t.Fatalf("Remove() error = %v, want protected-finalizer failure", err)
 	}
 	if retained, err := store.Get(context.Background(), group.ID); err != nil || retained.Group.ID != group.ID {
 		t.Fatalf("Get() after rejected raw removal = %+v, %v", retained, err)
 	}
-	if result, err := backend.Get(context.Background(), environmentComposeKey(environmentID)); err != nil || result.Entry == nil {
+	if result, err := backend.Get(context.Background(), environmentComposeKey(environmentID)); err != nil ||
+		result.Entry == nil {
 		t.Fatalf("member Service desired projection was removed: %+v, %v", result, err)
 	}
 }
@@ -163,7 +167,8 @@ func TestStoreListUsesEnvironmentScopeAndCursorRevision(t *testing.T) {
 		t.Fatalf("List(first page) = %+v, %v", page, err)
 	}
 	next, err := store.List(context.Background(), environmentID, PageRequest{Limit: 1, Cursor: page.NextCursor})
-	if err != nil || len(next.Items) != 1 || next.Revision != page.Revision || next.Items[0].Group.ID == page.Items[0].Group.ID {
+	if err != nil || len(next.Items) != 1 || next.Revision != page.Revision ||
+		next.Items[0].Group.ID == page.Items[0].Group.ID {
 		t.Fatalf("List(next page) = %+v, %v", next, err)
 	}
 }
@@ -189,7 +194,10 @@ func TestStoreRejectsTamperedCursorAndCorruptIndexes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("encodeCursor() error = %v", err)
 	}
-	if _, err := store.List(context.Background(), environmentID, PageRequest{Limit: 1, Cursor: forged}); !errors.Is(err, errs.New(errs.KindMalformedRequest, "")) {
+	if _, err := store.List(context.Background(), environmentID, PageRequest{Limit: 1, Cursor: forged}); !errors.Is(
+		err,
+		errs.New(errs.KindMalformedRequest, ""),
+	) {
 		t.Fatalf("List(forged cursor) error = %v, want 400 malformed request", err)
 	}
 
@@ -242,7 +250,13 @@ func seedEnvironmentAndServices(store *memoryStore, environmentID string, servic
 	createTaskID := ids.NewAt(ids.KindTask, now, 8003)
 	blueprintRevisionID := ids.NewAt(ids.KindTask, now, 8004)
 	tenant := infraetcd.TenantRecord{ID: tenantID, Slug: "tenant", Name: "Tenant"}
-	project := infraetcd.ProjectRecord{ID: projectID, TenantID: tenantID, Slug: "project", Name: "Project", Kind: infraetcd.ProjectKindTenant}
+	project := infraetcd.ProjectRecord{
+		ID:       projectID,
+		TenantID: tenantID,
+		Slug:     "project",
+		Name:     "Project",
+		Kind:     infraetcd.ProjectKindTenant,
+	}
 	environment := infraetcd.EnvironmentRecord{
 		ID: environmentID, ProjectID: projectID, Name: "production", NetworkPool: "10.0.0.0/24",
 		VolumeDir:         "/var/lib/groundplane/vol/" + tenantID + "/" + projectID + "/" + environmentID,
@@ -253,7 +267,10 @@ func seedEnvironmentAndServices(store *memoryStore, environmentID string, servic
 	store.put(projectOwnerKey(project), []byte(projectID))
 	store.put(environmentKey(environmentID), mustDurableValue("environment", environment))
 	store.put(environmentOwnerKey(projectID, environmentID), []byte(environmentID))
-	store.put(environmentMutationEpochKey(environmentID), mustDurableValue("environment-mutation-epoch", epochRecord{EnvironmentID: environmentID}))
+	store.put(
+		environmentMutationEpochKey(environmentID),
+		mustDurableValue("environment-mutation-epoch", epochRecord{EnvironmentID: environmentID}),
+	)
 	projection := infraetcd.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: blueprintRevisionID, RenderGeneration: 1,
 		DesiredServices: make([]infraetcd.EnvironmentServiceProjection, len(serviceIDs)),
@@ -306,7 +323,10 @@ func (store *memoryStore) Get(_ context.Context, key string) (*infraetcd.GetResu
 	return &infraetcd.GetResult{Entry: value, ReadRevision: store.revision}, nil
 }
 
-func (store *memoryStore) GetMany(_ context.Context, request infraetcd.GetManyRequest) (*infraetcd.GetManyResult, error) {
+func (store *memoryStore) GetMany(
+	_ context.Context,
+	request infraetcd.GetManyRequest,
+) (*infraetcd.GetManyResult, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	values := make([]*infraetcd.KeyValue, len(request.Keys))
@@ -357,10 +377,19 @@ func (store *memoryStore) Range(_ context.Context, request infraetcd.RangeReques
 	if revision == 0 {
 		revision = store.revision
 	}
-	return &infraetcd.RangeResult{Values: values, ReadRevision: revision, ResponseRevision: store.revision, More: more}, nil
+	return &infraetcd.RangeResult{
+		Values:           values,
+		ReadRevision:     revision,
+		ResponseRevision: store.revision,
+		More:             more,
+	}, nil
 }
 
-func (store *memoryStore) Transact(_ context.Context, conditions []infraetcd.Condition, mutations []infraetcd.Mutation) (infraetcd.TransactionResult, error) {
+func (store *memoryStore) Transact(
+	_ context.Context,
+	conditions []infraetcd.Condition,
+	mutations []infraetcd.Mutation,
+) (infraetcd.TransactionResult, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	failures := make([]*infraetcd.KeyValue, len(conditions))
@@ -404,7 +433,12 @@ func (store *memoryStore) put(key string, value []byte) {
 
 func (store *memoryStore) putLocked(key string, value []byte) {
 	store.revision++
-	store.values[key] = infraetcd.KeyValue{Key: key, Value: append([]byte(nil), value...), Version: 1, ModRevision: store.revision}
+	store.values[key] = infraetcd.KeyValue{
+		Key:         key,
+		Value:       append([]byte(nil), value...),
+		Version:     1,
+		ModRevision: store.revision,
+	}
 }
 
 func (store *memoryStore) delete(key string) {

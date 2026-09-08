@@ -101,7 +101,10 @@ func (journal *Journal) Issue(
 	steps := operationSteps(current.Operation)
 	if current.Status != runnerallocation.RuntimeStatusRunning || current.ActiveStep != nil ||
 		current.NextStep >= len(steps) || steps[current.NextStep] != step {
-		return runnerallocation.RunnerRuntimeProgress{}, errs.New(errs.KindStateConflict, "runner journal issue is invalid")
+		return runnerallocation.RunnerRuntimeProgress{}, errs.New(
+			errs.KindStateConflict,
+			"runner journal issue is invalid",
+		)
 	}
 	directory, err := journal.progressDirectory(current)
 	if err != nil {

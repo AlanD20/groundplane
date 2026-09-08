@@ -43,7 +43,10 @@ func (repository *ServiceRepository) ValidateServiceRemovalReferences(
 		"/v1/indexes/attaches/by-service/service/" + current.Record.Desired.ID + "/",
 		"/v1/indexes/attaches/by-backing-service/service/" + current.Record.Desired.ID + "/",
 	} {
-		page, err := repository.store.Range(ctx, RangeRequest{Prefix: prefix, Limit: 1, Revision: projection.ReadRevision})
+		page, err := repository.store.Range(
+			ctx,
+			RangeRequest{Prefix: prefix, Limit: 1, Revision: projection.ReadRevision},
+		)
 		if err != nil {
 			return err
 		}
@@ -115,14 +118,20 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		tombstone.TargetRevision != current.Revision || tombstone.TaskID != task.ID ||
 		tombstone.Phase != DeletionPhaseHostEffects || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
 		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) || task.Status != TaskStatusPending {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Service removal state does not match its Task")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Service removal state does not match its Task",
+		)
 	}
 	wantReplay := IdempotencyReplayTarget{Kind: IdempotencyReplayTargetService, ID: current.Record.Desired.ID}
 	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending || marker.TaskID != task.ID ||
 		marker.Locator != intent.Claim.Locator || marker.ReplayTarget == nil || *marker.ReplayTarget != wantReplay ||
 		!sameBlueprintProtectedIntent(marker.Intent, intent.Claim.Intent) ||
 		!marker.CreatedAt.Equal(task.CreatedAt) || !marker.UpdatedAt.Equal(marker.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "Service removal marker does not match its Task")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"Service removal marker does not match its Task",
+		)
 	}
 	if err := validateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -137,7 +146,11 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	versionedTenant, versionedProject, versionedEnvironment, err := mutationContext.versionHierarchy(&tenant, project, environment)
+	versionedTenant, versionedProject, versionedEnvironment, err := mutationContext.versionHierarchy(
+		&tenant,
+		project,
+		environment,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -209,7 +222,10 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		{Key: environmentComposeProjectionKey(environment.Record.ID), ModRevision: indexes.Values[1].ModRevision},
 		{Key: serviceLifecycleActiveKey(current.Record.Desired.ID)},
 		{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)},
-		{Key: environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID), ModRevision: publication.rootRevision},
+		{
+			Key:         environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
+			ModRevision: publication.rootRevision,
+		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 	}
@@ -218,7 +234,11 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
 		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: MutationPut, Key: deletionTombstoneKey(string(DeletionTargetService), current.Record.Desired.ID), Value: tombstoneValue},
+		{
+			Type:  MutationPut,
+			Key:   deletionTombstoneKey(string(DeletionTargetService), current.Record.Desired.ID),
+			Value: tombstoneValue,
+		},
 		{Type: MutationPut, Key: serviceRemovalIntentKey(task.ID), Value: intentValue},
 		{Type: MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID)},
 	}
@@ -252,7 +272,12 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	if err := binding.preparedConflict(originalClassify); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	initiation, err := newEnvironmentTaskInitiation(versionedTenant, versionedProject, versionedEnvironment, TaskActorOperator)
+	initiation, err := newEnvironmentTaskInitiation(
+		versionedTenant,
+		versionedProject,
+		versionedEnvironment,
+		TaskActorOperator,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

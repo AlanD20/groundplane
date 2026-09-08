@@ -50,7 +50,9 @@ func TestEnvironmentEntryProjectionPreservesBlueprintKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	projected, err := environmentEntryProjection([]etcd.Versioned[etcd.EntryRecord]{{Record: record, Revision: 1, ReadRevision: 1}})
+	projected, err := environmentEntryProjection(
+		[]etcd.Versioned[etcd.EntryRecord]{{Record: record, Revision: 1, ReadRevision: 1}},
+	)
 	if err != nil || len(projected) != 1 || projected[0].BlueprintKey != record.BlueprintKey {
 		t.Fatalf("environmentEntryProjection() = %#v, %v", projected, err)
 	}

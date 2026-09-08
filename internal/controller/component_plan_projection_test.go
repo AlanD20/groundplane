@@ -8,6 +8,7 @@ import (
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -76,7 +77,7 @@ func TestProjectPinnedEnvironmentComponentsRehydratesExactGraph(t *testing.T) {
 		routeSpecs,
 		map[string]core.ComponentSpec{string(core.ComponentCapabilityHTTPRouter): {
 			Implementation: core.ComponentKindIngressCaddy, Enabled: true,
-			Settings: core.ComponentCapabilitySettings{ZoneID: projection.DesiredZones[0].Desired.ID},
+			Settings: core.ComponentCapabilitySettings{ZoneIDs: []string{projection.DesiredZones[0].Desired.ID}},
 		}},
 		nil,
 		catalog,
@@ -107,7 +108,7 @@ func TestProjectPinnedEnvironmentComponentsUsesDesiredRoutesDirectly(t *testing.
 		routeSpecs,
 		map[string]core.ComponentSpec{string(core.ComponentCapabilityHTTPRouter): {
 			Implementation: core.ComponentKindIngressCaddy, Enabled: true,
-			Settings: core.ComponentCapabilitySettings{ZoneID: projection.DesiredZones[0].Desired.ID},
+			Settings: core.ComponentCapabilitySettings{ZoneIDs: []string{projection.DesiredZones[0].Desired.ID}},
 		}},
 		nil,
 		catalog,
@@ -135,7 +136,7 @@ func TestProjectPinnedEnvironmentComponentsOmitsSuppressedRoute(t *testing.T) {
 		routeSpecs,
 		map[string]core.ComponentSpec{string(core.ComponentCapabilityHTTPRouter): {
 			Implementation: core.ComponentKindIngressCaddy, Enabled: true,
-			Settings: core.ComponentCapabilitySettings{ZoneID: projection.DesiredZones[0].Desired.ID},
+			Settings: core.ComponentCapabilitySettings{ZoneIDs: []string{projection.DesiredZones[0].Desired.ID}},
 		}},
 		nil,
 		catalog,
@@ -187,7 +188,31 @@ x-gp-components:
     implementation: caddy
     enabled: true
     settings:
-      zone_id: ` + projection.DesiredZones[0].Desired.ID + "\n")
+      zone_ids: [` + projection.DesiredZones[0].Desired.ID + "]\n")
+	parsed, err := blueprintparser.Parse(t.Context(), blueprintparser.EnvironmentScope{
+		EnvironmentID: identity.EnvironmentID, Tenant: identity.TenantSlug,
+		Project: identity.ProjectSlug, Environment: identity.EnvironmentName,
+	}, core.BlueprintBundle{RootPath: "blueprint.yaml", ComposeSources: []string{"blueprint.yaml"},
+		Files: []core.BlueprintFile{{Path: "blueprint.yaml", Content: content}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An ordinary Zone omitted from this upload remains in the pinned desired
+	// revision and must not make Component file replay depend on audit coverage.
+	parsed.Project.Networks["secondary"] = composetypes.NetworkConfig{
+		Ipam: composetypes.IPAMConfig{Config: []*composetypes.IPAMPool{{Subnet: "10.70.1.0/24"}}},
+	}
+	projection.DesiredZones = append(projection.DesiredZones, etcd.EnvironmentZoneProjection{
+		EnvironmentID: identity.EnvironmentID, Desired: core.Zone{
+			ID:   ids.NewAt(ids.KindNetwork, time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC), 30),
+			Name: "secondary", Subnet: "10.70.1.0/24",
+			OwnerKind: core.ZoneOwnerEnvironment, OwnerID: identity.EnvironmentID,
+		},
+	})
+	projection.NormalizedCompose, err = MarshalNormalizedEnvironmentProject(parsed.Project)
+	if err != nil {
+		t.Fatal(err)
+	}
 	reader := &blueprintPlanReader{
 		tenant: etcd.TenantRecord{ID: identity.TenantID, Slug: identity.TenantSlug, Name: "Acme"},
 		project: etcd.ProjectRecord{
@@ -240,7 +265,7 @@ func componentPlanProjectionInput(
 		OwnerID: environmentID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
 		GeneratedServices: []string{caddyServiceID}, PinnedIPv4: "10.70.0.2",
 		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-			ZoneID: ids.NewAt(ids.KindNetwork, at, 9),
+			ZoneIDs: []string{ids.NewAt(ids.KindNetwork, at, 9)},
 		}},
 	})
 	if err != nil {

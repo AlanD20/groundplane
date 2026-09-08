@@ -24,7 +24,11 @@ func TestScriptRunnerCreatesOnPrimaryAndConnectsSecondaryBeforeStart(t *testing.
 	if options.HostConfig.NetworkMode != "gp_net_primary" || len(options.NetworkingConfig.EndpointsConfig) != 1 ||
 		options.NetworkingConfig.EndpointsConfig["gp_net_primary"] == nil ||
 		options.NetworkingConfig.EndpointsConfig["gp_net_secondary"] != nil {
-		t.Fatalf("create network projection = mode %q endpoints %#v", options.HostConfig.NetworkMode, options.NetworkingConfig.EndpointsConfig)
+		t.Fatalf(
+			"create network projection = mode %q endpoints %#v",
+			options.HostConfig.NetworkMode,
+			options.NetworkingConfig.EndpointsConfig,
+		)
 	}
 
 	connector := &recordingNetworkConnector{}

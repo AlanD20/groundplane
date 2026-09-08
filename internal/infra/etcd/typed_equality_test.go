@@ -28,7 +28,9 @@ func TestSameBlueprintAttachCandidateRecordChecksAllTypedIdentity(t *testing.T) 
 		t.Fatal("changed Attach status was accepted")
 	}
 	changedFacts := left
-	changedFacts.FactSets = []AttachFactSetMetadata{{GrantAttachID: "grant", Facts: []AttachFactDefinition{{Key: "PASSWORD"}}}}
+	changedFacts.FactSets = []AttachFactSetMetadata{
+		{GrantAttachID: "grant", Facts: []AttachFactDefinition{{Key: "PASSWORD"}}},
+	}
 	if sameBlueprintAttachCandidateRecord(left, changedFacts) {
 		t.Fatal("changed Attach facts were accepted")
 	}
@@ -60,7 +62,7 @@ func TestSameServiceRemovalProjectionChecksTypedComponentConfig(t *testing.T) {
 		Components: []ComponentRecord{{Desired: ComponentDesiredRecord{
 			ID: "component", Owner: core.ComponentOwnerEnvironment, OwnerID: "environment",
 			Kind: core.ComponentKindIngressCaddy, Config: core.ComponentConfig{
-				Caddy: &core.CaddyComponentConfig{ZoneID: "zone", CaddyfileTemplate: "site"},
+				Caddy: &core.CaddyComponentConfig{ZoneIDs: []string{"zone"}, CaddyfileTemplate: "site"},
 			},
 		}}},
 	}
@@ -69,7 +71,10 @@ func TestSameServiceRemovalProjectionChecksTypedComponentConfig(t *testing.T) {
 	}
 	changed := left
 	changed.Components = append([]ComponentRecord(nil), left.Components...)
-	changed.Components[0].Desired.Config.Caddy = &core.CaddyComponentConfig{ZoneID: "zone", CaddyfileTemplate: "changed"}
+	changed.Components[0].Desired.Config.Caddy = &core.CaddyComponentConfig{
+		ZoneIDs:           []string{"zone"},
+		CaddyfileTemplate: "changed",
+	}
 	if sameServiceRemovalProjection(left, changed) {
 		t.Fatal("changed Component configuration was accepted")
 	}

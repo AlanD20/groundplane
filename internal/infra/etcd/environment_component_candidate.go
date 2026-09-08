@@ -25,8 +25,10 @@ type EnvironmentComponentCandidateInput struct {
 // same transaction that publishes its Intent and Task.
 type ComponentTaskPreparation struct {
 	Intent                    ComponentTaskIntent
+	managedRuntimeSources     []ManagedComponentRuntimeSource
 	appliedProjectionPresent  bool
 	appliedProjectionRevision int64
+	desiredProjectionRevision int64
 	addresses                 []componentTaskAddressPreparation
 }
 
@@ -173,6 +175,22 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 			selectedZones[zone.Record.Desired.ID] = zone
 		}
 	}
+	desired, _, err := currentEnvironmentProjectionAtRevision(ctx, repository.store, environmentID, fixedRevision)
+	if err != nil {
+		return ComponentTaskPreparation{}, err
+	}
+	managedRuntimeSources, err := selectManagedComponentRuntimeSources(desired.Record, selected.Record, found)
+	if err != nil {
+		return ComponentTaskPreparation{}, err
+	}
+	desiredZones := make(map[string]Versioned[ZoneRecord], len(desired.Record.DesiredZones))
+	for _, item := range desired.Record.DesiredZones {
+		zone, joinErr := joinEnvironmentZone(desired, item)
+		if joinErr != nil {
+			return ComponentTaskPreparation{}, joinErr
+		}
+		desiredZones[zone.Record.Desired.ID] = zone
+	}
 	for zoneID, change := range preparedZones {
 		zone, selectedZone := selectedZones[zoneID]
 		if change.Current == nil {
@@ -190,8 +208,19 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 				"Component candidate Environment projection is unavailable",
 			)
 		}
-		if !selectedZone || change.Current.Revision != zone.Revision ||
-			!reflect.DeepEqual(change.Current.Record, zone.Record) {
+		current, desiredZone := desiredZones[zoneID]
+		if !desiredZone || change.Current.Revision != current.Revision ||
+			!reflect.DeepEqual(change.Current.Record, current.Record) {
+			return ComponentTaskPreparation{}, errs.New(
+				errs.KindStateConflict,
+				"Component candidate desired Zone changed",
+			)
+		}
+		// The selected projection is runtime placement evidence. Its Zone
+		// topology may be stale while the desired Zone identity remains the
+		// same; the desired full record and revision above are the mutation
+		// authority and still fence concurrent edits.
+		if !componentCandidateSelectedZoneIdentityMatches(change.Current.Record, zone.Record, selectedZone) {
 			return ComponentTaskPreparation{}, errs.New(
 				errs.KindStateConflict,
 				"Component candidate Zone changed in the selected projection",
@@ -247,7 +276,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 		zoneChange := preparedZones[zoneID]
 		zoneRevision := int64(0)
 		if zoneChange.Current != nil {
-			zoneRevision = selectedZones[zoneID].Revision
+			zoneRevision = zoneChange.Current.Revision
 		}
 		registryValue := state.Values[registryOffset+index]
 		currentRegistry := componentAddressRegistry{Reservations: map[string]string{}}
@@ -322,14 +351,27 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 	}
 	preparation := ComponentTaskPreparation{
 		Intent:                    intent,
+		managedRuntimeSources:     managedRuntimeSources,
 		appliedProjectionPresent:  found,
 		appliedProjectionRevision: keyValueRevision(appliedValue),
+		desiredProjectionRevision: desired.Revision,
 		addresses:                 addresses,
 	}
 	if err := validateComponentTaskPreparation(preparation); err != nil {
 		return ComponentTaskPreparation{}, err
 	}
 	return cloneComponentTaskPreparation(preparation), nil
+}
+
+func componentCandidateSelectedZoneIdentityMatches(
+	current ZoneRecord,
+	selected ZoneRecord,
+	selectedPresent bool,
+) bool {
+	if !selectedPresent {
+		return true
+	}
+	return current.EnvironmentID == selected.EnvironmentID && current.Desired.ID == selected.Desired.ID
 }
 
 func componentCandidateZones(
@@ -368,13 +410,14 @@ func projectedComponentCandidateZone(component core.Component) (string, bool, er
 	if component.Kind != core.ComponentKindIngressCaddy || !component.Enabled {
 		return "", false, nil
 	}
-	if component.Config.Caddy == nil || ids.Validate(ids.KindNetwork, component.Config.Caddy.ZoneID) != nil {
+	if component.Config.Caddy == nil || len(component.Config.Caddy.ZoneIDs) == 0 ||
+		ids.Validate(ids.KindNetwork, component.Config.Caddy.ZoneIDs[0]) != nil {
 		return "", false, errs.New(
 			errs.KindValidationFailed,
 			"enabled Caddy Component candidate has an invalid Zone",
 		)
 	}
-	return component.Config.Caddy.ZoneID, true, nil
+	return component.Config.Caddy.ZoneIDs[0], true, nil
 }
 
 func validatePreparedCurrentComponentReservations(
@@ -397,7 +440,10 @@ func validateComponentTaskPreparation(preparation ComponentTaskPreparation) erro
 	if err := validateComponentTaskIntent(preparation.Intent); err != nil {
 		return err
 	}
-	if preparation.appliedProjectionRevision < 0 ||
+	if len(preparation.managedRuntimeSources) > maximumManagedComponentRuntimeSources {
+		return errs.New(errs.KindValidationFailed, "Component candidate managed runtime source count is invalid")
+	}
+	if preparation.desiredProjectionRevision < 0 || preparation.appliedProjectionRevision < 0 ||
 		preparation.appliedProjectionPresent != (preparation.appliedProjectionRevision > 0) {
 		return errs.New(errs.KindValidationFailed, "Component candidate applied projection evidence is invalid")
 	}
@@ -441,8 +487,10 @@ func validateComponentTaskPreparation(preparation ComponentTaskPreparation) erro
 func cloneComponentTaskPreparation(preparation ComponentTaskPreparation) ComponentTaskPreparation {
 	clone := ComponentTaskPreparation{
 		Intent:                    cloneComponentTaskIntent(preparation.Intent),
+		managedRuntimeSources:     append([]ManagedComponentRuntimeSource(nil), preparation.managedRuntimeSources...),
 		appliedProjectionPresent:  preparation.appliedProjectionPresent,
 		appliedProjectionRevision: preparation.appliedProjectionRevision,
+		desiredProjectionRevision: preparation.desiredProjectionRevision,
 		addresses:                 make([]componentTaskAddressPreparation, len(preparation.addresses)),
 	}
 	for index, address := range preparation.addresses {

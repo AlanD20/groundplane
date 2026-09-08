@@ -119,14 +119,20 @@ func (repository *HierarchyRepository) GetRouteMutationIntent(
 		return Versioned[RouteMutationIntent]{}, false, err
 	}
 	if validateStableID(ids.KindTask, taskID) != nil {
-		return Versioned[RouteMutationIntent]{}, false, errs.New(errs.KindValidationFailed, "Route mutation intent Task id is invalid")
+		return Versioned[RouteMutationIntent]{}, false, errs.New(
+			errs.KindValidationFailed,
+			"Route mutation intent Task id is invalid",
+		)
 	}
 	result, err := repository.store.Get(ctx, routeMutationIntentKey(taskID))
 	if err != nil {
 		return Versioned[RouteMutationIntent]{}, false, err
 	}
 	if result == nil {
-		return Versioned[RouteMutationIntent]{}, false, errs.New(errs.KindInternal, "Route mutation intent read is empty")
+		return Versioned[RouteMutationIntent]{}, false, errs.New(
+			errs.KindInternal,
+			"Route mutation intent read is empty",
+		)
 	}
 	if result.Entry == nil {
 		return Versioned[RouteMutationIntent]{ReadRevision: result.ReadRevision}, false, nil
@@ -135,10 +141,18 @@ func (repository *HierarchyRepository) GetRouteMutationIntent(
 	if err != nil || intent.TaskID != taskID {
 		return Versioned[RouteMutationIntent]{}, false, corruptRouteMutationIntent()
 	}
-	return Versioned[RouteMutationIntent]{Record: intent, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision}, true, nil
+	return Versioned[RouteMutationIntent]{
+		Record:       intent,
+		Revision:     result.Entry.ModRevision,
+		ReadRevision: result.ReadRevision,
+	}, true, nil
 }
 
-func terminalRouteMutationIntent(intent RouteMutationIntent, status TaskStatus, terminalAt time.Time) (RouteMutationIntent, error) {
+func terminalRouteMutationIntent(
+	intent RouteMutationIntent,
+	status TaskStatus,
+	terminalAt time.Time,
+) (RouteMutationIntent, error) {
 	if intent.Status != TaskStatusPending || !isTerminalTaskStatus(status) {
 		return RouteMutationIntent{}, errs.New(errs.KindStateConflict, "Route mutation intent is not pending")
 	}
@@ -189,15 +203,19 @@ func validateRouteMutationIntent(intent RouteMutationIntent) error {
 			return errs.New(errs.KindValidationFailed, "Route create intent has edit state")
 		}
 	case RouteMutationEdit:
-		if intent.Previous == nil || intent.RouteRevision <= 0 || intent.Previous.Record.EnvironmentID != intent.EnvironmentID ||
-			intent.Previous.Record.Desired.ID != intent.RouteID || intent.Previous.Revision != intent.RouteRevision {
+		if intent.Previous == nil || intent.RouteRevision <= 0 ||
+			intent.Previous.Record.EnvironmentID != intent.EnvironmentID ||
+			intent.Previous.Record.Desired.ID != intent.RouteID ||
+			intent.Previous.Revision != intent.RouteRevision {
 			return errs.New(errs.KindValidationFailed, "Route edit intent has incomplete prior state")
 		}
 		if err := validateRouteRecord(intent.Previous.Record); err != nil {
 			return err
 		}
-		if intent.Previous.Record.Desired.Host != intent.Route.Desired.Host || intent.Previous.Record.Desired.Path != intent.Route.Desired.Path ||
-			intent.Previous.Record.Desired.TargetServiceID != intent.Route.Desired.TargetServiceID || intent.Previous.Record.Desired.TargetPort != intent.Route.Desired.TargetPort {
+		if intent.Previous.Record.Desired.Host != intent.Route.Desired.Host ||
+			intent.Previous.Record.Desired.Path != intent.Route.Desired.Path ||
+			intent.Previous.Record.Desired.TargetServiceID != intent.Route.Desired.TargetServiceID ||
+			intent.Previous.Record.Desired.TargetPort != intent.Route.Desired.TargetPort {
 			return errs.New(errs.KindValidationFailed, "Route edit intent changed immutable route fields")
 		}
 	default:
@@ -211,14 +229,18 @@ func validateRouteMutationIntent(intent RouteMutationIntent) error {
 		return errs.New(errs.KindValidationFailed, "Route mutation intent terminal state is invalid")
 	}
 	if intent.CurrentProjection == nil || intent.CandidateProjection == nil {
-		if intent.CurrentProjection != nil || intent.CandidateProjection != nil || intent.CurrentProjectionRevision != 0 || intent.Provider != nil {
+		if intent.CurrentProjection != nil || intent.CandidateProjection != nil ||
+			intent.CurrentProjectionRevision != 0 ||
+			intent.Provider != nil {
 			return errs.New(errs.KindValidationFailed, "Route mutation intent projection state is incomplete")
 		}
 		return nil
 	}
 	if intent.CurrentProjectionRevision <= 0 || intent.CurrentProjection.EnvironmentID != intent.EnvironmentID ||
 		intent.CandidateProjection.EnvironmentID != intent.EnvironmentID || validateEnvironmentComposeProjection(*intent.CurrentProjection) != nil ||
-		validateEnvironmentComposeProjection(*intent.CandidateProjection) != nil || intent.CandidateProjection.RenderGeneration <= intent.CurrentProjection.RenderGeneration ||
+		validateEnvironmentComposeProjection(
+			*intent.CandidateProjection,
+		) != nil || intent.CandidateProjection.RenderGeneration <= intent.CurrentProjection.RenderGeneration ||
 		validateRouteProviderPin(intent.Provider) != nil {
 		return errs.New(errs.KindValidationFailed, "Route mutation intent projection is invalid")
 	}
@@ -253,7 +275,11 @@ func cloneRouteMutationIntent(source RouteMutationIntent) RouteMutationIntent {
 	clone := source
 	clone.Route = cloneRouteRecord(source.Route)
 	if source.Previous != nil {
-		previous := Versioned[RouteRecord]{Record: cloneRouteRecord(source.Previous.Record), Revision: source.Previous.Revision, ReadRevision: source.Previous.ReadRevision}
+		previous := Versioned[RouteRecord]{
+			Record:       cloneRouteRecord(source.Previous.Record),
+			Revision:     source.Previous.Revision,
+			ReadRevision: source.Previous.ReadRevision,
+		}
 		clone.Previous = &previous
 	}
 	if source.CurrentProjection != nil {

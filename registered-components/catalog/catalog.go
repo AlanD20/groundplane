@@ -203,10 +203,17 @@ func NewRegistered(registrations ...Registration) (Catalog, error) {
 				return Catalog{}, fmt.Errorf("component catalog: invalid image for %q", definition.Implementation())
 			}
 			if _, duplicate := imageRepositories[image.Repository]; duplicate {
-				return Catalog{}, fmt.Errorf("component catalog: repeated image repository %q for %q", image.Repository, definition.Implementation())
+				return Catalog{}, fmt.Errorf(
+					"component catalog: repeated image repository %q for %q",
+					image.Repository,
+					definition.Implementation(),
+				)
 			}
 			imageRepositories[image.Repository] = struct{}{}
-			images = append(images, registeredImage{implementation: definition.Implementation(), image: cloneOCIImage(image)})
+			images = append(
+				images,
+				registeredImage{implementation: definition.Implementation(), image: cloneOCIImage(image)},
+			)
 		}
 		for _, recipe := range registration.ManagedConfigActions {
 			action, found := definition.FindAction(recipe.actionID)

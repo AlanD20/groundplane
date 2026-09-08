@@ -34,7 +34,16 @@ func TestProjectEnvironmentEntriesInjectsEnvironmentAndFileEntries(t *testing.T)
 		entryComposeTestRecord(t, environmentID, "APP_ENV", "", []string{"all"}, false, nil, nil),
 		entryComposeTestRecord(t, environmentID, "TOKEN", "", []string{"api"}, true, nil, nil),
 		entryComposeTestRecord(t, environmentID, "MAINTENANCE", "", []string{"maintenance"}, false, nil, nil),
-		entryComposeTestRecord(t, environmentID, "", "etc/ssl/app.pem", []string{"api"}, true, uint32Pointer(82), uint32Pointer(82)),
+		entryComposeTestRecord(
+			t,
+			environmentID,
+			"",
+			"etc/ssl/app.pem",
+			[]string{"api"},
+			true,
+			uint32Pointer(82),
+			uint32Pointer(82),
+		),
 	}
 
 	projection, err := ProjectEnvironmentEntries(

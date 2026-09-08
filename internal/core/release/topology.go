@@ -26,7 +26,12 @@ type TopologyTransition struct {
 	PriorTarget       WorkloadTarget
 }
 
-func NewTopologyTransition(candidateStrategy Strategy, candidateSlot Slot, priorStrategy Strategy, priorSlot Slot) (TopologyTransition, error) {
+func NewTopologyTransition(
+	candidateStrategy Strategy,
+	candidateSlot Slot,
+	priorStrategy Strategy,
+	priorSlot Slot,
+) (TopologyTransition, error) {
 	candidateTarget, err := TargetFor(candidateStrategy, candidateSlot)
 	if err != nil {
 		return TopologyTransition{}, err

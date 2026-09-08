@@ -420,7 +420,9 @@ func newRunnerCreateTask(
 			etcd.TaskResourceKindParam:               etcd.TaskResourceRunner,
 			etcd.RunnerRegistrationTokenPresentParam: "true",
 		},
-		Steps: []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}}, TimeoutSeconds: runnerCreateTimeoutSeconds,
+		Steps: []etcd.TaskStepRecord{
+			{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)},
+		}, TimeoutSeconds: runnerCreateTimeoutSeconds,
 		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}, nil
 }

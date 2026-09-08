@@ -110,13 +110,19 @@ func clearEnvironmentPlan(plan componentsdk.EnvironmentPlan) {
 	}
 }
 
-func buildRenderInput(hosts []componentdns.Host, config Config, baseline []componentdns.ResolverEndpoint) (componentdns.RenderInput, error) {
+func buildRenderInput(
+	hosts []componentdns.Host,
+	config Config,
+	baseline []componentdns.ResolverEndpoint,
+) (componentdns.RenderInput, error) {
 	catchAll := append([]componentdns.ResolverEndpoint(nil), baseline...)
 	if !config.UpstreamAuto {
 		catchAll = append([]componentdns.ResolverEndpoint(nil), config.UpstreamResolvers...)
 	}
 	if len(catchAll) == 0 {
-		return componentdns.RenderInput{}, invalid("coredns: resolver baseline is required when upstream_auto is enabled")
+		return componentdns.RenderInput{}, invalid(
+			"coredns: resolver baseline is required when upstream_auto is enabled",
+		)
 	}
 	forwarders := append([]componentdns.Forwarder(nil), config.Forwarders...)
 	if config.TailnetDelegation {

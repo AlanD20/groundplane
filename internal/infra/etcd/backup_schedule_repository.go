@@ -99,7 +99,11 @@ func (repository *BackupRuntimeRepository) EvaluateBackupSchedule(
 	if !validBackupRuntimeInstant(now) {
 		return BackupScheduleEvaluation{}, errs.New(errs.KindValidationFailed, "backup schedule clock is invalid")
 	}
-	keys := []string{backupPolicyKey(environmentID), environmentCoordinationKey(environmentID), environmentOperationLockKey(environmentID)}
+	keys := []string{
+		backupPolicyKey(environmentID),
+		environmentCoordinationKey(environmentID),
+		environmentOperationLockKey(environmentID),
+	}
 	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
 	if err != nil {
 		return BackupScheduleEvaluation{}, err
@@ -155,8 +159,12 @@ func (repository *BackupRuntimeRepository) EvaluateBackupSchedule(
 				return BackupScheduleEvaluation{}, encodeErr
 			}
 			defer clear(value)
-			result, txErr := repository.store.Transact(ctx,
-				[]Condition{{Key: keys[0], ModRevision: read.Values[0].ModRevision}, {Key: keys[1], ModRevision: read.Values[1].ModRevision}},
+			result, txErr := repository.store.Transact(
+				ctx,
+				[]Condition{
+					{Key: keys[0], ModRevision: read.Values[0].ModRevision},
+					{Key: keys[1], ModRevision: read.Values[1].ModRevision},
+				},
 				[]Mutation{{Type: MutationPut, Key: keys[1], Value: value}},
 			)
 			if txErr != nil {
@@ -186,21 +194,34 @@ func (repository *BackupRuntimeRepository) SkipScheduledBackup(
 	if !evaluation.Overlap || evaluation.ScheduledAt.IsZero() || evaluation.ReadRevision <= 0 {
 		return errs.New(errs.KindValidationFailed, "backup overlap evaluation is invalid")
 	}
-	keys := []string{backupPolicyKey(evaluation.EnvironmentID), environmentCoordinationKey(evaluation.EnvironmentID), environmentOperationLockKey(evaluation.EnvironmentID)}
+	keys := []string{
+		backupPolicyKey(evaluation.EnvironmentID),
+		environmentCoordinationKey(evaluation.EnvironmentID),
+		environmentOperationLockKey(evaluation.EnvironmentID),
+	}
 	dueKey, err := backupDueOutcomeKey(evaluation.EnvironmentID, evaluation.PolicyRevision, evaluation.ScheduledAt)
 	if err != nil {
 		return err
 	}
 	retention := now.UTC().Add(backupDueRetention)
-	retentionKey, err := backupDueRetentionIndexKey(retention, evaluation.EnvironmentID, evaluation.PolicyRevision, evaluation.ScheduledAt)
+	retentionKey, err := backupDueRetentionIndexKey(
+		retention,
+		evaluation.EnvironmentID,
+		evaluation.PolicyRevision,
+		evaluation.ScheduledAt,
+	)
 	if err != nil {
 		return err
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: append(keys, dueKey), Revision: evaluation.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		GetManyRequest{Keys: append(keys, dueKey), Revision: evaluation.ReadRevision},
+	)
 	if err != nil {
 		return err
 	}
-	if read == nil || len(read.Values) != 4 || read.ReadRevision != evaluation.ReadRevision || read.Values[1] == nil || read.Values[2] == nil {
+	if read == nil || len(read.Values) != 4 || read.ReadRevision != evaluation.ReadRevision || read.Values[1] == nil ||
+		read.Values[2] == nil {
 		return errs.New(errs.KindStateConflict, "backup overlap evidence changed")
 	}
 	defer clearKeyValues(read.Values)
@@ -233,9 +254,20 @@ func (repository *BackupRuntimeRepository) SkipScheduledBackup(
 		return err
 	}
 	defer clear(dueValue)
-	result, err := repository.store.Transact(ctx,
-		[]Condition{{Key: keys[0], ModRevision: read.Values[0].ModRevision}, {Key: keys[1], ModRevision: read.Values[1].ModRevision}, {Key: keys[2], ModRevision: read.Values[2].ModRevision}, {Key: dueKey}, {Key: retentionKey}},
-		[]Mutation{{Type: MutationPut, Key: dueKey, Value: dueValue}, {Type: MutationPut, Key: retentionKey, Value: []byte(dueKey)}, {Type: MutationPut, Key: keys[1], Value: coordValue}},
+	result, err := repository.store.Transact(
+		ctx,
+		[]Condition{
+			{Key: keys[0], ModRevision: read.Values[0].ModRevision},
+			{Key: keys[1], ModRevision: read.Values[1].ModRevision},
+			{Key: keys[2], ModRevision: read.Values[2].ModRevision},
+			{Key: dueKey},
+			{Key: retentionKey},
+		},
+		[]Mutation{
+			{Type: MutationPut, Key: dueKey, Value: dueValue},
+			{Type: MutationPut, Key: retentionKey, Value: []byte(dueKey)},
+			{Type: MutationPut, Key: keys[1], Value: coordValue},
+		},
 	)
 	if err != nil {
 		return err
@@ -258,7 +290,12 @@ func (repository *BackupRuntimeRepository) prepareScheduledBackupPublication(
 		return nil, nil, err
 	}
 	retention := record.CreatedAt.UTC().Add(backupDueRetention)
-	retentionKey, err := backupDueRetentionIndexKey(retention, record.EnvironmentID, record.PolicyRevision, *record.ScheduledAt)
+	retentionKey, err := backupDueRetentionIndexKey(
+		retention,
+		record.EnvironmentID,
+		record.PolicyRevision,
+		*record.ScheduledAt,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -266,7 +303,8 @@ func (repository *BackupRuntimeRepository) prepareScheduledBackupPublication(
 	if err != nil {
 		return nil, nil, err
 	}
-	if read == nil || len(read.Values) != 3 || read.ReadRevision != fixedRevision || read.Values[0] == nil || read.Values[1] == nil {
+	if read == nil || len(read.Values) != 3 || read.ReadRevision != fixedRevision || read.Values[0] == nil ||
+		read.Values[1] == nil {
 		return nil, nil, errs.New(errs.KindStateConflict, "backup schedule coordination is unavailable")
 	}
 	defer clearKeyValues(read.Values)
@@ -274,7 +312,8 @@ func (repository *BackupRuntimeRepository) prepareScheduledBackupPublication(
 		return nil, nil, errs.New(errs.KindStateConflict, "backup scheduled occurrence already has an outcome")
 	}
 	policy, err := decodeBackupPolicyRecord(read.Values[0].Value)
-	if err != nil || !policy.Enabled || policy.EnvironmentID != record.EnvironmentID || read.Values[0].ModRevision != record.PolicyRevision {
+	if err != nil || !policy.Enabled || policy.EnvironmentID != record.EnvironmentID ||
+		read.Values[0].ModRevision != record.PolicyRevision {
 		return nil, nil, errs.New(errs.KindStateConflict, "backup scheduled policy changed")
 	}
 	coord, err := decodeEnvironmentCoordinationRecord(read.Values[1].Value)
@@ -286,7 +325,8 @@ func (repository *BackupRuntimeRepository) prepareScheduledBackupPublication(
 		return nil, nil, err
 	}
 	state := *coord.CurrentBackupScheduleState
-	if state.PolicyDigest != digest || state.Frequency != policy.Frequency || state.LastEvaluatedAt.After(record.CreatedAt.UTC()) {
+	if state.PolicyDigest != digest || state.Frequency != policy.Frequency ||
+		state.LastEvaluatedAt.After(record.CreatedAt.UTC()) {
 		return nil, nil, errs.New(errs.KindStateConflict, "backup schedule digest or clock changed")
 	}
 	state.LastEvaluatedAt, state.UpdatedAt = record.CreatedAt.UTC(), record.CreatedAt.UTC()
@@ -307,11 +347,15 @@ func (repository *BackupRuntimeRepository) prepareScheduledBackupPublication(
 		clear(coordValue)
 		return nil, nil, err
 	}
-	return []Condition{{Key: keys[1], ModRevision: read.Values[1].ModRevision}, {Key: dueKey}, {Key: retentionKey}}, []Mutation{
-		{Type: MutationPut, Key: dueKey, Value: dueValue},
-		{Type: MutationPut, Key: retentionKey, Value: []byte(dueKey)},
-		{Type: MutationPut, Key: keys[1], Value: coordValue},
-	}, nil
+	return []Condition{
+			{Key: keys[1], ModRevision: read.Values[1].ModRevision},
+			{Key: dueKey},
+			{Key: retentionKey},
+		}, []Mutation{
+			{Type: MutationPut, Key: dueKey, Value: dueValue},
+			{Type: MutationPut, Key: retentionKey, Value: []byte(dueKey)},
+			{Type: MutationPut, Key: keys[1], Value: coordValue},
+		}, nil
 }
 
 func (repository *BackupRuntimeRepository) exactScheduledBackupRunSubordinates(
@@ -325,7 +369,12 @@ func (repository *BackupRuntimeRepository) exactScheduledBackupRunSubordinates(
 		return false
 	}
 	retainUntil := run.CreatedAt.UTC().Add(backupDueRetention)
-	retentionKey, err := backupDueRetentionIndexKey(retainUntil, run.EnvironmentID, run.PolicyRevision, *run.ScheduledAt)
+	retentionKey, err := backupDueRetentionIndexKey(
+		retainUntil,
+		run.EnvironmentID,
+		run.PolicyRevision,
+		*run.ScheduledAt,
+	)
 	if err != nil {
 		return false
 	}

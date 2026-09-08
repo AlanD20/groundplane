@@ -29,7 +29,9 @@ func buildVolumeMutationPlan(
 		steps = append(steps, payload.step(ids.New(ids.KindStep), uint32(volumeMutationTimeoutSeconds)))
 	}
 	if request.action == volumeMutationActionAdd {
-		appendStep(volumeEnsurePayload{artifactID: newArtifact.ArtifactId, volumeID: request.volumeID, intent: intentDigest})
+		appendStep(
+			volumeEnsurePayload{artifactID: newArtifact.ArtifactId, volumeID: request.volumeID, intent: intentDigest},
+		)
 	}
 	operation := agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
 	artifacts := []*agentpb.ComposeArtifact{newArtifact}
@@ -70,11 +72,15 @@ type volumeEnsurePayload struct {
 }
 
 func (value volumeEnsurePayload) step(id string, timeout uint32) *agentpb.ExecutionStep {
-	return &agentpb.ExecutionStep{StepId: id, TimeoutSeconds: timeout, Payload: &agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure{
-		ManagedVolumeDirectoriesEnsure: &agentpb.ManagedVolumeDirectoriesEnsure{
-			ArtifactId: value.artifactID, VolumeIds: []string{value.volumeID}, IntentSha256: append([]byte(nil), value.intent...),
+	return &agentpb.ExecutionStep{
+		StepId:         id,
+		TimeoutSeconds: timeout,
+		Payload: &agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure{
+			ManagedVolumeDirectoriesEnsure: &agentpb.ManagedVolumeDirectoriesEnsure{
+				ArtifactId: value.artifactID, VolumeIds: []string{value.volumeID}, IntentSha256: append([]byte(nil), value.intent...),
+			},
 		},
-	}}
+	}
 }
 
 type volumeComposeApplyPayload struct {
@@ -95,11 +101,15 @@ func (value volumeComposeApplyPayload) step(id string, timeout uint32) *agentpb.
 type volumeDockerRemovePayload struct{ volumeID string }
 
 func (value volumeDockerRemovePayload) step(id string, timeout uint32) *agentpb.ExecutionStep {
-	return &agentpb.ExecutionStep{StepId: id, TimeoutSeconds: timeout, Payload: &agentpb.ExecutionStep_ManagedVolumeRemove{
-		ManagedVolumeRemove: &agentpb.ManagedVolumeRemove{
-			VolumeId: value.volumeID, DockerName: "gp_vol_" + strings.ToLower(value.volumeID),
+	return &agentpb.ExecutionStep{
+		StepId:         id,
+		TimeoutSeconds: timeout,
+		Payload: &agentpb.ExecutionStep_ManagedVolumeRemove{
+			ManagedVolumeRemove: &agentpb.ManagedVolumeRemove{
+				VolumeId: value.volumeID, DockerName: "gp_vol_" + strings.ToLower(value.volumeID),
+			},
 		},
-	}}
+	}
 }
 
 type volumeDirectoryRemovePayload struct {
@@ -108,12 +118,16 @@ type volumeDirectoryRemovePayload struct {
 }
 
 func (value volumeDirectoryRemovePayload) step(id string, timeout uint32) *agentpb.ExecutionStep {
-	return &agentpb.ExecutionStep{StepId: id, TimeoutSeconds: timeout, Payload: &agentpb.ExecutionStep_ManagedVolumeDirectoryRemove{
-		ManagedVolumeDirectoryRemove: &agentpb.ManagedVolumeDirectoryRemove{
-			ArtifactId: value.artifactID, VolumeId: value.volumeID, ComposeKey: value.key,
-			IntentSha256: append([]byte(nil), value.intent...),
+	return &agentpb.ExecutionStep{
+		StepId:         id,
+		TimeoutSeconds: timeout,
+		Payload: &agentpb.ExecutionStep_ManagedVolumeDirectoryRemove{
+			ManagedVolumeDirectoryRemove: &agentpb.ManagedVolumeDirectoryRemove{
+				ArtifactId: value.artifactID, VolumeId: value.volumeID, ComposeKey: value.key,
+				IntentSha256: append([]byte(nil), value.intent...),
+			},
 		},
-	}}
+	}
 }
 
 func volumeMutationTaskType(action string) etcd.TaskType {

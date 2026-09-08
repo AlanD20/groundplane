@@ -52,24 +52,38 @@ func (repository *HierarchyRepository) ClaimBackingServiceCreationStage(
 		return Versioned[BackingServiceCreationStage]{}, err
 	}
 	if result.Succeeded {
-		return Versioned[BackingServiceCreationStage]{Record: candidate, Revision: result.Revision, ReadRevision: result.Revision}, nil
+		return Versioned[BackingServiceCreationStage]{
+			Record:       candidate,
+			Revision:     result.Revision,
+			ReadRevision: result.Revision,
+		}, nil
 	}
 	existing, err := repository.store.Get(ctx, key)
 	if err != nil {
 		return Versioned[BackingServiceCreationStage]{}, err
 	}
 	if existing == nil || existing.Entry == nil {
-		return Versioned[BackingServiceCreationStage]{}, stateConflict("backing-service creation stage", candidate.TaskID)
+		return Versioned[BackingServiceCreationStage]{}, stateConflict(
+			"backing-service creation stage",
+			candidate.TaskID,
+		)
 	}
 	record, err := decodeBackingServiceCreationStage(existing.Entry.Value)
 	if err != nil {
 		return Versioned[BackingServiceCreationStage]{}, err
 	}
 	if record.Locator != candidate.Locator || record.RequestSHA256 != candidate.RequestSHA256 {
-		return Versioned[BackingServiceCreationStage]{}, errs.New(errs.KindIdempotencyMismatch, "Idempotency-Key was already used with a different backing-service request")
+		return Versioned[BackingServiceCreationStage]{}, errs.New(
+			errs.KindIdempotencyMismatch,
+			"Idempotency-Key was already used with a different backing-service request",
+		)
 	}
 	record.Existing = true
-	return Versioned[BackingServiceCreationStage]{Record: record, Revision: existing.Entry.ModRevision, ReadRevision: existing.ReadRevision}, nil
+	return Versioned[BackingServiceCreationStage]{
+		Record:       record,
+		Revision:     existing.Entry.ModRevision,
+		ReadRevision: existing.ReadRevision,
+	}, nil
 }
 
 func backingServiceCreationStageKey(locator IdempotencyLocator) (string, error) {

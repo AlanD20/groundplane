@@ -19,7 +19,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
-	"github.com/distribution/reference"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -73,7 +72,7 @@ func buildScriptRunnerPlan(
 		return nil, errs.New(errs.KindValidationFailed, "manual Script plan identity is invalid")
 	}
 	sources := input.Sources
-	if err := validateScriptRunnerReleaseSource(sources, input.Candidate != nil); err != nil {
+	if err := validateScriptRunnerReleaseSource(sources); err != nil {
 		return nil, err
 	}
 	project, err := loadNormalizedEnvironmentProject(ctx, sources.RenderInput.Record.Projection)
@@ -94,7 +93,7 @@ func buildScriptRunnerPlan(
 	if err != nil || desiredService.Name != sources.Service.Record.Desired.Name {
 		return nil, errs.New(errs.KindStateConflict, "desired Environment service topology is missing")
 	}
-	service.Image, err = scriptRunnerReleaseImage(sources, input.Candidate != nil)
+	service.Image, err = scriptRunnerReleaseImage(sources)
 	if err != nil {
 		return nil, err
 	}
@@ -129,10 +128,6 @@ func buildScriptRunnerPlan(
 	if err != nil {
 		return nil, err
 	}
-	imageReference, imageDigest, procedureImage, err := scriptRunnerImageAuthority(sources, service.Image, input.Candidate != nil)
-	if err != nil {
-		return nil, err
-	}
 	serviceSource := existingScriptSourceAuthority(sources.Service.Revision)
 	projectionSource := existingScriptSourceAuthority(sources.DesiredProjection.Revision)
 	if input.Candidate != nil {
@@ -147,8 +142,7 @@ func buildScriptRunnerPlan(
 		ServiceId: sources.Service.Record.Desired.ID, ServiceSource: serviceSource,
 		ServiceDefinitionSha256: serviceDigest[:],
 		ReleaseId:               sources.Release.Intent.ID, ReleaseModRevision: uint64(sources.Release.IntentRevision),
-		ImageReference: imageReference, ImageDigest: imageDigest,
-		ProcedureServiceImage:     procedureImage,
+		LocalImageId:              service.Image,
 		BlueprintBundleGeneration: sources.RenderInput.Record.Projection.RevisionID,
 		RenderGeneration:          sources.RenderInput.Record.Projection.RenderGeneration,
 		NetworkTopologySource:     projectionSource,
@@ -206,58 +200,21 @@ func blueprintScriptStagedSourceAuthority(
 	}}
 }
 
-func validateScriptRunnerReleaseSource(sources etcd.ScriptExecutionSources, candidate bool) error {
-	if sources.RenderInput.Record.Image != sources.Release.Intent.Image ||
+func validateScriptRunnerReleaseSource(sources etcd.ScriptExecutionSources) error {
+	if sources.RenderInput.Record.CandidateWorkload != sources.Release.Intent.CandidateWorkload ||
 		sources.RenderInput.Record.Projection.RevisionID == "" ||
-		sources.RenderInput.Record.Projection.RenderGeneration == 0 {
+		sources.RenderInput.Record.Projection.RenderGeneration == 0 ||
+		release.ValidateWorkloadSeal(sources.Release.Intent.CandidateWorkload) != nil {
 		return errs.New(errs.KindStateConflict, "Release cannot authorize a Script runner")
 	}
-	if candidate {
-		named, err := reference.ParseNormalizedNamed(sources.Release.Intent.Image)
-		if err != nil || named.String() != sources.Release.Intent.Image {
-			return errs.New(errs.KindStateConflict, "Blueprint candidate image reference is not canonical")
-		}
-		return nil
-	}
-	_, err := scriptRunnerReleaseImage(sources, false)
-	return err
+	return nil
 }
 
-func scriptRunnerReleaseImage(sources etcd.ScriptExecutionSources, candidate bool) (string, error) {
-	if candidate {
-		return sources.Release.Intent.Image, nil
+func scriptRunnerReleaseImage(sources etcd.ScriptExecutionSources) (string, error) {
+	if err := validateScriptRunnerReleaseSource(sources); err != nil {
+		return "", err
 	}
-	if sources.Release.ResolvedImage != nil {
-		if err := release.ValidateResolvedImageEvidence(*sources.Release.ResolvedImage, sources.Release.Intent); err != nil ||
-			!imageref.IsDigestPinned(sources.Release.ResolvedImage.ImmutableReference) {
-			return "", errs.New(errs.KindStateConflict, "Release cannot authorize a Script runner")
-		}
-		return sources.Release.ResolvedImage.ImmutableReference, nil
-	}
-	if !imageref.IsDigestPinned(sources.Release.Intent.Image) {
-		return "", errs.New(errs.KindStateConflict, "Release cannot authorize a Script runner")
-	}
-	return sources.Release.Intent.Image, nil
-}
-
-func scriptRunnerImageAuthority(
-	sources etcd.ScriptExecutionSources,
-	requestedReference string,
-	candidate bool,
-) (string, []byte, *agentpb.ProcedureServiceImageAuthority, error) {
-	if candidate {
-		return "", nil, &agentpb.ProcedureServiceImageAuthority{
-			ArtifactId:         sources.Release.Intent.RenderInputID,
-			ServiceId:          sources.Service.Record.Desired.ID,
-			ReleaseId:          sources.Release.Intent.ID,
-			RequestedReference: requestedReference,
-		}, nil
-	}
-	digest, err := digestPinnedImageBytes(requestedReference)
-	if err != nil {
-		return "", nil, nil, err
-	}
-	return requestedReference, digest, nil, nil
+	return sources.Release.Intent.CandidateWorkload.LocalImageID, nil
 }
 
 func projectScriptRunner(
@@ -286,14 +243,17 @@ func projectScriptRunner(
 		return nil, err
 	}
 	labels := scriptPairs(map[string]string{
-		"com.groundplane.environment-id":      input.Sources.Environment.Record.ID,
-		"com.groundplane.kind":                "script-runner",
-		"com.groundplane.managed":             "true",
-		"com.groundplane.operation-id":        input.OperationID,
-		"com.groundplane.plan-id":             input.PlanID,
-		"com.groundplane.project-id":          input.Sources.Project.Record.ID,
-		"com.groundplane.release-id":          input.Sources.Release.Intent.ID,
-		"com.groundplane.render-generation":   strconv.FormatUint(input.Sources.RenderInput.Record.Projection.RenderGeneration, 10),
+		"com.groundplane.environment-id": input.Sources.Environment.Record.ID,
+		"com.groundplane.kind":           "script-runner",
+		"com.groundplane.managed":        "true",
+		"com.groundplane.operation-id":   input.OperationID,
+		"com.groundplane.plan-id":        input.PlanID,
+		"com.groundplane.project-id":     input.Sources.Project.Record.ID,
+		"com.groundplane.release-id":     input.Sources.Release.Intent.ID,
+		"com.groundplane.render-generation": strconv.FormatUint(
+			input.Sources.RenderInput.Record.Projection.RenderGeneration,
+			10,
+		),
 		"com.groundplane.script-execution-id": input.ExecutionID,
 		"com.groundplane.script-generation":   strconv.FormatUint(input.Sources.BodyGeneration.Record.Generation, 10),
 		"com.groundplane.script-id":           input.Sources.Script.Record.Desired.ID,
@@ -312,7 +272,9 @@ func projectScriptRunner(
 		PidsLimit: service.PidsLimit, ShmSize: int64(service.ShmSize), Init: service.Init,
 		Isolation: service.Isolation, Runtime: service.Runtime, ReadOnly: service.ReadOnly,
 		Tmpfs: append([]string(nil), service.Tmpfs...), CapDrop: append([]string(nil), service.CapDrop...),
-		SecurityOpt: append([]string(nil), service.SecurityOpt...), GroupAdd: append([]string(nil), service.GroupAdd...),
+		SecurityOpt: append(
+			[]string(nil),
+			service.SecurityOpt...), GroupAdd: append([]string(nil), service.GroupAdd...),
 		Blkio: blkio, CpuCount: service.CPUCount, CpuPercent: service.CPUPercent,
 		CpuShares: service.CPUShares, CpuPeriod: service.CPUPeriod, CpuQuota: service.CPUQuota,
 		CpuRtPeriod: service.CPURTPeriod, CpuRtRuntime: service.CPURTRuntime,
@@ -459,6 +421,24 @@ func projectScriptNetworks(
 			},
 		})
 	}
+	for _, network := range sources.AttachSources.Networks {
+		if network.Revision <= 0 || network.ReadRevision != sources.Revision {
+			return nil, errs.New(errs.KindStateConflict, "Script Attach network revision is invalid")
+		}
+		for _, existing := range result {
+			if existing.NetworkId == network.Record.Desired.ID {
+				return nil, errs.New(errs.KindStateConflict, "Script Attach network identity is duplicated")
+			}
+		}
+		dockerName, err := networkname.New(network.Record.Desired.ID)
+		if err != nil {
+			return nil, errs.New(errs.KindStateConflict, "Script Attach network identity is invalid")
+		}
+		result = append(result, &agentpb.ScriptRunnerNetwork{
+			NetworkId: network.Record.Desired.ID, Source: existingScriptSourceAuthority(network.Revision),
+			RenderedAttachment: &agentpb.ScriptNetworkAttachment{DockerNetworkName: dockerName},
+		})
+	}
 	sort.Slice(result, func(left, right int) bool { return result[left].NetworkId < result[right].NetworkId })
 	return result, nil
 }
@@ -530,7 +510,10 @@ func scriptEnvironmentPairs(environment composetypes.MappingWithEquals) ([]*agen
 	keys := make([]string, 0, len(environment))
 	for key, value := range environment {
 		if value == nil {
-			return nil, errs.New(errs.KindValidationFailed, "Script runner environment contains an unresolved host lookup")
+			return nil, errs.New(
+				errs.KindValidationFailed,
+				"Script runner environment contains an unresolved host lookup",
+			)
 		}
 		keys = append(keys, key)
 	}
@@ -586,7 +569,10 @@ func scriptBlkio(value *composetypes.BlkioConfig) (*agentpb.ScriptBlkio, error) 
 		if len(device.Extensions) != 0 {
 			return nil, errs.New(errs.KindValidationFailed, "Script runner blkio device extensions are unsupported")
 		}
-		result.WeightDevices = append(result.WeightDevices, &agentpb.ScriptWeightDevice{Path: device.Path, Weight: uint32(device.Weight)})
+		result.WeightDevices = append(
+			result.WeightDevices,
+			&agentpb.ScriptWeightDevice{Path: device.Path, Weight: uint32(device.Weight)},
+		)
 	}
 	convert := func(values []composetypes.ThrottleDevice) ([]*agentpb.ScriptThrottleDevice, error) {
 		converted := make([]*agentpb.ScriptThrottleDevice, len(values))
@@ -600,7 +586,10 @@ func scriptBlkio(value *composetypes.BlkioConfig) (*agentpb.ScriptBlkio, error) 
 		return converted, nil
 	}
 	var err error
-	sort.Slice(result.WeightDevices, func(left, right int) bool { return result.WeightDevices[left].Path < result.WeightDevices[right].Path })
+	sort.Slice(
+		result.WeightDevices,
+		func(left, right int) bool { return result.WeightDevices[left].Path < result.WeightDevices[right].Path },
+	)
 	if result.DeviceReadBps, err = convert(value.DeviceReadBps); err != nil {
 		return nil, err
 	}

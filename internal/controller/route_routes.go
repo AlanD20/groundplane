@@ -81,9 +81,11 @@ func (s *Server) registerRoutes() {
 		Responses: map[string]*huma.Response{
 			"202": {
 				Description: http.StatusText(http.StatusAccepted),
-				Content: map[string]*huma.MediaType{"application/json": {Schema: s.API.OpenAPI().Components.Schemas.Schema(
-					reflect.TypeFor[apiTypes.RouteTaskAccepted](), true, "RouteTaskAccepted",
-				)}},
+				Content: map[string]*huma.MediaType{
+					"application/json": {Schema: s.API.OpenAPI().Components.Schemas.Schema(
+						reflect.TypeFor[apiTypes.RouteTaskAccepted](), true, "RouteTaskAccepted",
+					)},
+				},
 			},
 		},
 	}, s.createRoute)
@@ -93,9 +95,11 @@ func (s *Server) registerRoutes() {
 		Responses: map[string]*huma.Response{
 			"202": {
 				Description: http.StatusText(http.StatusAccepted),
-				Content: map[string]*huma.MediaType{"application/json": {Schema: s.API.OpenAPI().Components.Schemas.Schema(
-					reflect.TypeFor[apiTypes.RouteTaskAccepted](), true, "RouteTaskAccepted",
-				)}},
+				Content: map[string]*huma.MediaType{
+					"application/json": {Schema: s.API.OpenAPI().Components.Schemas.Schema(
+						reflect.TypeFor[apiTypes.RouteTaskAccepted](), true, "RouteTaskAccepted",
+					)},
+				},
 			},
 		},
 	}, s.editRoute)

@@ -20,8 +20,12 @@ func TestHostResolutionProjectionPublicationUsesFixedInputRevisionAndCAS(t *test
 	routes := []HostResolutionRouteRecord{{
 		EnvironmentID:     ids.NewAt(ids.KindEnvironment, time.Unix(1_700_000_000, 0).UTC(), 1),
 		DesiredRevisionID: ids.NewAt(ids.KindTask, time.Unix(1_700_000_000, 0).UTC(), 2), AppliedRevision: 17,
-		RouteID:   ids.NewAt(ids.KindRoute, time.Unix(1_700_000_000, 0).UTC(), 3),
-		ServiceID: ids.NewAt(ids.KindService, time.Unix(1_700_000_000, 0).UTC(), 4), Hostname: "app.example.test", IPv4: "192.0.2.10",
+		RouteID: ids.NewAt(ids.KindRoute, time.Unix(1_700_000_000, 0).UTC(), 3),
+		ServiceID: ids.NewAt(
+			ids.KindService,
+			time.Unix(1_700_000_000, 0).UTC(),
+			4,
+		), Hostname: "app.example.test", IPv4: "192.0.2.10",
 	}}
 	first, err := prepareHostResolutionProjectionPublication(nil, 41, routes)
 	if err != nil {
@@ -104,7 +108,11 @@ func TestHostResolutionProjectionPublicationHasConstantTransactionSize(t *testin
 	}
 	defer publication.clear()
 	if len(publication.conditions) != 1 || len(publication.mutations) != 1 {
-		t.Fatalf("projection operation count = %d/%d, want 1/1", len(publication.conditions), len(publication.mutations))
+		t.Fatalf(
+			"projection operation count = %d/%d, want 1/1",
+			len(publication.conditions),
+			len(publication.mutations),
+		)
 	}
 }
 
@@ -138,6 +146,10 @@ func TestHostResolutionProviderSnapshotHasConstantTransactionSize(t *testing.T) 
 		t.Fatalf("hostResolutionComponents(1024) error = %v", err)
 	}
 	if len(providers) != len(providerIDs) || len(conditions) != 1 || conditions[0].Key != componentWriteFenceKey {
-		t.Fatalf("provider snapshot = %d providers / %#v conditions, want 1024 / one collection fence", len(providers), conditions)
+		t.Fatalf(
+			"provider snapshot = %d providers / %#v conditions, want 1024 / one collection fence",
+			len(providers),
+			conditions,
+		)
 	}
 }

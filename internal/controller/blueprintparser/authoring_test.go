@@ -66,7 +66,7 @@ func TestMarshalAuthoringDocumentEmitsTypedExtensionsInCanonicalOrder(t *testing
 		keys = append(keys, root.Content[index].Value)
 	}
 	wantKeys := []string{
-		"kind", "schema", "metadata", "x-gp-network-pool", "name", "services",
+		"kind", "schema", "metadata", "x-gp-network-pool", "services",
 		"x-gp-requires", "x-gp-attachments", "x-gp-entry", "x-gp-routes",
 		"x-gp-scripts", "x-gp-components", "x-gp-backup", "x-gp-release-groups",
 	}

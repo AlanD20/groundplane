@@ -138,7 +138,10 @@ func ValidateServiceDependencyPhasePlan(serviceNames []string, plan ServiceDepen
 	positions := make(map[string]int, len(plan.OrderedServices))
 	for index, name := range plan.OrderedServices {
 		if _, exists := nodes[name]; !exists {
-			return errs.New(errs.KindValidationFailed, "Service dependency phase plan order references an unrelated Service")
+			return errs.New(
+				errs.KindValidationFailed,
+				"Service dependency phase plan order references an unrelated Service",
+			)
 		}
 		if _, duplicate := positions[name]; duplicate {
 			return errs.New(errs.KindValidationFailed, "Service dependency phase plan order duplicates a Service")

@@ -13,7 +13,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/distribution/reference"
 )
 
 const (
@@ -74,9 +73,8 @@ type Intent struct {
 	OperationKind            OperationKind `json:"operation_kind"`
 	GroupOperationID         string        `json:"group_operation_id,omitempty"`
 	GroupMemberOrdinal       uint32        `json:"group_member_ordinal,omitempty"`
-	Image                    string        `json:"image"`
+	CandidateWorkload        WorkloadSeal  `json:"candidate_workload"`
 	Tag                      string        `json:"tag"`
-	Digest                   string        `json:"digest,omitempty"`
 	Strategy                 Strategy      `json:"strategy"`
 	Slot                     Slot          `json:"slot,omitempty"`
 	OnFailure                OnFailure     `json:"on_failure"`
@@ -157,24 +155,14 @@ type Checkpoint struct {
 	UpdatedAt time.Time        `json:"updated_at"`
 }
 
-type ResolvedImageEvidence struct {
-	RequestedReference   string `json:"requested_reference"`
-	ImmutableReference   string `json:"immutable_reference"`
-	Digest               string `json:"digest"`
-	LocalImageID         string `json:"local_image_id"`
-	ComposeApplyStepID   string `json:"compose_apply_step_id"`
-	ControlPayloadDigest string `json:"control_payload_digest"`
-}
-
 type TerminalSummary struct {
-	ReleaseID              string                 `json:"release_id"`
-	Outcome                State                  `json:"outcome"`
-	FinalServingReleaseID  string                 `json:"final_serving_release_id,omitempty"`
-	EffectDigests          []string               `json:"effect_digests"`
-	AttemptIDs             []string               `json:"attempt_ids"`
-	RollbackMaterialDigest string                 `json:"rollback_material_digest"`
-	ResolvedImage          *ResolvedImageEvidence `json:"resolved_image,omitempty"`
-	CompletedAt            time.Time              `json:"completed_at"`
+	ReleaseID              string    `json:"release_id"`
+	Outcome                State     `json:"outcome"`
+	FinalServingReleaseID  string    `json:"final_serving_release_id,omitempty"`
+	EffectDigests          []string  `json:"effect_digests"`
+	AttemptIDs             []string  `json:"attempt_ids"`
+	RollbackMaterialDigest string    `json:"rollback_material_digest"`
+	CompletedAt            time.Time `json:"completed_at"`
 }
 
 type RetentionStatus string
@@ -235,13 +223,15 @@ func ValidateIntent(value Intent) error {
 			return invalid("prior release identity is invalid")
 		}
 	}
-	if !validText(value.Image) || !validText(value.Tag) || strings.ContainsAny(value.Tag, "@/\\") {
+	if ValidateWorkloadSeal(value.CandidateWorkload) != nil || !validText(value.Tag) ||
+		strings.ContainsAny(value.Tag, "@/\\") {
 		return invalid("release image or tag is invalid")
 	}
-	if value.Digest != "" && !validSHA256(value.Digest) {
-		return invalid("release image digest is invalid")
+	if value.Strategy == StrategyBlueGreen && value.CandidateWorkload.ReplicaCount != 1 {
+		return invalid("blue-green requires a singleton workload")
 	}
-	if !validSHA256(value.RenderInputDigest) || value.CreatedAt.IsZero() || value.CreatedAt.Location() != time.UTC || !validText(value.Actor) {
+	if !validSHA256(value.RenderInputDigest) || value.CreatedAt.IsZero() || value.CreatedAt.Location() != time.UTC ||
+		!validText(value.Actor) {
 		return invalid("release immutable evidence is invalid")
 	}
 	if value.OnFailure != OnFailureSwitchBack && value.OnFailure != OnFailureLeaveActive {
@@ -270,7 +260,9 @@ func ValidateIntent(value Intent) error {
 }
 
 func ValidateCheckpoint(value Checkpoint) error {
-	if ids.Validate(ids.KindDeployment, value.ReleaseID) != nil || !validState(value.State) || value.UpdatedAt.IsZero() || value.UpdatedAt.Location() != time.UTC {
+	if ids.Validate(ids.KindDeployment, value.ReleaseID) != nil || !validState(value.State) ||
+		value.UpdatedAt.IsZero() ||
+		value.UpdatedAt.Location() != time.UTC {
 		return invalid("release checkpoint is invalid")
 	}
 	seen := make(map[string]struct{}, len(value.Evidence))
@@ -303,28 +295,6 @@ func ValidateEvidence(value EffectEvidence, releaseID string) error {
 	return nil
 }
 
-func ValidateResolvedImageEvidence(value ResolvedImageEvidence, intent Intent) error {
-	if value.RequestedReference != intent.Image ||
-		ids.Validate(ids.KindStep, value.ComposeApplyStepID) != nil ||
-		!validSHA256(value.Digest) || !validSHA256(value.ControlPayloadDigest) ||
-		!strings.HasPrefix(value.LocalImageID, "sha256:") ||
-		!validSHA256(strings.TrimPrefix(value.LocalImageID, "sha256:")) {
-		return invalid("release resolved image evidence is invalid")
-	}
-	requested, requestErr := reference.ParseNormalizedNamed(value.RequestedReference)
-	immutable, immutableErr := reference.ParseNormalizedNamed(value.ImmutableReference)
-	digested, digestOK := immutable.(reference.Digested)
-	if requestErr != nil || immutableErr != nil || !digestOK ||
-		requested.String() != value.RequestedReference ||
-		immutable.String() != value.ImmutableReference ||
-		reference.TrimNamed(requested).Name() != reference.TrimNamed(immutable).Name() ||
-		digested.Digest().Algorithm().String() != "sha256" ||
-		digested.Digest().Encoded() != value.Digest {
-		return invalid("release resolved image reference is invalid")
-	}
-	return nil
-}
-
 func CanTransition(from State, to State) bool {
 	if from == to {
 		return true
@@ -333,15 +303,26 @@ func CanTransition(from State, to State) bool {
 	case StatePending:
 		return to == StateRunning || to == StateAborted || to == StateTimedOut
 	case StateRunning:
-		return to == StateCandidateHealthy || to == StateServing || to == StateCompensating || to == StateFailed || to == StateTimedOut || to == StateAborted || to == StateRecoveryRequired
+		return to == StateCandidateHealthy || to == StateServing || to == StateCompensating || to == StateFailed ||
+			to == StateTimedOut ||
+			to == StateAborted ||
+			to == StateRecoveryRequired
 	case StateCandidateHealthy:
-		return to == StateSwitching || to == StateServing || to == StateCompensating || to == StateFailed || to == StateTimedOut || to == StateAborted || to == StateRecoveryRequired
+		return to == StateSwitching || to == StateServing || to == StateCompensating || to == StateFailed ||
+			to == StateTimedOut ||
+			to == StateAborted ||
+			to == StateRecoveryRequired
 	case StateSwitching:
 		return to == StateServing || to == StateCompensating || to == StateRecoveryRequired
 	case StateServing:
-		return to == StatePostHooks || to == StateCompleted || to == StateCompensating || to == StateFailed || to == StateTimedOut || to == StateAborted || to == StateRecoveryRequired
+		return to == StatePostHooks || to == StateCompleted || to == StateCompensating || to == StateFailed ||
+			to == StateTimedOut ||
+			to == StateAborted ||
+			to == StateRecoveryRequired
 	case StatePostHooks:
-		return to == StateCompleted || to == StateCompensating || to == StateFailed || to == StateTimedOut || to == StateAborted || to == StateRecoveryRequired
+		return to == StateCompleted || to == StateCompensating || to == StateFailed || to == StateTimedOut ||
+			to == StateAborted ||
+			to == StateRecoveryRequired
 	case StateCompensating:
 		return to == StateFailed || to == StateTimedOut || to == StateAborted || to == StateRecoveryRequired
 	case StateRecoveryRequired:

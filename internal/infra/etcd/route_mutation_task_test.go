@@ -27,7 +27,9 @@ func TestRouteProviderPinClonePreservesCanonicalOrigin(t *testing.T) {
 		Destination: "components/router/config", ActionID: "activate-config", ServiceID: serviceID,
 		Input: componentsdk.HTTPRouterInput{
 			ComponentID: componentID, Enabled: true, GeneratedServiceID: serviceID,
-			ZoneID: ids.New(ids.KindNetwork), ZoneName: "frontend", PinnedIPv4: "10.40.0.2",
+			Zones: []componentsdk.HTTPRouterZoneInput{{
+				ID: ids.New(ids.KindNetwork), Name: "frontend", StaticIPv4: "10.40.0.2",
+			}},
 			Origin: componentsdk.HTTPRouterOrigin{ServiceName: "edge-router", URL: "http://edge-router:8080"},
 			Routes: []componentsdk.HTTPRoute{{
 				ID: "rte_one", Host: "app.example.com", Path: "/", BackendServiceID: "svc_backend",
@@ -41,7 +43,9 @@ func TestRouteProviderPinClonePreservesCanonicalOrigin(t *testing.T) {
 	}
 	cloned := cloneRouteProviderPin(pinned)
 	cloned.Input.Routes[0].Path = "/changed"
-	if pinned.Input.Routes[0].Path != "/" || cloned.Input.Origin != pinned.Input.Origin {
+	cloned.Input.Zones[0].Name = "changed"
+	if pinned.Input.Routes[0].Path != "/" || pinned.Input.Zones[0].Name != "frontend" ||
+		cloned.Input.Origin != pinned.Input.Origin {
 		t.Fatalf("cloneRouteProviderPin() source/clone = %#v / %#v", pinned, cloned)
 	}
 	changed := pinned
@@ -141,13 +145,20 @@ func TestRouteRepositoryRejectsPublicationOmittingDesiredService(t *testing.T) {
 		ctx, environment, project, target, nil, record, intent, task, marker,
 	)
 	if kind, ok := errs.KindOf(mutationErr); !ok || kind != errs.KindResourceInUse {
-		t.Errorf("BeginRouteMutationWithTask() error kind = %v/%v, want %v (error %v)", kind, ok, errs.KindResourceInUse, mutationErr)
+		t.Errorf(
+			"BeginRouteMutationWithTask() error kind = %v/%v, want %v (error %v)",
+			kind,
+			ok,
+			errs.KindResourceInUse,
+			mutationErr,
+		)
 	}
 	headAfter, err := store.Get(ctx, environmentBlueprintHeadKey(environment.Record.ID))
 	if err != nil || headAfter.Entry == nil {
 		t.Fatalf("Get(desired head after) = %#v/%v", headAfter, err)
 	}
-	if headAfter.Entry.ModRevision != headBefore.Entry.ModRevision || string(headAfter.Entry.Value) != string(headBefore.Entry.Value) {
+	if headAfter.Entry.ModRevision != headBefore.Entry.ModRevision ||
+		string(headAfter.Entry.Value) != string(headBefore.Entry.Value) {
 		t.Errorf("desired head changed: before=%#v after=%#v", headBefore.Entry, headAfter.Entry)
 	}
 }
@@ -177,7 +188,10 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 	task.Type = TaskCreate
 	task.Target = record.Desired.ID
 	task.Status = TaskStatusPending
-	task.Params = map[string]string{TaskResourceKindParam: TaskResourceRoute, TaskRouteEnvironmentParam: environment.Record.ID}
+	task.Params = map[string]string{
+		TaskResourceKindParam:     TaskResourceRoute,
+		TaskRouteEnvironmentParam: environment.Record.ID,
+	}
 	task.Steps = []TaskStepRecord{{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, createdAt, 1204)}}
 	task.TimeoutSeconds = 30
 	task.RenderGeneration = 1
@@ -198,11 +212,32 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 	if err != nil {
 		t.Fatalf("marshal acceptance: %v", err)
 	}
-	marker, err := NewCompletedDirectIdempotencyMarker(IdempotencyLocator{ScopeKind: IdempotencyScopeEnvironment, ScopeID: environment.Record.ID, Method: http.MethodPost, Route: "/routes", Key: task.IdempotencyKey}, testDirectMarker().Intent, IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body}, createdAt)
+	marker, err := NewCompletedDirectIdempotencyMarker(
+		IdempotencyLocator{
+			ScopeKind: IdempotencyScopeEnvironment,
+			ScopeID:   environment.Record.ID,
+			Method:    http.MethodPost,
+			Route:     "/routes",
+			Key:       task.IdempotencyKey,
+		},
+		testDirectMarker().Intent,
+		IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body},
+		createdAt,
+	)
 	if err != nil {
 		t.Fatalf("NewCompletedDirectIdempotencyMarker() error = %v", err)
 	}
-	result, err := repository.BeginRouteMutationWithTask(ctx, environment, project, target, nil, record, intent, task, marker)
+	result, err := repository.BeginRouteMutationWithTask(
+		ctx,
+		environment,
+		project,
+		target,
+		nil,
+		record,
+		intent,
+		task,
+		marker,
+	)
 	if err != nil {
 		t.Fatalf("BeginRouteMutationWithTask() error = %v", err)
 	}
@@ -222,7 +257,17 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 	if err != nil || !found || storedIntent.Record.TaskID != task.ID {
 		t.Fatalf("GetRouteMutationIntent() = %#v/%v/%v", storedIntent, found, err)
 	}
-	companions, err := store.GetMany(ctx, GetManyRequest{Keys: []string{taskKey(task.ID), taskQueueKey(task.Executor, task.ID), routeMutationIntentKey(task.ID), componentTaskActiveEnvironmentKey(environment.Record.ID)}})
+	companions, err := store.GetMany(
+		ctx,
+		GetManyRequest{
+			Keys: []string{
+				taskKey(task.ID),
+				taskQueueKey(task.Executor, task.ID),
+				routeMutationIntentKey(task.ID),
+				componentTaskActiveEnvironmentKey(environment.Record.ID),
+			},
+		},
+	)
 	if err != nil || companions == nil || len(companions.Values) != 4 {
 		t.Fatalf("GetMany(Task companions) = %#v, %v", companions, err)
 	}
@@ -336,7 +381,8 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 	if err != nil {
 		t.Fatalf("RetryTask(edit) error = %v", err)
 	}
-	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
+	if outcome, _, conflict, classifyErr := result.Classify(); classifyErr != nil || conflict != nil ||
+		outcome != IdempotencyKnownApplied {
 		t.Fatalf("RetryTask(edit) outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
 	}
 	if _, found, err := tasks.ClaimNextControllerTask(ctx, editTerminalAt.Add(2*time.Second)); err != nil || !found {
@@ -359,7 +405,9 @@ func routeRepositoryTestProviderPin(serviceID string) *RouteProviderPin {
 		Destination: "components/router/config", ActionID: "activate-config", ServiceID: serviceID,
 		Input: componentsdk.HTTPRouterInput{
 			ComponentID: componentID, Enabled: true, GeneratedServiceID: serviceID,
-			ZoneID: ids.New(ids.KindNetwork), ZoneName: "frontend", PinnedIPv4: "10.40.0.2",
+			Zones: []componentsdk.HTTPRouterZoneInput{{
+				ID: ids.New(ids.KindNetwork), Name: "frontend", StaticIPv4: "10.40.0.2",
+			}},
 			Origin: componentsdk.HTTPRouterOrigin{ServiceName: "edge-router", URL: "http://edge-router:8080"},
 			Routes: []componentsdk.HTTPRoute{{
 				ID: "rte_one", Host: "app.example.com", Path: "/", BackendServiceID: "svc_backend",

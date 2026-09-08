@@ -27,7 +27,8 @@ func TestZoneRepositoryReadsAndPagesSelectedProjection(t *testing.T) {
 		t.Fatalf("GetZone() = %#v, %v", stored, err)
 	}
 	first, err := repository.ListZones(ctx, environment.Record.ID, PageRequest{Limit: 1})
-	if err != nil || len(first.Items) != 1 || first.NextCursor == "" || first.Items[0].Record.Desired.Name != "backend" {
+	if err != nil || len(first.Items) != 1 || first.NextCursor == "" ||
+		first.Items[0].Record.Desired.Name != "backend" {
 		t.Fatalf("ListZones(first) = %#v, %v", first, err)
 	}
 	second, err := repository.ListZones(

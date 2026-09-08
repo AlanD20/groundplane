@@ -62,7 +62,8 @@ func NormalizedEnvironmentArtifact(
 	runtime := &agentpb.ComposeArtifact{}
 	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(projection.ComposeArtifact, runtime); err != nil ||
 		runtime.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
-		runtime.GetOwnerId() != projection.EnvironmentID || ids.Validate(ids.KindConfig, runtime.GetArtifactId()) != nil {
+		runtime.GetOwnerId() != projection.EnvironmentID ||
+		ids.Validate(ids.KindConfig, runtime.GetArtifactId()) != nil {
 		return nil, errs.New(errs.KindInternal, "Environment normalized Compose projection is corrupt")
 	}
 	project, err := loadNormalizedEnvironmentProject(context.Background(), projection)
@@ -129,6 +130,8 @@ func loadNormalizedEnvironmentProject(
 		}},
 	}, func(options *loader.Options) {
 		options.ResolvePaths = false
+		options.SkipInterpolation = true
+		options.SkipNormalization = true
 		options.SkipResolveEnvironment = true
 		options.SetProjectName("gp-"+strings.ToLower(projection.EnvironmentID), true)
 	})

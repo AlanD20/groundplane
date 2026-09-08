@@ -26,7 +26,10 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskClaim(
 		return blueprintAttachTaskChange{}, err
 	}
 	if intent.Status != TaskStatusPending {
-		return blueprintAttachTaskChange{}, errs.New(errs.KindStateConflict, "Blueprint Attach Task intent is not pending")
+		return blueprintAttachTaskChange{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Attach Task intent is not pending",
+		)
 	}
 	return repository.prepareBlueprintAttachCandidateTransition(
 		ctx, task, intentValue, intent, revision,
@@ -81,7 +84,10 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskAcknowledgement(
 			if activeErr != nil {
 				return blueprintAttachTaskChange{}, activeErr
 			}
-			return blueprintAttachTaskChange{}, errs.New(errs.KindStateConflict, "Blueprint Attach Task lost its Environment fence")
+			return blueprintAttachTaskChange{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Attach Task lost its Environment fence",
+			)
 		}
 		change.conditions = append(change.conditions, Condition{
 			Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: active.Values[0].ModRevision,
@@ -105,7 +111,10 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskRetry(
 	}
 	if source.FinishedAt == nil || intent.TerminalAt == nil || intent.Status != source.Status ||
 		!intent.TerminalAt.Equal(*source.FinishedAt) || retry.Target != source.Target || retry.RetryOf != source.ID {
-		return blueprintAttachTaskChange{}, errs.New(errs.KindStateConflict, "Blueprint Attach retry changed its pinned Task")
+		return blueprintAttachTaskChange{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Attach retry changed its pinned Task",
+		)
 	}
 	keys := make([]string, 0, len(intent.Candidates)+1)
 	for _, candidate := range intent.Candidates {
@@ -130,12 +139,18 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskRetry(
 		value := state.Values[index]
 		if value == nil {
 			clearBlueprintAttachTaskChange(change)
-			return blueprintAttachTaskChange{}, errs.New(errs.KindStateConflict, "Blueprint Attach retry candidate is missing")
+			return blueprintAttachTaskChange{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Attach retry candidate is missing",
+			)
 		}
 		current, decodeErr := decodeAttachRecord(value.Value)
 		if decodeErr != nil || current.ID != candidate.ID || current.TaskID != source.ID {
 			clearBlueprintAttachTaskChange(change)
-			return blueprintAttachTaskChange{}, errs.New(errs.KindStateConflict, "Blueprint Attach retry candidate changed")
+			return blueprintAttachTaskChange{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Attach retry candidate changed",
+			)
 		}
 		retrying, retryErr := RetryAttachOperation(current, retry.ID)
 		if retryErr != nil {
@@ -148,17 +163,29 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskRetry(
 			return blueprintAttachTaskChange{}, encodeErr
 		}
 		change.values = append(change.values, encoded)
-		change.conditions = append(change.conditions, Condition{Key: attachKey(current.ID), ModRevision: value.ModRevision})
-		change.mutations = append(change.mutations, Mutation{Type: MutationPut, Key: attachKey(current.ID), Value: encoded})
+		change.conditions = append(
+			change.conditions,
+			Condition{Key: attachKey(current.ID), ModRevision: value.ModRevision},
+		)
+		change.mutations = append(
+			change.mutations,
+			Mutation{Type: MutationPut, Key: attachKey(current.ID), Value: encoded},
+		)
 		retryCandidates = append(retryCandidates, retrying)
 	}
 	if intent.OwnsEnvironmentFence {
 		active := state.Values[len(state.Values)-1]
 		if active != nil {
 			clearBlueprintAttachTaskChange(change)
-			return blueprintAttachTaskChange{}, errs.New(errs.KindStateConflict, "Environment already has an active Blueprint Attach retry")
+			return blueprintAttachTaskChange{}, errs.New(
+				errs.KindStateConflict,
+				"Environment already has an active Blueprint Attach retry",
+			)
 		}
-		change.conditions = append(change.conditions, Condition{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)})
+		change.conditions = append(
+			change.conditions,
+			Condition{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
+		)
 		change.mutations = append(change.mutations, Mutation{
 			Type: MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID),
 		})
@@ -217,7 +244,8 @@ func (repository *TaskRepository) validateBlueprintAttachTaskAcknowledgementRepl
 			return errs.New(errs.KindStateConflict, "Blueprint Attach terminal candidate is missing")
 		}
 		record, decodeErr := decodeAttachRecord(value.Value)
-		if decodeErr != nil || record.ID != candidate.ID || record.TaskID != task.ID || record.Status != expectedStatus {
+		if decodeErr != nil || record.ID != candidate.ID || record.TaskID != task.ID ||
+			record.Status != expectedStatus {
 			return errs.New(errs.KindStateConflict, "Blueprint Attach terminal candidate does not match its Task")
 		}
 	}
@@ -236,7 +264,10 @@ func (repository *TaskRepository) prepareBlueprintAttachCandidateTransition(
 	transition func(AttachRecord) (AttachRecord, error),
 ) (blueprintAttachTaskChange, error) {
 	if task.ID != intent.TaskID || task.Target != intent.EnvironmentID {
-		return blueprintAttachTaskChange{}, errs.New(errs.KindStateConflict, "Blueprint Attach intent has the wrong Task owner")
+		return blueprintAttachTaskChange{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint Attach intent has the wrong Task owner",
+		)
 	}
 	keys := make([]string, 0, len(intent.Candidates))
 	for _, candidate := range intent.Candidates {
@@ -257,7 +288,10 @@ func (repository *TaskRepository) prepareBlueprintAttachCandidateTransition(
 		value := state.Values[index]
 		if value == nil {
 			clearBlueprintAttachTaskChange(change)
-			return blueprintAttachTaskChange{}, errs.New(errs.KindStateConflict, "Blueprint Attach candidate is missing")
+			return blueprintAttachTaskChange{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Attach candidate is missing",
+			)
 		}
 		current, decodeErr := decodeAttachRecord(value.Value)
 		if decodeErr != nil || current.ID != candidate.ID || current.EnvironmentID != intent.EnvironmentID ||
@@ -276,8 +310,14 @@ func (repository *TaskRepository) prepareBlueprintAttachCandidateTransition(
 			return blueprintAttachTaskChange{}, encodeErr
 		}
 		change.values = append(change.values, encoded)
-		change.conditions = append(change.conditions, Condition{Key: attachKey(current.ID), ModRevision: value.ModRevision})
-		change.mutations = append(change.mutations, Mutation{Type: MutationPut, Key: attachKey(current.ID), Value: encoded})
+		change.conditions = append(
+			change.conditions,
+			Condition{Key: attachKey(current.ID), ModRevision: value.ModRevision},
+		)
+		change.mutations = append(
+			change.mutations,
+			Mutation{Type: MutationPut, Key: attachKey(current.ID), Value: encoded},
+		)
 	}
 	return change, nil
 }
@@ -294,7 +334,10 @@ func (repository *TaskRepository) readBlueprintAttachTaskIntent(
 		return nil, BlueprintAttachTaskIntent{}, false, err
 	}
 	if result == nil || len(result.Values) != 1 {
-		return nil, BlueprintAttachTaskIntent{}, false, errs.New(errs.KindInternal, "Blueprint Attach intent read is incomplete")
+		return nil, BlueprintAttachTaskIntent{}, false, errs.New(
+			errs.KindInternal,
+			"Blueprint Attach intent read is incomplete",
+		)
 	}
 	if result.Values[0] == nil {
 		return nil, BlueprintAttachTaskIntent{}, false, nil

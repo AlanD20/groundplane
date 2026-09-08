@@ -203,10 +203,16 @@ func ResolveBlueprintRequirements(
 		if target.Kind != RequirementTargetBackingAttach || target.Name == "" ||
 			ids.Validate(ids.KindAttach, target.ID) != nil ||
 			ids.Validate(ids.KindTask, target.TaskID) != nil || target.Revision <= 0 {
-			return BlueprintRequirements{}, errs.New(errs.KindInternal, "Blueprint requirement target projection is invalid")
+			return BlueprintRequirements{}, errs.New(
+				errs.KindInternal,
+				"Blueprint requirement target projection is invalid",
+			)
 		}
 		if _, duplicate := targets[key]; duplicate {
-			return BlueprintRequirements{}, errs.New(errs.KindInternal, "Blueprint requirement target projection is duplicated")
+			return BlueprintRequirements{}, errs.New(
+				errs.KindInternal,
+				"Blueprint requirement target projection is duplicated",
+			)
 		}
 		targets[key] = target
 	}
@@ -224,7 +230,10 @@ func ResolveBlueprintRequirements(
 					"Blueprint requirement depends on an Attach created by the same Task",
 				)
 			}
-			return BlueprintRequirements{}, errs.New(errs.KindValidationFailed, "Blueprint requirement target does not exist")
+			return BlueprintRequirements{}, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint requirement target does not exist",
+			)
 		}
 		resolved = append(resolved, ResolvedRequirement{
 			Target: ResolvedRequirementTarget{
@@ -262,7 +271,10 @@ func BuildBlueprintRequirementPhasePlan(
 	phase RequirementPhase,
 ) (BlueprintRequirementPhasePlan, error) {
 	if phase != RequirementPhaseStart && phase != RequirementPhaseDeploy && phase != RequirementPhaseRollback {
-		return BlueprintRequirementPhasePlan{}, errs.New(errs.KindValidationFailed, "Blueprint requirement operation phase is invalid")
+		return BlueprintRequirementPhasePlan{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint requirement operation phase is invalid",
+		)
 	}
 	if err := requirements.Validate(); err != nil {
 		return BlueprintRequirementPhasePlan{}, err
@@ -271,7 +283,10 @@ func BuildBlueprintRequirementPhasePlan(
 	sort.Strings(steps)
 	for index, stepID := range steps {
 		if ids.Validate(ids.KindStep, stepID) != nil || index > 0 && stepID == steps[index-1] {
-			return BlueprintRequirementPhasePlan{}, errs.New(errs.KindValidationFailed, "Blueprint requirement Task step ids are invalid")
+			return BlueprintRequirementPhasePlan{}, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint requirement Task step ids are invalid",
+			)
 		}
 	}
 	selected := make([]ResolvedRequirement, 0, len(requirements.Resolved))
@@ -284,7 +299,10 @@ func BuildBlueprintRequirementPhasePlan(
 		}
 	}
 	if len(selected) != 0 && len(steps) == 0 {
-		return BlueprintRequirementPhasePlan{}, errs.New(errs.KindValidationFailed, "Blueprint requirement Task has no steps")
+		return BlueprintRequirementPhasePlan{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint requirement Task has no steps",
+		)
 	}
 	ordered := make([]string, 0, len(selected)+len(steps))
 	edges := make([]BlueprintRequirementEdge, 0, len(selected)*len(steps))

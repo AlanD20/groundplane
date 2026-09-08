@@ -373,7 +373,12 @@ func TestEnvironmentZoneAndRouteMutationAuditStageSealsEveryAuthoredField(t *tes
 	}
 	zoneBase := *audits[0].Zone
 	zoneFields := []EnvironmentZoneMutationRequest{
-		{EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 5), Name: "private", Subnet: "10.42.0.0/24", Internal: true},
+		{
+			EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 5),
+			Name:          "private",
+			Subnet:        "10.42.0.0/24",
+			Internal:      true,
+		},
 		{EnvironmentID: claim.EnvironmentID, Name: "alternate", Subnet: "10.42.0.0/24", Internal: true},
 		{EnvironmentID: claim.EnvironmentID, Name: "private", Subnet: "10.43.0.0/24", Internal: true},
 		{EnvironmentID: claim.EnvironmentID, Name: "private", Subnet: "10.42.0.0/24", Internal: false},
@@ -389,12 +394,54 @@ func TestEnvironmentZoneAndRouteMutationAuditStageSealsEveryAuthoredField(t *tes
 	}
 	routeBase := *audits[2].Route
 	routeFields := []EnvironmentRouteMutationRequest{
-		{EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 6), Host: "app.example.test", Path: "/api/*", Exposure: "public", TargetServiceID: serviceID, TargetPort: 8080},
-		{EnvironmentID: claim.EnvironmentID, Host: "other.example.test", Path: "/api/*", Exposure: "public", TargetServiceID: serviceID, TargetPort: 8080},
-		{EnvironmentID: claim.EnvironmentID, Host: "app.example.test", Path: "/other/*", Exposure: "public", TargetServiceID: serviceID, TargetPort: 8080},
-		{EnvironmentID: claim.EnvironmentID, Host: "app.example.test", Path: "/api/*", Exposure: "internal", TargetServiceID: serviceID, TargetPort: 8080},
-		{EnvironmentID: claim.EnvironmentID, Host: "app.example.test", Path: "/api/*", Exposure: "public", TargetServiceID: ids.NewAt(ids.KindService, now, 7), TargetPort: 8080},
-		{EnvironmentID: claim.EnvironmentID, Host: "app.example.test", Path: "/api/*", Exposure: "public", TargetServiceID: serviceID, TargetPort: 9090},
+		{
+			EnvironmentID:   ids.NewAt(ids.KindEnvironment, now, 6),
+			Host:            "app.example.test",
+			Path:            "/api/*",
+			Exposure:        "public",
+			TargetServiceID: serviceID,
+			TargetPort:      8080,
+		},
+		{
+			EnvironmentID:   claim.EnvironmentID,
+			Host:            "other.example.test",
+			Path:            "/api/*",
+			Exposure:        "public",
+			TargetServiceID: serviceID,
+			TargetPort:      8080,
+		},
+		{
+			EnvironmentID:   claim.EnvironmentID,
+			Host:            "app.example.test",
+			Path:            "/other/*",
+			Exposure:        "public",
+			TargetServiceID: serviceID,
+			TargetPort:      8080,
+		},
+		{
+			EnvironmentID:   claim.EnvironmentID,
+			Host:            "app.example.test",
+			Path:            "/api/*",
+			Exposure:        "internal",
+			TargetServiceID: serviceID,
+			TargetPort:      8080,
+		},
+		{
+			EnvironmentID:   claim.EnvironmentID,
+			Host:            "app.example.test",
+			Path:            "/api/*",
+			Exposure:        "public",
+			TargetServiceID: ids.NewAt(ids.KindService, now, 7),
+			TargetPort:      8080,
+		},
+		{
+			EnvironmentID:   claim.EnvironmentID,
+			Host:            "app.example.test",
+			Path:            "/api/*",
+			Exposure:        "public",
+			TargetServiceID: serviceID,
+			TargetPort:      9090,
+		},
 	}
 	routeDigest := mutationAuditDigestForTest(t, claim, projection, dependencyDigest, audits[2])
 	for index := range routeFields {
@@ -463,7 +510,10 @@ func TestEnvironmentEntryMutationAuditIsTypedRedactedAndDeterministic(t *testing
 	if _, err := encodeEnvironmentDesiredMutationAudit(EnvironmentDesiredMutationAudit{Entry: &EnvironmentEntryMutationAudit{
 		Action: EnvironmentEntryMutationEdit, BaseRevisionID: audit.Entry.BaseRevisionID,
 		EntryID: entryID, Record: &record,
-	}}); !isKind(err, errs.KindValidationFailed) {
+	}}); !isKind(
+		err,
+		errs.KindValidationFailed,
+	) {
 		t.Fatalf("Entry mutation literal audit error = %v", err)
 	}
 }

@@ -89,7 +89,10 @@ func (repository *ScriptRepository) prepareScriptCreation(
 	}
 	record.ScriptSetGeneration = active.Record.GenerationID
 	page, err := repository.store.Range(ctx, RangeRequest{
-		Prefix: scriptSetOwnerPrefix(record.EnvironmentID, active.Record.GenerationID), Limit: 65, Revision: active.ReadRevision,
+		Prefix: scriptSetOwnerPrefix(
+			record.EnvironmentID,
+			active.Record.GenerationID,
+		), Limit: 65, Revision: active.ReadRevision,
 	})
 	if err != nil {
 		return nil, nil, nil, err
@@ -111,7 +114,9 @@ func (repository *ScriptRepository) prepareScriptCreation(
 		clear(value)
 		return nil, nil, nil, err
 	}
-	locatorValue, err := encodeScriptLocator(scriptLocatorRecord{ScriptID: record.Desired.ID, EnvironmentID: record.EnvironmentID})
+	locatorValue, err := encodeScriptLocator(
+		scriptLocatorRecord{ScriptID: record.Desired.ID, EnvironmentID: record.EnvironmentID},
+	)
 	if err != nil {
 		clear(value)
 		clear(bodyValue)
@@ -129,8 +134,21 @@ func (repository *ScriptRepository) prepareScriptCreation(
 		record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID, record.ActiveGeneration,
 	)})
 	mutations := []Mutation{
-		{Type: MutationPut, Key: scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID), Value: value},
-		{Type: MutationPut, Key: scriptSetBodyGenerationKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID, record.ActiveGeneration), Value: bodyValue},
+		{
+			Type:  MutationPut,
+			Key:   scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
+			Value: value,
+		},
+		{
+			Type: MutationPut,
+			Key: scriptSetBodyGenerationKey(
+				record.EnvironmentID,
+				record.ScriptSetGeneration,
+				record.Desired.ID,
+				record.ActiveGeneration,
+			),
+			Value: bodyValue,
+		},
 		{
 			Type:  MutationPut,
 			Key:   scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
@@ -142,11 +160,23 @@ func (repository *ScriptRepository) prepareScriptCreation(
 			Value: []byte(record.Desired.ID),
 		},
 		{Type: MutationPut, Key: scriptLocatorKey(record.Desired.ID), Value: locatorValue},
-		{Type: MutationPut, Key: scriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID), Value: []byte(record.Desired.ID)},
+		{
+			Type:  MutationPut,
+			Key:   scriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID),
+			Value: []byte(record.Desired.ID),
+		},
 		{Type: MutationPut, Key: scriptSetActiveKey(record.EnvironmentID), Value: activeValue},
 	}
 	classify := func(_ int64, values []*KeyValue) error {
-		return classifyScriptWriteConflict(values, environment, project, target, record, 0, scriptWriteConflictExtras{bodyGeneration: true})
+		return classifyScriptWriteConflict(
+			values,
+			environment,
+			project,
+			target,
+			record,
+			0,
+			scriptWriteConflictExtras{bodyGeneration: true},
+		)
 	}
 	return conditions, mutations, classify, nil
 }
@@ -174,7 +204,9 @@ func (repository *ScriptRepository) GetScript(ctx context.Context, id string) (V
 		return Versioned[ScriptRecord]{}, err
 	}
 	primary, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys: []string{scriptSetScriptKey(locator.EnvironmentID, active.Record.GenerationID, id)}, Revision: active.ReadRevision,
+		Keys: []string{
+			scriptSetScriptKey(locator.EnvironmentID, active.Record.GenerationID, id),
+		}, Revision: active.ReadRevision,
 	})
 	if err != nil {
 		return Versioned[ScriptRecord]{}, err
@@ -295,7 +327,10 @@ func (repository *ScriptRepository) prepareScriptReplacement(
 	}
 	slugChanged := replacement.Desired.Slug != current.Record.Desired.Slug
 	if slugChanged {
-		indexKeys = append(indexKeys, scriptSetSlugKey(current.Record.EnvironmentID, active.Record.GenerationID, replacement.Desired.Slug))
+		indexKeys = append(
+			indexKeys,
+			scriptSetSlugKey(current.Record.EnvironmentID, active.Record.GenerationID, replacement.Desired.Slug),
+		)
 	}
 	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys:     indexKeys,
@@ -304,7 +339,8 @@ func (repository *ScriptRepository) prepareScriptReplacement(
 	if err != nil {
 		return ScriptRecord{}, nil, nil, nil, err
 	}
-	if indexes == nil || len(indexes.Values) != len(indexKeys) || indexes.Values[0] == nil || indexes.Values[1] == nil ||
+	if indexes == nil || len(indexes.Values) != len(indexKeys) || indexes.Values[0] == nil ||
+		indexes.Values[1] == nil ||
 		string(indexes.Values[0].Value) != current.Record.Desired.ID ||
 		string(indexes.Values[1].Value) != current.Record.Desired.ID {
 		return ScriptRecord{}, nil, nil, nil, errs.New(errs.KindInternal, "Script indexes are missing or corrupt")
@@ -326,16 +362,35 @@ func (repository *ScriptRepository) prepareScriptReplacement(
 		return ScriptRecord{}, nil, nil, nil, err
 	}
 	mutations := []Mutation{
-		{Type: MutationPut, Key: scriptSetScriptKey(replacement.EnvironmentID, active.Record.GenerationID, replacement.Desired.ID), Value: value},
+		{
+			Type:  MutationPut,
+			Key:   scriptSetScriptKey(replacement.EnvironmentID, active.Record.GenerationID, replacement.Desired.ID),
+			Value: value,
+		},
 		{Type: MutationPut, Key: scriptSetActiveKey(replacement.EnvironmentID), Value: activeValue},
 	}
 	extras := scriptWriteConflictExtras{}
 	if slugChanged {
 		extras.newSlug = replacement.Desired.Slug
-		conditions = append(conditions, Condition{Key: scriptSetSlugKey(replacement.EnvironmentID, active.Record.GenerationID, extras.newSlug)})
-		mutations = append(mutations,
-			Mutation{Type: MutationDelete, Key: scriptSetSlugKey(current.Record.EnvironmentID, active.Record.GenerationID, current.Record.Desired.Slug)},
-			Mutation{Type: MutationPut, Key: scriptSetSlugKey(replacement.EnvironmentID, active.Record.GenerationID, extras.newSlug), Value: []byte(replacement.Desired.ID)},
+		conditions = append(
+			conditions,
+			Condition{Key: scriptSetSlugKey(replacement.EnvironmentID, active.Record.GenerationID, extras.newSlug)},
+		)
+		mutations = append(
+			mutations,
+			Mutation{
+				Type: MutationDelete,
+				Key: scriptSetSlugKey(
+					current.Record.EnvironmentID,
+					active.Record.GenerationID,
+					current.Record.Desired.Slug,
+				),
+			},
+			Mutation{
+				Type:  MutationPut,
+				Key:   scriptSetSlugKey(replacement.EnvironmentID, active.Record.GenerationID, extras.newSlug),
+				Value: []byte(replacement.Desired.ID),
+			},
 		)
 	}
 	if replacement.ActiveGeneration != current.Record.ActiveGeneration {
@@ -359,7 +414,15 @@ func (repository *ScriptRepository) prepareScriptReplacement(
 		})
 	}
 	classify := func(_ int64, values []*KeyValue) error {
-		return classifyScriptWriteConflict(values, environment, project, target, current.Record, current.Revision, extras)
+		return classifyScriptWriteConflict(
+			values,
+			environment,
+			project,
+			target,
+			current.Record,
+			current.Revision,
+			extras,
+		)
 	}
 	return replacement, conditions, mutations, classify, nil
 }
@@ -385,9 +448,15 @@ func scriptWriteConditions(
 	ownerRevision int64,
 	slugRevision int64,
 ) []Condition {
-	scriptCondition := Condition{Key: scriptSetScriptKey(record.EnvironmentID, active.Record.GenerationID, record.Desired.ID)}
-	ownerCondition := Condition{Key: scriptSetOwnerKey(record.EnvironmentID, active.Record.GenerationID, record.Desired.ID)}
-	slugCondition := Condition{Key: scriptSetSlugKey(record.EnvironmentID, active.Record.GenerationID, record.Desired.Slug)}
+	scriptCondition := Condition{
+		Key: scriptSetScriptKey(record.EnvironmentID, active.Record.GenerationID, record.Desired.ID),
+	}
+	ownerCondition := Condition{
+		Key: scriptSetOwnerKey(record.EnvironmentID, active.Record.GenerationID, record.Desired.ID),
+	}
+	slugCondition := Condition{
+		Key: scriptSetSlugKey(record.EnvironmentID, active.Record.GenerationID, record.Desired.Slug),
+	}
 	if current != nil {
 		scriptCondition.ModRevision = current.Revision
 		ownerCondition.ModRevision = ownerRevision

@@ -148,7 +148,11 @@ func TestLocalAgentControllerTaskHandlerRejectsUnclosedParams(t *testing.T) {
 
 	task := testAgentEnrollmentTask()
 	task.Params["surprise"] = "value"
-	handler, err := newControllerTaskHandler(&fakeControllerTaskLocalAgents{}, testBackingZoneCascade(t), &fakeControllerTaskRunners{})
+	handler, err := newControllerTaskHandler(
+		&fakeControllerTaskLocalAgents{},
+		testBackingZoneCascade(t),
+		&fakeControllerTaskRunners{},
+	)
 	if err != nil {
 		t.Fatalf("newControllerTaskHandler() error = %v", err)
 	}

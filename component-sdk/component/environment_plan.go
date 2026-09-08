@@ -35,13 +35,27 @@ type HTTPRouterOrigin struct {
 	URL         string
 }
 
+// HTTPRouterZoneInput is one exact, ordered Zone selected by the router.
+// StaticIPv4 is present only for the first (primary) Zone.
+type HTTPRouterZoneInput struct {
+	ID         string
+	Name       string
+	StaticIPv4 string
+}
+
+// NetworkInput is an immutable capability-neutral view of an explicitly
+// selected Environment Zone.
+type NetworkInput struct {
+	ID       string
+	Name     string
+	Internal bool
+}
+
 type HTTPRouterInput struct {
 	ComponentID        string
 	Enabled            bool
 	GeneratedServiceID string
-	ZoneID             string
-	ZoneName           string
-	PinnedIPv4         string
+	Zones              []HTTPRouterZoneInput
 	Origin             HTTPRouterOrigin
 	Routes             []HTTPRoute
 }
@@ -51,16 +65,40 @@ func ValidateHTTPRouterInput(input HTTPRouterInput) error {
 		return fmt.Errorf("component: HTTP router Component id is required")
 	}
 	if !input.Enabled {
-		if input.GeneratedServiceID != "" || input.ZoneID != "" || input.ZoneName != "" ||
-			input.PinnedIPv4 != "" || input.Origin != (HTTPRouterOrigin{}) || len(input.Routes) != 0 {
+		if input.GeneratedServiceID != "" || len(input.Zones) != 0 ||
+			input.Origin != (HTTPRouterOrigin{}) || len(input.Routes) != 0 {
 			return fmt.Errorf("component: disabled HTTP router contains runtime input")
 		}
 		return nil
 	}
-	address, err := netip.ParseAddr(input.PinnedIPv4)
-	if input.GeneratedServiceID == "" || input.ZoneID == "" || !safeName(input.ZoneName) || err != nil ||
-		!address.Is4() || address.Is4In6() || address.IsUnspecified() || address.IsMulticast() {
+	if input.GeneratedServiceID == "" || len(input.Zones) == 0 {
 		return fmt.Errorf("component: enabled HTTP router identity is invalid")
+	}
+	seenIDs := make(map[string]struct{}, len(input.Zones))
+	seenNames := make(map[string]struct{}, len(input.Zones))
+	for index, zone := range input.Zones {
+		if zone.ID == "" || !safeName(zone.Name) {
+			return fmt.Errorf("component: HTTP router Zone identity is invalid")
+		}
+		if _, duplicate := seenIDs[zone.ID]; duplicate {
+			return fmt.Errorf("component: HTTP router repeats a Zone id")
+		}
+		if _, duplicate := seenNames[zone.Name]; duplicate {
+			return fmt.Errorf("component: HTTP router repeats a Zone name")
+		}
+		seenIDs[zone.ID] = struct{}{}
+		seenNames[zone.Name] = struct{}{}
+		if index > 0 {
+			if zone.StaticIPv4 != "" {
+				return fmt.Errorf("component: only the primary HTTP router Zone may have a static address")
+			}
+			continue
+		}
+		address, err := netip.ParseAddr(zone.StaticIPv4)
+		if err != nil || !address.Is4() || address.Is4In6() || address.IsUnspecified() ||
+			address.IsMulticast() || address.String() != zone.StaticIPv4 {
+			return fmt.Errorf("component: HTTP router primary Zone address is invalid")
+		}
 	}
 	if err := ValidateHTTPRouterOrigin(input.Origin); err != nil {
 		return err
@@ -105,6 +143,7 @@ func ValidateHTTPRouterOrigin(origin HTTPRouterOrigin) error {
 }
 
 func CloneHTTPRouterInput(input HTTPRouterInput) HTTPRouterInput {
+	input.Zones = append([]HTTPRouterZoneInput(nil), input.Zones...)
 	input.Routes = append([]HTTPRoute(nil), input.Routes...)
 	return input
 }
@@ -202,9 +241,10 @@ type ManagedMount struct {
 }
 
 type ManagedNetworkAttachment struct {
-	Name       string
-	Aliases    []string
-	StaticIPv4 string
+	Name            string
+	Aliases         []string
+	StaticIPv4      string
+	GatewayPriority int
 }
 
 type ManagedDependency struct {
@@ -231,6 +271,7 @@ type ManagedService struct {
 	Dependencies      []ManagedDependency
 	SecretEnvironment []ManagedSecretEnvironment
 	ObservationAction ActionID
+	Healthcheck       *ManagedHealthcheck
 }
 
 type ManagedNetworkMode string
@@ -270,7 +311,7 @@ func DigestEnvironmentPlan(plan EnvironmentPlan) [sha256.Size]byte {
 		return normalized.Files[left].Path < normalized.Files[right].Path
 	})
 	encoded := make([]byte, 0, 1024)
-	encoded = appendPlanString(encoded, "environment-plan-v5")
+	encoded = appendPlanString(encoded, "environment-plan-v7")
 	encoded = appendPlanCount(encoded, len(normalized.Services))
 	for _, service := range normalized.Services {
 		encoded = appendPlanString(encoded, service.ID)
@@ -283,6 +324,7 @@ func DigestEnvironmentPlan(plan EnvironmentPlan) [sha256.Size]byte {
 			encoded = appendPlanString(encoded, network.Name)
 			encoded = appendPlanStrings(encoded, network.Aliases)
 			encoded = appendPlanString(encoded, network.StaticIPv4)
+			encoded = appendPlanUint64(encoded, uint64(network.GatewayPriority))
 		}
 		encoded = appendPlanStrings(encoded, service.Expose)
 		encoded = appendPlanString(encoded, service.Restart)
@@ -305,6 +347,14 @@ func DigestEnvironmentPlan(plan EnvironmentPlan) [sha256.Size]byte {
 			encoded = appendPlanString(encoded, secret.SecretID)
 		}
 		encoded = appendPlanString(encoded, string(service.ObservationAction))
+		encoded = appendPlanBool(encoded, service.Healthcheck != nil)
+		if health := service.Healthcheck; health != nil {
+			encoded = appendPlanStrings(encoded, health.Command)
+			encoded = appendPlanUint64(encoded, uint64(health.IntervalSeconds))
+			encoded = appendPlanUint64(encoded, uint64(health.TimeoutSeconds))
+			encoded = appendPlanUint64(encoded, uint64(health.StartPeriodSeconds))
+			encoded = appendPlanUint64(encoded, uint64(health.Retries))
+		}
 	}
 	encoded = appendPlanCount(encoded, len(normalized.Files))
 	for _, file := range normalized.Files {
@@ -370,6 +420,11 @@ func CloneEnvironmentPlan(plan EnvironmentPlan) EnvironmentPlan {
 	for index, service := range plan.Services {
 		service.Image.Platforms = append([]OCIPlatform(nil), service.Image.Platforms...)
 		service.Command = append([]string(nil), service.Command...)
+		if service.Healthcheck != nil {
+			health := *service.Healthcheck
+			health.Command = append([]string(nil), health.Command...)
+			service.Healthcheck = &health
+		}
 		service.Expose = append([]string(nil), service.Expose...)
 		service.Mounts = append([]ManagedMount(nil), service.Mounts...)
 		service.Dependencies = append([]ManagedDependency(nil), service.Dependencies...)

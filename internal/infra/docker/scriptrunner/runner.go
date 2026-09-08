@@ -29,6 +29,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/scriptexecution"
+	"github.com/AlanD20/groundplane/internal/common/workloadimage"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -131,7 +132,10 @@ func (runner *Runner) RecoverContainer(
 	body scriptexecution.BodyEvidence,
 ) (scriptexecution.ContainerRecovery, error) {
 	if ctx == nil || runner == nil || runner.client == nil || runner.bodies == nil {
-		return scriptexecution.ContainerRecovery{}, errs.New(errs.KindInternal, "Script runner: runtime is not configured")
+		return scriptexecution.ContainerRecovery{}, errs.New(
+			errs.KindInternal,
+			"Script runner: runtime is not configured",
+		)
 	}
 	if err := validateRequest(request); err != nil {
 		return scriptexecution.ContainerRecovery{}, err
@@ -148,15 +152,24 @@ func (runner *Runner) RecoverContainer(
 		return scriptexecution.ContainerRecovery{}, operationError(ctx, "recover container by name", err)
 	}
 	if !validDockerContainerID(inspected.Container.ID) {
-		return scriptexecution.ContainerRecovery{}, errs.New(errs.KindStateConflict, "Script runner: recovered container id is invalid")
+		return scriptexecution.ContainerRecovery{}, errs.New(
+			errs.KindStateConflict,
+			"Script runner: recovered container id is invalid",
+		)
 	}
 	if err := validateOwnedContainer(inspected, inspected.Container.ID, request, prepared); err != nil {
 		return scriptexecution.ContainerRecovery{}, err
 	}
 	if inspected.Container.State.Status != container.StateCreated || inspected.Container.State.Running {
-		return scriptexecution.ContainerRecovery{}, errs.New(errs.KindStateConflict, "Script runner: recovered container is not stopped in created state")
+		return scriptexecution.ContainerRecovery{}, errs.New(
+			errs.KindStateConflict,
+			"Script runner: recovered container is not stopped in created state",
+		)
 	}
-	return scriptexecution.ContainerRecovery{Found: true, Evidence: containerEvidence(request, inspected.Container.ID)}, nil
+	return scriptexecution.ContainerRecovery{
+		Found:    true,
+		Evidence: containerEvidence(request, inspected.Container.ID),
+	}, nil
 }
 
 func (runner *Runner) CreateContainer(
@@ -165,7 +178,10 @@ func (runner *Runner) CreateContainer(
 	body scriptexecution.BodyEvidence,
 ) (scriptexecution.ContainerEvidence, error) {
 	if ctx == nil || runner == nil || runner.client == nil || runner.bodies == nil {
-		return scriptexecution.ContainerEvidence{}, errs.New(errs.KindInternal, "Script runner: runtime is not configured")
+		return scriptexecution.ContainerEvidence{}, errs.New(
+			errs.KindInternal,
+			"Script runner: runtime is not configured",
+		)
 	}
 	if err := validateRequest(request); err != nil {
 		return scriptexecution.ContainerEvidence{}, err
@@ -184,7 +200,10 @@ func (runner *Runner) CreateContainer(
 		return scriptexecution.ContainerEvidence{}, operationError(ctx, "create container", err)
 	}
 	if created.ID == "" {
-		return scriptexecution.ContainerEvidence{}, errs.New(errs.KindInternal, "Script runner: Docker returned an empty container id")
+		return scriptexecution.ContainerEvidence{}, errs.New(
+			errs.KindInternal,
+			"Script runner: Docker returned an empty container id",
+		)
 	}
 	evidence := containerEvidence(request, created.ID)
 	if !validDockerContainerID(created.ID) {
@@ -201,7 +220,10 @@ func (runner *Runner) CreateContainer(
 		)
 	}
 	if inspected.Container.State.Status != container.StateCreated || inspected.Container.State.Running {
-		return evidence, errs.New(errs.KindStateConflict, "Script runner: created container is not stopped in created state")
+		return evidence, errs.New(
+			errs.KindStateConflict,
+			"Script runner: created container is not stopped in created state",
+		)
 	}
 	return evidence, nil
 }
@@ -236,7 +258,10 @@ func (runner *Runner) RunContainer(
 	}
 	if inspected.Container.State.Status != container.StateCreated &&
 		inspected.Container.State.Status != container.StateRunning {
-		return result, errs.New(errs.KindStateConflict, "Script runner: captured container has an invalid runtime state")
+		return result, errs.New(
+			errs.KindStateConflict,
+			"Script runner: captured container has an invalid runtime state",
+		)
 	}
 	if inspected.Container.State.Status == container.StateCreated {
 		var connected map[string]*network.EndpointSettings
@@ -352,7 +377,10 @@ func preparedBodyForEvidence(
 	}, nil
 }
 
-func containerEvidenceForRequest(request scriptexecution.Request, containerID string) scriptexecution.ContainerEvidence {
+func containerEvidenceForRequest(
+	request scriptexecution.Request,
+	containerID string,
+) scriptexecution.ContainerEvidence {
 	return containerEvidence(request, containerID)
 }
 
@@ -365,21 +393,34 @@ func containerEvidence(request scriptexecution.Request, containerID string) scri
 
 func scriptExitResult(exitCode int64) (scriptexecution.RunResult, error) {
 	if exitCode < 0 || exitCode > int64(^uint32(0)>>1) {
-		return scriptexecution.RunResult{}, errs.New(errs.KindInternal, "Script runner: container exit status is out of range")
+		return scriptexecution.RunResult{}, errs.New(
+			errs.KindInternal,
+			"Script runner: container exit status is out of range",
+		)
 	}
 	return scriptexecution.RunResult{ExitCode: int32(exitCode)}, nil
 }
 
 func validateRequest(request scriptexecution.Request) error {
-	if ids.Validate(ids.KindTask, request.TaskID) != nil || ids.Validate(ids.KindAssignment, request.AssignmentID) != nil ||
-		ids.Validate(ids.KindOperation, request.OperationID) != nil || ids.Validate(ids.KindStep, request.StepID) != nil ||
-		len(request.PlanHash) != sha256.Size || request.Projection == nil || request.BodyMetadata == nil || request.ExecutionID == "" ||
-		request.BodyMetadata.ScriptExecutionId != request.ExecutionID || len(request.Body) == 0 ||
-		len(request.Body) != int(request.BodyMetadata.Size) || len(request.Body) > executionplan.MaximumScriptBodyBytes ||
+	if ids.Validate(ids.KindTask, request.TaskID) != nil ||
+		ids.Validate(ids.KindAssignment, request.AssignmentID) != nil ||
+		ids.Validate(ids.KindOperation, request.OperationID) != nil ||
+		ids.Validate(ids.KindStep, request.StepID) != nil ||
+		len(request.PlanHash) != sha256.Size ||
+		request.Projection == nil ||
+		request.BodyMetadata == nil ||
+		request.ExecutionID == "" ||
+		request.BodyMetadata.ScriptExecutionId != request.ExecutionID ||
+		len(request.Body) == 0 ||
+		len(request.Body) != int(request.BodyMetadata.Size) ||
+		len(request.Body) > executionplan.MaximumScriptBodyBytes ||
 		request.Projection.Name != "gp-script-"+strings.ToLower(request.ExecutionID) ||
-		request.Projection.Image == "" || len(request.Projection.Entrypoint) != 1 ||
-		request.Projection.Entrypoint[0] != "/bin/sh" || len(request.Projection.Command) != 1 ||
-		request.Projection.Command[0] != bodyTarget || request.Projection.StopGraceSeconds != stopSeconds {
+		!workloadimage.LocalIDValid(request.Projection.Image) ||
+		len(request.Projection.Entrypoint) != 1 ||
+		request.Projection.Entrypoint[0] != "/bin/sh" ||
+		len(request.Projection.Command) != 1 ||
+		request.Projection.Command[0] != bodyTarget ||
+		request.Projection.StopGraceSeconds != stopSeconds {
 		return errs.New(errs.KindInternal, "Script runner: request is invalid")
 	}
 	digest := sha256.Sum256(request.Body)
@@ -387,7 +428,8 @@ func validateRequest(request scriptexecution.Request) error {
 		return errs.New(errs.KindInternal, "Script runner: body digest does not match")
 	}
 	for _, entry := range request.Entries {
-		if entry == nil || entry.Binding == nil || len(entry.Binding.Sha256) != sha256.Size || len(entry.Value) > 256<<10 {
+		if entry == nil || entry.Binding == nil || len(entry.Binding.Sha256) != sha256.Size ||
+			len(entry.Value) > 256<<10 {
 			return errs.New(errs.KindInternal, "Script runner: Entry artifact is invalid")
 		}
 		entryDigest := sha256.Sum256(entry.Value)
@@ -401,7 +443,9 @@ func validateRequest(request scriptexecution.Request) error {
 			}
 		case agentpb.ScriptEntryBindingKind_SCRIPT_ENTRY_BINDING_KIND_FILE:
 			if entry.Binding.EnvironmentKey != "" || !filepath.IsAbs(entry.Binding.FileTarget) ||
-				filepath.Clean(entry.Binding.FileTarget) != entry.Binding.FileTarget || entry.Binding.FileTarget == bodyTarget ||
+				filepath.Clean(
+					entry.Binding.FileTarget,
+				) != entry.Binding.FileTarget || entry.Binding.FileTarget == bodyTarget ||
 				(entry.Binding.Mode != 0o444 && entry.Binding.Mode != 0o600) {
 				return errs.New(errs.KindInternal, "Script runner: file Entry binding is invalid")
 			}
@@ -443,14 +487,18 @@ func createOptions(request scriptexecution.Request, bodyPath string) (client.Con
 		Config: &container.Config{
 			Image: projection.Image, User: strconv.FormatUint(uint64(projection.Uid), 10) + ":" + strconv.FormatUint(uint64(projection.Gid), 10),
 			WorkingDir: projection.WorkingDir, Env: scriptEnvironment(projection.Environment, request.Entries), Labels: pairMap(projection.Labels),
-			Entrypoint: append([]string(nil), projection.Entrypoint...), Cmd: append([]string(nil), projection.Command...),
+			Entrypoint: append(
+				[]string(nil),
+				projection.Entrypoint...), Cmd: append([]string(nil), projection.Command...),
 			AttachStdout: true, AttachStderr: true, StopSignal: "SIGTERM", StopTimeout: intPointer(stopSeconds),
 		},
 		HostConfig: &container.HostConfig{
 			LogConfig: container.LogConfig{Type: "none"}, NetworkMode: networkMode,
 			RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyDisabled},
 			DNS:           dns, DNSOptions: append([]string(nil), projection.DnsOpt...), DNSSearch: append([]string(nil), projection.DnsSearch...),
-			ExtraHosts: append([]string(nil), projection.ExtraHosts...), GroupAdd: append([]string(nil), projection.GroupAdd...),
+			ExtraHosts: append(
+				[]string(nil),
+				projection.ExtraHosts...), GroupAdd: append([]string(nil), projection.GroupAdd...),
 			CapDrop: append([]string(nil), projection.CapDrop...), ReadonlyRootfs: projection.ReadOnly,
 			SecurityOpt: append([]string(nil), projection.SecurityOpt...), StorageOpt: pairMap(projection.StorageOpt),
 			Tmpfs: tmpfsMap(projection.Tmpfs), ShmSize: projection.ShmSize, Sysctls: pairMap(projection.Sysctls),
@@ -601,7 +649,10 @@ func dockerResources(projection *agentpb.ScriptRunnerProjection) (container.Reso
 	if projection.Blkio != nil {
 		resources.BlkioWeight = uint16(projection.Blkio.Weight)
 		for _, value := range projection.Blkio.WeightDevices {
-			resources.BlkioWeightDevice = append(resources.BlkioWeightDevice, &blkiodev.WeightDevice{Path: value.Path, Weight: uint16(value.Weight)})
+			resources.BlkioWeightDevice = append(
+				resources.BlkioWeightDevice,
+				&blkiodev.WeightDevice{Path: value.Path, Weight: uint16(value.Weight)},
+			)
 		}
 		var err error
 		if resources.BlkioDeviceReadBps, err = throttleDevices(projection.Blkio.DeviceReadBps); err != nil {
@@ -632,7 +683,11 @@ func throttleDevices(values []*agentpb.ScriptThrottleDevice) ([]*blkiodev.Thrott
 }
 
 func waitForContainer(ctx context.Context, engine engineClient, containerID string) (container.WaitResponse, error) {
-	wait := engine.ContainerWait(ctx, containerID, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})
+	wait := engine.ContainerWait(
+		ctx,
+		containerID,
+		client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning},
+	)
 	select {
 	case response, ok := <-wait.Result:
 		if !ok {

@@ -83,9 +83,15 @@ func (repository *HierarchyDeletionRepository) OperationByTaskAtRevision(
 		return HierarchyDeletionOperation{}, err
 	}
 	if ids.Validate(ids.KindTask, taskID) != nil || revision < 0 {
-		return HierarchyDeletionOperation{}, errs.New(errs.KindValidationFailed, "hierarchy deletion Task lookup is invalid")
+		return HierarchyDeletionOperation{}, errs.New(
+			errs.KindValidationFailed,
+			"hierarchy deletion Task lookup is invalid",
+		)
 	}
-	taskResult, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{taskKey(taskID)}, Revision: revision})
+	taskResult, err := repository.store.GetMany(
+		ctx,
+		GetManyRequest{Keys: []string{taskKey(taskID)}, Revision: revision},
+	)
 	if err != nil {
 		return HierarchyDeletionOperation{}, err
 	}

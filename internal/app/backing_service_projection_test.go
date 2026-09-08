@@ -48,7 +48,8 @@ func TestBackingServiceCreationProjectionIncludesGeneratedTopology(t *testing.T)
 		Desired: core.Service{
 			ID: serviceID, Name: "postgres", Image: "postgres:16-alpine",
 			Zones: []string{networkID}, Strategy: core.StrategyRecreate, Adapter: "postgres:16",
-			Mounts: []core.Mount{{Volume: volumeID, Mount: "/var/lib/postgresql/data"}},
+			Authentication: core.BackingAuthenticationPassword,
+			Mounts:         []core.Mount{{Volume: volumeID, Mount: "/var/lib/postgresql/data"}},
 		},
 	}
 	projection := buildBackingServiceCreationProjection(
@@ -68,6 +69,9 @@ func TestBackingServiceCreationProjectionIncludesGeneratedTopology(t *testing.T)
 		len(projection.DesiredServices) != 1 || projection.DesiredServices[0].Desired.ID != serviceID ||
 		projection.DesiredServices[0].BackingNetworkID != networkID {
 		t.Fatalf("backing desired topology = %#v / %#v", projection.DesiredZones, projection.DesiredServices)
+	}
+	if projection.DesiredServices[0].Desired.Authentication != core.BackingAuthenticationPassword {
+		t.Fatalf("backing authentication was not preserved: %#v", projection.DesiredServices[0].Desired)
 	}
 	if _, err := desiredrevision.PreflightProjection(projection); err != nil {
 		t.Fatalf("PreflightProjection() error = %v", err)

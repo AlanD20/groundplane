@@ -56,7 +56,10 @@ func bindHierarchyDeletionAction(
 	if planned.ID == "" || planned.NodeID == "" || planned.ParentOperationID != operation.Tombstone.OperationID ||
 		planned.Ordinal < 0 || planned.TargetID == "" || planned.TargetRevision <= 0 ||
 		!slices.IsSorted(planned.PrerequisiteOrdinals) {
-		return HierarchyDeletionAction{}, errs.New(errs.KindValidationFailed, "hierarchy deletion planned action is invalid")
+		return HierarchyDeletionAction{}, errs.New(
+			errs.KindValidationFailed,
+			"hierarchy deletion planned action is invalid",
+		)
 	}
 	action := HierarchyDeletionAction{
 		Schema: 1, ParentOperationID: planned.ParentOperationID, NodeID: planned.NodeID,
@@ -69,7 +72,10 @@ func bindHierarchyDeletionAction(
 	case HierarchyDeletionProcedureAgent:
 		input := planned.ProcedureInput.AgentChild
 		if input == nil || planned.ProcedureInput.ControllerFinalizer != nil {
-			return HierarchyDeletionAction{}, errs.New(errs.KindValidationFailed, "hierarchy deletion Agent binding input is invalid")
+			return HierarchyDeletionAction{}, errs.New(
+				errs.KindValidationFailed,
+				"hierarchy deletion Agent binding input is invalid",
+			)
 		}
 		action.AgentProcedure = &HierarchyDeletionAgentProcedure{
 			ChildOperationID: hierarchyDeletionStableOperationID(planned.ParentOperationID, planned.NodeID),
@@ -82,7 +88,10 @@ func bindHierarchyDeletionAction(
 			input.TargetID != planned.TargetID || input.FixedInputRevision != planned.TargetRevision ||
 			!validHierarchyDeletionDigest(input.FixedInputDigest) || input.BatchOrdinal < 0 ||
 			input.BatchCount <= 0 || input.BatchOrdinal >= input.BatchCount {
-			return HierarchyDeletionAction{}, errs.New(errs.KindValidationFailed, "hierarchy deletion Controller binding input is invalid")
+			return HierarchyDeletionAction{}, errs.New(
+				errs.KindValidationFailed,
+				"hierarchy deletion Controller binding input is invalid",
+			)
 		}
 		procedure, err := bindHierarchyDeletionControllerProcedure(planned, *input)
 		if err != nil {
@@ -90,7 +99,10 @@ func bindHierarchyDeletionAction(
 		}
 		action.ControllerProcedure = &procedure
 	default:
-		return HierarchyDeletionAction{}, errs.New(errs.KindValidationFailed, "hierarchy deletion procedure input kind is invalid")
+		return HierarchyDeletionAction{}, errs.New(
+			errs.KindValidationFailed,
+			"hierarchy deletion procedure input kind is invalid",
+		)
 	}
 	if err := validateHierarchyDeletionAction(action); err != nil {
 		return HierarchyDeletionAction{}, err

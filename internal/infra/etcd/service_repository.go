@@ -135,6 +135,24 @@ func (mutationContext *ordinaryEnvironmentMutationContext) bind(
 	mutations []Mutation,
 	advanceEpoch bool,
 ) (*ordinaryEnvironmentMutationBinding, error) {
+	binding, err := mutationContext.prepareBinding(ctx, store, conditions, mutations, advanceEpoch)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateEnvironmentMutationTransactionBudget(binding.conditions, binding.mutations); err != nil {
+		binding.clear()
+		return nil, err
+	}
+	return binding, nil
+}
+
+func (mutationContext *ordinaryEnvironmentMutationContext) prepareBinding(
+	ctx context.Context,
+	store hierarchyStore,
+	conditions []Condition,
+	mutations []Mutation,
+	advanceEpoch bool,
+) (*ordinaryEnvironmentMutationBinding, error) {
 	if mutationContext == nil || mutationContext.readRevision <= 0 {
 		return nil, errs.New(errs.KindInternal, "environment mutation context is invalid")
 	}
@@ -177,10 +195,6 @@ func (mutationContext *ordinaryEnvironmentMutationContext) bind(
 			return nil, err
 		}
 		mutations = append(mutations, epochMutation)
-	}
-	if len(conditions)+len(mutations) > maximumTransactionOperations {
-		clearMutationValues(mutations)
-		return nil, errs.New(errs.KindValidationFailed, "environment mutation exceeds the atomic transaction limit")
 	}
 	keys := make([]string, len(conditions))
 	for index, condition := range conditions {

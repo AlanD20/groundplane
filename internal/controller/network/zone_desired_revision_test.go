@@ -22,10 +22,17 @@ func TestZoneRemovalCandidatePreservesServicesAndRemovesAuthoredMembership(t *te
 	serviceID := ids.NewAt(ids.KindService, now, 4)
 	revisionID := ids.NewAt(ids.KindTask, now, 5)
 	artifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
-		ArtifactId: ids.NewAt(ids.KindConfig, now, 6), OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		ArtifactId: ids.NewAt(
+			ids.KindConfig,
+			now,
+			6,
+		), OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
 		OwnerId: environmentID, CanonicalYaml: []byte("services:\n  api:\n    image: example.invalid/api:1\n    networks:\n      frontend: {}\n      backend: {}\nnetworks:\n  frontend: {}\n  backend: {}\n"),
 		Services: []*agentpb.ComposeService{{ServiceId: serviceID, ComposeName: "api"}},
-		Networks: []*agentpb.ComposeNetwork{{NetworkId: zoneID, ComposeName: "frontend"}, {NetworkId: otherZoneID, ComposeName: "backend"}},
+		Networks: []*agentpb.ComposeNetwork{
+			{NetworkId: zoneID, ComposeName: "frontend"},
+			{NetworkId: otherZoneID, ComposeName: "backend"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("Marshal() error = %v", err)
@@ -33,8 +40,41 @@ func TestZoneRemovalCandidatePreservesServicesAndRemovesAuthoredMembership(t *te
 	current := etcd.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 7), RenderGeneration: 1,
 		ComposeArtifact: artifact, NormalizedCompose: []byte("services:\n  api:\n    image: example.invalid/api:1\n    networks:\n      frontend: {}\n      backend: {}\nnetworks:\n  frontend: {}\n  backend: {}\n"),
-		DesiredZones:    []etcd.EnvironmentZoneProjection{{EnvironmentID: environmentID, Desired: core.Zone{ID: zoneID, Name: "frontend", Subnet: "10.0.1.0/24", OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID}}, {EnvironmentID: environmentID, Desired: core.Zone{ID: otherZoneID, Name: "backend", Subnet: "10.0.2.0/24", OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID}}},
-		DesiredServices: []etcd.EnvironmentServiceProjection{{EnvironmentID: environmentID, Desired: core.Service{ID: serviceID, Name: "api", Image: "example.invalid/api:1", Zones: []string{"frontend", "backend"}, Strategy: core.StrategyRecreate, Replicas: 1}}},
+		DesiredZones: []etcd.EnvironmentZoneProjection{
+			{
+				EnvironmentID: environmentID,
+				Desired: core.Zone{
+					ID:        zoneID,
+					Name:      "frontend",
+					Subnet:    "10.0.1.0/24",
+					OwnerKind: core.ZoneOwnerEnvironment,
+					OwnerID:   environmentID,
+				},
+			},
+			{
+				EnvironmentID: environmentID,
+				Desired: core.Zone{
+					ID:        otherZoneID,
+					Name:      "backend",
+					Subnet:    "10.0.2.0/24",
+					OwnerKind: core.ZoneOwnerEnvironment,
+					OwnerID:   environmentID,
+				},
+			},
+		},
+		DesiredServices: []etcd.EnvironmentServiceProjection{
+			{
+				EnvironmentID: environmentID,
+				Desired: core.Service{
+					ID:       serviceID,
+					Name:     "api",
+					Image:    "example.invalid/api:1",
+					Zones:    []string{"frontend", "backend"},
+					Strategy: core.StrategyRecreate,
+					Replicas: 1,
+				},
+			},
+		},
 	}
 	candidate, affected, err := buildZoneRemovalProjection(current, zoneID, "frontend", revisionID, 2)
 	if err != nil {
@@ -43,7 +83,9 @@ func TestZoneRemovalCandidatePreservesServicesAndRemovesAuthoredMembership(t *te
 	if len(candidate.DesiredZones) != 1 || candidate.DesiredZones[0].Desired.ID != otherZoneID {
 		t.Fatalf("candidate Zones = %#v", candidate.DesiredZones)
 	}
-	if len(candidate.DesiredServices) != 1 || !slices.Equal(candidate.DesiredServices[0].Desired.Zones, []string{"backend"}) || !slices.Equal(affected, []string{serviceID}) {
+	if len(candidate.DesiredServices) != 1 ||
+		!slices.Equal(candidate.DesiredServices[0].Desired.Zones, []string{"backend"}) ||
+		!slices.Equal(affected, []string{serviceID}) {
 		t.Fatalf("candidate Services/affected = %#v / %#v", candidate.DesiredServices, affected)
 	}
 }

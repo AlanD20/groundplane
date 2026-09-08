@@ -4,12 +4,13 @@ package api
 // service. Workload image, command, volume, and bootstrap details come only
 // from the compiled adapter catalog.
 type BackingServiceCreate struct {
-	Slug        string                   `json:"slug"`
-	Name        string                   `json:"name"`
-	Description string                   `json:"description,omitempty"`
-	Adapter     string                   `json:"adapter"`
-	NetworkPool string                   `json:"network_pool"`
-	Zone        BackingServiceZoneCreate `json:"zone"`
+	Slug           string                   `json:"slug"`
+	Name           string                   `json:"name"`
+	Description    string                   `json:"description,omitempty"`
+	Adapter        string                   `json:"adapter"`
+	Authentication string                   `json:"authentication,omitempty" enum:"username_password,password,none" doc:"Immutable Valkey authentication mode; omitted selects username_password. Unsupported for other adapters."`
+	NetworkPool    string                   `json:"network_pool"`
+	Zone           BackingServiceZoneCreate `json:"zone"`
 }
 
 type BackingServiceZoneCreate struct {

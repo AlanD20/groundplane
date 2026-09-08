@@ -18,7 +18,10 @@ func (c *Client) CreateRoute(ctx context.Context, input apiTypes.RouteCreate) (a
 	}
 	exposure := generated.RouteCreateExposure(input.Exposure)
 	if !exposure.Valid() {
-		return apiTypes.RouteTaskAccepted{}, errs.New(errs.KindValidationFailed, "Route exposure must be public or internal")
+		return apiTypes.RouteTaskAccepted{}, errs.New(
+			errs.KindValidationFailed,
+			"Route exposure must be public or internal",
+		)
 	}
 	body := generated.RouteCreateJSONRequestBody{
 		EnvironmentId: input.EnvironmentID, Exposure: exposure,
@@ -148,7 +151,10 @@ func (c *Client) EditRoute(
 	path := "/api/v1/routes/" + id
 	exposure := generated.RouteEditExposure(input.Exposure)
 	if !exposure.Valid() {
-		return apiTypes.RouteTaskAccepted{}, errs.New(errs.KindValidationFailed, "Route exposure must be public or internal")
+		return apiTypes.RouteTaskAccepted{}, errs.New(
+			errs.KindValidationFailed,
+			"Route exposure must be public or internal",
+		)
 	}
 	response, err := client.RouteEditWithResponse(
 		ctx,

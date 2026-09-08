@@ -18,7 +18,7 @@ func TestReconcileBlueprintComponentsPreservesOmissionAndExplicitlyDisables(t *t
 		ID: ids.NewAt(ids.KindComponent, now, 2), Owner: core.ComponentOwnerEnvironment,
 		OwnerID: environmentID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
 		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-			ZoneID: ids.NewAt(ids.KindNetwork, now, 3),
+			ZoneIDs: []string{ids.NewAt(ids.KindNetwork, now, 3)},
 		}},
 		GeneratedServices: []string{ids.NewAt(ids.KindService, now, 4)},
 		PinnedIPv4:        "10.40.10.2", Healthy: true,
@@ -53,7 +53,7 @@ func TestReconcileBlueprintComponentsPlansUnhealthyEnabledRepair(t *testing.T) {
 		ID: ids.NewAt(ids.KindComponent, now, 2), Owner: core.ComponentOwnerEnvironment,
 		OwnerID: environmentID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
 		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-			ZoneID: ids.NewAt(ids.KindNetwork, now, 3),
+			ZoneIDs: []string{ids.NewAt(ids.KindNetwork, now, 3)},
 		}},
 		GeneratedServices: []string{ids.NewAt(ids.KindService, now, 4)}, PinnedIPv4: "10.40.10.2",
 	}
@@ -91,7 +91,7 @@ func TestReconcileBlueprintComponentsAllocatesIndependentEnableIdentities(t *tes
 		map[string]core.ComponentSpec{
 			"http-router": {
 				Implementation: core.ComponentKindIngressCaddy, Enabled: true,
-				Settings: core.ComponentCapabilitySettings{ZoneID: ids.NewAt(ids.KindNetwork, now, 5)},
+				Settings: core.ComponentCapabilitySettings{ZoneIDs: []string{ids.NewAt(ids.KindNetwork, now, 5)}},
 			},
 		},
 		[]core.Component{caddy, tunnel},
@@ -111,7 +111,10 @@ func TestReconcileBlueprintComponentsAllocatesIndependentEnableIdentities(t *tes
 		map[string]core.ComponentSpec{
 			"edge-tunnel": {
 				Implementation: core.ComponentKindEdgeCloudflare, Enabled: true,
-				Settings: core.ComponentCapabilitySettings{SecretID: ids.NewAt(ids.KindSecret, now, 6)},
+				Settings: core.ComponentCapabilitySettings{
+					ZoneIDs:  []string{ids.NewAt(ids.KindNetwork, now, 7)},
+					SecretID: ids.NewAt(ids.KindSecret, now, 6),
+				},
 			},
 		},
 		[]core.Component{caddy, tunnel},

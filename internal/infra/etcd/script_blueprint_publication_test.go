@@ -125,9 +125,16 @@ func TestBlueprintScriptFinalFlipConflictsWithConcurrentDirectEditCAS(t *testing
 	}
 	directResult, err := store.Transact(context.Background(), []Condition{
 		{Key: scriptSetActiveKey(direct.EnvironmentID), ModRevision: active.Revision},
-		{Key: scriptSetScriptKey(direct.EnvironmentID, direct.ScriptSetGeneration, direct.Desired.ID), ModRevision: current[0].Revision},
+		{
+			Key:         scriptSetScriptKey(direct.EnvironmentID, direct.ScriptSetGeneration, direct.Desired.ID),
+			ModRevision: current[0].Revision,
+		},
 	}, []Mutation{
-		{Type: MutationPut, Key: scriptSetScriptKey(direct.EnvironmentID, direct.ScriptSetGeneration, direct.Desired.ID), Value: primary},
+		{
+			Type:  MutationPut,
+			Key:   scriptSetScriptKey(direct.EnvironmentID, direct.ScriptSetGeneration, direct.Desired.ID),
+			Value: primary,
+		},
 		{Type: MutationPut, Key: scriptSetActiveKey(direct.EnvironmentID), Value: activeValue},
 	})
 	clear(primary)
@@ -180,7 +187,11 @@ func TestBlueprintScriptStageReplayRetainsNewLocatorMutations(t *testing.T) {
 		{Key: scriptEnvironmentLocatorKey(environmentID, record.Desired.ID)},
 	}, []Mutation{
 		{Type: MutationPut, Key: scriptLocatorKey(record.Desired.ID), Value: locator},
-		{Type: MutationPut, Key: scriptEnvironmentLocatorKey(environmentID, record.Desired.ID), Value: []byte(record.Desired.ID)},
+		{
+			Type:  MutationPut,
+			Key:   scriptEnvironmentLocatorKey(environmentID, record.Desired.ID),
+			Value: []byte(record.Desired.ID),
+		},
 	})
 	clear(locator)
 	if err != nil || !seed.Succeeded {
@@ -338,9 +349,13 @@ func scriptBlueprintEmptyActiveSet(t *testing.T, store *memoryHierarchyStore) (*
 	if err != nil {
 		t.Fatalf("encodeScriptSetGeneration() error = %v", err)
 	}
-	result, err := store.Transact(context.Background(), []Condition{{Key: scriptSetActiveKey(environmentID)}}, []Mutation{{
-		Type: MutationPut, Key: scriptSetActiveKey(environmentID), Value: value,
-	}})
+	result, err := store.Transact(
+		context.Background(),
+		[]Condition{{Key: scriptSetActiveKey(environmentID)}},
+		[]Mutation{{
+			Type: MutationPut, Key: scriptSetActiveKey(environmentID), Value: value,
+		}},
+	)
 	clear(value)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("seed active Script set = %#v, %v", result, err)
@@ -375,17 +390,40 @@ func scriptBlueprintSeedActiveSet(
 			if err != nil {
 				t.Fatalf("encodeScriptBodyGeneration() error = %v", err)
 			}
-			locator, err := encodeScriptLocator(scriptLocatorRecord{ScriptID: record.Desired.ID, EnvironmentID: environmentID})
+			locator, err := encodeScriptLocator(
+				scriptLocatorRecord{ScriptID: record.Desired.ID, EnvironmentID: environmentID},
+			)
 			if err != nil {
 				t.Fatalf("encodeScriptLocator() error = %v", err)
 			}
-			mutations = append(mutations,
-				Mutation{Type: MutationPut, Key: scriptSetScriptKey(environmentID, environmentID, record.Desired.ID), Value: primary},
-				Mutation{Type: MutationPut, Key: scriptSetBodyGenerationKey(environmentID, environmentID, record.Desired.ID, 1), Value: body},
-				Mutation{Type: MutationPut, Key: scriptSetOwnerKey(environmentID, environmentID, record.Desired.ID), Value: []byte(record.Desired.ID)},
-				Mutation{Type: MutationPut, Key: scriptSetSlugKey(environmentID, environmentID, record.Desired.Slug), Value: []byte(record.Desired.ID)},
+			mutations = append(
+				mutations,
+				Mutation{
+					Type:  MutationPut,
+					Key:   scriptSetScriptKey(environmentID, environmentID, record.Desired.ID),
+					Value: primary,
+				},
+				Mutation{
+					Type:  MutationPut,
+					Key:   scriptSetBodyGenerationKey(environmentID, environmentID, record.Desired.ID, 1),
+					Value: body,
+				},
+				Mutation{
+					Type:  MutationPut,
+					Key:   scriptSetOwnerKey(environmentID, environmentID, record.Desired.ID),
+					Value: []byte(record.Desired.ID),
+				},
+				Mutation{
+					Type:  MutationPut,
+					Key:   scriptSetSlugKey(environmentID, environmentID, record.Desired.Slug),
+					Value: []byte(record.Desired.ID),
+				},
 				Mutation{Type: MutationPut, Key: scriptLocatorKey(record.Desired.ID), Value: locator},
-				Mutation{Type: MutationPut, Key: scriptEnvironmentLocatorKey(environmentID, record.Desired.ID), Value: []byte(record.Desired.ID)},
+				Mutation{
+					Type:  MutationPut,
+					Key:   scriptEnvironmentLocatorKey(environmentID, record.Desired.ID),
+					Value: []byte(record.Desired.ID),
+				},
 			)
 		}
 		result, err := store.Transact(context.Background(), nil, mutations)

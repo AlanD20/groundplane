@@ -159,7 +159,10 @@ func (service *environmentBlueprintService) loadEnvironmentBlueprintSnapshot(
 	if hasHead != hasProjection || hasHead &&
 		(head.Record.EnvironmentID != environmentID || projection.Record.EnvironmentID != environmentID ||
 			head.Record.RevisionID != projection.Record.RevisionID) {
-		return environmentBlueprintSnapshot{}, errs.New(errs.KindInternal, "Environment Blueprint desired head is inconsistent")
+		return environmentBlueprintSnapshot{}, errs.New(
+			errs.KindInternal,
+			"Environment Blueprint desired head is inconsistent",
+		)
 	}
 	return environmentBlueprintSnapshot{
 		tenant: tenant, project: project, environment: environment,
@@ -337,13 +340,14 @@ func environmentBlueprintAuthoringComponents(
 		case core.ComponentKindIngressCaddy:
 			capability = core.ComponentCapabilityHTTPRouter
 			if record.Desired.Config.Caddy != nil {
-				spec.Settings.ZoneID = record.Desired.Config.Caddy.ZoneID
+				spec.Settings.ZoneIDs = append([]string(nil), record.Desired.Config.Caddy.ZoneIDs...)
 				spec.ImplementationConfig.CaddyfileTemplate =
 					record.Desired.Config.Caddy.CaddyfileTemplate
 			}
 		case core.ComponentKindEdgeCloudflare:
 			capability = core.ComponentCapabilityEdgeTunnel
 			if record.Desired.Config.CloudflareTunnel != nil {
+				spec.Settings.ZoneIDs = append([]string(nil), record.Desired.Config.CloudflareTunnel.ZoneIDs...)
 				spec.Settings.SecretID = record.Desired.Config.CloudflareTunnel.SecretID
 			}
 		default:

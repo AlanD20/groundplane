@@ -86,7 +86,10 @@ func (repository *HierarchyDeletionRepository) FreezeMembership(
 	}
 	if current.Tombstone.Phase != HierarchyDeletionPlanning || current.Tombstone.SnapshotRevision <= 0 ||
 		current.Tombstone.TargetRevision <= 0 || current.Tombstone.PlanCount != nil || current.Tombstone.PlanDigest != nil {
-		return HierarchyDeletionFrozenMembership{}, errs.New(errs.KindStateConflict, "hierarchy deletion membership is not freezable")
+		return HierarchyDeletionFrozenMembership{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion membership is not freezable",
+		)
 	}
 	frozen := HierarchyDeletionFrozenMembership{
 		Revision: current.Tombstone.SnapshotRevision, CoordinationEpoch: current.Tombstone.DeletionEpoch,
@@ -207,7 +210,13 @@ func (repository *HierarchyDeletionRepository) freezeProjectMembership(
 	}
 	nodes := make([]HierarchyDeletionMembershipNode, 0)
 	for _, environment := range environments {
-		children, freezeErr := repository.freezeEnvironmentMembership(ctx, operation, environment.id, environment.revision, environment.digest)
+		children, freezeErr := repository.freezeEnvironmentMembership(
+			ctx,
+			operation,
+			environment.id,
+			environment.revision,
+			environment.digest,
+		)
 		if freezeErr != nil {
 			return nil, freezeErr
 		}
@@ -253,7 +262,12 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 	environmentRevision int64,
 	environmentDigest string,
 ) ([]HierarchyDeletionMembershipNode, error) {
-	activeScripts, err := readActiveScriptSet(ctx, repository.store, environmentID, operation.Tombstone.SnapshotRevision)
+	activeScripts, err := readActiveScriptSet(
+		ctx,
+		repository.store,
+		environmentID,
+		operation.Tombstone.SnapshotRevision,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -268,17 +282,56 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 		return nil, corruptHierarchyDeletion()
 	}
 	descriptors := []hierarchyDeletionIndexedResource{
-		{targetKind: "attach", actionKind: HierarchyDeletionAttachGrantRevoke, ownerPrefix: attachOwnerPrefix, primaryKey: attachKey, stableIDKind: ids.KindAttach, validateOwner: validateHierarchyDeletionAttachOwner},
-		{targetKind: "release-group", actionKind: HierarchyDeletionReleaseGroupRemove, ownerPrefix: func(owner string) string { return releaseGroupOwnerPrefix + owner + "/" }, primaryKey: releaseGroupRecordKey, stableIDKind: ids.KindReleaseGroup, validateOwner: validateHierarchyDeletionReleaseGroupOwner, controller: true},
-		{targetKind: "entry", actionKind: HierarchyDeletionEntryRemove, ownerPrefix: entryOwnerCollectionPrefix, primaryKey: entryRecordKey, stableIDKind: ids.KindEnvEntry, validateOwner: validateHierarchyDeletionEntryOwner, controller: true},
-		{targetKind: "component", actionKind: HierarchyDeletionComponentRemove, ownerPrefix: componentEnvironmentOwnerPrefix, primaryKey: componentKey, stableIDKind: ids.KindComponent, validateOwner: validateHierarchyDeletionComponentOwner, controller: true},
+		{
+			targetKind:    "attach",
+			actionKind:    HierarchyDeletionAttachGrantRevoke,
+			ownerPrefix:   attachOwnerPrefix,
+			primaryKey:    attachKey,
+			stableIDKind:  ids.KindAttach,
+			validateOwner: validateHierarchyDeletionAttachOwner,
+		},
+		{
+			targetKind:    "release-group",
+			actionKind:    HierarchyDeletionReleaseGroupRemove,
+			ownerPrefix:   func(owner string) string { return releaseGroupOwnerPrefix + owner + "/" },
+			primaryKey:    releaseGroupRecordKey,
+			stableIDKind:  ids.KindReleaseGroup,
+			validateOwner: validateHierarchyDeletionReleaseGroupOwner,
+			controller:    true,
+		},
+		{
+			targetKind:    "entry",
+			actionKind:    HierarchyDeletionEntryRemove,
+			ownerPrefix:   entryOwnerCollectionPrefix,
+			primaryKey:    entryRecordKey,
+			stableIDKind:  ids.KindEnvEntry,
+			validateOwner: validateHierarchyDeletionEntryOwner,
+			controller:    true,
+		},
+		{
+			targetKind:    "component",
+			actionKind:    HierarchyDeletionComponentRemove,
+			ownerPrefix:   componentEnvironmentOwnerPrefix,
+			primaryKey:    componentKey,
+			stableIDKind:  ids.KindComponent,
+			validateOwner: validateHierarchyDeletionComponentOwner,
+			controller:    true,
+		},
 		{targetKind: "script", actionKind: HierarchyDeletionScriptRemove,
 			ownerPrefix: func(owner string) string { return scriptSetOwnerPrefix(owner, activeScripts.Record.GenerationID) },
 			primaryKey: func(id string) string {
 				return scriptSetScriptKey(environmentID, activeScripts.Record.GenerationID, id)
 			},
 			stableIDKind: ids.KindScript, validateOwner: validateHierarchyDeletionScriptOwner, controller: true},
-		{targetKind: "connector", actionKind: HierarchyDeletionConnectorFinalize, ownerPrefix: connectorEnvironmentPrefix, primaryKey: connectorRecordKey, stableIDKind: ids.KindConnector, validateOwner: validateHierarchyDeletionConnectorOwner, controller: true},
+		{
+			targetKind:    "connector",
+			actionKind:    HierarchyDeletionConnectorFinalize,
+			ownerPrefix:   connectorEnvironmentPrefix,
+			primaryKey:    connectorRecordKey,
+			stableIDKind:  ids.KindConnector,
+			validateOwner: validateHierarchyDeletionConnectorOwner,
+			controller:    true,
+		},
 	}
 	cleanup := hierarchyDeletionAgentNode(
 		"environment:"+environmentID+":cleanup", "environment", environmentID,
@@ -303,8 +356,13 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 			for _, grant := range part {
 				nodes = append(nodes, grant)
 				detach := hierarchyDeletionAgentNode(
-					"attach:"+grant.TargetID+":detach", "attach", grant.TargetID,
-					HierarchyDeletionAttachDetach, grant.TargetRevision, []string{grant.NodeID}, operation.Tombstone.OperationID,
+					"attach:"+grant.TargetID+":detach",
+					"attach",
+					grant.TargetID,
+					HierarchyDeletionAttachDetach,
+					grant.TargetRevision,
+					[]string{grant.NodeID},
+					operation.Tombstone.OperationID,
 				)
 				detach.fixedInputDigest = grant.fixedInputDigest
 				nodes = append(nodes, detach)
@@ -605,7 +663,9 @@ func hierarchyDeletionControllerInput(
 	}
 }
 
-func ptrHierarchyDeletionControllerInput(value HierarchyDeletionControllerFinalizerInput) *HierarchyDeletionControllerFinalizerInput {
+func ptrHierarchyDeletionControllerInput(
+	value HierarchyDeletionControllerFinalizerInput,
+) *HierarchyDeletionControllerFinalizerInput {
 	return &value
 }
 
@@ -643,7 +703,11 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionTargetDigest(
 	case "secret":
 		key = secretRecordKey(targetID)
 	default:
-		return "", errs.Newf(errs.KindValidationFailed, "hierarchy deletion finalizer target kind %q is unsupported", targetKind)
+		return "", errs.Newf(
+			errs.KindValidationFailed,
+			"hierarchy deletion finalizer target kind %q is unsupported",
+			targetKind,
+		)
 	}
 	stored, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {

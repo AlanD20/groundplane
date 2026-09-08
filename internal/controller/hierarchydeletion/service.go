@@ -66,14 +66,25 @@ func idempotencyIntent(target TargetKind, targetID string) IdempotencyIntent {
 	return idempotencyIntentWithScope(target, targetID, target, targetID)
 }
 
-func idempotencyIntentWithScope(target TargetKind, targetID string, scopeKind TargetKind, scopeID string) IdempotencyIntent {
+func idempotencyIntentWithScope(
+	target TargetKind,
+	targetID string,
+	scopeKind TargetKind,
+	scopeID string,
+) IdempotencyIntent {
 	route := TenantDeleteRoute
 	if target == TargetProject || target == TargetBackingService {
 		route = ProjectDeleteRoute
 	} else if target == TargetEnvironment {
 		route = EnvironmentDeleteRoute
 	}
-	return IdempotencyIntent{Method: "DELETE", RouteTemplate: route, ScopeKind: scopeKind, ScopeID: scopeID, PathBindings: []PathBinding{{Name: "id", Value: targetID}}}
+	return IdempotencyIntent{
+		Method:        "DELETE",
+		RouteTemplate: route,
+		ScopeKind:     scopeKind,
+		ScopeID:       scopeID,
+		PathBindings:  []PathBinding{{Name: "id", Value: targetID}},
+	}
 }
 
 type BeginResult struct {
@@ -134,11 +145,34 @@ func (s *Service) Delete(ctx context.Context, request DeleteRequest) (TaskAccept
 	if err != nil {
 		return TaskAccepted{}, err
 	}
-	result, err := s.repository.BeginDeletion(ctx, BeginDeletion{OperationID: operationID, TaskOperationIDCandidate: taskOperationID, OperationKind: kind, TargetKind: resolved.TargetKind, TargetID: request.TargetID, TaskIDCandidate: taskIDCandidate, IdempotencyKey: request.IdempotencyKey, IdempotencyIntent: idempotencyIntentWithScope(request.TargetKind, request.TargetID, resolved.ScopeKind, resolved.ScopeID), CreatedAt: now, DeadlineAt: now.Add(OperationDeadline)})
+	result, err := s.repository.BeginDeletion(
+		ctx,
+		BeginDeletion{
+			OperationID:              operationID,
+			TaskOperationIDCandidate: taskOperationID,
+			OperationKind:            kind,
+			TargetKind:               resolved.TargetKind,
+			TargetID:                 request.TargetID,
+			TaskIDCandidate:          taskIDCandidate,
+			IdempotencyKey:           request.IdempotencyKey,
+			IdempotencyIntent: idempotencyIntentWithScope(
+				request.TargetKind,
+				request.TargetID,
+				resolved.ScopeKind,
+				resolved.ScopeID,
+			),
+			CreatedAt:  now,
+			DeadlineAt: now.Add(OperationDeadline),
+		},
+	)
 	if err != nil {
 		return TaskAccepted{}, err
 	}
-	return TaskAccepted{TaskID: result.Operation.TaskID, OperationID: result.Operation.ID, Existing: result.Existing}, nil
+	return TaskAccepted{
+		TaskID:      result.Operation.TaskID,
+		OperationID: result.Operation.ID,
+		Existing:    result.Existing,
+	}, nil
 }
 
 func (s *Service) Execute(ctx context.Context, taskID string) error {
@@ -161,16 +195,29 @@ func (s *Service) Execute(ctx context.Context, taskID string) error {
 				return err
 			}
 			if !progressed {
-				return errs.Newf(errs.KindStateConflict, "hierarchy deletion %s has no ready action but is incomplete", operation.ID)
+				return errs.Newf(
+					errs.KindStateConflict,
+					"hierarchy deletion %s has no ready action but is incomplete",
+					operation.ID,
+				)
 			}
 		case PhaseFinalizing:
 			return nil
 		case PhaseSummarizing:
-			return errs.Newf(errs.KindInternal, "hierarchy deletion %s stopped in obsolete pre-root summary phase", operation.ID)
+			return errs.Newf(
+				errs.KindInternal,
+				"hierarchy deletion %s stopped in obsolete pre-root summary phase",
+				operation.ID,
+			)
 		case PhaseRetained:
 			return nil
 		default:
-			return errs.Newf(errs.KindInternal, "hierarchy deletion %s has invalid phase %q", operation.ID, operation.Phase)
+			return errs.Newf(
+				errs.KindInternal,
+				"hierarchy deletion %s has invalid phase %q",
+				operation.ID,
+				operation.Phase,
+			)
 		}
 	}
 }
@@ -184,7 +231,11 @@ func (s *Service) plan(ctx context.Context, operation Operation) error {
 		return err
 	}
 	if operation.PlanCursor > len(plan.Actions) {
-		return errs.Newf(errs.KindInternal, "hierarchy deletion %s plan cursor exceeds deterministic plan", operation.ID)
+		return errs.Newf(
+			errs.KindInternal,
+			"hierarchy deletion %s plan cursor exceeds deterministic plan",
+			operation.ID,
+		)
 	}
 	actions, err := s.repository.BindPlan(ctx, operation, plan.Actions)
 	if err != nil {
@@ -242,14 +293,22 @@ func (s *Service) executeBatch(ctx context.Context, operation Operation) (bool, 
 			return true, executeErr
 		}
 		if proof.Terminal != AgentTerminalCompleted {
-			return true, errs.Newf(errs.KindStateConflict, "hierarchy deletion action %s ended %s", action.ID, proof.Terminal)
+			return true, errs.Newf(
+				errs.KindStateConflict,
+				"hierarchy deletion action %s ended %s",
+				action.ID,
+				proof.Terminal,
+			)
 		}
 	}
 	return len(actions) != 0, nil
 }
 
 func isRootFinalizer(operation Operation, action Action) bool {
-	if !operation.PlanSealed || operation.ActionCount <= 0 || action.Ordinal != operation.ActionCount-1 || action.TargetID != operation.TargetID || string(action.TargetKind) != string(operation.TargetKind) || action.Procedure.Kind != ProcedureControllerFinalizer {
+	if !operation.PlanSealed || operation.ActionCount <= 0 || action.Ordinal != operation.ActionCount-1 ||
+		action.TargetID != operation.TargetID ||
+		string(action.TargetKind) != string(operation.TargetKind) ||
+		action.Procedure.Kind != ProcedureControllerFinalizer {
 		return false
 	}
 	switch operation.TargetKind {

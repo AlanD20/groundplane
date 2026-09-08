@@ -52,6 +52,7 @@ func TestDispatchReadyQuarantinesUnrenderableRecoveredAssignment(t *testing.T) {
 		plans:          map[string]*agentpb.ExecutionPlan{second.Task.Record.ID: secondPlan},
 	})
 	stream := &scriptedStream{ctx: context.Background()}
+	server.now = func() time.Time { return at }
 	delivered := make(map[string]string)
 	quarantined := make(map[string]string)
 

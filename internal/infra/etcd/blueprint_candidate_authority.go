@@ -94,15 +94,17 @@ func validateBlueprintCandidateCompensation(
 		}
 		return errs.New(errs.KindReleaseRecoveryRequired, "Blueprint candidate absence restoration is unproven")
 	}
-	switch intent.Strategy {
-	case domain.StrategyBlueGreen:
+	// Evidence follows the sealed predecessor topology. Addressable recreate
+	// also owns a stable proxy; the candidate strategy cannot select its proof.
+	switch {
+	case render.PriorProxyGeneration != 0:
 		if !hasProxy || hasRecreate || !proxy.Compensated ||
 			proxy.ReleaseID != priorReleaseID || proxy.Target != string(render.PriorTarget) ||
 			proxy.ProxyGeneration != render.PriorProxyGeneration ||
 			proxy.ConfigSHA256 != render.PriorProxyDigest {
 			return errs.New(errs.KindReleaseRecoveryRequired, "Blueprint proxy predecessor restoration is unproven")
 		}
-	case domain.StrategyRecreate:
+	case render.PriorTarget == domain.WorkloadSingleton:
 		if hasProxy || !hasRecreate || !recreate.Compensated ||
 			recreate.ReleaseID != priorReleaseID || recreate.Target != string(render.PriorTarget) ||
 			recreate.ArtifactID != render.PriorArtifactID {

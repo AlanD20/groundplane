@@ -89,7 +89,11 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 		if err := validateID(ids.KindTenant, targetID); err != nil {
 			return HierarchyDeletionTargetResolution{}, err
 		}
-		return HierarchyDeletionTargetResolution{TargetKind: requested, ScopeKind: IdempotencyScopeTenant, ScopeID: targetID}, nil
+		return HierarchyDeletionTargetResolution{
+			TargetKind: requested,
+			ScopeKind:  IdempotencyScopeTenant,
+			ScopeID:    targetID,
+		}, nil
 	case HierarchyDeletionTargetProject:
 		project, err := getRecord(ctx, repository.store, projectKey(targetID), targetID, errs.KindProjectNotFound,
 			decodeProject, func(record ProjectRecord) string { return record.ID })
@@ -97,12 +101,22 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 			return HierarchyDeletionTargetResolution{}, err
 		}
 		if project.Record.Kind == ProjectKindBacking {
-			return HierarchyDeletionTargetResolution{}, errs.New(errs.KindValidationFailed, "project deletion requires an ordinary Project")
+			return HierarchyDeletionTargetResolution{}, errs.New(
+				errs.KindValidationFailed,
+				"project deletion requires an ordinary Project",
+			)
 		}
 		if project.Record.Kind != ProjectKindTenant {
-			return HierarchyDeletionTargetResolution{}, errs.New(errs.KindInternal, "hierarchy deletion Project kind is invalid")
+			return HierarchyDeletionTargetResolution{}, errs.New(
+				errs.KindInternal,
+				"hierarchy deletion Project kind is invalid",
+			)
 		}
-		return HierarchyDeletionTargetResolution{TargetKind: requested, ScopeKind: IdempotencyScopeTenant, ScopeID: project.Record.TenantID}, nil
+		return HierarchyDeletionTargetResolution{
+			TargetKind: requested,
+			ScopeKind:  IdempotencyScopeTenant,
+			ScopeID:    project.Record.TenantID,
+		}, nil
 	case HierarchyDeletionTargetBacking:
 		if err := validateID(ids.KindProject, targetID); err != nil {
 			return HierarchyDeletionTargetResolution{}, err
@@ -113,24 +127,45 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 			return HierarchyDeletionTargetResolution{}, err
 		}
 		if project.Record.Kind != ProjectKindBacking || project.Record.TenantID != "" {
-			return HierarchyDeletionTargetResolution{}, errs.New(errs.KindBackingServiceNotFound, "backing service was not found")
+			return HierarchyDeletionTargetResolution{}, errs.New(
+				errs.KindBackingServiceNotFound,
+				"backing service was not found",
+			)
 		}
-		return HierarchyDeletionTargetResolution{TargetKind: requested, ScopeKind: IdempotencyScopePlatform, ScopeID: "-"}, nil
+		return HierarchyDeletionTargetResolution{
+			TargetKind: requested,
+			ScopeKind:  IdempotencyScopePlatform,
+			ScopeID:    "-",
+		}, nil
 	case HierarchyDeletionTargetEnvironment:
 		if err := validateID(ids.KindEnvironment, targetID); err != nil {
 			return HierarchyDeletionTargetResolution{}, err
 		}
-		environment, err := getRecord(ctx, repository.store, environmentKey(targetID), targetID, errs.KindEnvironmentNotFound,
-			decodeEnvironment, func(record EnvironmentRecord) string { return record.ID })
+		environment, err := getRecord(
+			ctx,
+			repository.store,
+			environmentKey(targetID),
+			targetID,
+			errs.KindEnvironmentNotFound,
+			decodeEnvironment,
+			func(record EnvironmentRecord) string { return record.ID },
+		)
 		if err != nil {
 			return HierarchyDeletionTargetResolution{}, err
 		}
 		if err := validateID(ids.KindProject, environment.Record.ProjectID); err != nil {
 			return HierarchyDeletionTargetResolution{}, corruptHierarchyDeletion()
 		}
-		return HierarchyDeletionTargetResolution{TargetKind: requested, ScopeKind: IdempotencyScopeProject, ScopeID: environment.Record.ProjectID}, nil
+		return HierarchyDeletionTargetResolution{
+			TargetKind: requested,
+			ScopeKind:  IdempotencyScopeProject,
+			ScopeID:    environment.Record.ProjectID,
+		}, nil
 	default:
-		return HierarchyDeletionTargetResolution{}, errs.New(errs.KindValidationFailed, "hierarchy deletion target kind is invalid")
+		return HierarchyDeletionTargetResolution{}, errs.New(
+			errs.KindValidationFailed,
+			"hierarchy deletion target kind is invalid",
+		)
 	}
 }
 
@@ -212,7 +247,11 @@ func (repository *HierarchyDeletionRepository) Begin(
 	}
 	defer clear(root.targetValue)
 
-	operation, conditions, mutations, initiation, err := prepareHierarchyDeletionPublication(begin, root, snapshotRevision)
+	operation, conditions, mutations, initiation, err := prepareHierarchyDeletionPublication(
+		begin,
+		root,
+		snapshotRevision,
+	)
 	if err != nil {
 		return HierarchyDeletionBeginResult{}, err
 	}
@@ -331,7 +370,9 @@ func hierarchyDeletionTask(
 			TaskHierarchyDeletionOperationParam:  begin.OperationID,
 			TaskHierarchyDeletionTargetKindParam: string(begin.TargetKind),
 		},
-		Steps: []TaskStepRecord{{Kind: TaskStepOperation, ID: "step_" + suffix}}, TimeoutSeconds: int64(hierarchyDeletionAttemptTimeout / time.Second),
+		Steps: []TaskStepRecord{
+			{Kind: TaskStepOperation, ID: "step_" + suffix},
+		}, TimeoutSeconds: int64(hierarchyDeletionAttemptTimeout / time.Second),
 		Status: TaskStatusPending, NextEventSequence: 1, CreatedAt: begin.CreatedAt, UpdatedAt: begin.CreatedAt,
 	}
 	if err := validateTaskRecord(task); err != nil {

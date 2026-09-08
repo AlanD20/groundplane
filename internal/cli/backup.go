@@ -224,7 +224,10 @@ func newBackupCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().Changed("output") {
-				return errs.New(errs.KindValidationFailed, "backup export-key does not support global --output; use --file")
+				return errs.New(
+					errs.KindValidationFailed,
+					"backup export-key does not support global --output; use --file",
+				)
 			}
 			app := fromContext(cmd)
 			return runExportKey(

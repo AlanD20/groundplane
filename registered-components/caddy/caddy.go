@@ -55,7 +55,7 @@ type Config struct {
 }
 
 func ConfigFields() []string {
-	return []string{"zone_id", "caddyfile_template"}
+	return []string{"zone_ids", "caddyfile_template"}
 }
 
 func Definition() (component.Definition, error) {
@@ -128,10 +128,14 @@ func Plan(input component.HTTPRouterInput, config Config) (component.Environment
 		Services: []component.ManagedService{{
 			ID: input.GeneratedServiceID, Name: ServiceName, Image: Image,
 			NetworkMode: component.ManagedNetworkModeZones,
-			Networks: []component.ManagedNetworkAttachment{{
-				Name: input.ZoneName, Aliases: []string{ServiceName}, StaticIPv4: input.PinnedIPv4,
-			}},
-			Expose: []string{"80", "443"}, Restart: "unless-stopped", Replicas: 1,
+			Networks:    caddyNetworks(input.Zones),
+			Expose:      []string{"80", "443"}, Restart: "unless-stopped", Replicas: 1,
+			// Observe the running admin API, not a new process's version.
+			// https://caddyserver.com/docs/api#get-configpath
+			Healthcheck: &component.ManagedHealthcheck{
+				Command:         []string{"wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"},
+				IntervalSeconds: 5, TimeoutSeconds: 3, StartPeriodSeconds: 5, Retries: 3,
+			},
 			Mounts: []component.ManagedMount{
 				{
 					Source:   caddyfileName,
@@ -149,6 +153,16 @@ func Plan(input component.HTTPRouterInput, config Config) (component.Environment
 			{Path: caddyConfigMarkerName, Content: []byte{}},
 		},
 	}), nil
+}
+
+func caddyNetworks(zones []component.HTTPRouterZoneInput) []component.ManagedNetworkAttachment {
+	networks := make([]component.ManagedNetworkAttachment, len(zones))
+	for index, zone := range zones {
+		networks[index] = component.ManagedNetworkAttachment{
+			Name: zone.Name, Aliases: []string{ServiceName}, StaticIPv4: zone.StaticIPv4,
+		}
+	}
+	return networks
 }
 
 func renderCaddyfile(templateBody string, routes []component.HTTPRoute) ([]byte, error) {

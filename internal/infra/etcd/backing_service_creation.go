@@ -47,7 +47,8 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	if err := validateBackingServiceCreation(ctx, creation); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, creation.Marker); err != nil || found {
+	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, creation.Marker); err != nil ||
+		found {
 		return existing, err
 	}
 	publication, err := repository.prepareEnvironmentBlueprintPublication(
@@ -180,7 +181,11 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	mutations := []Mutation{
 		{Type: MutationDelete, Key: creationStageKey},
 		{Type: MutationPut, Key: taskKey(creation.Task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(creation.Task.OperationID, creation.Task.ID), Value: taskReference},
+		{
+			Type:  MutationPut,
+			Key:   taskOperationIndexKey(creation.Task.OperationID, creation.Task.ID),
+			Value: taskReference,
+		},
 		{Type: MutationPut, Key: taskActiveOperationKey(creation.Task.OperationID), Value: taskReference},
 		{Type: MutationPut, Key: taskQueueKey(creation.Task.Executor, creation.Task.ID), Value: taskReference},
 		{Type: MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
@@ -189,31 +194,61 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		{Type: MutationPut, Key: projectKey(creation.Project.ID), Value: projectValue},
 		{Type: MutationPut, Key: projectSlugKey(creation.Project), Value: []byte(creation.Project.ID)},
 		{Type: MutationPut, Key: projectOwnerKey(creation.Project), Value: []byte(creation.Project.ID)},
-		{Type: MutationPut, Key: HierarchyCoordinationKey(string(HierarchyDeletionTargetProject), creation.Project.ID), Value: projectCoordinationValue},
+		{
+			Type:  MutationPut,
+			Key:   HierarchyCoordinationKey(string(HierarchyDeletionTargetProject), creation.Project.ID),
+			Value: projectCoordinationValue,
+		},
 		{Type: MutationPut, Key: environmentKey(creation.Environment.ID), Value: environmentValue},
-		{Type: MutationPut, Key: environmentNameKey(creation.Project.ID, creation.Environment.Name), Value: []byte(creation.Environment.ID)},
-		{Type: MutationPut, Key: environmentOwnerKey(creation.Project.ID, creation.Environment.ID), Value: []byte(creation.Environment.ID)},
+		{
+			Type:  MutationPut,
+			Key:   environmentNameKey(creation.Project.ID, creation.Environment.Name),
+			Value: []byte(creation.Environment.ID),
+		},
+		{
+			Type:  MutationPut,
+			Key:   environmentOwnerKey(creation.Project.ID, creation.Environment.ID),
+			Value: []byte(creation.Environment.ID),
+		},
 		{Type: MutationPut, Key: environmentMutationEpochKey(creation.Environment.ID), Value: epochValue},
-		{Type: MutationPut, Key: HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), creation.Environment.ID), Value: environmentCoordinationValue},
+		{
+			Type:  MutationPut,
+			Key:   HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), creation.Environment.ID),
+			Value: environmentCoordinationValue,
+		},
 		{Type: MutationPut, Key: scriptSetActiveKey(creation.Environment.ID), Value: scriptSetValue},
 		{Type: MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue},
 		{Type: MutationPut, Key: zonePoolRegistryKey(creation.Environment.ID), Value: zoneRegistryValue},
 		{Type: MutationPut, Key: serviceRuntimeKey(creation.Service.Desired.ID), Value: serviceValue},
 	}
 	for index, component := range creation.Components {
-		mutations = append(mutations,
+		mutations = append(
+			mutations,
 			Mutation{Type: MutationPut, Key: componentKey(component.Desired.ID), Value: componentValues[index]},
-			Mutation{Type: MutationPut, Key: componentEnvironmentOwnerKey(creation.Environment.ID, component.Desired.ID), Value: []byte(component.Desired.ID)},
-			Mutation{Type: MutationPut, Key: componentEnvironmentKindKey(creation.Environment.ID, component.Desired.Kind), Value: []byte(component.Desired.ID)},
+			Mutation{
+				Type:  MutationPut,
+				Key:   componentEnvironmentOwnerKey(creation.Environment.ID, component.Desired.ID),
+				Value: []byte(component.Desired.ID),
+			},
+			Mutation{
+				Type:  MutationPut,
+				Key:   componentEnvironmentKindKey(creation.Environment.ID, component.Desired.Kind),
+				Value: []byte(component.Desired.ID),
+			},
 		)
 	}
 	if len(creation.Components) > 0 {
 		mutations = append(mutations, componentWriteFenceMutation(creation.Task.ID))
 	}
 	for index, entry := range creation.Entries {
-		mutations = append(mutations,
+		mutations = append(
+			mutations,
 			Mutation{Type: MutationPut, Key: entryRecordKey(entry.Entry.ID), Value: entryValues[index]},
-			Mutation{Type: MutationPut, Key: entryOwnerKey(creation.Environment.ID, entry.Entry.ID), Value: []byte(entry.Entry.ID)},
+			Mutation{
+				Type:  MutationPut,
+				Key:   entryOwnerKey(creation.Environment.ID, entry.Entry.ID),
+				Value: []byte(entry.Entry.ID),
+			},
 			Mutation{Type: MutationPut, Key: entryGenerationKeys[index], Value: entryGenerationValues[index]},
 		)
 	}
@@ -458,7 +493,10 @@ func backingServiceCreationConditions(
 		{Key: taskOperationIndexKey(creation.Task.OperationID, creation.Task.ID)},
 		{Key: taskActiveOperationKey(creation.Task.OperationID)},
 		{Key: taskQueueKey(creation.Task.Executor, creation.Task.ID)},
-		{Key: environmentBlueprintRootKey(creation.Environment.ID, creation.Task.ID), ModRevision: publication.rootRevision},
+		{
+			Key:         environmentBlueprintRootKey(creation.Environment.ID, creation.Task.ID),
+			ModRevision: publication.rootRevision,
+		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 		{Key: environmentBlueprintHeadKey(creation.Environment.ID)},
@@ -552,16 +590,24 @@ func classifyBackingServiceCreation(
 			if err != nil {
 				return err
 			}
-			return errs.Newf(errs.KindStateConflict, "operation %s already has active task %s", creation.Task.OperationID, activeTaskID)
+			return errs.Newf(
+				errs.KindStateConflict,
+				"operation %s already has active task %s",
+				creation.Task.OperationID,
+				activeTaskID,
+			)
 		}
 		for _, index := range []int{creationStageCondition, taskCondition, activeOperationCondition, queuedTaskCondition} {
 			if values[index] != nil {
 				return errs.New(errs.KindInternal, "Backing-service creation collided with durable Task state")
 			}
 		}
-		if values[blueprintRootCondition] == nil || values[blueprintRootCondition].ModRevision != publication.rootRevision ||
-			values[blueprintDescriptorCondition] == nil || values[blueprintDescriptorCondition].ModRevision != publication.descriptorRevision ||
-			values[blueprintLocatorCondition] == nil || values[blueprintLocatorCondition].ModRevision != publication.locatorRevision {
+		if values[blueprintRootCondition] == nil ||
+			values[blueprintRootCondition].ModRevision != publication.rootRevision ||
+			values[blueprintDescriptorCondition] == nil ||
+			values[blueprintDescriptorCondition].ModRevision != publication.descriptorRevision ||
+			values[blueprintLocatorCondition] == nil ||
+			values[blueprintLocatorCondition].ModRevision != publication.locatorRevision {
 			return errs.New(errs.KindStateConflict, "Backing-service sealed staging evidence changed")
 		}
 		if values[blueprintHeadCondition] != nil {

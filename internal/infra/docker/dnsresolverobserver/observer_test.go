@@ -97,7 +97,7 @@ func TestObserveReturnsTypedExactCandidateEvidence(t *testing.T) {
 	executor := &Executor{
 		runtime: observerRuntimeStub{evidence: runtimeEvidence{
 			artifact: append([]byte(nil), artifact...), logs: reloadLog(reloadSHA512),
-			verifiedImageDigest: imageDigest, verifiedImageConfigDigest: imageConfigDigest,
+			verifiedImageDigest: imageDigest, imageConfigAuthority: imageConfigDigest,
 		}},
 		metrics: &observerMetricsStub{values: [][]byte{
 			baseCounters, baseCounters, baseCounters,

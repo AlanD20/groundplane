@@ -587,7 +587,8 @@ func validateEnvironmentBlueprintSeal(value EnvironmentBlueprintSeal) error {
 	if value.SourceKind != EnvironmentBlueprintSourceApply && value.SourceKind != EnvironmentBlueprintSourceMutation {
 		return errs.New(errs.KindValidationFailed, "Blueprint sealed root source is invalid")
 	}
-	if ids.Validate(ids.KindEnvironment, value.EnvironmentID) != nil || ids.Validate(ids.KindTask, value.RevisionID) != nil {
+	if ids.Validate(ids.KindEnvironment, value.EnvironmentID) != nil ||
+		ids.Validate(ids.KindTask, value.RevisionID) != nil {
 		return errs.New(errs.KindValidationFailed, "Blueprint sealed root identity is invalid")
 	}
 	return nil

@@ -46,7 +46,13 @@ func hierarchyDeletionChildAttemptKey(
 }
 
 func HierarchyDeletionSuccessorKey(parentOperationID, childOperationID, attemptID string) (string, error) {
-	return hierarchyDeletionChildAttemptKey("deletion-successors", parentOperationID, childOperationID, attemptID, false)
+	return hierarchyDeletionChildAttemptKey(
+		"deletion-successors",
+		parentOperationID,
+		childOperationID,
+		attemptID,
+		false,
+	)
 }
 
 func HierarchyDeletionReceiptKey(parentOperationID, childOperationID, attemptID string) (string, error) {

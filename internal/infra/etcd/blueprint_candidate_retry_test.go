@@ -34,7 +34,10 @@ func TestReleaseHookRetryRequiresDurableNotStartedState(t *testing.T) {
 				return &started
 			},
 		},
-		{name: "unknown execution", seed: func(*testing.T, ScriptExecutionRecord) *ScriptExecutionRecord { return nil }},
+		{
+			name: "unknown execution",
+			seed: func(*testing.T, ScriptExecutionRecord) *ScriptExecutionRecord { return nil },
+		},
 		{
 			name: "lineage mismatch",
 			seed: func(_ *testing.T, record ScriptExecutionRecord) *ScriptExecutionRecord {
@@ -54,7 +57,11 @@ func TestReleaseHookRetryRequiresDurableNotStartedState(t *testing.T) {
 			}
 			record := scriptCheckpointTestRecord(now)
 			source := releaseHookRetryTestTask(record, record.CurrentTaskID, now)
-			retry := releaseHookRetryTestTask(record, ids.NewAt(ids.KindTask, now.Add(2*time.Second), 20), now.Add(2*time.Second))
+			retry := releaseHookRetryTestTask(
+				record,
+				ids.NewAt(ids.KindTask, now.Add(2*time.Second), 20),
+				now.Add(2*time.Second),
+			)
 			retry.RetryOf = source.ID
 			retry.Params[TaskReleasePublicationParam] = source.Params[TaskReleasePublicationParam]
 			retry.Params[EnvironmentDesiredRevisionParam] = source.Params[EnvironmentDesiredRevisionParam]
@@ -63,7 +70,11 @@ func TestReleaseHookRetryRequiresDurableNotStartedState(t *testing.T) {
 				if encodeErr != nil {
 					t.Fatal(encodeErr)
 				}
-				transaction, seedErr := store.Transact(ctx, nil, []Mutation{{Type: MutationPut, Key: scriptExecutionKey(record.ID), Value: value}})
+				transaction, seedErr := store.Transact(
+					ctx,
+					nil,
+					[]Mutation{{Type: MutationPut, Key: scriptExecutionKey(record.ID), Value: value}},
+				)
 				if seedErr != nil || !transaction.Succeeded {
 					t.Fatalf("seed execution = %#v, %v", transaction, seedErr)
 				}
@@ -94,7 +105,11 @@ func TestReleaseHookRetryTransfersExactNotStartedAuthority(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seeded, err := store.Transact(ctx, nil, []Mutation{{Type: MutationPut, Key: scriptExecutionKey(record.ID), Value: value}})
+	seeded, err := store.Transact(
+		ctx,
+		nil,
+		[]Mutation{{Type: MutationPut, Key: scriptExecutionKey(record.ID), Value: value}},
+	)
 	if err != nil || !seeded.Succeeded {
 		t.Fatalf("seed execution = %#v, %v", seeded, err)
 	}

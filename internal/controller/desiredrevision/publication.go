@@ -17,11 +17,17 @@ import (
 )
 
 type ClaimRepository interface {
-	ClaimEnvironmentBlueprintStage(context.Context, etcd.EnvironmentBlueprintStageClaimRequest) (etcd.EnvironmentBlueprintStageClaim, error)
+	ClaimEnvironmentBlueprintStage(
+		context.Context,
+		etcd.EnvironmentBlueprintStageClaimRequest,
+	) (etcd.EnvironmentBlueprintStageClaim, error)
 }
 
 type PublicationRepository interface {
-	StageEnvironmentBlueprintRevision(context.Context, etcd.EnvironmentBlueprintStageRequest) (etcd.EnvironmentBlueprintSeal, error)
+	StageEnvironmentBlueprintRevision(
+		context.Context,
+		etcd.EnvironmentBlueprintStageRequest,
+	) (etcd.EnvironmentBlueprintSeal, error)
 	AbandonEnvironmentBlueprintStage(context.Context, etcd.EnvironmentBlueprintStageClaim) error
 	PublishEnvironmentBlueprintDesiredRevision(
 		context.Context,
@@ -58,7 +64,10 @@ type PublicationIdempotency interface {
 // boundaries use the narrower interfaces above.
 type Repository interface {
 	ClaimRepository
-	StageEnvironmentBlueprintRevision(context.Context, etcd.EnvironmentBlueprintStageRequest) (etcd.EnvironmentBlueprintSeal, error)
+	StageEnvironmentBlueprintRevision(
+		context.Context,
+		etcd.EnvironmentBlueprintStageRequest,
+	) (etcd.EnvironmentBlueprintSeal, error)
 	PublishEnvironmentDesiredRevisionWithTask(
 		context.Context,
 		etcd.Versioned[etcd.ProjectRecord],
@@ -118,7 +127,10 @@ func Claim(
 		return etcd.EnvironmentBlueprintStageClaim{}, err
 	}
 	if claim.RevisionID != claim.TaskID {
-		return etcd.EnvironmentBlueprintStageClaim{}, errs.New(errs.KindInternal, "Blueprint staged revision and Task identity diverged")
+		return etcd.EnvironmentBlueprintStageClaim{}, errs.New(
+			errs.KindInternal,
+			"Blueprint staged revision and Task identity diverged",
+		)
 	}
 	if claim.Existing {
 		if input.MatchExistingIntent == nil {
@@ -143,7 +155,10 @@ func Claim(
 		claim.RenderGeneration != input.RenderGeneration ||
 		claim.SourceKind != input.SourceKind ||
 		claim.ProjectionSchema != etcd.EnvironmentDesiredProjectionSchema {
-		return etcd.EnvironmentBlueprintStageClaim{}, errs.New(errs.KindStateConflict, "Blueprint staged baseline changed")
+		return etcd.EnvironmentBlueprintStageClaim{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint staged baseline changed",
+		)
 	}
 	return claim, nil
 }
@@ -216,7 +231,10 @@ func Stage(
 	input StageInput,
 ) (StagedPublication, error) {
 	if ctx == nil || repository == nil {
-		return StagedPublication{}, errs.New(errs.KindInternal, "Environment desired revision staging is not configured")
+		return StagedPublication{}, errs.New(
+			errs.KindInternal,
+			"Environment desired revision staging is not configured",
+		)
 	}
 	projectionBytes, err := etcd.EncodeEnvironmentComposeProjectionStorage(input.Projection)
 	if err != nil {
@@ -241,7 +259,10 @@ func Stage(
 		seal.BaselineHeadRevision != input.Claim.BaselineHeadRevision ||
 		seal.DependencyDigest != evidence.DependencyDigest || seal.ProjectionBytes != uint64(len(projectionBytes)) ||
 		seal.ProjectionSHA256 != projectionDigest {
-		return StagedPublication{}, errs.New(errs.KindInternal, "Environment desired revision seal does not match its candidate")
+		return StagedPublication{}, errs.New(
+			errs.KindInternal,
+			"Environment desired revision seal does not match its candidate",
+		)
 	}
 	projection, err := etcd.DecodeEnvironmentComposeProjectionStorage(projectionBytes)
 	if err != nil {
@@ -418,7 +439,10 @@ func Publish(
 		Locator: input.Locator, Intent: claim.Intent, Response: response,
 		TaskID: input.Task.ID, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
-	identity := etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: input.Environment.Record.ID, RevisionID: input.Task.ID}
+	identity := etcd.EnvironmentDesiredRevisionIdentity{
+		EnvironmentID: input.Environment.Record.ID,
+		RevisionID:    input.Task.ID,
+	}
 	result, publicationErr := repository.PublishEnvironmentBlueprintDesiredRevision(
 		ctx, input.EnvironmentPool, input.NetworkPool, input.Project, input.Environment, input.ExpectedHeadRevision,
 		claim, identity, projection, input.ZoneChanges, input.ServiceChanges, input.RouteChanges,

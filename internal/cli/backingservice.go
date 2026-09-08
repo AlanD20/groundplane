@@ -51,7 +51,7 @@ func newBackingServiceCmd() *cobra.Command {
 		},
 	})
 
-	var adapter, name, description, networkPool, zoneName, zoneSubnet string
+	var adapter, authentication, name, description, networkPool, zoneName, zoneSubnet string
 	var zoneInternal bool
 	create := &cobra.Command{
 		Use:   "create <slug>",
@@ -60,8 +60,13 @@ func newBackingServiceCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			created, err := fromContext(cmd).Client.CreateBackingService(cmd.Context(), apiTypes.BackingServiceCreate{
 				Slug: args[0], Name: name, Description: description, Adapter: adapter,
-				NetworkPool: networkPool,
-				Zone:        apiTypes.BackingServiceZoneCreate{Name: zoneName, Subnet: zoneSubnet, Internal: zoneInternal},
+				Authentication: authentication,
+				NetworkPool:    networkPool,
+				Zone: apiTypes.BackingServiceZoneCreate{
+					Name:     zoneName,
+					Subnet:   zoneSubnet,
+					Internal: zoneInternal,
+				},
 			})
 			if err != nil {
 				return err
@@ -74,6 +79,12 @@ func newBackingServiceCmd() *cobra.Command {
 	}
 	create.Flags().
 		StringVar(&adapter, "adapter", "", "adapter key, e.g. postgres:16 (see `groundplane backing-service create --help` for the registry)")
+	create.Flags().StringVar(
+		&authentication,
+		"authentication",
+		"",
+		"immutable Valkey mode: username_password (default), password, or none",
+	)
 	create.Flags().StringVar(&name, "name", "", "display name")
 	create.Flags().StringVar(&description, "description", "", "optional description")
 	create.Flags().StringVar(&networkPool, "network-pool", "", "reserved Environment pool, e.g. 10.200.0.0/24")
@@ -194,6 +205,7 @@ func renderBackingService(cmd *cobra.Command, backing apiTypes.BackingService) e
 func backingServiceFields(backing apiTypes.BackingService) map[string]any {
 	return map[string]any{
 		"project_id": backing.ProjectID, "environment_id": backing.EnvironmentID, "service_id": backing.ServiceID,
+		"authentication":     backing.Authentication,
 		"backing_network_id": backing.BackingNetworkID,
 	}
 }

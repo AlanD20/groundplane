@@ -56,8 +56,18 @@ func TestBlueprintAttachPublicationCarriesCandidateSetAndBackingFences(t *testin
 		taskID,
 		environmentID,
 		[]EnvironmentBlueprintAttachCandidateInput{
-			{Record: dependent, BackingProject: backingProject, BackingEnvironment: backingEnvironment, BackingService: backingService},
-			{Record: owner, BackingProject: backingProject, BackingEnvironment: backingEnvironment, BackingService: backingService},
+			{
+				Record:             dependent,
+				BackingProject:     backingProject,
+				BackingEnvironment: backingEnvironment,
+				BackingService:     backingService,
+			},
+			{
+				Record:             owner,
+				BackingProject:     backingProject,
+				BackingEnvironment: backingEnvironment,
+				BackingService:     backingService,
+			},
 		},
 		true,
 		now,
@@ -190,7 +200,11 @@ func TestBlueprintAttachPreparationRequiresExactReadyRetainedGrantEvidence(t *te
 				t.Fatalf("PrepareEnvironmentBlueprintAttachTask() error = %v, want validation", err)
 			}
 			if fixture.store.revision != before {
-				t.Fatalf("rejected retained evidence wrote at revision %d, started at %d", fixture.store.revision, before)
+				t.Fatalf(
+					"rejected retained evidence wrote at revision %d, started at %d",
+					fixture.store.revision,
+					before,
+				)
 			}
 			clear(facts.Ciphertext)
 		})
@@ -249,7 +263,10 @@ func TestBlueprintAttachPublicationUsesRetainedCredentialOwnerEvidence(t *testin
 	}
 	defer clearPreparedBlueprintAttachTaskPublication(publication)
 	wantConditions := map[string]Condition{
-		attachKey(owner.Record.ID):                          {Key: attachKey(owner.Record.ID), ModRevision: owner.Revision},
+		attachKey(owner.Record.ID): {
+			Key:         attachKey(owner.Record.ID),
+			ModRevision: owner.Revision,
+		},
 		deletionTombstoneKey("attach", owner.Record.ID):     {Key: deletionTombstoneKey("attach", owner.Record.ID)},
 		attachCredentialByKey(owner.Record.ID, dependentID): {Key: attachCredentialByKey(owner.Record.ID, dependentID)},
 	}

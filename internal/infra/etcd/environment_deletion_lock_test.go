@@ -904,7 +904,9 @@ func TestEnvironmentDeletionCompletionFencesChildInsertionAtTerminalCommit(t *te
 	desired := serviceRecordTestDesired()
 	desired.ID = ids.NewAt(ids.KindService, projectionTask.CreatedAt, 70)
 	desired.Name = "api"
-	projection.DesiredServices = []EnvironmentServiceProjection{{EnvironmentID: fixture.environment.Record.ID, Desired: desired}}
+	projection.DesiredServices = []EnvironmentServiceProjection{
+		{EnvironmentID: fixture.environment.Record.ID, Desired: desired},
+	}
 	projectionValue, err := encodeEnvironmentComposeProjection(projection)
 	if err != nil {
 		t.Fatalf("encode Environment projection = %v", err)
@@ -922,7 +924,8 @@ func TestEnvironmentDeletionCompletionFencesChildInsertionAtTerminalCommit(t *te
 		t.Fatalf("seed Environment projection = %#v, %v", transaction, transactErr)
 	}
 	agentID := ids.NewAt(ids.KindAgent, fixture.now, 8084)
-	if _, found, err := fixture.tasks.ClaimNextTask(context.Background(), agentID, 1, fixture.now.Add(time.Second)); err != nil || !found {
+	if _, found, err := fixture.tasks.ClaimNextTask(context.Background(), agentID, 1, fixture.now.Add(time.Second)); err != nil ||
+		!found {
 		t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
 	}
 	childKey := serviceRuntimeKey(desired.ID)

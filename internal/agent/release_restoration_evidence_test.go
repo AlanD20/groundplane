@@ -89,11 +89,16 @@ func TestReleaseRestorationEvidenceProvenForCandidateAbsence(t *testing.T) {
 			ServiceId: "api", ReleaseId: "release-api", ArtifactId: "candidate-artifact",
 			Target: "singleton", Compensated: true,
 		}}},
-		{name: "mismatched proof", result: composeStepResult{CandidateAbsenceEvidence: &agentpb.CandidateAbsenceEvidence{
-			AssignmentId: exact.GetAssignmentId(), PlanHash: append([]byte(nil), exact.GetPlanHash()...),
-			AuthoritySha256: append([]byte(nil), exact.GetAuthoritySha256()...), ComposeProjectName: "wrong-project",
-			CandidateArtifactId: exact.GetCandidateArtifactId(), Candidates: exact.GetCandidates(), AbsenceProven: true,
-		}}},
+		{
+			name: "mismatched proof",
+			result: composeStepResult{CandidateAbsenceEvidence: &agentpb.CandidateAbsenceEvidence{
+				AssignmentId: exact.GetAssignmentId(), PlanHash: append([]byte(nil), exact.GetPlanHash()...),
+				AuthoritySha256: append(
+					[]byte(nil),
+					exact.GetAuthoritySha256()...), ComposeProjectName: "wrong-project",
+				CandidateArtifactId: exact.GetCandidateArtifactId(), Candidates: exact.GetCandidates(), AbsenceProven: true,
+			}},
+		},
 		{name: "exact proof", result: composeStepResult{CandidateAbsenceEvidence: exact}, want: true},
 	}
 	for _, test := range tests {
@@ -105,23 +110,28 @@ func TestReleaseRestorationEvidenceProvenForCandidateAbsence(t *testing.T) {
 	}
 }
 
-func TestCandidateAbsenceEvidenceUsesCanonicalUniqueMembership(t *testing.T) {
+// Rationale: a helper response proves only its current member; another member
+// or an aggregate response cannot stand in for that exact proof.
+func TestCandidateAbsenceEvidenceUsesExactMember(t *testing.T) {
 	assignment, step, exact := exactCandidateAbsenceCompensation()
-	permuted := proto.Clone(exact).(*agentpb.CandidateAbsenceEvidence)
-	permuted.Candidates[0], permuted.Candidates[1] = permuted.Candidates[1], permuted.Candidates[0]
+	other := proto.CloneOf(exact)
+	other.Candidates[0] = &agentpb.CandidateReleaseService{ServiceId: "worker", ReleaseId: "release-worker"}
 	duplicate := proto.Clone(exact).(*agentpb.CandidateAbsenceEvidence)
-	duplicate.Candidates[1] = proto.Clone(duplicate.Candidates[0]).(*agentpb.CandidateReleaseService)
+	duplicate.Candidates = append(duplicate.Candidates, proto.CloneOf(duplicate.Candidates[0]))
 	missing := proto.Clone(exact).(*agentpb.CandidateAbsenceEvidence)
-	missing.Candidates = missing.Candidates[:1]
+	missing.Candidates = nil
 	extra := proto.Clone(exact).(*agentpb.CandidateAbsenceEvidence)
-	extra.Candidates = append(extra.Candidates, &agentpb.CandidateReleaseService{ServiceId: "web", ReleaseId: "release-web"})
-	if !releaseRestorationEvidenceProven(assignment, step, composeStepResult{CandidateAbsenceEvidence: permuted}) {
-		t.Fatal("canonical candidate membership rejected a permutation")
+	extra.Candidates = append(
+		extra.Candidates,
+		&agentpb.CandidateReleaseService{ServiceId: "web", ReleaseId: "release-web"},
+	)
+	if !releaseRestorationEvidenceProven(assignment, step, composeStepResult{CandidateAbsenceEvidence: exact}) {
+		t.Fatal("exact member proof rejected")
 	}
 	if releaseRestorationEvidenceProven(assignment, step, composeStepResult{CandidateAbsenceEvidence: duplicate}) {
 		t.Fatal("canonical candidate membership accepted a duplicate")
 	}
-	for name, evidence := range map[string]*agentpb.CandidateAbsenceEvidence{"missing": missing, "extra": extra} {
+	for name, evidence := range map[string]*agentpb.CandidateAbsenceEvidence{"missing": missing, "extra": extra, "other": other} {
 		if releaseRestorationEvidenceProven(assignment, step, composeStepResult{CandidateAbsenceEvidence: evidence}) {
 			t.Fatalf("canonical candidate membership accepted %s membership", name)
 		}
@@ -130,19 +140,28 @@ func TestCandidateAbsenceEvidenceUsesCanonicalUniqueMembership(t *testing.T) {
 
 func TestCandidateServingPredecessorAcceptsExactTypedRestorationVariant(t *testing.T) {
 	releaseID := "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	artifact := &agentpb.ComposeArtifact{ArtifactId: "prior-artifact", ProjectName: "gp-release", Services: []*agentpb.ComposeService{{
-		ServiceId: "api", ComposeName: "api", ExpectedReplicas: 2,
-		Role:           agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
-		ExpectedLabels: []*agentpb.LabelPair{{Key: "com.groundplane.release-id", Value: releaseID}},
-	}}}
+	artifact := &agentpb.ComposeArtifact{
+		ArtifactId:  "prior-artifact",
+		ProjectName: "gp-release",
+		Services: []*agentpb.ComposeService{{
+			ServiceId: "api", ComposeName: "api", ExpectedReplicas: 2,
+			Role:           agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
+			ExpectedLabels: []*agentpb.LabelPair{{Key: "com.groundplane.release-id", Value: releaseID}},
+		}},
+	}
 	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
 	if err != nil {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(encoded)
 	assignment := Assignment{RestorationAuthority: &agentpb.ReleaseRestorationAuthority{
-		Target:             agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR,
-		ServingPredecessor: &agentpb.ReleaseServingPredecessorAuthority{ComposeArtifact: encoded, ComposeArtifactSha256: digest[:]},
+		Candidates: []*agentpb.ReleaseRestorationCandidate{
+			{ServiceId: "api", Target: agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR},
+		},
+		AppliedPredecessor: &agentpb.ReleaseAppliedPredecessorAuthority{
+			ComposeArtifact:       encoded,
+			ComposeArtifactSha256: digest[:],
+		},
 	}}
 	step := &agentpb.ExecutionStep{Payload: &agentpb.ExecutionStep_CandidateRestorationCompensate{
 		CandidateRestorationCompensate: &agentpb.CandidateRestorationCompensate{ServiceId: "api"},
@@ -168,8 +187,8 @@ func TestCandidateServingPredecessorAcceptsExactTypedRestorationVariant(t *testi
 		t.Fatal(err)
 	}
 	digest = sha256.Sum256(encoded)
-	assignment.RestorationAuthority.ServingPredecessor.ComposeArtifact = encoded
-	assignment.RestorationAuthority.ServingPredecessor.ComposeArtifactSha256 = digest[:]
+	assignment.RestorationAuthority.AppliedPredecessor.ComposeArtifact = encoded
+	assignment.RestorationAuthority.AppliedPredecessor.ComposeArtifactSha256 = digest[:]
 	proxy := composeStepResult{ProxyEvidence: &agentpb.ServiceProxyEvidence{
 		ServiceId: "api", Target: "singleton", ProxyGeneration: 7, ConfigSha256: configDigest[:],
 		ReleaseId: releaseID, Compensated: true,
@@ -276,8 +295,16 @@ func exactCandidateAbsenceCompensation() (Assignment, *agentpb.ExecutionStep, *a
 	planHash := bytes.Repeat([]byte{0x51}, 32)
 	authorityDigest := bytes.Repeat([]byte{0x61}, 32)
 	candidates := []*agentpb.ReleaseRestorationCandidate{
-		{ServiceId: "api", ReleaseId: "release-api"},
-		{ServiceId: "worker", ReleaseId: "release-worker"},
+		{
+			ServiceId: "api",
+			ReleaseId: "release-api",
+			Target:    agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE,
+		},
+		{
+			ServiceId: "worker",
+			ReleaseId: "release-worker",
+			Target:    agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE,
+		},
 	}
 	services := []*agentpb.CandidateReleaseService{
 		{ServiceId: "api", ReleaseId: "release-api"},
@@ -289,16 +316,21 @@ func exactCandidateAbsenceCompensation() (Assignment, *agentpb.ExecutionStep, *a
 			CandidateReleaseProcedure: &agentpb.CandidateReleaseProcedure{Members: []*agentpb.CandidateReleaseMember{
 				{
 					ServiceId: "api", CandidateReleaseId: "release-api", CandidateArtifactId: "candidate-artifact",
-					CandidateAbsence: &agentpb.CandidateAbsenceRestoration{ComposeProjectName: "gp-project", Services: services},
+					CandidateAbsence: &agentpb.CandidateAbsenceRestoration{
+						ComposeProjectName: "gp-project",
+						Services:           services,
+					},
 				},
 				{
 					ServiceId: "worker", CandidateReleaseId: "release-worker", CandidateArtifactId: "candidate-artifact",
-					CandidateAbsence: &agentpb.CandidateAbsenceRestoration{ComposeProjectName: "gp-project", Services: services},
+					CandidateAbsence: &agentpb.CandidateAbsenceRestoration{
+						ComposeProjectName: "gp-project",
+						Services:           services,
+					},
 				},
 			}},
 		},
 		RestorationAuthority: &agentpb.ReleaseRestorationAuthority{
-			Target:   agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE,
 			PlanHash: planHash, CandidateArtifactId: "candidate-artifact", AuthoritySha256: authorityDigest,
 			Candidates: candidates,
 		},
@@ -311,7 +343,7 @@ func exactCandidateAbsenceCompensation() (Assignment, *agentpb.ExecutionStep, *a
 	evidence := &agentpb.CandidateAbsenceEvidence{
 		AssignmentId: assignment.AssignmentID, PlanHash: planHash, AuthoritySha256: authorityDigest,
 		ComposeProjectName: "gp-project", CandidateArtifactId: "candidate-artifact",
-		Candidates: services, AbsenceProven: true,
+		Candidates: []*agentpb.CandidateReleaseService{proto.CloneOf(services[0])}, AbsenceProven: true,
 	}
 	return assignment, step, evidence
 }

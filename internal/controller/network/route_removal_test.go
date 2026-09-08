@@ -8,6 +8,7 @@ import (
 	"errors"
 	"math"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -241,14 +242,30 @@ func (store *routeRemovalServiceEvidenceStore) GetMany(
 	for index, key := range request.Keys {
 		switch key {
 		case store.headKey:
-			values[index] = &etcd.KeyValue{Key: key, Value: append([]byte(nil), store.headValue...), ModRevision: store.readRevision}
+			values[index] = &etcd.KeyValue{
+				Key:         key,
+				Value:       append([]byte(nil), store.headValue...),
+				ModRevision: store.readRevision,
+			}
 		case store.rootKey:
-			values[index] = &etcd.KeyValue{Key: key, Value: append([]byte(nil), store.rootValue...), ModRevision: store.readRevision}
+			values[index] = &etcd.KeyValue{
+				Key:         key,
+				Value:       append([]byte(nil), store.rootValue...),
+				ModRevision: store.readRevision,
+			}
 		case store.chunkKey:
-			values[index] = &etcd.KeyValue{Key: key, Value: append([]byte(nil), store.chunkValue...), ModRevision: store.readRevision}
+			values[index] = &etcd.KeyValue{
+				Key:         key,
+				Value:       append([]byte(nil), store.chunkValue...),
+				ModRevision: store.readRevision,
+			}
 		}
 	}
-	return &etcd.GetManyResult{Values: values, ReadRevision: store.readRevision, ResponseRevision: store.readRevision}, nil
+	return &etcd.GetManyResult{
+		Values:           values,
+		ReadRevision:     store.readRevision,
+		ResponseRevision: store.readRevision,
+	}, nil
 }
 
 func routeRemovalServiceEvidence(
@@ -305,7 +322,12 @@ func routeRemovalServiceEvidence(
 		environmentID: environmentID, projection: projection,
 		headValue: headValue, rootValue: sealValue, chunkValue: chunkValue,
 		headKey: headKey, rootKey: etcd.DesiredRevisionRootKey(environmentID, revisionID),
-		chunkKey:     etcd.DesiredRevisionChunkKey(environmentID, revisionID, etcd.EnvironmentBlueprintChunkProjection, 0),
+		chunkKey: etcd.DesiredRevisionChunkKey(
+			environmentID,
+			revisionID,
+			etcd.EnvironmentBlueprintChunkProjection,
+			0,
+		),
 		readRevision: 13,
 	}
 }
@@ -451,7 +473,9 @@ func (fake *routeRemovalPlanFake) PrepareRouteRemovalTask(
 		ServiceID: intent.CandidateProjection.Components[0].Runtime.GeneratedServices[0],
 		Input: componentsdk.HTTPRouterInput{ComponentID: componentID, Enabled: true,
 			GeneratedServiceID: intent.CandidateProjection.Components[0].Runtime.GeneratedServices[0],
-			ZoneID:             ids.New(ids.KindNetwork), ZoneName: "frontend", PinnedIPv4: "10.0.0.2",
+			Zones: []componentsdk.HTTPRouterZoneInput{{
+				ID: ids.New(ids.KindNetwork), Name: "frontend", StaticIPv4: "10.0.0.2",
+			}},
 			Origin: componentsdk.HTTPRouterOrigin{ServiceName: "caddy", URL: "http://caddy:80"}},
 	}
 	fake.intent = intent
@@ -464,7 +488,10 @@ func (fake *routeRemovalPlanFake) PrepareRouteRemovalTask(
 	}
 	task.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
 	task.Steps = []etcd.TaskStepRecord{
-		{Kind: etcd.TaskStepOperation, ID: procedure.MaterializeStepID}, {Kind: etcd.TaskStepOperation, ID: procedure.ComposeApplyStepID}, {Kind: etcd.TaskStepOperation, ID: procedure.ActivateStepID},
+		{
+			Kind: etcd.TaskStepOperation,
+			ID:   procedure.MaterializeStepID,
+		}, {Kind: etcd.TaskStepOperation, ID: procedure.ComposeApplyStepID}, {Kind: etcd.TaskStepOperation, ID: procedure.ActivateStepID},
 	}
 	task.Materializations = []etcd.TaskMaterializationRecord{{
 		StepID: procedure.MaterializeStepID, MaterializationID: procedure.MaterializationID,
@@ -594,7 +621,7 @@ func TestRouteRemovalSelectsAgentProviderPlanForAppliedRoute(t *testing.T) {
 		ID: ids.NewAt(ids.KindComponent, at, 21), Owner: core.ComponentOwnerEnvironment,
 		OwnerID: repository.environment.Record.ID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
 		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-			ZoneID: zoneID,
+			ZoneIDs: []string{zoneID},
 		}},
 		GeneratedServices: []string{caddyServiceID}, PinnedIPv4: "10.70.0.2", Healthy: true,
 	})
@@ -662,7 +689,7 @@ func TestRouteRemovalPropagatesProviderPlannerError(t *testing.T) {
 		ID: ids.NewAt(ids.KindComponent, at, 31), Owner: core.ComponentOwnerEnvironment,
 		OwnerID: repository.environment.Record.ID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
 		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-			ZoneID: zoneID,
+			ZoneIDs: []string{zoneID},
 		}},
 		GeneratedServices: []string{caddyServiceID}, PinnedIPv4: "10.70.0.3", Healthy: true,
 	})
@@ -731,6 +758,11 @@ func routeRemovalTestComposeArtifact(projection etcd.EnvironmentComposeProjectio
 	for index, service := range projection.DesiredServices {
 		services[index] = &agentpb.ComposeService{
 			ServiceId: service.Desired.ID, ComposeName: service.Desired.Name,
+		}
+		for _, component := range projection.Components {
+			if component.Desired.Enabled && slices.Contains(component.Runtime.GeneratedServices, service.Desired.ID) {
+				services[index].OwnerComponentId = component.Desired.ID
+			}
 		}
 	}
 	value, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{

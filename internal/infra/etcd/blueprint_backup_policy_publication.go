@@ -64,7 +64,12 @@ func prepareBlueprintBackupPolicyPublication(
 		policyRevision = state.candidate.Current.Revision
 	}
 	compare(backupPolicyComparePolicy, state.environmentID, backupPolicyKey(state.environmentID), policyRevision)
-	compare(backupPolicyCompareCoordination, state.environmentID, environmentCoordinationKey(state.environmentID), state.candidate.Coordination.Revision)
+	compare(
+		backupPolicyCompareCoordination,
+		state.environmentID,
+		environmentCoordinationKey(state.environmentID),
+		state.candidate.Coordination.Revision,
+	)
 	for _, source := range state.sources {
 		primaryRevision, environmentRevision, identityRevision := int64(0), int64(0), int64(0)
 		if source.primary != nil {
@@ -73,18 +78,37 @@ func prepareBlueprintBackupPolicyPublication(
 			identityRevision = source.identityIndex.ModRevision
 		}
 		compare(backupPolicyCompareSource, source.record.ID, backupSourceKey(source.record.ID), primaryRevision)
-		compare(backupPolicyCompareSourceEnvironmentIndex, source.record.ID, backupSourceEnvironmentKey(state.environmentID, source.record.ID), environmentRevision)
-		compare(backupPolicyCompareSourceIdentityIndex, source.record.ID, backupSourceIdentityKey(state.environmentID, source.record.Kind, source.record.TargetID), identityRevision)
+		compare(
+			backupPolicyCompareSourceEnvironmentIndex,
+			source.record.ID,
+			backupSourceEnvironmentKey(state.environmentID, source.record.ID),
+			environmentRevision,
+		)
+		compare(
+			backupPolicyCompareSourceIdentityIndex,
+			source.record.ID,
+			backupSourceIdentityKey(state.environmentID, source.record.Kind, source.record.TargetID),
+			identityRevision,
+		)
 		if source.primary == nil {
 			sourceValue, encodeErr := encodeBackupSourceRecord(source.record)
 			if encodeErr != nil {
 				clearPreparedBlueprintBackupPolicyPublication(publication)
 				return preparedBlueprintBackupPolicyPublication{}, encodeErr
 			}
-			publication.mutations = append(publication.mutations,
+			publication.mutations = append(
+				publication.mutations,
 				Mutation{Type: MutationPut, Key: backupSourceKey(source.record.ID), Value: sourceValue},
-				Mutation{Type: MutationPut, Key: backupSourceEnvironmentKey(state.environmentID, source.record.ID), Value: []byte(source.record.ID)},
-				Mutation{Type: MutationPut, Key: backupSourceIdentityKey(state.environmentID, source.record.Kind, source.record.TargetID), Value: []byte(source.record.ID)},
+				Mutation{
+					Type:  MutationPut,
+					Key:   backupSourceEnvironmentKey(state.environmentID, source.record.ID),
+					Value: []byte(source.record.ID),
+				},
+				Mutation{
+					Type:  MutationPut,
+					Key:   backupSourceIdentityKey(state.environmentID, source.record.Kind, source.record.TargetID),
+					Value: []byte(source.record.ID),
+				},
 			)
 		}
 		if !state.retain && source.record.Kind == core.BackupSourceAttach {
@@ -92,7 +116,10 @@ func prepareBlueprintBackupPolicyPublication(
 				candidate := blueprintBackupAttachCandidate(attaches, source.record.TargetID)
 				if candidate == nil || !candidate.Record.OwnsCredential() {
 					clearPreparedBlueprintBackupPolicyPublication(publication)
-					return preparedBlueprintBackupPolicyPublication{}, errs.New(errs.KindValidationFailed, "Blueprint Backup candidate Attach changed")
+					return preparedBlueprintBackupPolicyPublication{}, errs.New(
+						errs.KindValidationFailed,
+						"Blueprint Backup candidate Attach changed",
+					)
 				}
 			} else {
 				compare(backupPolicyCompareAttach, source.record.TargetID, attachKey(source.record.TargetID), source.attach.Revision)
@@ -106,14 +133,34 @@ func prepareBlueprintBackupPolicyPublication(
 		if state.candidate.Connector != nil {
 			connectorRevision = state.candidate.Connector.Revision
 			ownerRevision = state.candidate.ConnectorOwnerIndex.ModRevision
-			compare(backupPolicyCompareConnector, state.retainedConnectorID, state.connectorNameIndex.Key, state.connectorNameIndex.ModRevision)
+			compare(
+				backupPolicyCompareConnector,
+				state.retainedConnectorID,
+				state.connectorNameIndex.Key,
+				state.connectorNameIndex.ModRevision,
+			)
 		}
 		if state.connectorTombstone != nil {
 			tombstoneRevision = state.connectorTombstone.ModRevision
 		}
-		compare(backupPolicyCompareConnector, state.retainedConnectorID, connectorRecordKey(state.retainedConnectorID), connectorRevision)
-		compare(backupPolicyCompareConnectorOwnerIndex, state.retainedConnectorID, connectorEnvironmentKey(state.environmentID, state.retainedConnectorID), ownerRevision)
-		compare(backupPolicyCompareConnectorTombstone, state.retainedConnectorID, deletionTombstoneKey(string(DeletionTargetConnector), state.retainedConnectorID), tombstoneRevision)
+		compare(
+			backupPolicyCompareConnector,
+			state.retainedConnectorID,
+			connectorRecordKey(state.retainedConnectorID),
+			connectorRevision,
+		)
+		compare(
+			backupPolicyCompareConnectorOwnerIndex,
+			state.retainedConnectorID,
+			connectorEnvironmentKey(state.environmentID, state.retainedConnectorID),
+			ownerRevision,
+		)
+		compare(
+			backupPolicyCompareConnectorTombstone,
+			state.retainedConnectorID,
+			deletionTombstoneKey(string(DeletionTargetConnector), state.retainedConnectorID),
+			tombstoneRevision,
+		)
 	} else if state.candidate.Connector != nil {
 		connectorID := state.candidate.Connector.Record.Connector.ID
 		compare(backupPolicyCompareConnector, connectorID, state.connectorNameIndex.Key, state.connectorNameIndex.ModRevision)
@@ -126,7 +173,12 @@ func prepareBlueprintBackupPolicyPublication(
 		if reference.Entry != nil {
 			revision = reference.Entry.ModRevision
 		}
-		compare(backupPolicyCompareConnectorReference, reference.ConnectorID, backupPolicyConnectorReferenceKey(reference.ConnectorID, state.environmentID), revision)
+		compare(
+			backupPolicyCompareConnectorReference,
+			reference.ConnectorID,
+			backupPolicyConnectorReferenceKey(reference.ConnectorID, state.environmentID),
+			revision,
+		)
 	}
 	if !state.retain {
 		oldConnectorID := ""
@@ -138,10 +190,23 @@ func prepareBlueprintBackupPolicyPublication(
 			newConnectorID = state.candidate.Replacement.ConnectorID
 		}
 		if oldConnectorID != "" && oldConnectorID != newConnectorID {
-			publication.mutations = append(publication.mutations, Mutation{Type: MutationDelete, Key: backupPolicyConnectorReferenceKey(oldConnectorID, state.environmentID)})
+			publication.mutations = append(
+				publication.mutations,
+				Mutation{
+					Type: MutationDelete,
+					Key:  backupPolicyConnectorReferenceKey(oldConnectorID, state.environmentID),
+				},
+			)
 		}
 		if newConnectorID != "" && newConnectorID != oldConnectorID {
-			publication.mutations = append(publication.mutations, Mutation{Type: MutationPut, Key: backupPolicyConnectorReferenceKey(newConnectorID, state.environmentID), Value: []byte(state.environmentID)})
+			publication.mutations = append(
+				publication.mutations,
+				Mutation{
+					Type:  MutationPut,
+					Key:   backupPolicyConnectorReferenceKey(newConnectorID, state.environmentID),
+					Value: []byte(state.environmentID),
+				},
+			)
 		}
 	}
 	recordRevision, encryptedRevision := int64(0), int64(0)

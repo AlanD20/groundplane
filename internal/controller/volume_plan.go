@@ -76,7 +76,11 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 		candidateProjection.Record.RenderGeneration != uint64(task.RenderGeneration) {
 		return nil, errs.New(errs.KindInternal, "durable Volume candidate projection is stale")
 	}
-	candidateArtifact, err := decodeVolumePlanArtifact(candidateProjection.Record.ComposeArtifact, environmentID, candidateArtifactID)
+	candidateArtifact, err := decodeVolumePlanArtifact(
+		candidateProjection.Record.ComposeArtifact,
+		environmentID,
+		candidateArtifactID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -92,9 +96,12 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 	if err != nil {
 		return nil, err
 	}
-	if environment.Record.ID != environmentID || environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady ||
-		project.Record.ID != environment.Record.ProjectID || project.Record.Kind != etcd.ProjectKindTenant ||
-		tenant.Record.ID != project.Record.TenantID || candidateArtifact.AuthorizedVolumeDir != environment.Record.VolumeDir {
+	if environment.Record.ID != environmentID ||
+		environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady ||
+		project.Record.ID != environment.Record.ProjectID ||
+		project.Record.Kind != etcd.ProjectKindTenant ||
+		tenant.Record.ID != project.Record.TenantID ||
+		candidateArtifact.AuthorizedVolumeDir != environment.Record.VolumeDir {
 		return nil, errs.New(errs.KindInternal, "durable Volume Environment hierarchy is invalid")
 	}
 
@@ -105,14 +112,22 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 			return nil, errs.New(errs.KindInternal, "durable Volume add procedure is invalid")
 		}
 		steps := []*agentpb.ExecutionStep{
-			{StepId: task.Steps[0].ID, TimeoutSeconds: uint32(task.TimeoutSeconds), Payload: &agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure{
-				ManagedVolumeDirectoriesEnsure: &agentpb.ManagedVolumeDirectoriesEnsure{
-					ArtifactId: candidateArtifactID, VolumeIds: []string{task.Target}, IntentSha256: intentDigest,
+			{
+				StepId:         task.Steps[0].ID,
+				TimeoutSeconds: uint32(task.TimeoutSeconds),
+				Payload: &agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure{
+					ManagedVolumeDirectoriesEnsure: &agentpb.ManagedVolumeDirectoriesEnsure{
+						ArtifactId: candidateArtifactID, VolumeIds: []string{task.Target}, IntentSha256: intentDigest,
+					},
 				},
-			}},
-			{StepId: task.Steps[1].ID, TimeoutSeconds: uint32(task.TimeoutSeconds), Payload: &agentpb.ExecutionStep_ComposeApply{
-				ComposeApply: &agentpb.ComposeApply{ArtifactId: candidateArtifactID, FullReconcile: true},
-			}},
+			},
+			{
+				StepId:         task.Steps[1].ID,
+				TimeoutSeconds: uint32(task.TimeoutSeconds),
+				Payload: &agentpb.ExecutionStep_ComposeApply{
+					ComposeApply: &agentpb.ComposeApply{ArtifactId: candidateArtifactID, FullReconcile: true},
+				},
+			},
 		}
 		return BuildPlan(PlanBuildInput{
 			VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
@@ -215,16 +230,28 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 		})
 		stepIndex++
 	}
-	steps = append(steps,
-		&agentpb.ExecutionStep{StepId: task.Steps[stepIndex].ID, TimeoutSeconds: uint32(task.TimeoutSeconds), Payload: &agentpb.ExecutionStep_ManagedVolumeRemove{
-			ManagedVolumeRemove: &agentpb.ManagedVolumeRemove{VolumeId: task.Target, DockerName: "gp_vol_" + strings.ToLower(task.Target)},
-		}},
-		&agentpb.ExecutionStep{StepId: task.Steps[stepIndex+1].ID, TimeoutSeconds: uint32(task.TimeoutSeconds), Payload: &agentpb.ExecutionStep_ManagedVolumeDirectoryRemove{
-			ManagedVolumeDirectoryRemove: &agentpb.ManagedVolumeDirectoryRemove{
-				ArtifactId: cleanupArtifact.ArtifactId, VolumeId: task.Target, ComposeKey: key,
-				IntentSha256: intentDigest, Cursor: nil,
+	steps = append(
+		steps,
+		&agentpb.ExecutionStep{
+			StepId:         task.Steps[stepIndex].ID,
+			TimeoutSeconds: uint32(task.TimeoutSeconds),
+			Payload: &agentpb.ExecutionStep_ManagedVolumeRemove{
+				ManagedVolumeRemove: &agentpb.ManagedVolumeRemove{
+					VolumeId:   task.Target,
+					DockerName: "gp_vol_" + strings.ToLower(task.Target),
+				},
 			},
-		}},
+		},
+		&agentpb.ExecutionStep{
+			StepId:         task.Steps[stepIndex+1].ID,
+			TimeoutSeconds: uint32(task.TimeoutSeconds),
+			Payload: &agentpb.ExecutionStep_ManagedVolumeDirectoryRemove{
+				ManagedVolumeDirectoryRemove: &agentpb.ManagedVolumeDirectoryRemove{
+					ArtifactId: cleanupArtifact.ArtifactId, VolumeId: task.Target, ComposeKey: key,
+					IntentSha256: intentDigest, Cursor: nil,
+				},
+			},
+		},
 	)
 	return BuildPlan(PlanBuildInput{
 		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
@@ -340,7 +367,8 @@ func rebindVolumeArtifactForPlan(
 	planID string,
 	renderGeneration uint64,
 ) (*agentpb.ComposeArtifact, error) {
-	if source == nil || ids.Validate(ids.KindConfig, artifactID) != nil || ids.Validate(ids.KindPlan, planID) != nil || renderGeneration == 0 {
+	if source == nil || ids.Validate(ids.KindConfig, artifactID) != nil || ids.Validate(ids.KindPlan, planID) != nil ||
+		renderGeneration == 0 {
 		return nil, errs.New(errs.KindInternal, "historical Volume artifact identity is invalid")
 	}
 	owned := proto.Clone(source).(*agentpb.ComposeArtifact)

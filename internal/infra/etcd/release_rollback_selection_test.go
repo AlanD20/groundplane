@@ -7,7 +7,12 @@ import (
 )
 
 func TestRollbackIntentMatchesBothIndexedOwners(t *testing.T) {
-	view := ReleaseView{Intent: domain.Intent{EnvironmentID: "env_01J00000000000000000000000", ServiceID: "svc_01J00000000000000000000000"}}
+	view := ReleaseView{
+		Intent: domain.Intent{
+			EnvironmentID: "env_01J00000000000000000000000",
+			ServiceID:     "svc_01J00000000000000000000000",
+		},
+	}
 	if !rollbackIntentMatches(view, view.Intent.EnvironmentID, view.Intent.ServiceID) {
 		t.Fatal("matching rollback intent rejected")
 	}

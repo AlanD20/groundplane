@@ -68,16 +68,25 @@ func (repository *TaskRepository) PublishReleaseGroupDirectMutation(
 		return IdempotencyTransactionResult{}, err
 	}
 	if prepared.taskType != TaskCreate && prepared.taskType != TaskUpdate {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "release group direct mutation type is invalid")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"release group direct mutation type is invalid",
+		)
 	}
 	if ids.Validate(ids.KindEnvironment, prepared.environmentID) != nil ||
 		ids.Validate(ids.KindReleaseGroup, prepared.groupID) != nil {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "release group direct mutation identity is invalid")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"release group direct mutation identity is invalid",
+		)
 	}
 	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted ||
 		marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != prepared.environmentID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "release group direct marker is invalid")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"release group direct marker is invalid",
+		)
 	}
 	if err := validateReleaseGroupPreparedFragment(prepared); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -114,13 +123,19 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 		return IdempotencyTransactionResult{}, err
 	}
 	if environment.Record.ID != prepared.environmentID || project.Record.ID != environment.Record.ProjectID {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindScopeUnauthorized, "release group mutation hierarchy is inconsistent")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindScopeUnauthorized,
+			"release group mutation hierarchy is inconsistent",
+		)
 	}
 	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != environment.Record.ID || !marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "release group mutation marker does not match its task")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"release group mutation marker does not match its task",
+		)
 	}
 	task = cloneTaskRecord(task)
 	if task.IdempotencyKey == "" {

@@ -94,7 +94,10 @@ func TestResolveEnvironmentLogTargetsUsesOneFixedRevisionThroughDeletion(t *test
 			t.Fatalf("targets are not sorted by stable Service id: %#v", targets)
 		}
 	}
-	if _, err := ledger.ResolveEnvironmentLogTargets(context.Background(), environment.Record.ID, 128); !isKind(err, errs.KindEnvironmentNotFound) {
+	if _, err := ledger.ResolveEnvironmentLogTargets(context.Background(), environment.Record.ID, 128); !isKind(
+		err,
+		errs.KindEnvironmentNotFound,
+	) {
 		t.Fatalf("post-deletion snapshot error = %v, want Environment not found", err)
 	}
 }
@@ -128,7 +131,12 @@ func stageReleaseLogDesiredProjection(
 		fixtures[index] = releaseLogServiceFixture{ID: serviceID, Name: name}
 		projection.DesiredServices[index] = EnvironmentServiceProjection{
 			EnvironmentID: environment.Record.ID,
-			Desired:       core.Service{ID: serviceID, Name: name, Image: "app:latest", Strategy: core.StrategyRecreate},
+			Desired: core.Service{
+				ID:       serviceID,
+				Name:     name,
+				Image:    "app:latest",
+				Strategy: core.StrategyRecreate,
+			},
 		}
 	}
 	projection = withTestEnvironmentComposeArtifact(projection)
@@ -167,7 +175,7 @@ func installServingRelease(
 	intent := domain.Intent{
 		ID: releaseID, EnvironmentID: environmentID, ServiceID: serviceID,
 		OperationID: ids.NewAt(ids.KindOperation, now, offset), OperationKind: domain.OperationDeploy,
-		Image: "app:latest", Tag: "stable", Strategy: domain.StrategyRecreate,
+		CandidateWorkload: releaseTestWorkloadSeal("app:latest"), Tag: "stable", Strategy: domain.StrategyRecreate,
 		OnFailure:     domain.OnFailureLeaveActive,
 		RenderInputID: ids.NewAt(ids.KindConfig, now, offset), RenderInputDigest: strings.Repeat("a", 64),
 		CreatedAt: now, Actor: "operator", OriginatingTaskID: ids.NewAt(ids.KindTask, now, offset),
@@ -201,7 +209,7 @@ func installServingRelease(
 
 func testReleaseLogLedger(t *testing.T, store Store) *ReleaseLedger {
 	t.Helper()
-	tasks, err := NewTaskRepository(store)
+	tasks, err := newTaskRepository(store)
 	if err != nil {
 		t.Fatalf("NewTaskRepository() error = %v", err)
 	}

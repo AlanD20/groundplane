@@ -3,12 +3,10 @@ package composeobserver
 import (
 	"context"
 	"crypto/sha256"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/image"
 	"github.com/moby/moby/client"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -181,7 +179,6 @@ func dockerLabels(plan *agentpb.ExecutionPlan) map[string]string {
 type fakeEngine struct {
 	containers []container.Summary
 	inspects   map[string]client.ContainerInspectResult
-	images     map[string]client.ImageInspectResult
 }
 
 func (engine *fakeEngine) ContainerList(
@@ -197,14 +194,6 @@ func (engine *fakeEngine) ContainerInspect(
 	_ client.ContainerInspectOptions,
 ) (client.ContainerInspectResult, error) {
 	return engine.inspects[id], nil
-}
-
-func (engine *fakeEngine) ImageInspect(
-	_ context.Context,
-	id string,
-	_ ...client.ImageInspectOption,
-) (client.ImageInspectResult, error) {
-	return engine.images[id], nil
 }
 
 func (engine *fakeEngine) NetworkList(
@@ -238,103 +227,3 @@ func (engine *fakeEngine) VolumeInspect(
 }
 
 func (engine *fakeEngine) Close() error { return nil }
-
-func TestObserveServiceImageProvesSelectedCandidateByContainerAndImageInspect(t *testing.T) {
-	requested := "registry.example/app:candidate"
-	environmentID := "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	releaseID := "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	localID := "sha256:" + strings.Repeat("c", 64)
-	manifestDigest := strings.Repeat("b", 64)
-	yaml := []byte("services:\n  api:\n    image: " + requested + "\n")
-	yamlDigest := sha256.Sum256(yaml)
-	proxyConfig := []byte("{\"upstreams\":[\"api--singleton:8080\"]}")
-	proxyDigest := sha256.Sum256(proxyConfig)
-	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
-		Schema: executionplan.SchemaVersion, PlanId: observerPlanID, RenderGeneration: 1,
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,
-		TargetId:  environmentID,
-		Artifacts: []*agentpb.ComposeArtifact{{
-			ArtifactId: observerArtifactID, OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
-			OwnerId: environmentID, ProjectName: "gp-" + strings.ToLower(environmentID),
-			AuthorizedVolumeDir: "/var/lib/groundplane/volumes/tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-			CanonicalYaml:       yaml, YamlSha256: yamlDigest[:],
-			Services: []*agentpb.ComposeService{
-				{
-					ServiceId: observerServiceID, ComposeName: "api", ExpectedReplicas: 1,
-					Role:              agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
-					ProxyConfigJson:   proxyConfig,
-					ProxyConfigSha256: proxyDigest[:],
-					ExpectedLabels: []*agentpb.LabelPair{
-						{Key: "com.groundplane.environment-id", Value: environmentID},
-						{Key: "com.groundplane.kind", Value: "service"},
-						{Key: "com.groundplane.managed", Value: "true"},
-						{Key: "com.groundplane.plan-id", Value: observerPlanID},
-						{Key: "com.groundplane.render-generation", Value: "1"},
-						{Key: "com.groundplane.runtime-role", Value: "proxy"},
-						{Key: "com.groundplane.service-id", Value: observerServiceID},
-					},
-				},
-				{
-					ServiceId: observerServiceID, ComposeName: "api--singleton", ExpectedReplicas: 1,
-					ImageReference: requested,
-					Role:           agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
-					ExpectedLabels: []*agentpb.LabelPair{
-						{Key: "com.groundplane.environment-id", Value: environmentID},
-						{Key: "com.groundplane.kind", Value: "service"},
-						{Key: "com.groundplane.managed", Value: "true"},
-						{Key: "com.groundplane.plan-id", Value: observerPlanID},
-						{Key: "com.groundplane.release-id", Value: releaseID},
-						{Key: "com.groundplane.render-generation", Value: "1"},
-						{Key: "com.groundplane.runtime-role", Value: "singleton"},
-						{Key: "com.groundplane.service-id", Value: observerServiceID},
-					},
-				},
-			},
-		}},
-		Steps: []*agentpb.ExecutionStep{{
-			StepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAV", TimeoutSeconds: 30,
-			Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
-				ArtifactId: observerArtifactID, ServiceIds: []string{observerServiceID},
-				ForceRecreate: true, NoDependencies: true,
-			}},
-		}},
-	})
-	if err != nil {
-		t.Fatalf("seal candidate plan: %v", err)
-	}
-	labels := map[string]string{
-		composeProjectLabel: "gp-" + strings.ToLower(environmentID), composeServiceLabel: "api--singleton",
-	}
-	for _, pair := range plan.Artifacts[0].Services[1].ExpectedLabels {
-		labels[pair.Key] = pair.Value
-	}
-	engine := &fakeEngine{
-		containers: []container.Summary{{ID: "candidate", Labels: labels}},
-		inspects: map[string]client.ContainerInspectResult{
-			"candidate": {Container: container.InspectResponse{
-				ID: "candidate", Image: localID,
-				Config: &container.Config{Image: requested, Labels: labels},
-			}},
-		},
-		images: map[string]client.ImageInspectResult{
-			localID: {InspectResponse: image.InspectResponse{
-				ID: localID, RepoDigests: []string{"registry.example/app@sha256:" + manifestDigest},
-			}},
-		},
-	}
-	observer, err := NewWithEngine(engine)
-	if err != nil {
-		t.Fatal(err)
-	}
-	evidence, err := observer.ObserveServiceImage(
-		context.Background(), plan, observerArtifactID, observerServiceID, releaseID, requested,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if evidence.GetImmutableReference() != "registry.example/app@sha256:"+manifestDigest ||
-		evidence.GetLocalImageId() != localID ||
-		len(evidence.GetImageDigest()) != sha256.Size {
-		t.Fatalf("image evidence = %#v", evidence)
-	}
-}

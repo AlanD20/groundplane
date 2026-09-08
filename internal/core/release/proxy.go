@@ -51,7 +51,12 @@ func ProxyPorts(exposures []string) ([]uint16, error) {
 	return ports, nil
 }
 
-func RenderProxyConfig(serviceName, releaseID string, target WorkloadTarget, generation uint64, ports []uint16) (ProxyConfig, error) {
+func RenderProxyConfig(
+	serviceName, releaseID string,
+	target WorkloadTarget,
+	generation uint64,
+	ports []uint16,
+) (ProxyConfig, error) {
 	if serviceName == "" || strings.ContainsAny(serviceName, "/\\\x00") ||
 		target.Validate() != nil || generation == 0 || releaseID == "" ||
 		len(ports) == 0 || len(ports) > MaximumProxyPorts {

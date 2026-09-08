@@ -53,7 +53,7 @@ func TestProjectComponentConfigHidesDisabledConfiguration(t *testing.T) {
 	component := core.Component{
 		Enabled: false,
 		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-			ZoneID: "net_01ARZ3NDEKTSV4RRFFQ69G5FAX",
+			ZoneIDs: []string{"net_01ARZ3NDEKTSV4RRFFQ69G5FAX"},
 		}},
 	}
 	if config := projectComponentConfig(component); config != nil {

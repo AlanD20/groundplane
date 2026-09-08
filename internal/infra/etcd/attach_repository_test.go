@@ -81,6 +81,57 @@ func TestAttachRepositoryCreatesAndReadsAtomicAttach(t *testing.T) {
 	}
 }
 
+// Rationale: direct Attach publication must durably capture the selected
+// backing authentication mode and publish no adapter-procedure Task steps for
+// a no-auth backing Service.
+func TestAttachRepositoryPublishesNoAuthenticationMode(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := newAttachTestStore()
+	scope := seedAttachScope(t, ctx, store)
+	backing := seedDesiredServiceFixture(
+		t,
+		ctx,
+		store,
+		scope.BackingEnvironment.Record.ID,
+		core.Service{
+			ID:   ids.NewAt(ids.KindService, testAttachTime, 301),
+			Name: "valkey", Image: "valkey/valkey:9-alpine",
+			Adapter: "valkey:9", Authentication: core.BackingAuthenticationNone,
+		},
+		ids.NewAt(ids.KindNetwork, testAttachTime, 302),
+		303,
+		true,
+		true,
+	)
+	scope.BackingService = backing.Service
+	repository, err := NewAttachRepository(store)
+	if err != nil {
+		t.Fatalf("NewAttachRepository() error = %v", err)
+	}
+	record, facts := testPendingAttach(t, scope, 304, "api-cache", nil)
+
+	created := createTestAttach(t, ctx, repository, scope, record, &facts)
+	storedTask, err := store.Get(ctx, taskKey(created.Record.TaskID))
+	if err != nil || storedTask == nil || storedTask.Entry == nil {
+		t.Fatalf("Get(published Task) = %#v, %v", storedTask, err)
+	}
+	task, err := decodeTaskRecord(storedTask.Entry.Value)
+	if err != nil {
+		t.Fatalf("decodeTaskRecord() error = %v", err)
+	}
+	stored, err := repository.GetAttachTaskRenderInput(ctx, task.PlanID)
+	if err != nil {
+		t.Fatalf("GetAttachTaskRenderInput() error = %v", err)
+	}
+	if stored.Record.Authentication != core.BackingAuthenticationNone {
+		t.Fatalf("published authentication = %q, want none", stored.Record.Authentication)
+	}
+	if len(task.Steps) != 1 {
+		t.Fatalf("published no-auth Task steps = %d, want 1", len(task.Steps))
+	}
+}
+
 // Rationale: retry must retain the exact generated identity and fact metadata while changing only task lifecycle state.
 func TestAttachLifecycleRetryPreservesIdentity(t *testing.T) {
 	t.Parallel()
@@ -1250,12 +1301,16 @@ func createTestAttach(
 	seed := int64(binary.BigEndian.Uint64(recordDigest[:8]))
 	planDigest := sha256.Sum256([]byte("attach-plan-" + record.ID))
 	stepCount := len(record.GrantAttachIDs) + 2
-	if scope.BackingService.Record.Desired.Adapter == "manual" {
+	if scope.BackingService.Record.Desired.Adapter == "manual" ||
+		scope.BackingService.Record.Desired.Authentication == core.BackingAuthenticationNone {
 		stepCount = 1
 	}
 	steps := make([]TaskStepRecord, stepCount)
 	for index := range steps {
-		steps[index] = TaskStepRecord{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, record.CreatedAt, seed+2+int64(index))}
+		steps[index] = TaskStepRecord{
+			Kind: TaskStepOperation,
+			ID:   ids.NewAt(ids.KindStep, record.CreatedAt, seed+2+int64(index)),
+		}
 	}
 	owner, err := EnvironmentTaskOwner(scope.Project.Record, scope.Environment.Record)
 	if err != nil {
@@ -1313,13 +1368,16 @@ func createTestAttach(
 		BackingServiceID:    scope.BackingService.Record.Desired.ID,
 		BackingProjectID:    record.BackingProjectID,
 		AdapterKey:          scope.BackingService.Record.Desired.Adapter,
+		Authentication:      scope.BackingService.Record.Desired.Authentication,
 		DesiredRevisionID:   scope.DesiredHead.Record.RevisionID,
 		ArtifactID:          ids.NewAt(ids.KindConfig, record.CreatedAt, seed+2000),
 		RenderGeneration:    scope.ComposeProjection.Record.RenderGeneration,
 		Services:            attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
 		Networks:            attachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones),
 		Volumes:             append([]EnvironmentVolumeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
-		VolumeMounts:        append([]EnvironmentServiceVolumeMount(nil), scope.ComposeProjection.Record.VolumeMounts...),
+		VolumeMounts: append(
+			[]EnvironmentServiceVolumeMount(nil),
+			scope.ComposeProjection.Record.VolumeMounts...),
 		NetworkJoins: []AttachTaskNetworkJoin{{
 			NetworkID: record.BackingNetworkID, ServiceIDs: []string{record.ServiceID},
 		}},
@@ -1348,7 +1406,8 @@ func createTestAttach(
 		t.Fatalf("Attach Task queue = %#v, error = %v", queued, err)
 	}
 	storedRenderInput, err := repository.GetAttachTaskRenderInput(ctx, task.PlanID)
-	if err != nil || storedRenderInput.Record.PlanID != task.PlanID || storedRenderInput.Revision != created.Revision {
+	if err != nil || storedRenderInput.Record.PlanID != task.PlanID || storedRenderInput.Revision != created.Revision ||
+		storedRenderInput.Record.Authentication != scope.BackingService.Record.Desired.Authentication {
 		t.Fatalf("Attach Task render input = %#v, error = %v", storedRenderInput, err)
 	}
 	return created
@@ -1400,16 +1459,19 @@ func publishTestDetach(
 		BackingServiceID:    scope.BackingService.Record.Desired.ID,
 		BackingProjectID:    current.Record.BackingProjectID,
 		AdapterKey:          scope.BackingService.Record.Desired.Adapter,
+		Authentication:      scope.BackingService.Record.Desired.Authentication,
 		DesiredRevisionID:   scope.DesiredHead.Record.RevisionID,
 		ArtifactID:          ids.NewAt(ids.KindConfig, createdAt, 904),
 		RenderGeneration:    scope.ComposeProjection.Record.RenderGeneration,
 		Services:            attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
 		Networks:            attachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones),
 		Volumes:             append([]EnvironmentVolumeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
-		VolumeMounts:        append([]EnvironmentServiceVolumeMount(nil), scope.ComposeProjection.Record.VolumeMounts...),
-		NetworkJoins:        nil,
-		ConsumerServiceIDs:  []string{current.Record.ServiceID},
-		GrantAttachIDs:      append([]string(nil), current.Record.GrantAttachIDs...),
+		VolumeMounts: append(
+			[]EnvironmentServiceVolumeMount(nil),
+			scope.ComposeProjection.Record.VolumeMounts...),
+		NetworkJoins:       nil,
+		ConsumerServiceIDs: []string{current.Record.ServiceID},
+		GrantAttachIDs:     append([]string(nil), current.Record.GrantAttachIDs...),
 	}
 	result, err := repository.BeginAttachDetachWithTask(ctx, scope, current, renderInput, task, marker)
 	if err != nil {

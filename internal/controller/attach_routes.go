@@ -252,10 +252,16 @@ func decodeAttachCredential(decoder *json.Decoder) (apiTypes.AttachCredential, e
 		}
 		member, ok := token.(string)
 		if !ok {
-			return apiTypes.AttachCredential{}, errs.New(errs.KindMalformedRequest, "Attach credential member name is invalid")
+			return apiTypes.AttachCredential{}, errs.New(
+				errs.KindMalformedRequest,
+				"Attach credential member name is invalid",
+			)
 		}
 		if _, duplicate := seen[member]; duplicate {
-			return apiTypes.AttachCredential{}, errs.New(errs.KindMalformedRequest, "Attach credential contains a duplicate member")
+			return apiTypes.AttachCredential{}, errs.New(
+				errs.KindMalformedRequest,
+				"Attach credential contains a duplicate member",
+			)
 		}
 		seen[member] = struct{}{}
 		switch member {
@@ -264,7 +270,10 @@ func decodeAttachCredential(decoder *json.Decoder) (apiTypes.AttachCredential, e
 		case "attach_id":
 			err = decoder.Decode(&credential.AttachID)
 		default:
-			return apiTypes.AttachCredential{}, errs.New(errs.KindMalformedRequest, "Attach credential contains an unknown member")
+			return apiTypes.AttachCredential{}, errs.New(
+				errs.KindMalformedRequest,
+				"Attach credential contains an unknown member",
+			)
 		}
 		if err != nil {
 			return apiTypes.AttachCredential{}, err

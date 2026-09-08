@@ -79,6 +79,7 @@ type ProjectPage struct {
 // main Environment, and its sole adapter-backed Service. ProjectID is the
 // facade's stable public identity; the other ids address shared operations.
 type BackingService struct {
+	Authentication   string `json:"authentication,omitempty"`
 	ProjectID        string `json:"project_id"`
 	EnvironmentID    string `json:"environment_id"`
 	ServiceID        string `json:"service_id"`
@@ -526,12 +527,13 @@ type ManagedConfigFile struct {
 }
 
 type CaddyComponentConfig struct {
-	ZoneID            string `json:"zone_id"`
-	CaddyfileTemplate string `json:"caddyfile_template,omitempty"`
+	ZoneIDs           []string `json:"zone_ids"`
+	CaddyfileTemplate string   `json:"caddyfile_template,omitempty"`
 }
 
 type CloudflareTunnelComponentConfig struct {
-	SecretID string `json:"secret_id"`
+	ZoneIDs  []string `json:"zone_ids"`
+	SecretID string   `json:"secret_id"`
 }
 
 type CoreDNSComponentConfig struct {
@@ -558,11 +560,12 @@ type ComponentConfigMutationInput struct {
 }
 
 type CaddyComponentConfigMutationInput struct {
-	ZoneID            string `json:"zone_id"`
-	CaddyfileTemplate string `json:"caddyfile_template,omitempty"`
+	ZoneIDs           []string `json:"zone_ids"`
+	CaddyfileTemplate string   `json:"caddyfile_template,omitempty"`
 }
 
 type CloudflareTunnelComponentConfigMutationInput struct {
+	ZoneIDs    []string                        `json:"zone_ids"`
 	Credential CloudflareTunnelCredentialInput `json:"credential"`
 }
 
@@ -935,7 +938,7 @@ type RestoreRequest struct {
 }
 
 type ComponentEnableRequest struct {
-	Config map[string]any `json:"config,omitempty"`
+	Config *ComponentConfigMutationInput `json:"config,omitempty"`
 }
 
 type RunnerCreateRequest struct {

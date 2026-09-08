@@ -19,15 +19,22 @@ func (repository *TaskRepository) retryHierarchyDeletionTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	if retry.Executor != TaskExecutorController {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindTaskNotRetryable, "hierarchy child Tasks retry through their parent operation")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"hierarchy child Tasks retry through their parent operation",
+		)
 	}
 	initiation, err := newInheritedTaskInitiation(source, actor)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if provided != nil {
-		if err := validateTaskInitiation(TaskRecord{}, *provided, false); err != nil || provided.actor != TaskActorSystem {
-			return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "system hierarchy Task retry initiation is invalid")
+		if err := validateTaskInitiation(TaskRecord{}, *provided, false); err != nil ||
+			provided.actor != TaskActorSystem {
+			return IdempotencyTransactionResult{}, errs.New(
+				errs.KindValidationFailed,
+				"system hierarchy Task retry initiation is invalid",
+			)
 		}
 		fences := append(append([]Condition(nil), initiation.fences...), provided.fences...)
 		initiation, err = newTaskInitiation(source.Record.Owner, TaskActorSystem, fences...)
@@ -38,7 +45,10 @@ func (repository *TaskRepository) retryHierarchyDeletionTask(
 	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
 		marker.TaskID != retry.ID || !marker.CreatedAt.Equal(retry.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) || validateIdempotencyMarker(marker) != nil {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "hierarchy Task retry marker is invalid")
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"hierarchy Task retry marker is invalid",
+		)
 	}
 	retry.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
 	if err := validateTaskRecord(retry); err != nil {
@@ -88,7 +98,12 @@ func (repository *TaskRepository) retryHierarchyDeletionTask(
 			if decodeErr != nil {
 				return decodeErr
 			}
-			return errs.Newf(errs.KindTaskRetryInFlight, "operation %s already has active retry %s", retry.OperationID, activeTaskID)
+			return errs.Newf(
+				errs.KindTaskRetryInFlight,
+				"operation %s already has active retry %s",
+				retry.OperationID,
+				activeTaskID,
+			)
 		}
 		return errs.New(errs.KindStateConflict, "hierarchy deletion retry authority changed")
 	}
@@ -120,7 +135,10 @@ func (repository *TaskRepository) prepareHierarchyDeletionRetry(
 		operation.Tombstone.Terminal.TaskID != source.Record.ID ||
 		operation.Tombstone.Terminal.Status != string(source.Record.Status) ||
 		operation.Tombstone.Phase == HierarchyDeletionRetained || operation.Fence.Dispatch != HierarchyDeletionDispatchClosed {
-		return hierarchyDeletionRootAckChange{}, errs.New(errs.KindTaskNotRetryable, "hierarchy deletion operation is not retryable")
+		return hierarchyDeletionRootAckChange{}, errs.New(
+			errs.KindTaskNotRetryable,
+			"hierarchy deletion operation is not retryable",
+		)
 	}
 	targetKey := hierarchyDeletionPrimaryKey(operation.Tombstone.TargetKind, operation.Tombstone.TargetID)
 	tombstoneKey := HierarchyDeletionTombstoneKey(string(operation.Tombstone.TargetKind), operation.Tombstone.TargetID)

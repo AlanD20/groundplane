@@ -417,6 +417,9 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	if err := releasePublication.validate(environment.Record.ID, task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	if err := releasePublication.validateRetainedRuntime(task, projection); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	task = cloneTaskRecord(task)
 	if task.IdempotencyKey == "" {
 		task.IdempotencyKey = marker.Locator.Key
@@ -546,7 +549,10 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
-		{Key: environmentBlueprintRootKey(revision.EnvironmentID, revision.RevisionID), ModRevision: publication.rootRevision},
+		{
+			Key:         environmentBlueprintRootKey(revision.EnvironmentID, revision.RevisionID),
+			ModRevision: publication.rootRevision,
+		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 		{Key: environmentBlueprintHeadKey(revision.EnvironmentID), ModRevision: expectedHeadRevision},
@@ -584,7 +590,12 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 			if decodeErr != nil {
 				return decodeErr
 			}
-			return errs.Newf(errs.KindStateConflict, "operation %s already has active task %s", task.OperationID, activeTaskID)
+			return errs.Newf(
+				errs.KindStateConflict,
+				"operation %s already has active task %s",
+				task.OperationID,
+				activeTaskID,
+			)
 		}
 		for _, index := range []int{0, 1, 3} {
 			if values[index] != nil {
@@ -635,12 +646,15 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		return requirementPublication.classify(values[requirementBaseConditionCount:])
 	}
 	if publishDomain {
-		conditions = append(conditions, componentPublication.conditions...)
-		mutations = append(mutations, componentPublication.mutations...)
-		classified = classifyEnvironmentBlueprintComponentPublication(
+		conditions, classified, err = composeEnvironmentBlueprintComponentPublication(
+			conditions,
 			classified,
 			componentPublication,
 		)
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		mutations = append(mutations, componentPublication.mutations...)
 		conditions = append(conditions, attachPublication.conditions...)
 		mutations = append(mutations, attachPublication.mutations...)
 		classified = classifyEnvironmentBlueprintAttachPublication(classified, attachPublication)
@@ -670,21 +684,25 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 			}
 			return scriptPublication.classify(values[scriptBaseConditionCount:])
 		}
+		releaseForCompare, err := releasePublication.withExistingComparisons(conditions)
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
 		releaseBaseConditionCount := len(conditions)
-		conditions = append(conditions, releasePublication.conditions...)
+		conditions = append(conditions, releaseForCompare.conditions...)
 		mutations = append(mutations, releasePublication.mutations...)
 		if err := releasePublication.sources.ValidateStagedMutations(claim, mutations); err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
 		releaseBaseClassifier := classified
 		classified = func(revision int64, values []*KeyValue) error {
-			if len(values) != releaseBaseConditionCount+len(releasePublication.conditions) {
+			if len(values) != releaseBaseConditionCount+len(releaseForCompare.conditions) {
 				return errs.New(errs.KindInternal, "Blueprint Release compare evidence is incomplete")
 			}
 			if err := releaseBaseClassifier(revision, values[:releaseBaseConditionCount]); err != nil {
 				return err
 			}
-			return releasePublication.classify(values[releaseBaseConditionCount:])
+			return releaseForCompare.classify(values[releaseBaseConditionCount:])
 		}
 	}
 	classifier := func(revision int64, values []*KeyValue) error {

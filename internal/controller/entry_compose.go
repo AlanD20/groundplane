@@ -46,7 +46,9 @@ func ProjectEnvironmentEntries(
 	entries []etcd.EntryRecord,
 ) (EnvironmentEntryComposeProjection, error) {
 	if project == nil || ids.Validate(ids.KindEnvironment, environmentID) != nil ||
-		!filepath.IsAbs(volumeDir) || filepath.Clean(volumeDir) != volumeDir || filepath.Base(volumeDir) != environmentID {
+		!filepath.IsAbs(
+			volumeDir,
+		) || filepath.Clean(volumeDir) != volumeDir || filepath.Base(volumeDir) != environmentID {
 		return EnvironmentEntryComposeProjection{}, errs.New(
 			errs.KindInternal,
 			"Environment Entry Compose input is invalid",

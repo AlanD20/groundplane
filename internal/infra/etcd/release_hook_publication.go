@@ -17,7 +17,9 @@ type releaseHookPublicationFragment struct {
 	mutations  []Mutation
 }
 
-func prepareReleaseHookPublicationFragment(evidence ReleasePublicationEvidence) (releaseHookPublicationFragment, error) {
+func prepareReleaseHookPublicationFragment(
+	evidence ReleasePublicationEvidence,
+) (releaseHookPublicationFragment, error) {
 	fragment := releaseHookPublicationFragment{}
 	updatedScripts := make(map[string]ScriptRecord)
 	scriptRevisions := make(map[string]int64)
@@ -47,13 +49,22 @@ func prepareReleaseHookPublicationFragment(evidence ReleasePublicationEvidence) 
 			execution.OperationID != evidence.Task.OperationID || execution.PlanHash != evidence.Task.PlanHash ||
 			evidence.Task.Params[ReleaseHookStepExecutionParam(execution.StepID)] != execution.ID ||
 			sources.Revision != evidence.Manifest.ReadRevision {
-			return releaseHookPublicationFragment{}, errs.New(errs.KindValidationFailed, "release hook execution evidence is invalid")
+			return releaseHookPublicationFragment{}, errs.New(
+				errs.KindValidationFailed,
+				"release hook execution evidence is invalid",
+			)
 		}
 		if _, exists := updatedScripts[execution.ScriptID]; exists {
-			return releaseHookPublicationFragment{}, errs.New(errs.KindValidationFailed, "release hook Script selection is duplicated")
+			return releaseHookPublicationFragment{}, errs.New(
+				errs.KindValidationFailed,
+				"release hook Script selection is duplicated",
+			)
 		}
 		if sources.Script.Record.ActiveReferences == math.MaxUint64 {
-			return releaseHookPublicationFragment{}, errs.New(errs.KindStateConflict, "Script active reference count is exhausted")
+			return releaseHookPublicationFragment{}, errs.New(
+				errs.KindStateConflict,
+				"Script active reference count is exhausted",
+			)
 		}
 		updated := sources.Script.Record
 		updated.ActiveReferences++
@@ -97,13 +108,22 @@ func prepareReleaseHookPublicationFragment(evidence ReleasePublicationEvidence) 
 		for _, condition := range scriptExecutionProjectionConditions(sources) {
 			appendRevision(condition.Key, condition.ModRevision)
 		}
-		fragment.mutations = append(fragment.mutations,
+		fragment.mutations = append(
+			fragment.mutations,
 			Mutation{Type: MutationPut, Key: scriptExecutionKey(execution.ID), Value: executionValue},
 			Mutation{Type: MutationPut, Key: scriptRunnerSnapshotKey(execution.SnapshotID), Value: snapshotValue},
 			Mutation{Type: MutationPut, Key: scriptSetBodyForwardReferenceKey(
-				execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID, execution.ScriptGeneration, execution.ID,
+				execution.EnvironmentID,
+				execution.ScriptSetGeneration,
+				execution.ScriptID,
+				execution.ScriptGeneration,
+				execution.ID,
 			), Value: bodyReference},
-			Mutation{Type: MutationPut, Key: scriptBodyReverseReferenceKey(execution.ID), Value: append([]byte(nil), bodyReference...)},
+			Mutation{
+				Type:  MutationPut,
+				Key:   scriptBodyReverseReferenceKey(execution.ID),
+				Value: append([]byte(nil), bodyReference...),
+			},
 		)
 	}
 	for scriptID, updated := range updatedScripts {

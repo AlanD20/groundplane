@@ -23,7 +23,13 @@ func TestHierarchyReadsAppliedEntryProjectionFromRuntimeRecord(t *testing.T) {
 	got, found, err := hierarchy.GetEnvironmentAppliedComposeProjection(ctx, environment.Record.ID)
 	if err != nil || !found || got.Revision != want.Revision ||
 		got.Record.EnvironmentID != want.Record.EnvironmentID || got.Record.RevisionID != want.Record.RevisionID {
-		t.Fatalf("GetEnvironmentAppliedComposeProjection() = %#v, %v, %v; want revision %d", got, found, err, want.Revision)
+		t.Fatalf(
+			"GetEnvironmentAppliedComposeProjection() = %#v, %v, %v; want revision %d",
+			got,
+			found,
+			err,
+			want.Revision,
+		)
 	}
 }
 

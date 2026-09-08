@@ -13,7 +13,6 @@ import (
 )
 
 const (
-	serviceProxyImage      = "caddy:2.11.4-alpine"
 	serviceProxyConfigPath = "/etc/caddy/groundplane-proxy.json"
 )
 
@@ -52,7 +51,12 @@ func renderServiceProxyTopology(
 			}
 			authored.Name = name
 			authored.Labels = labels
-			authored.Extensions, err = composeResourceExtensions(authored.Extensions, "service", serviceID, input.EnvironmentID)
+			authored.Extensions, err = composeResourceExtensions(
+				authored.Extensions,
+				"service",
+				serviceID,
+				input.EnvironmentID,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -61,17 +65,24 @@ func renderServiceProxyTopology(
 			if replicas <= 0 {
 				return nil, errs.New(errs.KindValidationFailed, "Service replicas must be positive")
 			}
-			result = append(result, &agentpb.ComposeService{
+			service := &agentpb.ComposeService{
 				ServiceId: serviceID, ComposeName: name, ExpectedLabels: expected,
 				OwnerComponentId: composeServiceComponentOwner(input.Identities.Services, serviceID),
 				ExpectedReplicas: expectedRuntimeReplicas(active, replicas),
 				HasHealthcheck:   authored.HealthCheck != nil && !authored.HealthCheck.Disable,
-			})
+			}
+			if err := bindEnvironmentComponentImage(input.Identities.Services, authored, service); err != nil {
+				return nil, err
+			}
+			result = append(result, service)
 			continue
 		}
 		if len(exposures) == 0 {
 			if identity.Strategy == domain.StrategyBlueGreen {
-				return nil, errs.New(errs.KindValidationFailed, "blue-green release requires an addressable TCP service")
+				return nil, errs.New(
+					errs.KindValidationFailed,
+					"blue-green release requires an addressable TCP service",
+				)
 			}
 			if identity.Strategy == domain.StrategyRecreate {
 				replicas := authored.GetScale()
@@ -85,12 +96,24 @@ func renderServiceProxyTopology(
 						authored.Image = input.Project.DisabledServices[name].Image
 					}
 				}
-				labels, expected, err := composeServiceRuntimeLabels(authored.Labels, serviceID, "singleton", "", identity.ReleaseID, input)
+				labels, expected, err := composeServiceRuntimeLabels(
+					authored.Labels,
+					serviceID,
+					"singleton",
+					"",
+					identity.ReleaseID,
+					input,
+				)
 				if err != nil {
 					return nil, err
 				}
 				authored.Name, authored.Labels = name, labels
-				authored.Extensions, err = composeResourceExtensions(authored.Extensions, "service", serviceID, input.EnvironmentID)
+				authored.Extensions, err = composeResourceExtensions(
+					authored.Extensions,
+					"service",
+					serviceID,
+					input.EnvironmentID,
+				)
 				if err != nil {
 					return nil, err
 				}
@@ -132,14 +155,17 @@ func renderServiceProxyTopology(
 		}
 		configName := "gp-proxy-" + strings.ToLower(serviceID)
 		if _, collision := project.Configs[configName]; collision {
-			return nil, errs.New(errs.KindValidationFailed, "generated Service proxy config collides with authored Compose config")
+			return nil, errs.New(
+				errs.KindValidationFailed,
+				"generated Service proxy config collides with authored Compose config",
+			)
 		}
 		project.Configs[configName] = composetypes.ConfigObjConfig(
 			composetypes.FileObjectConfig{Content: string(proxyConfig.JSON)},
 		)
 
 		proxy := composetypes.ServiceConfig{
-			Name: name, Image: serviceProxyImage, Networks: cloneProxyNetworks(authored.Networks),
+			Name: name, Networks: cloneProxyNetworks(authored.Networks),
 			Ports: slices.Clone(authored.Ports), Expose: slices.Clone(authored.Expose), Restart: authored.Restart,
 			Profiles: slices.Clone(authored.Profiles),
 			Command:  composetypes.ShellCommand{"caddy", "run", "--config", serviceProxyConfigPath},
@@ -149,7 +175,14 @@ func renderServiceProxyTopology(
 				),
 			},
 		}
-		proxyLabels, proxyExpected, err := composeServiceRuntimeLabels(authored.Labels, serviceID, "proxy", "", "", input)
+		proxyLabels, proxyExpected, err := composeServiceRuntimeLabels(
+			authored.Labels,
+			serviceID,
+			"proxy",
+			"",
+			"",
+			input,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -158,14 +191,18 @@ func renderServiceProxyTopology(
 		if err != nil {
 			return nil, err
 		}
-		project.Services[name] = proxy
-		result = append(result, &agentpb.ComposeService{
+		proxyService := &agentpb.ComposeService{
 			ServiceId: serviceID, ComposeName: name, ExpectedLabels: proxyExpected,
 			OwnerComponentId: composeServiceComponentOwner(input.Identities.Services, serviceID),
 			ExpectedReplicas: expectedRuntimeReplicas(active, 1),
 			Role:             agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
 			ProxyConfigJson:  slices.Clone(proxyConfig.JSON), ProxyConfigSha256: slices.Clone(proxyConfig.SHA256[:]),
-		})
+		}
+		if err := bindServiceProxyImage(identity.ProxyImage, &proxy, proxyService); err != nil {
+			return nil, err
+		}
+		project.Services[name] = proxy
+		result = append(result, proxyService)
 
 		targets := []domain.WorkloadTarget{domain.WorkloadSingleton}
 		if identity.Strategy == domain.StrategyBlueGreen {
@@ -200,12 +237,24 @@ func renderServiceProxyTopology(
 				serviceRole = agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT
 				slot = string(target)
 			}
-			labels, expected, err := composeServiceRuntimeLabels(authored.Labels, serviceID, role, slot, releaseID, input)
+			labels, expected, err := composeServiceRuntimeLabels(
+				authored.Labels,
+				serviceID,
+				role,
+				slot,
+				releaseID,
+				input,
+			)
 			if err != nil {
 				return nil, err
 			}
 			workload.Labels = labels
-			workload.Extensions, err = composeResourceExtensions(authored.Extensions, "service", serviceID, input.EnvironmentID)
+			workload.Extensions, err = composeResourceExtensions(
+				authored.Extensions,
+				"service",
+				serviceID,
+				input.EnvironmentID,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -249,7 +298,9 @@ func expectedRuntimeReplicas(active bool, configured int) uint32 {
 	return uint32(configured)
 }
 
-func cloneProxyNetworks(values map[string]*composetypes.ServiceNetworkConfig) map[string]*composetypes.ServiceNetworkConfig {
+func cloneProxyNetworks(
+	values map[string]*composetypes.ServiceNetworkConfig,
+) map[string]*composetypes.ServiceNetworkConfig {
 	result := make(map[string]*composetypes.ServiceNetworkConfig, len(values))
 	for name, value := range values {
 		if value == nil {

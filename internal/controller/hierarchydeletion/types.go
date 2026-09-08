@@ -189,7 +189,14 @@ func stableOperationID(kind OperationKind, targetID, idempotencyKey string) stri
 	sum := sha256.Sum256([]byte(string(kind) + "\x00" + targetID + "\x00" + idempotencyKey))
 	return "del_" + hex.EncodeToString(sum[:16])
 }
-func stableActionID(operationID string, ordinal int, kind ActionKind, targetKind ActionTargetKind, targetID string) string {
+
+func stableActionID(
+	operationID string,
+	ordinal int,
+	kind ActionKind,
+	targetKind ActionTargetKind,
+	targetID string,
+) string {
 	value := fmt.Sprintf("%s\x00%020d\x00%s\x00%s\x00%s", operationID, ordinal, kind, targetKind, targetID)
 	sum := sha256.Sum256([]byte(value))
 	return "act_" + hex.EncodeToString(sum[:16])
@@ -203,7 +210,8 @@ func taskOperationID(taskID string) (string, error) {
 }
 
 func validateRequest(request DeleteRequest) error {
-	if request.TargetKind != TargetTenant && request.TargetKind != TargetProject && request.TargetKind != TargetEnvironment {
+	if request.TargetKind != TargetTenant && request.TargetKind != TargetProject &&
+		request.TargetKind != TargetEnvironment {
 		return errs.Newf(errs.KindValidationFailed, "hierarchy deletion target kind %q is invalid", request.TargetKind)
 	}
 	if strings.TrimSpace(request.TargetID) == "" {
@@ -224,7 +232,9 @@ func validateMembership(snapshot FrozenMembership) error {
 	}
 	seen := make(map[string]struct{}, len(snapshot.Nodes))
 	for _, node := range snapshot.Nodes {
-		if strings.TrimSpace(node.NodeID) == "" || !node.TargetKind.Valid() || strings.TrimSpace(node.ID) == "" || !node.ActionKind.Valid() || node.TargetRevision <= 0 {
+		if strings.TrimSpace(node.NodeID) == "" || !node.TargetKind.Valid() || strings.TrimSpace(node.ID) == "" ||
+			!node.ActionKind.Valid() ||
+			node.TargetRevision <= 0 {
 			return errs.New(errs.KindInternal, "hierarchy deletion membership contains an invalid node")
 		}
 		if err := node.ProcedureInput.Validate(node.ActionKind, node.TargetKind, node.ID, node.TargetRevision); err != nil {
@@ -244,7 +254,14 @@ func BuildPlan(operation Operation, snapshot FrozenMembership) (Plan, error) {
 	}
 	if len(snapshot.ReverseReferences) > 0 {
 		ref := snapshot.ReverseReferences[0]
-		return Plan{}, errs.Newf(errs.KindStateConflict, "hierarchy deletion is fenced by %s %s referencing %s %s", ref.SourceKind, ref.SourceID, ref.TargetKind, ref.TargetID)
+		return Plan{}, errs.Newf(
+			errs.KindStateConflict,
+			"hierarchy deletion is fenced by %s %s referencing %s %s",
+			ref.SourceKind,
+			ref.SourceID,
+			ref.TargetKind,
+			ref.TargetID,
+		)
 	}
 	finalKind := ActionTenantFinalize
 	if operation.Kind == OperationBackingDelete || operation.TargetKind == TargetBackingService {
@@ -288,7 +305,12 @@ func BuildPlan(operation Operation, snapshot FrozenMembership) (Plan, error) {
 		for _, prerequisiteID := range prerequisiteIDs {
 			prerequisiteIndex, ok := byID[prerequisiteID]
 			if !ok {
-				return errs.Newf(errs.KindInternal, "hierarchy deletion node %s requires missing node %s", node.NodeID, prerequisiteID)
+				return errs.Newf(
+					errs.KindInternal,
+					"hierarchy deletion node %s requires missing node %s",
+					node.NodeID,
+					prerequisiteID,
+				)
 			}
 			if err := visit(prerequisiteIndex); err != nil {
 				return err
@@ -297,7 +319,21 @@ func BuildPlan(operation Operation, snapshot FrozenMembership) (Plan, error) {
 		}
 		ordinal := len(actions)
 		ordinals[index] = ordinal
-		actions = append(actions, PlannedAction{ID: stableActionID(operation.ID, ordinal, node.ActionKind, node.TargetKind, node.ID), NodeID: node.NodeID, Ordinal: ordinal, OperationID: operation.ID, Kind: node.ActionKind, TargetKind: node.TargetKind, TargetID: node.ID, TargetRevision: node.TargetRevision, PrerequisiteOrdinals: prerequisites, ProcedureInput: node.ProcedureInput})
+		actions = append(
+			actions,
+			PlannedAction{
+				ID:                   stableActionID(operation.ID, ordinal, node.ActionKind, node.TargetKind, node.ID),
+				NodeID:               node.NodeID,
+				Ordinal:              ordinal,
+				OperationID:          operation.ID,
+				Kind:                 node.ActionKind,
+				TargetKind:           node.TargetKind,
+				TargetID:             node.ID,
+				TargetRevision:       node.TargetRevision,
+				PrerequisiteOrdinals: prerequisites,
+				ProcedureInput:       node.ProcedureInput,
+			},
+		)
 		state[index] = 2
 		return nil
 	}
@@ -315,10 +351,24 @@ func BuildPlan(operation Operation, snapshot FrozenMembership) (Plan, error) {
 		rootOrdinals = append(rootOrdinals, ordinals[rootIndex])
 	}
 	if len(actions) != len(nodes) {
-		return Plan{}, errs.New(errs.KindInternal, "hierarchy deletion membership contains an orphan outside the aggregate")
+		return Plan{}, errs.New(
+			errs.KindInternal,
+			"hierarchy deletion membership contains an orphan outside the aggregate",
+		)
 	}
 	ordinal := len(actions)
-	final := PlannedAction{ID: stableActionID(operation.ID, ordinal, finalKind, rootKind, operation.TargetID), NodeID: "root.finalize", Ordinal: ordinal, OperationID: operation.ID, Kind: finalKind, TargetKind: rootKind, TargetID: operation.TargetID, TargetRevision: rootRevision, PrerequisiteOrdinals: rootOrdinals, ProcedureInput: rootInput}
+	final := PlannedAction{
+		ID:                   stableActionID(operation.ID, ordinal, finalKind, rootKind, operation.TargetID),
+		NodeID:               "root.finalize",
+		Ordinal:              ordinal,
+		OperationID:          operation.ID,
+		Kind:                 finalKind,
+		TargetKind:           rootKind,
+		TargetID:             operation.TargetID,
+		TargetRevision:       rootRevision,
+		PrerequisiteOrdinals: rootOrdinals,
+		ProcedureInput:       rootInput,
+	}
 	actions = append(actions, final)
 	return Plan{Actions: actions}, nil
 }

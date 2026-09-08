@@ -12,6 +12,7 @@ type environmentBlueprintAtomicShape struct {
 	name                         string
 	releases                     int
 	hooks                        int
+	realHookSources              bool
 	physicalSources              int
 	attaches                     bool
 	backup                       bool

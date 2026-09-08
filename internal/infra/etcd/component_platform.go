@@ -224,10 +224,14 @@ type ComponentObservationRecord struct {
 }
 
 func validateComponentObservation(record ComponentObservationRecord) error {
-	if ids.Validate(ids.KindComponent, record.ComponentID) != nil || ids.Validate(ids.KindService, record.ServiceID) != nil ||
-		ids.Validate(ids.KindPlan, record.PlanID) != nil || ids.Validate(ids.KindConfig, record.ComposeArtifactID) != nil ||
-		ids.Validate(ids.KindAgent, record.AgentID) != nil || ids.Validate(ids.KindTask, record.TaskID) != nil ||
-		ids.Validate(ids.KindStep, record.StepID) != nil || record.Revision == 0 ||
+	if ids.Validate(ids.KindComponent, record.ComponentID) != nil ||
+		ids.Validate(ids.KindService, record.ServiceID) != nil ||
+		ids.Validate(ids.KindPlan, record.PlanID) != nil ||
+		ids.Validate(ids.KindConfig, record.ComposeArtifactID) != nil ||
+		ids.Validate(ids.KindAgent, record.AgentID) != nil ||
+		ids.Validate(ids.KindTask, record.TaskID) != nil ||
+		ids.Validate(ids.KindStep, record.StepID) != nil ||
+		record.Revision == 0 ||
 		(record.PredecessorTaskID != "" && ids.Validate(ids.KindTask, record.PredecessorTaskID) != nil) ||
 		(record.Revision == 1 && record.PredecessorTaskID != "") ||
 		(record.Revision > 1 && record.PredecessorTaskID == "") ||

@@ -483,5 +483,136 @@ class DeployRollbackTest(unittest.TestCase):
         return result, deploy_dir, systemctl_log, destinations
 
 
+class DeployAgentIdlePreflightTest(unittest.TestCase):
+    def run_dispatch_fixture(
+        self,
+        responses: list[str],
+        *,
+        list_failure: bool = False,
+    ) -> tuple[subprocess.CompletedProcess[str], str, str]:
+        with temporary_directory() as temporary:
+            root = Path(temporary)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            cli = bin_dir / "groundplane"
+            list_count = root / "list-count"
+            list_count.write_text("0\n", encoding="utf-8")
+            update_log = root / "update.log"
+            update_log.write_text("", encoding="utf-8")
+            response_paths = []
+            for index, response in enumerate(responses):
+                response_path = root / f"agent-list-{index}"
+                response_path.write_text(response + "\n", encoding="utf-8")
+                response_paths.append(response_path)
+
+            cases = "".join(
+                f'        {index}) cat {shlex.quote(str(path))} ;;\n'
+                for index, path in enumerate(response_paths)
+            )
+            last_response = shlex.quote(str(response_paths[-1]))
+            cli.write_text(
+                "#!/bin/sh\n"
+                'case "$*" in\n'
+                '    *"agent list")\n'
+                '        if test "${AGENT_LIST_FAILURE:-0}" -eq 1; then\n'
+                "            echo 'agent list read failed' >&2\n"
+                "            exit 17\n"
+                "        fi\n"
+                '        count=$(sed -n \'1p\' "$AGENT_LIST_COUNT")\n'
+                "        case \"$count\" in\n"
+                f"{cases}"
+                f"            *) cat {last_response} ;;\n"
+                "        esac\n"
+                '        printf \'%s\\n\' "$((count + 1))" > "$AGENT_LIST_COUNT"\n'
+                "        ;;\n"
+                '    *"agent update --all")\n'
+                '        printf \'update\\n\' >> "$AGENT_UPDATE_LOG"\n'
+                '        printf \'{\\n  "task_id": "task_1"\\n}\\n\'\n'
+                "        ;;\n"
+                "    *)\n"
+                "        echo \"unexpected CLI operation: $*\" >&2\n"
+                "        exit 19\n"
+                "        ;;\n"
+                "esac\n",
+                encoding="utf-8",
+            )
+            cli.chmod(0o755)
+
+            load_agent_list = shell_function("load_agent_list").replace(
+                "/usr/local/bin/groundplane", shlex.quote(str(cli))
+            )
+            dispatch_agent_update = shell_function("dispatch_agent_update").replace(
+                "/usr/local/bin/groundplane", shlex.quote(str(cli))
+            ).replace("sleep 1", ":")
+            command = (
+                "set -eu\n"
+                "agent_task_id=\n"
+                "retain_recovery=0\n"
+                "unresolved_task_id=\n"
+                "unresolved_task_state=unknown\n"
+                f"{load_agent_list}\n"
+                f"{dispatch_agent_update}\n"
+                "if ! load_agent_list; then exit 1; fi\n"
+                "selected_agent_id=$agent_id\n"
+                "dispatch_agent_update\n"
+            )
+            environment = os.environ.copy()
+            environment["AGENT_LIST_COUNT"] = str(list_count)
+            environment["AGENT_UPDATE_LOG"] = str(update_log)
+            if list_failure:
+                environment["AGENT_LIST_FAILURE"] = "1"
+            result = subprocess.run(
+                ["sh", "-c", command, "--"],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=environment,
+            )
+            return (
+                result,
+                update_log.read_text(encoding="utf-8"),
+                list_count.read_text(encoding="utf-8"),
+            )
+
+    def test_busy_agent_is_not_updated_until_authoritatively_idle(self) -> None:
+        result, updates, list_count = self.run_dispatch_fixture(
+            [
+                '{"items":[{"id":"agt_1","in_flight":1}]}',
+                '{"items":[{"id":"agt_1","in_flight":0}]}',
+            ]
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(updates.splitlines(), ["update"])
+        self.assertEqual(list_count.strip(), "2")
+
+    def test_persistent_busy_agent_exhausts_bound_without_update(self) -> None:
+        result, updates, list_count = self.run_dispatch_fixture(
+            ['{"items":[{"id":"agt_1","in_flight":1}]}']
+        )
+
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(updates, "")
+        self.assertEqual(list_count.strip(), "330")
+        self.assertIn("remained busy for 330 seconds", result.stderr)
+
+    def test_malformed_agent_list_fails_closed_without_update(self) -> None:
+        result, updates, list_count = self.run_dispatch_fixture(["not json"])
+
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(updates, "")
+        self.assertEqual(list_count.strip(), "1")
+
+    def test_agent_list_read_failure_fails_closed_without_update(self) -> None:
+        result, updates, list_count = self.run_dispatch_fixture(
+            ['{"items":[{"id":"agt_1","in_flight":0}]}'],
+            list_failure=True,
+        )
+
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(updates, "")
+        self.assertEqual(list_count.strip(), "0")
+
+
 if __name__ == "__main__":
     unittest.main()

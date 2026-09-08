@@ -84,7 +84,9 @@ func (state *concurrentRouteProviderState) collectionRevision(collection string)
 	return state.snapshotRevision
 }
 
-func routeProviderEnvironmentProjection(environmentID, serviceImage, routeHost string) etcd.EnvironmentComposeProjection {
+func routeProviderEnvironmentProjection(
+	environmentID, serviceImage, routeHost string,
+) etcd.EnvironmentComposeProjection {
 	serviceID := ids.New(ids.KindService)
 	routeID := ids.New(ids.KindRoute)
 	return etcd.EnvironmentComposeProjection{
@@ -139,7 +141,8 @@ func TestRouteProviderEnvironmentUsesSelectedRouteHead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("routeProviderEnvironment() error = %v", err)
 	}
-	if revision != state.snapshotRevision || len(environment.Routes) != 1 || environment.Routes[0].Host != "new.example.test" {
+	if revision != state.snapshotRevision || len(environment.Routes) != 1 ||
+		environment.Routes[0].Host != "new.example.test" {
 		t.Fatalf("selected route head = revision %d, routes %#v", revision, environment.Routes)
 	}
 }

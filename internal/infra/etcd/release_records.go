@@ -71,6 +71,8 @@ type ReleasePublicationMarker struct {
 	OperationID                string                                   `json:"operation_id"`
 	ManifestDigest             string                                   `json:"manifest_digest"`
 	CandidateReleaseDescriptor executionplan.CandidateReleaseDescriptor `json:"candidate_release_descriptor"`
+	ExecutedComposeArtifact    []byte                                   `json:"executed_compose_artifact,omitempty"`
+	NativePredecessors         []BlueprintNativePredecessor             `json:"native_predecessors,omitempty"`
 	PublishedAt                time.Time                                `json:"published_at"`
 }
 
@@ -199,7 +201,8 @@ func decodeReleaseRecord[T any](value []byte, kind string) (T, error) {
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	decoder.DisallowUnknownFields()
 	var envelope releaseEnvelope[T]
-	if err := decoder.Decode(&envelope); err != nil || requireJSONEOF(decoder) != nil || envelope.Schema != 1 || envelope.Kind != kind {
+	if err := decoder.Decode(&envelope); err != nil || requireJSONEOF(decoder) != nil || envelope.Schema != 1 ||
+		envelope.Kind != kind {
 		return zero, corruptReleaseRecord()
 	}
 	return envelope.Data, nil
@@ -263,8 +266,9 @@ func validateReleaseOperationHead(value ReleaseOperationHead, manifest ReleaseSt
 	if value.ReleaseGroupID == "" && value.Progress != nil || value.ReleaseGroupID != "" && value.Progress == nil {
 		return errs.New(errs.KindValidationFailed, "release operation group progress presence is invalid")
 	}
-	if value.Progress != nil && (value.Progress.OperationID != value.OperationID || value.Progress.AttemptID != task.ID ||
-		value.Progress.NextMemberOrdinal != 1 || len(value.Progress.Results) != 0 || value.Progress.Compensating) {
+	if value.Progress != nil &&
+		(value.Progress.OperationID != value.OperationID || value.Progress.AttemptID != task.ID ||
+			value.Progress.NextMemberOrdinal != 1 || len(value.Progress.Results) != 0 || value.Progress.Compensating) {
 		return errs.New(errs.KindValidationFailed, "release operation initial group progress is invalid")
 	}
 	if value.FailurePolicy != domain.OnFailureSwitchBack && value.FailurePolicy != domain.OnFailureLeaveActive {
@@ -285,7 +289,10 @@ func validateReleaseFenceSet(value ReleaseFenceSet, head ReleaseOperationHead, m
 		return errs.New(errs.KindValidationFailed, "release fence set is invalid")
 	}
 	sorted := slices.Clone(value.Members)
-	slices.SortFunc(sorted, func(left, right ReleaseFenceMember) int { return strings.Compare(left.ServiceID, right.ServiceID) })
+	slices.SortFunc(
+		sorted,
+		func(left, right ReleaseFenceMember) int { return strings.Compare(left.ServiceID, right.ServiceID) },
+	)
 	for index := range sorted {
 		if index > 0 && sorted[index-1].ServiceID == sorted[index].ServiceID {
 			return errs.New(errs.KindValidationFailed, "release fence member is duplicated")

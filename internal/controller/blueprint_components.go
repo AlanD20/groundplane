@@ -151,20 +151,20 @@ func validateBlueprintComponentSpec(
 	switch capability {
 	case core.ComponentCapabilityHTTPRouter:
 		if spec.Implementation != core.ComponentKindIngressCaddy || spec.Settings.SecretID != "" ||
-			(spec.Enabled && spec.Settings.ZoneID == "") {
+			(spec.Enabled && len(spec.Settings.ZoneIDs) == 0) {
 			return "", errs.New(
 				errs.KindValidationFailed,
-				"http-router must select Caddy and provide zone_id while enabled",
+				"http-router must select Caddy and provide zone_ids while enabled",
 			)
 		}
 		return core.ComponentKindIngressCaddy, nil
 	case core.ComponentCapabilityEdgeTunnel:
-		if spec.Implementation != core.ComponentKindEdgeCloudflare || spec.Settings.ZoneID != "" ||
+		if spec.Implementation != core.ComponentKindEdgeCloudflare ||
 			spec.ImplementationConfig.CaddyfileTemplate != "" ||
-			(spec.Enabled && spec.Settings.SecretID == "") {
+			(spec.Enabled && (spec.Settings.SecretID == "" || len(spec.Settings.ZoneIDs) == 0)) {
 			return "", errs.New(
 				errs.KindValidationFailed,
-				"edge-tunnel must select Cloudflare Tunnel and provide secret_id while enabled",
+				"edge-tunnel must select Cloudflare Tunnel and provide zone_ids and secret_id while enabled",
 			)
 		}
 		return core.ComponentKindEdgeCloudflare, nil
@@ -179,18 +179,19 @@ func validateBlueprintComponentSpec(
 func blueprintComponentConfig(kind core.ComponentKind, spec core.ComponentSpec) core.ComponentConfig {
 	switch kind {
 	case core.ComponentKindIngressCaddy:
-		if spec.Settings.ZoneID == "" && spec.ImplementationConfig.CaddyfileTemplate == "" {
+		if len(spec.Settings.ZoneIDs) == 0 && spec.ImplementationConfig.CaddyfileTemplate == "" {
 			return core.ComponentConfig{}
 		}
 		return core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-			ZoneID:            spec.Settings.ZoneID,
+			ZoneIDs:           append([]string(nil), spec.Settings.ZoneIDs...),
 			CaddyfileTemplate: spec.ImplementationConfig.CaddyfileTemplate,
 		}}
 	case core.ComponentKindEdgeCloudflare:
-		if spec.Settings.SecretID == "" {
+		if spec.Settings.SecretID == "" && len(spec.Settings.ZoneIDs) == 0 {
 			return core.ComponentConfig{}
 		}
 		return core.ComponentConfig{CloudflareTunnel: &core.CloudflareTunnelComponentConfig{
+			ZoneIDs:  append([]string(nil), spec.Settings.ZoneIDs...),
 			SecretID: spec.Settings.SecretID,
 		}}
 	default:

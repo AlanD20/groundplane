@@ -71,7 +71,8 @@ func cleanupEnvironmentDeletionScriptLocators(
 				return errs.New(errs.KindInternal, "Script global locator is missing")
 			}
 			locator, decodeErr := decodeScriptLocator(global.Value)
-			if decodeErr != nil || locator.EnvironmentID != environmentID || locator.ScriptID != string(environmentLocator.Value) {
+			if decodeErr != nil || locator.EnvironmentID != environmentID ||
+				locator.ScriptID != string(environmentLocator.Value) {
 				return errs.New(errs.KindStateConflict, "Script global locator ownership changed")
 			}
 			conditions = append(conditions,

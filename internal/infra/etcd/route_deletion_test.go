@@ -19,7 +19,14 @@ func TestRouteRemovalCompletionPromotesStagedCandidate(t *testing.T) {
 	ctx := context.Background()
 	repository, store, environment, project, target := routeRepositoryTestHierarchy(t)
 	record := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1100, "/api/*")
-	projection := routeDeletionTestProjection(t, store, environment, project, target, Versioned[RouteRecord]{Record: record})
+	projection := routeDeletionTestProjection(
+		t,
+		store,
+		environment,
+		project,
+		target,
+		Versioned[RouteRecord]{Record: record},
+	)
 	current, err := repository.GetRoute(ctx, record.Desired.ID)
 	if err != nil {
 		t.Fatalf("GetRoute() error = %v", err)
@@ -146,7 +153,10 @@ func TestRouteRemovalCompletionPromotesStagedCandidate(t *testing.T) {
 	if err != nil || !corruptReplay.Succeeded {
 		t.Fatalf("replace completed replay head = %#v/%v", corruptReplay, err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, TaskStatusCompleted, terminalAt); !isKind(err, errs.KindStateConflict) {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, TaskStatusCompleted, terminalAt); !isKind(
+		err,
+		errs.KindStateConflict,
+	) {
 		t.Fatalf("AcknowledgeControllerTask(changed replay head) error = %v", err)
 	}
 }
@@ -158,7 +168,14 @@ func TestRouteRepositoryRejectsRemovalDuringEnvironmentReconciliation(t *testing
 	ctx := context.Background()
 	repository, store, environment, project, target := routeRepositoryTestHierarchy(t)
 	record := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1110, "/admin/*")
-	projection := routeDeletionTestProjection(t, store, environment, project, target, Versioned[RouteRecord]{Record: record})
+	projection := routeDeletionTestProjection(
+		t,
+		store,
+		environment,
+		project,
+		target,
+		Versioned[RouteRecord]{Record: record},
+	)
 	current, err := repository.GetRoute(ctx, record.Desired.ID)
 	if err != nil {
 		t.Fatalf("GetRoute() error = %v", err)
@@ -202,7 +219,14 @@ func TestRouteRemovalFailureRetryAndAbortPreserveAppliedState(t *testing.T) {
 	ctx := context.Background()
 	repository, store, environment, project, target := routeRepositoryTestHierarchy(t)
 	record := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1140, "/retry/*")
-	projection := routeDeletionTestProjection(t, store, environment, project, target, Versioned[RouteRecord]{Record: record})
+	projection := routeDeletionTestProjection(
+		t,
+		store,
+		environment,
+		project,
+		target,
+		Versioned[RouteRecord]{Record: record},
+	)
 	current, err := repository.GetRoute(ctx, record.Desired.ID)
 	if err != nil {
 		t.Fatalf("GetRoute() error = %v", err)

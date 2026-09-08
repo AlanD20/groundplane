@@ -99,11 +99,18 @@ func recreateHealthArtifacts() map[string]*agentpb.ComposeArtifact {
 	}
 	return map[string]*agentpb.ComposeArtifact{
 		recreateHealthCandidateArtifact: {ArtifactId: recreateHealthCandidateArtifact,
-			Services: []*agentpb.ComposeService{service(agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
-				"", recreateHealthCandidateRelease, 3)}},
+			Services: []*agentpb.ComposeService{
+				service(agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
+					"", recreateHealthCandidateRelease, 3),
+			}},
 		recreateHealthPriorArtifact: {ArtifactId: recreateHealthPriorArtifact,
 			Services: []*agentpb.ComposeService{
-				service(agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT, "blue", recreateHealthPriorRelease, 1),
+				service(
+					agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
+					"blue",
+					recreateHealthPriorRelease,
+					1,
+				),
 				service(agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT, "green", "", 1),
 			}},
 	}

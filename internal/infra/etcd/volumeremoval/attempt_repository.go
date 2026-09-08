@@ -124,10 +124,18 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) PublishSuccessorAtt
 	}
 	mutations := []etcd.Mutation{
 		{Type: etcd.MutationPut, Key: etcd.CapabilityTaskKey(successor.ID), Value: taskValue},
-		{Type: etcd.MutationPut, Key: etcd.CapabilityTaskOperationIndexKey(operationID, successor.ID), Value: reference},
+		{
+			Type:  etcd.MutationPut,
+			Key:   etcd.CapabilityTaskOperationIndexKey(operationID, successor.ID),
+			Value: reference,
+		},
 		{Type: etcd.MutationPut, Key: etcd.CapabilityTaskActiveOperationKey(operationID), Value: reference},
 		{Type: etcd.MutationPut, Key: etcd.CapabilityTaskQueueKey(successor.Executor, successor.ID), Value: reference},
-		{Type: etcd.MutationPut, Key: environmentVolumeRemovalAttemptKey(operationID, attempt.Ordinal), Value: attemptValue},
+		{
+			Type:  etcd.MutationPut,
+			Key:   environmentVolumeRemovalAttemptKey(operationID, attempt.Ordinal),
+			Value: attemptValue,
+		},
 		{Type: etcd.MutationPut, Key: environmentVolumeRemovalRuntimeKey(operationID), Value: runtimeValue},
 	}
 	if err := validateEnvironmentVolumeRemovalTransaction(repository.store, conditions, mutations, 48); err != nil {
@@ -269,7 +277,10 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadAssignedTask(
 		{Key: etcd.CapabilityTaskKey(input.TaskID), ModRevision: primary.Values[0].ModRevision},
 		{Key: etcd.CapabilityTaskAssignmentIndexKey(input.TaskID), ModRevision: primary.Values[1].ModRevision},
 		{Key: claimKey, ModRevision: claim.Values[0].ModRevision},
-		{Key: etcd.CapabilityTaskTimeoutIndexKey(input.TaskID, assignment.Deadline), ModRevision: claim.Values[1].ModRevision},
+		{
+			Key:         etcd.CapabilityTaskTimeoutIndexKey(input.TaskID, assignment.Deadline),
+			ModRevision: claim.Values[1].ModRevision,
+		},
 	}, nil
 }
 

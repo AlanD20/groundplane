@@ -1,18 +1,22 @@
 package controller
 
 import (
+	"encoding/hex"
 	"math"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/imageref"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
 
@@ -74,7 +78,16 @@ func ProjectEnvironmentComponents(
 				"Component generated Service conflicts with a disabled Compose service",
 			)
 		}
-		service, environmentFile, err := projectEnvironmentComponentService(environment, generated)
+		platform, reference, selected := generated.Definition.Image.Select(runtime.GOOS, runtime.GOARCH)
+		if !selected {
+			return EnvironmentComponentComposeProjection{}, errs.New(
+				errs.KindInternal,
+				"Component image platform is unavailable",
+			)
+		}
+		image := SelectedComponentImage{Repository: generated.Definition.Image.Repository,
+			IndexDigest: generated.Definition.Image.IndexDigest, Reference: reference, Platform: platform}
+		service, environmentFile, err := projectEnvironmentComponentService(environment, generated, image)
 		if err != nil {
 			return EnvironmentComponentComposeProjection{}, err
 		}
@@ -97,6 +110,7 @@ func ProjectEnvironmentComponents(
 		projected.Services[generated.Name] = service
 		result.Services = append(result.Services, ComposeResourceIdentity{
 			ID: generated.Definition.ID, Name: generated.Name, ComponentID: generated.ComponentID,
+			ComponentImage: &image,
 		})
 		if environmentFile != nil {
 			result.EnvironmentFiles = append(result.EnvironmentFiles, *environmentFile)
@@ -162,21 +176,36 @@ func cloneComposeProjectServices(project *composetypes.Project) *composetypes.Pr
 func projectEnvironmentComponentService(
 	environment core.Environment,
 	generated GeneratedEnvironmentService,
+	image SelectedComponentImage,
 ) (composetypes.ServiceConfig, *EnvironmentComponentEnvironmentFile, error) {
 	definition := generated.Definition
-	imageReference, selected := environmentComponentImageReference(definition.Image)
-	if !selected {
-		return composetypes.ServiceConfig{}, nil, errs.New(
-			errs.KindInternal,
-			"Component generated Service has no image for the Controller platform",
-		)
-	}
 	projected := composetypes.ServiceConfig{
-		Name: definition.Name, Image: imageReference,
+		Name: definition.Name, Image: image.Reference,
 		Command:  composetypes.ShellCommand(append([]string(nil), definition.Command...)),
 		Networks: make(map[string]*composetypes.ServiceNetworkConfig, len(definition.Networks)),
 		Expose:   composetypes.StringOrNumberList(append([]string(nil), definition.Expose...)),
 		Restart:  definition.Restart,
+	}
+	if definition.NetworkMode == componentsdk.ManagedNetworkModeDefault {
+		// Docker's built-in bridge needs no owned Zone. Leaving this empty
+		// would let Compose create an unsealed project-default network.
+		projected.NetworkMode = "bridge"
+	}
+	if health := definition.Healthcheck; health != nil {
+		if err := health.Validate(); err != nil {
+			return composetypes.ServiceConfig{}, nil, errs.New(
+				errs.KindValidationFailed,
+				"Component healthcheck is invalid",
+			)
+		}
+		interval := composetypes.Duration(time.Duration(health.IntervalSeconds) * time.Second)
+		timeout := composetypes.Duration(time.Duration(health.TimeoutSeconds) * time.Second)
+		start := composetypes.Duration(time.Duration(health.StartPeriodSeconds) * time.Second)
+		retries := uint64(health.Retries)
+		projected.HealthCheck = &composetypes.HealthCheckConfig{
+			Test:     append(composetypes.HealthCheckTest{"CMD"}, health.Command...),
+			Interval: &interval, Timeout: &timeout, StartPeriod: &start, Retries: &retries,
+		}
 	}
 	for _, network := range definition.Networks {
 		if _, exists := environment.Zones[network.Name]; !exists {
@@ -186,8 +215,9 @@ func projectEnvironmentComponentService(
 			)
 		}
 		projected.Networks[network.Name] = &composetypes.ServiceNetworkConfig{
-			Aliases:     append([]string(nil), network.Aliases...),
-			Ipv4Address: network.StaticIPv4,
+			Aliases:         append([]string(nil), network.Aliases...),
+			Ipv4Address:     network.StaticIPv4,
+			GatewayPriority: network.GatewayPriority,
 		}
 	}
 	for _, mount := range definition.Mounts {
@@ -240,4 +270,82 @@ func projectEnvironmentComponentService(
 func environmentComponentImageReference(image componentsdk.OCIImage) (string, bool) {
 	_, reference, selected := image.Select(runtime.GOOS, runtime.GOARCH)
 	return reference, selected
+}
+
+func bindEnvironmentComponentImage(
+	identities []ComposeResourceIdentity,
+	authored composetypes.ServiceConfig,
+	service *agentpb.ComposeService,
+) error {
+	for _, identity := range identities {
+		if identity.ID != service.GetServiceId() {
+			continue
+		}
+		if identity.ComponentID == "" {
+			if identity.ComponentImage != nil {
+				return errs.New(errs.KindInternal, "native Service carries Component image authority")
+			}
+			return nil
+		}
+		if identity.ComponentImage == nil {
+			return errs.New(errs.KindInternal, "Component Service image authority is absent")
+		}
+		image := *identity.ComponentImage
+		platform, reference := image.Platform, image.Reference
+		if validateSelectedComponentImage(image) != nil || authored.Image != reference {
+			return errs.New(errs.KindInternal, "Component Service image differs from compiled authority")
+		}
+		service.ImageReference, service.ImageRepository = reference, image.Repository
+		service.ImageIndexDigest = mustDecodePlatformDigest(image.IndexDigest)
+		service.ImageChildDigest = mustDecodePlatformDigest(platform.ChildDigest)
+		service.ImageConfigDigest = mustDecodePlatformDigest(platform.ConfigDigest)
+		service.ImageOs, service.ImageArchitecture, service.ImageVariant = platform.OS, platform.Architecture, platform.Variant
+		for key, value := range map[string]string{
+			"com.groundplane.image-index-digest":  "sha256:" + image.IndexDigest,
+			"com.groundplane.image-child-digest":  "sha256:" + platform.ChildDigest,
+			"com.groundplane.image-config-digest": "sha256:" + platform.ConfigDigest,
+			"com.groundplane.image-platform":      platform.OS + "/" + platform.Architecture + platformVariantSuffix(platform.Variant),
+		} {
+			authored.Labels[key] = value
+			service.ExpectedLabels = append(service.ExpectedLabels, &agentpb.LabelPair{Key: key, Value: value})
+		}
+		sort.Slice(service.ExpectedLabels, func(left, right int) bool {
+			return service.ExpectedLabels[left].Key < service.ExpectedLabels[right].Key
+		})
+		return nil
+	}
+	return errs.New(errs.KindInternal, "Compose Service identity is absent")
+}
+
+func validateSelectedComponentImage(image SelectedComponentImage) error {
+	p := image.Platform
+	if !validPlatformSHA256(image.IndexDigest) || !validPlatformSHA256(p.ChildDigest) ||
+		!validPlatformSHA256(p.ConfigDigest) ||
+		!imageref.IsDigestPinned(image.Reference) ||
+		image.Reference != image.Repository+"@sha256:"+p.ChildDigest ||
+		p.OS != "linux" ||
+		p.Architecture != "amd64" && p.Architecture != "arm64" ||
+		p.Architecture == "amd64" && p.Variant != "" ||
+		p.Architecture == "arm64" && p.Variant != "" && p.Variant != "v8" {
+		return errs.New(errs.KindInternal, "selected Component image authority is invalid")
+	}
+	return nil
+}
+
+func pinnedComponentServiceIdentity(
+	service *agentpb.ComposeService,
+	componentID string,
+) (ComposeResourceIdentity, error) {
+	image := SelectedComponentImage{Repository: service.GetImageRepository(), Reference: service.GetImageReference(),
+		IndexDigest: hex.EncodeToString(service.GetImageIndexDigest()), Platform: componentsdk.OCIPlatform{
+			OS: service.GetImageOs(), Architecture: service.GetImageArchitecture(), Variant: service.GetImageVariant(),
+			ChildDigest: hex.EncodeToString(
+				service.GetImageChildDigest(),
+			), ConfigDigest: hex.EncodeToString(service.GetImageConfigDigest()),
+		}}
+	if service.GetOwnerComponentId() != componentID || validateSelectedComponentImage(image) != nil {
+		return ComposeResourceIdentity{}, errs.New(errs.KindInternal, "pinned Component image authority is invalid")
+	}
+	return ComposeResourceIdentity{ID: service.GetServiceId(), Name: service.GetComposeName(),
+		ComponentID: componentID, ComponentImage: &image}, nil
 }

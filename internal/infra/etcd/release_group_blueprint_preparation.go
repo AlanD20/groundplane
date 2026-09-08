@@ -115,10 +115,14 @@ func (repository *HierarchyRepository) PrepareReleaseGroupBlueprintMutation(
 			!bytes.Equal(indexes.Values[1].Value, []byte(id)) {
 			return ReleaseGroupBlueprintPreparedMutation{}, corruptRecord()
 		}
-		conditions = append(conditions,
+		conditions = append(
+			conditions,
 			Condition{Key: releaseGroupRecordKey(id), ModRevision: versioned.Revision},
 			Condition{Key: releaseGroupOwnerKey(environmentID, id), ModRevision: indexes.Values[0].ModRevision},
-			Condition{Key: releaseGroupNameKey(environmentID, versioned.Group.Name), ModRevision: indexes.Values[1].ModRevision},
+			Condition{
+				Key:         releaseGroupNameKey(environmentID, versioned.Group.Name),
+				ModRevision: indexes.Values[1].ModRevision,
+			},
 			Condition{Key: deletionTombstoneKey(string(DeletionTargetReleaseGroup), id)},
 		)
 		next, retained := desiredByID[id]

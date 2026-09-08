@@ -12,7 +12,10 @@ import (
 
 const environmentDesiredHeadScanPrefix = "/v1/records/environment-blueprints/"
 
-func (repository *ServiceRepository) GetService(ctx context.Context, serviceID string) (Versioned[ServiceRecord], error) {
+func (repository *ServiceRepository) GetService(
+	ctx context.Context,
+	serviceID string,
+) (Versioned[ServiceRecord], error) {
 	if err := validateContext(ctx); err != nil {
 		return Versioned[ServiceRecord]{}, err
 	}
@@ -56,7 +59,8 @@ func (repository *ServiceRepository) GetServiceByName(
 		return Versioned[ServiceRecord]{}, errs.New(errs.KindServiceNotFound, "Service was not found")
 	}
 	for _, service := range projection.Record.DesiredServices {
-		if service.Desired.Name == name && !componentGeneratedService(projection.Record.Components, service.Desired.ID) {
+		if service.Desired.Name == name &&
+			!componentGeneratedService(projection.Record.Components, service.Desired.ID) {
 			return joinEnvironmentService(ctx, repository.store, projection, service.Desired.ID,
 				environmentBlueprintHeadKey(environmentID))
 		}
@@ -155,11 +159,19 @@ func findServiceAtRevision(
 			if !strings.HasSuffix(value.Key, "/current") {
 				continue
 			}
-			environmentID := strings.TrimSuffix(strings.TrimPrefix(value.Key, environmentDesiredHeadScanPrefix), "/current")
+			environmentID := strings.TrimSuffix(
+				strings.TrimPrefix(value.Key, environmentDesiredHeadScanPrefix),
+				"/current",
+			)
 			if strings.Contains(environmentID, "/") || ids.Validate(ids.KindEnvironment, environmentID) != nil {
 				return Versioned[ServiceRecord]{}, corruptEnvironmentComposeProjection()
 			}
-			projection, found, projectionErr := currentEnvironmentProjectionAtRevision(ctx, store, environmentID, fixedRevision)
+			projection, found, projectionErr := currentEnvironmentProjectionAtRevision(
+				ctx,
+				store,
+				environmentID,
+				fixedRevision,
+			)
 			if projectionErr != nil {
 				return Versioned[ServiceRecord]{}, projectionErr
 			}
@@ -188,7 +200,10 @@ func findServiceAtRevision(
 			break
 		}
 		if len(page.Values) == 0 {
-			return Versioned[ServiceRecord]{}, errs.New(errs.KindInternal, "Environment desired head scan did not advance")
+			return Versioned[ServiceRecord]{}, errs.New(
+				errs.KindInternal,
+				"Environment desired head scan did not advance",
+			)
 		}
 	}
 	if matched == nil {
@@ -265,5 +280,9 @@ func joinEnvironmentService(
 	if err := validateServiceRecord(record); err != nil {
 		return Versioned[ServiceRecord]{}, corruptRecord()
 	}
-	return Versioned[ServiceRecord]{Record: record, Revision: projection.Revision, ReadRevision: projection.ReadRevision}, nil
+	return Versioned[ServiceRecord]{
+		Record:       record,
+		Revision:     projection.Revision,
+		ReadRevision: projection.ReadRevision,
+	}, nil
 }

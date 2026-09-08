@@ -1,6 +1,7 @@
 # ADR 0064: Candidate Release restoration authority
 
 - Status: Accepted
+- Target-selection clause superseded by ADR 0066; the lifecycle fences remain.
 - Date: 2026-09-04
 - Capabilities: C06 Releases, C09 Scripts, C21 Environment Blueprint
 
@@ -50,18 +51,20 @@ for the selected target only; they are never selection or decision authority.
 The string `baseline`, synthetic Release identity, and restoration derivation
 from a candidate Service's mutable `Current` projection do not exist.
 
-### Claim selects one restoration target
+### Claim selects a restoration target per Service (ADR 0066)
 
 Blueprint publication retains its independently sealed nullable
 `BlueprintAppliedPredecessor`. Claim reads that authority under the existing
-writer and Environment mutation-epoch fence and selects exactly one already
-declared target:
+writer and Environment mutation-epoch fence and selects one already-declared
+target for each member from its runtime metadata:
 
-- `Present=true` selects `serving_predecessor` and requires its exact applied
-  projection, artifact, revision, and digest; or
-- `Present=false` selects `candidate_absence`.
+- A member with an acknowledged serving runtime selects `serving_predecessor`
+  and requires the exact applied projection, artifact, revision, and digest.
+- A member without a serving runtime selects `candidate_absence`, including
+  configured-only members in a present applied projection. The nullable applied
+  witness remains independently fenced even when every member selects absence.
 
-The claim transaction atomically stores the selected target and canonical
+The claim transaction atomically stores the sorted member targets and canonical
 restoration-authority digest in every durable assignment copy while installing
 the claim, writer, and positive execution epoch. An Agent cannot choose or
 change the target. A mismatch between the nullable witness, plan alternative,

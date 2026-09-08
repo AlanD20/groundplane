@@ -1,6 +1,8 @@
 package app
 
 import (
+	"runtime"
+
 	"github.com/AlanD20/groundplane/internal/agent"
 	"github.com/AlanD20/groundplane/internal/infra/docker/composehelper"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -21,8 +23,9 @@ func (catalog composeHelperComponentCatalog) ResolveContainerConfigAction(
 	if err != nil {
 		return composehelper.ComponentActionRecipe{}, err
 	}
+	platform, reference, _ := recipe.Image().Select(runtime.GOOS, runtime.GOARCH)
 	return composehelper.NewComponentActionRecipe(
-		recipe.RelativePath(), recipe.ContainerPath(), selectedImageReference(recipe.Image()),
+		recipe.RelativePath(), recipe.ContainerPath(), reference, platform,
 		recipe.ValidateArgs(), recipe.ActivateArgs(),
 	)
 }

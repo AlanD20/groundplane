@@ -146,8 +146,10 @@ func (reader *Reader) Open(ctx context.Context, request *agentpb.LogSubscribe) (
 			return nil, fmt.Errorf("managed log container %s unexpectedly enables TTY", candidate.ID)
 		}
 		target := targets[labels["com.groundplane.service-id"]+"\x00"+labels["com.groundplane.release-id"]]
-		if target == nil || labels["com.groundplane.managed"] != "true" || labels["com.groundplane.kind"] != "service" ||
-			labels["com.groundplane.environment-id"] != target.GetEnvironmentId() || (role != "slot" && role != "singleton") {
+		if target == nil || labels["com.groundplane.managed"] != "true" ||
+			labels["com.groundplane.kind"] != "service" ||
+			labels["com.groundplane.environment-id"] != target.GetEnvironmentId() ||
+			(role != "slot" && role != "singleton") {
 			set.Close()
 			return nil, fmt.Errorf("log container %s ownership changed", candidate.ID)
 		}

@@ -4,7 +4,6 @@ package composehelper
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/binary"
 	"encoding/hex"
@@ -19,7 +18,6 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -169,9 +167,18 @@ func execute(
 	if response, handled, removeErr := executeManagedRemove(ctx, taskRunner, owned.TimeoutSeconds, step); handled {
 		return response, removeErr
 	}
+	if ensure := step.GetManagedNetworkEnsure(); ensure != nil {
+		return executeManagedNetworkEnsure(ctx, taskRunner, owned.TimeoutSeconds, artifact, ensure)
+	}
+	if ensure := step.GetManagedVolumeEnsure(); ensure != nil {
+		return executeManagedVolumeEnsure(ctx, taskRunner, owned.TimeoutSeconds, artifact, ensure)
+	}
 	if apply := step.GetComponentApply(); apply != nil {
 		if owned.Plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
-			return nil, errs.New(errs.KindValidationFailed, "managed Component action is not a container helper procedure")
+			return nil, errs.New(
+				errs.KindValidationFailed,
+				"managed Component action is not a container helper procedure",
+			)
 		}
 		if catalog == nil {
 			return nil, errs.New(errs.KindValidationFailed, "Component action has no compiled helper catalog")
@@ -184,14 +191,19 @@ func execute(
 			ctx, taskRunner, owned.TimeoutSeconds, artifact, apply, recipe,
 		)
 	}
-	if step.GetServiceProxySwitch() != nil || step.GetServiceProxyProbe() != nil || step.GetServiceProxyCompensate() != nil {
+	if step.GetServiceProxySwitch() != nil || step.GetServiceProxyProbe() != nil ||
+		step.GetServiceProxyCompensate() != nil {
 		return executeServiceProxy(ctx, taskRunner, owned.TimeoutSeconds, owned.Plan, artifact, step)
 	}
 	if step.GetCandidateRestorationProbe() != nil || step.GetCandidateRestorationCompensate() != nil {
-		if owned.GetRestorationAuthority().GetTarget() == agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR {
+		switch executionplan.RestorationTargetForService(owned.GetRestorationAuthority(), restorationStepServiceID(step)) {
+		case agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR:
 			return executeServingPredecessor(ctx, taskRunner, owned.TimeoutSeconds, owned, artifact, step)
+		case agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE:
+			return executeCandidateAbsence(ctx, taskRunner, owned.TimeoutSeconds, owned, artifact, step)
+		default:
+			return nil, errs.New(errs.KindValidationFailed, "candidate restoration member target is invalid")
 		}
-		return executeCandidateAbsence(ctx, taskRunner, owned.TimeoutSeconds, owned, artifact, step)
 	}
 	commands, err := commandsFor(owned, step, artifact)
 	if err != nil {
@@ -237,127 +249,15 @@ func execute(
 		Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
 	}
 	if compensate := step.GetServiceRecreateCompensate(); compensate != nil {
-		response.RecreateEvidence = &agentpb.ServiceRecreateEvidence{ServiceId: compensate.ServiceId, ReleaseId: compensate.PriorReleaseId, ArtifactId: compensate.ArtifactId, Compensated: true, Target: compensate.PriorTarget}
+		response.RecreateEvidence = &agentpb.ServiceRecreateEvidence{
+			ServiceId:   compensate.ServiceId,
+			ReleaseId:   compensate.PriorReleaseId,
+			ArtifactId:  compensate.ArtifactId,
+			Compensated: true,
+			Target:      compensate.PriorTarget,
+		}
 	}
 	return response, nil
-}
-
-func validateRequest(
-	request *agentpb.ComposeHelperRequest,
-) (*agentpb.ComposeHelperRequest, *agentpb.ExecutionStep, *agentpb.ComposeArtifact, error) {
-	if request == nil || request.Schema != SchemaVersion {
-		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Compose helper request schema is unsupported")
-	}
-	if err := executionplan.RejectUnknown(request); err != nil {
-		return nil, nil, nil, err
-	}
-	if ids.Validate(ids.KindAssignment, request.AssignmentId) != nil ||
-		ids.Validate(ids.KindTask, request.TaskId) != nil ||
-		ids.Validate(ids.KindOperation, request.OperationId) != nil {
-		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Compose helper task identity is invalid")
-	}
-	if request.TimeoutSeconds == 0 || request.TimeoutSeconds > maximumTimeout {
-		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Compose helper timeout is invalid")
-	}
-	plan, err := executionplan.Validate(request.Plan)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	var selected *agentpb.ExecutionStep
-	for _, step := range plan.Steps {
-		if step.StepId == request.StepId {
-			selected = step
-			break
-		}
-	}
-	if selected == nil || request.TimeoutSeconds > selected.TimeoutSeconds {
-		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Compose helper step selection is invalid")
-	}
-	artifactID := ""
-	var artifact *agentpb.ComposeArtifact
-	switch payload := selected.Payload.(type) {
-	case *agentpb.ExecutionStep_ComposeApply:
-		artifactID = payload.ComposeApply.ArtifactId
-	case *agentpb.ExecutionStep_ComposeStop:
-		artifactID = payload.ComposeStop.ArtifactId
-	case *agentpb.ExecutionStep_ComposeRemove:
-		artifactID = payload.ComposeRemove.ArtifactId
-	case *agentpb.ExecutionStep_ManagedNetworkRemove, *agentpb.ExecutionStep_ManagedVolumeRemove:
-		artifactID = ""
-	case *agentpb.ExecutionStep_ComponentApply:
-		artifact, err = componentActionArtifact(plan.GetArtifacts(), payload.ComponentApply.GetComponentId())
-		if err != nil {
-			return nil, nil, nil, err
-		}
-	case *agentpb.ExecutionStep_ComposeWorkloadApply:
-		artifactID = payload.ComposeWorkloadApply.ArtifactId
-	case *agentpb.ExecutionStep_ServiceProxySwitch:
-		artifactID = payload.ServiceProxySwitch.CandidateArtifactId
-	case *agentpb.ExecutionStep_ServiceProxyProbe:
-		artifactID = payload.ServiceProxyProbe.CandidateArtifactId
-	case *agentpb.ExecutionStep_ServiceProxyCompensate:
-		artifactID = payload.ServiceProxyCompensate.CandidateArtifactId
-	case *agentpb.ExecutionStep_ServiceRecreateCompensate:
-		artifactID = payload.ServiceRecreateCompensate.ArtifactId
-	case *agentpb.ExecutionStep_CandidateRestorationProbe:
-		artifactID = payload.CandidateRestorationProbe.CandidateArtifactId
-	case *agentpb.ExecutionStep_CandidateRestorationCompensate:
-		artifactID = payload.CandidateRestorationCompensate.CandidateArtifactId
-	default:
-		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Compose helper step payload is unsupported")
-	}
-	if artifact == nil {
-		for _, candidate := range plan.Artifacts {
-			if candidate.ArtifactId == artifactID {
-				artifact = candidate
-				break
-			}
-		}
-	}
-	if artifactID != "" && artifact == nil {
-		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Compose helper artifact selection is invalid")
-	}
-	candidateRestoration := selected.GetCandidateRestorationProbe() != nil || selected.GetCandidateRestorationCompensate() != nil
-	if candidateRestoration != (request.GetRestorationAuthority() != nil) {
-		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Compose helper restoration authority presence is invalid")
-	}
-	owned := proto.Clone(request).(*agentpb.ComposeHelperRequest)
-	owned.Plan = plan
-	for _, step := range owned.Plan.Steps {
-		if step.StepId == request.StepId {
-			selected = step
-			break
-		}
-	}
-	for _, candidate := range owned.Plan.Artifacts {
-		if artifact != nil && candidate.ArtifactId == artifact.ArtifactId {
-			artifact = candidate
-			break
-		}
-	}
-	return owned, selected, artifact, nil
-}
-
-func componentActionArtifact(
-	artifacts []*agentpb.ComposeArtifact,
-	componentID string,
-) (*agentpb.ComposeArtifact, error) {
-	var selected *agentpb.ComposeArtifact
-	for _, artifact := range artifacts {
-		for _, service := range artifact.GetServices() {
-			if service.GetOwnerComponentId() != componentID {
-				continue
-			}
-			if selected != nil {
-				return nil, errs.New(errs.KindValidationFailed, "Compose helper Component target is not unique")
-			}
-			selected = artifact
-		}
-	}
-	if selected == nil {
-		return nil, errs.New(errs.KindValidationFailed, "Compose helper Component target is absent")
-	}
-	return selected, nil
 }
 
 type componentConfigMount struct {
@@ -371,33 +271,6 @@ type componentConfigMount struct {
 // registered recipe. No recipe field is accepted over the helper protocol.
 type ComponentActionCatalog interface {
 	ResolveContainerConfigAction(*agentpb.ComponentApply) (ComponentActionRecipe, error)
-}
-
-type ComponentActionRecipe struct {
-	relativePath   string
-	containerPath  string
-	imageReference string
-	validateArgs   []string
-	activateArgs   []string
-}
-
-func NewComponentActionRecipe(
-	relativePath string,
-	containerPath string,
-	imageReference string,
-	validateArgs []string,
-	activateArgs []string,
-) (ComponentActionRecipe, error) {
-	if !validRelativeComponentConfigPath(relativePath) ||
-		!filepath.IsAbs(containerPath) || filepath.Clean(containerPath) != containerPath ||
-		!validImmutableImageReference(imageReference) ||
-		!validComponentCommand(validateArgs) || !validComponentCommand(activateArgs) {
-		return ComponentActionRecipe{}, errs.New(errs.KindInternal, "compiled Component action recipe is invalid")
-	}
-	return ComponentActionRecipe{
-		relativePath: relativePath, containerPath: containerPath, imageReference: imageReference,
-		validateArgs: append([]string(nil), validateArgs...), activateArgs: append([]string(nil), activateArgs...),
-	}, nil
 }
 
 func executeComponentContainerConfigAction(
@@ -431,7 +304,10 @@ func executeComponentContainerConfigAction(
 			return runner.Result{}, nil, contextErr
 		}
 		if result.ExitCode < 0 || result.ExitCode > math.MaxInt32 {
-			return runner.Result{}, nil, errs.New(errs.KindInternal, "Component action command returned an invalid exit code")
+			return runner.Result{}, nil, errs.New(
+				errs.KindInternal,
+				"Component action command returned an invalid exit code",
+			)
 		}
 		if runErr != nil || result.ExitCode != 0 {
 			return result, fail(result.ExitCode, diagnostic), nil
@@ -484,12 +360,16 @@ func executeComponentContainerConfigAction(
 	}
 	inspectedImage, failure, err := run(
 		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
-		"container", "inspect", "--format", "{{.Config.Image}}", containerID,
+		"container",
+		"inspect",
+		"--format",
+		"{{.Config.Image}}\n{{.Image}}\n{{json .ImageManifestDescriptor}}",
+		containerID,
 	)
 	if err != nil || failure != nil {
 		return failure, err
 	}
-	if strings.TrimSpace(string(inspectedImage.Stdout)) != recipe.imageReference {
+	if !recipe.matchesImage(inspectedImage.Stdout) {
 		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), nil
 	}
 	inspectedMounts, failure, err := run(
@@ -504,7 +384,8 @@ func executeComponentContainerConfigAction(
 		!hasExactComponentConfigMount(mounts, configPath, recipe.containerPath) {
 		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), nil
 	}
-	if matches, hashErr := containerConfigMatches(executionCtx, run, containerID, recipe.containerPath, apply.GetArtifactDigest()); hashErr != nil || !matches {
+	if matches, hashErr := containerConfigMatches(executionCtx, run, containerID, recipe.containerPath, apply.GetArtifactDigest()); hashErr != nil ||
+		!matches {
 		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), hashErr
 	}
 	validateCommand := append([]string{"container", "exec", containerID}, recipe.validateArgs...)
@@ -515,7 +396,8 @@ func executeComponentContainerConfigAction(
 	if err != nil || failure != nil {
 		return failure, err
 	}
-	if matches, hashErr := containerConfigMatches(executionCtx, run, containerID, recipe.containerPath, apply.GetArtifactDigest()); hashErr != nil || !matches {
+	if matches, hashErr := containerConfigMatches(executionCtx, run, containerID, recipe.containerPath, apply.GetArtifactDigest()); hashErr != nil ||
+		!matches {
 		return fail(1, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED), hashErr
 	}
 	activateCommand := append([]string{"container", "exec", containerID}, recipe.activateArgs...)
@@ -775,7 +657,14 @@ func commandsFor(
 		validation := base
 		validation.Args = append(append([]string(nil), prefix...), "config", "--quiet", "--no-interpolate")
 		mutation := base
-		mutation.Args = append(append([]string(nil), prefix...), "up", "--detach", "--force-recreate", "--no-deps", "--remove-orphans")
+		mutation.Args = append(
+			append([]string(nil), prefix...),
+			"up",
+			"--detach",
+			"--force-recreate",
+			"--no-deps",
+			"--remove-orphans",
+		)
 		mutation.Args = append(mutation.Args, serviceNames(artifact, []string{compensate.ServiceId})...)
 		return []runner.RunCmdOpts{validation, mutation}, nil
 	}
@@ -833,8 +722,10 @@ func serviceNames(artifact *agentpb.ComposeArtifact, selected []string) []string
 
 func releaseWorkloadName(artifact *agentpb.ComposeArtifact, serviceID, target string) string {
 	for _, service := range artifact.GetServices() {
-		if target == "singleton" && service.GetServiceId() == serviceID && service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON ||
-			service.GetServiceId() == serviceID && service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT && service.GetSlot() == target {
+		if target == "singleton" && service.GetServiceId() == serviceID &&
+			service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON ||
+			service.GetServiceId() == serviceID && service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT &&
+				service.GetSlot() == target {
 			return service.GetComposeName()
 		}
 	}
@@ -843,61 +734,12 @@ func releaseWorkloadName(artifact *agentpb.ComposeArtifact, serviceID, target st
 
 func recreateSingletonName(artifact *agentpb.ComposeArtifact, serviceID string) string {
 	for _, service := range artifact.GetServices() {
-		if service.GetServiceId() == serviceID && service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON {
+		if service.GetServiceId() == serviceID &&
+			service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON {
 			return service.GetComposeName()
 		}
 	}
 	return ""
-}
-
-func validateResponse(response *agentpb.ComposeHelperResponse) error {
-	if response == nil || response.Schema != SchemaVersion {
-		return errs.New(errs.KindValidationFailed, "Compose helper response schema is unsupported")
-	}
-	if err := executionplan.RejectUnknown(response); err != nil {
-		return err
-	}
-	switch response.Outcome {
-	case agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED:
-		if response.ExitCode != 0 ||
-			response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE {
-			return errs.New(errs.KindValidationFailed, "completed Compose helper response is inconsistent")
-		}
-		if response.ProxyEvidence != nil && (response.ProxyEvidence.ServiceId == "" ||
-			!validRuntimeTarget(response.ProxyEvidence.Target) ||
-			response.ProxyEvidence.ProxyGeneration == 0 || len(response.ProxyEvidence.ConfigSha256) != sha256.Size ||
-			response.ProxyEvidence.ReleaseId == "") {
-			return errs.New(errs.KindValidationFailed, "completed Compose helper proxy evidence is invalid")
-		}
-		if response.RecreateEvidence != nil && (response.RecreateEvidence.ServiceId == "" || response.RecreateEvidence.ReleaseId == "" || response.RecreateEvidence.ArtifactId == "" || !validRuntimeTarget(response.RecreateEvidence.Target)) {
-			return errs.New(errs.KindValidationFailed, "completed Compose helper recreate evidence is invalid")
-		}
-		if evidence := response.GetCandidateAbsenceEvidence(); evidence != nil {
-			if evidence.GetAssignmentId() == "" || len(evidence.GetPlanHash()) != sha256.Size ||
-				len(evidence.GetAuthoritySha256()) != sha256.Size || evidence.GetComposeProjectName() == "" ||
-				evidence.GetCandidateArtifactId() == "" || len(evidence.GetCandidates()) == 0 {
-				return errs.New(errs.KindValidationFailed, "completed candidate absence evidence is invalid")
-			}
-		}
-	case agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_FAILED:
-		if response.ExitCode <= 0 ||
-			(response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CONFIG_REJECTED &&
-				response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED &&
-				response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_CONFIG_REJECTED &&
-				response.Diagnostic != agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED) {
-			return errs.New(errs.KindValidationFailed, "failed Compose helper response is inconsistent")
-		}
-		if response.ProxyEvidence != nil || response.RecreateEvidence != nil || response.CandidateAbsenceEvidence != nil {
-			return errs.New(errs.KindValidationFailed, "failed Compose helper response carries release evidence")
-		}
-	default:
-		return errs.New(errs.KindValidationFailed, "Compose helper response outcome is unsupported")
-	}
-	return nil
-}
-
-func validRuntimeTarget(value string) bool {
-	return value == "singleton" || value == "blue" || value == "green"
 }
 
 func frame(encoded []byte) ([]byte, error) {

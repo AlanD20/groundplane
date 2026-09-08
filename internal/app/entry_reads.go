@@ -14,8 +14,15 @@ type entryReadRepository interface {
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
 	GetEntry(context.Context, string) (etcd.Versioned[etcd.EntryRecord], error)
 	ListEntries(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.EntryRecord], error)
-	GetEnvironmentComposeProjection(context.Context, string) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
-	GetEnvironmentComposeProjectionRevision(context.Context, string, string) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	GetEnvironmentComposeProjection(
+		context.Context,
+		string,
+	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	GetEnvironmentComposeProjectionRevision(
+		context.Context,
+		string,
+		string,
+	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
 	GetSecretEntryValue(
 		context.Context,
 		string,

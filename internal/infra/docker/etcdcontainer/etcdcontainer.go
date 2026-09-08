@@ -96,7 +96,11 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 		return err
 	}
 	if exists && !owned(inspected) {
-		return errs.Newf(errs.KindInternal, "etcd container: %q exists without Groundplane ownership labels", ContainerName)
+		return errs.Newf(
+			errs.KindInternal,
+			"etcd container: %q exists without Groundplane ownership labels",
+			ContainerName,
+		)
 	}
 	if exists && !matchesDesired(inspected) {
 		if _, err := m.client.ContainerRemove(ctx, inspected.ID, client.ContainerRemoveOptions{Force: true}); err != nil {
@@ -219,7 +223,8 @@ func createOptions() client.ContainerCreateOptions {
 }
 
 func owned(inspected container.InspectResponse) bool {
-	return inspected.Config != nil && inspected.Config.Labels[labelManaged] == "true" && inspected.Config.Labels[labelKind] == "etcd"
+	return inspected.Config != nil && inspected.Config.Labels[labelManaged] == "true" &&
+		inspected.Config.Labels[labelKind] == "etcd"
 }
 
 func matchesDesired(inspected container.InspectResponse) bool {
@@ -290,7 +295,8 @@ func equalEtcdVolumeOptions(left, right *mount.VolumeOptions) bool {
 	if left == nil || right == nil {
 		return left == nil && right == nil
 	}
-	return left.NoCopy == right.NoCopy && equalEtcdStringMap(left.Labels, right.Labels) && left.Subpath == right.Subpath &&
+	return left.NoCopy == right.NoCopy && equalEtcdStringMap(left.Labels, right.Labels) &&
+		left.Subpath == right.Subpath &&
 		equalEtcdDrivers(left.DriverConfig, right.DriverConfig)
 }
 
@@ -312,7 +318,8 @@ func equalEtcdTmpfsOptions(left, right *mount.TmpfsOptions) bool {
 	if left == nil || right == nil {
 		return left == nil && right == nil
 	}
-	return left.SizeBytes == right.SizeBytes && left.Mode == right.Mode && equalEtcdStringMatrix(left.Options, right.Options)
+	return left.SizeBytes == right.SizeBytes && left.Mode == right.Mode &&
+		equalEtcdStringMatrix(left.Options, right.Options)
 }
 
 func ensureDataDirectory() error {

@@ -867,9 +867,11 @@ func attachDetachRaceEnvelope(
 		Services:            attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
 		Networks:            attachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones),
 		Volumes:             append([]EnvironmentVolumeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
-		VolumeMounts:        append([]EnvironmentServiceVolumeMount(nil), scope.ComposeProjection.Record.VolumeMounts...),
-		ConsumerServiceIDs:  []string{current.Record.ServiceID},
-		GrantAttachIDs:      append([]string(nil), current.Record.GrantAttachIDs...),
+		VolumeMounts: append(
+			[]EnvironmentServiceVolumeMount(nil),
+			scope.ComposeProjection.Record.VolumeMounts...),
+		ConsumerServiceIDs: []string{current.Record.ServiceID},
+		GrantAttachIDs:     append([]string(nil), current.Record.GrantAttachIDs...),
 	}
 	return scope, renderInput, task, marker
 }

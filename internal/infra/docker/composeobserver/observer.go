@@ -13,13 +13,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/distribution/reference"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/infra/docker/managedimage"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -98,6 +99,32 @@ func (observer *Observer) Observe(
 	if artifact == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Compose observation artifact is not in the plan")
 	}
+	return observer.observeArtifact(ctx, artifact)
+}
+
+// ObserveRestoration accepts only the immutable read-only witness descriptor,
+// never a manufactured execution plan with rewritten historical ownership.
+func (observer *Observer) ObserveRestoration(
+	ctx context.Context,
+	observation *executionplan.RestorationObservation,
+) (*agentpb.ObservedProject, error) {
+	if observer == nil || observer.engine == nil || observer.now == nil || ctx == nil {
+		return nil, errs.New(errs.KindInternal, "Compose restoration observer is not configured")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	artifact := observation.Artifact()
+	if artifact == nil {
+		return nil, errs.New(errs.KindValidationFailed, "Compose restoration observation is empty")
+	}
+	return observer.observeArtifact(ctx, artifact)
+}
+
+func (observer *Observer) observeArtifact(
+	ctx context.Context,
+	artifact *agentpb.ComposeArtifact,
+) (*agentpb.ObservedProject, error) {
 	observedAt := timestamppb.New(observer.now().UTC())
 	if err := observedAt.CheckValid(); err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
@@ -126,180 +153,6 @@ func (observer *Observer) Observe(
 		return result.Collisions[i].Name < result.Collisions[j].Name
 	})
 	return result, nil
-}
-
-type serviceImageEngine interface {
-	ImageInspect(context.Context, string, ...client.ImageInspectOption) (client.ImageInspectResult, error)
-}
-
-func (observer *Observer) ObserveServiceImage(
-	ctx context.Context,
-	plan *agentpb.ExecutionPlan,
-	artifactID string,
-	serviceID string,
-	releaseID string,
-	requestedReference string,
-) (*agentpb.ProcedureServiceImageResult, error) {
-	return observer.inspectServiceImage(
-		ctx, plan, artifactID, serviceID, releaseID, requestedReference, "",
-	)
-}
-
-func (observer *Observer) inspectServiceImage(
-	ctx context.Context,
-	plan *agentpb.ExecutionPlan,
-	artifactID string,
-	serviceID string,
-	releaseID string,
-	requestedReference string,
-	expectedLocalImageID string,
-) (*agentpb.ProcedureServiceImageResult, error) {
-	if observer == nil || observer.engine == nil || ctx == nil {
-		return nil, errs.New(errs.KindInternal, "Compose service image observer is not configured")
-	}
-	ownedPlan, err := executionplan.Validate(plan)
-	if err != nil {
-		return nil, err
-	}
-	artifact := findArtifact(ownedPlan, artifactID)
-	if artifact == nil {
-		return nil, errs.New(errs.KindValidationFailed, "Compose service image artifact is not in the plan")
-	}
-	var service *agentpb.ComposeService
-	for _, candidate := range artifact.GetServices() {
-		if candidate.GetServiceId() != serviceID ||
-			candidate.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
-			continue
-		}
-		if candidate.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON &&
-			candidate.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT {
-			continue
-		}
-		if candidate.GetImageReference() != requestedReference ||
-			!expectedLabel(candidate.GetExpectedLabels(), "com.groundplane.release-id", releaseID) {
-			continue
-		}
-		if service != nil {
-			return nil, errs.New(errs.KindInternal, "Compose service image authority is ambiguous")
-		}
-		service = candidate
-	}
-	if service == nil {
-		return nil, errs.New(errs.KindStateConflict, "Compose service image authority is not sealed by the plan")
-	}
-	listed, err := observer.engine.ContainerList(ctx, client.ContainerListOptions{All: true})
-	if err != nil {
-		return nil, operationError(ctx, "list procedure service containers", err)
-	}
-	var containerID, localImageID string
-	for _, summary := range listed.Items {
-		if summary.Labels[composeProjectLabel] != artifact.GetProjectName() ||
-			summary.Labels[composeServiceLabel] != service.GetComposeName() {
-			continue
-		}
-		inspected, inspectErr := observer.engine.ContainerInspect(ctx, summary.ID, client.ContainerInspectOptions{})
-		if inspectErr != nil {
-			return nil, operationError(ctx, "inspect procedure service container", inspectErr)
-		}
-		item := inspected.Container
-		if item.ID == "" || item.Config == nil || item.Config.Image != requestedReference ||
-			item.Config.Labels[composeProjectLabel] != artifact.GetProjectName() ||
-			item.Config.Labels[composeServiceLabel] != service.GetComposeName() ||
-			!labelsMatch(item.Config.Labels, service.GetExpectedLabels()) {
-			return nil, errs.New(errs.KindStateConflict, "Compose service container does not match sealed ownership")
-		}
-		if containerID != "" {
-			return nil, errs.New(errs.KindStateConflict, "Compose service image authority is ambiguous")
-		}
-		containerID, localImageID = item.ID, item.Image
-	}
-	if containerID == "" || localImageID == "" {
-		return nil, errs.New(errs.KindStateConflict, "Compose service candidate container is not observed")
-	}
-	if expectedLocalImageID != "" && localImageID != expectedLocalImageID {
-		return nil, errs.New(errs.KindStateConflict, "Compose service local image differs from acknowledged evidence")
-	}
-	imageObserver, ok := observer.engine.(serviceImageEngine)
-	if !ok {
-		return nil, errs.New(errs.KindInternal, "Compose image inspection is not configured")
-	}
-	inspected, err := imageObserver.ImageInspect(ctx, localImageID)
-	if err != nil {
-		return nil, operationError(ctx, "inspect procedure service image", err)
-	}
-	if inspected.ID == "" || inspected.ID != localImageID {
-		return nil, errs.New(errs.KindStateConflict, "Compose image inspect does not match the selected container")
-	}
-	immutableReference, digestBytes, err := matchingImmutableReference(requestedReference, inspected.RepoDigests)
-	if err != nil {
-		return nil, err
-	}
-	return &agentpb.ProcedureServiceImageResult{
-		ServiceId: serviceID, ReleaseId: releaseID, RequestedReference: requestedReference,
-		ImmutableReference: immutableReference, ImageDigest: digestBytes, LocalImageId: localImageID,
-	}, nil
-}
-
-func (observer *Observer) VerifyServiceImage(
-	ctx context.Context,
-	plan *agentpb.ExecutionPlan,
-	artifactID string,
-	expected *agentpb.ProcedureServiceImageResult,
-) error {
-	if expected == nil {
-		return errs.New(errs.KindValidationFailed, "Compose service image verification evidence is missing")
-	}
-	observed, err := observer.inspectServiceImage(
-		ctx, plan, artifactID, expected.GetServiceId(), expected.GetReleaseId(),
-		expected.GetRequestedReference(), expected.GetLocalImageId(),
-	)
-	if err != nil {
-		return err
-	}
-	if !proto.Equal(observed, expected) {
-		return errs.New(errs.KindStateConflict, "Compose service image differs from acknowledged evidence")
-	}
-	return nil
-}
-
-func matchingImmutableReference(requested string, candidates []string) (string, []byte, error) {
-	named, err := reference.ParseNormalizedNamed(requested)
-	if err != nil {
-		return "", nil, errs.New(errs.KindStateConflict, "Compose requested image reference is invalid")
-	}
-	repository := reference.TrimNamed(named).Name()
-	immutable := ""
-	var digestBytes []byte
-	for _, value := range candidates {
-		candidate, parseErr := reference.ParseNormalizedNamed(value)
-		digested, digestOK := candidate.(reference.Digested)
-		if parseErr != nil || !digestOK || reference.TrimNamed(candidate).Name() != repository ||
-			digested.Digest().Algorithm().String() != "sha256" {
-			continue
-		}
-		decoded, decodeErr := hex.DecodeString(digested.Digest().Encoded())
-		if decodeErr != nil || len(decoded) != sha256.Size {
-			continue
-		}
-		canonical := candidate.String()
-		if immutable != "" && immutable != canonical {
-			return "", nil, errs.New(errs.KindStateConflict, "Compose image inspect returned ambiguous repository digests")
-		}
-		immutable, digestBytes = canonical, decoded
-	}
-	if immutable == "" {
-		return "", nil, errs.New(errs.KindStateConflict, "Compose image inspect lacks the requested repository digest")
-	}
-	return immutable, digestBytes, nil
-}
-
-func expectedLabel(labels []*agentpb.LabelPair, key, value string) bool {
-	for _, label := range labels {
-		if label.GetKey() == key && label.GetValue() == value {
-			return true
-		}
-	}
-	return false
 }
 
 func (observer *Observer) observeContainers(
@@ -339,8 +192,26 @@ func (observer *Observer) observeContainers(
 			!labelsMatch(item.Config.Labels, service.ExpectedLabels) {
 			result.Collisions = append(result.Collisions, &agentpb.ObservedCollision{
 				Kind: agentpb.ObservedCollisionKind_OBSERVED_COLLISION_KIND_CONTAINER, Name: name,
+				ComposeServiceName: item.Config.Labels[composeServiceLabel],
+				ComponentId:        item.Config.Labels["com.groundplane.component-id"],
+				ServiceId:          item.Config.Labels["com.groundplane.service-id"],
 			})
 			continue
+		}
+		if service.GetOwnerComponentId() != "" || len(service.GetImageConfigDigest()) != 0 {
+			if item.Config.Image != service.GetImageReference() {
+				return errs.New(
+					errs.KindStateConflict,
+					"managed Component container image differs from sealed authority",
+				)
+			}
+			if err := managedimage.Verify(item.Image, item.ImageManifestDescriptor,
+				"sha256:"+hex.EncodeToString(service.GetImageChildDigest()),
+				"sha256:"+hex.EncodeToString(service.GetImageConfigDigest()),
+				ocispec.Platform{OS: service.ImageOs, Architecture: service.ImageArchitecture, Variant: service.ImageVariant},
+			); err != nil {
+				return err
+			}
 		}
 		state, exitCode, err := containerState(item.State)
 		if err != nil {

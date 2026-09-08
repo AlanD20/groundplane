@@ -325,7 +325,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** component.enable */
+        /** Enable a Component with optional configuration */
         post: operations["component.enable"];
         delete?: never;
         options?: never;
@@ -1589,6 +1589,7 @@ export interface components {
              * @example /api/v1/BackingService.json
              */
             readonly $schema?: string;
+            authentication?: string;
             backing_network_id: string;
             environment_id: string;
             project_id: string;
@@ -1602,6 +1603,11 @@ export interface components {
              */
             readonly $schema?: string;
             adapter: string;
+            /**
+             * @description Immutable Valkey authentication mode; omitted selects username_password. Unsupported for other adapters.
+             * @enum {string}
+             */
+            authentication?: "username_password" | "password" | "none";
             description?: string;
             name: string;
             network_pool: string;
@@ -1698,9 +1704,12 @@ export interface components {
         };
         ComponentConfig: {
             caddyfile_template?: string;
-            zone_id: string;
+            /** @description Ordered selected Environment Zone IDs; the first router Zone is primary. */
+            zone_ids: string[];
         } | {
             secret_id: string;
+            /** @description Ordered selected Environment Zone IDs; the first router Zone is primary. */
+            zone_ids: string[];
         } | {
             corefile_template: string;
             forwarders: {
@@ -1720,7 +1729,8 @@ export interface components {
             readonly $schema?: string;
             config: {
                 caddyfile_template?: string;
-                zone_id: string;
+                /** @description Ordered selected Environment Zone IDs; the first router Zone is primary. */
+                zone_ids: string[];
             } | {
                 credential: {
                     /** @enum {string} */
@@ -1732,6 +1742,8 @@ export interface components {
                     secret_name: string;
                     token: string;
                 };
+                /** @description Ordered selected Environment Zone IDs; the first router Zone is primary. */
+                zone_ids: string[];
             } | {
                 corefile_template: string;
                 forwarders: {
@@ -1762,6 +1774,32 @@ export interface components {
             readonly $schema?: string;
             config: components["schemas"]["ComponentConfig"] | null;
             managed_files: components["schemas"]["ManagedConfigFile"][];
+        };
+        ComponentEnableRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/ComponentEnableRequest.json
+             */
+            readonly $schema?: string;
+            config?: {
+                caddyfile_template?: string;
+                /** @description Ordered selected Environment Zone IDs; the first router Zone is primary. */
+                zone_ids: string[];
+            } | {
+                credential: {
+                    /** @enum {string} */
+                    mode: "existing";
+                    secret_id: string;
+                } | {
+                    /** @enum {string} */
+                    mode: "new";
+                    secret_name: string;
+                    token: string;
+                };
+                /** @description Ordered selected Environment Zone IDs; the first router Zone is primary. */
+                zone_ids: string[];
+            };
         };
         ComponentProjection: {
             component_id: string;
@@ -4019,7 +4057,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ComponentEnableRequest"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {

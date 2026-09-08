@@ -14,10 +14,12 @@ func TestDesiredContainerIsPrivatePersistentAndControllerOwned(t *testing.T) {
 	if options.Config.Labels[labelManaged] != "true" || options.Config.Labels[labelKind] != "etcd" {
 		t.Fatalf("labels = %#v", options.Config.Labels)
 	}
-	if options.HostConfig.NetworkMode != container.NetworkMode("host") || options.HostConfig.RestartPolicy.Name != container.RestartPolicyDisabled {
+	if options.HostConfig.NetworkMode != container.NetworkMode("host") ||
+		options.HostConfig.RestartPolicy.Name != container.RestartPolicyDisabled {
 		t.Fatalf("runtime policy = %#v", options.HostConfig)
 	}
-	if len(options.HostConfig.Mounts) != 1 || options.HostConfig.Mounts[0].Source != DataDirectory || options.HostConfig.Mounts[0].Target != DataDirectory {
+	if len(options.HostConfig.Mounts) != 1 || options.HostConfig.Mounts[0].Source != DataDirectory ||
+		options.HostConfig.Mounts[0].Target != DataDirectory {
 		t.Fatalf("mounts = %#v", options.HostConfig.Mounts)
 	}
 	if len(options.Config.Cmd) == 0 || options.Config.Cmd[0] != "--name=groundplane" {

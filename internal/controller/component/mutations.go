@@ -17,13 +17,16 @@ type mutationRepository interface {
 	GetComponent(context.Context, string) (etcd.Versioned[etcd.ComponentRecord], error)
 }
 
-type mutationBlueprintRepository interface {
-	GetEnvironmentBlueprintHead(context.Context, string) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
-	GetEnvironmentBlueprintRevision(context.Context, string, string) (etcd.Versioned[etcd.EnvironmentBlueprintRevision], bool, error)
-}
-
 type blueprintApplier interface {
-	ApplyComponentBlueprint(context.Context, string, string, core.BlueprintBundle, string) (etcd.IdempotencyResponse, error)
+	GetBlueprint(context.Context, string) (apiTypes.EnvironmentBlueprintDocument, error)
+	ApplyComponentBlueprint(
+		context.Context,
+		string,
+		string,
+		core.BlueprintBundle,
+		string,
+		string,
+	) (etcd.IdempotencyResponse, error)
 }
 
 type credentialReferenceResolver interface {
@@ -44,7 +47,6 @@ type platformConfigMutator interface {
 
 type MutationService struct {
 	components  mutationRepository
-	blueprints  mutationBlueprintRepository
 	applier     blueprintApplier
 	credentials credentialReferenceResolver
 	platform    platformConfigMutator
@@ -52,17 +54,15 @@ type MutationService struct {
 
 func NewMutationService(
 	components mutationRepository,
-	blueprints mutationBlueprintRepository,
 	applier blueprintApplier,
 	credentials credentialReferenceResolver,
 	platform platformConfigMutator,
 ) (*MutationService, error) {
-	if components == nil || blueprints == nil || applier == nil || credentials == nil || platform == nil {
+	if components == nil || applier == nil || credentials == nil || platform == nil {
 		return nil, errs.New(errs.KindInternal, "Component mutation dependencies are not configured")
 	}
 	return &MutationService{
 		components:  components,
-		blueprints:  blueprints,
 		applier:     applier,
 		credentials: credentials,
 		platform:    platform,
@@ -72,6 +72,7 @@ func NewMutationService(
 func (service *MutationService) EnableComponent(
 	ctx context.Context,
 	componentID string,
+	request apiTypes.ComponentEnableRequest,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
 	current, err := service.components.GetComponent(ctx, componentID)
@@ -79,9 +80,33 @@ func (service *MutationService) EnableComponent(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if current.Record.Desired.Owner == core.ComponentOwnerPlatform {
+		if request.Config != nil {
+			return etcd.IdempotencyResponse{}, errs.New(
+				errs.KindValidationFailed,
+				"Platform Component enable does not accept config",
+			)
+		}
 		return service.platform.EnablePlatformComponent(ctx, componentID, idempotencyKey)
 	}
+	var config *apiTypes.ComponentConfig
+	if request.Config != nil {
+		prepared, err := service.environmentComponentConfig(
+			ctx,
+			current.Record.Desired,
+			*request.Config,
+			idempotencyKey,
+		)
+		if err != nil {
+			return etcd.IdempotencyResponse{}, err
+		}
+		config = &prepared
+	}
 	return service.mutateComponent(ctx, componentID, idempotencyKey, func(spec *yaml.Node) error {
+		if config != nil {
+			if err := applyEnvironmentComponentConfig(spec, *config); err != nil {
+				return err
+			}
+		}
 		return replaceYAMLMappingValue(spec, "enabled", scalarNode("!!bool", strconv.FormatBool(true)))
 	})
 }
@@ -134,69 +159,13 @@ func (service *MutationService) SetComponentConfig(
 	if current.Record.Desired.Owner == core.ComponentOwnerPlatform {
 		return service.platform.ReplacePlatformComponentConfig(ctx, componentID, request, idempotencyKey)
 	}
-	var publicConfig apiTypes.ComponentConfig
-	var mutate func(*yaml.Node) error
-	if current.Record.Desired.Kind == core.ComponentKindEdgeCloudflare {
-		if request.Config.CloudflareTunnel == nil {
-			return etcd.IdempotencyResponse{}, errs.New(
-				errs.KindValidationFailed,
-				"Cloudflare Tunnel config accepts only credential",
-			)
-		}
-		credential := request.Config.CloudflareTunnel.Credential
-		secretID, err := service.credentials.ResolveCredentialReference(
-			ctx,
-			current.Record.Desired.OwnerID,
-			OpaqueSecretReferenceInput{
-				Mode: credential.Mode, SecretID: credential.SecretID,
-				Name: credential.SecretName, Value: credential.Token,
-			},
-			idempotencyKey,
-		)
-		if err != nil {
-			return etcd.IdempotencyResponse{}, err
-		}
-		publicConfig = apiTypes.ComponentConfig{CloudflareTunnel: &apiTypes.CloudflareTunnelComponentConfig{SecretID: secretID}}
-		mutate = func(spec *yaml.Node) error {
-			var settings yaml.Node
-			if err := settings.Encode(map[string]string{"secret_id": secretID}); err != nil {
-				return errs.New(errs.KindValidationFailed, "Component config is invalid")
-			}
-			return replaceYAMLMappingValue(spec, "settings", &settings)
-		}
-	} else {
-		if current.Record.Desired.Kind != core.ComponentKindIngressCaddy || request.Config.Caddy == nil ||
-			request.Config.Caddy.ZoneID == "" {
-			return etcd.IdempotencyResponse{}, errs.New(
-				errs.KindValidationFailed,
-				"Caddy config requires zone_id and accepts only Caddy fields",
-			)
-		}
-		publicConfig = apiTypes.ComponentConfig{Caddy: &apiTypes.CaddyComponentConfig{
-			ZoneID: request.Config.Caddy.ZoneID, CaddyfileTemplate: request.Config.Caddy.CaddyfileTemplate,
-		}}
-		mutate = func(spec *yaml.Node) error {
-			var settings yaml.Node
-			if err := settings.Encode(map[string]string{"zone_id": request.Config.Caddy.ZoneID}); err != nil {
-				return errs.New(errs.KindValidationFailed, "Component config is invalid")
-			}
-			if err := replaceYAMLMappingValue(spec, "settings", &settings); err != nil {
-				return err
-			}
-			if request.Config.Caddy.CaddyfileTemplate == "" {
-				removeYAMLMappingValue(spec, "implementation_config")
-				return nil
-			}
-			var implementation yaml.Node
-			if err := implementation.Encode(map[string]string{
-				"caddyfile_template": request.Config.Caddy.CaddyfileTemplate,
-			}); err != nil {
-				return errs.New(errs.KindValidationFailed, "Component config is invalid")
-			}
-			return replaceYAMLMappingValue(spec, "implementation_config", &implementation)
-		}
+	publicConfig, err := service.environmentComponentConfig(ctx, current.Record.Desired, request.Config, idempotencyKey)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
 	}
-	response, err := service.mutateComponent(ctx, componentID, idempotencyKey, mutate)
+	response, err := service.mutateComponent(ctx, componentID, idempotencyKey, func(spec *yaml.Node) error {
+		return applyEnvironmentComponentConfig(spec, publicConfig)
+	})
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -234,52 +203,32 @@ func (service *MutationService) mutateComponent(
 	}
 	if component.Record.Desired.Kind != core.ComponentKindIngressCaddy &&
 		component.Record.Desired.Kind != core.ComponentKindEdgeCloudflare {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Component action is unsupported for this kind")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict,
+			"Component action is unsupported for this kind",
+		)
 	}
 	environmentID := component.Record.Desired.OwnerID
-	head, found, err := service.blueprints.GetEnvironmentBlueprintHead(ctx, environmentID)
+	document, err := service.applier.GetBlueprint(ctx, environmentID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if !found {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Environment has no desired Blueprint")
+	if document.EnvironmentID != environmentID || document.Revision == "" {
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Component Blueprint authoring identity is invalid",
+		)
 	}
-	revision, found, err := service.blueprints.GetEnvironmentBlueprintRevision(ctx, environmentID, head.Record.RevisionID)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+	bundle := core.BlueprintBundle{
+		RootPath: "groundplane.yaml", ComposeSources: []string{"groundplane.yaml"},
+		Files: []core.BlueprintFile{{Path: "groundplane.yaml", Content: []byte(document.Document)}},
 	}
-	if !found {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment Blueprint head is missing its revision")
-	}
-	bundle := componentBlueprintBundle(revision.Record)
 	if err := mutateComponentBlueprint(&bundle, component.Record.Desired.Kind, mutate); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	return service.applier.ApplyComponentBlueprint(
-		ctx, environmentID, component.Record.Desired.ID, bundle, idempotencyKey,
+		ctx, environmentID, component.Record.Desired.ID, bundle, document.Revision, idempotencyKey,
 	)
-}
-
-func componentBlueprintBundle(revision etcd.EnvironmentBlueprintRevision) core.BlueprintBundle {
-	files := make([]core.BlueprintFile, len(revision.Files))
-	for index, file := range revision.Files {
-		files[index] = core.BlueprintFile{Path: file.Path, Content: append([]byte(nil), file.Content...)}
-	}
-	return core.BlueprintBundle{
-		RootPath: revision.RootPath, ComposeSources: append([]string(nil), revision.ComposeSources...),
-		Files: files, Interpolation: cloneStringMap(revision.Interpolation),
-	}
-}
-
-func cloneStringMap(source map[string]string) map[string]string {
-	if source == nil {
-		return nil
-	}
-	clone := make(map[string]string, len(source))
-	for key, value := range source {
-		clone[key] = value
-	}
-	return clone
 }
 
 func mutateComponentBlueprint(

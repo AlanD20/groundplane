@@ -197,7 +197,13 @@ func componentTaskAddress(record ComponentRecord) (componentTaskAddressBinding, 
 			"enabled Caddy Component candidate has no typed config",
 		)
 	}
-	zoneID := record.Desired.Config.Caddy.ZoneID
+	if len(record.Desired.Config.Caddy.ZoneIDs) == 0 {
+		return componentTaskAddressBinding{}, false, errs.New(
+			errs.KindValidationFailed,
+			"enabled Caddy Component candidate has no primary Zone",
+		)
+	}
+	zoneID := record.Desired.Config.Caddy.ZoneIDs[0]
 	if ids.Validate(ids.KindNetwork, zoneID) != nil {
 		return componentTaskAddressBinding{}, false, errs.New(
 			errs.KindValidationFailed,

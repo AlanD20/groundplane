@@ -3,12 +3,47 @@ package agent
 import (
 	"bytes"
 	"context"
+	"slices"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/adapters/postgres16"
+	"github.com/AlanD20/groundplane/internal/adapters/valkey9"
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
+
+// Rationale: selectable Valkey authentication may not fall back to an implied
+// mode at the Agent boundary or reach container discovery.
+func TestAdapterRuntimeRejectsUnsetValkeyAuthenticationBeforeEffects(t *testing.T) {
+	valkey9.Register()
+	fake := &adapterRuntimeRunner{}
+	runtime := NewAdapterRuntime(fake)
+	_, err := runtime.executeStep(context.Background(), &agentpb.ExecutionStep{
+		Payload: &agentpb.ExecutionStep_AdapterProcedure{AdapterProcedure: &agentpb.AdapterProcedure{
+			AdapterKey:       "valkey:9",
+			Phase:            agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_PROVISION,
+			AttachId:         "att_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			BackingServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+			Role:             "default", Password: []byte("owner-password"),
+		}},
+	})
+	if err == nil || len(fake.calls) != 0 {
+		t.Fatalf("executeStep(unset Valkey mode) = %v, calls %#v", err, fake.calls)
+	}
+}
+
+// Rationale: non-secret Valkey operations are discrete argv and legitimately
+// carry no stdin, while SQL continues to require a body.
+func TestAdapterCommandAllowsArgumentOnlyCompiledExec(t *testing.T) {
+	t.Parallel()
+	command, arguments, input, err := adapterCommand(adapters.Step{
+		Op: adapters.StepExec, Program: "valkey-cli", Args: []string{"ACL", "SAVE"},
+	})
+	if err != nil || command != "valkey-cli" || !slices.Equal(arguments, []string{"ACL", "SAVE"}) || input != nil {
+		t.Fatalf("adapterCommand(argument-only) = %q, %#v, %#v, %v", command, arguments, input, err)
+	}
+}
 
 // Rationale: the Agent must select one stable labeled container, reconstruct only its compiled
 // adapter, keep secrets out of argv, and leave the WorkerPool-owned immutable plan valid for later steps.

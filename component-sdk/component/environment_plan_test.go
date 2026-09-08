@@ -37,8 +37,19 @@ func environmentPlanTestImage(repository string) OCIImage {
 		Repository:  repository,
 		IndexDigest: strings.Repeat("a", 64),
 		Platforms: []OCIPlatform{
-			{OS: "linux", Architecture: "amd64", ChildDigest: strings.Repeat("b", 64), ConfigDigest: strings.Repeat("c", 64)},
-			{OS: "linux", Architecture: "arm64", Variant: "v8", ChildDigest: strings.Repeat("d", 64), ConfigDigest: strings.Repeat("e", 64)},
+			{
+				OS:           "linux",
+				Architecture: "amd64",
+				ChildDigest:  strings.Repeat("b", 64),
+				ConfigDigest: strings.Repeat("c", 64),
+			},
+			{
+				OS:           "linux",
+				Architecture: "arm64",
+				Variant:      "v8",
+				ChildDigest:  strings.Repeat("d", 64),
+				ConfigDigest: strings.Repeat("e", 64),
+			},
 		},
 	}
 }
@@ -47,8 +58,19 @@ func environmentPlanTestImage(repository string) OCIImage {
 // catalog-authenticated variant rather than accepting a caller-invented value.
 func TestOCIImageSelectReturnsAuthenticatedPlatform(t *testing.T) {
 	image := OCIImage{Repository: "example/resolver", IndexDigest: strings.Repeat("e", 64), Platforms: []OCIPlatform{
-		{OS: "linux", Architecture: "amd64", ChildDigest: strings.Repeat("a", 64), ConfigDigest: strings.Repeat("b", 64)},
-		{OS: "linux", Architecture: "arm64", Variant: "v8", ChildDigest: strings.Repeat("c", 64), ConfigDigest: strings.Repeat("d", 64)},
+		{
+			OS:           "linux",
+			Architecture: "amd64",
+			ChildDigest:  strings.Repeat("a", 64),
+			ConfigDigest: strings.Repeat("b", 64),
+		},
+		{
+			OS:           "linux",
+			Architecture: "arm64",
+			Variant:      "v8",
+			ChildDigest:  strings.Repeat("c", 64),
+			ConfigDigest: strings.Repeat("d", 64),
+		},
 	}}
 	selected, reference, found := image.Select("linux", "arm64")
 	if !found || selected.Variant != "v8" || selected.ConfigDigest != strings.Repeat("d", 64) ||
@@ -106,7 +128,10 @@ func TestValidateHTTPRouterInputRequiresCanonicalManagedOrigin(t *testing.T) {
 	t.Parallel()
 	valid := HTTPRouterInput{
 		ComponentID: "cmp_router", Enabled: true, GeneratedServiceID: "svc_router",
-		ZoneID: "net_frontend", ZoneName: "frontend", PinnedIPv4: "10.40.0.2",
+		Zones: []HTTPRouterZoneInput{
+			{ID: "net_frontend", Name: "frontend", StaticIPv4: "10.40.0.2"},
+			{ID: "net_services", Name: "services"},
+		},
 		Origin: HTTPRouterOrigin{ServiceName: "edge-router", URL: "http://edge-router:8080"},
 	}
 	if err := ValidateHTTPRouterInput(valid); err != nil {
@@ -127,17 +152,64 @@ func TestValidateHTTPRouterInputRequiresCanonicalManagedOrigin(t *testing.T) {
 	}
 }
 
+// Rationale: primary address ownership and replay require one ordered,
+// duplicate-free Zone view with a static address only on the first Zone.
+func TestValidateHTTPRouterInputRejectsInvalidOrderedZones(t *testing.T) {
+	t.Parallel()
+	valid := HTTPRouterInput{
+		ComponentID: "cmp_router", Enabled: true, GeneratedServiceID: "svc_router",
+		Zones: []HTTPRouterZoneInput{
+			{ID: "net_primary", Name: "primary", StaticIPv4: "10.40.0.2"},
+			{ID: "net_secondary", Name: "secondary"},
+		},
+		Origin: HTTPRouterOrigin{ServiceName: "edge-router", URL: "http://edge-router:8080"},
+	}
+	for name, mutate := range map[string]func(*HTTPRouterInput){
+		"missing zones":       func(input *HTTPRouterInput) { input.Zones = nil },
+		"duplicate id":        func(input *HTTPRouterInput) { input.Zones[1].ID = input.Zones[0].ID },
+		"duplicate name":      func(input *HTTPRouterInput) { input.Zones[1].Name = input.Zones[0].Name },
+		"missing primary pin": func(input *HTTPRouterInput) { input.Zones[0].StaticIPv4 = "" },
+		"secondary pin":       func(input *HTTPRouterInput) { input.Zones[1].StaticIPv4 = "10.40.1.2" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			input := CloneHTTPRouterInput(valid)
+			mutate(&input)
+			if ValidateHTTPRouterInput(input) == nil {
+				t.Fatalf("ValidateHTTPRouterInput() accepted %#v", input.Zones)
+			}
+		})
+	}
+}
+
 // Rationale: fixed-revision planning must retain the exact origin while
 // detaching mutable Route storage from the caller.
 func TestCloneHTTPRouterInputPreservesOriginAndDetachesRoutes(t *testing.T) {
 	t.Parallel()
 	input := HTTPRouterInput{
 		Origin: HTTPRouterOrigin{ServiceName: "edge-router", URL: "http://edge-router:8080"},
+		Zones:  []HTTPRouterZoneInput{{ID: "net_primary", Name: "primary", StaticIPv4: "10.40.0.2"}},
 		Routes: []HTTPRoute{{ID: "rte_one", Path: "/one"}},
 	}
 	cloned := CloneHTTPRouterInput(input)
 	cloned.Routes[0].Path = "/changed"
-	if input.Routes[0].Path != "/one" || cloned.Origin != input.Origin {
+	cloned.Zones[0].Name = "changed"
+	if input.Routes[0].Path != "/one" || input.Zones[0].Name != "primary" || cloned.Origin != input.Origin {
 		t.Fatalf("CloneHTTPRouterInput() source/clone = %#v / %#v", input, cloned)
+	}
+}
+
+// Rationale: gateway selection changes runtime connectivity and therefore must
+// be immutable replay authority rather than digest-invisible metadata.
+func TestDigestEnvironmentPlanIncludesGatewayPriority(t *testing.T) {
+	t.Parallel()
+	base := EnvironmentPlan{Services: []ManagedService{{
+		ID: "svc_tunnel", Name: "tunnel", Image: environmentPlanTestImage("example/tunnel"),
+		NetworkMode: ManagedNetworkModeZones,
+		Networks:    []ManagedNetworkAttachment{{Name: "frontend"}},
+	}}}
+	changed := CloneEnvironmentPlan(base)
+	changed.Services[0].Networks[0].GatewayPriority = 1
+	if DigestEnvironmentPlan(base) == DigestEnvironmentPlan(changed) {
+		t.Fatal("DigestEnvironmentPlan() ignored gateway priority")
 	}
 }

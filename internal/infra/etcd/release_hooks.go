@@ -143,7 +143,8 @@ func validateReleaseHookRenderInputs(hooks []ReleaseHookRenderInput, serviceID s
 	seenSlugs := make(map[string]struct{}, len(hooks))
 	seenExecutions := make(map[string]struct{}, len(hooks))
 	for _, hook := range hooks {
-		if ids.Validate(ids.KindScript, hook.ScriptID) != nil || hook.ServiceID != serviceID || hook.ScriptSlug == "" || hook.ScriptGeneration == 0 {
+		if ids.Validate(ids.KindScript, hook.ScriptID) != nil || hook.ServiceID != serviceID || hook.ScriptSlug == "" ||
+			hook.ScriptGeneration == 0 {
 			return errs.New(errs.KindValidationFailed, "release hook identity is invalid")
 		}
 		if _, exists := seenSlugs[hook.ScriptSlug]; exists {
@@ -157,7 +158,8 @@ func validateReleaseHookRenderInputs(hooks []ReleaseHookRenderInput, serviceID s
 			return errs.New(errs.KindValidationFailed, "release selects a duplicate Script execution")
 		}
 		seenExecutions[hook.ScriptExecutionID] = struct{}{}
-		if _, err := ulid.ParseStrict(hook.RunnerSnapshotID); err != nil || len(hook.RunnerSnapshot) == 0 || len(hook.RunnerProjection) == 0 {
+		if _, err := ulid.ParseStrict(hook.RunnerSnapshotID); err != nil || len(hook.RunnerSnapshot) == 0 ||
+			len(hook.RunnerProjection) == 0 {
 			return errs.New(errs.KindValidationFailed, "release hook runner snapshot is not pinned")
 		}
 		if len(hook.BodySHA256) != 64 || len(hook.ServiceDefinitionSHA256) != 64 {
@@ -176,7 +178,10 @@ func validateReleaseHookRenderInputs(hooks []ReleaseHookRenderInput, serviceID s
 		if bodyBytes > maximumReleaseHookBodyBytes {
 			return errs.New(errs.KindValidationFailed, "release hook bodies exceed the release limit")
 		}
-		if hook.When != core.ScriptPreDeploy && hook.When != core.ScriptPostDeploy && hook.When != core.ScriptPreRollback && hook.When != core.ScriptPostRollback && hook.When != core.ScriptOnFailure {
+		if hook.When != core.ScriptPreDeploy && hook.When != core.ScriptPostDeploy &&
+			hook.When != core.ScriptPreRollback &&
+			hook.When != core.ScriptPostRollback &&
+			hook.When != core.ScriptOnFailure {
 			return errs.New(errs.KindValidationFailed, "release hook trigger is invalid")
 		}
 	}

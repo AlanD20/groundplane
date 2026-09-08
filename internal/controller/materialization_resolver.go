@@ -76,8 +76,10 @@ func (resolver *TaskMaterializationResolver) ResolveTaskMaterializationSource(
 	environmentID string,
 	source etcd.TaskMaterializationSource,
 ) ([]byte, error) {
-	if ctx == nil || resolver == nil || resolver.blueprints == nil || resolver.values == nil || resolver.secrets == nil ||
-		resolver.components == nil || resolver.protector == nil {
+	if ctx == nil || resolver == nil || resolver.blueprints == nil || resolver.values == nil ||
+		resolver.secrets == nil ||
+		resolver.components == nil ||
+		resolver.protector == nil {
 		return nil, errs.New(errs.KindInternal, "materialization value resolver is not configured")
 	}
 	if err := ctx.Err(); err != nil {
@@ -98,7 +100,8 @@ func (resolver *TaskMaterializationResolver) ResolveMaterialization(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if resolver == nil || resolver.blueprints == nil || resolver.values == nil || resolver.secrets == nil || resolver.components == nil ||
+	if resolver == nil || resolver.blueprints == nil || resolver.values == nil || resolver.secrets == nil ||
+		resolver.components == nil ||
 		resolver.protector == nil {
 		return nil, errs.New(errs.KindInternal, "materialization value resolver is not configured")
 	}
@@ -341,7 +344,10 @@ func (resolver *TaskMaterializationResolver) PinSecretValue(
 ) (etcd.TaskSecretValueReference, error) {
 	if ctx == nil || resolver == nil || resolver.secrets == nil || ids.Validate(ids.KindProject, projectID) != nil ||
 		ids.Validate(ids.KindSecret, secretID) != nil {
-		return etcd.TaskSecretValueReference{}, errs.New(errs.KindValidationFailed, "Component Secret reference is invalid")
+		return etcd.TaskSecretValueReference{}, errs.New(
+			errs.KindValidationFailed,
+			"Component Secret reference is invalid",
+		)
 	}
 	current, err := resolver.secrets.GetSecret(ctx, secretID)
 	if err != nil {
@@ -351,7 +357,10 @@ func (resolver *TaskMaterializationResolver) PinSecretValue(
 	if current.Revision <= 0 || secret.ID != secretID || secret.Kind != core.SecretKindEnvVar ||
 		secret.Scope == core.SecretScopeProject && secret.ProjectID != projectID ||
 		secret.Scope != core.SecretScopeProject && secret.Scope != core.SecretScopePlatform {
-		return etcd.TaskSecretValueReference{}, errs.New(errs.KindValidationFailed, "Component Secret is unavailable in this Project")
+		return etcd.TaskSecretValueReference{}, errs.New(
+			errs.KindValidationFailed,
+			"Component Secret is unavailable in this Project",
+		)
 	}
 	value, err := resolver.secrets.GetSecretValue(ctx, current)
 	if err != nil {
@@ -387,7 +396,10 @@ func (resolver *TaskMaterializationResolver) resolveSecretValue(
 	}
 	metadata := secretvalue.Metadata{
 		Version: secretvalue.EnvelopeVersion(record.EnvelopeVersion), Cipher: secretvalue.CipherSuite(record.Cipher),
-		Digest: secretvalue.Digest{Algorithm: secretvalue.DigestAlgorithm(record.DigestAlgorithm), Value: record.CiphertextSHA256},
+		Digest: secretvalue.Digest{
+			Algorithm: secretvalue.DigestAlgorithm(record.DigestAlgorithm),
+			Value:     record.CiphertextSHA256,
+		},
 	}
 	envelope, err := secretvalue.Restore(metadata, record.Ciphertext)
 	clear(record.Ciphertext)

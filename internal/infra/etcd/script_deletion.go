@@ -114,10 +114,20 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
-		{Key: scriptSetScriptKey(current.Record.EnvironmentID, active.Record.GenerationID, scriptID), ModRevision: current.Revision},
-		{Key: scriptSetOwnerKey(current.Record.EnvironmentID, active.Record.GenerationID, scriptID), ModRevision: indexes.Values[0].ModRevision},
 		{
-			Key:         scriptSetSlugKey(current.Record.EnvironmentID, active.Record.GenerationID, current.Record.Desired.Slug),
+			Key:         scriptSetScriptKey(current.Record.EnvironmentID, active.Record.GenerationID, scriptID),
+			ModRevision: current.Revision,
+		},
+		{
+			Key:         scriptSetOwnerKey(current.Record.EnvironmentID, active.Record.GenerationID, scriptID),
+			ModRevision: indexes.Values[0].ModRevision,
+		},
+		{
+			Key: scriptSetSlugKey(
+				current.Record.EnvironmentID,
+				active.Record.GenerationID,
+				current.Record.Desired.Slug,
+			),
 			ModRevision: indexes.Values[1].ModRevision,
 		},
 		{Key: deletionTombstoneKey(string(DeletionTargetScript), scriptID)},

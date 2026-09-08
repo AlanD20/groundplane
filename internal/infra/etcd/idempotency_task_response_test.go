@@ -12,7 +12,9 @@ func TestValidTaskResponseAcceptsCreatedResource(t *testing.T) {
 	response := IdempotencyResponse{
 		Status:      http.StatusCreated,
 		ContentKind: "application/json",
-		Body:        []byte(`{"backing_service":{"project_id":"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV"},"task_id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`),
+		Body: []byte(
+			`{"backing_service":{"project_id":"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV"},"task_id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`,
+		),
 	}
 
 	if !validTaskResponse(response, taskID) {

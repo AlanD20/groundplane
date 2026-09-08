@@ -13,10 +13,12 @@ import (
 	"strings"
 	"testing"
 
+	component "github.com/AlanD20/groundplane-component-sdk/component"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -32,7 +34,7 @@ const (
 	helperProjectID              = "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	componentConfigRelativePath  = "components/caddy/Caddyfile"
 	componentConfigContainerPath = "/etc/caddy/Caddyfile"
-	componentImageReference      = "docker.io/library/caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648"
+	componentImageReference      = "docker.io/library/caddy@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648"
 	componentMaterializeStepID   = "step_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 	componentComposeApplyStepID  = "step_01ARZ3NDEKTSV4RRFFQ69G5FAX"
 )
@@ -41,7 +43,9 @@ type componentCatalogFake struct{}
 
 func (componentCatalogFake) ResolveContainerConfigAction(*agentpb.ComponentApply) (ComponentActionRecipe, error) {
 	return NewComponentActionRecipe(
-		componentConfigRelativePath, componentConfigContainerPath, componentImageReference,
+		componentConfigRelativePath, componentConfigContainerPath, componentImageReference, component.OCIPlatform{
+			OS: "linux", Architecture: "amd64", ChildDigest: strings.Split(componentImageReference, "@sha256:")[1], ConfigDigest: strings.Repeat("b", 64),
+		},
 		[]string{"caddy", "validate", "--config", componentConfigContainerPath, "--adapter", "caddyfile"},
 		[]string{"caddy", "reload", "--config", componentConfigContainerPath, "--adapter", "caddyfile"},
 	)
@@ -121,7 +125,9 @@ func TestExecuteEmptyFullReconcileUsesComposeDown(t *testing.T) {
 	request := validRequest(t)
 	request.Plan.PlanHash = nil
 	request.Plan.Artifacts[0].Services[0].ExpectedReplicas = 0
-	request.Plan.Artifacts[0].CanonicalYaml = []byte("services:\n  api:\n    image: example/api:latest\n    profiles: [configured]\n")
+	request.Plan.Artifacts[0].CanonicalYaml = []byte(
+		"services:\n  api:\n    image: example/api:latest\n    profiles: [configured]\n",
+	)
 	digest := sha256.Sum256(request.Plan.Artifacts[0].CanonicalYaml)
 	request.Plan.Artifacts[0].YamlSha256 = digest[:]
 	request.Plan.Steps[0].Payload = &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
@@ -251,6 +257,91 @@ func TestExecuteComponentConfigValidatesBeforeActivation(t *testing.T) {
 	}
 }
 
+// Rationale: Blueprint plans may carry a retained prior artifact alongside
+// the candidate; the helper must execute against the materialization-bound
+// candidate while retaining unique Component ownership checks.
+func TestArtifactForRequestBlueprintComponentUsesMaterializedArtifact(t *testing.T) {
+	request := blueprintComponentRequestWithRetainedPrior(t)
+	request.Plan.Artifacts = []*agentpb.ComposeArtifact{request.Plan.Artifacts[1], request.Plan.Artifacts[0]}
+	if err := sealComponentRequest(request); err != nil {
+		t.Fatalf("Seal() error = %v", err)
+	}
+
+	artifact, err := ArtifactForRequest(request)
+	if err != nil {
+		t.Fatalf("ArtifactForRequest() error = %v", err)
+	}
+	if artifact == nil || artifact.ArtifactId != helperArtifactID {
+		t.Fatalf("ArtifactForRequest() artifact = %#v, want bound candidate %q", artifact, helperArtifactID)
+	}
+}
+
+// Rationale: helper-side selection must preserve the execution-plan fences for
+// missing or ambiguous chains, selected-service ownership, and ordinary plans.
+func TestArtifactForRequestBlueprintComponentRejectsInvalidSelection(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*agentpb.ComposeHelperRequest)
+	}{
+		{name: "missing materialization", mutate: func(request *agentpb.ComposeHelperRequest) {
+			request.Plan.Steps = request.Plan.Steps[1:]
+		}},
+		{name: "detached chain", mutate: func(request *agentpb.ComposeHelperRequest) {
+			request.Plan.Steps[1].PrerequisiteStepId = ""
+		}},
+		{name: "ambiguous materialization", mutate: func(request *agentpb.ComposeHelperRequest) {
+			duplicate := proto.CloneOf(request.Plan.Steps[0])
+			duplicate.StepId = "step_01ARZ3NDEKTSV4RRFFQ69FAX"
+			request.Plan.Steps = append(request.Plan.Steps, duplicate)
+		}},
+		{name: "duplicate selected service", mutate: func(request *agentpb.ComposeHelperRequest) {
+			duplicate := proto.CloneOf(request.Plan.Artifacts[0].Services[0])
+			request.Plan.Artifacts[0].Services = append(request.Plan.Artifacts[0].Services, duplicate)
+		}},
+		{name: "ordinary global ownership", mutate: func(request *agentpb.ComposeHelperRequest) {
+			request.Plan.Operation = agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request := blueprintComponentRequestWithRetainedPrior(t)
+			test.mutate(request)
+			if err := sealComponentRequest(request); err != nil {
+				return
+			}
+			if _, err := ArtifactForRequest(request); err == nil {
+				t.Fatal("ArtifactForRequest() accepted invalid Component selection")
+			}
+		})
+	}
+}
+
+func blueprintComponentRequestWithRetainedPrior(t *testing.T) *agentpb.ComposeHelperRequest {
+	t.Helper()
+	request, _ := validComponentConfigRequest(t)
+	request.Plan.PlanHash = nil
+	request.Plan.Operation = agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY
+	prior := proto.CloneOf(request.Plan.Artifacts[0])
+	prior.ArtifactId = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FBG"
+	prior.Services[0].ServiceId = "svc_01ARZ3NDEKTSV4RRFFQ69G5FBG"
+	for _, label := range prior.Services[0].ExpectedLabels {
+		if label.Key == "com.groundplane.service-id" {
+			label.Value = prior.Services[0].ServiceId
+		}
+	}
+	request.Plan.Artifacts = append(request.Plan.Artifacts, prior)
+	return request
+}
+
+func sealComponentRequest(request *agentpb.ComposeHelperRequest) error {
+	sealed, err := executionplan.Seal(request.Plan)
+	if err != nil {
+		return err
+	}
+	request.Plan = sealed
+	return nil
+}
+
 // Rationale: rejected Component configuration must be reported as a bounded
 // generic diagnostic and must never reach the activation command.
 func TestExecuteComponentConfigRejectionStopsBeforeActivation(t *testing.T) {
@@ -284,7 +375,11 @@ func TestExecuteComponentConfigRejectsForgedRuntimeAuthorityBeforeActivation(t *
 			base := fake.RunFunc
 			fake.RunFunc = func(ctx context.Context, options runner.RunCmdOpts) (runner.Result, error) {
 				if strings.Contains(strings.Join(options.Args, " "), ".Config.Image") {
-					return runner.Result{Stdout: []byte("docker.io/library/caddy@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n")}, nil
+					return runner.Result{
+						Stdout: []byte(
+							"docker.io/library/caddy@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+						),
+					}, nil
 				}
 				return base(ctx, options)
 			}
@@ -296,7 +391,9 @@ func TestExecuteComponentConfigRejectsForgedRuntimeAuthorityBeforeActivation(t *
 				if strings.Contains(strings.Join(options.Args, " "), " sha256sum ") {
 					hashes++
 					if hashes == 2 {
-						return runner.Result{Stdout: []byte(strings.Repeat("a", 64) + "  " + componentConfigContainerPath + "\n")}, nil
+						return runner.Result{
+							Stdout: []byte(strings.Repeat("a", 64) + "  " + componentConfigContainerPath + "\n"),
+						}, nil
 					}
 				}
 				return base(ctx, options)
@@ -440,6 +537,19 @@ func validComponentConfigRequest(t *testing.T) (*agentpb.ComposeHelperRequest, s
 		{Key: "com.groundplane.service-id", Value: helperServiceID},
 	}
 	request.Plan.Artifacts[0].Services[0].OwnerComponentId = helperComponentID
+	service := request.Plan.Artifacts[0].Services[0]
+	service.ImageReference = componentImageReference
+	service.ImageRepository = strings.Split(componentImageReference, "@")[0]
+	service.ImageIndexDigest = bytes.Repeat([]byte{0xa}, sha256.Size)
+	service.ImageChildDigest, _ = hex.DecodeString(strings.Split(componentImageReference, "@sha256:")[1])
+	service.ImageConfigDigest = bytes.Repeat([]byte{0xbb}, sha256.Size)
+	service.ImageOs, service.ImageArchitecture = "linux", "amd64"
+	service.ExpectedLabels = append(service.ExpectedLabels[:2], append([]*agentpb.LabelPair{
+		{Key: "com.groundplane.image-child-digest", Value: "sha256:" + hex.EncodeToString(service.ImageChildDigest)},
+		{Key: "com.groundplane.image-config-digest", Value: "sha256:" + hex.EncodeToString(service.ImageConfigDigest)},
+		{Key: "com.groundplane.image-index-digest", Value: "sha256:" + hex.EncodeToString(service.ImageIndexDigest)},
+		{Key: "com.groundplane.image-platform", Value: "linux/amd64"},
+	}, service.ExpectedLabels[2:]...)...)
 	request.Plan.Steps = []*agentpb.ExecutionStep{{
 		StepId: componentMaterializeStepID, TimeoutSeconds: 30,
 		Payload: &agentpb.ExecutionStep_MaterializeFile{MaterializeFile: &agentpb.MaterializeFile{
@@ -470,11 +580,15 @@ func componentConfigRunner(t *testing.T, configPath string, validationExit int) 
 	t.Helper()
 	labels, err := json.Marshal(map[string]string{
 		"com.groundplane.managed": "true", "com.groundplane.kind": "service",
-		"com.groundplane.component-id":      helperComponentID,
-		"com.groundplane.environment-id":    helperEnvironmentID,
-		"com.groundplane.service-id":        helperServiceID,
-		"com.groundplane.plan-id":           helperPlanID,
-		"com.groundplane.render-generation": "1",
+		"com.groundplane.component-id":        helperComponentID,
+		"com.groundplane.environment-id":      helperEnvironmentID,
+		"com.groundplane.service-id":          helperServiceID,
+		"com.groundplane.plan-id":             helperPlanID,
+		"com.groundplane.render-generation":   "1",
+		"com.groundplane.image-child-digest":  strings.Split(componentImageReference, "@")[1],
+		"com.groundplane.image-config-digest": "sha256:" + strings.Repeat("b", 64),
+		"com.groundplane.image-index-digest":  "sha256:" + strings.Repeat("0a", 32),
+		"com.groundplane.image-platform":      "linux/amd64",
 	})
 	if err != nil {
 		t.Fatalf("Marshal(labels) error = %v", err)
@@ -494,12 +608,16 @@ func componentConfigRunner(t *testing.T, configPath string, validationExit int) 
 		case strings.Contains(joined, ".Config.Labels"):
 			return runner.Result{Stdout: append(labels, '\n')}, nil
 		case strings.Contains(joined, ".Config.Image"):
-			return runner.Result{Stdout: []byte(componentImageReference + "\n")}, nil
+			return runner.Result{
+				Stdout: []byte(componentImageReference + "\nsha256:" + strings.Repeat("b", 64) + "\nnull\n"),
+			}, nil
 		case strings.Contains(joined, ".Mounts"):
 			return runner.Result{Stdout: append(mounts, '\n')}, nil
 		case strings.Contains(joined, " sha256sum "):
 			digest := sha256.Sum256([]byte("http:// {\n\trespond 404\n}\n"))
-			return runner.Result{Stdout: []byte(hex.EncodeToString(digest[:]) + "  " + componentConfigContainerPath + "\n")}, nil
+			return runner.Result{
+				Stdout: []byte(hex.EncodeToString(digest[:]) + "  " + componentConfigContainerPath + "\n"),
+			}, nil
 		case strings.Contains(joined, " caddy validate ") && validationExit != 0:
 			return runner.Result{ExitCode: validationExit}, errors.New("validation failed")
 		default:

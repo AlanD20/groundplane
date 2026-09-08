@@ -11,7 +11,11 @@ import (
 // durable Route effects belong only to Task acknowledgement.
 func TestControllerTaskHandlerAcceptsExactRouteMutation(t *testing.T) {
 	t.Parallel()
-	handler, err := newControllerTaskHandler(&fakeControllerTaskLocalAgents{}, testBackingZoneCascade(t), &fakeControllerTaskRunners{})
+	handler, err := newControllerTaskHandler(
+		&fakeControllerTaskLocalAgents{},
+		testBackingZoneCascade(t),
+		&fakeControllerTaskRunners{},
+	)
 	if err != nil {
 		t.Fatalf("newControllerTaskHandler() error = %v", err)
 	}

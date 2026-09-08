@@ -24,7 +24,10 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 		return false, false, corruptHierarchyDeletion()
 	}
 	intentKey, _ := HierarchyDeletionIntentKey(operationID)
-	intentRead, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{intentKey, markerKey}, Revision: revision})
+	intentRead, err := repository.store.GetMany(
+		ctx,
+		GetManyRequest{Keys: []string{intentKey, markerKey}, Revision: revision},
+	)
 	if err != nil {
 		return false, false, err
 	}
@@ -43,7 +46,10 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 		return false, false, corruptHierarchyDeletion()
 	}
 	tombstoneKey := HierarchyDeletionTombstoneKey(string(intent.TargetKind), intent.TargetID)
-	tombstoneRead, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{tombstoneKey}, Revision: revision})
+	tombstoneRead, err := repository.store.GetMany(
+		ctx,
+		GetManyRequest{Keys: []string{tombstoneKey}, Revision: revision},
+	)
 	if err != nil {
 		return false, false, err
 	}
@@ -51,8 +57,13 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 		return false, false, corruptHierarchyDeletion()
 	}
 	var tombstone HierarchyDeletionTombstone
-	if decodeHierarchyDeletionRecord(tombstoneRead.Values[0].Value, hierarchyDeletionLargeRecordBytes, &tombstone) != nil ||
-		tombstone.OperationID != operationID || tombstone.Terminal == nil {
+	if decodeHierarchyDeletionRecord(
+		tombstoneRead.Values[0].Value,
+		hierarchyDeletionLargeRecordBytes,
+		&tombstone,
+	) != nil ||
+		tombstone.OperationID != operationID ||
+		tombstone.Terminal == nil {
 		return false, false, corruptHierarchyDeletion()
 	}
 	if tombstone.CurrentTaskID != task.ID {
@@ -118,7 +129,15 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 		return false, false, corruptHierarchyDeletion()
 	}
 	clear(pruneRead.Entry.Value)
-	changed, err := repository.advanceHierarchyDeletionPrune(ctx, task, tombstone, tombstoneRead.Values[0].ModRevision, prune, pruneRead.Entry.ModRevision, now)
+	changed, err := repository.advanceHierarchyDeletionPrune(
+		ctx,
+		task,
+		tombstone,
+		tombstoneRead.Values[0].ModRevision,
+		prune,
+		pruneRead.Entry.ModRevision,
+		now,
+	)
 	return changed, false, err
 }
 
@@ -153,7 +172,10 @@ func (repository *TaskRepository) advanceHierarchyDeletionPrune(
 		conditions := []Condition{{Key: mustHierarchyDeletionPruneIntentKey(operationID), ModRevision: pruneRevision}}
 		mutations := make([]Mutation, 0, count)
 		for index := 0; index < count; index++ {
-			conditions = append(conditions, Condition{Key: page.Values[index].Key, ModRevision: page.Values[index].ModRevision})
+			conditions = append(
+				conditions,
+				Condition{Key: page.Values[index].Key, ModRevision: page.Values[index].ModRevision},
+			)
 			mutations = append(mutations, Mutation{Type: MutationDelete, Key: page.Values[index].Key})
 		}
 		transaction, transactErr := repository.store.Transact(ctx, conditions, mutations)

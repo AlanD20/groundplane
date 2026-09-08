@@ -189,11 +189,23 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 			MaximumArtifacts,
 		)
 	}
+	if err := validateServiceLifecyclePlan(plan); err != nil {
+		return err
+	}
 	artifacts := make(map[string]*agentpb.ComposeArtifact, len(plan.Artifacts))
 	for _, artifact := range plan.Artifacts {
-		validationPlan, identityErr := componentArtifactValidationPlan(plan, artifact)
+		validationPlan, lifecycle, identityErr := serviceLifecycleArtifactValidationPlan(plan, artifact)
 		if identityErr != nil {
 			return identityErr
+		}
+		if !lifecycle {
+			validationPlan, identityErr = managedComponentArtifactValidationPlan(plan, artifact)
+			if identityErr == nil {
+				validationPlan, identityErr = componentArtifactValidationPlan(validationPlan, artifact)
+			}
+			if identityErr != nil {
+				return identityErr
+			}
 		}
 		if err := validateArtifact(validationPlan, artifact); err != nil {
 			return err
@@ -202,6 +214,9 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 			return errs.New(errs.KindValidationFailed, "execution plan artifact ids must be unique")
 		}
 		artifacts[artifact.ArtifactId] = artifact
+	}
+	if err := validateManagedComponentProcedure(plan, artifacts); err != nil {
+		return err
 	}
 	if err := validateCandidateReleasePlan(plan, artifacts); err != nil {
 		return err
@@ -595,9 +610,12 @@ func validateLabels(
 			values,
 			labelPlan,
 			labelGeneration,
-		) &&
-			(labelPlan != plan.PlanId || labelGeneration != strconv.FormatUint(plan.RenderGeneration, 10)) {
-			return errs.New(errs.KindValidationFailed, "expected service labels do not identify the current plan")
+		) {
+			retained, reason := validBlueprintRetainedOwnership(plan, artifact, resourceID, values)
+			if !retained && (labelPlan != plan.PlanId || labelGeneration != strconv.FormatUint(plan.RenderGeneration, 10)) {
+				return errs.Newf(errs.KindValidationFailed,
+					"expected service labels do not identify the current plan (retained ownership: %s)", reason)
+			}
 		}
 	} else {
 		_, hasPlanID := values[labelPlanID]
@@ -672,7 +690,8 @@ func validateStep(
 		}
 		if payload.ComposeApply.FullReconcile &&
 			(payload.ComposeApply.ForceRecreate || payload.ComposeApply.NoDependencies) ||
-			payload.ComposeApply.NoDependencies && !payload.ComposeApply.ForceRecreate {
+			payload.ComposeApply.NoDependencies && !payload.ComposeApply.ForceRecreate &&
+				!blueprintManagedServiceSelection(operation, payload.ComposeApply, artifacts) {
 			return errs.New(errs.KindValidationFailed, "Compose apply replacement options are inconsistent")
 		}
 		return validateSelection(payload.ComposeApply.ArtifactId, selected, artifacts, false)
@@ -750,31 +769,9 @@ func validateStep(
 		}
 		return nil
 	case *agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure:
-		ensure := payload.ManagedVolumeDirectoriesEnsure
-		if ensure == nil || !operationCreatesManagedVolumes(operation) || len(ensure.IntentSha256) != sha256.Size ||
-			len(ensure.VolumeIds) == 0 {
-			return errs.New(errs.KindValidationFailed, "managed volume directory ensure payload is invalid")
-		}
-		artifact := artifacts[ensure.ArtifactId]
-		if artifact == nil || artifact.OwnerKind != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
-			len(artifact.Volumes) == 0 {
-			return errs.New(errs.KindValidationFailed, "managed volume directory artifact is invalid")
-		}
-		available := make(map[string]struct{}, len(artifact.Volumes))
-		for _, volume := range artifact.Volumes {
-			available[volume.VolumeId] = struct{}{}
-		}
-		previous := ""
-		for _, volumeID := range ensure.VolumeIds {
-			if validateID(ids.KindVolume, volumeID) != nil || volumeID <= previous {
-				return errs.New(errs.KindValidationFailed, "managed volume directory ids are invalid or unsorted")
-			}
-			if _, exists := available[volumeID]; !exists {
-				return errs.New(errs.KindValidationFailed, "managed volume directory id is absent from its artifact")
-			}
-			previous = volumeID
-		}
-		return nil
+		return validateManagedVolumeDirectoriesEnsure(operation, payload.ManagedVolumeDirectoriesEnsure, artifacts)
+	case *agentpb.ExecutionStep_ManagedVolumeEnsure:
+		return validateManagedVolumeEnsure(operation, payload.ManagedVolumeEnsure, artifacts)
 	case *agentpb.ExecutionStep_ManagedVolumeRemove:
 		remove := payload.ManagedVolumeRemove
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE || remove == nil ||
@@ -804,6 +801,8 @@ func validateStep(
 		return validateMaterializeFile(renderGeneration, payload.MaterializeFile, artifacts)
 	case *agentpb.ExecutionStep_AdapterProcedure:
 		return validateAdapterProcedure(operation, payload.AdapterProcedure)
+	case *agentpb.ExecutionStep_ManagedNetworkEnsure:
+		return validateManagedNetworkEnsure(operation, payload.ManagedNetworkEnsure, artifacts)
 	case *agentpb.ExecutionStep_ManagedNetworkRemove:
 		remove := payload.ManagedNetworkRemove
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE || remove == nil {
@@ -833,7 +832,7 @@ func validateStep(
 		if apply.GetGeneration() != renderGeneration {
 			return errs.New(errs.KindValidationFailed, "Component action generation does not match its plan")
 		}
-		return validateComponentContainerActionTarget(apply, step, artifacts, steps)
+		return validateComponentContainerActionTarget(operation, apply, step, artifacts, steps)
 	case *agentpb.ExecutionStep_HostResolutionApply:
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY ||
 			!validHostResolutionAction(payload.HostResolutionApply.GetComponentId(),
@@ -995,83 +994,6 @@ func validateComponentAction(action *agentpb.ComponentApply) error {
 			validateID(ids.KindConfig, action.GetExpectedPreviousArtifactId()) != nil) ||
 		(len(action.GetExpectedPreviousArtifactDigest()) != 0 && !action.GetManagedConfigContent()) {
 		return errs.New(errs.KindValidationFailed, "component action identity, generation, or digest is invalid")
-	}
-	return nil
-}
-
-func validateComponentContainerActionTarget(
-	action *agentpb.ComponentApply,
-	step *agentpb.ExecutionStep,
-	artifacts map[string]*agentpb.ComposeArtifact,
-	steps []*agentpb.ExecutionStep,
-) error {
-	matches := 0
-	var selectedArtifact *agentpb.ComposeArtifact
-	var selectedService *agentpb.ComposeService
-	for _, artifact := range artifacts {
-		if artifact == nil || artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
-			artifact.GetAuthorizedVolumeDir() == "" {
-			continue
-		}
-		for _, service := range artifact.GetServices() {
-			if service != nil && service.GetOwnerComponentId() == action.GetComponentId() {
-				matches++
-				selectedArtifact = artifact
-				selectedService = service
-			}
-		}
-	}
-	if matches != 1 {
-		return errs.New(errs.KindValidationFailed, "Component container action target is not uniquely owned")
-	}
-	expectedGeneration := strconv.FormatUint(action.GetGeneration(), 10)
-	sealedGeneration := ""
-	for _, label := range selectedService.GetExpectedLabels() {
-		if label.GetKey() == labelRenderGen {
-			sealedGeneration = label.GetValue()
-			break
-		}
-	}
-	if sealedGeneration != expectedGeneration {
-		return errs.New(
-			errs.KindValidationFailed,
-			"Component action generation does not match its selected Service",
-		)
-	}
-	var prerequisite *agentpb.ExecutionStep
-	for _, candidate := range steps {
-		if candidate.GetStepId() == step.GetPrerequisiteStepId() {
-			prerequisite = candidate
-			break
-		}
-	}
-	var materialization *agentpb.MaterializeFile
-	if prerequisite != nil {
-		materialization = prerequisite.GetMaterializeFile()
-	}
-	if materialization == nil && prerequisite != nil {
-		apply := prerequisite.GetComposeApply()
-		if apply == nil || apply.GetArtifactId() != selectedArtifact.GetArtifactId() ||
-			apply.GetFullReconcile() || !apply.GetForceRecreate() || !apply.GetNoDependencies() ||
-			len(apply.GetServiceIds()) != 1 ||
-			apply.GetServiceIds()[0] != selectedService.GetServiceId() {
-			return errs.New(
-				errs.KindValidationFailed,
-				"Component action prerequisite is not its targeted Compose apply",
-			)
-		}
-		for _, candidate := range steps {
-			if candidate.GetStepId() == prerequisite.GetPrerequisiteStepId() {
-				materialization = candidate.GetMaterializeFile()
-				break
-			}
-		}
-	}
-	if materialization == nil || materialization.GetMaterializationId() != action.GetArtifactId() ||
-		materialization.GetArtifactId() != selectedArtifact.GetArtifactId() ||
-		materialization.GetEnvironmentId() != selectedArtifact.GetOwnerId() ||
-		subtle.ConstantTimeCompare(materialization.GetSha256(), action.GetArtifactDigest()) != 1 {
-		return errs.New(errs.KindValidationFailed, "Component action is not bound to its materialization prerequisite")
 	}
 	return nil
 }
@@ -1318,6 +1240,21 @@ func validateAdapterProcedure(operation agentpb.PlanOperation, procedure *agentp
 		!validAdapterSecret(procedure.Password) {
 		return errs.New(errs.KindValidationFailed, "adapter procedure identity is invalid")
 	}
+	switch procedure.Authentication {
+	case agentpb.BackingAuthentication_BACKING_AUTHENTICATION_UNSPECIFIED,
+		agentpb.BackingAuthentication_BACKING_AUTHENTICATION_USERNAME_PASSWORD:
+		if procedure.Role == "default" {
+			return errs.New(errs.KindValidationFailed, "adapter procedure authentication identity is invalid")
+		}
+	case agentpb.BackingAuthentication_BACKING_AUTHENTICATION_PASSWORD:
+		if procedure.Role != "default" {
+			return errs.New(errs.KindValidationFailed, "adapter procedure authentication identity is invalid")
+		}
+	case agentpb.BackingAuthentication_BACKING_AUTHENTICATION_NONE:
+		return errs.New(errs.KindValidationFailed, "no-auth mode cannot carry an adapter procedure")
+	default:
+		return errs.New(errs.KindValidationFailed, "adapter procedure authentication mode is unsupported")
+	}
 	switch procedure.Phase {
 	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_PROVISION:
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_ATTACH &&
@@ -1339,7 +1276,10 @@ func validateAdapterProcedure(operation agentpb.PlanOperation, procedure *agentp
 			return errs.New(errs.KindValidationFailed, "adapter revoke procedure is invalid")
 		}
 	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_DETACH:
-		if operation != agentpb.PlanOperation_PLAN_OPERATION_DETACH || len(procedure.Password) != 0 ||
+		passwordRequired := procedure.Authentication ==
+			agentpb.BackingAuthentication_BACKING_AUTHENTICATION_PASSWORD
+		if operation != agentpb.PlanOperation_PLAN_OPERATION_DETACH ||
+			(passwordRequired != (len(procedure.Password) != 0)) ||
 			!validAdapterIdentity(procedure.Database, false) || procedure.GrantOn != "" {
 			return errs.New(errs.KindValidationFailed, "adapter detach procedure is invalid")
 		}

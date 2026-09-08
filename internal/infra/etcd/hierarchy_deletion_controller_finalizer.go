@@ -26,7 +26,10 @@ func (repository *HierarchyDeletionRepository) CompleteControllerAction(
 	}
 	if validateTimestamp("hierarchy deletion Controller completion", completedAt) != nil ||
 		action.ProcedureKind != HierarchyDeletionProcedureController || action.ControllerProcedure == nil {
-		return HierarchyDeletionOperation{}, errs.New(errs.KindValidationFailed, "hierarchy deletion Controller action is invalid")
+		return HierarchyDeletionOperation{}, errs.New(
+			errs.KindValidationFailed,
+			"hierarchy deletion Controller action is invalid",
+		)
 	}
 	current, err := repository.OperationByTask(ctx, operation.Tombstone.CurrentTaskID)
 	if err != nil {
@@ -37,7 +40,10 @@ func (repository *HierarchyDeletionRepository) CompleteControllerAction(
 	}
 	if action.TargetID == current.Tombstone.TargetID &&
 		hierarchyDeletionRootFinalizerMatches(current.Tombstone.TargetKind, action.ActionKind) {
-		return HierarchyDeletionOperation{}, errs.New(errs.KindStateConflict, "root hierarchy deletion finalizer requires Task acknowledgement")
+		return HierarchyDeletionOperation{}, errs.New(
+			errs.KindStateConflict,
+			"root hierarchy deletion finalizer requires Task acknowledgement",
+		)
 	}
 	effects, err := repository.prepareHierarchyDeletionControllerEffects(ctx, current, action)
 	if err != nil {
@@ -57,7 +63,10 @@ func (repository *HierarchyDeletionRepository) CompleteControllerAction(
 		},
 	)
 	if err != nil || expected != *action.ControllerProcedure {
-		return HierarchyDeletionOperation{}, errs.New(errs.KindStateConflict, "hierarchy deletion finalizer template changed")
+		return HierarchyDeletionOperation{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion finalizer template changed",
+		)
 	}
 	actionValue, err := encodeHierarchyDeletionAction(action)
 	if err != nil {
@@ -131,7 +140,8 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionControlle
 		return repository.prepareHierarchyDeletionProjectFinalizer(ctx, action)
 	default:
 		return hierarchyDeletionControllerEffects{}, errs.Newf(
-			errs.KindValidationFailed, "hierarchy deletion Controller finalizer %q is unsupported before plan execution",
+			errs.KindValidationFailed,
+			"hierarchy deletion Controller finalizer %q is unsupported before plan execution",
 			action.ActionKind,
 		)
 	}
@@ -227,7 +237,11 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRouteFina
 		mutations = append(mutations, Mutation{Type: MutationDelete, Key: routeObservationKey(action.TargetID)})
 		clear(result.Entry.Value)
 	}
-	return hierarchyDeletionControllerEffects{fixedInputDigest: digest, conditions: conditions, mutations: mutations}, nil
+	return hierarchyDeletionControllerEffects{
+		fixedInputDigest: digest,
+		conditions:       conditions,
+		mutations:        mutations,
+	}, nil
 }
 
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionComponentFinalizer(
@@ -290,7 +304,10 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinal
 		return hierarchyDeletionControllerEffects{}, corruptZonePoolRegistry()
 	}
 	if values.Values[1] != nil {
-		addresses, decodeErr := decodeEnvelope[componentAddressRegistry](values.Values[1].Value, "component_address_registry")
+		addresses, decodeErr := decodeEnvelope[componentAddressRegistry](
+			values.Values[1].Value,
+			"component_address_registry",
+		)
 		if decodeErr != nil || validateComponentAddressRegistry(zone, addresses) != nil {
 			return hierarchyDeletionControllerEffects{}, corruptComponentAddressRegistry()
 		}
@@ -379,7 +396,12 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionScriptFin
 	if action.ControllerProcedure == nil {
 		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
 	}
-	storage, err := readActiveScriptStorage(ctx, repository.store, action.TargetID, action.ControllerProcedure.FixedInputRevision)
+	storage, err := readActiveScriptStorage(
+		ctx,
+		repository.store,
+		action.TargetID,
+		action.ControllerProcedure.FixedInputRevision,
+	)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
@@ -414,13 +436,22 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionScriptFin
 		return hierarchyDeletionControllerEffects{}, err
 	}
 	effects.values = append(effects.values, activeValue)
-	effects.conditions = append(effects.conditions,
+	effects.conditions = append(
+		effects.conditions,
 		Condition{Key: scriptSetActiveKey(record.EnvironmentID), ModRevision: storage.Active.Revision},
 		Condition{Key: scriptLocatorKey(action.TargetID), ModRevision: storage.Locator.Revision},
-		Condition{Key: scriptEnvironmentLocatorKey(record.EnvironmentID, action.TargetID), ModRevision: storage.EnvironmentLocator.Revision},
+		Condition{
+			Key:         scriptEnvironmentLocatorKey(record.EnvironmentID, action.TargetID),
+			ModRevision: storage.EnvironmentLocator.Revision,
+		},
 	)
-	effects.mutations = append(effects.mutations,
-		Mutation{Type: MutationDelete, Key: scriptSetBodyGenerationPrefix(record.EnvironmentID, record.ScriptSetGeneration, action.TargetID), Prefix: true},
+	effects.mutations = append(
+		effects.mutations,
+		Mutation{
+			Type:   MutationDelete,
+			Key:    scriptSetBodyGenerationPrefix(record.EnvironmentID, record.ScriptSetGeneration, action.TargetID),
+			Prefix: true,
+		},
 		Mutation{Type: MutationDelete, Key: scriptLocatorKey(action.TargetID)},
 		Mutation{Type: MutationDelete, Key: scriptEnvironmentLocatorKey(record.EnvironmentID, action.TargetID)},
 		Mutation{Type: MutationPut, Key: scriptSetActiveKey(record.EnvironmentID), Value: activeValue},
@@ -493,7 +524,10 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReservati
 		if result != nil {
 			clearKeyValues(result.Values)
 		}
-		return hierarchyDeletionControllerEffects{}, errs.New(errs.KindStateConflict, "hierarchy deletion reservation authority changed")
+		return hierarchyDeletionControllerEffects{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion reservation authority changed",
+		)
 	}
 	defer clearKeyValues(result.Values)
 	environment, err := decodeEnvironment(result.Values[0].Value)
@@ -561,7 +595,10 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRunnerFin
 		if base != nil {
 			clearKeyValues(base.Values)
 		}
-		return hierarchyDeletionControllerEffects{}, errs.New(errs.KindStateConflict, "hierarchy deletion Runner cleanup authority changed")
+		return hierarchyDeletionControllerEffects{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion Runner cleanup authority changed",
+		)
 	}
 	defer clearKeyValues(base.Values)
 	record, err := decodeRunnerAggregate(base.Values[0], base.Values[1])
@@ -603,8 +640,14 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRunnerFin
 		{Key: runnerLifecycleKey(action.TargetID), ModRevision: base.Values[1].ModRevision},
 		{Key: runnerObservationKey(action.TargetID), ModRevision: keyValueRevision(base.Values[2])},
 		{Key: runnerRuntimeOwnershipKey(action.TargetID)},
-		{Key: runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, action.TargetID), ModRevision: allocation.owner.ModRevision},
-		{Key: runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug), ModRevision: allocation.slug.ModRevision},
+		{
+			Key:         runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, action.TargetID),
+			ModRevision: allocation.owner.ModRevision,
+		},
+		{
+			Key:         runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
+			ModRevision: allocation.slug.ModRevision,
+		},
 		{Key: runnerTenantQuotaKey(record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
 		{Key: runnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
 		{Key: systemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
@@ -645,7 +688,10 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionProjectFi
 	if _, err := repository.requireHierarchyDeletionPrefixesEmpty(ctx, prefixes); err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{projectSlugKey(record), projectOwnerKey(record)}})
+	indexes, err := repository.store.GetMany(
+		ctx,
+		GetManyRequest{Keys: []string{projectSlugKey(record), projectOwnerKey(record)}},
+	)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}

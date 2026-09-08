@@ -148,7 +148,10 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 		return PreparedManualBackupRun{}, errs.New(errs.KindValidationFailed, "backup run initiator is invalid")
 	}
 	if initiator == BackupRunInitiatorOperator && input.ScheduledAt != nil {
-		return PreparedManualBackupRun{}, errs.New(errs.KindValidationFailed, "operator backup run cannot have a schedule")
+		return PreparedManualBackupRun{}, errs.New(
+			errs.KindValidationFailed,
+			"operator backup run cannot have a schedule",
+		)
 	}
 	if initiator == BackupRunInitiatorSchedule &&
 		(input.ScheduledAt == nil || !validBackupRuntimeInstant(input.ScheduledAt.UTC()) || input.ScheduledAt.After(input.CreatedAt)) {

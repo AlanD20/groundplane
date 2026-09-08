@@ -2,10 +2,11 @@ package etcd
 
 import (
 	"encoding/hex"
+	"math"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"math"
 )
 
 const routePrefix = "/v1/records/routes/"

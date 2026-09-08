@@ -88,7 +88,8 @@ func TestPlatformResolverFinalLiveLineageReplaysExactTerminalEvidence(t *testing
 			t.Parallel()
 			first, firstProven := platformResolverFinalLiveLineage(test.predecessor, test.input)
 			second, secondProven := platformResolverFinalLiveLineage(test.predecessor, test.input)
-			if firstProven != test.wantProven || secondProven != test.wantProven || first != test.want || second != test.want {
+			if firstProven != test.wantProven || secondProven != test.wantProven || first != test.want ||
+				second != test.want {
 				t.Fatalf("replayed lineage = %#v/%t then %#v/%t, want %#v/%t",
 					first, firstProven, second, secondProven, test.want, test.wantProven)
 			}
@@ -108,7 +109,10 @@ func TestPlatformResolverTaskInputBelongsToTaskAcceptsPinnedRetryOrigin(t *testi
 	if !platformResolverTaskInputBelongsToTask(retry, PlatformComponentTaskRenderInput{TaskID: originID}) {
 		t.Fatal("retry predecessor rejected its originating render input")
 	}
-	if platformResolverTaskInputBelongsToTask(TaskRecord{ID: retryID}, PlatformComponentTaskRenderInput{TaskID: originID}) {
+	if platformResolverTaskInputBelongsToTask(
+		TaskRecord{ID: retryID},
+		PlatformComponentTaskRenderInput{TaskID: originID},
+	) {
 		t.Fatal("non-retry predecessor accepted another Task's render input")
 	}
 }

@@ -241,7 +241,8 @@ func decodeScriptSetGeneration(value []byte) (ScriptSetGenerationRecord, error) 
 }
 
 func encodeScriptLocator(record scriptLocatorRecord) ([]byte, error) {
-	if validateID(ids.KindScript, record.ScriptID) != nil || validateID(ids.KindEnvironment, record.EnvironmentID) != nil {
+	if validateID(ids.KindScript, record.ScriptID) != nil ||
+		validateID(ids.KindEnvironment, record.EnvironmentID) != nil {
 		return nil, errs.New(errs.KindValidationFailed, "Script locator is invalid")
 	}
 	return encodeEnvelope("script_locator", record)
@@ -249,7 +250,8 @@ func encodeScriptLocator(record scriptLocatorRecord) ([]byte, error) {
 
 func decodeScriptLocator(value []byte) (scriptLocatorRecord, error) {
 	record, err := decodeEnvelope[scriptLocatorRecord](value, "script_locator")
-	if err != nil || validateID(ids.KindScript, record.ScriptID) != nil || validateID(ids.KindEnvironment, record.EnvironmentID) != nil {
+	if err != nil || validateID(ids.KindScript, record.ScriptID) != nil ||
+		validateID(ids.KindEnvironment, record.EnvironmentID) != nil {
 		return scriptLocatorRecord{}, corruptRecord()
 	}
 	return record, nil
@@ -261,12 +263,18 @@ func readActiveScriptSet(
 	environmentID string,
 	revision int64,
 ) (Versioned[ScriptSetGenerationRecord], error) {
-	read, err := store.GetMany(ctx, GetManyRequest{Keys: []string{scriptSetActiveKey(environmentID)}, Revision: revision})
+	read, err := store.GetMany(
+		ctx,
+		GetManyRequest{Keys: []string{scriptSetActiveKey(environmentID)}, Revision: revision},
+	)
 	if err != nil {
 		return Versioned[ScriptSetGenerationRecord]{}, err
 	}
 	if read == nil || len(read.Values) != 1 || read.Values[0] == nil {
-		return Versioned[ScriptSetGenerationRecord]{}, errs.New(errs.KindInternal, "Environment active Script-set generation is missing")
+		return Versioned[ScriptSetGenerationRecord]{}, errs.New(
+			errs.KindInternal,
+			"Environment active Script-set generation is missing",
+		)
 	}
 	record, err := decodeScriptSetGeneration(read.Values[0].Value)
 	if err != nil || record.EnvironmentID != environmentID {
@@ -290,7 +298,10 @@ func readActiveScriptStorage(
 	scriptID string,
 	revision int64,
 ) (activeScriptStorage, error) {
-	locatorRead, err := store.GetMany(ctx, GetManyRequest{Keys: []string{scriptLocatorKey(scriptID)}, Revision: revision})
+	locatorRead, err := store.GetMany(
+		ctx,
+		GetManyRequest{Keys: []string{scriptLocatorKey(scriptID)}, Revision: revision},
+	)
 	if err != nil {
 		return activeScriptStorage{}, err
 	}
@@ -302,7 +313,9 @@ func readActiveScriptStorage(
 		return activeScriptStorage{}, corruptRecord()
 	}
 	environmentLocatorRead, err := store.GetMany(ctx, GetManyRequest{
-		Keys: []string{scriptEnvironmentLocatorKey(locator.EnvironmentID, scriptID)}, Revision: locatorRead.ReadRevision,
+		Keys: []string{
+			scriptEnvironmentLocatorKey(locator.EnvironmentID, scriptID),
+		}, Revision: locatorRead.ReadRevision,
 	})
 	if err != nil {
 		return activeScriptStorage{}, err
@@ -331,10 +344,22 @@ func readActiveScriptStorage(
 		return activeScriptStorage{}, corruptRecord()
 	}
 	return activeScriptStorage{
-		Script:             Versioned[ScriptRecord]{Record: record, Revision: primary.Values[0].ModRevision, ReadRevision: active.ReadRevision},
-		Active:             active,
-		Locator:            Versioned[scriptLocatorRecord]{Record: locator, Revision: locatorRead.Values[0].ModRevision, ReadRevision: active.ReadRevision},
-		EnvironmentLocator: Versioned[string]{Record: scriptID, Revision: environmentLocatorRead.Values[0].ModRevision, ReadRevision: active.ReadRevision},
+		Script: Versioned[ScriptRecord]{
+			Record:       record,
+			Revision:     primary.Values[0].ModRevision,
+			ReadRevision: active.ReadRevision,
+		},
+		Active: active,
+		Locator: Versioned[scriptLocatorRecord]{
+			Record:       locator,
+			Revision:     locatorRead.Values[0].ModRevision,
+			ReadRevision: active.ReadRevision,
+		},
+		EnvironmentLocator: Versioned[string]{
+			Record:       scriptID,
+			Revision:     environmentLocatorRead.Values[0].ModRevision,
+			ReadRevision: active.ReadRevision,
+		},
 	}, nil
 }
 

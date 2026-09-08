@@ -72,7 +72,10 @@ func TestExecuteReleaseHooksRespectPhasesAndPreservePrimaryFailure(t *testing.T)
 		scriptExit: map[string]int32{"failure": 29},
 		scriptErr:  map[string]error{"failure": errors.New("secondary failure hook error")},
 	}
-	compose, err := NewComposeRuntime(runtime, &fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}})
+	compose, err := NewComposeRuntime(
+		runtime,
+		&fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}},
+	)
 	if err != nil {
 		t.Fatalf("NewComposeRuntime() error = %v", err)
 	}
@@ -86,13 +89,16 @@ func TestExecuteReleaseHooksRespectPhasesAndPreservePrimaryFailure(t *testing.T)
 	compensate := releaseCompensate("compensate", "switch-ok")
 	compensate.GetServiceProxyCompensate().PriorTarget = "green"
 	compensate.GetServiceProxyCompensate().PriorReleaseId = "prior-api"
-	plan := &agentpb.ExecutionPlan{Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, Steps: []*agentpb.ExecutionStep{
-		releaseHookStep("pre", agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK),
-		releaseForwardSwitch("switch-ok"), releaseForwardSwitch("switch-fail"),
-		compensate,
-		post,
-		failure,
-	}}
+	plan := &agentpb.ExecutionPlan{
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
+		Steps: []*agentpb.ExecutionStep{
+			releaseHookStep("pre", agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK),
+			releaseForwardSwitch("switch-ok"), releaseForwardSwitch("switch-fail"),
+			compensate,
+			post,
+			failure,
+		},
+	}
 	result := runReleaseExecution(t, pool, "task-hooks", "", plan)
 	if result.Terminal != TaskTerminalFailed || result.ExitCode != 17 {
 		t.Fatalf("release hook result = %#v", result)
@@ -124,8 +130,11 @@ func TestExecuteReleaseFailureHookRequiresMatchingServingEvidence(t *testing.T) 
 			releaseID: "release-api", wantRun: true,
 		},
 		{
-			name:      "absent serving evidence records no serving release",
-			state:     &releaseExecutionState{evidence: map[string]*agentpb.ServiceProxyEvidence{}, recreate: map[string]*agentpb.ServiceRecreateEvidence{}},
+			name: "absent serving evidence records no serving release",
+			state: &releaseExecutionState{
+				evidence: map[string]*agentpb.ServiceProxyEvidence{},
+				recreate: map[string]*agentpb.ServiceRecreateEvidence{},
+			},
 			releaseID: "release-api", wantReason: agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_NO_SERVING_RELEASE,
 		},
 		{
@@ -138,11 +147,20 @@ func TestExecuteReleaseFailureHookRequiresMatchingServingEvidence(t *testing.T) 
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			failure := releaseHookStep("failure", agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FAILURE_HOOK)
+			failure := releaseHookStep(
+				"failure",
+				agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FAILURE_HOOK,
+			)
 			failure.GetRunScript().ReleaseId = test.releaseID
 			run, reason := releaseFailureHookExecution(failure, test.state)
 			if run != test.wantRun || reason != test.wantReason {
-				t.Fatalf("releaseFailureHookExecution() = %t/%s, want %t/%s", run, reason, test.wantRun, test.wantReason)
+				t.Fatalf(
+					"releaseFailureHookExecution() = %t/%s, want %t/%s",
+					run,
+					reason,
+					test.wantRun,
+					test.wantReason,
+				)
 			}
 		})
 	}
@@ -152,7 +170,10 @@ func TestExecuteReleaseFailureHookRequiresMatchingServingEvidence(t *testing.T) 
 		Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
 	}
 	runtime := &orderedReleaseRuntime{responses: map[string]*agentpb.ComposeHelperResponse{"fail": failureResponse}}
-	compose, err := NewComposeRuntime(runtime, &fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}})
+	compose, err := NewComposeRuntime(
+		runtime,
+		&fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,18 +203,24 @@ func TestExecuteReleaseCompensationFailureSuppressesFailureHooks(t *testing.T) {
 			Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED,
 		},
 	}}
-	compose, err := NewComposeRuntime(runtime, &fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}})
+	compose, err := NewComposeRuntime(
+		runtime,
+		&fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}},
+	)
 	if err != nil {
 		t.Fatalf("NewComposeRuntime() error = %v", err)
 	}
 	pool := NewWorkerPool(64, "/var/lib/groundplane/volumes", nil, nil)
 	pool.compose = compose
 	pool.SetScriptRuntime(runtime)
-	plan := &agentpb.ExecutionPlan{Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, Steps: []*agentpb.ExecutionStep{
-		releaseForwardSwitch("switch-ok"), releaseForwardSwitch("switch-fail"),
-		releaseCompensate("compensate", "switch-ok"),
-		releaseHookStep("failure", agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FAILURE_HOOK),
-	}}
+	plan := &agentpb.ExecutionPlan{
+		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
+		Steps: []*agentpb.ExecutionStep{
+			releaseForwardSwitch("switch-ok"), releaseForwardSwitch("switch-fail"),
+			releaseCompensate("compensate", "switch-ok"),
+			releaseHookStep("failure", agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FAILURE_HOOK),
+		},
+	}
 	result := runReleaseExecution(t, pool, "task-compensation-failure", "", plan)
 	if result.Terminal != TaskTerminalFailed || !result.Compose.GetReconciliationRequired() || result.ExitCode != 17 {
 		t.Fatalf("compensation failure result = %#v", result)
@@ -220,7 +247,10 @@ func TestExecuteReleasePostServingFailureWithDisabledCompensationStaysTerminal(t
 		scriptExit: map[string]int32{"post": 23},
 		scriptErr:  map[string]error{"post": errors.New("post hook failed")},
 	}
-	compose, err := NewComposeRuntime(runtime, &fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}})
+	compose, err := NewComposeRuntime(
+		runtime,
+		&fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +266,9 @@ func TestExecuteReleasePostServingFailureWithDisabledCompensationStaysTerminal(t
 		Steps:     []*agentpb.ExecutionStep{releaseForwardSwitch("switch-api"), post, compensate},
 	})
 	if result.Terminal != TaskTerminalFailed || result.Compose.GetReconciliationRequired() ||
-		len(result.Compose.GetProxyEvidence()) != 1 || result.Compose.GetProxyEvidence()[0].GetReleaseId() != "release-api" {
+		len(
+			result.Compose.GetProxyEvidence(),
+		) != 1 || result.Compose.GetProxyEvidence()[0].GetReleaseId() != "release-api" {
 		t.Fatalf("leave_active post-serving failure = %#v", result)
 	}
 	want := []string{"compose:switch-api", "script:post"}
@@ -260,15 +292,26 @@ func TestExecuteReleaseRunsPostDeployAfterCandidateStartBeforeReadiness(t *testi
 		finalize  string
 	}{
 		{name: "blue-green", start: "candidate-apply", readiness: "candidate-readiness", finalize: "proxy-switch"},
-		{name: "recreate", start: "candidate-start", readiness: "candidate-readiness", finalize: "recreate-acknowledge"},
+		{
+			name:      "recreate",
+			start:     "candidate-start",
+			readiness: "candidate-readiness",
+			finalize:  "recreate-acknowledge",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			runtime := &orderedReleaseRuntime{responses: map[string]*agentpb.ComposeHelperResponse{
-				test.start: releaseExecutionSuccess("api", false), test.readiness: releaseExecutionSuccess("api", false),
+				test.start: releaseExecutionSuccess(
+					"api",
+					false,
+				), test.readiness: releaseExecutionSuccess("api", false),
 				test.finalize: releaseExecutionSuccess("api", false),
 			}}
-			compose, err := NewComposeRuntime(runtime, &fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}})
+			compose, err := NewComposeRuntime(
+				runtime,
+				&fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}},
+			)
 			if err != nil {
 				t.Fatalf("NewComposeRuntime() error = %v", err)
 			}
@@ -277,9 +320,14 @@ func TestExecuteReleaseRunsPostDeployAfterCandidateStartBeforeReadiness(t *testi
 			pool.SetScriptRuntime(runtime)
 			post := releaseHookStep("post-deploy", agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_POST_HOOK)
 			post.PrerequisiteStepId = test.start
-			plan := &agentpb.ExecutionPlan{Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, Steps: []*agentpb.ExecutionStep{
-				releaseForwardSwitch(test.start), releaseForwardSwitch(test.readiness), releaseForwardSwitch(test.finalize), post,
-			}}
+			plan := &agentpb.ExecutionPlan{
+				Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
+				Steps: []*agentpb.ExecutionStep{
+					releaseForwardSwitch(
+						test.start,
+					), releaseForwardSwitch(test.readiness), releaseForwardSwitch(test.finalize), post,
+				},
+			}
 			result := runReleaseExecution(t, pool, "task-"+test.name, "", plan)
 			if result.Terminal != TaskTerminalCompleted {
 				t.Fatalf("release result = %#v", result)

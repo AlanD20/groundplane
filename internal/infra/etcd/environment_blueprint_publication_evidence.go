@@ -39,7 +39,10 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 		return environmentBlueprintPublicationEvidence{}, err
 	}
 	if descriptorRead == nil || descriptorRead.Entry == nil {
-		return environmentBlueprintPublicationEvidence{}, errs.New(errs.KindStateConflict, "Blueprint sealed staging evidence is unavailable")
+		return environmentBlueprintPublicationEvidence{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint sealed staging evidence is unavailable",
+		)
 	}
 	defer clear(descriptorRead.Entry.Value)
 	descriptor, err := decodeEnvironmentBlueprintStageDescriptor(descriptorRead.Entry.Value)
@@ -58,7 +61,10 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 	}
 	if result == nil || len(result.Values) != len(keys) || result.Values[0] == nil ||
 		result.Values[1] == nil || result.Values[2] == nil {
-		return environmentBlueprintPublicationEvidence{}, errs.New(errs.KindStateConflict, "Blueprint sealed staging evidence is unavailable")
+		return environmentBlueprintPublicationEvidence{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint sealed staging evidence is unavailable",
+		)
 	}
 	defer clearKeyValues(result.Values)
 	seal, err := decodeEnvironmentBlueprintSeal(result.Values[0].Value)
@@ -82,7 +88,10 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 		task.Params[EnvironmentDesiredRevisionParam] != revision.RevisionID ||
 		uint64(task.RenderGeneration) != descriptor.Claim.RenderGeneration || marker.TaskID != task.ID ||
 		!sameBlueprintProtectedIntent(marker.Intent, descriptor.Claim.Intent) {
-		return environmentBlueprintPublicationEvidence{}, errs.New(errs.KindStateConflict, "Blueprint sealed staging evidence changed")
+		return environmentBlueprintPublicationEvidence{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint sealed staging evidence changed",
+		)
 	}
 	published := descriptor
 	published.State = EnvironmentBlueprintStagePublished
@@ -344,7 +353,12 @@ func protectedBlueprintIntentDigest(intent ProtectedIntentRecord) ([sha256.Size]
 	return result, nil
 }
 
-func matchingEnvironmentBlueprintChunk(chunk EnvironmentBlueprintChunk, family uint8, sequence uint32, data []byte) bool {
+func matchingEnvironmentBlueprintChunk(
+	chunk EnvironmentBlueprintChunk,
+	family uint8,
+	sequence uint32,
+	data []byte,
+) bool {
 	return chunk.Family == family && chunk.Sequence == sequence &&
 		chunk.LogicalOffset == uint64(sequence)*EnvironmentBlueprintChunkBytes &&
 		chunk.LogicalLength == uint32(len(data)) && chunk.Digest == sha256.Sum256(data) &&

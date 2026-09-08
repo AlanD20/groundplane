@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -22,6 +24,52 @@ func TestBeginZoneDeletionFencesDistinctDesiredAndAppliedProjections(t *testing.
 	assertZoneDeletionApplied(t, result, err)
 	fixture.assertZoneDeletionTombstone(t)
 	fixture.assertCurrentHead(t)
+}
+
+// Rationale: every enabled Component membership is desired authority for a
+// Zone, including secondary Caddy and non-address-reserving Tunnel networks.
+func TestBeginZoneDeletionRejectsEnabledComponentMembership(t *testing.T) {
+	for _, kind := range []core.ComponentKind{
+		core.ComponentKindIngressCaddy,
+		core.ComponentKindEdgeCloudflare,
+	} {
+		t.Run(string(kind), func(t *testing.T) {
+			fixture := newZoneDeletionProjectionFixture(t, false)
+			at := fixture.task.CreatedAt
+			component := core.Component{
+				ID: ids.NewAt(ids.KindComponent, at, 500), Owner: core.ComponentOwnerEnvironment,
+				OwnerID: fixture.environment.Record.ID, Kind: kind, Enabled: true,
+				GeneratedServices: []string{ids.NewAt(ids.KindService, at, 501)},
+			}
+			switch kind {
+			case core.ComponentKindIngressCaddy:
+				component.Config.Caddy = &core.CaddyComponentConfig{ZoneIDs: []string{
+					ids.NewAt(ids.KindNetwork, at, 502), fixture.zone.Record.Desired.ID,
+				}}
+				component.PinnedIPv4 = "10.40.21.2"
+			case core.ComponentKindEdgeCloudflare:
+				component.Config.CloudflareTunnel = &core.CloudflareTunnelComponentConfig{
+					ZoneIDs:  []string{fixture.zone.Record.Desired.ID},
+					SecretID: ids.NewAt(ids.KindSecret, at, 503),
+				}
+			}
+			record, err := NewComponentRecord(component)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fixture.authorities.Desired.Record.Components = append(
+				fixture.authorities.Desired.Record.Components,
+				record,
+			)
+			_, err = fixture.zones.BeginZoneDeletionWithTask(
+				context.Background(), fixture.environment, fixture.project, fixture.zone, fixture.authorities,
+				fixture.tombstone, fixture.intent, fixture.task, fixture.marker,
+			)
+			if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
+				t.Fatalf("BeginZoneDeletionWithTask() error = %v, want resource_in_use", err)
+			}
+		})
+	}
 }
 
 func TestBackingZoneHandoffUsesSelectedProjection(t *testing.T) {

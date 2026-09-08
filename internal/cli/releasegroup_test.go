@@ -86,9 +86,25 @@ func TestReleaseGroupRollbackSendsOptionalTag(t *testing.T) {
 func TestReleaseGroupRollbackPreviewSendsExactOptionalTag(t *testing.T) {
 	t.Parallel()
 	groupID := "rg_01J00000000000000000000000"
-	server := exactRequestServer(t, http.MethodGet, "/api/v1/release-groups/"+groupID+"/rollback-preview?tag=release-2026-09-04", "", http.StatusOK, `{"release_group_id":"`+groupID+`","revision":"42","sources":[]}`)
+	server := exactRequestServer(
+		t,
+		http.MethodGet,
+		"/api/v1/release-groups/"+groupID+"/rollback-preview?tag=release-2026-09-04",
+		"",
+		http.StatusOK,
+		`{"release_group_id":"`+groupID+`","revision":"42","sources":[]}`,
+	)
 	defer server.Close()
-	executeNoun(t, newReleaseGroupCmd(), server.URL, Scope{AsID: true}, "rollback-preview", groupID, "--tag", "release-2026-09-04")
+	executeNoun(
+		t,
+		newReleaseGroupCmd(),
+		server.URL,
+		Scope{AsID: true},
+		"rollback-preview",
+		groupID,
+		"--tag",
+		"release-2026-09-04",
+	)
 }
 
 func TestReleaseGroupRollbackRejectsExplicitBlankTag(t *testing.T) {

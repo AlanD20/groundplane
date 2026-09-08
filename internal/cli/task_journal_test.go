@@ -64,8 +64,10 @@ func TestTaskAndActivityResolveEnvironmentJournalScope(t *testing.T) {
 						`"volume_dir":"/var/lib/groundplane/vol/env","provisioning_state":"ready"}]}`)
 				case test.endpoint:
 					query := request.URL.Query()
-					if query.Get("environment") != environmentID || query.Get("project") != "" || query.Get("workspace") != "" ||
-						query.Get("limit") != "50" || len(query) != 2 {
+					if query.Get("environment") != environmentID || query.Get("project") != "" ||
+						query.Get("workspace") != "" ||
+						query.Get("limit") != "50" ||
+						len(query) != 2 {
 						t.Errorf("journal request = %s", request.URL.RequestURI())
 					}
 					writeTaskJournalTestResponse(t, writer, taskJournalTestResponse)

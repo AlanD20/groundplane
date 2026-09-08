@@ -202,7 +202,7 @@ func TestEnvironmentComposeProjectionRejectsDuplicateGeneratedServiceOwnership(t
 		ID: ids.NewAt(ids.KindComponent, now, 72), Owner: core.ComponentOwnerEnvironment,
 		OwnerID: environmentID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
 		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-			ZoneID: ids.NewAt(ids.KindNetwork, now, 76),
+			ZoneIDs: []string{ids.NewAt(ids.KindNetwork, now, 76)},
 		}},
 		GeneratedServices: []string{serviceID},
 	})
@@ -213,6 +213,7 @@ func TestEnvironmentComposeProjectionRejectsDuplicateGeneratedServiceOwnership(t
 		ID: ids.NewAt(ids.KindComponent, now, 73), Owner: core.ComponentOwnerEnvironment,
 		OwnerID: environmentID, Kind: core.ComponentKindEdgeCloudflare, Enabled: true,
 		Config: core.ComponentConfig{CloudflareTunnel: &core.CloudflareTunnelComponentConfig{
+			ZoneIDs:  []string{ids.NewAt(ids.KindNetwork, now, 77)},
 			SecretID: ids.NewAt(ids.KindSecret, now, 74),
 		}},
 		GeneratedServices: []string{serviceID},
@@ -243,7 +244,7 @@ func TestEnvironmentComposeProjectionValidatesGeneratedServiceArtifactCoverage(t
 		ID: ids.NewAt(ids.KindComponent, now, 83), Owner: core.ComponentOwnerEnvironment,
 		OwnerID: environmentID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
 		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-			ZoneID: ids.NewAt(ids.KindNetwork, now, 84),
+			ZoneIDs: []string{ids.NewAt(ids.KindNetwork, now, 84)},
 		}},
 		GeneratedServices: []string{generatedServiceID},
 	})

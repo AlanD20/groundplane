@@ -17,13 +17,30 @@ func TestNormalizeRequirementsRejectsOpenGrammar(t *testing.T) {
 		Condition: RequirementReady, Phases: []RequirementPhase{RequirementPhaseDeploy},
 	}
 	cases := map[string][]Requirement{
-		"healthy":         {{Target: valid.Target, Condition: "healthy", Phases: valid.Phases}},
-		"unknown":         {{Target: valid.Target, Condition: "unknown", Phases: valid.Phases}},
-		"kind":            {{Target: RequirementTarget{Kind: "service", Name: "api"}, Condition: valid.Condition, Phases: valid.Phases}},
-		"name":            {{Target: RequirementTarget{Kind: RequirementTargetBackingAttach}, Condition: valid.Condition, Phases: valid.Phases}},
-		"phases":          {{Target: valid.Target, Condition: valid.Condition}},
-		"duplicate phase": {{Target: valid.Target, Condition: valid.Condition, Phases: []RequirementPhase{RequirementPhaseDeploy, RequirementPhaseDeploy}}},
-		"duplicate":       {valid, {Target: valid.Target, Condition: RequirementExists, Phases: []RequirementPhase{RequirementPhaseStart}}},
+		"healthy": {{Target: valid.Target, Condition: "healthy", Phases: valid.Phases}},
+		"unknown": {{Target: valid.Target, Condition: "unknown", Phases: valid.Phases}},
+		"kind": {
+			{Target: RequirementTarget{Kind: "service", Name: "api"}, Condition: valid.Condition, Phases: valid.Phases},
+		},
+		"name": {
+			{
+				Target:    RequirementTarget{Kind: RequirementTargetBackingAttach},
+				Condition: valid.Condition,
+				Phases:    valid.Phases,
+			},
+		},
+		"phases": {{Target: valid.Target, Condition: valid.Condition}},
+		"duplicate phase": {
+			{
+				Target:    valid.Target,
+				Condition: valid.Condition,
+				Phases:    []RequirementPhase{RequirementPhaseDeploy, RequirementPhaseDeploy},
+			},
+		},
+		"duplicate": {
+			valid,
+			{Target: valid.Target, Condition: RequirementExists, Phases: []RequirementPhase{RequirementPhaseStart}},
+		},
 	}
 	for name, values := range cases {
 		t.Run(name, func(t *testing.T) {

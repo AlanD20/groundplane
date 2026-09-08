@@ -193,10 +193,12 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	if err != nil || aborted.Record.Status != TaskStatusAborted {
 		t.Fatalf("AbortPendingTask(operator resolver) = %#v, %v", aborted, err)
 	}
-	if activeRead, readErr := store.Get(ctx, platformComponentTaskActiveKey(current.Record.Desired.ID)); readErr != nil || activeRead.Entry != nil {
+	if activeRead, readErr := store.Get(ctx, platformComponentTaskActiveKey(current.Record.Desired.ID)); readErr != nil ||
+		activeRead.Entry != nil {
 		t.Fatalf("aborted operator resolver active fence = %#v, %v", activeRead, readErr)
 	}
-	if replay, replayErr := tasks.AbortPendingTask(ctx, operatorTask.ID, now.Add(time.Second)); replayErr != nil || replay.Revision != aborted.Revision {
+	if replay, replayErr := tasks.AbortPendingTask(ctx, operatorTask.ID, now.Add(time.Second)); replayErr != nil ||
+		replay.Revision != aborted.Revision {
 		t.Fatalf("AbortPendingTask(operator resolver replay) = %#v, %v", replay, replayErr)
 	}
 	current, err = components.GetComponent(ctx, current.Record.Desired.ID)

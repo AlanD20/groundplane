@@ -129,7 +129,10 @@ func (repository *IdempotencyRepository) ResolveReplayLocatorAtRevision(
 		return IdempotencyLocator{}, 0, false, err
 	}
 	if result == nil || result.ReadRevision <= 0 {
-		return IdempotencyLocator{}, 0, false, errs.New(errs.KindInternal, "idempotency replay lookup result is missing")
+		return IdempotencyLocator{}, 0, false, errs.New(
+			errs.KindInternal,
+			"idempotency replay lookup result is missing",
+		)
 	}
 	if result.Entry == nil {
 		return IdempotencyLocator{}, 0, false, nil

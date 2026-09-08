@@ -95,7 +95,10 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 	change := scriptTaskChange{
 		applies: true,
 		conditions: []Condition{
-			{Key: scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID), ModRevision: storage.Script.Revision},
+			{
+				Key:         scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
+				ModRevision: storage.Script.Revision,
+			},
 			{
 				Key:         scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
 				ModRevision: dependencies.Values[0].ModRevision,
@@ -196,27 +199,53 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 	change := scriptTaskChange{
 		applies: true,
 		conditions: []Condition{
-			{Key: scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target), ModRevision: storage.Script.Revision},
+			{
+				Key:         scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
+				ModRevision: storage.Script.Revision,
+			},
 			{
 				Key:         deletionTombstoneKey(string(DeletionTargetScript), task.Target),
 				ModRevision: stored.Values[0].ModRevision,
 			},
-			{Key: scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target), ModRevision: indexes.Values[0].ModRevision},
-			{Key: scriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug), ModRevision: indexes.Values[1].ModRevision},
+			{
+				Key:         scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
+				ModRevision: indexes.Values[0].ModRevision,
+			},
+			{
+				Key:         scriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
+				ModRevision: indexes.Values[1].ModRevision,
+			},
 			{Key: scriptSetActiveKey(record.EnvironmentID), ModRevision: storage.Active.Revision},
 			{Key: scriptLocatorKey(task.Target), ModRevision: storage.Locator.Revision},
-			{Key: scriptEnvironmentLocatorKey(record.EnvironmentID, task.Target), ModRevision: storage.EnvironmentLocator.Revision},
+			{
+				Key:         scriptEnvironmentLocatorKey(record.EnvironmentID, task.Target),
+				ModRevision: storage.EnvironmentLocator.Revision,
+			},
 		},
 		mutations: []Mutation{{
 			Type: MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetScript), task.Target),
 		}},
 	}
 	if terminalStatus == TaskStatusCompleted {
-		change.mutations = append(change.mutations,
-			Mutation{Type: MutationDelete, Key: scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target)},
-			Mutation{Type: MutationDelete, Key: scriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug)},
-			Mutation{Type: MutationDelete, Key: scriptSetBodyGenerationPrefix(record.EnvironmentID, record.ScriptSetGeneration, task.Target), Prefix: true},
-			Mutation{Type: MutationDelete, Key: scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target)},
+		change.mutations = append(
+			change.mutations,
+			Mutation{
+				Type: MutationDelete,
+				Key:  scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
+			},
+			Mutation{
+				Type: MutationDelete,
+				Key:  scriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
+			},
+			Mutation{
+				Type:   MutationDelete,
+				Key:    scriptSetBodyGenerationPrefix(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
+				Prefix: true,
+			},
+			Mutation{
+				Type: MutationDelete,
+				Key:  scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
+			},
 			Mutation{Type: MutationDelete, Key: scriptLocatorKey(task.Target)},
 			Mutation{Type: MutationDelete, Key: scriptEnvironmentLocatorKey(record.EnvironmentID, task.Target)},
 		)
@@ -226,7 +255,10 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 		return scriptTaskChange{}, err
 	}
 	change.values = append(change.values, activeValue)
-	change.mutations = append(change.mutations, Mutation{Type: MutationPut, Key: scriptSetActiveKey(record.EnvironmentID), Value: activeValue})
+	change.mutations = append(
+		change.mutations,
+		Mutation{Type: MutationPut, Key: scriptSetActiveKey(record.EnvironmentID), Value: activeValue},
+	)
 	return change, nil
 }
 

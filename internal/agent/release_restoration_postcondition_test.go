@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -11,6 +12,7 @@ import (
 // Compose observation must contain the complete sealed predecessor replica set
 // with exact lineage and health before recovery can close.
 func TestReleaseRestorationWorkloadSetRequiresExactHealthyLineage(t *testing.T) {
+	const sealedImage = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	labels := []*agentpb.LabelPair{
 		{Key: "com.groundplane.release-id", Value: "prior-api"},
 		{Key: "com.groundplane.runtime-role", Value: "singleton"},
@@ -19,19 +21,24 @@ func TestReleaseRestorationWorkloadSetRequiresExactHealthyLineage(t *testing.T) 
 		ArtifactId: "prior-artifact", ProjectName: "gp-release",
 		Services: []*agentpb.ComposeService{{
 			ServiceId: "api", ComposeName: "api", ExpectedReplicas: 2, HasHealthcheck: true,
-			Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON, ExpectedLabels: labels,
+			ImageReference: sealedImage,
+			Role:           agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON, ExpectedLabels: labels,
+		}, {
+			ServiceId: "api", ComposeName: "api-proxy", ExpectedReplicas: 1,
+			Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY, ImageReference: "caddy:managed",
 		}},
 	}
-	container := func(name string) *agentpb.ObservedContainer {
+	container := func(index int) *agentpb.ObservedContainer {
 		return &agentpb.ObservedContainer{
-			ContainerId: name, Name: name, ServiceId: "api",
+			ContainerId: fmt.Sprintf("%064x", index), ServiceId: "api",
+			ImageReference: sealedImage, ImageId: sealedImage,
 			State:  agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING,
 			Health: agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY,
 			Labels: proto.Clone(&agentpb.ObservedContainer{Labels: labels}).(*agentpb.ObservedContainer).GetLabels(),
 		}
 	}
 	valid := &agentpb.ObservedProject{
-		ProjectName: "gp-release", Containers: []*agentpb.ObservedContainer{container("api-1"), container("api-2")},
+		ProjectName: "gp-release", Containers: []*agentpb.ObservedContainer{container(1), container(2)},
 	}
 	tests := []struct {
 		name   string
@@ -39,6 +46,25 @@ func TestReleaseRestorationWorkloadSetRequiresExactHealthyLineage(t *testing.T) 
 		wantOK bool
 	}{
 		{name: "complete healthy set", wantOK: true},
+		{name: "wrong actual image despite matching config", mutate: func(value *agentpb.ObservedProject) {
+			value.Containers[1].ImageId = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+		}},
+		{name: "missing actual image", mutate: func(value *agentpb.ObservedProject) {
+			value.Containers[1].ImageId = ""
+		}},
+		{name: "duplicate replica identity", mutate: func(value *agentpb.ObservedProject) {
+			value.Containers[1].ContainerId = value.Containers[0].ContainerId
+		}},
+		{name: "invalid replica identity", mutate: func(value *agentpb.ObservedProject) {
+			value.Containers[1].ContainerId = ""
+		}},
+		{name: "stable proxy has separate image authority", wantOK: true, mutate: func(value *agentpb.ObservedProject) {
+			proxy := container(3)
+			proxy.ImageReference = "caddy:managed"
+			proxy.ImageId = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+			proxy.Labels[1].Value = "proxy"
+			value.Containers = append(value.Containers, proxy)
+		}},
 		{name: "unhealthy predecessor", mutate: func(value *agentpb.ObservedProject) {
 			value.Containers[1].Health = agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_UNHEALTHY
 		}},
@@ -46,7 +72,7 @@ func TestReleaseRestorationWorkloadSetRequiresExactHealthyLineage(t *testing.T) 
 			value.Containers = value.Containers[:1]
 		}},
 		{name: "extra predecessor", mutate: func(value *agentpb.ObservedProject) {
-			value.Containers = append(value.Containers, container("api-3"))
+			value.Containers = append(value.Containers, container(3))
 		}},
 		{name: "mixed lineage", mutate: func(value *agentpb.ObservedProject) {
 			value.Containers[1].Labels[0].Value = "candidate-api"
@@ -61,6 +87,10 @@ func TestReleaseRestorationWorkloadSetRequiresExactHealthyLineage(t *testing.T) 
 			err := releaseRestorationWorkloadSetProven(artifact, observed, "api")
 			if (err == nil) != test.wantOK {
 				t.Fatalf("releaseRestorationWorkloadSetProven() error = %v, want success %t", err, test.wantOK)
+			}
+			err = releaseRestorationWorkloadTargetProven(artifact, observed, "api", "singleton", "prior-api")
+			if (err == nil) != test.wantOK {
+				t.Fatalf("releaseRestorationWorkloadTargetProven() error = %v, want success %t", err, test.wantOK)
 			}
 		})
 	}

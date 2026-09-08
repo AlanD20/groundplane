@@ -30,13 +30,16 @@ func TestServiceMutationUsesFixedRevisionAndAdvancesEpoch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	result, err := repository.PublishEnvironmentServiceDesiredRevisionDirect(context.Background(), EnvironmentServiceDesiredPublication{
-		Project: project, Environment: environment, ExpectedHeadRevision: 0,
-		Claim: claim, Revision: EnvironmentDesiredRevisionIdentity{
-			EnvironmentID: environment.Record.ID, RevisionID: fixture.Projection.Record.RevisionID,
-		}, Projection: fixture.Projection.Record,
-		Change: EnvironmentBlueprintServiceChange{Record: record}, Marker: marker,
-	})
+	result, err := repository.PublishEnvironmentServiceDesiredRevisionDirect(
+		context.Background(),
+		EnvironmentServiceDesiredPublication{
+			Project: project, Environment: environment, ExpectedHeadRevision: 0,
+			Claim: claim, Revision: EnvironmentDesiredRevisionIdentity{
+				EnvironmentID: environment.Record.ID, RevisionID: fixture.Projection.Record.RevisionID,
+			}, Projection: fixture.Projection.Record,
+			Change: EnvironmentBlueprintServiceChange{Record: record}, Marker: marker,
+		},
+	)
 	if err != nil {
 		t.Fatalf("PublishEnvironmentServiceDesiredRevisionDirect() error = %v", err)
 	}
@@ -141,11 +144,27 @@ func TestServiceMutationSelectedHeadZoneUsesTombstoneFence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReplaceServiceDesired() error = %v", err)
 	}
-	secondFixture := seedDesiredServiceFixture(t, ctx, store, environment.Record.ID, replacementDesired, "", 953, false, false)
+	secondFixture := seedDesiredServiceFixture(
+		t,
+		ctx,
+		store,
+		environment.Record.ID,
+		replacementDesired,
+		"",
+		953,
+		false,
+		false,
+	)
 	secondFixture.Projection.Record.RenderGeneration = published.Record.RenderGeneration + 1
 	secondFixture.Claim.RenderGeneration = secondFixture.Projection.Record.RenderGeneration
-	secondFixture.Projection.Record.DesiredZones = append([]EnvironmentZoneProjection(nil), fixture.Projection.Record.DesiredZones...)
-	secondMarker := directServiceMutationMarker(environment.Record.ID, record.Desired.ID, "selected-head-zone-tombstone")
+	secondFixture.Projection.Record.DesiredZones = append(
+		[]EnvironmentZoneProjection(nil),
+		fixture.Projection.Record.DesiredZones...)
+	secondMarker := directServiceMutationMarker(
+		environment.Record.ID,
+		record.Desired.ID,
+		"selected-head-zone-tombstone",
+	)
 	secondClaim := stageDirectServicePublicationForTest(t, ctx, store, secondFixture, secondMarker, published.Revision)
 	tombstoneValue := []byte("zone-removal-in-progress")
 	defer clear(tombstoneValue)
@@ -155,14 +174,17 @@ func TestServiceMutationSelectedHeadZoneUsesTombstoneFence(t *testing.T) {
 	if err != nil || !tombstoneResult.Succeeded {
 		t.Fatalf("seed Zone deletion tombstone = %#v/%v", tombstoneResult, err)
 	}
-	secondResult, err := repository.PublishEnvironmentServiceDesiredRevisionDirect(ctx, EnvironmentServiceDesiredPublication{
-		Project: project, Environment: environment, ExpectedHeadRevision: published.Revision,
-		Claim: secondClaim, Revision: EnvironmentDesiredRevisionIdentity{
-			EnvironmentID: environment.Record.ID, RevisionID: secondFixture.Projection.Record.RevisionID,
-		}, Projection: secondFixture.Projection.Record,
-		Change:     EnvironmentBlueprintServiceChange{Current: &current, Record: replacement},
-		References: ServiceMutationReferences{Zones: []Versioned[ZoneRecord]{selectedZone}}, Marker: secondMarker,
-	})
+	secondResult, err := repository.PublishEnvironmentServiceDesiredRevisionDirect(
+		ctx,
+		EnvironmentServiceDesiredPublication{
+			Project: project, Environment: environment, ExpectedHeadRevision: published.Revision,
+			Claim: secondClaim, Revision: EnvironmentDesiredRevisionIdentity{
+				EnvironmentID: environment.Record.ID, RevisionID: secondFixture.Projection.Record.RevisionID,
+			}, Projection: secondFixture.Projection.Record,
+			Change:     EnvironmentBlueprintServiceChange{Current: &current, Record: replacement},
+			References: ServiceMutationReferences{Zones: []Versioned[ZoneRecord]{selectedZone}}, Marker: secondMarker,
+		},
+	)
 	if err != nil {
 		t.Fatalf("PublishEnvironmentServiceDesiredRevisionDirect(tombstoned Zone) error = %v", err)
 	}
@@ -205,13 +227,16 @@ func TestServiceMutationEpochRaceAndHeldLockPerformNoDomainWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	result, err := repository.PublishEnvironmentServiceDesiredRevisionDirect(context.Background(), EnvironmentServiceDesiredPublication{
-		Project: project, Environment: environment, ExpectedHeadRevision: 0,
-		Claim: claim, Revision: EnvironmentDesiredRevisionIdentity{
-			EnvironmentID: environment.Record.ID, RevisionID: fixture.Projection.Record.RevisionID,
-		}, Projection: fixture.Projection.Record,
-		Change: EnvironmentBlueprintServiceChange{Record: record}, Marker: marker,
-	})
+	result, err := repository.PublishEnvironmentServiceDesiredRevisionDirect(
+		context.Background(),
+		EnvironmentServiceDesiredPublication{
+			Project: project, Environment: environment, ExpectedHeadRevision: 0,
+			Claim: claim, Revision: EnvironmentDesiredRevisionIdentity{
+				EnvironmentID: environment.Record.ID, RevisionID: fixture.Projection.Record.RevisionID,
+			}, Projection: fixture.Projection.Record,
+			Change: EnvironmentBlueprintServiceChange{Record: record}, Marker: marker,
+		},
+	)
 	if err != nil {
 		t.Fatalf("PublishEnvironmentServiceDesiredRevisionDirect(epoch race) error = %v", err)
 	}
@@ -244,7 +269,10 @@ func TestServiceMutationEpochRaceAndHeldLockPerformNoDomainWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetService(current) error = %v", err)
 	}
-	projection, found, err := baseRepository.GetEnvironmentComposeProjection(context.Background(), environment.Record.ID)
+	projection, found, err := baseRepository.GetEnvironmentComposeProjection(
+		context.Background(),
+		environment.Record.ID,
+	)
 	if err != nil || !found || projection.Record.RevisionID != seeded.Projection.Record.RevisionID {
 		t.Fatalf("GetEnvironmentComposeProjection() = %#v/%v/%v", projection, found, err)
 	}
@@ -255,13 +283,16 @@ func TestServiceMutationEpochRaceAndHeldLockPerformNoDomainWrite(t *testing.T) {
 		environmentMutationFenceTestOwner(serviceRecordTestTime(), 923),
 	)
 	storeRevisionBefore := store.revision
-	_, err = baseRepository.PublishEnvironmentServiceDesiredRevisionDirect(context.Background(), EnvironmentServiceDesiredPublication{
-		Project: project, Environment: environment, ExpectedHeadRevision: projection.Revision,
-		Claim: lockedClaim, Revision: EnvironmentDesiredRevisionIdentity{
-			EnvironmentID: environment.Record.ID, RevisionID: lockedClaim.RevisionID,
-		}, Projection: projection.Record,
-		Change: EnvironmentBlueprintServiceChange{Current: &joined, Record: joined.Record}, Marker: lockedMarker,
-	})
+	_, err = baseRepository.PublishEnvironmentServiceDesiredRevisionDirect(
+		context.Background(),
+		EnvironmentServiceDesiredPublication{
+			Project: project, Environment: environment, ExpectedHeadRevision: projection.Revision,
+			Claim: lockedClaim, Revision: EnvironmentDesiredRevisionIdentity{
+				EnvironmentID: environment.Record.ID, RevisionID: lockedClaim.RevisionID,
+			}, Projection: projection.Record,
+			Change: EnvironmentBlueprintServiceChange{Current: &joined, Record: joined.Record}, Marker: lockedMarker,
+		},
+	)
 	if !isKind(err, errs.KindResourceInUse) || store.revision != storeRevisionBefore {
 		t.Fatalf("PublishEnvironmentServiceDesiredRevisionDirect(held lock) error = %v", err)
 	}
@@ -306,13 +337,16 @@ func TestServiceMutationRejectsCrossTenantHierarchySpoof(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	result, err := repository.PublishEnvironmentServiceDesiredRevisionDirect(context.Background(), EnvironmentServiceDesiredPublication{
-		Project: otherProject, Environment: forgedEnvironment, ExpectedHeadRevision: 0,
-		Claim: claim, Revision: EnvironmentDesiredRevisionIdentity{
-			EnvironmentID: environment.Record.ID, RevisionID: fixture.Projection.Record.RevisionID,
-		}, Projection: fixture.Projection.Record,
-		Change: EnvironmentBlueprintServiceChange{Record: record}, Marker: marker,
-	})
+	result, err := repository.PublishEnvironmentServiceDesiredRevisionDirect(
+		context.Background(),
+		EnvironmentServiceDesiredPublication{
+			Project: otherProject, Environment: forgedEnvironment, ExpectedHeadRevision: 0,
+			Claim: claim, Revision: EnvironmentDesiredRevisionIdentity{
+				EnvironmentID: environment.Record.ID, RevisionID: fixture.Projection.Record.RevisionID,
+			}, Projection: fixture.Projection.Record,
+			Change: EnvironmentBlueprintServiceChange{Record: record}, Marker: marker,
+		},
+	)
 	if err == nil {
 		outcome, _, conflict, classifyErr := result.Classify()
 		if classifyErr != nil || outcome != IdempotencyKnownConflict || !isKind(conflict, errs.KindStateConflict) {

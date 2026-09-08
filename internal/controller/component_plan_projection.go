@@ -27,7 +27,9 @@ func projectPinnedEnvironmentComponents(
 			generated[serviceID] = struct{}{}
 		}
 	}
-	authored := make([]ComposeResourceIdentity, 0, len(projection.DesiredServices)-len(generated))
+	// Generated identities are not members of the desired Service collection.
+	// Their count therefore cannot be subtracted from its allocation bound.
+	authored := make([]ComposeResourceIdentity, 0, len(projection.DesiredServices))
 	for _, service := range projection.DesiredServices {
 		if _, owned := generated[service.Desired.ID]; owned {
 			continue

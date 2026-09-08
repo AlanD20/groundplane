@@ -72,7 +72,9 @@ func TestLogManagerTerminatesUndrainedQueueOverflow(t *testing.T) {
 
 	sources := &burstLogSources{exited: make(chan struct{})}
 	manager := newLogManager(logReaderStub{sources: sources})
-	manager.Subscribe(context.Background(), validAgentLogSubscribe())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	manager.Subscribe(ctx, validAgentLogSubscribe())
 	select {
 	case message := <-manager.Outputs():
 		if message.GetLogReady() == nil {
@@ -151,7 +153,10 @@ func (sources *burstLogSources) Run(ctx context.Context, output chan<- *agentpb.
 			return ctx.Err()
 		}
 	}
-	return nil
+	// The final send only hands off the record. Wait for overflow cancellation
+	// so the test cannot drain output before the collector checks that record.
+	<-ctx.Done()
+	return ctx.Err()
 }
 
 func (sources *burstLogSources) Close() error {

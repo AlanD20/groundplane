@@ -381,7 +381,10 @@ func platformComponentConfigIntent(
 		Query: idempotentintent.Object(),
 		Body: idempotentintent.JSONBody(idempotentintent.Object(
 			idempotentintent.Field{Name: "config", Value: idempotentintent.Object(
-				idempotentintent.Field{Name: "corefile_template", Value: idempotentintent.String(config.CorefileTemplate)},
+				idempotentintent.Field{
+					Name:  "corefile_template",
+					Value: idempotentintent.String(config.CorefileTemplate),
+				},
 				idempotentintent.Field{Name: "forwarders", Value: idempotentintent.List(forwarders...)},
 				idempotentintent.Field{
 					Name:  "tailnet_delegation",
@@ -411,8 +414,10 @@ func platformComponentConfigIntent(
 }
 
 func coreDNSConfigMutation(input apiTypes.ComponentConfigMutationInput) (core.CoreDNSComponentConfig, error) {
-	if input.CoreDNS == nil || input.CoreDNS.CorefileTemplate == nil || input.CoreDNS.UpstreamAuto == nil || input.CoreDNS.UpstreamResolvers == nil ||
-		input.CoreDNS.Forwarders == nil || input.CoreDNS.TailnetDelegation == nil {
+	if input.CoreDNS == nil || input.CoreDNS.CorefileTemplate == nil || input.CoreDNS.UpstreamAuto == nil ||
+		input.CoreDNS.UpstreamResolvers == nil ||
+		input.CoreDNS.Forwarders == nil ||
+		input.CoreDNS.TailnetDelegation == nil {
 		return core.CoreDNSComponentConfig{}, errs.New(
 			errs.KindValidationFailed,
 			"CoreDNS config requires every CoreDNS field and accepts no Environment Component fields",

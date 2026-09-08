@@ -44,7 +44,34 @@ const (
 
 func (k ActionKind) Valid() bool {
 	switch k {
-	case ActionAttachGrantRevoke, ActionAttachDetach, ActionEnvironmentAgentCleanup, ActionServiceRemove, ActionEntryRemove, ActionRouteRemove, ActionComponentRemove, ActionScriptRemove, ActionReleaseGroupRemove, ActionReleaseFinalize, ActionBackupPolicyFinalize, ActionKeyMaterialRemove, ActionMaterializationRemove, ActionVolumeAgentCleanup, ActionVolumeFinalize, ActionZoneRemove, ActionNetworkRemove, ActionReservationRelease, ActionRecoveryPointRemove, ActionOrphanObjectRemove, ActionConnectorFinalize, ActionEnvironmentFinalize, ActionRunnerLocalRemove, ActionProjectSecretRemove, ActionBackingRuntimeReconstruct, ActionBackingServiceFinalize, ActionProjectFinalize, ActionTenantFinalize:
+	case ActionAttachGrantRevoke,
+		ActionAttachDetach,
+		ActionEnvironmentAgentCleanup,
+		ActionServiceRemove,
+		ActionEntryRemove,
+		ActionRouteRemove,
+		ActionComponentRemove,
+		ActionScriptRemove,
+		ActionReleaseGroupRemove,
+		ActionReleaseFinalize,
+		ActionBackupPolicyFinalize,
+		ActionKeyMaterialRemove,
+		ActionMaterializationRemove,
+		ActionVolumeAgentCleanup,
+		ActionVolumeFinalize,
+		ActionZoneRemove,
+		ActionNetworkRemove,
+		ActionReservationRelease,
+		ActionRecoveryPointRemove,
+		ActionOrphanObjectRemove,
+		ActionConnectorFinalize,
+		ActionEnvironmentFinalize,
+		ActionRunnerLocalRemove,
+		ActionProjectSecretRemove,
+		ActionBackingRuntimeReconstruct,
+		ActionBackingServiceFinalize,
+		ActionProjectFinalize,
+		ActionTenantFinalize:
 		return true
 	default:
 		return false
@@ -82,7 +109,30 @@ const (
 
 func (k ActionTargetKind) Valid() bool {
 	switch k {
-	case ActionTargetTenant, ActionTargetProject, ActionTargetEnvironment, ActionTargetService, ActionTargetAttach, ActionTargetEntry, ActionTargetRoute, ActionTargetComponent, ActionTargetScript, ActionTargetReleaseGroup, ActionTargetRelease, ActionTargetBackupPolicy, ActionTargetKeyMaterial, ActionTargetMaterialization, ActionTargetVolume, ActionTargetZone, ActionTargetNetwork, ActionTargetReservation, ActionTargetRecoveryPoint, ActionTargetOrphanObject, ActionTargetConnector, ActionTargetRunner, ActionTargetSecret, ActionTargetBackingService:
+	case ActionTargetTenant,
+		ActionTargetProject,
+		ActionTargetEnvironment,
+		ActionTargetService,
+		ActionTargetAttach,
+		ActionTargetEntry,
+		ActionTargetRoute,
+		ActionTargetComponent,
+		ActionTargetScript,
+		ActionTargetReleaseGroup,
+		ActionTargetRelease,
+		ActionTargetBackupPolicy,
+		ActionTargetKeyMaterial,
+		ActionTargetMaterialization,
+		ActionTargetVolume,
+		ActionTargetZone,
+		ActionTargetNetwork,
+		ActionTargetReservation,
+		ActionTargetRecoveryPoint,
+		ActionTargetOrphanObject,
+		ActionTargetConnector,
+		ActionTargetRunner,
+		ActionTargetSecret,
+		ActionTargetBackingService:
 		return true
 	default:
 		return false
@@ -137,10 +187,46 @@ type Procedure struct {
 	ControllerFinalizer *ControllerFinalizerProcedure
 }
 
-var agentProcedures = map[ActionKind]string{ActionAttachGrantRevoke: "attach.grant-revoke", ActionAttachDetach: "attach.detach", ActionEnvironmentAgentCleanup: "environment.cleanup", ActionMaterializationRemove: "materialization.remove", ActionVolumeAgentCleanup: "volume.cleanup", ActionNetworkRemove: "network.remove", ActionRecoveryPointRemove: "recovery-point.remove", ActionOrphanObjectRemove: "orphan-object.remove", ActionBackingRuntimeReconstruct: "backing.runtime-reconstruct"}
-var controllerFinalizers = map[ActionKind]string{ActionServiceRemove: "service.remove", ActionEntryRemove: "entry.remove", ActionRouteRemove: "route.remove", ActionComponentRemove: "component.remove", ActionScriptRemove: "script.remove", ActionReleaseGroupRemove: "release-group.remove", ActionReleaseFinalize: "release.finalize", ActionBackupPolicyFinalize: "backup-policy.finalize", ActionKeyMaterialRemove: "key-material.remove", ActionVolumeFinalize: "volume.finalize", ActionZoneRemove: "zone.remove", ActionReservationRelease: "reservation.release", ActionConnectorFinalize: "connector.finalize", ActionEnvironmentFinalize: "environment.finalize", ActionRunnerLocalRemove: "runner.remove", ActionProjectSecretRemove: "secret.remove", ActionBackingServiceFinalize: "backing.finalize", ActionProjectFinalize: "project.finalize", ActionTenantFinalize: "tenant.finalize"}
+var agentProcedures = map[ActionKind]string{
+	ActionAttachGrantRevoke:         "attach.grant-revoke",
+	ActionAttachDetach:              "attach.detach",
+	ActionEnvironmentAgentCleanup:   "environment.cleanup",
+	ActionMaterializationRemove:     "materialization.remove",
+	ActionVolumeAgentCleanup:        "volume.cleanup",
+	ActionNetworkRemove:             "network.remove",
+	ActionRecoveryPointRemove:       "recovery-point.remove",
+	ActionOrphanObjectRemove:        "orphan-object.remove",
+	ActionBackingRuntimeReconstruct: "backing.runtime-reconstruct",
+}
 
-func (p ProcedureInput) Validate(action ActionKind, targetKind ActionTargetKind, targetID string, targetRevision int64) error {
+var controllerFinalizers = map[ActionKind]string{
+	ActionServiceRemove:          "service.remove",
+	ActionEntryRemove:            "entry.remove",
+	ActionRouteRemove:            "route.remove",
+	ActionComponentRemove:        "component.remove",
+	ActionScriptRemove:           "script.remove",
+	ActionReleaseGroupRemove:     "release-group.remove",
+	ActionReleaseFinalize:        "release.finalize",
+	ActionBackupPolicyFinalize:   "backup-policy.finalize",
+	ActionKeyMaterialRemove:      "key-material.remove",
+	ActionVolumeFinalize:         "volume.finalize",
+	ActionZoneRemove:             "zone.remove",
+	ActionReservationRelease:     "reservation.release",
+	ActionConnectorFinalize:      "connector.finalize",
+	ActionEnvironmentFinalize:    "environment.finalize",
+	ActionRunnerLocalRemove:      "runner.remove",
+	ActionProjectSecretRemove:    "secret.remove",
+	ActionBackingServiceFinalize: "backing.finalize",
+	ActionProjectFinalize:        "project.finalize",
+	ActionTenantFinalize:         "tenant.finalize",
+}
+
+func (p ProcedureInput) Validate(
+	action ActionKind,
+	targetKind ActionTargetKind,
+	targetID string,
+	targetRevision int64,
+) error {
 	agentName, isAgent := agentProcedures[action]
 	finalizer, isFinalizer := controllerFinalizers[action]
 	switch p.Kind {
@@ -164,7 +250,12 @@ func (p ProcedureInput) Validate(action ActionKind, targetKind ActionTargetKind,
 			return errs.Newf(errs.KindInternal, "action %q requires exactly one controller-finalizer input", action)
 		}
 		v := p.ControllerFinalizer
-		if v.Finalizer != finalizer || v.TargetKind != targetKind || v.TargetID != targetID || v.FixedInputRevision != targetRevision || !canonicalDigest(v.FixedInputDigest) || v.BatchOrdinal < 0 || v.BatchCount <= 0 || v.BatchOrdinal >= v.BatchCount {
+		if v.Finalizer != finalizer || v.TargetKind != targetKind || v.TargetID != targetID ||
+			v.FixedInputRevision != targetRevision ||
+			!canonicalDigest(v.FixedInputDigest) ||
+			v.BatchOrdinal < 0 ||
+			v.BatchCount <= 0 ||
+			v.BatchOrdinal >= v.BatchCount {
 			return errs.Newf(errs.KindInternal, "controller-finalizer input for %q is incomplete", action)
 		}
 	default:
@@ -182,7 +273,9 @@ func (p Procedure) Validate(action ActionKind) error {
 			return errs.Newf(errs.KindInternal, "action %q requires exactly one agent-child procedure", action)
 		}
 		v := p.AgentChild
-		if ids.Validate(ids.KindOperation, v.ChildOperationID) != nil || v.TypedProcedure != agentName || !canonicalDigest(v.InputDigest) || v.Timeout <= 0 {
+		if ids.Validate(ids.KindOperation, v.ChildOperationID) != nil || v.TypedProcedure != agentName ||
+			!canonicalDigest(v.InputDigest) ||
+			v.Timeout <= 0 {
 			return errs.Newf(errs.KindInternal, "agent-child evidence for %q is incomplete", action)
 		}
 		if action == ActionAttachDetach {
@@ -197,7 +290,9 @@ func (p Procedure) Validate(action ActionKind) error {
 			return errs.Newf(errs.KindInternal, "action %q requires exactly one controller-finalizer procedure", action)
 		}
 		v := p.ControllerFinalizer
-		if v.Finalizer != finalizer || v.FixedInputRevision <= 0 || !canonicalDigest(v.CompareTemplateDigest) || !canonicalDigest(v.MutationTemplateDigest) || !canonicalDigest(v.PostconditionTemplateDigest) {
+		if v.Finalizer != finalizer || v.FixedInputRevision <= 0 || !canonicalDigest(v.CompareTemplateDigest) ||
+			!canonicalDigest(v.MutationTemplateDigest) ||
+			!canonicalDigest(v.PostconditionTemplateDigest) {
 			return errs.Newf(errs.KindInternal, "controller-finalizer evidence for %q is incomplete", action)
 		}
 	default:
@@ -207,12 +302,24 @@ func (p Procedure) Validate(action ActionKind) error {
 }
 
 func validateBoundAction(planned PlannedAction, bound Action) error {
-	if bound.ID != planned.ID || bound.NodeID != planned.NodeID || bound.Ordinal != planned.Ordinal || bound.OperationID != planned.OperationID || bound.Kind != planned.Kind || bound.TargetKind != planned.TargetKind || bound.TargetID != planned.TargetID || bound.TargetRevision != planned.TargetRevision || bound.State != ActionPending || bound.Attempt != 0 || len(bound.PrerequisiteOrdinals) != len(planned.PrerequisiteOrdinals) {
+	if bound.ID != planned.ID || bound.NodeID != planned.NodeID || bound.Ordinal != planned.Ordinal ||
+		bound.OperationID != planned.OperationID ||
+		bound.Kind != planned.Kind ||
+		bound.TargetKind != planned.TargetKind ||
+		bound.TargetID != planned.TargetID ||
+		bound.TargetRevision != planned.TargetRevision ||
+		bound.State != ActionPending ||
+		bound.Attempt != 0 ||
+		len(bound.PrerequisiteOrdinals) != len(planned.PrerequisiteOrdinals) {
 		return errs.Newf(errs.KindInternal, "bound hierarchy deletion action %s changed its plan identity", planned.ID)
 	}
 	for index := range planned.PrerequisiteOrdinals {
 		if bound.PrerequisiteOrdinals[index] != planned.PrerequisiteOrdinals[index] {
-			return errs.Newf(errs.KindInternal, "bound hierarchy deletion action %s changed its prerequisites", planned.ID)
+			return errs.Newf(
+				errs.KindInternal,
+				"bound hierarchy deletion action %s changed its prerequisites",
+				planned.ID,
+			)
 		}
 	}
 	if err := planned.ProcedureInput.Validate(planned.Kind, planned.TargetKind, planned.TargetID, planned.TargetRevision); err != nil {
@@ -226,7 +333,9 @@ func validateBoundAction(planned PlannedAction, bound Action) error {
 	}
 	if planned.ProcedureInput.Kind == ProcedureAgentChild {
 		input, procedure := planned.ProcedureInput.AgentChild, bound.Procedure.AgentChild
-		if input.TaskType != procedure.TaskType || input.TypedProcedure != procedure.TypedProcedure || input.InputDigest != procedure.InputDigest || input.Timeout != procedure.Timeout {
+		if input.TaskType != procedure.TaskType || input.TypedProcedure != procedure.TypedProcedure ||
+			input.InputDigest != procedure.InputDigest ||
+			input.Timeout != procedure.Timeout {
 			return errs.Newf(errs.KindInternal, "bound hierarchy deletion action %s changed agent input", planned.ID)
 		}
 		return nil
@@ -277,12 +386,25 @@ func (p AgentTerminalProof) Validate(action Action) error {
 	if action.Procedure.Kind != ProcedureAgentChild || action.Procedure.AgentChild == nil {
 		return errs.Newf(errs.KindInternal, "action %s is not agent-child", action.ID)
 	}
-	if p.ChildOperationID != action.Procedure.AgentChild.ChildOperationID || p.AttemptID == "" || p.TaskID == "" || p.AssignmentID == "" || p.AttemptGeneration <= 0 || p.ReceiptRevision <= 0 || p.ProgressKey == "" || !p.Terminal.Valid() || !canonicalDigest(p.ReceiptDigest) || !canonicalDigest(p.ProgressDigest) || !canonicalDigest(p.TerminalTaskDigest) || !canonicalDigest(p.CheckpointDigest) {
+	if p.ChildOperationID != action.Procedure.AgentChild.ChildOperationID || p.AttemptID == "" || p.TaskID == "" ||
+		p.AssignmentID == "" ||
+		p.AttemptGeneration <= 0 ||
+		p.ReceiptRevision <= 0 ||
+		p.ProgressKey == "" ||
+		!p.Terminal.Valid() ||
+		!canonicalDigest(p.ReceiptDigest) ||
+		!canonicalDigest(p.ProgressDigest) ||
+		!canonicalDigest(p.TerminalTaskDigest) ||
+		!canonicalDigest(p.CheckpointDigest) {
 		return errs.Newf(errs.KindInternal, "agent terminal proof for action %s is incomplete", action.ID)
 	}
 	if p.Terminal == AgentTerminalCompleted {
 		if !canonicalDigest(p.ResultDigest) || p.ErrorDigest != "" {
-			return errs.Newf(errs.KindInternal, "completed agent proof for action %s requires only result digest", action.ID)
+			return errs.Newf(
+				errs.KindInternal,
+				"completed agent proof for action %s requires only result digest",
+				action.ID,
+			)
 		}
 	} else if !canonicalDigest(p.ErrorDigest) || p.ResultDigest != "" {
 		return errs.Newf(errs.KindInternal, "non-success agent proof for action %s requires only error digest", action.ID)

@@ -62,7 +62,10 @@ func buildVolumeMutationProjection(
 	}
 	if hasCurrent {
 		if err := proto.Unmarshal(current.ComposeArtifact, oldArtifact); err != nil {
-			return etcd.EnvironmentComposeProjection{}, nil, nil, errs.New(errs.KindInternal, "Volume baseline artifact is corrupt")
+			return etcd.EnvironmentComposeProjection{}, nil, nil, errs.New(
+				errs.KindInternal,
+				"Volume baseline artifact is corrupt",
+			)
 		}
 	}
 	normalizedArtifact := proto.Clone(oldArtifact).(*agentpb.ComposeArtifact)
@@ -79,7 +82,10 @@ func buildVolumeMutationProjection(
 		candidate.Volumes = append(candidate.Volumes, etcd.EnvironmentVolumeIdentity{
 			ID: request.volumeID, Slug: request.slug, Key: request.key,
 		})
-		sort.Slice(candidate.Volumes, func(left, right int) bool { return candidate.Volumes[left].Key < candidate.Volumes[right].Key })
+		sort.Slice(
+			candidate.Volumes,
+			func(left, right int) bool { return candidate.Volumes[left].Key < candidate.Volumes[right].Key },
+		)
 	case volumeMutationActionEdit:
 		action = controller.VolumeArtifactEdit
 		for index := range candidate.Volumes {
@@ -104,7 +110,10 @@ func buildVolumeMutationProjection(
 		}
 		candidate.VolumeMounts = keptMounts
 	default:
-		return etcd.EnvironmentComposeProjection{}, nil, nil, errs.New(errs.KindInternal, "Volume mutation action is invalid")
+		return etcd.EnvironmentComposeProjection{}, nil, nil, errs.New(
+			errs.KindInternal,
+			"Volume mutation action is invalid",
+		)
 	}
 	newArtifact, err := controller.MutateEnvironmentVolumeArtifact(oldArtifact, controller.VolumeArtifactMutation{
 		Action: action, VolumeID: request.volumeID, Key: request.key,
@@ -114,11 +123,17 @@ func buildVolumeMutationProjection(
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, nil, nil, err
 	}
-	normalizedArtifact, err = controller.MutateEnvironmentVolumeArtifact(normalizedArtifact, controller.VolumeArtifactMutation{
-		Action: action, VolumeID: request.volumeID, Key: request.key,
-		ArtifactID: stableIDFromTask(ids.KindConfig, revisionID), PlanID: stableIDFromTask(ids.KindPlan, revisionID),
-		TenantID: tenantID, ProjectID: projectID, RenderGeneration: generation,
-	})
+	normalizedArtifact, err = controller.MutateEnvironmentVolumeArtifact(
+		normalizedArtifact,
+		controller.VolumeArtifactMutation{
+			Action: action, VolumeID: request.volumeID, Key: request.key,
+			ArtifactID: stableIDFromTask(
+				ids.KindConfig,
+				revisionID,
+			), PlanID: stableIDFromTask(ids.KindPlan, revisionID),
+			TenantID: tenantID, ProjectID: projectID, RenderGeneration: generation,
+		},
+	)
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, nil, nil, err
 	}

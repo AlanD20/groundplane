@@ -74,7 +74,7 @@ func TestPlatformExecutionDisableReusesSealedPredecessorOwnership(t *testing.T) 
 	if err != nil {
 		t.Fatalf("PlatformComponentDesiredDigest() error = %v", err)
 	}
-	registeredPlan := executionPlanFixture(serviceID, "example/resolver@sha256:"+strings.Repeat("1", 64))
+	registeredPlan := executionPlanFixture(serviceID, "example/resolver")
 	selectedPlatform, selectedReference, selected := registeredPlan.Services[0].Image.Select(
 		runtime.GOOS,
 		runtime.GOARCH,
@@ -230,8 +230,8 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 	if err != nil {
 		t.Fatalf("PlatformComponentDesiredDigest() error = %v", err)
 	}
-	firstPlan := executionPlanFixture(serviceID, "example/resolver@sha256:"+strings.Repeat("1", 64))
-	secondPlan := executionPlanFixture(serviceID, "example/resolver@sha256:"+strings.Repeat("2", 64))
+	firstPlan := executionPlanFixture(serviceID, "example/resolver")
+	secondPlan := executionPlanFixture(serviceID, "example/changed-resolver")
 	selectedPlatform, selectedReference, selected := firstPlan.Services[0].Image.Select(
 		runtime.GOOS,
 		runtime.GOARCH,
@@ -289,7 +289,10 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 			etcd.TaskResourceKindParam:                   etcd.TaskResourceComponent,
 			etcd.TaskPlatformComponentDesiredSHA256Param: desiredDigest,
 		},
-		Steps: []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: stepID}, {Kind: etcd.TaskStepOperation, ID: waitStepID}},
+		Steps: []etcd.TaskStepRecord{
+			{Kind: etcd.TaskStepOperation, ID: stepID},
+			{Kind: etcd.TaskStepOperation, ID: waitStepID},
+		},
 	}
 	input.ComposeArtifact, err = controllerpkg.RenderPlatformComponentCompose(
 		controllerpkg.PlatformComponentComposeInput{

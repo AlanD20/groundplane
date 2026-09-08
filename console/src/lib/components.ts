@@ -8,12 +8,13 @@ import type {
 type ComponentSeed = {
   caddy?: {
     enabled?: boolean
-    zoneId?: string
+    zoneIds?: string[]
     caddyfile_template?: string
     pinnedIPv4?: string
   }
   tunnel?: {
     enabled?: boolean
+    zoneIds?: string[]
     secret_id?: string
   }
 }
@@ -37,7 +38,7 @@ export function createEnvironmentComponents(
       status: caddyEnabled ? 'healthy' : 'stopped',
       dependencies: [],
       generatedServices: caddyEnabled ? [`svc_${caddyId.slice(4)}`] : [],
-      config: { zone_id: seed.caddy?.zoneId ?? '', caddyfile_template: seed.caddy?.caddyfile_template ?? '' },
+      config: caddyEnabled ? { zone_ids: seed.caddy?.zoneIds ?? [], caddyfile_template: seed.caddy?.caddyfile_template ?? '' } : null,
       state: { pinnedIPv4: seed.caddy?.pinnedIPv4 },
     },
     {
@@ -49,7 +50,7 @@ export function createEnvironmentComponents(
       status: tunnelEnabled ? 'healthy' : 'stopped',
       dependencies: [],
       generatedServices: tunnelEnabled ? [`svc_${tunnelId.slice(4)}`] : [],
-      config: { secret_id: seed.tunnel?.secret_id ?? '' },
+      config: tunnelEnabled ? { zone_ids: seed.tunnel?.zoneIds ?? [], secret_id: seed.tunnel?.secret_id ?? '' } : null,
       state: {},
     },
   ]

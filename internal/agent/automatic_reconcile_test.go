@@ -2,6 +2,7 @@ package agent
 
 import (
 	"crypto/sha256"
+	"strings"
 	"testing"
 	"time"
 
@@ -53,7 +54,7 @@ func automaticComponentApplyPlan(t *testing.T) *agentpb.ExecutionPlan {
 	)
 	digest := sha256.Sum256([]byte("CoreDNS component action"))
 	yaml := []byte("services:\n  coredns:\n    image: registry.example/coredns@sha256:" +
-		"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n")
+		strings.Repeat("a", 64) + "\n")
 	yamlDigest := sha256.Sum256(yaml)
 	plan := &agentpb.ExecutionPlan{
 		Schema: executionplan.SchemaVersion, PlanId: planID, RenderGeneration: 1,
@@ -92,6 +93,7 @@ func automaticComponentApplyPlan(t *testing.T) *agentpb.ExecutionPlan {
 			},
 		},
 	}
+	bindAgentTestComponentImage(t, plan.Artifacts[0].Services[0])
 	sealed, err := executionplan.Seal(plan)
 	if err != nil {
 		t.Fatalf("executionplan.Seal() error = %v", err)

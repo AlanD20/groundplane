@@ -31,20 +31,29 @@ func ReconcileBlueprintEntries(
 	allocate func(ids.Kind, string) string,
 ) (BlueprintEntryReconciliation, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil || allocate == nil {
-		return BlueprintEntryReconciliation{}, errs.New(errs.KindInternal, "Blueprint Entry reconciliation input is invalid")
+		return BlueprintEntryReconciliation{}, errs.New(
+			errs.KindInternal,
+			"Blueprint Entry reconciliation input is invalid",
+		)
 	}
 	currentByKey := make(map[string]etcd.EntryRecord)
 	result := BlueprintEntryReconciliation{Current: make([]etcd.EntryRecord, 0, len(current)+len(authored))}
 	for _, record := range current {
 		if record.EnvironmentID != environmentID || record.Entry.Validate() != nil {
-			return BlueprintEntryReconciliation{}, errs.New(errs.KindInternal, "durable Blueprint Entry state is inconsistent")
+			return BlueprintEntryReconciliation{}, errs.New(
+				errs.KindInternal,
+				"durable Blueprint Entry state is inconsistent",
+			)
 		}
 		if record.BlueprintKey == "" {
 			result.Current = append(result.Current, record)
 			continue
 		}
 		if _, duplicate := currentByKey[record.BlueprintKey]; duplicate {
-			return BlueprintEntryReconciliation{}, errs.New(errs.KindInternal, "durable Blueprint Entry key is duplicated")
+			return BlueprintEntryReconciliation{}, errs.New(
+				errs.KindInternal,
+				"durable Blueprint Entry key is duplicated",
+			)
 		}
 		currentByKey[record.BlueprintKey] = record
 	}
@@ -66,7 +75,10 @@ func ReconcileBlueprintEntries(
 			return BlueprintEntryReconciliation{}, errs.Wrap(errs.KindValidationFailed, err)
 		}
 		if desired.Kind == core.EntryKindFile && entrymaterialization.ValidateDesiredDestination(desired.Path) != nil {
-			return BlueprintEntryReconciliation{}, errs.New(errs.KindValidationFailed, "Blueprint file Entry destination is invalid")
+			return BlueprintEntryReconciliation{}, errs.New(
+				errs.KindValidationFailed,
+				"Blueprint file Entry destination is invalid",
+			)
 		}
 		if found && blueprintEntryIdentityChanged(existing.Entry, desired) {
 			result.Removed = append(result.Removed, existing)
@@ -96,8 +108,14 @@ func ReconcileBlueprintEntries(
 	for _, record := range currentByKey {
 		result.Removed = append(result.Removed, record)
 	}
-	sort.Slice(result.Current, func(left, right int) bool { return result.Current[left].Entry.ID < result.Current[right].Entry.ID })
-	sort.Slice(result.Removed, func(left, right int) bool { return result.Removed[left].Entry.ID < result.Removed[right].Entry.ID })
+	sort.Slice(
+		result.Current,
+		func(left, right int) bool { return result.Current[left].Entry.ID < result.Current[right].Entry.ID },
+	)
+	sort.Slice(
+		result.Removed,
+		func(left, right int) bool { return result.Removed[left].Entry.ID < result.Removed[right].Entry.ID },
+	)
 	return result, nil
 }
 

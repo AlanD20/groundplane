@@ -19,7 +19,10 @@ func (repository *HierarchyDeletionRepository) ReadyAction(
 	}
 	if current.Tombstone.Phase != HierarchyDeletionExecuting || current.Tombstone.PlanCount == nil ||
 		current.Tombstone.PlanDigest == nil || current.Fence.Dispatch != HierarchyDeletionDispatchOpen {
-		return nil, HierarchyDeletionOperation{}, errs.New(errs.KindStateConflict, "hierarchy deletion is not executable")
+		return nil, HierarchyDeletionOperation{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion is not executable",
+		)
 	}
 	ordinal := current.Tombstone.Checkpoint.NextOrdinal
 	if ordinal >= *current.Tombstone.PlanCount {
@@ -75,7 +78,10 @@ func (repository *HierarchyDeletionRepository) ReadyAction(
 	}
 	clearKeyValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return nil, HierarchyDeletionOperation{}, errs.New(errs.KindStateConflict, "hierarchy deletion action selection changed")
+		return nil, HierarchyDeletionOperation{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion action selection changed",
+		)
 	}
 	current.Fence = nextFence
 	current.FenceRevision = transaction.Revision

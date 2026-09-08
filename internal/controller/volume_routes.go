@@ -268,7 +268,11 @@ func (s *Server) volumeMutationResponse(response etcd.IdempotencyResponse, actio
 		Body: func(ctx huma.Context) {
 			ctx.SetStatus(response.Status)
 			if _, err := ctx.BodyWriter().Write(response.Body); err != nil && s.Logger != nil {
-				s.Logger.Error("controller: write Volume mutation response", slog.String("action", action), slog.Any("error", err))
+				s.Logger.Error(
+					"controller: write Volume mutation response",
+					slog.String("action", action),
+					slog.Any("error", err),
+				)
 			}
 		},
 	}
@@ -278,7 +282,8 @@ func (s *Server) rejectVolumeDeleteBody(ctx huma.Context, next func(huma.Context
 	var probe [1]byte
 	count, err := ctx.BodyReader().Read(probe[:])
 	if count != 0 || (err != nil && !errors.Is(err, io.EOF)) {
-		if writeErr := huma.WriteErr(s.API, ctx, http.StatusBadRequest, "Volume deletion body is not allowed"); writeErr != nil && s.Logger != nil {
+		if writeErr := huma.WriteErr(s.API, ctx, http.StatusBadRequest, "Volume deletion body is not allowed"); writeErr != nil &&
+			s.Logger != nil {
 			s.Logger.Error("controller: write Volume deletion problem", slog.Any("error", writeErr))
 		}
 		return
@@ -290,7 +295,8 @@ func (s *Server) validateVolumeDeleteQuery(ctx huma.Context, next func(huma.Cont
 	requestURL := ctx.URL()
 	for key, values := range requestURL.Query() {
 		if (key != "impact_token" && key != "confirm_key") || len(values) != 1 {
-			if writeErr := huma.WriteErr(s.API, ctx, http.StatusBadRequest, "Volume deletion query is invalid"); writeErr != nil && s.Logger != nil {
+			if writeErr := huma.WriteErr(s.API, ctx, http.StatusBadRequest, "Volume deletion query is invalid"); writeErr != nil &&
+				s.Logger != nil {
 				s.Logger.Error("controller: write Volume deletion problem", slog.Any("error", writeErr))
 			}
 			return

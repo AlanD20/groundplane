@@ -25,6 +25,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 	agentID string,
 	terminalAt time.Time,
 	readRevision int64,
+	proofConditions ...Condition,
 ) (bool, error) {
 	publicationID := task.Params[TaskReleasePublicationParam]
 	if publicationID == "" {
@@ -50,7 +51,6 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 			ctx, task, assignment, terminalStatus, result, agentID, terminalAt, readRevision,
 		)
 	}
-
 	baseKeys := []string{
 		releasePublicationKey(publicationID), releaseOperationKey(task.OperationID),
 		releaseFenceSetKey(task.Owner.EnvironmentID), environmentMutationEpochKey(task.Owner.EnvironmentID),
@@ -59,7 +59,8 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 	if err != nil {
 		return false, err
 	}
-	if base == nil || len(base.Values) != len(baseKeys) || base.Values[0] == nil || base.Values[1] == nil || base.Values[3] == nil {
+	if base == nil || len(base.Values) != len(baseKeys) || base.Values[0] == nil || base.Values[1] == nil ||
+		base.Values[3] == nil {
 		return false, corruptReleaseRecord()
 	}
 	marker, err := decodeReleaseRecord[ReleasePublicationMarker](base.Values[0].Value, "release-publication")
@@ -91,7 +92,6 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 			return processed, terminalErr
 		}
 	}
-
 	terminalKeys := make([]string, len(head.Members))
 	for index, member := range head.Members {
 		terminalKeys[index] = releaseTerminalKey(member.ReleaseID)
@@ -104,7 +104,19 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 		return false, corruptReleaseRecord()
 	}
 	if task.RetryOf != "" && head.State == domain.StateRecovering {
-		return repository.finalizeReleaseRecoveryBatch(ctx, task, assignment, terminalStatus, result, agentID, terminalAt, head, fence, base, terminalRead)
+		return repository.finalizeReleaseRecoveryBatch(
+			ctx,
+			task,
+			assignment,
+			terminalStatus,
+			result,
+			agentID,
+			terminalAt,
+			head,
+			fence,
+			base,
+			terminalRead,
+			proofConditions...)
 	}
 	pending := make([]int, 0, maximumReleaseTerminalBatchMembers)
 	for index, value := range terminalRead.Values {
@@ -113,7 +125,17 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 		}
 	}
 	if len(pending) == 0 {
-		return repository.closeReleaseOperation(ctx, task, head, fence, base, terminalRead, terminalStatus, result, terminalAt)
+		return repository.closeReleaseOperation(
+			ctx,
+			task,
+			head,
+			fence,
+			base,
+			terminalRead,
+			terminalStatus,
+			result,
+			terminalAt,
+			proofConditions...)
 	}
 
 	failedOrdinal, err := releaseFailedMemberOrdinal(task, terminalStatus, result)
@@ -158,7 +180,8 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 			return false, corruptReleaseRecord()
 		}
 		checkpoint, err := decodeReleaseRecord[domain.Checkpoint](values[1].Value, "release-checkpoint")
-		if err != nil || checkpoint.ReleaseID != intent.ID || domain.ValidateCheckpoint(checkpoint) != nil || checkpoint.State != domain.StatePending {
+		if err != nil || checkpoint.ReleaseID != intent.ID || domain.ValidateCheckpoint(checkpoint) != nil ||
+			checkpoint.State != domain.StatePending {
 			return false, corruptReleaseRecord()
 		}
 		projection, err := decodeReleaseProjection(values[2], task.Owner.EnvironmentID, member.ServiceID)
@@ -177,10 +200,19 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 			observedReleaseID, compensated = recreate.ReleaseID, hasRecreate && recreate.Compensated
 			observedTarget = recreate.Target
 		}
-		state, serving, recovery := releaseMemberTerminalState(head, member.Ordinal, terminalStatus, failedOrdinal, result, compensated)
+		state, serving, recovery := releaseMemberTerminalState(
+			head,
+			member.Ordinal,
+			terminalStatus,
+			failedOrdinal,
+			result,
+			compensated,
+		)
 		var evidence []domain.EffectEvidence
 		if serving {
-			if hasProxy && (proxy.Compensated || proxy.ReleaseID != intent.ID) || hasRecreate && (recreate.Compensated || recreate.ReleaseID != intent.ID) || !hasProxy && !hasRecreate {
+			if hasProxy && (proxy.Compensated || proxy.ReleaseID != intent.ID) ||
+				hasRecreate && (recreate.Compensated || recreate.ReleaseID != intent.ID) ||
+				!hasProxy && !hasRecreate {
 				return false, errs.New(errs.KindStateConflict, "release serving evidence does not match its candidate")
 			}
 			stepID := task.Steps[index*5+2].ID
@@ -197,10 +229,14 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 			effect := domain.EffectEvidence{
 				PlanID: task.PlanID, StepID: stepID, AttemptID: task.ID, AgentID: agentID,
 				AcknowledgementID: assignment.AssignmentID, ObservedReleaseID: intent.ID,
-				ObservedRenderGeneration: uint64(task.RenderGeneration), EffectDigest: effectDigest, AcknowledgedAt: terminalAt,
+				ObservedRenderGeneration: uint64(
+					task.RenderGeneration,
+				), EffectDigest: effectDigest, AcknowledgedAt: terminalAt,
 			}
 			if hasProxy {
-				effect.ObservedSlot, effect.RouterConfigurationDigest, effect.ObservedRouterTarget = domain.WorkloadTarget(proxy.Target).Slot(), proxy.ConfigSHA256, proxy.Target
+				effect.ObservedSlot, effect.RouterConfigurationDigest, effect.ObservedRouterTarget = domain.WorkloadTarget(proxy.Target).
+					Slot(),
+					proxy.ConfigSHA256, proxy.Target
 			}
 			evidence = []domain.EffectEvidence{effect}
 		} else if compensated {
@@ -243,7 +279,15 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 			projection.Revision++
 		}
 		retention := releaseRollbackMaterial(intent, state, terminalAt)
-		terminal := releaseTerminalSummary(intent, state, projection.ServingReleaseID, evidence, head.Attempts, retention.Digest, terminalAt)
+		terminal := releaseTerminalSummary(
+			intent,
+			state,
+			projection.ServingReleaseID,
+			evidence,
+			head.Attempts,
+			retention.Digest,
+			terminalAt,
+		)
 		checkpointValue, err := encodeReleaseRecord("release-checkpoint", checkpoint)
 		if err != nil {
 			return false, err
@@ -275,13 +319,16 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 			if err != nil {
 				return false, err
 			}
-			mutations = append(mutations, Mutation{Type: MutationPut, Key: detailKeys[offset*5+2], Value: projectionValue})
+			mutations = append(
+				mutations,
+				Mutation{Type: MutationPut, Key: detailKeys[offset*5+2], Value: projectionValue},
+			)
 		}
 	}
-	if len(conditions)+len(mutations) > maximumTransactionOperations {
+	if len(conditions)+len(proofConditions)+len(mutations) > maximumTransactionOperations {
 		return false, errs.New(errs.KindInternal, "release terminal batch exceeds the transaction ceiling")
 	}
-	transaction, err := repository.store.Transact(ctx, conditions, mutations)
+	transaction, err := repository.store.Transact(ctx, append(conditions, proofConditions...), mutations)
 	if err != nil {
 		return false, err
 	}
@@ -302,6 +349,7 @@ func (repository *TaskRepository) closeReleaseOperation(
 	terminalStatus TaskStatus,
 	result TaskResultRecord,
 	terminalAt time.Time,
+	proofConditions ...Condition,
 ) (bool, error) {
 	for _, value := range terminals.Values {
 		if value == nil {
@@ -353,7 +401,7 @@ func (repository *TaskRepository) closeReleaseOperation(
 	} else if fence.OperationID != task.OperationID {
 		return false, corruptReleaseRecord()
 	}
-	transaction, err := repository.store.Transact(ctx, conditions, mutations)
+	transaction, err := repository.store.Transact(ctx, append(conditions, proofConditions...), mutations)
 	if err != nil {
 		return false, err
 	}
@@ -392,7 +440,8 @@ func (repository *TaskRepository) validateReleaseTerminalMembers(
 			return corruptReleaseRecord()
 		}
 	}
-	if head.State != domain.StateRecoveryRequired && task.RetryOf == "" && head.State != releaseOperationTerminalState(terminalStatus) {
+	if head.State != domain.StateRecoveryRequired && task.RetryOf == "" &&
+		head.State != releaseOperationTerminalState(terminalStatus) {
 		return errs.New(errs.KindStateConflict, "release terminal outcome changed")
 	}
 	return nil
@@ -511,7 +560,7 @@ func releaseOperationTerminalState(status TaskStatus) domain.State {
 }
 
 func releaseRollbackMaterial(intent domain.Intent, state domain.State, terminalAt time.Time) domain.RollbackMaterial {
-	references := []string{intent.RenderInputID, intent.Image}
+	references := []string{intent.RenderInputID, intent.CandidateWorkload.LocalImageID}
 	digest, _ := domain.Digest(references)
 	material := domain.RollbackMaterial{
 		ReleaseID: intent.ID, Status: domain.RetentionAvailable,

@@ -23,10 +23,17 @@ func TestTenantDeleteResolvesSlugAndDispatchesAuthoritativeTask(t *testing.T) {
 			if request.Method != http.MethodGet || request.URL.Path != "/api/v1/tenants" {
 				t.Fatalf("resolution request = %s %s", request.Method, request.URL.String())
 			}
-			_ = json.NewEncoder(writer).Encode(apiTypes.Page[apiTypes.Tenant]{Items: []apiTypes.Tenant{{ID: tenantID, Slug: "acme"}}})
+			_ = json.NewEncoder(writer).
+				Encode(apiTypes.Page[apiTypes.Tenant]{Items: []apiTypes.Tenant{{ID: tenantID, Slug: "acme"}}})
 		case 2:
-			if request.Method != http.MethodDelete || request.URL.Path != "/api/v1/tenants/"+tenantID || len(request.Header.Values("Idempotency-Key")) != 1 {
-				t.Fatalf("delete request = %s %s headers=%v", request.Method, request.URL.String(), request.Header.Values("Idempotency-Key"))
+			if request.Method != http.MethodDelete || request.URL.Path != "/api/v1/tenants/"+tenantID ||
+				len(request.Header.Values("Idempotency-Key")) != 1 {
+				t.Fatalf(
+					"delete request = %s %s headers=%v",
+					request.Method,
+					request.URL.String(),
+					request.Header.Values("Idempotency-Key"),
+				)
 			}
 			writer.WriteHeader(http.StatusAccepted)
 			_ = json.NewEncoder(writer).Encode(apiTypes.TaskAccepted{TaskID: taskID})
@@ -53,15 +60,25 @@ func TestProjectDeleteResolvesScopedSlugAndDispatchesAuthoritativeTask(t *testin
 		writer.Header().Set("Content-Type", "application/json")
 		switch requests {
 		case 1:
-			_ = json.NewEncoder(writer).Encode(apiTypes.Page[apiTypes.Tenant]{Items: []apiTypes.Tenant{{ID: tenantID, Slug: "acme"}}})
+			_ = json.NewEncoder(writer).
+				Encode(apiTypes.Page[apiTypes.Tenant]{Items: []apiTypes.Tenant{{ID: tenantID, Slug: "acme"}}})
 		case 2:
-			if request.Method != http.MethodGet || request.URL.Path != "/api/v1/projects" || request.URL.Query().Get("tenant") != tenantID || request.URL.Query().Get("kind") != "tenant" {
+			if request.Method != http.MethodGet || request.URL.Path != "/api/v1/projects" ||
+				request.URL.Query().Get("tenant") != tenantID ||
+				request.URL.Query().Get("kind") != "tenant" {
 				t.Fatalf("project resolution request = %s %s", request.Method, request.URL.String())
 			}
-			_ = json.NewEncoder(writer).Encode(apiTypes.Page[apiTypes.Project]{Items: []apiTypes.Project{{ID: projectID, TenantID: tenantID, Slug: "console", Kind: "tenant"}}})
+			_ = json.NewEncoder(writer).
+				Encode(apiTypes.Page[apiTypes.Project]{Items: []apiTypes.Project{{ID: projectID, TenantID: tenantID, Slug: "console", Kind: "tenant"}}})
 		case 3:
-			if request.Method != http.MethodDelete || request.URL.Path != "/api/v1/projects/"+projectID || len(request.Header.Values("Idempotency-Key")) != 1 {
-				t.Fatalf("delete request = %s %s headers=%v", request.Method, request.URL.String(), request.Header.Values("Idempotency-Key"))
+			if request.Method != http.MethodDelete || request.URL.Path != "/api/v1/projects/"+projectID ||
+				len(request.Header.Values("Idempotency-Key")) != 1 {
+				t.Fatalf(
+					"delete request = %s %s headers=%v",
+					request.Method,
+					request.URL.String(),
+					request.Header.Values("Idempotency-Key"),
+				)
 			}
 			writer.WriteHeader(http.StatusAccepted)
 			_ = json.NewEncoder(writer).Encode(apiTypes.TaskAccepted{TaskID: taskID})

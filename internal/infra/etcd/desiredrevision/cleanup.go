@@ -34,7 +34,10 @@ func (repository *Repository) AbandonEnvironmentBlueprintStage(
 	if err != nil {
 		return err
 	}
-	evidence, err := repository.store.GetMany(ctx, etcd.GetManyRequest{Keys: []string{descriptorKey, locatorKey, markerKey}})
+	evidence, err := repository.store.GetMany(
+		ctx,
+		etcd.GetManyRequest{Keys: []string{descriptorKey, locatorKey, markerKey}},
+	)
 	if err != nil {
 		return err
 	}
@@ -49,7 +52,8 @@ func (repository *Repository) AbandonEnvironmentBlueprintStage(
 	if descriptor.State == etcd.EnvironmentBlueprintStageAbandoned {
 		return nil
 	}
-	if descriptor.State == etcd.EnvironmentBlueprintStagePublished || evidence.Values[1] == nil || evidence.Values[2] != nil {
+	if descriptor.State == etcd.EnvironmentBlueprintStagePublished || evidence.Values[1] == nil ||
+		evidence.Values[2] != nil {
 		return errs.New(errs.KindStateConflict, "Blueprint staging claim cannot be abandoned")
 	}
 	owned, err := environmentBlueprintLocatorOwnedBy(evidence.Values[1].Value, descriptor)
@@ -383,7 +387,10 @@ func (repository *Repository) cleanupPublishedEnvironmentBlueprintDescriptor(
 	return result.Succeeded, nil
 }
 
-func environmentBlueprintLocatorOwnedBy(value []byte, descriptor etcd.EnvironmentBlueprintStageDescriptor) (bool, error) {
+func environmentBlueprintLocatorOwnedBy(
+	value []byte,
+	descriptor etcd.EnvironmentBlueprintStageDescriptor,
+) (bool, error) {
 	descriptorID, digest, err := etcd.DecodeDesiredRevisionLocator(value)
 	if err != nil {
 		return false, err
@@ -395,7 +402,10 @@ func environmentBlueprintLocatorOwnedBy(value []byte, descriptor etcd.Environmen
 	return descriptorID == descriptor.Claim.DescriptorID && digest == want, nil
 }
 
-func environmentBlueprintMarkerOwnedBy(value []byte, descriptor etcd.EnvironmentBlueprintStageDescriptor) (bool, error) {
+func environmentBlueprintMarkerOwnedBy(
+	value []byte,
+	descriptor etcd.EnvironmentBlueprintStageDescriptor,
+) (bool, error) {
 	marker, err := etcd.DecodeCapabilityIdempotencyMarker(value, descriptor.Claim.Locator)
 	if err != nil {
 		return false, err

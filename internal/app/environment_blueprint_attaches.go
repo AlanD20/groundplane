@@ -24,6 +24,7 @@ type resolvedBlueprintAttach struct {
 	backingEnvironment etcd.Versioned[etcd.EnvironmentRecord]
 	backingService     etcd.Versioned[etcd.ServiceRecord]
 	adapter            adapters.Adapter
+	authentication     core.BackingAuthentication
 }
 
 type blueprintAttachProcedure struct {
@@ -131,6 +132,15 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 				"Blueprint Attach requires a ready registered backing Service",
 			)
 		}
+		authentication, authErr := core.ResolveBackingAuthentication(
+			adapter.SupportsAuthenticationModes(), backingService.Record.Desired.Authentication,
+		)
+		if authErr != nil || authentication != backingService.Record.Desired.Authentication {
+			return preparedBlueprintAttaches{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint Attach backing Service authentication policy is invalid",
+			)
+		}
 		if len(spec.Grants) != 0 && !adapter.SupportsGrants() {
 			return preparedBlueprintAttaches{}, errs.New(
 				errs.KindValidationFailed,
@@ -140,6 +150,7 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 		resolved[name] = resolvedBlueprintAttach{
 			name: name, spec: spec, consumer: consumer, backingProject: backingProject,
 			backingEnvironment: backingEnvironment, backingService: backingService, adapter: adapter,
+			authentication: authentication,
 		}
 	}
 	if err := validateExistingBlueprintAttaches(names, resolved, currentByName); err != nil {
@@ -173,12 +184,22 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 		if err != nil {
 			return preparedBlueprintAttaches{}, err
 		}
-		password, err := generateAttachPassword(service.random)
-		if err != nil {
-			return preparedBlueprintAttaches{}, err
+		role := identityName
+		var password []byte
+		if item.authentication == core.BackingAuthenticationPassword {
+			role = "default"
+		}
+		if item.authentication == core.BackingAuthenticationNone {
+			role = ""
+		} else {
+			password, err = generateAttachPassword(service.random)
+			if err != nil {
+				return preparedBlueprintAttaches{}, err
+			}
 		}
 		identities[name] = &controllerpkg.AttachPlanIdentity{
-			Database: identityName, Role: identityName, Password: password,
+			Authentication: item.authentication,
+			Database:       identityName, Role: role, Password: password,
 		}
 	}
 	inputs := make([]etcd.EnvironmentBlueprintAttachCandidateInput, 0, newCount)
@@ -234,7 +255,8 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 			grantFacts = append(grantFacts, AttachGrantFactParams{
 				AttachID: grantID,
 				Params: adapters.FactParams{
-					Host: item.backingService.Record.Desired.Name, Port: item.adapter.Port(),
+					Authentication: item.authentication,
+					Host:           item.backingService.Record.Desired.Name, Port: item.adapter.Port(),
 					Database: database, Role: identity.Role, Password: identity.Password,
 				},
 			})
@@ -245,7 +267,8 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 		var own adapters.FactParams
 		if identity != nil {
 			own = adapters.FactParams{
-				Host: item.backingService.Record.Desired.Name, Port: item.adapter.Port(),
+				Authentication: item.authentication,
+				Host:           item.backingService.Record.Desired.Name, Port: item.adapter.Port(),
 				Database: identity.Database, Role: identity.Role, Password: identity.Password,
 			}
 		}
@@ -274,10 +297,16 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 			if err := prepared.facts.addOwner(name, own, grantNames, grantFacts, item.adapter); err != nil {
 				return preparedBlueprintAttaches{}, err
 			}
-			prepared.procedures = append(prepared.procedures, blueprintAttachProcedure{
-				record: record, adapterKey: item.adapter.Key(), identity: identity,
-			})
-			delete(identities, name)
+			if item.authentication != core.BackingAuthenticationNone {
+				prepared.procedures = append(prepared.procedures, blueprintAttachProcedure{
+					record: record, adapterKey: item.adapter.Key(), identity: identity,
+				})
+			} else {
+				identity.Clear()
+				delete(identities, name)
+			}
+			// Later owners may grant this database; keep its identity through preparation.
+			// The returned procedures own cleanup, with the failure defer covering all identities.
 		}
 	}
 	for _, name := range names {
@@ -333,7 +362,9 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 	}
 	prepared.publication = publication
 	for _, name := range names {
-		prepared.effective = append(prepared.effective, etcd.Versioned[etcd.AttachRecord]{Record: records[name]})
+		if record, created := records[name]; created {
+			prepared.effective = append(prepared.effective, etcd.Versioned[etcd.AttachRecord]{Record: record})
+		}
 	}
 	sort.Slice(prepared.procedures, func(left, right int) bool {
 		return prepared.procedures[left].record.ID < prepared.procedures[right].record.ID
@@ -396,9 +427,21 @@ func (prepared preparedBlueprintAttaches) procedureSteps(
 	records := make([]etcd.TaskStepRecord, 0)
 	for _, procedure := range prepared.procedures {
 		stepRecords := make([]etcd.TaskStepRecord, 0, len(procedure.record.GrantAttachIDs)+1)
-		stepRecords = append(stepRecords, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: namedID(ids.KindStep, "attach:"+procedure.record.ID+":provision")})
+		stepRecords = append(
+			stepRecords,
+			etcd.TaskStepRecord{
+				Kind: etcd.TaskStepOperation,
+				ID:   namedID(ids.KindStep, "attach:"+procedure.record.ID+":provision"),
+			},
+		)
 		for _, grantID := range procedure.record.GrantAttachIDs {
-			stepRecords = append(stepRecords, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: namedID(ids.KindStep, "attach:"+procedure.record.ID+":grant:"+grantID)})
+			stepRecords = append(
+				stepRecords,
+				etcd.TaskStepRecord{
+					Kind: etcd.TaskStepOperation,
+					ID:   namedID(ids.KindStep, "attach:"+procedure.record.ID+":grant:"+grantID),
+				},
+			)
 		}
 		procedureTask := etcd.TaskRecord{
 			ID: taskID, Type: etcd.TaskAttach, Target: procedure.record.ID,

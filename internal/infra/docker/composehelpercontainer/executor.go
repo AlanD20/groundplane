@@ -34,6 +34,8 @@ const (
 
 // Engine is the exact Moby surface required for one helper lifecycle.
 type Engine interface {
+	ImageInspect(context.Context, string, ...client.ImageInspectOption) (client.ImageInspectResult, error)
+	ImagePull(context.Context, string, client.ImagePullOptions) (client.ImagePullResponse, error)
 	ContainerCreate(context.Context, client.ContainerCreateOptions) (client.ContainerCreateResult, error)
 	ContainerAttach(context.Context, string, client.ContainerAttachOptions) (client.ContainerAttachResult, error)
 	ContainerWait(context.Context, string, client.ContainerWaitOptions) client.ContainerWaitResult
@@ -114,6 +116,20 @@ func (executor *Executor) Execute(
 	artifact, err := composehelper.ArtifactForRequest(request)
 	if err != nil {
 		return nil, err
+	}
+	services, err := composehelper.StartupServices(request)
+	if err != nil {
+		return nil, err
+	}
+	for _, service := range services {
+		if err := validatePreparedServiceImage(service); err != nil {
+			return nil, err
+		}
+	}
+	for _, service := range services {
+		if err := executor.prepareServiceImage(ctx, service); err != nil {
+			return nil, err
+		}
 	}
 	created, err := executor.engine.ContainerCreate(ctx, createOptions(executor.image, artifact))
 	if err != nil {

@@ -108,6 +108,7 @@ func componentRenderTestEnvironment() core.Environment {
 				OwnerID: environmentID, Kind: core.ComponentKindEdgeCloudflare, Enabled: true,
 				GeneratedServices: []string{ids.NewAt(ids.KindService, at, 903)},
 				Config: core.ComponentConfig{CloudflareTunnel: &core.CloudflareTunnelComponentConfig{
+					ZoneIDs:  []string{ids.NewAt(ids.KindNetwork, at, 901)},
 					SecretID: ids.NewAt(ids.KindSecret, at, 907),
 				}},
 			},
@@ -116,7 +117,7 @@ func componentRenderTestEnvironment() core.Environment {
 				OwnerID: environmentID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
 				GeneratedServices: []string{ids.NewAt(ids.KindService, at, 906)},
 				Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-					ZoneID: ids.NewAt(ids.KindNetwork, at, 901),
+					ZoneIDs: []string{ids.NewAt(ids.KindNetwork, at, 901)},
 				}},
 			},
 		},

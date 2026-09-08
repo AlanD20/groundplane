@@ -1,6 +1,7 @@
 package caddy
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -19,7 +20,17 @@ func TestPlanRendersDeterministicHTTPRoutes(t *testing.T) {
 		plan.Services[0].Name != routerInput().Origin.ServiceName || len(plan.Files) != 3 {
 		t.Fatalf("Plan() = %#v", plan)
 	}
+	if len(plan.Services[0].Networks) != 2 || plan.Services[0].Networks[0].Name != "frontend" ||
+		plan.Services[0].Networks[0].StaticIPv4 != "10.40.0.2" ||
+		plan.Services[0].Networks[1].Name != "services" || plan.Services[0].Networks[1].StaticIPv4 != "" {
+		t.Fatalf("Plan() networks = %#v", plan.Services[0].Networks)
+	}
 	caddyfile := string(plan.Files[0].Content)
+	health := plan.Services[0].Healthcheck
+	if health == nil || health.Validate() != nil ||
+		!slices.Equal(health.Command, []string{"wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"}) {
+		t.Fatal("Caddy readiness must observe its running local admin API")
+	}
 	apps := strings.Index(caddyfile, "handle /apps/*")
 	app := strings.Index(caddyfile, "handle /app/*")
 	root := strings.Index(caddyfile, "handle /*")
@@ -85,7 +96,10 @@ func sameOCIImage(left, right component.OCIImage) bool {
 func routerInput() component.HTTPRouterInput {
 	return component.HTTPRouterInput{
 		ComponentID: "cmp_caddy", Enabled: true, GeneratedServiceID: "svc_caddy",
-		ZoneID: "net_frontend", ZoneName: "frontend", PinnedIPv4: "10.40.0.2",
+		Zones: []component.HTTPRouterZoneInput{
+			{ID: "net_frontend", Name: "frontend", StaticIPv4: "10.40.0.2"},
+			{ID: "net_services", Name: "services"},
+		},
 		Origin: component.HTTPRouterOrigin{ServiceName: ServiceName, URL: OriginURL},
 		Routes: []component.HTTPRoute{
 			{

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -91,6 +92,34 @@ func TestTaskPlanResolverRebuildsBlueprintComposeProcedure(t *testing.T) {
 		first.Steps[1].GetManagedVolumeDirectoriesEnsure() == nil ||
 		first.Steps[2].GetComposeApply() == nil || !first.Steps[2].GetComposeApply().FullReconcile {
 		t.Fatalf("resolved Blueprint plans = %#v / %#v", first, second)
+	}
+}
+
+// A retry has a new Task identity but retains the authored desired revision;
+// replay must use that durable selector even when no prior teardown exists.
+func TestTaskPlanResolverRebuildsBlueprintRetryAgainstAuthoredRevision(t *testing.T) {
+	reader, task := blueprintPlanTestState(t)
+	task.Params[taskcontract.EnvironmentBlueprintProcedureParam] = string(
+		taskcontract.BlueprintComposeProcedureNone,
+	)
+	task.Steps = append([]etcd.TaskStepRecord(nil), task.Steps[:2]...)
+	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, nil)
+	if err != nil {
+		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
+	}
+	original, err := resolver.ResolveExecutionPlan(context.Background(), task)
+	if err != nil {
+		t.Fatalf("ResolveExecutionPlan(original) error = %v", err)
+	}
+	retry := task
+	retry.ID = ids.NewAt(ids.KindTask, time.Date(2026, 8, 22, 20, 1, 0, 0, time.UTC), 1)
+	retry.RetryOf = task.ID
+	replayed, err := resolver.ResolveExecutionPlan(context.Background(), retry)
+	if err != nil {
+		t.Fatalf("ResolveExecutionPlan(retry) error = %v", err)
+	}
+	if !bytes.Equal(original.PlanHash, replayed.PlanHash) || !proto.Equal(original, replayed) {
+		t.Fatalf("retry changed authored-revision plan = %#v / %#v", original, replayed)
 	}
 }
 

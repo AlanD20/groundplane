@@ -252,13 +252,26 @@ func TestEnvironmentBlueprintUsesFixedRevisionAdvancesEpochAndReplaysReadOnly(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := publishEnvironmentBlueprintClaimTest(repository,
-		ctx, project, environment, 0, claim,
+	first, err := publishEnvironmentBlueprintClaimTest(
+		repository,
+		ctx,
+		project,
+		environment,
+		0,
+		claim,
 		EnvironmentDesiredRevisionIdentity{
 			EnvironmentID: revision.EnvironmentID,
 			RevisionID:    revision.RevisionID,
 		},
-		projection, zoneChanges, serviceChanges, routeChanges, ReleaseGroupBlueprintPreparedMutation{}, ComponentTaskPreparation{}, BlueprintAttachTaskPreparation{}, task, marker,
+		projection,
+		zoneChanges,
+		serviceChanges,
+		routeChanges,
+		ReleaseGroupBlueprintPreparedMutation{},
+		ComponentTaskPreparation{},
+		BlueprintAttachTaskPreparation{},
+		task,
+		marker,
 	)
 	if err != nil {
 		t.Fatalf("PublishEnvironmentDesiredRevisionWithTask() error = %v", err)
@@ -294,13 +307,26 @@ func TestEnvironmentBlueprintUsesFixedRevisionAdvancesEpochAndReplaysReadOnly(t 
 		environment.Record.ID,
 		environmentMutationFenceTestOwner(serviceRecordTestTime(), 13061),
 	)
-	replayed, err := publishEnvironmentBlueprintClaimTest(repository,
-		ctx, project, environment, 0, claim,
+	replayed, err := publishEnvironmentBlueprintClaimTest(
+		repository,
+		ctx,
+		project,
+		environment,
+		0,
+		claim,
 		EnvironmentDesiredRevisionIdentity{
 			EnvironmentID: revision.EnvironmentID,
 			RevisionID:    revision.RevisionID,
 		},
-		projection, zoneChanges, serviceChanges, routeChanges, ReleaseGroupBlueprintPreparedMutation{}, ComponentTaskPreparation{}, BlueprintAttachTaskPreparation{}, task, marker,
+		projection,
+		zoneChanges,
+		serviceChanges,
+		routeChanges,
+		ReleaseGroupBlueprintPreparedMutation{},
+		ComponentTaskPreparation{},
+		BlueprintAttachTaskPreparation{},
+		task,
+		marker,
 	)
 	if err != nil {
 		t.Fatalf("PublishEnvironmentDesiredRevisionWithTask(replay) error = %v", err)

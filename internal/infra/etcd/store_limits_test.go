@@ -89,7 +89,10 @@ func TestEnvironmentBlueprintExecutorUsesUnifiedEnvelopeWithoutWideningStore(t *
 	for index := range tooMany {
 		tooMany[index] = Condition{Key: fmt.Sprintf("/blueprint/too-many/%03d", index)}
 	}
-	if _, err := executeEnvironmentBlueprintTransaction(context.Background(), store, tooMany, mutations[:1]); !isKind(err, errs.KindValidationFailed) {
+	if _, err := executeEnvironmentBlueprintTransaction(context.Background(), store, tooMany, mutations[:1]); !isKind(
+		err,
+		errs.KindValidationFailed,
+	) {
 		t.Fatalf("Blueprint Transact(257 comparisons) error = %v, want validation", err)
 	}
 	maximum := make([]Condition, maximumEnvironmentBlueprintTransactionOperationsPerArm)
@@ -102,7 +105,10 @@ func TestEnvironmentBlueprintExecutorUsesUnifiedEnvelopeWithoutWideningStore(t *
 	}
 	backend.transaction = nil
 	large := []Mutation{{Type: MutationPut, Key: "/blueprint/large", Value: make([]byte, maximumTransactionBytes)}}
-	if _, err := executeEnvironmentBlueprintTransaction(context.Background(), store, nil, large); !isKind(err, errs.KindValidationFailed) {
+	if _, err := executeEnvironmentBlueprintTransaction(context.Background(), store, nil, large); !isKind(
+		err,
+		errs.KindValidationFailed,
+	) {
 		t.Fatalf("Blueprint Transact(oversize) error = %v, want validation", err)
 	}
 	if backend.transaction != nil {

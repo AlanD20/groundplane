@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"strings"
 	"testing"
+
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -24,11 +27,13 @@ func TestPrepareBlueprintReleaseTaskFirstCandidateAuthorityIsPredecessorIndepend
 		Intent: domain.Intent{
 			ID: candidateReleaseID, EnvironmentID: reader.environment.ID, ServiceID: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 			OperationID: task.OperationID, OperationKind: domain.OperationBlueprintApply,
-			Image: "example/api:next", Strategy: domain.StrategyRecreate, OnFailure: domain.OnFailureSwitchBack,
+			CandidateWorkload: releaseTestWorkload(
+				"example/api:next",
+			), Strategy: domain.StrategyRecreate, OnFailure: domain.OnFailureSwitchBack,
 		},
 		Render: etcd.ReleaseRenderInput{
 			ReleaseID: candidateReleaseID, PlanID: task.PlanID, ArtifactID: task.Params[EnvironmentBlueprintArtifactParam],
-			ServiceID: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", ServiceName: "api", Image: "example/api:next",
+			ServiceID: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", ServiceName: "api", CandidateWorkload: releaseTestWorkload("example/api:next"),
 			Strategy: domain.StrategyRecreate, CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
 			TenantID: reader.tenant.ID, TenantSlug: reader.tenant.Slug, ProjectID: reader.project.ID,
 			ProjectSlug: reader.project.Slug, EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
@@ -58,15 +63,21 @@ func TestPrepareBlueprintReleaseTaskFirstCandidateAuthorityIsPredecessorIndepend
 	if procedureMember.GetCandidateAbsence() == nil || procedureMember.GetServingPredecessor() == nil {
 		t.Fatalf("Blueprint restoration alternatives = %#v, want both", procedureMember)
 	}
+	assertRestorationStartupScope(t, task, plan)
 	input.Members[0].Intent.PriorServingReleaseID = "dep_01ARZ3NDEKTSV4RRFFQ69G5FB0"
 	input.Members[0].Render.PriorArtifactID = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FB1"
-	input.Members[0].Render.PriorImage = "example/api:advanced"
+	prior := releaseTestWorkload("example/api:advanced")
+	input.Members[0].Render.PriorWorkload = &prior
 	_, advanced, err := resolver.PrepareBlueprintReleaseTask(context.Background(), task, input)
 	if err != nil {
 		t.Fatalf("PrepareBlueprintReleaseTask(advanced predecessor) error = %v", err)
 	}
 	if !bytes.Equal(plan.GetPlanHash(), advanced.GetPlanHash()) {
-		t.Fatalf("Blueprint plan hash changed with applied predecessor: %x != %x", plan.GetPlanHash(), advanced.GetPlanHash())
+		t.Fatalf(
+			"Blueprint plan hash changed with applied predecessor: %x != %x",
+			plan.GetPlanHash(),
+			advanced.GetPlanHash(),
+		)
 	}
 }
 
@@ -91,17 +102,21 @@ func TestPrepareBlueprintReleaseTaskBindsAddressableRecreateWorkload(t *testing.
 		t.Fatalf("marshal exposed normalized Compose fixture: %v", err)
 	}
 	reader.projection.NormalizedCompose = normalized
+	freezeBlueprintNativeRuntimeFixture(t, reader, task, project)
 	const candidateReleaseID = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAX"
 	task.Params[etcd.TaskReleasePublicationParam] = "publication"
 	member := etcd.ReleaseTaskRenderMember{
 		Intent: domain.Intent{
 			ID: candidateReleaseID, EnvironmentID: reader.environment.ID, ServiceID: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 			OperationID: task.OperationID, OperationKind: domain.OperationBlueprintApply,
-			Image: "example/api:next", Strategy: domain.StrategyRecreate, OnFailure: domain.OnFailureSwitchBack,
+			CandidateWorkload: releaseTestWorkload(
+				"example/api:next",
+			), Strategy: domain.StrategyRecreate, OnFailure: domain.OnFailureSwitchBack,
 		},
 		Render: etcd.ReleaseRenderInput{
-			ReleaseID: candidateReleaseID, PlanID: task.PlanID, ArtifactID: task.Params[EnvironmentBlueprintArtifactParam],
-			ServiceID: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", ServiceName: "api", Image: "example/api:next",
+			ProxyImage: testServiceProxyImage(),
+			ReleaseID:  candidateReleaseID, PlanID: task.PlanID, ArtifactID: task.Params[EnvironmentBlueprintArtifactParam],
+			ServiceID: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", ServiceName: "api", CandidateWorkload: releaseTestWorkload("example/api:next"),
 			Strategy: domain.StrategyRecreate, CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
 			TenantID: reader.tenant.ID, TenantSlug: reader.tenant.Slug, ProjectID: reader.project.ID,
 			ProjectSlug: reader.project.Slug, EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
@@ -132,8 +147,12 @@ func TestPrepareBlueprintReleaseTaskBindsAddressableRecreateWorkload(t *testing.
 			continue
 		}
 		candidateWorkloads++
-		if service.GetImageReference() != member.Render.Image {
-			t.Fatalf("candidate workload image = %q, want %q", service.GetImageReference(), member.Render.Image)
+		if service.GetImageReference() != member.Render.CandidateWorkload.LocalImageID {
+			t.Fatalf(
+				"candidate workload image = %q, want %q",
+				service.GetImageReference(),
+				member.Render.CandidateWorkload.LocalImageID,
+			)
 		}
 	}
 	if candidateWorkloads != 1 {
@@ -158,11 +177,13 @@ func TestPrepareBlueprintReleaseTaskOwnsForwardStepPolicies(t *testing.T) {
 		Intent: domain.Intent{
 			ID: candidateReleaseID, EnvironmentID: reader.environment.ID, ServiceID: serviceID,
 			OperationID: task.OperationID, OperationKind: domain.OperationBlueprintApply,
-			Image: "example/api:next", Strategy: domain.StrategyRecreate, OnFailure: domain.OnFailureSwitchBack,
+			CandidateWorkload: releaseTestWorkload(
+				"example/api:next",
+			), Strategy: domain.StrategyRecreate, OnFailure: domain.OnFailureSwitchBack,
 		},
 		Render: etcd.ReleaseRenderInput{
 			ReleaseID: candidateReleaseID, PlanID: task.PlanID, ArtifactID: task.Params[EnvironmentBlueprintArtifactParam],
-			ServiceID: serviceID, ServiceName: "api", Image: "example/api:next",
+			ServiceID: serviceID, ServiceName: "api", CandidateWorkload: releaseTestWorkload("example/api:next"),
 			Strategy: domain.StrategyRecreate, CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
 			TenantID: reader.tenant.ID, TenantSlug: reader.tenant.Slug, ProjectID: reader.project.ID,
 			ProjectSlug: reader.project.Slug, EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
@@ -175,7 +196,54 @@ func TestPrepareBlueprintReleaseTaskOwnsForwardStepPolicies(t *testing.T) {
 	if err := proto.Unmarshal(reader.projection.ComposeArtifact, projectionArtifact); err != nil {
 		t.Fatalf("unmarshal projection artifact: %v", err)
 	}
-	projectionArtifact.Services[0].OwnerComponentId = componentID
+	const generatedID = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAZ"
+	selected := testSelectedComponentImage("example/router")
+	projectionArtifact.Services = append(projectionArtifact.Services, &agentpb.ComposeService{
+		ServiceId: generatedID, ComposeName: "router", OwnerComponentId: componentID,
+		ImageRepository: selected.Repository, ImageReference: selected.Reference,
+		ImageIndexDigest: mustDecodePlatformDigest(
+			selected.IndexDigest,
+		), ImageChildDigest: mustDecodePlatformDigest(selected.Platform.ChildDigest),
+		ImageConfigDigest: mustDecodePlatformDigest(selected.Platform.ConfigDigest), ImageOs: selected.Platform.OS,
+		ImageArchitecture: selected.Platform.Architecture, ImageVariant: selected.Platform.Variant,
+	})
+	project, err := loadNormalizedEnvironmentProject(context.Background(), reader.projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	project.Services["router"] = composetypes.ServiceConfig{Name: "router", Image: selected.Reference,
+		Networks: map[string]*composetypes.ServiceNetworkConfig{"frontend": {}},
+	}
+	const attachName = "gp_attach_net_01arz3ndektsv4rrffq69g5fb0"
+	resolvedValue := "captured-runtime-$GP_LITERAL"
+	native := project.Services["api"]
+	native.Environment = composetypes.MappingWithEquals{"GP_RESOLVED_ENTRY": &resolvedValue}
+	native.EnvFiles = []composetypes.EnvFile{{Path: "/var/lib/groundplane/runtime/captured.env", Required: true}}
+	native.Networks[attachName] = &composetypes.ServiceNetworkConfig{}
+	project.Services["api"] = native
+	project.Networks[attachName] = composetypes.NetworkConfig{
+		External: true,
+		Name:     "gp_net_net_01arz3ndektsv4rrffq69g5fb0",
+	}
+	// Generated Component services exist only in resolved runtime, never in
+	// the authored normalized stream or desired native Service collection.
+	identities, err := ComposeIdentitySnapshotFromProjection(reader.projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identities.Services = append(identities.Services, ComposeResourceIdentity{
+		ID: generatedID, Name: "router", ComponentID: componentID, ComponentImage: &selected,
+	})
+	projectionArtifact, err = RenderCompose(ComposeRenderInput{
+		Project: project, ArtifactID: artifactID, ProjectOwnerKind: ComposeProjectOwnerTenant,
+		TenantID: reader.tenant.ID, ProjectID: reader.project.ID, EnvironmentID: reader.environment.ID,
+		PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
+		AuthorizedVolumeDir: reader.environment.VolumeDir, Identities: identities,
+		ExternalNetworks: []ComposeResourceIdentity{{ID: "net_01ARZ3NDEKTSV4RRFFQ69G5FB0", Name: attachName}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	projectionBytes, err := proto.Marshal(projectionArtifact)
 	if err != nil {
 		t.Fatalf("marshal component-owned projection artifact: %v", err)
@@ -183,7 +251,7 @@ func TestPrepareBlueprintReleaseTaskOwnsForwardStepPolicies(t *testing.T) {
 	reader.projection.ComposeArtifact = projectionBytes
 	reader.projection.Components = []etcd.ComponentRecord{{
 		Desired: etcd.ComponentDesiredRecord{ID: componentID},
-		Runtime: etcd.ComponentRuntimeRecord{GeneratedServices: []string{serviceID}},
+		Runtime: etcd.ComponentRuntimeRecord{GeneratedServices: []string{generatedID}},
 	}}
 	member.Render.Projection = reader.projection
 	prefix, err := BuildTaskMaterializationStep(
@@ -201,7 +269,7 @@ func TestPrepareBlueprintReleaseTaskOwnsForwardStepPolicies(t *testing.T) {
 		Payload: &agentpb.ExecutionStep_ComponentApply{ComponentApply: &agentpb.ComponentApply{
 			ComponentId: componentID, DefinitionDigest: definitionDigest[:], CatalogDigest: catalogDigest[:],
 			ActionId: "activate-config", ArtifactId: task.Materializations[0].MaterializationID,
-			ArtifactDigest: materializationDigest[:], Generation: uint64(task.RenderGeneration), ManagedConfigContent: true,
+			ArtifactDigest: materializationDigest[:], Generation: uint64(task.RenderGeneration),
 		}},
 	}
 	prefixBefore := proto.Clone(prefix).(*agentpb.ExecutionStep)
@@ -219,12 +287,57 @@ func TestPrepareBlueprintReleaseTaskOwnsForwardStepPolicies(t *testing.T) {
 		RecoveryCompensateStepIDs: []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FB3"},
 		PostStepIDs:               [][]string{nil},
 	}
-	_, plan, err := resolver.PrepareBlueprintReleaseTask(context.Background(), task, input)
+	preparedTask, plan, err := resolver.PrepareBlueprintReleaseTask(context.Background(), task, input)
 	if err != nil {
 		t.Fatalf("PrepareBlueprintReleaseTask() error = %v", err)
 	}
+	for _, retained := range []string{resolvedValue, "GP_RESOLVED_ENTRY", "/var/lib/groundplane/runtime/captured.env", attachName} {
+		if !strings.Contains(string(plan.Artifacts[0].CanonicalYaml), retained) {
+			t.Fatalf("candidate lost resolved runtime field %q", retained)
+		}
+	}
+	managedApply, managedHealth := 0, 0
+	for _, step := range plan.Steps {
+		if apply := step.GetComposeApply(); apply != nil && len(apply.ServiceIds) == 1 &&
+			apply.ServiceIds[0] == generatedID {
+			managedApply++
+			if apply.FullReconcile || apply.ForceRecreate || !apply.NoDependencies ||
+				step.Policy != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD {
+				t.Fatal("mixed Blueprint managed startup acquired native candidate authority")
+			}
+		}
+		if health := step.GetWaitHealthy(); health != nil && len(health.ServiceIds) == 1 &&
+			health.ServiceIds[0] == generatedID {
+			managedHealth++
+		}
+	}
+	if managedApply != 1 || managedHealth != 1 {
+		t.Fatal("mixed Blueprint omitted its owned managed lifecycle")
+	}
 	if !proto.Equal(prefix, prefixBefore) || !proto.Equal(component, componentBefore) {
 		t.Fatalf("caller steps mutated: prefix = %#v, component = %#v", prefix, component)
+	}
+	if len(preparedTask.ComponentActionStepIDs) != 1 || preparedTask.ComponentActionStepIDs[0] != componentStepID {
+		t.Fatalf("zero-hook Blueprint lost Component effect authority: %v", preparedTask.ComponentActionStepIDs)
+	}
+	descriptor, err := executionplan.DescribeCandidateRelease(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(descriptor.ComponentActionStepIDs) != 1 || descriptor.ComponentActionStepIDs[0] != componentStepID {
+		t.Fatalf("descriptor lost Component effect: %v", descriptor.ComponentActionStepIDs)
+	}
+	for _, changed := range [][]string{nil, {prefixStepID}, {componentStepID, componentStepID}} {
+		tampered := executionplan.CloneCandidateReleaseDescriptor(descriptor)
+		tampered.ComponentActionStepIDs = changed
+		if executionplan.CandidateReleaseDescriptorMatchesPlan(tampered, plan) == nil {
+			t.Fatalf("accepted tampered Component steps: %v", changed)
+		}
+	}
+	clone := executionplan.CloneCandidateReleaseDescriptor(descriptor)
+	clone.ComponentActionStepIDs[0] = prefixStepID
+	if descriptor.ComponentActionStepIDs[0] != componentStepID {
+		t.Fatal("descriptor Component step clone aliases source")
 	}
 	wantForward := map[string]bool{
 		prefixStepID: true, applyStepID: true, healthStepID: true, componentStepID: true,
@@ -276,7 +389,10 @@ func TestPrepareBlueprintReleaseTaskOwnsForwardStepPolicies(t *testing.T) {
 		mutate func(*BlueprintReleasePlanInput)
 	}{
 		{name: "recovery probe in prefix", mutate: func(candidate *BlueprintReleasePlanInput) {
-			candidate.PrefixSteps = append(append([]*agentpb.ExecutionStep(nil), candidate.PrefixSteps...), recoveryProbe)
+			candidate.PrefixSteps = append(
+				append([]*agentpb.ExecutionStep(nil), candidate.PrefixSteps...),
+				recoveryProbe,
+			)
 		}},
 		{name: "recovery compensation in component stage", mutate: func(candidate *BlueprintReleasePlanInput) {
 			candidate.ComponentSteps = append(
@@ -317,12 +433,24 @@ func TestBindBlueprintCandidateServiceImagesRejectsDuplicateCandidateWorkload(t 
 	)
 	labels := []*agentpb.LabelPair{{Key: composeLabelReleaseID, Value: releaseID}}
 	artifact := &agentpb.ComposeArtifact{Services: []*agentpb.ComposeService{
-		{ServiceId: serviceID, Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON, ExpectedLabels: labels},
-		{ServiceId: serviceID, Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON, ExpectedLabels: labels},
+		{
+			ServiceId:      serviceID,
+			Role:           agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
+			ExpectedLabels: labels,
+		},
+		{
+			ServiceId:      serviceID,
+			Role:           agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
+			ExpectedLabels: labels,
+		},
 	}}
 	members := []etcd.ReleaseTaskRenderMember{{
 		Intent: domain.Intent{ID: releaseID},
-		Render: etcd.ReleaseRenderInput{ServiceID: serviceID, Image: image, Strategy: domain.StrategyRecreate},
+		Render: etcd.ReleaseRenderInput{
+			ServiceID:         serviceID,
+			CandidateWorkload: releaseTestWorkload(image),
+			Strategy:          domain.StrategyRecreate,
+		},
 	}}
 	if err := bindBlueprintCandidateServiceImages(artifact, members); err == nil {
 		t.Fatal("bindBlueprintCandidateServiceImages() accepted duplicate candidate workloads")

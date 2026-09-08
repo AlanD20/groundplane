@@ -38,11 +38,19 @@ func findRouteAtRevision(
 			if !strings.HasSuffix(value.Key, "/current") {
 				continue
 			}
-			environmentID := strings.TrimSuffix(strings.TrimPrefix(value.Key, environmentDesiredHeadScanPrefix), "/current")
+			environmentID := strings.TrimSuffix(
+				strings.TrimPrefix(value.Key, environmentDesiredHeadScanPrefix),
+				"/current",
+			)
 			if strings.Contains(environmentID, "/") || ids.Validate(ids.KindEnvironment, environmentID) != nil {
 				return Versioned[RouteRecord]{}, corruptEnvironmentComposeProjection()
 			}
-			projection, found, projectionErr := currentEnvironmentProjectionAtRevision(ctx, store, environmentID, fixedRevision)
+			projection, found, projectionErr := currentEnvironmentProjectionAtRevision(
+				ctx,
+				store,
+				environmentID,
+				fixedRevision,
+			)
 			if projectionErr != nil {
 				return Versioned[RouteRecord]{}, projectionErr
 			}
@@ -67,7 +75,10 @@ func findRouteAtRevision(
 			break
 		}
 		if len(page.Values) == 0 {
-			return Versioned[RouteRecord]{}, errs.New(errs.KindInternal, "Environment desired head scan did not advance")
+			return Versioned[RouteRecord]{}, errs.New(
+				errs.KindInternal,
+				"Environment desired head scan did not advance",
+			)
 		}
 	}
 	if matched == nil {

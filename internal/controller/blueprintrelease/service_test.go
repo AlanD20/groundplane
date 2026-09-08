@@ -64,7 +64,7 @@ func TestPrepareWithoutCandidatesPreservesMaterializationAndVolumePrefix(t *test
 			},
 		}},
 	}
-	resolver, err := controller.NewTaskPlanResolver("/var/lib/groundplane/vol", nil)
+	resolver, err := controller.NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", &managedPlanReader{}, nil)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolver() error = %v", err)
 	}
@@ -100,7 +100,9 @@ func TestPrepareWithoutCandidatesPreservesMaterializationAndVolumePrefix(t *test
 	if len(prepared.Plan.GetSteps()) != 2 || len(prepared.Task.Steps) != 2 ||
 		prepared.Plan.Steps[0].GetMaterializeFile() == nil ||
 		prepared.Plan.Steps[1].GetManagedVolumeDirectoriesEnsure() == nil ||
-		prepared.Task.Params[taskcontract.EnvironmentBlueprintProcedureParam] != string(taskcontract.BlueprintComposeProcedureNone) ||
+		prepared.Task.Params[taskcontract.EnvironmentBlueprintProcedureParam] != string(
+			taskcontract.BlueprintComposeProcedureNone,
+		) ||
 		prepared.Task.Params[etcd.TaskReleasePublicationParam] != "" {
 		t.Fatalf("no-candidate Blueprint preparation = %#v / %#v", prepared.Task, prepared.Plan)
 	}
@@ -411,18 +413,21 @@ func TestPostDeployHookBoundsRejectBeforePublication(t *testing.T) {
 		{name: "aggregate body", executions: 16, bodyBytes: 1<<20 + 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			err := validatePostDeployHookBounds(test.executions, test.bodyBytes)
+			err := validateDeployHookBounds(test.executions, test.bodyBytes)
 			if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
-				t.Fatalf("validatePostDeployHookBounds() error = %v, want validation.failed", err)
+				t.Fatalf("validateDeployHookBounds() error = %v, want validation.failed", err)
 			}
 		})
 	}
 }
 
-func TestPostDeployScriptSelectionIncludesNewServiceAndExcludesManual(t *testing.T) {
+// Rationale: initial pre-hooks and post-hooks share one selection and budget;
+// manual scripts must not run implicitly during Blueprint apply.
+func TestDeployScriptSelectionIncludesBothPhasesAndExcludesManual(t *testing.T) {
 	t.Parallel()
 	serviceID := "svc_new"
-	selected := postDeployScriptsByService([]etcd.ScriptRecord{
+	selected := deployScriptsByService([]etcd.ScriptRecord{
+		{ServiceID: serviceID, Desired: core.Script{ID: "scr_pre", Slug: "a-prepare", When: core.ScriptPreDeploy}},
 		{
 			ServiceID: serviceID,
 			Desired:   core.Script{ID: "scr_post", Slug: "migrate", When: core.ScriptPostDeploy},
@@ -432,8 +437,8 @@ func TestPostDeployScriptSelectionIncludesNewServiceAndExcludesManual(t *testing
 			Desired:   core.Script{ID: "scr_manual", Slug: "manual", When: core.ScriptManual},
 		},
 	})
-	if len(selected) != 1 || len(selected[serviceID]) != 1 ||
-		selected[serviceID][0].Desired.ID != "scr_post" {
+	if len(selected) != 1 || len(selected[serviceID]) != 2 ||
+		selected[serviceID][0].Desired.ID != "scr_pre" || selected[serviceID][1].Desired.ID != "scr_post" {
 		t.Fatalf("selected post-deploy Scripts = %#v", selected)
 	}
 }

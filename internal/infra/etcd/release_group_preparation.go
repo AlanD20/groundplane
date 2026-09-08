@@ -76,9 +76,14 @@ func (repository *TaskRepository) PrepareReleaseGroupUpdate(
 		evidence.collectionEpoch,
 	}
 	if current.Name != replacement.Name {
-		mutations = append(mutations,
+		mutations = append(
+			mutations,
 			Mutation{Type: MutationDelete, Key: releaseGroupNameKey(replacement.EnvironmentID, current.Name)},
-			Mutation{Type: MutationPut, Key: releaseGroupNameKey(replacement.EnvironmentID, replacement.Name), Value: []byte(replacement.ID)},
+			Mutation{
+				Type:  MutationPut,
+				Key:   releaseGroupNameKey(replacement.EnvironmentID, replacement.Name),
+				Value: []byte(replacement.ID),
+			},
 		)
 	}
 	return newReleaseGroupPreparedMutation(

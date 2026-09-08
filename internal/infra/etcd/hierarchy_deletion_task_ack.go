@@ -33,32 +33,48 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionAgentTask(
 	task, err := decodeTaskRecord(taskValue.Value)
 	if err != nil || task.ID != taskID || task.Executor != TaskExecutorAgent ||
 		task.Params[TaskResourceKindParam] != TaskResourceHierarchyDeletion {
-		return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "hierarchy deletion child Task identity changed")
+		return Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion child Task identity changed",
+		)
 	}
 	if err := validateTaskResult(result, task.Steps, terminalStatus); err != nil {
 		return Versioned[TaskRecord]{}, err
 	}
 	if read.Values[1] == nil {
 		if read.Values[2] != nil {
-			return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "hierarchy deletion child assignment index is orphaned")
+			return Versioned[TaskRecord]{}, errs.New(
+				errs.KindInternal,
+				"hierarchy deletion child assignment index is orphaned",
+			)
 		}
 		wantAssignment := TaskTerminalAssignmentRecord{
 			AssignmentID: assignmentID, AgentID: agentID, AgentGeneration: agentGeneration,
 		}
 		if task.Status != terminalStatus || task.Result == nil || !taskResultsEqual(*task.Result, result) ||
 			task.TerminalAssignment == nil || *task.TerminalAssignment != wantAssignment {
-			return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "hierarchy deletion child Task has no matching assignment")
+			return Versioned[TaskRecord]{}, errs.New(
+				errs.KindStateConflict,
+				"hierarchy deletion child Task has no matching assignment",
+			)
 		}
 		if err := repository.ensureHierarchyDeletionReceiptForTask(ctx, task, taskValue.ModRevision); err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
-		return Versioned[TaskRecord]{Record: task, Revision: taskValue.ModRevision, ReadRevision: read.ReadRevision}, nil
+		return Versioned[TaskRecord]{
+			Record:       task,
+			Revision:     taskValue.ModRevision,
+			ReadRevision: read.ReadRevision,
+		}, nil
 	}
 	assignmentValue := read.Values[1]
 	assignmentIndexValue := read.Values[2]
 	if assignmentIndexValue == nil || assignmentIndexValue.ModRevision != assignmentValue.ModRevision ||
 		!bytes.Equal(assignmentIndexValue.Value, assignmentValue.Value) {
-		return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "hierarchy deletion child assignment indexes disagree")
+		return Versioned[TaskRecord]{}, errs.New(
+			errs.KindInternal,
+			"hierarchy deletion child assignment indexes disagree",
+		)
 	}
 	assignment, err := decodeTaskAssignment(assignmentValue.Value)
 	if err != nil {
@@ -109,11 +125,17 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionAgentTask(
 		companions.Values[1] != nil || companions.Values[2] == nil || companions.Values[3] != nil ||
 		companions.Values[2].ModRevision != assignmentValue.ModRevision ||
 		!bytes.Equal(companions.Values[2].Value, assignmentValue.Value) {
-		return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "hierarchy deletion child lifecycle records disagree")
+		return Versioned[TaskRecord]{}, errs.New(
+			errs.KindInternal,
+			"hierarchy deletion child lifecycle records disagree",
+		)
 	}
 	activeTaskID, err := decodeTaskReference(companions.Values[0].Value)
 	if err != nil || activeTaskID != task.ID {
-		return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "hierarchy deletion child active operation is corrupt")
+		return Versioned[TaskRecord]{}, errs.New(
+			errs.KindInternal,
+			"hierarchy deletion child active operation is corrupt",
+		)
 	}
 	transaction, err := repository.store.Transact(ctx,
 		[]Condition{
@@ -139,12 +161,19 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionAgentTask(
 	}
 	clearKeyValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "hierarchy deletion child acknowledgement changed")
+		return Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion child acknowledgement changed",
+		)
 	}
 	if err := repository.ensureHierarchyDeletionReceiptForTask(ctx, terminal, transaction.Revision); err != nil {
 		return Versioned[TaskRecord]{}, err
 	}
-	return Versioned[TaskRecord]{Record: terminal, Revision: transaction.Revision, ReadRevision: transaction.Revision}, nil
+	return Versioned[TaskRecord]{
+		Record:       terminal,
+		Revision:     transaction.Revision,
+		ReadRevision: transaction.Revision,
+	}, nil
 }
 
 func (repository *TaskRepository) ensureHierarchyDeletionReceiptForTask(

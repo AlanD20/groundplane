@@ -43,9 +43,22 @@ type entryBulkUpsertEvidence struct {
 type entryBulkUpsertIdempotency interface {
 	Prepare(context.Context, entryBulkUpsertInput) (entryBulkUpsertEvidence, error)
 	MatchesStaged(context.Context, entryBulkUpsertEvidence, etcd.ProtectedIntentRecord) (bool, error)
-	ResolveExisting(context.Context, etcd.IdempotencyLocator, entryBulkUpsertEvidence) (idempotentintent.Resolution, bool, error)
-	ResolveKnown(context.Context, entryBulkUpsertEvidence, etcd.IdempotencyTransactionResult) (idempotentintent.Resolution, error)
-	ResolveUnknown(context.Context, etcd.IdempotencyLocator, entryBulkUpsertEvidence, error) (idempotentintent.Resolution, error)
+	ResolveExisting(
+		context.Context,
+		etcd.IdempotencyLocator,
+		entryBulkUpsertEvidence,
+	) (idempotentintent.Resolution, bool, error)
+	ResolveKnown(
+		context.Context,
+		entryBulkUpsertEvidence,
+		etcd.IdempotencyTransactionResult,
+	) (idempotentintent.Resolution, error)
+	ResolveUnknown(
+		context.Context,
+		etcd.IdempotencyLocator,
+		entryBulkUpsertEvidence,
+		error,
+	) (idempotentintent.Resolution, error)
 }
 
 type durableEntryBulkUpsertIdempotency struct {
@@ -211,7 +224,10 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	}
 	if existing {
 		if resolution.Kind != idempotentintent.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry bulk upsert replay resolution is invalid")
+			return etcd.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Entry bulk upsert replay resolution is invalid",
+			)
 		}
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}
@@ -226,8 +242,12 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if _, err := service.desired.repository.GetTenant(ctx, project.Record.TenantID); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if project.Record.Kind != etcd.ProjectKindTenant || environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindResourceInUse, "Environment is not ready for Entry mutation")
+	if project.Record.Kind != etcd.ProjectKindTenant ||
+		environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady {
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindResourceInUse,
+			"Environment is not ready for Entry mutation",
+		)
 	}
 	if err := service.desired.validateExposure(ctx, input.environmentID, input.exposure); err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -240,12 +260,21 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	expectedHeadRevision, generation, err := serviceDesiredState(input.environmentID, head, hasHead, current, hasCurrent)
+	expectedHeadRevision, generation, err := serviceDesiredState(
+		input.environmentID,
+		head,
+		hasHead,
+		current,
+		hasCurrent,
+	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	if !hasCurrent || generation > math.MaxInt32 {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Entry mutation requires initialized Environment desired state")
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict,
+			"Entry mutation requires initialized Environment desired state",
+		)
 	}
 	now := service.desired.now().UTC()
 	candidateTaskID := ids.New(ids.KindTask)
@@ -253,30 +282,38 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	candidate, _, err := controller.ProjectEnvironmentEntryMutation(current.Record, controller.EnvironmentEntryArtifactMutation{
-		RevisionID:       candidateTaskID,
-		ArtifactID:       entryStableIDFromRevision(ids.KindConfig, candidateTaskID),
-		PlanID:           entryStableIDFromRevision(ids.KindPlan, candidateTaskID),
-		RenderGeneration: generation,
-		Entries:          candidateRecords.entries,
-	})
+	candidate, _, err := controller.ProjectEnvironmentEntryMutation(
+		current.Record,
+		controller.EnvironmentEntryArtifactMutation{
+			RevisionID:       candidateTaskID,
+			ArtifactID:       entryStableIDFromRevision(ids.KindConfig, candidateTaskID),
+			PlanID:           entryStableIDFromRevision(ids.KindPlan, candidateTaskID),
+			RenderGeneration: generation,
+			Entries:          candidateRecords.entries,
+		},
+	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	candidate = cloneEnvironmentDesiredProjection(candidate)
-	claim, _, err := controllerrevision.PreflightAndClaim(ctx, service.desired.repository, candidate, controllerrevision.ClaimInput{
-		EnvironmentID:   input.environmentID,
-		CandidateTaskID: candidateTaskID,
-		Locator:         locator,
-		Intent:          evidence.durable,
-		MatchExistingIntent: func(ctx context.Context, existing etcd.ProtectedIntentRecord) (bool, error) {
-			return service.idempotency.MatchesStaged(ctx, evidence, existing)
+	claim, _, err := controllerrevision.PreflightAndClaim(
+		ctx,
+		service.desired.repository,
+		candidate,
+		controllerrevision.ClaimInput{
+			EnvironmentID:   input.environmentID,
+			CandidateTaskID: candidateTaskID,
+			Locator:         locator,
+			Intent:          evidence.durable,
+			MatchExistingIntent: func(ctx context.Context, existing etcd.ProtectedIntentRecord) (bool, error) {
+				return service.idempotency.MatchesStaged(ctx, evidence, existing)
+			},
+			BaselineHeadRevision: expectedHeadRevision,
+			SourceKind:           etcd.EnvironmentBlueprintSourceMutation,
+			RenderGeneration:     generation,
+			CreatedAt:            now,
 		},
-		BaselineHeadRevision: expectedHeadRevision,
-		SourceKind:           etcd.EnvironmentBlueprintSourceMutation,
-		RenderGeneration:     generation,
-		CreatedAt:            now,
-	})
+	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -291,13 +328,16 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 			return etcd.IdempotencyResponse{}, err
 		}
 	}
-	candidate, materializations, err := controller.ProjectEnvironmentEntryMutation(current.Record, controller.EnvironmentEntryArtifactMutation{
-		RevisionID:       claim.RevisionID,
-		ArtifactID:       entryStableIDFromRevision(ids.KindConfig, claim.RevisionID),
-		PlanID:           entryStableIDFromRevision(ids.KindPlan, claim.RevisionID),
-		RenderGeneration: generation,
-		Entries:          candidateRecords.entries,
-	})
+	candidate, materializations, err := controller.ProjectEnvironmentEntryMutation(
+		current.Record,
+		controller.EnvironmentEntryArtifactMutation{
+			RevisionID:       claim.RevisionID,
+			ArtifactID:       entryStableIDFromRevision(ids.KindConfig, claim.RevisionID),
+			PlanID:           entryStableIDFromRevision(ids.KindPlan, claim.RevisionID),
+			RenderGeneration: generation,
+			Entries:          candidateRecords.entries,
+		},
+	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -457,11 +497,16 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 
 func prepareEntryBulkUpsert(request apiTypes.EntryBulkUpsertRequest) (entryBulkUpsertInput, error) {
 	if ids.Validate(ids.KindEnvironment, request.EnvironmentID) != nil {
-		return entryBulkUpsertInput{}, errs.New(errs.KindValidationFailed, "Entry bulk upsert requires a stable Environment id")
+		return entryBulkUpsertInput{}, errs.New(
+			errs.KindValidationFailed,
+			"Entry bulk upsert requires a stable Environment id",
+		)
 	}
 	if len(request.Entries) == 0 || len(request.Entries) > apiTypes.MaximumBulkEntryCount {
 		return entryBulkUpsertInput{}, errs.Newf(
-			errs.KindValidationFailed, "Entry bulk upsert requires 1 through %d entries", apiTypes.MaximumBulkEntryCount,
+			errs.KindValidationFailed,
+			"Entry bulk upsert requires 1 through %d entries",
+			apiTypes.MaximumBulkEntryCount,
 		)
 	}
 	exposure, err := normalizeEntryExposure(request.Exposure)
@@ -477,11 +522,18 @@ func prepareEntryBulkUpsert(request apiTypes.EntryBulkUpsertRequest) (entryBulkU
 		}
 		seen[item.Key] = struct{}{}
 		if len(item.Value) > apiTypes.MaximumEntryValueBytes {
-			return entryBulkUpsertInput{}, errs.Newf(errs.KindValidationFailed, "Entry %q literal exceeds the 256 KiB limit", item.Key)
+			return entryBulkUpsertInput{}, errs.Newf(
+				errs.KindValidationFailed,
+				"Entry %q literal exceeds the 256 KiB limit",
+				item.Key,
+			)
 		}
 		totalBytes += len(item.Key) + len(item.Value)
 		if totalBytes > apiTypes.MaximumBulkEntryPayloadBytes {
-			return entryBulkUpsertInput{}, errs.New(errs.KindValidationFailed, "Entry bulk upsert exceeds the 1 MiB value limit")
+			return entryBulkUpsertInput{}, errs.New(
+				errs.KindValidationFailed,
+				"Entry bulk upsert exceeds the 1 MiB value limit",
+			)
 		}
 		validation := core.EnvEntry{
 			ID: ids.New(ids.KindEnvEntry), Kind: core.EntryKindEnv, Key: item.Key,
@@ -516,7 +568,10 @@ func buildEntryBulkCandidate(
 			continue
 		}
 		if _, duplicate := byKey[record.Entry.Key]; duplicate {
-			return entryBulkCandidate{}, errs.New(errs.KindInternal, "Environment Entry projection has a duplicated env key")
+			return entryBulkCandidate{}, errs.New(
+				errs.KindInternal,
+				"Environment Entry projection has a duplicated env key",
+			)
 		}
 		byKey[record.Entry.Key] = record
 	}

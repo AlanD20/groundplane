@@ -38,6 +38,8 @@ func TestEnsureManagedComposeVolumesCreatesAndVerifiesMissingVolume(t *testing.T
 	wantCreate := []string{
 		"volume", "create", "--driver", "local",
 		"--opt", "type=none", "--opt", "o=bind", "--opt", "device=" + device,
+		"--label", "com.docker.compose.project=gp-environment",
+		"--label", "com.docker.compose.volume=app-data",
 		"--label", "com.groundplane.kind=volume",
 		"--label", "com.groundplane.managed=true",
 		volume.DockerName,
@@ -51,7 +53,11 @@ func TestEnsureManagedComposeVolumesRejectsForeignExistingVolume(t *testing.T) {
 	artifact, volume, device := managedEnsureFixture()
 	fake := runner.NewFake()
 	fake.RunFunc = func(context.Context, runner.RunCmdOpts) (runner.Result, error) {
-		return runner.Result{Stdout: []byte(`{"Name":"` + volume.DockerName + `","Driver":"local","Labels":{},"Options":{"type":"none","o":"bind","device":"` + device + `"}}`)}, nil
+		return runner.Result{
+			Stdout: []byte(
+				`{"Name":"` + volume.DockerName + `","Driver":"local","Labels":{},"Options":{"type":"none","o":"bind","device":"` + device + `"}}`,
+			),
+		}, nil
 	}
 	failure, err := ensureManagedComposeVolumes(context.Background(), fake, artifact)
 	if err != nil || failure == nil || failure.ExitCode != 1 || len(fake.Calls) != 1 {
@@ -70,10 +76,19 @@ func managedEnsureFixture() (*agentpb.ComposeArtifact, *agentpb.ComposeVolume, s
 	}
 	directory := "/var/lib/groundplane/vol/tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
 		"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	return &agentpb.ComposeArtifact{AuthorizedVolumeDir: directory, Volumes: []*agentpb.ComposeVolume{volume}},
-		volume, filepath.Join(directory, volume.ComposeName)
+	return &agentpb.ComposeArtifact{
+			ProjectName:         "gp-environment",
+			AuthorizedVolumeDir: directory,
+			Volumes:             []*agentpb.ComposeVolume{volume},
+		},
+		volume, filepath.Join(
+			directory,
+			volume.ComposeName,
+		)
 }
 
 func managedEnsureInspection(volume *agentpb.ComposeVolume, device string) []byte {
-	return []byte(`{"Name":"` + volume.DockerName + `","Driver":"local","Labels":{"com.groundplane.kind":"volume","com.groundplane.managed":"true","com.docker.compose.volume":"app-data"},"Options":{"type":"none","o":"bind","device":"` + device + `"}}`)
+	return []byte(
+		`{"Name":"` + volume.DockerName + `","Driver":"local","Labels":{"com.groundplane.kind":"volume","com.groundplane.managed":"true","com.docker.compose.project":"gp-environment","com.docker.compose.volume":"app-data"},"Options":{"type":"none","o":"bind","device":"` + device + `"}}`,
+	)
 }

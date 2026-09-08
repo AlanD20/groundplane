@@ -129,7 +129,11 @@ func createOptions(image string, operation Operation) client.ContainerCreateOpti
 			CapAdd:         []string{"DAC_OVERRIDE"},
 			SecurityOpt:    []string{"no-new-privileges"},
 			Mounts: []mount.Mount{
-				{Type: mount.TypeBind, Source: hostresolutionhelper.ResolverSourcePath, Target: hostresolutionhelper.ResolverMountPath},
+				{
+					Type:   mount.TypeBind,
+					Source: hostresolutionhelper.ResolverSourcePath,
+					Target: hostresolutionhelper.ResolverMountPath,
+				},
 				{Type: mount.TypeBind, Source: agentprotocol.StatePath, Target: agentprotocol.StatePath},
 			},
 		},

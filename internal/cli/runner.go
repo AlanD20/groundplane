@@ -86,7 +86,8 @@ func newRunnerCmd() *cobra.Command {
 	}
 	add.Flags().
 		StringVar(&project, "project", "", "repo-scoped: the project slug (defaults to -p/--project; omit both for org-scoped)")
-	add.Flags().StringVar(&tokenFile, "registration-token-file", "", "read the short-lived GitHub registration token from PATH, or - for stdin")
+	add.Flags().
+		StringVar(&tokenFile, "registration-token-file", "", "read the short-lived GitHub registration token from PATH, or - for stdin")
 	add.Flags().StringVar(&githubURL, "github-url", "", "GitHub organization or repository URL")
 	add.Flags().StringSliceVar(&labels, "label", nil, "additional GitHub Runner label (repeatable)")
 	_ = add.MarkFlagRequired("registration-token-file")
@@ -158,7 +159,8 @@ func newRunnerCmd() *cobra.Command {
 			return app.Out.Render(headers, rows, accepted)
 		},
 	}
-	retry.Flags().StringVar(&retryTokenFile, "registration-token-file", "", "read the fresh short-lived GitHub registration token from PATH, or - for stdin")
+	retry.Flags().
+		StringVar(&retryTokenFile, "registration-token-file", "", "read the fresh short-lived GitHub registration token from PATH, or - for stdin")
 	_ = retry.MarkFlagRequired("registration-token-file")
 	cmd.AddCommand(retry)
 

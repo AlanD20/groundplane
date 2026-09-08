@@ -20,6 +20,17 @@ from `blueprint.md`, and implementation seams from `architecture.md`.
 
 No row is complete at `Console fixture` or `Scaffolded`.
 
+### C10/C11 authentication extension — 2026-09-06
+
+ADR 0068 adds immutable Valkey backing authentication (`username_password`,
+`password`, `none`), inherited by every Attach. All human surfaces, creation,
+facts, encrypted credential replay and owner-scoped detach are implemented.
+Focused integrated backend race tests, production build, Console build and
+isolated browser checks pass. Real isolated Valkey containers prove all three
+modes, restart persistence, management exclusion, owner-only revocation and
+ACL-save failure propagation. The earlier Accepted rows below do not imply
+live Groundplane acceptance of this extension; that QA journey is pending.
+
 ## Active MVP closure order
 
 Work in this order until the two minimum-hosting gates pass. Start a later item

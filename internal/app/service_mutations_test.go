@@ -195,7 +195,9 @@ func TestServiceCreationCommitsExactResponseAndZoneFence(t *testing.T) {
 	tenantID := ids.NewAt(ids.KindTenant, at, 4)
 	revisionID := ids.NewAt(ids.KindTask, at, 5)
 	artifactID := ids.NewAt(ids.KindConfig, at, 6)
-	canonical := []byte("networks:\n  backend:\n    ipam:\n      config:\n        - subnet: 10.40.0.0/24\nservices: {}\n")
+	canonical := []byte(
+		"networks:\n  backend:\n    ipam:\n      config:\n        - subnet: 10.40.0.0/24\nservices: {}\n",
+	)
 	digest := sha256.Sum256(canonical)
 	artifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
 		ArtifactId: artifactID, OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
@@ -356,7 +358,12 @@ func TestServiceCreationBootstrapsMissingEnvironmentDesiredState(t *testing.T) {
 		len(repository.projection.Record.DesiredServices) != 1 ||
 		repository.projection.Record.DesiredServices[0].Desired.Name != "web" ||
 		artifact.GetOwnerId() != environmentID || artifact.GetAuthorizedVolumeDir() != volumeDir {
-		t.Fatalf("bootstrap response/projection/artifact = %#v/%#v/%#v", response, repository.projection.Record, artifact)
+		t.Fatalf(
+			"bootstrap response/projection/artifact = %#v/%#v/%#v",
+			response,
+			repository.projection.Record,
+			artifact,
+		)
 	}
 }
 

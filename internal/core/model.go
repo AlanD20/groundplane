@@ -185,9 +185,10 @@ type Service struct {
 	Replicas int `yaml:"replicas,omitempty" json:"replicas,omitempty"` // native Compose deploy.replicas
 
 	// For a backing project's single service only — see x-gp-adapter:
-	Adapter     string `yaml:"adapter,omitempty"      json:"adapter,omitempty"`      // e.g. "postgres:16" — looks up internal/adapters
-	FactsPrefix string `yaml:"facts_prefix,omitempty" json:"facts_prefix,omitempty"` // optional override; adapter supplies a default
-	Label       string `yaml:"label,omitempty"        json:"label,omitempty"`        // display only
+	Adapter        string                `yaml:"adapter,omitempty"      json:"adapter,omitempty"` // e.g. "postgres:16" — looks up internal/adapters
+	Authentication BackingAuthentication `yaml:"authentication,omitempty" json:"authentication,omitempty"`
+	FactsPrefix    string                `yaml:"facts_prefix,omitempty" json:"facts_prefix,omitempty"` // optional override; adapter supplies a default
+	Label          string                `yaml:"label,omitempty"        json:"label,omitempty"`        // display only
 }
 
 // EntryKind and EntrySourceKind implement the unified environment-entry
@@ -330,12 +331,13 @@ const (
 )
 
 type CaddyComponentConfig struct {
-	ZoneID            string `yaml:"zone_id" json:"zone_id"`
-	CaddyfileTemplate string `yaml:"caddyfile_template,omitempty" json:"caddyfile_template,omitempty"`
+	ZoneIDs           []string `yaml:"zone_ids" json:"zone_ids"`
+	CaddyfileTemplate string   `yaml:"caddyfile_template,omitempty" json:"caddyfile_template,omitempty"`
 }
 
 type CloudflareTunnelComponentConfig struct {
-	SecretID string `yaml:"secret_id" json:"secret_id"`
+	ZoneIDs  []string `yaml:"zone_ids" json:"zone_ids"`
+	SecretID string   `yaml:"secret_id" json:"secret_id"`
 }
 
 type DNSResolverEndpoint struct {
@@ -381,10 +383,12 @@ func CloneComponentConfig(config ComponentConfig) ComponentConfig {
 	clone := ComponentConfig{}
 	if config.Caddy != nil {
 		value := *config.Caddy
+		value.ZoneIDs = append([]string(nil), value.ZoneIDs...)
 		clone.Caddy = &value
 	}
 	if config.CloudflareTunnel != nil {
 		value := *config.CloudflareTunnel
+		value.ZoneIDs = append([]string(nil), value.ZoneIDs...)
 		clone.CloudflareTunnel = &value
 	}
 	if config.CoreDNS != nil {

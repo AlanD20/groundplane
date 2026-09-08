@@ -43,32 +43,46 @@ type CurrentSuccessfulRelease struct {
 	ProjectionRevision int64
 	Intent             domain.Intent
 	IntentRevision     int64
-	ResolvedImage      *domain.ResolvedImageEvidence
 	Revision           int64
 }
 
 type ServingRelease struct {
-	Projection domain.ServiceProjection
-	Intent     domain.Intent
-	Revision   int64
+	Projection         domain.ServiceProjection
+	ProjectionRevision int64
+	Intent             domain.Intent
+	IntentRevision     int64
+	Revision           int64
 }
 
 // ResolveCurrentSuccessful resolves the Service projection and its immutable
 // successful Release intent at one fixed etcd revision. It never falls back to
 // the mutable desired image when a Service has no successful Release.
-func (ledger *ReleaseLedger) ResolveCurrentSuccessful(ctx context.Context, environmentID, serviceID string, revision int64) (CurrentSuccessfulRelease, error) {
+func (ledger *ReleaseLedger) ResolveCurrentSuccessful(
+	ctx context.Context,
+	environmentID, serviceID string,
+	revision int64,
+) (CurrentSuccessfulRelease, error) {
 	if ctx == nil || ledger == nil || ids.Validate(ids.KindEnvironment, environmentID) != nil ||
 		ids.Validate(ids.KindService, serviceID) != nil || revision < 0 {
-		return CurrentSuccessfulRelease{}, errs.New(errs.KindValidationFailed, "current successful Release request is invalid")
+		return CurrentSuccessfulRelease{}, errs.New(
+			errs.KindValidationFailed,
+			"current successful Release request is invalid",
+		)
 	}
-	projectionRead, err := ledger.store.GetMany(ctx, GetManyRequest{Keys: []string{releaseProjectionKey(serviceID)}, Revision: revision})
+	projectionRead, err := ledger.store.GetMany(
+		ctx,
+		GetManyRequest{Keys: []string{releaseProjectionKey(serviceID)}, Revision: revision},
+	)
 	if err != nil {
 		return CurrentSuccessfulRelease{}, err
 	}
 	if projectionRead == nil || len(projectionRead.Values) != 1 || projectionRead.Values[0] == nil {
 		return CurrentSuccessfulRelease{}, errs.New(errs.KindReleaseNotFound, "Service has no successful Release")
 	}
-	projection, err := decodeReleaseRecord[domain.ServiceProjection](projectionRead.Values[0].Value, "service-release-projection")
+	projection, err := decodeReleaseRecord[domain.ServiceProjection](
+		projectionRead.Values[0].Value,
+		"service-release-projection",
+	)
 	if err != nil || projection.EnvironmentID != environmentID || projection.ServiceID != serviceID ||
 		ids.Validate(ids.KindDeployment, projection.CurrentSuccessfulReleaseID) != nil {
 		return CurrentSuccessfulRelease{}, corruptReleaseRecord()
@@ -83,7 +97,9 @@ func (ledger *ReleaseLedger) ResolveCurrentSuccessful(ctx context.Context, envir
 	if err != nil {
 		return CurrentSuccessfulRelease{}, err
 	}
-	if intentRead == nil || intentRead.ReadRevision != projectionRead.ReadRevision || len(intentRead.Values) != 2 || intentRead.Values[0] == nil || intentRead.Values[1] == nil {
+	if intentRead == nil || intentRead.ReadRevision != projectionRead.ReadRevision || len(intentRead.Values) != 2 ||
+		intentRead.Values[0] == nil ||
+		intentRead.Values[1] == nil {
 		return CurrentSuccessfulRelease{}, corruptReleaseRecord()
 	}
 	intent, err := decodeReleaseRecord[domain.Intent](intentRead.Values[0].Value, "release-intent")
@@ -95,29 +111,36 @@ func (ledger *ReleaseLedger) ResolveCurrentSuccessful(ctx context.Context, envir
 	if err != nil || terminal.ReleaseID != intent.ID || terminal.FinalServingReleaseID != intent.ID {
 		return CurrentSuccessfulRelease{}, corruptReleaseRecord()
 	}
-	if terminal.ResolvedImage != nil && domain.ValidateResolvedImageEvidence(*terminal.ResolvedImage, intent) != nil {
-		return CurrentSuccessfulRelease{}, corruptReleaseRecord()
-	}
 	return CurrentSuccessfulRelease{
 		Projection: projection, ProjectionRevision: projectionRead.Values[0].ModRevision,
 		Intent: intent, IntentRevision: intentRead.Values[0].ModRevision,
-		ResolvedImage: terminal.ResolvedImage, Revision: projectionRead.ReadRevision,
+		Revision: projectionRead.ReadRevision,
 	}, nil
 }
 
-func (ledger *ReleaseLedger) ResolveServing(ctx context.Context, environmentID, serviceID string, revision int64) (ServingRelease, error) {
+func (ledger *ReleaseLedger) ResolveServing(
+	ctx context.Context,
+	environmentID, serviceID string,
+	revision int64,
+) (ServingRelease, error) {
 	if ctx == nil || ledger == nil || ids.Validate(ids.KindEnvironment, environmentID) != nil ||
 		ids.Validate(ids.KindService, serviceID) != nil || revision < 0 {
 		return ServingRelease{}, errs.New(errs.KindValidationFailed, "serving Release request is invalid")
 	}
-	projectionRead, err := ledger.store.GetMany(ctx, GetManyRequest{Keys: []string{releaseProjectionKey(serviceID)}, Revision: revision})
+	projectionRead, err := ledger.store.GetMany(
+		ctx,
+		GetManyRequest{Keys: []string{releaseProjectionKey(serviceID)}, Revision: revision},
+	)
 	if err != nil {
 		return ServingRelease{}, err
 	}
 	if projectionRead == nil || len(projectionRead.Values) != 1 || projectionRead.Values[0] == nil {
 		return ServingRelease{}, errs.New(errs.KindReleaseNotFound, "Service has no serving Release")
 	}
-	projection, err := decodeReleaseRecord[domain.ServiceProjection](projectionRead.Values[0].Value, "service-release-projection")
+	projection, err := decodeReleaseRecord[domain.ServiceProjection](
+		projectionRead.Values[0].Value,
+		"service-release-projection",
+	)
 	if err != nil || projection.EnvironmentID != environmentID || projection.ServiceID != serviceID {
 		return ServingRelease{}, corruptReleaseRecord()
 	}
@@ -133,7 +156,8 @@ func (ledger *ReleaseLedger) ResolveServing(ctx context.Context, environmentID, 
 	if err != nil {
 		return ServingRelease{}, err
 	}
-	if intentRead == nil || intentRead.ReadRevision != projectionRead.ReadRevision || len(intentRead.Values) != 1 || intentRead.Values[0] == nil {
+	if intentRead == nil || intentRead.ReadRevision != projectionRead.ReadRevision || len(intentRead.Values) != 1 ||
+		intentRead.Values[0] == nil {
 		return ServingRelease{}, corruptReleaseRecord()
 	}
 	intent, err := decodeReleaseRecord[domain.Intent](intentRead.Values[0].Value, "release-intent")
@@ -141,7 +165,10 @@ func (ledger *ReleaseLedger) ResolveServing(ctx context.Context, environmentID, 
 		intent.EnvironmentID != environmentID || intent.ServiceID != serviceID {
 		return ServingRelease{}, corruptReleaseRecord()
 	}
-	return ServingRelease{Projection: projection, Intent: intent, Revision: projectionRead.ReadRevision}, nil
+	return ServingRelease{
+		Projection: projection, ProjectionRevision: projectionRead.Values[0].ModRevision,
+		Intent: intent, IntentRevision: intentRead.Values[0].ModRevision, Revision: projectionRead.ReadRevision,
+	}, nil
 }
 
 type releaseCursor struct {
@@ -224,7 +251,10 @@ func (ledger *ReleaseLedger) List(ctx context.Context, request ReleasePageReques
 		revision = cursor.Revision
 		start = prefix + cursor.LastReleaseID
 	}
-	page, err := ledger.store.Range(ctx, RangeRequest{Prefix: prefix, StartExclusive: start, Limit: int64(request.Limit + 1), Revision: revision})
+	page, err := ledger.store.Range(
+		ctx,
+		RangeRequest{Prefix: prefix, StartExclusive: start, Limit: int64(request.Limit + 1), Revision: revision},
+	)
 	if err != nil {
 		return ReleasePage{}, err
 	}
@@ -251,7 +281,8 @@ func (ledger *ReleaseLedger) List(ctx context.Context, request ReleasePageReques
 		if err != nil {
 			return ReleasePage{}, err
 		}
-		if view.Intent.EnvironmentID != request.EnvironmentID || request.ServiceID != "" && view.Intent.ServiceID != request.ServiceID {
+		if view.Intent.EnvironmentID != request.EnvironmentID ||
+			request.ServiceID != "" && view.Intent.ServiceID != request.ServiceID {
 			return ReleasePage{}, corruptReleaseRecord()
 		}
 		items[index] = view
@@ -285,7 +316,8 @@ func (ledger *ReleaseLedger) readViewAt(
 	if err != nil {
 		return ReleaseView{}, err
 	}
-	if read == nil || len(read.Values) != len(keys) || read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil {
+	if read == nil || len(read.Values) != len(keys) || read.Values[0] == nil || read.Values[1] == nil ||
+		read.Values[2] == nil {
 		return ReleaseView{}, corruptReleaseRecord()
 	}
 	intent, err := decodeReleaseRecord[domain.Intent](read.Values[0].Value, "release-intent")
@@ -316,7 +348,10 @@ func (ledger *ReleaseLedger) readViewAt(
 		view.Retention = &retention
 	}
 	projectionRead, err := ledger.store.GetMany(ctx, GetManyRequest{
-		Keys: []string{releaseProjectionKey(intent.ServiceID), releaseOperationKey(intent.OperationID)}, Revision: read.ReadRevision,
+		Keys: []string{
+			releaseProjectionKey(intent.ServiceID),
+			releaseOperationKey(intent.OperationID),
+		}, Revision: read.ReadRevision,
 	})
 	if err != nil {
 		return ReleaseView{}, err
@@ -325,7 +360,10 @@ func (ledger *ReleaseLedger) readViewAt(
 		return ReleaseView{}, corruptReleaseRecord()
 	}
 	if projectionRead.Values[0] != nil {
-		view.Projection, err = decodeReleaseRecord[domain.ServiceProjection](projectionRead.Values[0].Value, "service-release-projection")
+		view.Projection, err = decodeReleaseRecord[domain.ServiceProjection](
+			projectionRead.Values[0].Value,
+			"service-release-projection",
+		)
 		if err != nil || view.Projection.ServiceID != intent.ServiceID {
 			return ReleaseView{}, corruptReleaseRecord()
 		}
@@ -354,7 +392,10 @@ func decodeReleaseIndex(value []byte, serviceFilter string) (string, error) {
 	if serviceFilter == "" {
 		var decoded releaseEnvironmentIndexValue
 		if decoder.Decode(&decoded) != nil || requireJSONEOF(decoder) != nil || decoded.Schema != 1 ||
-			ids.Validate(ids.KindService, decoded.ServiceID) != nil || validatePublicationID(decoded.PublicationID) != nil {
+			ids.Validate(
+				ids.KindService,
+				decoded.ServiceID,
+			) != nil || validatePublicationID(decoded.PublicationID) != nil {
 			return "", corruptReleaseRecord()
 		}
 		publicationID = decoded.PublicationID
@@ -385,8 +426,14 @@ func decodeReleaseCursor(value string) (releaseCursor, error) {
 	decoder.DisallowUnknownFields()
 	var cursor releaseCursor
 	if decoder.Decode(&cursor) != nil || requireJSONEOF(decoder) != nil || cursor.Schema != 1 || cursor.Revision <= 0 ||
-		ids.Validate(ids.KindEnvironment, cursor.EnvironmentID) != nil || cursor.ServiceID != "" && ids.Validate(ids.KindService, cursor.ServiceID) != nil ||
-		ids.Validate(ids.KindDeployment, cursor.LastReleaseID) != nil || cursor.Direction != "ascending" || cursor.Limit < 1 || cursor.Limit > 200 {
+		ids.Validate(
+			ids.KindEnvironment,
+			cursor.EnvironmentID,
+		) != nil || cursor.ServiceID != "" && ids.Validate(ids.KindService, cursor.ServiceID) != nil ||
+		ids.Validate(
+			ids.KindDeployment,
+			cursor.LastReleaseID,
+		) != nil || cursor.Direction != "ascending" || cursor.Limit < 1 || cursor.Limit > 200 {
 		return releaseCursor{}, errs.New(errs.KindMalformedRequest, "release cursor is invalid")
 	}
 	return cursor, nil

@@ -276,11 +276,16 @@ func (service *routeRemovalService) removeRouteOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	task.TimeoutSeconds = routeRemovalAgentTimeoutSeconds
-	preparation, err := service.plans.PrepareRouteRemovalTask(ctx, task, intent, controller.RouteRemovalTaskProcedureIDs{
-		ArtifactID: ids.New(ids.KindConfig), MaterializationID: ids.New(ids.KindConfig),
-		MaterializeStepID: ids.New(ids.KindStep), ComposeApplyStepID: ids.New(ids.KindStep),
-		ActivateStepID: ids.New(ids.KindStep),
-	})
+	preparation, err := service.plans.PrepareRouteRemovalTask(
+		ctx,
+		task,
+		intent,
+		controller.RouteRemovalTaskProcedureIDs{
+			ArtifactID: ids.New(ids.KindConfig), MaterializationID: ids.New(ids.KindConfig),
+			MaterializeStepID: ids.New(ids.KindStep), ComposeApplyStepID: ids.New(ids.KindStep),
+			ActivateStepID: ids.New(ids.KindStep),
+		},
+	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}

@@ -793,8 +793,20 @@ func TestBackupVolumeServiceSnapshotRequiresStableIDOrder(t *testing.T) {
 		ComposeVolumeKey: "data", DockerVolumeName: "gp_vol_" + testBackupVolumeID,
 		AuthorizedVolumeDir: "/var/lib/groundplane/vol/test",
 		Services: []BackupVolumeServiceSnapshot{
-			{ServiceID: first, ServiceRevision: 8, ComposeKey: "first", MountPaths: []string{"/first"}, PriorIntent: BackupServiceIntentRunning},
-			{ServiceID: second, ServiceRevision: 9, ComposeKey: "second", MountPaths: []string{"/second"}, PriorIntent: BackupServiceIntentStopped},
+			{
+				ServiceID:       first,
+				ServiceRevision: 8,
+				ComposeKey:      "first",
+				MountPaths:      []string{"/first"},
+				PriorIntent:     BackupServiceIntentRunning,
+			},
+			{
+				ServiceID:       second,
+				ServiceRevision: 9,
+				ComposeKey:      "second",
+				MountPaths:      []string{"/second"},
+				PriorIntent:     BackupServiceIntentStopped,
+			},
 		},
 	}
 	if err := validateBackupVolumeSnapshot(snapshot); err != nil {

@@ -67,14 +67,20 @@ func (repository *ServiceRepository) GetServiceRemovalIntent(
 		return Versioned[ServiceRemovalIntent]{}, false, err
 	}
 	if ids.Validate(ids.KindTask, taskID) != nil {
-		return Versioned[ServiceRemovalIntent]{}, false, errs.New(errs.KindValidationFailed, "Service removal Task id is invalid")
+		return Versioned[ServiceRemovalIntent]{}, false, errs.New(
+			errs.KindValidationFailed,
+			"Service removal Task id is invalid",
+		)
 	}
 	result, err := repository.store.Get(ctx, serviceRemovalIntentKey(taskID))
 	if err != nil {
 		return Versioned[ServiceRemovalIntent]{}, false, err
 	}
 	if result == nil {
-		return Versioned[ServiceRemovalIntent]{}, false, errs.New(errs.KindInternal, "Service removal intent read is empty")
+		return Versioned[ServiceRemovalIntent]{}, false, errs.New(
+			errs.KindInternal,
+			"Service removal intent read is empty",
+		)
 	}
 	if result.Entry == nil {
 		return Versioned[ServiceRemovalIntent]{ReadRevision: result.ReadRevision}, false, nil
@@ -83,10 +89,18 @@ func (repository *ServiceRepository) GetServiceRemovalIntent(
 	if err != nil || intent.TaskID != taskID {
 		return Versioned[ServiceRemovalIntent]{}, false, corruptServiceRemovalIntent()
 	}
-	return Versioned[ServiceRemovalIntent]{Record: intent, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision}, true, nil
+	return Versioned[ServiceRemovalIntent]{
+		Record:       intent,
+		Revision:     result.Entry.ModRevision,
+		ReadRevision: result.ReadRevision,
+	}, true, nil
 }
 
-func terminalServiceRemovalIntent(intent ServiceRemovalIntent, status TaskStatus, at time.Time) (ServiceRemovalIntent, error) {
+func terminalServiceRemovalIntent(
+	intent ServiceRemovalIntent,
+	status TaskStatus,
+	at time.Time,
+) (ServiceRemovalIntent, error) {
 	if intent.Status != TaskStatusPending || !isTerminalTaskStatus(status) {
 		return ServiceRemovalIntent{}, errs.New(errs.KindStateConflict, "Service removal intent is not pending")
 	}
@@ -100,12 +114,17 @@ func terminalServiceRemovalIntent(intent ServiceRemovalIntent, status TaskStatus
 }
 
 func validateServiceRemovalIntent(intent ServiceRemovalIntent) error {
-	if ids.Validate(ids.KindTask, intent.TaskID) != nil || ids.Validate(ids.KindEnvironment, intent.EnvironmentID) != nil ||
-		ids.Validate(ids.KindService, intent.ServiceID) != nil || intent.ServiceName == "" || intent.ServiceRevision <= 0 ||
+	if ids.Validate(ids.KindTask, intent.TaskID) != nil ||
+		ids.Validate(ids.KindEnvironment, intent.EnvironmentID) != nil ||
+		ids.Validate(ids.KindService, intent.ServiceID) != nil ||
+		intent.ServiceName == "" ||
+		intent.ServiceRevision <= 0 ||
 		intent.RuntimeRevision < 0 ||
-		intent.CurrentProjectionRevision <= 0 || intent.ExpectedHeadRevision <= 0 ||
+		intent.CurrentProjectionRevision <= 0 ||
+		intent.ExpectedHeadRevision <= 0 ||
 		validateEnvironmentBlueprintStageClaim(intent.Claim) != nil ||
-		intent.Claim.EnvironmentID != intent.EnvironmentID || intent.Claim.RevisionID != intent.Claim.TaskID ||
+		intent.Claim.EnvironmentID != intent.EnvironmentID ||
+		intent.Claim.RevisionID != intent.Claim.TaskID ||
 		intent.Claim.BaselineHeadRevision != intent.ExpectedHeadRevision ||
 		intent.Claim.SourceKind != EnvironmentBlueprintSourceMutation ||
 		intent.CurrentProjection.EnvironmentID != intent.EnvironmentID ||
@@ -273,7 +292,8 @@ func sameServiceRemovalBlueprintFiles(left, right []core.BlueprintFile) bool {
 		return false
 	}
 	for index := range left {
-		if left[index].Path != right[index].Path || !sameServiceRemovalBytes(left[index].Content, right[index].Content) {
+		if left[index].Path != right[index].Path ||
+			!sameServiceRemovalBytes(left[index].Content, right[index].Content) {
 			return false
 		}
 	}
@@ -375,10 +395,12 @@ func sameServiceRemovalComponentConfig(left, right core.ComponentConfig) bool {
 		(left.CoreDNS == nil) != (right.CoreDNS == nil) {
 		return false
 	}
-	if left.Caddy != nil && *left.Caddy != *right.Caddy {
+	if left.Caddy != nil && (left.Caddy.CaddyfileTemplate != right.Caddy.CaddyfileTemplate ||
+		!slices.Equal(left.Caddy.ZoneIDs, right.Caddy.ZoneIDs)) {
 		return false
 	}
-	if left.CloudflareTunnel != nil && *left.CloudflareTunnel != *right.CloudflareTunnel {
+	if left.CloudflareTunnel != nil && (left.CloudflareTunnel.SecretID != right.CloudflareTunnel.SecretID ||
+		!slices.Equal(left.CloudflareTunnel.ZoneIDs, right.CloudflareTunnel.ZoneIDs)) {
 		return false
 	}
 	if left.CoreDNS == nil {

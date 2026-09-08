@@ -19,8 +19,20 @@ func TestHierarchyDeletionProjectReplayUsesCanonicalTenantScope(t *testing.T) {
 	store := newMemoryHierarchyStore()
 	tenantID := hierarchyTestID(ids.KindTenant, 701)
 	projects := []ProjectRecord{
-		{ID: hierarchyTestID(ids.KindProject, 702), TenantID: tenantID, Slug: "one", Name: "One", Kind: ProjectKindTenant},
-		{ID: hierarchyTestID(ids.KindProject, 703), TenantID: tenantID, Slug: "two", Name: "Two", Kind: ProjectKindTenant},
+		{
+			ID:       hierarchyTestID(ids.KindProject, 702),
+			TenantID: tenantID,
+			Slug:     "one",
+			Name:     "One",
+			Kind:     ProjectKindTenant,
+		},
+		{
+			ID:       hierarchyTestID(ids.KindProject, 703),
+			TenantID: tenantID,
+			Slug:     "two",
+			Name:     "Two",
+			Kind:     ProjectKindTenant,
+		},
 	}
 	mutations := make([]Mutation, 0, len(projects))
 	for _, project := range projects {
@@ -74,7 +86,12 @@ func TestIdempotencyHierarchyReplayIndexPreservesOwnerIsolationAndOriginalTask(t
 	if err != nil {
 		t.Fatalf("encodeIdempotencyMarker() error = %v", err)
 	}
-	targetKey, err := idempotencyReplayTargetKey(*marker.ReplayTarget, marker.Locator.Method, marker.Locator.Route, marker.Locator.Key)
+	targetKey, err := idempotencyReplayTargetKey(
+		*marker.ReplayTarget,
+		marker.Locator.Method,
+		marker.Locator.Route,
+		marker.Locator.Key,
+	)
 	if err != nil {
 		t.Fatalf("idempotencyReplayTargetKey() error = %v", err)
 	}
@@ -98,7 +115,12 @@ func TestIdempotencyHierarchyReplayIndexPreservesOwnerIsolationAndOriginalTask(t
 	if err != nil {
 		t.Fatalf("encode second marker = %v", err)
 	}
-	otherTargetKey, err := idempotencyReplayTargetKey(*other.ReplayTarget, other.Locator.Method, other.Locator.Route, other.Locator.Key)
+	otherTargetKey, err := idempotencyReplayTargetKey(
+		*other.ReplayTarget,
+		other.Locator.Method,
+		other.Locator.Route,
+		other.Locator.Key,
+	)
 	if err != nil {
 		t.Fatalf("idempotencyReplayTargetKey(second) error = %v", err)
 	}
@@ -164,10 +186,22 @@ func hierarchyReplayTaskMarker(now time.Time, tenantID, projectID, key, taskID s
 	}{TaskID: taskID})
 	return IdempotencyMarker{
 		Kind: IdempotencyMarkerTask, State: IdempotencyMarkerCompleted,
-		Locator:      IdempotencyLocator{ScopeKind: IdempotencyScopeTenant, ScopeID: tenantID, Method: http.MethodDelete, Route: "/projects/{id}", Key: key},
+		Locator: IdempotencyLocator{
+			ScopeKind: IdempotencyScopeTenant,
+			ScopeID:   tenantID,
+			Method:    http.MethodDelete,
+			Route:     "/projects/{id}",
+			Key:       key,
+		},
 		ReplayTarget: &IdempotencyReplayTarget{Kind: IdempotencyReplayTargetProject, ID: projectID},
-		Intent:       ProtectedIntentRecord{EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256", CiphertextDigest: hex.EncodeToString(digest[:]), Ciphertext: ciphertext},
-		Response:     IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body},
-		TaskID:       taskID, CreatedAt: now, UpdatedAt: now, TerminalAt: now, RetainUntil: now.Add(markerRetention),
+		Intent: ProtectedIntentRecord{
+			EnvelopeVersion:  1,
+			Cipher:           "age-x25519",
+			DigestAlgorithm:  "sha256",
+			CiphertextDigest: hex.EncodeToString(digest[:]),
+			Ciphertext:       ciphertext,
+		},
+		Response: IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body},
+		TaskID:   taskID, CreatedAt: now, UpdatedAt: now, TerminalAt: now, RetainUntil: now.Add(markerRetention),
 	}
 }

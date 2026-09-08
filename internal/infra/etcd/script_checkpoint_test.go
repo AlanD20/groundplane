@@ -56,7 +56,11 @@ func TestReleaseScriptNoEffectEvidenceConditionFencesCheckpointRevision(t *testi
 	if err != nil || !changed.Succeeded {
 		t.Fatalf("change Script checkpoint = %#v, %v", changed, err)
 	}
-	fenced, err := store.Transact(ctx, conditions, []Mutation{{Type: MutationPut, Key: "/test/no-effect-terminal", Value: []byte("invalid")}})
+	fenced, err := store.Transact(
+		ctx,
+		conditions,
+		[]Mutation{{Type: MutationPut, Key: "/test/no-effect-terminal", Value: []byte("invalid")}},
+	)
 	if err != nil || fenced.Succeeded {
 		t.Fatalf("stale Script checkpoint evidence transaction = %#v, %v", fenced, err)
 	}
@@ -213,8 +217,9 @@ func scriptCheckpointTestInput(record ScriptExecutionRecord, at time.Time) Scrip
 
 func scriptCheckpointTestRecord(at time.Time) ScriptExecutionRecord {
 	return ScriptExecutionRecord{
-		ID:          ulid.MustNew(ulid.Timestamp(at), strings.NewReader(strings.Repeat("a", 32))).String(),
-		SnapshotID:  ulid.MustNew(ulid.Timestamp(at.Add(time.Millisecond)), strings.NewReader(strings.Repeat("b", 32))).String(),
+		ID: ulid.MustNew(ulid.Timestamp(at), strings.NewReader(strings.Repeat("a", 32))).String(),
+		SnapshotID: ulid.MustNew(ulid.Timestamp(at.Add(time.Millisecond)), strings.NewReader(strings.Repeat("b", 32))).
+			String(),
 		OperationID: ids.NewAt(ids.KindOperation, at, 1), CurrentTaskID: ids.NewAt(ids.KindTask, at, 2),
 		StepID: ids.NewAt(ids.KindStep, at, 3), ScriptID: ids.NewAt(ids.KindScript, at, 4),
 		ScriptGeneration: 1, EnvironmentID: ids.NewAt(ids.KindEnvironment, at, 5),

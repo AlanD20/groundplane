@@ -54,7 +54,10 @@ func BuildRouteHostProjection(inputRevision int64, input []RouteHostInput) (Host
 	addressByHost := make(map[string]netip.Addr, len(input))
 	for _, source := range input {
 		if !validRouteHostState(source.State) || ids.Validate(ids.KindEnvironment, source.EnvironmentID) != nil ||
-			ids.Validate(ids.KindTask, source.DesiredRevisionID) != nil || ids.Validate(ids.KindRoute, source.RouteID) != nil ||
+			ids.Validate(
+				ids.KindTask,
+				source.DesiredRevisionID,
+			) != nil || ids.Validate(ids.KindRoute, source.RouteID) != nil ||
 			ids.Validate(ids.KindService, source.ServiceID) != nil || !validRouteHostName(source.Host) {
 			return HostProjection{}, fmt.Errorf("dns resolver: Route host source is invalid")
 		}

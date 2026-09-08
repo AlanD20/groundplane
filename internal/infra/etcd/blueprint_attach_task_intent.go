@@ -309,7 +309,10 @@ func validateBlueprintAttachTaskPreparation(preparation BlueprintAttachTaskPrepa
 				owner.Record.EnvironmentID != record.EnvironmentID ||
 				owner.Record.BackingServiceID != record.BackingServiceID ||
 				owner.Record.BackingNetworkID != record.BackingNetworkID {
-				return errs.New(errs.KindValidationFailed, "Blueprint Attach candidate credential owner is inconsistent")
+				return errs.New(
+					errs.KindValidationFailed,
+					"Blueprint Attach candidate credential owner is inconsistent",
+				)
 			}
 		} else {
 			if input.RetainedCredentialOwner == nil ||
@@ -338,7 +341,10 @@ func validateBlueprintAttachTaskPreparation(preparation BlueprintAttachTaskPrepa
 				if !grant.Record.OwnsCredential() || grant.Record.EnvironmentID != record.EnvironmentID ||
 					grant.Record.BackingServiceID != record.BackingServiceID ||
 					grant.Record.BackingNetworkID != record.BackingNetworkID {
-					return errs.New(errs.KindValidationFailed, "Blueprint Attach candidate grant target is inconsistent")
+					return errs.New(
+						errs.KindValidationFailed,
+						"Blueprint Attach candidate grant target is inconsistent",
+					)
 				}
 				continue
 			}
@@ -384,8 +390,10 @@ func sameBlueprintAttachFactSets(left, right []AttachFactSetMetadata) bool {
 }
 
 func validateBlueprintAttachTaskIntent(intent BlueprintAttachTaskIntent) error {
-	if ids.Validate(ids.KindTask, intent.TaskID) != nil || ids.Validate(ids.KindEnvironment, intent.EnvironmentID) != nil ||
-		intent.CreatedAt.IsZero() || len(intent.Candidates) == 0 {
+	if ids.Validate(ids.KindTask, intent.TaskID) != nil ||
+		ids.Validate(ids.KindEnvironment, intent.EnvironmentID) != nil ||
+		intent.CreatedAt.IsZero() ||
+		len(intent.Candidates) == 0 {
 		return errs.New(errs.KindValidationFailed, "Blueprint Attach Task intent is invalid")
 	}
 	if intent.Status == TaskStatusPending {

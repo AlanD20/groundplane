@@ -31,7 +31,8 @@ func prepareRouteHeadPublication(
 	if candidate.EnvironmentID == "" || candidate.RevisionID != task.ID || expectedHeadRevision < 0 {
 		return routeHeadPublication{}, errs.New(errs.KindValidationFailed, "Route desired candidate head is invalid")
 	}
-	if current != nil && (current.EnvironmentID != candidate.EnvironmentID || current.RenderGeneration >= candidate.RenderGeneration) {
+	if current != nil &&
+		(current.EnvironmentID != candidate.EnvironmentID || current.RenderGeneration >= candidate.RenderGeneration) {
 		return routeHeadPublication{}, errs.New(errs.KindStateConflict, "Route desired candidate head does not advance")
 	}
 	if err := validateEnvironmentComposeProjection(candidate); err != nil {
@@ -41,14 +42,20 @@ func prepareRouteHeadPublication(
 		return routeHeadPublication{}, err
 	}
 	if marker.Intent.EnvelopeVersion == 0 || task.ID == "" {
-		return routeHeadPublication{}, errs.New(errs.KindValidationFailed, "Route desired candidate audit identity is invalid")
+		return routeHeadPublication{}, errs.New(
+			errs.KindValidationFailed,
+			"Route desired candidate audit identity is invalid",
+		)
 	}
 	baseRevisionID := ""
 	if current != nil {
 		baseRevisionID = current.RevisionID
 	}
 	if audit.Route == nil || audit.Route.BaseRevisionID != baseRevisionID {
-		return routeHeadPublication{}, errs.New(errs.KindValidationFailed, "Route desired candidate audit base is invalid")
+		return routeHeadPublication{}, errs.New(
+			errs.KindValidationFailed,
+			"Route desired candidate audit base is invalid",
+		)
 	}
 	digest, err := EnvironmentBlueprintDependencyDigest(candidate)
 	if err != nil {
@@ -221,7 +228,9 @@ func prepareRouteHeadPromotion(
 		descriptor.Claim.SourceKind != EnvironmentBlueprintSourceMutation ||
 		descriptor.Claim.RenderGeneration != candidate.RenderGeneration ||
 		!sameEnvironmentBlueprintStageStreams(descriptor, streams.Descriptor) ||
-		seal != environmentBlueprintSealFromDescriptor(descriptor) || currentRevisionID != intent.CurrentProjection.RevisionID {
+		seal != environmentBlueprintSealFromDescriptor(
+			descriptor,
+		) || currentRevisionID != intent.CurrentProjection.RevisionID {
 		return routeHeadPublication{}, errs.New(errs.KindStateConflict, "Route desired staging evidence changed")
 	}
 	published := descriptor

@@ -3,10 +3,13 @@ package agent
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runner"
@@ -224,7 +227,9 @@ func TestEnableCompensationSealsComposeRemovePlan(t *testing.T) {
 	plan := requireSealedComposeCompensationPlan(t, helper.request, assignment.Plan.GetArtifacts()[0], composeStep)
 	remove := plan.GetSteps()[0].GetComposeRemove()
 	if remove == nil || remove.GetArtifactId() != composeStep.GetComposeApply().GetArtifactId() ||
-		len(remove.GetServiceIds()) != 1 || remove.GetServiceIds()[0] != composeStep.GetComposeApply().GetServiceIds()[0] {
+		len(
+			remove.GetServiceIds(),
+		) != 1 || remove.GetServiceIds()[0] != composeStep.GetComposeApply().GetServiceIds()[0] {
 		t.Fatalf("derived compensation step = %#v", plan.GetSteps()[0])
 	}
 	if len(taskRunner.Calls) != 1 ||
@@ -262,13 +267,18 @@ func TestDisableCompensationSealsComposeApplyPlan(t *testing.T) {
 	plan := requireSealedComposeCompensationPlan(t, helper.request, assignment.Plan.GetArtifacts()[0], composeStep)
 	apply := plan.GetSteps()[0].GetComposeApply()
 	if apply == nil || apply.GetArtifactId() != composeStep.GetComposeRemove().GetArtifactId() ||
-		len(apply.GetServiceIds()) != 1 || apply.GetServiceIds()[0] != composeStep.GetComposeRemove().GetServiceIds()[0] ||
+		len(
+			apply.GetServiceIds(),
+		) != 1 || apply.GetServiceIds()[0] != composeStep.GetComposeRemove().GetServiceIds()[0] ||
 		!apply.GetForceRecreate() || !apply.GetNoDependencies() {
 		t.Fatalf("derived compensation step = %#v", plan.GetSteps()[0])
 	}
 	if len(taskRunner.Calls) != 2 ||
 		!strings.Contains(strings.Join(taskRunner.Calls[0].Args, " "), " config --quiet --no-interpolate") ||
-		!strings.Contains(strings.Join(taskRunner.Calls[1].Args, " "), " up --detach --force-recreate --no-deps resolver") {
+		!strings.Contains(
+			strings.Join(taskRunner.Calls[1].Args, " "),
+			" up --detach --force-recreate --no-deps resolver",
+		) {
 		t.Fatalf("Compose helper calls = %#v, want validation and Compose apply", taskRunner.Calls)
 	}
 }
@@ -292,7 +302,13 @@ func requireSealedComposeCompensationPlan(
 		plan.GetComponentRollbackObservation() != nil || len(plan.GetArtifacts()) != 1 || len(plan.GetSteps()) != 1 {
 		t.Fatalf("derived compensation plan shape = %#v", plan)
 	}
-	if plan.GetPlanId() != sourceArtifact.GetServices()[0].GetExpectedLabels()[2].GetValue() ||
+	var sourcePlanID string
+	for _, label := range sourceArtifact.GetServices()[0].GetExpectedLabels() {
+		if label.GetKey() == "com.groundplane.plan-id" {
+			sourcePlanID = label.GetValue()
+		}
+	}
+	if plan.GetPlanId() != sourcePlanID ||
 		plan.GetRenderGeneration() != 7 || !proto.Equal(plan.GetArtifacts()[0], sourceArtifact) {
 		t.Fatalf("derived compensation authority or artifact changed: %#v", plan)
 	}
@@ -314,7 +330,7 @@ func sealedLifecycleCompensationAssignment(
 	artifactID := ids.NewAt(ids.KindConfig, now, 3)
 	serviceID := ids.NewAt(ids.KindService, now, 4)
 	yaml := []byte("services:\n  resolver:\n    image: registry.example/resolver@sha256:" +
-		"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n")
+		strings.Repeat("a", 64) + "\n")
 	yamlDigest := sha256.Sum256(yaml)
 	actionDigest := sha256.Sum256([]byte("component lifecycle compensation"))
 	artifact := &agentpb.ComposeArtifact{
@@ -331,6 +347,7 @@ func sealedLifecycleCompensationAssignment(
 			},
 		}},
 	}
+	bindAgentTestComponentImage(t, artifact.Services[0])
 	plan := &agentpb.ExecutionPlan{
 		Schema: executionplan.SchemaVersion, PlanId: planID, RenderGeneration: 7,
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY, TargetId: componentID,
@@ -395,4 +412,49 @@ func sealedLifecycleCompensationAssignment(
 		OperationID:  ids.NewAt(ids.KindOperation, now, 11),
 		Plan:         sealed,
 	}, sealed.GetSteps()[1]
+}
+
+func bindAgentTestComponentImage(t *testing.T, service *agentpb.ComposeService) {
+	t.Helper()
+	image := componentsdk.OCIImage{
+		Repository:  "registry.example/" + service.ComposeName,
+		IndexDigest: strings.Repeat("e", 64),
+		Platforms: []componentsdk.OCIPlatform{
+			{
+				OS:           "linux",
+				Architecture: "amd64",
+				ChildDigest:  strings.Repeat("a", 64),
+				ConfigDigest: strings.Repeat("b", 64),
+			},
+			{
+				OS:           "linux",
+				Architecture: "arm64",
+				Variant:      "v8",
+				ChildDigest:  strings.Repeat("c", 64),
+				ConfigDigest: strings.Repeat("d", 64),
+			},
+		},
+	}
+	if err := image.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	selected, reference, found := image.Select("linux", "amd64")
+	if !found {
+		t.Fatal("compiled test platform missing")
+	}
+	service.ImageReference, service.ImageRepository = reference, image.Repository
+	service.ImageOs, service.ImageArchitecture, service.ImageVariant = selected.OS, selected.Architecture, selected.Variant
+	service.ImageIndexDigest, _ = hex.DecodeString(image.IndexDigest)
+	service.ImageChildDigest, _ = hex.DecodeString(selected.ChildDigest)
+	service.ImageConfigDigest, _ = hex.DecodeString(selected.ConfigDigest)
+	service.ExpectedLabels = append(service.ExpectedLabels,
+		&agentpb.LabelPair{Key: "com.groundplane.image-index-digest", Value: "sha256:" + image.IndexDigest},
+		&agentpb.LabelPair{Key: "com.groundplane.image-child-digest", Value: "sha256:" + selected.ChildDigest},
+		&agentpb.LabelPair{Key: "com.groundplane.image-config-digest", Value: "sha256:" + selected.ConfigDigest},
+		&agentpb.LabelPair{Key: "com.groundplane.image-platform", Value: "linux/amd64"},
+	)
+	sort.Slice(
+		service.ExpectedLabels,
+		func(i, j int) bool { return service.ExpectedLabels[i].Key < service.ExpectedLabels[j].Key },
+	)
 }

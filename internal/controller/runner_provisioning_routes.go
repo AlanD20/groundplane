@@ -74,7 +74,8 @@ func (s *Server) retryRunner(
 func (s *Server) rejectRunnerProvisioningQuery(ctx huma.Context, next func(huma.Context)) {
 	requestURL := ctx.URL()
 	if len(requestURL.Query()) != 0 {
-		if err := huma.WriteErr(s.API, ctx, http.StatusBadRequest, "Runner mutation query is invalid"); err != nil && s.Logger != nil {
+		if err := huma.WriteErr(s.API, ctx, http.StatusBadRequest, "Runner mutation query is invalid"); err != nil &&
+			s.Logger != nil {
 			s.Logger.Error("controller: write Runner mutation problem", slog.Any("error", err))
 		}
 		return

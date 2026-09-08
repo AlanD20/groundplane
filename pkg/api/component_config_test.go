@@ -15,10 +15,26 @@ func TestComponentConfigIsAClosedExactlyOneWireUnion(t *testing.T) {
 		json string
 		want string
 	}{
-		{name: "caddy", json: `{"zone_id":"net_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`, want: `{"zone_id":"net_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`},
-		{name: "cloudflare", json: `{"secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`, want: `{"secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`},
-		{name: "coredns", json: `{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`, want: `{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`},
-		{name: "coredns-forwarder", json: `{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":false,"upstream_resolvers":["1.1.1.1"],"forwarders":[{"domain":"example.com","resolvers":["9.9.9.9"]}],"tailnet_delegation":true}`, want: `{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":false,"upstream_resolvers":["1.1.1.1"],"forwarders":[{"domain":"example.com","resolvers":["9.9.9.9"]}],"tailnet_delegation":true}`},
+		{
+			name: "caddy",
+			json: `{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"]}`,
+			want: `{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"]}`,
+		},
+		{
+			name: "cloudflare",
+			json: `{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`,
+			want: `{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`,
+		},
+		{
+			name: "coredns",
+			json: `{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`,
+			want: `{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`,
+		},
+		{
+			name: "coredns-forwarder",
+			json: `{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":false,"upstream_resolvers":["1.1.1.1"],"forwarders":[{"domain":"example.com","resolvers":["9.9.9.9"]}],"tailnet_delegation":true}`,
+			want: `{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":false,"upstream_resolvers":["1.1.1.1"],"forwarders":[{"domain":"example.com","resolvers":["9.9.9.9"]}],"tailnet_delegation":true}`,
+		},
 	}
 	for _, testCase := range valid {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -37,8 +53,8 @@ func TestComponentConfigIsAClosedExactlyOneWireUnion(t *testing.T) {
 	}
 	for _, value := range []string{
 		`{}`,
-		`{"zone_id":"net_01ARZ3NDEKTSV4RRFFQ69G5FAX","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`,
-		`{"zone_id":"net_01ARZ3NDEKTSV4RRFFQ69G5FAX","corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`,
+		`{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"caddyfile_template":"{routes}","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`,
+		`{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`,
 		`{"unknown":true}`,
 	} {
 		var config ComponentConfig
@@ -53,18 +69,18 @@ func TestComponentConfigIsAClosedExactlyOneWireUnion(t *testing.T) {
 func TestComponentConfigMutationInputRejectsEmptyAndMixedVariants(t *testing.T) {
 	t.Parallel()
 	valid := ComponentConfigMutationInput{
-		Caddy: &CaddyComponentConfigMutationInput{ZoneID: "net_01ARZ3NDEKTSV4RRFFQ69G5FAX"},
+		Caddy: &CaddyComponentConfigMutationInput{ZoneIDs: []string{"net_01ARZ3NDEKTSV4RRFFQ69G5FAX"}},
 	}
 	encoded, err := json.Marshal(valid)
 	if err != nil {
 		t.Fatalf("Marshal(valid) error = %v", err)
 	}
-	if string(encoded) != `{"zone_id":"net_01ARZ3NDEKTSV4RRFFQ69G5FAX"}` {
+	if string(encoded) != `{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"]}` {
 		t.Fatalf("Marshal(valid) = %s", encoded)
 	}
 	for _, value := range []string{
 		`{}`,
-		`{"zone_id":"net_01ARZ3NDEKTSV4RRFFQ69G5FAX","credential":{"mode":"existing","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}}`,
+		`{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"caddyfile_template":"{routes}","credential":{"mode":"existing","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}}`,
 		`{"upstream_auto":true,"upstream_resolvers":[],"forwarders":[]}`,
 		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[null],"forwarders":[],"tailnet_delegation":false}`,
 		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[{}],"tailnet_delegation":false}`,
@@ -76,7 +92,8 @@ func TestComponentConfigMutationInputRejectsEmptyAndMixedVariants(t *testing.T) 
 			t.Fatalf("Unmarshal(%s) accepted an empty, mixed, or incomplete variant", value)
 		}
 	}
-	if _, err := json.Marshal(ComponentConfigMutationInput{}); err == nil || !strings.Contains(err.Error(), "exactly one variant") {
+	if _, err := json.Marshal(ComponentConfigMutationInput{}); err == nil ||
+		!strings.Contains(err.Error(), "exactly one variant") {
 		t.Fatalf("Marshal(empty) error = %v, want exactly-one validation", err)
 	}
 }
@@ -86,8 +103,8 @@ func TestComponentConfigMutationInputRejectsEmptyAndMixedVariants(t *testing.T) 
 func TestComponentConfigRejectsExplicitNullAndInvalidResponseState(t *testing.T) {
 	t.Parallel()
 	for _, value := range []string{
-		`{"zone_id":"net_01ARZ3NDEKTSV4RRFFQ69G5FAX","secret_id":null}`,
-		`{"zone_id":"net_01ARZ3NDEKTSV4RRFFQ69G5FAX","caddyfile_template":null}`,
+		`{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"secret_id":null}`,
+		`{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"caddyfile_template":null}`,
 		`{"secret_id":"sec_invalid"}`,
 		`{"corefile_template":null,"upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`,
 		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":null,"forwarders":[],"tailnet_delegation":false}`,
@@ -102,7 +119,7 @@ func TestComponentConfigRejectsExplicitNullAndInvalidResponseState(t *testing.T)
 			t.Fatalf("Unmarshal(%s) accepted invalid response state", value)
 		}
 	}
-	if _, err := json.Marshal(ComponentConfig{Caddy: &CaddyComponentConfig{ZoneID: "net_invalid"}}); err == nil {
+	if _, err := json.Marshal(ComponentConfig{Caddy: &CaddyComponentConfig{ZoneIDs: []string{"net_invalid"}}}); err == nil {
 		t.Fatal("Marshal accepted an invalid Caddy zone_id")
 	}
 	if _, err := json.Marshal(ComponentConfig{CoreDNS: &CoreDNSComponentConfig{

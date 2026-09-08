@@ -24,8 +24,8 @@ type ReleaseRenderInput struct {
 	PriorArtifactID      string                `json:"prior_artifact_id,omitempty"`
 	ServiceID            string                `json:"service_id"`
 	ServiceName          string                `json:"service_name"`
-	Image                string                `json:"image"`
-	PriorImage           string                `json:"prior_image,omitempty"`
+	CandidateWorkload    domain.WorkloadSeal   `json:"candidate_workload"`
+	PriorWorkload        *domain.WorkloadSeal  `json:"prior_workload,omitempty"`
 	Strategy             domain.Strategy       `json:"strategy"`
 	PriorStrategy        domain.Strategy       `json:"prior_strategy"`
 	Slot                 domain.Slot           `json:"slot,omitempty"`
@@ -37,6 +37,7 @@ type ReleaseRenderInput struct {
 	ProxyPorts           []uint16              `json:"proxy_ports"`
 	ProxyConfigDigest    string                `json:"proxy_config_digest"`
 	PriorProxyDigest     string                `json:"prior_proxy_digest"`
+	ProxyImage           *ReleaseProxyImage    `json:"proxy_image,omitempty"`
 	core.ServiceDependencyPlans
 	TenantID            string                       `json:"tenant_id"`
 	TenantSlug          string                       `json:"tenant_slug"`
@@ -50,9 +51,10 @@ type ReleaseRenderInput struct {
 }
 
 type ReleaseTaskRenderInput struct {
-	PublicationID string
-	Operation     ReleaseOperationHead
-	Members       []ReleaseTaskRenderMember
+	NativePredecessors []BlueprintNativePredecessor
+	PublicationID      string
+	Operation          ReleaseOperationHead
+	Members            []ReleaseTaskRenderMember
 }
 
 type ReleaseTaskRenderMember struct {
@@ -83,53 +85,76 @@ func decodeReleaseRenderInput(value []byte) (ReleaseRenderInput, error) {
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	decoder.DisallowUnknownFields()
 	var input ReleaseRenderInput
-	if err := decoder.Decode(&input); err != nil || requireJSONEOF(decoder) != nil || validateReleaseRenderInput(input) != nil {
+	if err := decoder.Decode(&input); err != nil || requireJSONEOF(decoder) != nil ||
+		validateReleaseRenderInput(input) != nil {
 		return ReleaseRenderInput{}, corruptReleaseRecord()
 	}
 	return cloneReleaseRenderInput(input), nil
 }
 
 func validateReleaseRenderInput(input ReleaseRenderInput) error {
+	if (len(input.ProxyPorts) != 0) != (input.ProxyImage != nil) ||
+		input.ProxyImage != nil && input.ProxyImage.Validate() != nil {
+		return errs.New(errs.KindValidationFailed, "release proxy image authority is invalid")
+	}
 	if ids.Validate(ids.KindDeployment, input.ReleaseID) != nil || ids.Validate(ids.KindPlan, input.PlanID) != nil ||
-		ids.Validate(ids.KindConfig, input.ArtifactID) != nil || ids.Validate(ids.KindService, input.ServiceID) != nil ||
+		ids.Validate(
+			ids.KindConfig,
+			input.ArtifactID,
+		) != nil || ids.Validate(ids.KindService, input.ServiceID) != nil ||
 		ids.Validate(ids.KindTenant, input.TenantID) != nil || ids.Validate(ids.KindProject, input.ProjectID) != nil ||
-		ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil || input.ServiceName == "" || input.Image == "" ||
+		ids.Validate(
+			ids.KindEnvironment,
+			input.EnvironmentID,
+		) != nil || input.ServiceName == "" || domain.ValidateWorkloadSeal(input.CandidateWorkload) != nil ||
 		input.TenantSlug == "" || input.ProjectSlug == "" || input.EnvironmentName == "" || input.AuthorizedVolumeDir == "" {
 		return errs.New(errs.KindValidationFailed, "release render input identity is invalid")
 	}
 	candidateTarget, candidateErr := domain.TargetFor(input.Strategy, input.Slot)
 	priorTarget, priorErr := domain.TargetFor(input.PriorStrategy, input.PriorSlot)
-	if candidateErr != nil || priorErr != nil || input.CandidateTarget != candidateTarget || input.PriorTarget != priorTarget {
+	if candidateErr != nil || priorErr != nil || input.CandidateTarget != candidateTarget ||
+		input.PriorTarget != priorTarget {
 		return errs.New(errs.KindValidationFailed, "release render workload topology is invalid")
 	}
 	if input.Strategy == domain.StrategyBlueGreen {
+		if input.CandidateWorkload.ReplicaCount != 1 ||
+			input.PriorWorkload != nil && input.PriorWorkload.ReplicaCount != 1 {
+			return errs.New(errs.KindValidationFailed, "blue-green transition requires singleton workloads")
+		}
 		if input.Slot != domain.SlotBlue && input.Slot != domain.SlotGreen {
 			return errs.New(errs.KindValidationFailed, "release render input slot is invalid")
 		}
-		if input.PriorTarget.Validate() != nil ||
-			input.ProxyGeneration == 0 || input.PriorProxyGeneration == 0 || len(input.ProxyPorts) == 0 ||
-			input.ProxyConfigDigest == "" || input.PriorProxyDigest == "" {
+		hasPrior := input.PriorArtifactID != "" || input.PriorWorkload != nil
+		if input.PriorTarget.Validate() != nil || input.ProxyGeneration == 0 || len(input.ProxyPorts) == 0 ||
+			input.ProxyConfigDigest == "" ||
+			hasPrior && (input.PriorProxyGeneration == 0 || input.PriorProxyDigest == "" ||
+				ids.Validate(ids.KindConfig, input.PriorArtifactID) != nil || input.PriorWorkload == nil) ||
+			!hasPrior && (input.PriorProxyGeneration != 0 || input.PriorProxyDigest != "") {
 			return errs.New(errs.KindValidationFailed, "blue-green release render proxy authority is invalid")
 		}
 	} else if input.Strategy != domain.StrategyRecreate || input.Slot != "" {
 		return errs.New(errs.KindValidationFailed, "release render input strategy is invalid")
 	} else if len(input.ProxyPorts) != 0 {
-		hasPrior := input.PriorArtifactID != "" || input.PriorImage != ""
+		hasPrior := input.PriorArtifactID != "" || input.PriorWorkload != nil
 		if input.CandidateTarget != domain.WorkloadSingleton || input.ProxyGeneration == 0 || input.ProxyConfigDigest == "" ||
 			hasPrior && (input.PriorProxyGeneration == 0 || input.PriorProxyDigest == "" ||
-				ids.Validate(ids.KindConfig, input.PriorArtifactID) != nil || input.PriorImage == "") ||
+				ids.Validate(ids.KindConfig, input.PriorArtifactID) != nil || input.PriorWorkload == nil) ||
 			!hasPrior && (input.PriorProxyGeneration != 0 || input.PriorProxyDigest != "") {
 			return errs.New(errs.KindValidationFailed, "addressable recreate render authority is invalid")
 		}
 	} else if (input.PriorArtifactID != "" && ids.Validate(ids.KindConfig, input.PriorArtifactID) != nil) ||
-		(input.PriorArtifactID == "") != (input.PriorImage == "") ||
+		(input.PriorArtifactID == "") != (input.PriorWorkload == nil) ||
 		input.CandidateTarget != domain.WorkloadSingleton || input.PriorTarget != domain.WorkloadSingleton ||
 		input.ProxyGeneration != 0 || input.PriorProxyGeneration != 0 ||
 		input.ProxyConfigDigest != "" || input.PriorProxyDigest != "" {
 		return errs.New(errs.KindValidationFailed, "portless recreate render authority is invalid")
 	}
-	if (input.PriorArtifactID != "") != (input.PriorImage != "") {
+	if (input.PriorArtifactID != "") != (input.PriorWorkload != nil) {
 		return errs.New(errs.KindValidationFailed, "release prior topology artifact authority is invalid")
+	}
+	if input.PriorWorkload != nil && (domain.ValidateWorkloadSeal(*input.PriorWorkload) != nil ||
+		input.PriorStrategy == domain.StrategyBlueGreen && (input.PriorWorkload.ReplicaCount != 1 || input.CandidateWorkload.ReplicaCount != 1)) {
+		return errs.New(errs.KindValidationFailed, "release prior workload authority is invalid")
 	}
 	serviceNames := make([]string, 0, len(input.Projection.DesiredServices)+1)
 	selected := false
@@ -156,7 +181,8 @@ func validateReleaseRenderInput(input ReleaseRenderInput) error {
 			return err
 		}
 	}
-	if validateEnvironmentComposeProjection(input.Projection) != nil || input.Projection.EnvironmentID != input.EnvironmentID {
+	if validateEnvironmentComposeProjection(input.Projection) != nil ||
+		input.Projection.EnvironmentID != input.EnvironmentID {
 		return errs.New(errs.KindValidationFailed, "release render projection is invalid")
 	}
 	if !selected {
@@ -180,6 +206,14 @@ func releaseRenderTargetsGeneratedService(components []ComponentRecord, serviceI
 }
 
 func cloneReleaseRenderInput(input ReleaseRenderInput) ReleaseRenderInput {
+	if input.ProxyImage != nil {
+		image := *input.ProxyImage
+		input.ProxyImage = &image
+	}
+	if input.PriorWorkload != nil {
+		prior := *input.PriorWorkload
+		input.PriorWorkload = &prior
+	}
 	input.Projection = cloneEnvironmentComposeProjection(input.Projection)
 	input.ProxyPorts = slices.Clone(input.ProxyPorts)
 	input.ServiceDependencyPlans = input.ServiceDependencyPlans.Clone()
@@ -194,16 +228,22 @@ func (ledger *ReleaseLedger) GetTaskRenderInput(
 	publicationID := task.Params[TaskReleasePublicationParam]
 	if ctx == nil || ledger == nil || validatePublicationID(publicationID) != nil ||
 		(task.Type != TaskDeploy && task.Type != TaskRollback) || ids.Validate(ids.KindPlan, task.PlanID) != nil {
-		return ReleaseTaskRenderInput{}, errs.New(errs.KindValidationFailed, "release Task render input request is invalid")
+		return ReleaseTaskRenderInput{}, errs.New(
+			errs.KindValidationFailed,
+			"release Task render input request is invalid",
+		)
 	}
 	keys := []string{
-		releaseManifestStagingKey(publicationID), releasePublicationKey(publicationID), releaseOperationKey(task.OperationID),
+		releaseManifestStagingKey(
+			publicationID,
+		), releasePublicationKey(publicationID), releaseOperationKey(task.OperationID),
 	}
 	loaded, err := ledger.store.GetMany(ctx, GetManyRequest{Keys: keys})
 	if err != nil {
 		return ReleaseTaskRenderInput{}, err
 	}
-	if loaded == nil || len(loaded.Values) != len(keys) || loaded.Values[0] == nil || loaded.Values[1] == nil || loaded.Values[2] == nil {
+	if loaded == nil || len(loaded.Values) != len(keys) || loaded.Values[0] == nil || loaded.Values[1] == nil ||
+		loaded.Values[2] == nil {
 		return ReleaseTaskRenderInput{}, corruptReleaseRecord()
 	}
 	manifest, err := decodeReleaseRecord[ReleaseStagedManifest](loaded.Values[0].Value, "release-staged-manifest")
@@ -211,11 +251,13 @@ func (ledger *ReleaseLedger) GetTaskRenderInput(
 		return ReleaseTaskRenderInput{}, corruptReleaseRecord()
 	}
 	marker, err := decodeReleaseRecord[ReleasePublicationMarker](loaded.Values[1].Value, "release-publication")
-	if err != nil || marker.PublicationID != publicationID || marker.OperationID != task.OperationID || marker.ManifestDigest != manifest.Digest {
+	if err != nil || marker.PublicationID != publicationID || marker.OperationID != task.OperationID ||
+		marker.ManifestDigest != manifest.Digest {
 		return ReleaseTaskRenderInput{}, corruptReleaseRecord()
 	}
 	head, err := decodeReleaseRecord[ReleaseOperationHead](loaded.Values[2].Value, "release-operation")
-	if err != nil || head.OperationID != task.OperationID || head.PublicationID != publicationID || head.LatestTaskID != task.ID {
+	if err != nil || head.OperationID != task.OperationID || head.PublicationID != publicationID ||
+		head.LatestTaskID != task.ID {
 		return ReleaseTaskRenderInput{}, corruptReleaseRecord()
 	}
 	memberKeys := make([]string, 0, len(manifest.Members)*2)
@@ -253,7 +295,7 @@ func (ledger *ReleaseLedger) GetTaskRenderInput(
 		render, err := decodeReleaseRenderInput(raw)
 		if err != nil || render.ReleaseID != intent.ID || render.PlanID != task.PlanID ||
 			render.ArtifactID != intent.RenderInputID || render.ServiceID != intent.ServiceID ||
-			render.Image != intent.Image || render.Strategy != intent.Strategy || render.Slot != intent.Slot {
+			render.CandidateWorkload != intent.CandidateWorkload || render.Strategy != intent.Strategy || render.Slot != intent.Slot {
 			return ReleaseTaskRenderInput{}, corruptReleaseRecord()
 		}
 		digest, _ := domain.Digest(raw)

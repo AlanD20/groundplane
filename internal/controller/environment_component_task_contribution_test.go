@@ -34,7 +34,12 @@ func TestBuildEnvironmentComponentTaskContributionOmitsAbsentCandidate(t *testin
 		t.Fatalf("BuildEnvironmentComponentTaskContribution() error = %v", err)
 	}
 	if allocated || len(steps) != 0 || len(records) != 0 {
-		t.Fatalf("absent managed-config contribution = allocated %t, %d steps, %d records", allocated, len(steps), len(records))
+		t.Fatalf(
+			"absent managed-config contribution = allocated %t, %d steps, %d records",
+			allocated,
+			len(steps),
+			len(records),
+		)
 	}
 }
 
@@ -69,7 +74,9 @@ func TestAppendEnvironmentComponentTaskContributionRequiresComposeFirst(t *testi
 }
 
 func TestBuildEnvironmentComponentTaskContributionRequiresStepAllocator(t *testing.T) {
-	_, _, err := BuildEnvironmentComponentTaskContribution(EnvironmentComponentTaskContributionInput{TimeoutSeconds: 120})
+	_, _, err := BuildEnvironmentComponentTaskContribution(
+		EnvironmentComponentTaskContributionInput{TimeoutSeconds: 120},
+	)
 	if err == nil {
 		t.Fatal("BuildEnvironmentComponentTaskContribution() accepted missing step allocator")
 	}

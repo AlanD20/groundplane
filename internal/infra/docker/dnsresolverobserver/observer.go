@@ -50,10 +50,13 @@ type Request struct {
 }
 
 type runtimeEvidence struct {
-	artifact                  []byte
-	logs                      []byte
-	verifiedImageDigest       [sha256.Size]byte
-	verifiedImageConfigDigest [sha256.Size]byte
+	artifact            []byte
+	logs                []byte
+	verifiedImageDigest [sha256.Size]byte
+	// imageConfigAuthority is observed for classic Docker, or bound from the
+	// sealed catalog after verifying the selected child on containerd. It is
+	// never the child digest mislabeled as an independently observed config.
+	imageConfigAuthority [sha256.Size]byte
 }
 
 type runtimeInspector interface {
@@ -124,7 +127,10 @@ func (executor *Executor) Observe(
 	}
 	reportedDigest, err := latestReportedConfigSHA512(runtime.logs)
 	if err != nil || reportedDigest != effectiveDigest {
-		return nil, errs.New(errs.KindStateConflict, "DNS resolver reported configuration does not match the mounted artifact")
+		return nil, errs.New(
+			errs.KindStateConflict,
+			"DNS resolver reported configuration does not match the mounted artifact",
+		)
 	}
 	metrics, err := executor.metrics.Read(proofCtx, request.MetricsURL)
 	if err != nil {
@@ -147,7 +153,7 @@ func (executor *Executor) Observe(
 		ObservedAt: timestamppb.New(executor.now().UTC()), ImageRepository: request.ImageRepository,
 		ImageIndexDigest: append([]byte(nil), request.ImageIndexDigest[:]...), ImageOs: request.ImageOS,
 		ImageArchitecture: request.ImageArchitecture, ImageVariant: request.ImageVariant,
-		ImageConfigDigest: append([]byte(nil), runtime.verifiedImageConfigDigest[:]...),
+		ImageConfigDigest: append([]byte(nil), runtime.imageConfigAuthority[:]...),
 	}
 	if parsed.staticName != "" {
 		evidence.StaticQuery, err = executor.observeStatic(proofCtx, request, parsed)

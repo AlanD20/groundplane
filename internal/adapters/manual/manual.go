@@ -5,7 +5,10 @@
 // is an explicit function rather than an init().
 package manual
 
-import "github.com/AlanD20/groundplane/internal/adapters"
+import (
+	"github.com/AlanD20/groundplane/internal/adapters"
+	"github.com/AlanD20/groundplane/internal/core"
+)
 
 // Register adds this adapter to the registry. Called once, explicitly,
 // from internal/app.NewController and NewAgent.
@@ -15,15 +18,16 @@ func Register() {
 
 type adapter struct{}
 
-func (a *adapter) Key() string                           { return "manual" }
-func (a *adapter) Label() string                         { return "Manual (network-only)" }
-func (a *adapter) DefaultImage() string                  { return "" }
-func (a *adapter) FactsPrefix() string                   { return "" }
-func (a *adapter) URLScheme() string                     { return "" }
-func (a *adapter) Port() string                          { return "" }
-func (a *adapter) FactSchema() []adapters.FactDefinition { return nil }
-func (a *adapter) Manual() bool                          { return true }
-func (a *adapter) SupportsGrants() bool                  { return false }
+func (a *adapter) Key() string                                                     { return "manual" }
+func (a *adapter) Label() string                                                   { return "Manual (network-only)" }
+func (a *adapter) DefaultImage() string                                            { return "" }
+func (a *adapter) FactsPrefix() string                                             { return "" }
+func (a *adapter) URLScheme() string                                               { return "" }
+func (a *adapter) Port() string                                                    { return "" }
+func (a *adapter) FactSchema(core.BackingAuthentication) []adapters.FactDefinition { return nil }
+func (a *adapter) SupportsAuthenticationModes() bool                               { return false }
+func (a *adapter) Manual() bool                                                    { return true }
+func (a *adapter) SupportsGrants() bool                                            { return false }
 
 func (a *adapter) ProvisionSteps(p adapters.ProvisionParams) []adapters.Step { return nil }
 func (a *adapter) GrantSteps(p adapters.ProvisionParams) []adapters.Step     { return nil }

@@ -12,9 +12,10 @@ import (
 )
 
 type blueprintAttachPlanCandidate struct {
-	current    etcd.Versioned[etcd.AttachRecord]
-	adapterKey string
-	stepCount  int
+	current        etcd.Versioned[etcd.AttachRecord]
+	adapterKey     string
+	authentication core.BackingAuthentication
+	stepCount      int
 }
 
 func (resolver *TaskPlanResolver) blueprintAttachPlanCandidates(
@@ -63,8 +64,18 @@ func (resolver *TaskPlanResolver) blueprintAttachPlanCandidates(
 			if !registered {
 				return nil, 0, errs.New(errs.KindValidationFailed, "Blueprint Attach adapter is not registered")
 			}
+			authentication, authErr := core.ResolveBackingAuthentication(
+				adapter.SupportsAuthenticationModes(), backing.Record.Desired.Authentication,
+			)
+			if authErr != nil || authentication != backing.Record.Desired.Authentication {
+				return nil, 0, errs.New(
+					errs.KindStateConflict,
+					"Blueprint Attach backing Service authentication mode is invalid",
+				)
+			}
 			candidate.adapterKey = adapter.Key()
-			if !adapter.Manual() {
+			candidate.authentication = authentication
+			if !adapter.Manual() && authentication != core.BackingAuthenticationNone {
 				candidate.stepCount = len(current.Record.GrantAttachIDs) + 1
 				totalSteps += candidate.stepCount
 			}
@@ -106,6 +117,33 @@ func (resolver *TaskPlanResolver) blueprintAttachProcedureSteps(
 	steps := make([]*agentpb.ExecutionStep, 0)
 	for _, candidate := range candidates {
 		if candidate.stepCount == 0 {
+			if candidate.authentication == core.BackingAuthenticationNone {
+				procedureTask := task
+				procedureTask.Type = etcd.TaskAttach
+				procedureTask.Target = candidate.current.Record.ID
+				procedureTask.Steps = nil
+				err := resolver.attachIdentities.ResolveTaskIdentity(
+					ctx,
+					candidate.current,
+					task.ID,
+					func(identity AttachPlanIdentity) error {
+						if identity.Authentication != candidate.authentication {
+							return errs.New(
+								errs.KindStateConflict,
+								"Blueprint Attach encrypted authentication mode changed",
+							)
+						}
+						_, buildErr := BuildAttachProvisionSteps(
+							procedureTask, candidate.current.Record, candidate.adapterKey, identity,
+						)
+						return buildErr
+					},
+				)
+				if err != nil {
+					clearAdapterProcedurePasswords(steps)
+					return nil, stepIndex, err
+				}
+			}
 			continue
 		}
 		end := stepIndex + candidate.stepCount
@@ -123,6 +161,12 @@ func (resolver *TaskPlanResolver) blueprintAttachProcedureSteps(
 			candidate.current,
 			task.ID,
 			func(identity AttachPlanIdentity) error {
+				if identity.Authentication != candidate.authentication {
+					return errs.New(
+						errs.KindStateConflict,
+						"Blueprint Attach encrypted authentication mode changed",
+					)
+				}
 				var buildErr error
 				procedures, buildErr = BuildAttachProvisionSteps(
 					procedureTask, candidate.current.Record, candidate.adapterKey, identity,

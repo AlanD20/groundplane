@@ -417,7 +417,9 @@ func workerComponentComposeArtifact(
 	generation string,
 	name string,
 ) *agentpb.ComposeArtifact {
-	yaml := []byte("services:\n  resolver:\n    image: example.invalid/" + name + "@sha256:" + strings.Repeat("a", 64) + "\n")
+	yaml := []byte(
+		"services:\n  resolver:\n    image: example.invalid/" + name + "@sha256:" + strings.Repeat("a", 64) + "\n",
+	)
 	digest := sha256.Sum256(yaml)
 	return &agentpb.ComposeArtifact{
 		ArtifactId: artifactID, OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_PLATFORM,
@@ -507,12 +509,18 @@ func TestWorkerPoolAcceptsReceiptForNonBlockingTaskEventAndRejectsReplay(t *test
 	if err := pool.AcceptTaskEventAck(context.Background(), ack); err != nil {
 		t.Fatalf("AcceptTaskEventAck(receipt) error = %v", err)
 	}
-	if err := pool.AcceptTaskEventAck(context.Background(), ack); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+	if err := pool.AcceptTaskEventAck(context.Background(), ack); !errors.Is(
+		err,
+		errs.New(errs.KindStateConflict, ""),
+	) {
 		t.Fatalf("AcceptTaskEventAck(replay) error = %v, want state conflict", err)
 	}
 	changed := proto.CloneOf(ack)
 	changed.Ordinal++
-	if err := pool.AcceptTaskEventAck(context.Background(), changed); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+	if err := pool.AcceptTaskEventAck(context.Background(), changed); !errors.Is(
+		err,
+		errs.New(errs.KindStateConflict, ""),
+	) {
 		t.Fatalf("AcceptTaskEventAck(changed identity) error = %v, want state conflict", err)
 	}
 }
@@ -548,7 +556,10 @@ func TestWorkerPoolReceiptCleanupPreservesReplacementRegistration(t *testing.T) 
 	if err := pool.AcceptTaskEventAck(context.Background(), ack); err != nil {
 		t.Fatalf("AcceptTaskEventAck(replacement) error = %v", err)
 	}
-	if err := pool.AcceptTaskEventAck(context.Background(), ack); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+	if err := pool.AcceptTaskEventAck(context.Background(), ack); !errors.Is(
+		err,
+		errs.New(errs.KindStateConflict, ""),
+	) {
 		t.Fatalf("AcceptTaskEventAck(replacement replay) error = %v, want state conflict", err)
 	}
 }
