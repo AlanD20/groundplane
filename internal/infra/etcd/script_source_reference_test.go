@@ -832,8 +832,8 @@ func scriptRunnerSnapshotSourceFixture(
 	snapshotPayload, err := proto.MarshalOptions{Deterministic: true}.Marshal(&agentpb.ResolvedRunnerSnapshot{
 		SnapshotId: snapshotID, ScriptExecutionId: executionID, EnvironmentId: environmentID,
 		Networks: []*agentpb.ScriptRunnerNetwork{
-			{NetworkId: firstNetworkID},
-			{NetworkId: secondNetworkID},
+			{NetworkId: firstNetworkID, OwnerEnvironmentId: environmentID},
+			{NetworkId: secondNetworkID, OwnerEnvironmentId: environmentID},
 		},
 		Mounts: []*agentpb.ScriptRunnerMount{{SourceId: volumeID}},
 	})

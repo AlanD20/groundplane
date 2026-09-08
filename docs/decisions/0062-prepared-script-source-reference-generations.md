@@ -153,6 +153,16 @@ membership. The Environment applied Compose projection is never their source
 and is never a Blueprint final-publication mutation. This exception does not
 add either membership kind to the staged-source union above.
 
+Manual Service membership likewise uses its already-prepared immutable runner
+snapshot: Service existence is owned by the desired projection, while the
+runtime sidecar is optional and cannot be a prerequisite for Script execution.
+Reservation proves the snapshot's exact execution, Environment, Service id,
+prepared revision, and payload digest. Final manual publication still compares
+the captured desired Service/projection and serving Release fences. This is a
+closed snapshot-backed Service proof, not permission to invent a runtime record
+or resolve a different Service after planning. Blueprint staged Service evidence
+retains its existing exact candidate-publication contract.
+
 `ScriptSourceCount` is:
 
 ```text

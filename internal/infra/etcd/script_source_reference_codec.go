@@ -39,6 +39,7 @@ func validateScriptSourceReference(reference ScriptSourceReference) error {
 		return errs.New(errs.KindValidationFailed, "Script body source owner is invalid")
 	}
 	requiresDigest := reference.Source.Kind == ScriptSourceBody ||
+		(reference.Source.Kind == ScriptSourceService && reference.SourceDigest != "") ||
 		reference.Source.Kind == ScriptSourceRunnerSnapshot ||
 		reference.Source.Kind == ScriptSourceRelease ||
 		reference.Source.Kind == ScriptSourceNetwork ||
@@ -124,8 +125,16 @@ func validateScriptSourceRecord(key string, value []byte, reference ScriptSource
 			return errs.New(errs.KindValidationFailed, "Script runner snapshot source evidence is invalid")
 		}
 	case ScriptSourceService:
+		if strings.HasPrefix(key, scriptRunnerSnapshotPrefix) {
+			payload, _, err := decodeScriptRunnerSnapshotSource(key, value, reference)
+			if err != nil || payload.ServiceId != source.ServiceID {
+				return errs.New(errs.KindValidationFailed, "Script Service snapshot evidence is invalid")
+			}
+			return nil
+		}
 		record, err := decodeServiceRuntimeRecord(value)
-		if err != nil || key != serviceRuntimeKey(source.ServiceID) || record.ServiceID != source.ServiceID ||
+		if err != nil || reference.SourceDigest != "" ||
+			key != serviceRuntimeKey(source.ServiceID) || record.ServiceID != source.ServiceID ||
 			record.EnvironmentID != reference.SourceOwnerID {
 			return errs.New(errs.KindValidationFailed, "Script Service source evidence is invalid")
 		}
@@ -200,13 +209,28 @@ func decodeScriptRunnerSnapshotSource(
 		snapshot.ExecutionID != reference.ScriptExecutionID || snapshot.SHA256 != reference.SourceDigest ||
 		hex.EncodeToString(digest[:]) != reference.SourceDigest || proto.Unmarshal(snapshot.Payload, &payload) != nil ||
 		payload.SnapshotId != snapshot.SnapshotID || payload.ScriptExecutionId != snapshot.ExecutionID ||
-		payload.EnvironmentId != reference.SourceOwnerID {
+		!scriptRunnerSnapshotSourceOwnerMatches(&payload, reference) {
 		return agentpb.ResolvedRunnerSnapshot{}, "", errs.New(
 			errs.KindValidationFailed,
 			"Script runner snapshot source evidence is invalid",
 		)
 	}
 	return payload, snapshot.SnapshotID, nil
+}
+
+func scriptRunnerSnapshotSourceOwnerMatches(
+	snapshot *agentpb.ResolvedRunnerSnapshot,
+	reference ScriptSourceReference,
+) bool {
+	if reference.Source.Kind != ScriptSourceNetwork {
+		return snapshot.EnvironmentId == reference.SourceOwnerID
+	}
+	for _, network := range snapshot.Networks {
+		if network != nil && network.NetworkId == reference.Source.NetworkID {
+			return network.OwnerEnvironmentId == reference.SourceOwnerID
+		}
+	}
+	return false
 }
 
 func runnerSnapshotContainsScriptSource(

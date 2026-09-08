@@ -138,7 +138,7 @@ func TestBlueprintReleaseSourceMembersUsesStoredSecretEntryCiphertextDigest(t *t
 			EnvironmentId: environmentID, RevisionId: revisionID, RenderGeneration: 1,
 			FixedReadRevision: uint64(seed.Revision), CanonicalValueSha256: serviceDigest[:],
 		}},
-		Networks: []*agentpb.ScriptRunnerNetwork{{NetworkId: networkID}},
+		Networks: []*agentpb.ScriptRunnerNetwork{{NetworkId: networkID, OwnerEnvironmentId: environmentID}},
 		Mounts:   []*agentpb.ScriptRunnerMount{{SourceId: volumeID}},
 		EntryBindings: []*agentpb.ScriptRunnerEntryBinding{{
 			EntryId: entryID, ValueGenerationId: generationID,
@@ -272,7 +272,7 @@ func TestBlueprintReleaseSourceMembersAcceptsSharedNetworkAndVolumeSnapshots(t *
 				EnvironmentId: environmentID, RevisionId: revisionID, RenderGeneration: 1,
 				FixedReadRevision: uint64(seed.Revision), CanonicalValueSha256: serviceDigest[:],
 			}},
-			Networks: []*agentpb.ScriptRunnerNetwork{{NetworkId: networkID}},
+			Networks: []*agentpb.ScriptRunnerNetwork{{NetworkId: networkID, OwnerEnvironmentId: environmentID}},
 			Mounts:   []*agentpb.ScriptRunnerMount{{SourceId: volumeID}},
 		}
 		snapshotValue, marshalErr := proto.Marshal(snapshot)
