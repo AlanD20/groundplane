@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"sort"
 	"strconv"
+	"time"
 )
 
 const (
@@ -114,6 +115,7 @@ type OperationSourceRoot struct {
 	Phase            string           `json:"phase"`
 	ReleasePath      string           `json:"release_path"`
 	RetryDisposition RetryDisposition `json:"retry_disposition"`
+	RetryExpiresAt   *time.Time       `json:"retry_expires_at,omitempty"`
 	ReleaseCursor    uint64           `json:"release_cursor"`
 }
 
@@ -432,6 +434,12 @@ func decodeRoot(value []byte) (OperationSourceRoot, error) {
 }
 
 func validOperationSourceRoot(root OperationSourceRoot) bool {
+	retainsDeadline := root.RetryDisposition == RetryDispositionAvailable ||
+		root.RetryDisposition == RetryDispositionExpired
+	if retainsDeadline != (root.RetryExpiresAt != nil) ||
+		(root.RetryExpiresAt != nil && (root.RetryExpiresAt.IsZero() || root.RetryExpiresAt.Year() < 1 || root.RetryExpiresAt.Year() > 9999)) {
+		return false
+	}
 	if root.OperationID == "" || root.MembershipCount == 0 ||
 		len(root.MembershipSHA256) != hex.EncodedLen(sha256.Size) ||
 		root.ReleaseCursor > root.MembershipCount {

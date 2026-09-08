@@ -79,6 +79,18 @@ func (repository *Repository) ReleaseNext(
 	operationID string,
 	guards []Condition,
 ) (bool, bool, error) {
+	return repository.releaseNext(ctx, operationID, sourceReleasePathNormal, guards)
+}
+
+func (repository *Repository) ReleaseRetryExpiryNext(
+	ctx context.Context, operationID string, guards []Condition,
+) (bool, bool, error) {
+	return repository.releaseNext(ctx, operationID, sourceReleasePathRetryExpiry, guards)
+}
+
+func (repository *Repository) releaseNext(
+	ctx context.Context, operationID, expectedPath string, guards []Condition,
+) (bool, bool, error) {
 	if ctx == nil || operationID == "" || len(guards) == 0 {
 		return false, false, validation("source release input is invalid")
 	}
@@ -97,10 +109,8 @@ func (repository *Repository) ReleaseNext(
 		return false, false, err
 	}
 	if root.OperationID != operationID || root.Phase != operationSourcePhaseReleasing ||
-		root.ReleasePath != sourceReleasePathNormal ||
-		(root.RetryDisposition != RetryDispositionForbidden &&
-			root.RetryDisposition != RetryDispositionAbandoned) {
-		return false, false, conflict("operation source root is not in normal release")
+		root.ReleasePath != expectedPath {
+		return false, false, conflict("operation source root release path does not match")
 	}
 	page, err := repository.store.Range(ctx, ReversePrefix(operationID), normalReleaseWindowSize)
 	if err != nil {
@@ -304,6 +314,18 @@ func (repository *Repository) PrepareReleaseFinalization(
 	ctx context.Context,
 	operationID string,
 ) (ReleaseFragment, error) {
+	return repository.prepareReleaseFinalization(ctx, operationID, sourceReleasePathNormal)
+}
+
+func (repository *Repository) PrepareRetryExpiryFinalization(
+	ctx context.Context, operationID string,
+) (ReleaseFragment, error) {
+	return repository.prepareReleaseFinalization(ctx, operationID, sourceReleasePathRetryExpiry)
+}
+
+func (repository *Repository) prepareReleaseFinalization(
+	ctx context.Context, operationID, expectedPath string,
+) (ReleaseFragment, error) {
 	if ctx == nil || operationID == "" {
 		return ReleaseFragment{}, validation("source release finalization input is invalid")
 	}
@@ -323,9 +345,7 @@ func (repository *Repository) PrepareReleaseFinalization(
 		return ReleaseFragment{}, err
 	}
 	if root.OperationID != operationID || root.Phase != operationSourcePhaseReleasing ||
-		root.ReleasePath != sourceReleasePathNormal ||
-		(root.RetryDisposition != RetryDispositionForbidden &&
-			root.RetryDisposition != RetryDispositionAbandoned) ||
+		root.ReleasePath != expectedPath ||
 		root.ReleaseCursor != root.MembershipCount || page == nil || len(page.Values) != 0 {
 		return ReleaseFragment{}, corruption("source release cannot be finalized")
 	}

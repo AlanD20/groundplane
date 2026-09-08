@@ -176,6 +176,7 @@ membership_sha256
 phase = active | releasing
 release_path = absent | normal_completion | retry_expiry
 retry_disposition = undecided | available | transferred | forbidden | abandoned | expired
+retry_expires_at? = the retry-available Task's retain_until
 release_cursor
 ```
 
@@ -194,6 +195,12 @@ explicitly; an absent or unknown value is corruption.
 `ScriptOperationSourceRoot` is the sole Script-operation authority for retry
 disposition and reference-release phase; no parallel operation record may
 default, infer, or repair either value.
+
+ADR 0040's retry deadline lives on this same root. It is required for
+`available` and retained unchanged for `expired`; it is absent for the other
+dispositions. Retry transfer consumes the old deadline, and the new assignment
+claim atomically returns `transferred` to `undecided`. A later retry-eligible
+failure uses that new Task's own retention deadline.
 
 `ScriptSourcePreparation` uses the same operation id, membership count, and
 digest plus `phase = preparing | sealed | abandoning`, a preparation cursor,
