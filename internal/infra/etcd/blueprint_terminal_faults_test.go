@@ -67,7 +67,7 @@ func (store *blueprintTerminalFaultStore) TransactBlueprintTaskTerminal(
 func (fixture *ExecutedArtifactFixture) proveClosingTerminalFaults(t *testing.T, current TaskAssignment) {
 	t.Helper()
 	ctx := context.Background()
-	report, value, err := fixture.Tasks.readBlueprintClosingReport(ctx, current)
+	report, value, err := fixture.Tasks.readScriptClosingReport(ctx, current)
 	if err != nil || value == nil {
 		t.Fatalf("fault proof requires an original closing report: %v", err)
 	}
@@ -86,7 +86,7 @@ func (fixture *ExecutedArtifactFixture) proveClosingTerminalFaults(t *testing.T,
 			after.Task.Revision != current.Task.Revision || after.Assignment.Revision != current.Assignment.Revision {
 			t.Fatalf("terminal compare loss changed Task/assignment authority: reconnect=%v read=%v", reconnectErr, err)
 		}
-		retained, retainedValue, err := fixture.Tasks.readBlueprintClosingReport(ctx, after)
+		retained, retainedValue, err := fixture.Tasks.readScriptClosingReport(ctx, after)
 		if err != nil || retainedValue == nil || retainedValue.ModRevision != value.ModRevision ||
 			!retained.matches(report.Status, report.Result) {
 			t.Fatalf("terminal compare loss discarded original continuation: %v", err)

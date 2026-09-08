@@ -8,24 +8,24 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type blueprintTerminalScriptSourceRelease struct {
+type scriptTerminalSourceRelease struct {
 	conditions []Condition
 	mutations  []Mutation
 	advance    *blueprintTerminalSourceAdvance
 }
 
-func (change *blueprintTerminalScriptSourceRelease) clear() {
+func (change *scriptTerminalSourceRelease) clear() {
 	if change == nil {
 		return
 	}
 	clearMutationValues(change.mutations)
-	*change = blueprintTerminalScriptSourceRelease{}
+	*change = scriptTerminalSourceRelease{}
 }
 
-// prepareBlueprintTerminalScriptSourceRelease advances the existing bounded
+// prepareTerminalScriptSourceRelease advances the existing bounded
 // source-reference release protocol without surrendering Task assignment
 // authority. Only its final fragment joins the Task terminal transaction.
-func (repository *TaskRepository) prepareBlueprintTerminalScriptSourceRelease(
+func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	ctx context.Context,
 	task TaskRecord,
 	taskValue *KeyValue,
@@ -39,14 +39,18 @@ func (repository *TaskRepository) prepareBlueprintTerminalScriptSourceRelease(
 	submittedStatus TaskStatus,
 	submittedResult TaskResultRecord,
 	advanceNow bool,
-) (blueprintTerminalScriptSourceRelease, bool, error) {
+) (scriptTerminalSourceRelease, bool, error) {
+	if task.Type == TaskScript {
+		return repository.prepareManualScriptTerminalRelease(ctx, task, taskValue, assignment,
+			assignmentValue, assignmentIndexValue, terminalStatus, terminalAt, revision, submittedResult)
+	}
 	steps, err := releaseHookExecutionSteps(task)
 	if err != nil || len(steps) == 0 {
-		return blueprintTerminalScriptSourceRelease{}, false, err
+		return scriptTerminalSourceRelease{}, false, err
 	}
 	if taskValue == nil || assignmentValue == nil || assignmentIndexValue == nil || revision <= 0 ||
 		(assignment.ExecutionMode == TaskExecutionModeRecoveryOnly && (!recovery.final || recovery.value == nil)) {
-		return blueprintTerminalScriptSourceRelease{}, false, corruptTaskAssignment()
+		return scriptTerminalSourceRelease{}, false, corruptTaskAssignment()
 	}
 	lifecycleKey, lifecycleValue, _, err := repository.assignmentLifecycleIndexAtRevision(
 		ctx,
@@ -55,17 +59,17 @@ func (repository *TaskRepository) prepareBlueprintTerminalScriptSourceRelease(
 		revision,
 	)
 	if err != nil {
-		return blueprintTerminalScriptSourceRelease{}, false, err
+		return scriptTerminalSourceRelease{}, false, err
 	}
 	environmentID, materializes, err := taskEnvironmentWriter(task)
 	if err != nil {
-		return blueprintTerminalScriptSourceRelease{}, false, err
+		return scriptTerminalSourceRelease{}, false, err
 	}
 	if !materializes {
 		environmentID = task.Owner.EnvironmentID
 	}
 	if environmentID == "" || environmentID != task.Owner.EnvironmentID {
-		return blueprintTerminalScriptSourceRelease{}, false, corruptTaskAssignment()
+		return scriptTerminalSourceRelease{}, false, corruptTaskAssignment()
 	}
 	rootKey := scriptSourceRootKey(task.OperationID)
 	keys := []string{
@@ -84,28 +88,28 @@ func (repository *TaskRepository) prepareBlueprintTerminalScriptSourceRelease(
 	}
 	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
-		return blueprintTerminalScriptSourceRelease{}, false, err
+		return scriptTerminalSourceRelease{}, false, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
-		return blueprintTerminalScriptSourceRelease{}, false, corruptReleaseRecord()
+		return scriptTerminalSourceRelease{}, false, corruptReleaseRecord()
 	}
 	for _, value := range read.Values {
 		if value == nil {
-			return blueprintTerminalScriptSourceRelease{}, false, corruptReleaseRecord()
+			return scriptTerminalSourceRelease{}, false, corruptReleaseRecord()
 		}
 	}
 	root, err := decodeScriptOperationSourceRoot(read.Values[0].Value)
 	if err != nil || root.OperationID != task.OperationID {
-		return blueprintTerminalScriptSourceRelease{}, false, corruptReleaseRecord()
+		return scriptTerminalSourceRelease{}, false, corruptReleaseRecord()
 	}
 	activeTaskID, err := decodeTaskReference(read.Values[2].Value)
 	if err != nil || activeTaskID != task.ID {
-		return blueprintTerminalScriptSourceRelease{}, false, corruptTaskAssignment()
+		return scriptTerminalSourceRelease{}, false, corruptTaskAssignment()
 	}
 	if materializes {
 		writer, decodeErr := decodeTaskMaterializationWriter(read.Values[writerIndex].Value)
 		if decodeErr != nil || validateTaskMaterializationWriterForTask(writer, task, environmentID) != nil {
-			return blueprintTerminalScriptSourceRelease{}, false, corruptTaskMaterializationWriter()
+			return scriptTerminalSourceRelease{}, false, corruptTaskMaterializationWriter()
 		}
 	}
 	executions := make([]ScriptExecutionRecord, len(steps))
@@ -115,12 +119,12 @@ func (repository *TaskRepository) prepareBlueprintTerminalScriptSourceRelease(
 		if decodeErr != nil || validateScriptExecutionRecord(record) != nil || !taskOwnsScriptExecution(task, record) ||
 			record.ID != step.executionID || record.StepID != step.stepID || record.CurrentTaskID != task.ID ||
 			record.OperationID != task.OperationID || record.PlanHash != task.PlanHash {
-			return blueprintTerminalScriptSourceRelease{}, false, corruptReleaseRecord()
+			return scriptTerminalSourceRelease{}, false, corruptReleaseRecord()
 		}
 		executions[index] = record
 		if root.Phase == ScriptOperationSourceActive && terminalStatus == TaskStatusCompleted &&
 			(record.State != ScriptExecutionCleanupProven || record.AssignmentID != assignment.AssignmentID || record.ReconciliationRequired) {
-			return blueprintTerminalScriptSourceRelease{}, false, errs.New(
+			return scriptTerminalSourceRelease{}, false, errs.New(
 				errs.KindStateConflict,
 				"Blueprint Script cleanup is not proven",
 			)
@@ -167,11 +171,11 @@ func (repository *TaskRepository) prepareBlueprintTerminalScriptSourceRelease(
 			Task:       Versioned[TaskRecord]{Record: task, Revision: taskValue.ModRevision, ReadRevision: revision},
 			Assignment: Versioned[TaskAssignmentRecord]{Record: assignment, Revision: assignmentValue.ModRevision},
 		}
-		report, condition, mutation, reportErr := repository.prepareBlueprintClosingReport(
+		report, condition, mutation, reportErr := repository.prepareScriptClosingReport(
 			ctx, current, submittedStatus, submittedResult, *terminalAt, root.Phase == ScriptOperationSourceActive,
 		)
 		if reportErr != nil {
-			return blueprintTerminalScriptSourceRelease{}, false, reportErr
+			return scriptTerminalSourceRelease{}, false, reportErr
 		}
 		closingCondition, closingMutation, *terminalAt = condition, mutation, report.ObservedAt
 		if pending != nil {
@@ -183,13 +187,13 @@ func (repository *TaskRepository) prepareBlueprintTerminalScriptSourceRelease(
 	if root.Phase == ScriptOperationSourceActive {
 		if root.ReleasePath != ScriptSourceReleaseAbsent ||
 			(root.RetryDisposition != ScriptRetryDispositionUndecided && root.RetryDisposition != ScriptRetryDispositionTransferred) {
-			return blueprintTerminalScriptSourceRelease{}, false, corruptReleaseRecord()
+			return scriptTerminalSourceRelease{}, false, corruptReleaseRecord()
 		}
 		release, releaseErr := repository.beginBlueprintTerminalScriptSourceRelease(
 			ctx, task, executions, read.Values[executionOffset:], *terminalAt,
 		)
 		if releaseErr != nil {
-			return blueprintTerminalScriptSourceRelease{}, false, releaseErr
+			return scriptTerminalSourceRelease{}, false, releaseErr
 		}
 		defer release.clear()
 		if pending != nil {
@@ -204,18 +208,18 @@ func (repository *TaskRepository) prepareBlueprintTerminalScriptSourceRelease(
 			release.mutations,
 		)
 		if transactErr != nil {
-			return blueprintTerminalScriptSourceRelease{}, false, transactErr
+			return scriptTerminalSourceRelease{}, false, transactErr
 		}
 		clearKeyValues(transaction.FailureReads)
-		return blueprintTerminalScriptSourceRelease{}, true, nil
+		return scriptTerminalSourceRelease{}, true, nil
 	}
 	if root.Phase != ScriptOperationSourceReleasing || root.ReleasePath != ScriptSourceReleaseNormal ||
 		root.RetryDisposition != ScriptRetryDispositionForbidden {
-		return blueprintTerminalScriptSourceRelease{}, false, corruptReleaseRecord()
+		return scriptTerminalSourceRelease{}, false, corruptReleaseRecord()
 	}
 	for _, execution := range executions {
 		if !releaseRecoveryClosedScriptExecutionMatches(execution, assignment.AssignmentID) {
-			return blueprintTerminalScriptSourceRelease{}, false, corruptReleaseRecord()
+			return scriptTerminalSourceRelease{}, false, corruptReleaseRecord()
 		}
 	}
 	if pending != nil && root.ReleaseCursor != root.MembershipCount {
@@ -223,32 +227,32 @@ func (repository *TaskRepository) prepareBlueprintTerminalScriptSourceRelease(
 	}
 	authority, err := newScriptSourceReferenceAuthority(repository.store)
 	if err != nil {
-		return blueprintTerminalScriptSourceRelease{}, false, err
+		return scriptTerminalSourceRelease{}, false, err
 	}
 	if pending == nil {
 		processed, drained, err := authority.ReleaseNext(ctx, task.OperationID, guards)
 		if err != nil {
 			if errors.Is(err, errs.New(errs.KindStateConflict, "")) {
-				return blueprintTerminalScriptSourceRelease{}, true, nil
+				return scriptTerminalSourceRelease{}, true, nil
 			}
-			return blueprintTerminalScriptSourceRelease{}, false, err
+			return scriptTerminalSourceRelease{}, false, err
 		}
 		if processed {
-			return blueprintTerminalScriptSourceRelease{}, true, nil
+			return scriptTerminalSourceRelease{}, true, nil
 		}
 		if !drained {
-			return blueprintTerminalScriptSourceRelease{}, false, corruptReleaseRecord()
+			return scriptTerminalSourceRelease{}, false, corruptReleaseRecord()
 		}
 	}
 	final, err := authority.PrepareReleaseFinalization(ctx, task.OperationID)
 	if err != nil {
-		return blueprintTerminalScriptSourceRelease{}, false, err
+		return scriptTerminalSourceRelease{}, false, err
 	}
 	defer final.Clear()
 	// The terminal transaction already compares Task, assignment, lifecycle,
 	// Environment epoch, writer, and recovery authority. Add only source and
 	// execution evidence here; duplicate compares are rejected by its compiler.
-	change := blueprintTerminalScriptSourceRelease{
+	change := scriptTerminalSourceRelease{
 		conditions: append(append([]Condition(nil), final.conditions...), executionGuards...),
 		mutations:  cloneBlueprintCandidateMutations(final.mutations),
 	}
@@ -265,14 +269,14 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 	executions []ScriptExecutionRecord,
 	values []*KeyValue,
 	terminalAt time.Time,
-) (blueprintTerminalScriptSourceRelease, error) {
+) (scriptTerminalSourceRelease, error) {
 	authority, err := newScriptSourceReferenceAuthority(repository.store)
 	if err != nil {
-		return blueprintTerminalScriptSourceRelease{}, err
+		return scriptTerminalSourceRelease{}, err
 	}
 	release, err := authority.PrepareNormalRelease(ctx, task.OperationID, ScriptRetryDispositionForbidden)
 	if err != nil {
-		return blueprintTerminalScriptSourceRelease{}, err
+		return scriptTerminalSourceRelease{}, err
 	}
 	conditions := append([]Condition(nil), release.conditions...)
 	mutations := cloneBlueprintCandidateMutations(release.mutations)
@@ -280,7 +284,7 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 	for index, execution := range executions {
 		if !terminalAt.After(execution.UpdatedAt) {
 			clearMutationValues(mutations)
-			return blueprintTerminalScriptSourceRelease{}, errs.New(
+			return scriptTerminalSourceRelease{}, errs.New(
 				errs.KindStateConflict, "recovery parent Script execution timestamp changed",
 			)
 		}
@@ -289,16 +293,16 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 		case ScriptExecutionNotStarted:
 			if execution.AssignmentID != "" || execution.StartAuthorized || !execution.ActiveReference {
 				clearMutationValues(mutations)
-				return blueprintTerminalScriptSourceRelease{}, errs.New(
+				return scriptTerminalSourceRelease{}, errs.New(
 					errs.KindStateConflict, "recovery parent Script execution may already have started",
 				)
 			}
 			outcome := ScriptOutcomeEvidence{Reason: ScriptOutcomeParentFailureBeforeStart, ObservedAt: terminalAt}
 			cleanup := ScriptCleanupEvidence{ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true}
-			digest, digestErr := blueprintPendingAbortCheckpointSHA256(outcome, cleanup)
+			digest, digestErr := scriptControllerCleanupSHA256(outcome, cleanup)
 			if digestErr != nil {
 				clearMutationValues(mutations)
-				return blueprintTerminalScriptSourceRelease{}, digestErr
+				return scriptTerminalSourceRelease{}, digestErr
 			}
 			next.State = ScriptExecutionCleanupProven
 			next.Outcome = &outcome
@@ -308,13 +312,13 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 		case ScriptExecutionCleanupProven:
 			if execution.AssignmentID == "" || execution.ControllerCleanup != "" || execution.ReconciliationRequired {
 				clearMutationValues(mutations)
-				return blueprintTerminalScriptSourceRelease{}, errs.New(
+				return scriptTerminalSourceRelease{}, errs.New(
 					errs.KindStateConflict, "recovery parent Script cleanup authority changed",
 				)
 			}
 		default:
 			clearMutationValues(mutations)
-			return blueprintTerminalScriptSourceRelease{}, errs.New(
+			return scriptTerminalSourceRelease{}, errs.New(
 				errs.KindStateConflict, "recovery parent Script execution may already have started",
 			)
 		}
@@ -323,17 +327,17 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 		if validateScriptExecutionRecord(next) != nil ||
 			!releaseRecoveryClosedScriptExecutionMatches(next, execution.AssignmentID) {
 			clearMutationValues(mutations)
-			return blueprintTerminalScriptSourceRelease{}, corruptReleaseRecord()
+			return scriptTerminalSourceRelease{}, corruptReleaseRecord()
 		}
 		encoded, encodeErr := encodeEnvelope("script-execution", next)
 		if encodeErr != nil {
 			clearMutationValues(mutations)
-			return blueprintTerminalScriptSourceRelease{}, encodeErr
+			return scriptTerminalSourceRelease{}, encodeErr
 		}
 		conditions = append(conditions, Condition{Key: values[index].Key, ModRevision: values[index].ModRevision})
 		mutations = append(mutations, Mutation{Type: MutationPut, Key: values[index].Key, Value: encoded})
 	}
-	return blueprintTerminalScriptSourceRelease{conditions: conditions, mutations: mutations}, nil
+	return scriptTerminalSourceRelease{conditions: conditions, mutations: mutations}, nil
 }
 
 func releaseRecoveryParentFailureExecutionMatches(record ScriptExecutionRecord) bool {
@@ -348,7 +352,7 @@ func releaseRecoveryParentFailureExecutionMatches(record ScriptExecutionRecord) 
 		record.Cleanup.BodyLeaf != "" || !record.UpdatedAt.Equal(record.Outcome.ObservedAt) {
 		return false
 	}
-	digest, err := blueprintPendingAbortCheckpointSHA256(*record.Outcome, *record.Cleanup)
+	digest, err := scriptControllerCleanupSHA256(*record.Outcome, *record.Cleanup)
 	return err == nil && record.LastCheckpointSHA256 == digest
 }
 

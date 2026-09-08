@@ -21,6 +21,9 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 	retry TaskRecord,
 	revision int64,
 ) (scriptTaskChange, error) {
+	if source.Type == TaskScript {
+		return repository.prepareManualScriptRetry(ctx, source, retry, revision)
+	}
 	applies, err := taskOwnsScriptRemoval(source)
 	if err != nil || !applies {
 		return scriptTaskChange{}, err

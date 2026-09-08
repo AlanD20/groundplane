@@ -7,10 +7,10 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// blueprintClosingReport is temporary continuation authority, not a terminal
+// scriptClosingReport is temporary continuation authority, not a terminal
 // receipt. It is created with source closure and deleted with Task completion.
 // Result is the original Agent report, before recovery normalization.
-type blueprintClosingReport struct {
+type scriptClosingReport struct {
 	TaskID               string           `json:"task_id"`
 	OperationID          string           `json:"operation_id"`
 	PlanHash             string           `json:"plan_hash"`
@@ -30,15 +30,37 @@ func blueprintClosingReportKey(taskID string) string {
 	return "/v1/records/blueprint-closing-reports/" + taskID
 }
 
-func (report blueprintClosingReport) matches(status TaskStatus, result TaskResultRecord) bool {
+func manualScriptClosingReportKey(taskID string) string {
+	return "/v1/records/manual-script-closing-reports/" + taskID
+}
+
+func scriptClosingReportKey(task TaskRecord) string {
+	if task.Type == TaskScript {
+		return manualScriptClosingReportKey(task.ID)
+	}
+	return blueprintClosingReportKey(task.ID)
+}
+
+func scriptClosingReportEnvelope(task TaskRecord) string {
+	if task.Type == TaskScript {
+		return "manual-script-closing-report"
+	}
+	return "blueprint-closing-report"
+}
+
+func taskHasScriptClosingReport(task TaskRecord) bool {
+	return task.Type == TaskScript || (task.Type == TaskUpdate && task.Params[TaskReleasePublicationParam] != "")
+}
+
+func (report scriptClosingReport) matches(status TaskStatus, result TaskResultRecord) bool {
 	return report.Status == status && taskResultsEqual(report.Result, result) &&
 		report.ExecutionEpoch == result.ExecutionEpoch && report.RecoveryRecordSHA256 == result.ReleaseRecoveryRecordSHA256
 }
 
-func (report blueprintClosingReport) validate(current TaskAssignment) error {
+func (report scriptClosingReport) validate(current TaskAssignment) error {
 	task, assignment := current.Task.Record, current.Assignment.Record
-	if task.Type != TaskUpdate || task.Status != TaskStatusRunning || task.Executor != TaskExecutorAgent ||
-		task.Params[TaskReleasePublicationParam] == "" || report.TaskID != task.ID ||
+	if !taskHasScriptClosingReport(task) || task.Status != TaskStatusRunning || task.Executor != TaskExecutorAgent ||
+		report.TaskID != task.ID ||
 		report.OperationID != task.OperationID || report.PlanHash != task.PlanHash ||
 		report.AssignmentID != assignment.AssignmentID || report.AgentID != assignment.AgentID ||
 		report.AgentGeneration != assignment.AgentGeneration || report.ExecutionEpoch != assignment.ExecutionEpoch ||
@@ -57,46 +79,46 @@ func (report blueprintClosingReport) validate(current TaskAssignment) error {
 	return nil
 }
 
-func (repository *TaskRepository) readBlueprintClosingReport(
+func (repository *TaskRepository) readScriptClosingReport(
 	ctx context.Context, current TaskAssignment,
-) (blueprintClosingReport, *KeyValue, error) {
+) (scriptClosingReport, *KeyValue, error) {
 	read, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys: []string{blueprintClosingReportKey(current.Task.Record.ID)}, Revision: current.Task.ReadRevision,
+		Keys: []string{scriptClosingReportKey(current.Task.Record)}, Revision: current.Task.ReadRevision,
 	})
 	if err != nil {
-		return blueprintClosingReport{}, nil, err
+		return scriptClosingReport{}, nil, err
 	}
 	if read == nil || read.ReadRevision != current.Task.ReadRevision || len(read.Values) != 1 {
-		return blueprintClosingReport{}, nil, corruptTaskAssignment()
+		return scriptClosingReport{}, nil, corruptTaskAssignment()
 	}
 	value := read.Values[0]
 	if value == nil {
-		return blueprintClosingReport{}, nil, nil
+		return scriptClosingReport{}, nil, nil
 	}
-	report, err := decodeEnvelope[blueprintClosingReport](value.Value, "blueprint-closing-report")
+	report, err := decodeEnvelope[scriptClosingReport](value.Value, scriptClosingReportEnvelope(current.Task.Record))
 	if err != nil {
-		return blueprintClosingReport{}, nil, err
+		return scriptClosingReport{}, nil, err
 	}
 	report.Result.ExecutionEpoch = report.ExecutionEpoch
 	report.Result.ReleaseRecoveryRecordSHA256 = report.RecoveryRecordSHA256
 	if err := report.validate(current); err != nil {
-		return blueprintClosingReport{}, nil, err
+		return scriptClosingReport{}, nil, err
 	}
 	return report, value, nil
 }
 
-func (repository *TaskRepository) prepareBlueprintClosingReport(
+func (repository *TaskRepository) prepareScriptClosingReport(
 	ctx context.Context, current TaskAssignment, status TaskStatus, result TaskResultRecord,
 	observedAt time.Time, starting bool,
-) (blueprintClosingReport, Condition, Mutation, error) {
-	report, value, err := repository.readBlueprintClosingReport(ctx, current)
+) (scriptClosingReport, Condition, Mutation, error) {
+	report, value, err := repository.readScriptClosingReport(ctx, current)
 	if err != nil {
-		return blueprintClosingReport{}, Condition{}, Mutation{}, err
+		return scriptClosingReport{}, Condition{}, Mutation{}, err
 	}
-	key := blueprintClosingReportKey(current.Task.Record.ID)
+	key := scriptClosingReportKey(current.Task.Record)
 	if !starting {
 		if value == nil || !report.matches(status, result) {
-			return blueprintClosingReport{}, Condition{}, Mutation{}, errs.New(
+			return scriptClosingReport{}, Condition{}, Mutation{}, errs.New(
 				errs.KindStateConflict, "Blueprint closing report changed",
 			)
 		}
@@ -109,10 +131,10 @@ func (repository *TaskRepository) prepareBlueprintClosingReport(
 			}, nil
 	}
 	if value != nil {
-		return blueprintClosingReport{}, Condition{}, Mutation{}, corruptTaskAssignment()
+		return scriptClosingReport{}, Condition{}, Mutation{}, corruptTaskAssignment()
 	}
 	task, assignment := current.Task.Record, current.Assignment.Record
-	report = blueprintClosingReport{
+	report = scriptClosingReport{
 		TaskID: task.ID, OperationID: task.OperationID, PlanHash: task.PlanHash,
 		AssignmentID: assignment.AssignmentID, AgentID: assignment.AgentID,
 		AgentGeneration: assignment.AgentGeneration, ExecutionEpoch: assignment.ExecutionEpoch,
@@ -121,19 +143,19 @@ func (repository *TaskRepository) prepareBlueprintClosingReport(
 		Status: status, Result: result, ObservedAt: observedAt,
 	}
 	if err := report.validate(current); err != nil {
-		return blueprintClosingReport{}, Condition{}, Mutation{}, err
+		return scriptClosingReport{}, Condition{}, Mutation{}, err
 	}
-	encoded, err := encodeEnvelope("blueprint-closing-report", report)
+	encoded, err := encodeEnvelope(scriptClosingReportEnvelope(task), report)
 	return report, Condition{Key: key}, Mutation{Type: MutationPut, Key: key, Value: encoded}, err
 }
 
-func (repository *TaskRepository) resumeBlueprintClosingReport(
+func (repository *TaskRepository) resumeScriptClosingReport(
 	ctx context.Context, current TaskAssignment,
 ) (TaskAssignment, bool, error) {
-	if current.Task.Record.Type != TaskUpdate {
+	if !taskHasScriptClosingReport(current.Task.Record) {
 		return current, false, nil
 	}
-	report, value, err := repository.readBlueprintClosingReport(ctx, current)
+	report, value, err := repository.readScriptClosingReport(ctx, current)
 	if err != nil || value == nil {
 		return current, false, err
 	}

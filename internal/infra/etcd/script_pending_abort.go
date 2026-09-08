@@ -11,7 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type blueprintPendingAbortChange struct {
+type pendingScriptAbortChange struct {
 	applies    bool
 	advanced   bool
 	terminalAt time.Time
@@ -19,70 +19,96 @@ type blueprintPendingAbortChange struct {
 	mutations  []Mutation
 }
 
-func (change *blueprintPendingAbortChange) clear() {
+func (change *pendingScriptAbortChange) clear() {
 	if change == nil {
 		return
 	}
 	clearMutationValues(change.mutations)
-	*change = blueprintPendingAbortChange{}
+	*change = pendingScriptAbortChange{}
 }
 
-func (repository *TaskRepository) prepareBlueprintScriptTaskClaimSourceAuthority(
+func (repository *TaskRepository) prepareScriptTaskClaimSourceAuthority(
 	ctx context.Context,
 	task TaskRecord,
 	taskRevision int64,
 	revision int64,
-) ([]Condition, bool, error) {
-	if !blueprintScriptTaskShape(task) {
-		return nil, true, nil
+) (ScriptSourceReleaseFragment, bool, error) {
+	if task.Type != TaskScript && !blueprintScriptTaskShape(task) {
+		return ScriptSourceReleaseFragment{}, true, nil
 	}
-	steps, err := releaseHookExecutionSteps(task)
+	steps, err := preparedScriptExecutionSteps(task)
 	if err != nil {
-		return nil, false, err
+		return ScriptSourceReleaseFragment{}, false, err
 	}
 	if len(steps) == 0 {
-		return nil, true, nil
+		return ScriptSourceReleaseFragment{}, true, nil
 	}
 	key := scriptSourceRootKey(task.OperationID)
 	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
-		return nil, false, err
+		return ScriptSourceReleaseFragment{}, false, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-		return nil, false, corruptReleaseRecord()
+		return ScriptSourceReleaseFragment{}, false, corruptReleaseRecord()
 	}
 	root, err := decodeScriptOperationSourceRoot(read.Values[0].Value)
 	if err != nil || root.OperationID != task.OperationID {
-		return nil, false, corruptReleaseRecord()
+		return ScriptSourceReleaseFragment{}, false, corruptReleaseRecord()
 	}
 	if root.Phase == ScriptOperationSourceReleasing && root.ReleasePath == ScriptSourceReleaseNormal &&
 		(root.RetryDisposition == ScriptRetryDispositionAbandoned ||
 			root.RetryDisposition == ScriptRetryDispositionForbidden) {
-		return nil, false, nil
+		return ScriptSourceReleaseFragment{}, false, nil
 	}
 	if root.Phase != ScriptOperationSourceActive || root.ReleasePath != ScriptSourceReleaseAbsent ||
 		(root.RetryDisposition != ScriptRetryDispositionUndecided &&
 			root.RetryDisposition != ScriptRetryDispositionTransferred) ||
 		read.Values[0].ModRevision != taskRevision {
-		return nil, false, corruptReleaseRecord()
+		return ScriptSourceReleaseFragment{}, false, corruptReleaseRecord()
 	}
-	return []Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}, true, nil
+	change := ScriptSourceReleaseFragment{conditions: []Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}}
+	if task.Type == TaskScript {
+		execution, value, err := (&ScriptRepository{store: repository.store}).manualScriptExecutionAtRevision(
+			ctx,
+			task,
+			revision,
+		)
+		if err != nil || !manualScriptRootMatches(execution, root) || execution.State != ScriptExecutionNotStarted ||
+			!execution.ActiveReference {
+			return ScriptSourceReleaseFragment{}, false, errs.New(
+				errs.KindInternal,
+				"manual Script claim source authority is corrupt",
+			)
+		}
+		if root.RetryDisposition == ScriptRetryDispositionTransferred {
+			authority, err := newScriptSourceReferenceAuthority(repository.store)
+			if err != nil {
+				return ScriptSourceReleaseFragment{}, false, err
+			}
+			change, err = authority.PrepareRetryActivation(ctx, task.OperationID, read.Values[0].ModRevision)
+			if err != nil {
+				return ScriptSourceReleaseFragment{}, false, err
+			}
+		}
+		change.conditions = append(change.conditions, Condition{Key: value.Key, ModRevision: value.ModRevision})
+	}
+	return change, true, nil
 }
 
-func (repository *TaskRepository) prepareBlueprintPendingAbort(
+func (repository *TaskRepository) preparePendingScriptAbort(
 	ctx context.Context,
 	task Versioned[TaskRecord],
 	requestedTerminalAt time.Time,
-) (blueprintPendingAbortChange, error) {
-	if !blueprintScriptTaskShape(task.Record) {
-		return blueprintPendingAbortChange{}, nil
+) (pendingScriptAbortChange, error) {
+	if task.Record.Type != TaskScript && !blueprintScriptTaskShape(task.Record) {
+		return pendingScriptAbortChange{}, nil
 	}
-	steps, err := releaseHookExecutionSteps(task.Record)
+	steps, err := preparedScriptExecutionSteps(task.Record)
 	if err != nil {
-		return blueprintPendingAbortChange{}, err
+		return pendingScriptAbortChange{}, err
 	}
 	if len(steps) == 0 {
-		return blueprintPendingAbortChange{}, nil
+		return pendingScriptAbortChange{}, nil
 	}
 	keys := make([]string, 1, len(steps)+1)
 	keys[0] = scriptSourceRootKey(task.Record.OperationID)
@@ -91,40 +117,46 @@ func (repository *TaskRepository) prepareBlueprintPendingAbort(
 	}
 	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: task.ReadRevision})
 	if err != nil {
-		return blueprintPendingAbortChange{}, err
+		return pendingScriptAbortChange{}, err
 	}
 	if read == nil || read.ReadRevision != task.ReadRevision || len(read.Values) != len(keys) ||
 		read.Values[0] == nil {
-		return blueprintPendingAbortChange{}, corruptReleaseRecord()
+		return pendingScriptAbortChange{}, corruptReleaseRecord()
 	}
 	root, err := decodeScriptOperationSourceRoot(read.Values[0].Value)
 	if err != nil || root.OperationID != task.Record.OperationID {
-		return blueprintPendingAbortChange{}, corruptReleaseRecord()
+		return pendingScriptAbortChange{}, corruptReleaseRecord()
 	}
-	executions, err := decodeBlueprintPendingAbortExecutions(task.Record, steps, read.Values[1:])
+	executions, err := decodePendingScriptAbortExecutions(task.Record, steps, read.Values[1:])
 	if err != nil {
-		return blueprintPendingAbortChange{}, err
+		return pendingScriptAbortChange{}, err
+	}
+	if task.Record.Type == TaskScript && (len(executions) != 1 || !manualScriptRootMatches(executions[0], root)) {
+		return pendingScriptAbortChange{}, errs.New(
+			errs.KindInternal,
+			"manual Script Abort source authority is corrupt",
+		)
 	}
 	if root.Phase == ScriptOperationSourceActive {
 		if root.ReleasePath != ScriptSourceReleaseAbsent ||
 			(root.RetryDisposition != ScriptRetryDispositionUndecided &&
 				root.RetryDisposition != ScriptRetryDispositionTransferred) ||
 			read.Values[0].ModRevision != task.Revision {
-			return blueprintPendingAbortChange{}, corruptReleaseRecord()
+			return pendingScriptAbortChange{}, corruptReleaseRecord()
 		}
-		return repository.beginBlueprintPendingAbort(ctx, task, requestedTerminalAt, steps, executions, read.Values)
+		return repository.beginPendingScriptAbort(ctx, task, requestedTerminalAt, steps, executions, read.Values)
 	}
 	if root.Phase != ScriptOperationSourceReleasing || root.ReleasePath != ScriptSourceReleaseNormal ||
 		root.RetryDisposition != ScriptRetryDispositionAbandoned {
-		return blueprintPendingAbortChange{}, corruptReleaseRecord()
+		return pendingScriptAbortChange{}, corruptReleaseRecord()
 	}
-	terminalAt, err := blueprintPendingAbortTerminalAt(task.Record, steps, executions)
+	terminalAt, err := pendingScriptAbortTerminalAt(task.Record, steps, executions)
 	if err != nil {
-		return blueprintPendingAbortChange{}, err
+		return pendingScriptAbortChange{}, err
 	}
 	authority, err := newScriptSourceReferenceAuthority(repository.store)
 	if err != nil {
-		return blueprintPendingAbortChange{}, err
+		return pendingScriptAbortChange{}, err
 	}
 	guards := make([]Condition, 0, len(executions)+1)
 	guards = append(guards, Condition{Key: taskKey(task.Record.ID), ModRevision: task.Revision})
@@ -134,45 +166,45 @@ func (repository *TaskRepository) prepareBlueprintPendingAbort(
 	processed, drained, err := authority.ReleaseNext(ctx, task.Record.OperationID, guards)
 	if err != nil {
 		if errors.Is(err, errs.New(errs.KindStateConflict, "")) {
-			return blueprintPendingAbortChange{applies: true, advanced: true, terminalAt: terminalAt}, nil
+			return pendingScriptAbortChange{applies: true, advanced: true, terminalAt: terminalAt}, nil
 		}
-		return blueprintPendingAbortChange{}, err
+		return pendingScriptAbortChange{}, err
 	}
 	if processed {
-		return blueprintPendingAbortChange{applies: true, advanced: true, terminalAt: terminalAt}, nil
+		return pendingScriptAbortChange{applies: true, advanced: true, terminalAt: terminalAt}, nil
 	}
 	if !drained {
-		return blueprintPendingAbortChange{}, corruptReleaseRecord()
+		return pendingScriptAbortChange{}, corruptReleaseRecord()
 	}
 	final, err := authority.PrepareReleaseFinalization(ctx, task.Record.OperationID)
 	if err != nil {
-		return blueprintPendingAbortChange{}, err
+		return pendingScriptAbortChange{}, err
 	}
 	conditions := append([]Condition(nil), final.conditions...)
 	conditions = append(conditions, guards[1:]...)
 	mutations := append([]Mutation(nil), final.mutations...)
 	final.Clear()
-	return blueprintPendingAbortChange{
+	return pendingScriptAbortChange{
 		applies: true, terminalAt: terminalAt, conditions: conditions, mutations: mutations,
 	}, nil
 }
 
-func (repository *TaskRepository) beginBlueprintPendingAbort(
+func (repository *TaskRepository) beginPendingScriptAbort(
 	ctx context.Context,
 	task Versioned[TaskRecord],
 	requestedTerminalAt time.Time,
 	steps []releaseHookExecutionStep,
 	executions []ScriptExecutionRecord,
 	values []*KeyValue,
-) (blueprintPendingAbortChange, error) {
+) (pendingScriptAbortChange, error) {
 	terminal, err := transitionTaskStatus(task.Record, TaskStatusPending, TaskStatusAborted, requestedTerminalAt)
 	if err != nil {
-		return blueprintPendingAbortChange{}, err
+		return pendingScriptAbortChange{}, err
 	}
 	terminalAt := *terminal.FinishedAt
 	authority, err := newScriptSourceReferenceAuthority(repository.store)
 	if err != nil {
-		return blueprintPendingAbortChange{}, err
+		return pendingScriptAbortChange{}, err
 	}
 	release, err := authority.PrepareNormalRelease(
 		ctx,
@@ -180,38 +212,38 @@ func (repository *TaskRepository) beginBlueprintPendingAbort(
 		ScriptRetryDispositionAbandoned,
 	)
 	if err != nil {
-		return blueprintPendingAbortChange{}, err
+		return pendingScriptAbortChange{}, err
 	}
 	defer release.Clear()
 	if len(release.conditions) == 0 || len(release.mutations) == 0 {
-		return blueprintPendingAbortChange{applies: true, advanced: true, terminalAt: terminalAt}, nil
+		return pendingScriptAbortChange{applies: true, advanced: true, terminalAt: terminalAt}, nil
 	}
 	conditions := append([]Condition{{Key: taskKey(task.Record.ID), ModRevision: task.Revision}}, release.conditions...)
 	mutations := append([]Mutation(nil), release.mutations...)
 	defer clearMutationValues(mutations)
 	for index, execution := range executions {
-		next, encodeErr := abortBlueprintScriptExecutionBeforeStart(
+		next, encodeErr := abortScriptExecutionBeforeStart(
 			execution, task.Record, steps[index], terminalAt,
 		)
 		if encodeErr != nil {
-			return blueprintPendingAbortChange{}, encodeErr
+			return pendingScriptAbortChange{}, encodeErr
 		}
 		encoded, encodeErr := encodeEnvelope("script-execution", next)
 		if encodeErr != nil {
-			return blueprintPendingAbortChange{}, encodeErr
+			return pendingScriptAbortChange{}, encodeErr
 		}
 		conditions = append(conditions, Condition{Key: values[index+1].Key, ModRevision: values[index+1].ModRevision})
 		mutations = append(mutations, Mutation{Type: MutationPut, Key: values[index+1].Key, Value: encoded})
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
-		return blueprintPendingAbortChange{}, err
+		return pendingScriptAbortChange{}, err
 	}
 	clearKeyValues(transaction.FailureReads)
-	return blueprintPendingAbortChange{applies: true, advanced: true, terminalAt: terminalAt}, nil
+	return pendingScriptAbortChange{applies: true, advanced: true, terminalAt: terminalAt}, nil
 }
 
-func decodeBlueprintPendingAbortExecutions(
+func decodePendingScriptAbortExecutions(
 	task TaskRecord,
 	steps []releaseHookExecutionStep,
 	values []*KeyValue,
@@ -235,16 +267,17 @@ func decodeBlueprintPendingAbortExecutions(
 	return result, nil
 }
 
-func abortBlueprintScriptExecutionBeforeStart(
+func abortScriptExecutionBeforeStart(
 	record ScriptExecutionRecord,
 	task TaskRecord,
 	step releaseHookExecutionStep,
 	terminalAt time.Time,
 ) (ScriptExecutionRecord, error) {
-	if task.Status != TaskStatusPending || !blueprintScriptTaskShape(task) || !taskOwnsScriptExecution(task, record) ||
+	if task.Status != TaskStatusPending || (task.Type != TaskScript && !blueprintScriptTaskShape(task)) || !taskOwnsScriptExecution(task, record) ||
 		record.State != ScriptExecutionNotStarted || record.AssignmentID != "" || record.StartAuthorized ||
 		!record.ActiveReference || record.CurrentTaskID != task.ID || record.OperationID != task.OperationID ||
-		record.ID != step.executionID || record.StepID != step.stepID || !terminalAt.After(record.UpdatedAt) {
+		record.ID != step.executionID || record.StepID != step.stepID ||
+		!terminalAt.After(record.UpdatedAt) {
 		return ScriptExecutionRecord{}, errs.New(
 			errs.KindStateConflict,
 			"pending Blueprint Script execution is not abortable before start",
@@ -252,7 +285,7 @@ func abortBlueprintScriptExecutionBeforeStart(
 	}
 	outcome := ScriptOutcomeEvidence{Reason: ScriptOutcomeAbortBeforeStart, ObservedAt: terminalAt}
 	cleanup := ScriptCleanupEvidence{ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true}
-	digest, err := blueprintPendingAbortCheckpointSHA256(outcome, cleanup)
+	digest, err := scriptControllerCleanupSHA256(outcome, cleanup)
 	if err != nil {
 		return ScriptExecutionRecord{}, err
 	}
@@ -260,7 +293,7 @@ func abortBlueprintScriptExecutionBeforeStart(
 	next.State = ScriptExecutionCleanupProven
 	next.Outcome = &outcome
 	next.Cleanup = &cleanup
-	next.ControllerCleanup = ScriptControllerCleanupBlueprintPendingAbort
+	next.ControllerCleanup = pendingScriptCleanupAuthority(task)
 	next.LastCheckpointSHA256 = digest
 	next.ActiveReference = false
 	next.UpdatedAt = terminalAt
@@ -270,14 +303,14 @@ func abortBlueprintScriptExecutionBeforeStart(
 	return next, nil
 }
 
-func blueprintPendingAbortTerminalAt(
+func pendingScriptAbortTerminalAt(
 	task TaskRecord,
 	steps []releaseHookExecutionStep,
 	executions []ScriptExecutionRecord,
 ) (time.Time, error) {
 	var terminalAt time.Time
 	for index, execution := range executions {
-		if execution.Outcome == nil || !blueprintPendingAbortExecutionMatches(
+		if execution.Outcome == nil || !pendingScriptAbortExecutionMatches(
 			execution, task, steps[index], execution.Outcome.ObservedAt,
 		) {
 			return time.Time{}, corruptReleaseRecord()
@@ -296,7 +329,7 @@ func blueprintPendingAbortTerminalAt(
 	return terminalAt, nil
 }
 
-func blueprintPendingAbortExecutionMatches(
+func pendingScriptAbortExecutionMatches(
 	record ScriptExecutionRecord,
 	task TaskRecord,
 	step releaseHookExecutionStep,
@@ -306,7 +339,7 @@ func blueprintPendingAbortExecutionMatches(
 		record.StepID != step.stepID || record.State != ScriptExecutionCleanupProven || record.AssignmentID != "" ||
 		record.StartAuthorized || record.BodyPrepared != nil || record.ContainerCreated != nil || record.ActiveReference ||
 		record.ReconciliationRequired || record.Outcome == nil || record.Cleanup == nil ||
-		record.ControllerCleanup != ScriptControllerCleanupBlueprintPendingAbort ||
+		record.ControllerCleanup != pendingScriptCleanupAuthority(task) ||
 		record.Outcome.Reason != ScriptOutcomeAbortBeforeStart || record.Outcome.ExitCode != nil ||
 		record.Outcome.OutputTruncated || !record.Outcome.ObservedAt.Equal(terminalAt) ||
 		!record.Cleanup.ContainerAbsent || !record.Cleanup.BodyAbsent || !record.Cleanup.ExecutionDirectoryAbsent ||
@@ -314,11 +347,11 @@ func blueprintPendingAbortExecutionMatches(
 		record.Cleanup.BodyLeaf != "" || !record.UpdatedAt.Equal(terminalAt) {
 		return false
 	}
-	digest, err := blueprintPendingAbortCheckpointSHA256(*record.Outcome, *record.Cleanup)
+	digest, err := scriptControllerCleanupSHA256(*record.Outcome, *record.Cleanup)
 	return err == nil && record.LastCheckpointSHA256 == digest
 }
 
-func blueprintPendingAbortCheckpointSHA256(
+func scriptControllerCleanupSHA256(
 	outcome ScriptOutcomeEvidence,
 	cleanup ScriptCleanupEvidence,
 ) (string, error) {
@@ -335,14 +368,14 @@ func blueprintPendingAbortCheckpointSHA256(
 	return hex.EncodeToString(digest[:]), nil
 }
 
-func (repository *TaskRepository) validateBlueprintPendingAbortReplay(
+func (repository *TaskRepository) validatePendingScriptAbortReplay(
 	ctx context.Context,
 	task Versioned[TaskRecord],
 ) error {
-	if !blueprintScriptTaskShape(task.Record) {
+	if task.Record.Type != TaskScript && !blueprintScriptTaskShape(task.Record) {
 		return nil
 	}
-	steps, err := releaseHookExecutionSteps(task.Record)
+	steps, err := preparedScriptExecutionSteps(task.Record)
 	if err != nil || len(steps) == 0 {
 		return err
 	}
@@ -358,11 +391,11 @@ func (repository *TaskRepository) validateBlueprintPendingAbortReplay(
 	if read == nil || read.ReadRevision != task.ReadRevision || len(read.Values) != len(keys) || read.Values[0] != nil {
 		return corruptReleaseRecord()
 	}
-	executions, err := decodeBlueprintPendingAbortExecutions(task.Record, steps, read.Values[1:])
+	executions, err := decodePendingScriptAbortExecutions(task.Record, steps, read.Values[1:])
 	if err != nil {
 		return err
 	}
-	terminalAt, err := blueprintPendingAbortTerminalAt(task.Record, steps, executions)
+	terminalAt, err := pendingScriptAbortTerminalAt(task.Record, steps, executions)
 	if err != nil || task.Record.FinishedAt == nil || !terminalAt.Equal(*task.Record.FinishedAt) {
 		return corruptReleaseRecord()
 	}

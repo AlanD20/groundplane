@@ -411,12 +411,14 @@ func TestTaskJournalRequiresCanonicalUTCTimestamps(t *testing.T) {
 }
 
 func validTaskRecord(now time.Time) TaskRecord {
+	// Generic journal fixtures carry no Script execution or source authority.
+	// Script tests opt into TaskScript and publish those required companions.
 	task := newTaskRecord(
 		ids.NewAt(ids.KindTask, now, 1),
 		ids.NewAt(ids.KindOperation, now, 2),
 		PlatformTaskOwner(),
 		TaskActorOperator,
-		TaskScript,
+		TaskUpdate,
 		ids.NewAt(ids.KindService, now, 4),
 		120,
 		now,

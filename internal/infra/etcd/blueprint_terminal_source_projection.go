@@ -25,7 +25,7 @@ type blueprintTerminalSourceAdvance struct {
 }
 
 func (advance *blueprintTerminalSourceAdvance) execute(ctx context.Context, repository *TaskRepository) error {
-	change, _, err := repository.prepareBlueprintTerminalScriptSourceRelease(ctx,
+	change, _, err := repository.prepareTerminalScriptSourceRelease(ctx,
 		advance.task, advance.taskValue, advance.assignment, advance.assignmentValue, advance.assignmentIndexValue,
 		advance.recovery, advance.terminalStatus, &advance.terminalAt, advance.revision,
 		advance.submittedStatus, advance.submittedResult, true)
@@ -38,7 +38,7 @@ func (advance *blueprintTerminalSourceAdvance) execute(ctx context.Context, repo
 // is budget-only and cannot be passed to a terminal commit.
 func (advance *blueprintTerminalSourceAdvance) projection(
 	executionGuards []Condition,
-) blueprintTerminalScriptSourceRelease {
+) scriptTerminalSourceRelease {
 	rootKey, reportKey := scriptSourceRootKey(advance.task.OperationID), blueprintClosingReportKey(advance.task.ID)
 	conditions := []Condition{
 		{Key: rootKey, ModRevision: math.MaxInt64},
@@ -48,7 +48,7 @@ func (advance *blueprintTerminalSourceAdvance) projection(
 	for _, condition := range executionGuards {
 		conditions = append(conditions, Condition{Key: condition.Key, ModRevision: math.MaxInt64})
 	}
-	return blueprintTerminalScriptSourceRelease{
+	return scriptTerminalSourceRelease{
 		conditions: conditions,
 		mutations:  []Mutation{{Type: MutationDelete, Key: rootKey}, {Type: MutationDelete, Key: reportKey}},
 		advance:    advance,

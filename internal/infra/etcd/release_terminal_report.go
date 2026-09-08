@@ -13,12 +13,13 @@ func (repository *TaskRepository) prepareReleaseTerminalReport(
 	ctx context.Context, current TaskAssignment, status TaskStatus, result *TaskResultRecord,
 ) ([]Condition, error) {
 	task, assignment := current.Task.Record, current.Assignment.Record
-	if task.Executor != TaskExecutorAgent || result == nil || task.Params[TaskReleasePublicationParam] == "" {
+	if task.Executor != TaskExecutorAgent || result == nil ||
+		(task.Type != TaskScript && task.Params[TaskReleasePublicationParam] == "") {
 		return nil, nil
 	}
 	var conditions []Condition
-	if task.Type == TaskUpdate {
-		report, value, err := repository.readBlueprintClosingReport(ctx, current)
+	if taskHasScriptClosingReport(task) {
+		report, value, err := repository.readScriptClosingReport(ctx, current)
 		if err != nil {
 			return nil, err
 		}
@@ -28,6 +29,9 @@ func (repository *TaskRepository) prepareReleaseTerminalReport(
 			}
 			return nil, nil
 		}
+	}
+	if task.Type == TaskScript {
+		return nil, nil
 	}
 	if assignment.ExecutionMode != TaskExecutionModeForward ||
 		result.Diagnostic != TaskResultDiagnosticTimeoutBeforeEffect || result.ReconciliationRequired {

@@ -122,7 +122,7 @@ func TestAbortPendingBlueprintReleasesScriptExecutionAuthorityBeforeTerminalizat
 		record := scriptCheckpointTestRecord(at)
 		outcome := ScriptOutcomeEvidence{Reason: ScriptOutcomeAbortBeforeStart, ObservedAt: at.Add(time.Second)}
 		cleanup := ScriptCleanupEvidence{ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true}
-		digest, err := blueprintPendingAbortCheckpointSHA256(outcome, cleanup)
+		digest, err := scriptControllerCleanupSHA256(outcome, cleanup)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -138,7 +138,7 @@ func TestAbortPendingBlueprintReleasesScriptExecutionAuthorityBeforeTerminalizat
 		for _, taskType := range []TaskType{TaskScript, TaskDeploy, TaskRollback} {
 			manualRecord := scriptCheckpointTestRecord(at)
 			nonBlueprint := TaskRecord{Type: taskType, Status: TaskStatusPending}
-			if _, transitionErr := abortBlueprintScriptExecutionBeforeStart(
+			if _, transitionErr := abortScriptExecutionBeforeStart(
 				manualRecord,
 				nonBlueprint,
 				releaseHookExecutionStep{stepID: manualRecord.StepID, executionID: manualRecord.ID},
@@ -180,7 +180,7 @@ func TestAbortPendingBlueprintReleasesScriptExecutionAuthorityBeforeTerminalizat
 		mismatchedAt := terminal.Record.FinishedAt.Add(time.Nanosecond)
 		record.Outcome.ObservedAt = mismatchedAt
 		record.UpdatedAt = mismatchedAt
-		record.LastCheckpointSHA256, err = blueprintPendingAbortCheckpointSHA256(*record.Outcome, *record.Cleanup)
+		record.LastCheckpointSHA256, err = scriptControllerCleanupSHA256(*record.Outcome, *record.Cleanup)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -273,7 +273,7 @@ func assertBlueprintPendingAbortReleased(t *testing.T, published environmentBlue
 			t.Fatalf("Script execution %q = %#v, %v", step.executionID, read, getErr)
 		}
 		record, decodeErr := decodeEnvelope[ScriptExecutionRecord](read.Entry.Value, "script-execution")
-		if decodeErr != nil || record.Outcome == nil || !blueprintPendingAbortExecutionMatches(
+		if decodeErr != nil || record.Outcome == nil || !pendingScriptAbortExecutionMatches(
 			record, published.task, step, record.Outcome.ObservedAt,
 		) {
 			t.Fatalf("released Script execution %q = %#v, %v", step.executionID, record, decodeErr)

@@ -252,7 +252,7 @@ func (fixture *ExecutedArtifactFixture) ProveHookTerminalReconnect(
 	if err != nil || root.Phase != ScriptOperationSourceReleasing || root.ReleasePath != ScriptSourceReleaseNormal {
 		t.Fatalf("interruption did not reach normal source release: %v", err)
 	}
-	report, reportValue, err := fixture.Tasks.readBlueprintClosingReport(ctx, after)
+	report, reportValue, err := fixture.Tasks.readScriptClosingReport(ctx, after)
 	if err != nil || reportValue == nil || reportValue.ModRevision != rootRead.Entry.ModRevision ||
 		!report.ObservedAt.Equal(task.CreatedAt.Add(time.Minute)) || !taskResultsEqual(report.Result, result) {
 		t.Fatalf("original report was not captured atomically with source closure: %v", err)

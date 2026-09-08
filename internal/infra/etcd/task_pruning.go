@@ -130,10 +130,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	ctx context.Context,
 	now time.Time,
 ) (Versioned[taskPruneIntent], bool, error) {
-	page, err := repository.store.Range(
-		ctx,
-		RangeRequest{Prefix: taskRetentionIndexPrefix, Limit: 1},
-	)
+	page, err := repository.nextTaskRetentionPruneCandidate(ctx, now)
 	if err != nil {
 		return Versioned[taskPruneIntent]{}, false, err
 	}
@@ -175,7 +172,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		!task.RetainUntil.Equal(retainUntil) {
 		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
-	stop, err := repository.prepareHierarchyDeletionTaskPruneBoundary(
+	stop, err := repository.prepareTaskPruneBoundary(
 		ctx, task, taskValue.ModRevision, retentionEntry, page.ReadRevision, now,
 	)
 	if err != nil {
@@ -397,12 +394,10 @@ func (repository *TaskRepository) beginTaskPrune(
 		{Key: retentionEntry.Key, ModRevision: retentionEntry.ModRevision},
 		{Key: markerKey},
 		activeOperationCondition,
-		{
-			Key:         taskOperationIndexKey(task.OperationID, task.ID),
-			ModRevision: companions.Values[2].ModRevision,
-		},
+		{Key: taskOperationIndexKey(task.OperationID, task.ID), ModRevision: companions.Values[2].ModRevision},
 		{Key: taskPruneIntentKey(task.ID)},
 	}
+	conditions = append(conditions, scriptTaskPruneConditions(task)...)
 	for index, key := range environmentDeletionFenceKeys {
 		condition := Condition{Key: key}
 		value := companions.Values[environmentDeletionFenceStart+index]

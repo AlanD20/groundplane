@@ -829,8 +829,8 @@ func (repository *TaskRepository) claimNextTask(
 			{Type: MutationPut, Key: assignmentIndexKey, Value: assignmentValue},
 			{Type: MutationPut, Key: timeoutIndexKey, Value: assignmentValue},
 		}
-		scriptSourceConditions, scriptSourceReady, err :=
-			repository.prepareBlueprintScriptTaskClaimSourceAuthority(
+		scriptSource, scriptSourceReady, err :=
+			repository.prepareScriptTaskClaimSourceAuthority(
 				ctx, task, taskValue.ModRevision, candidate.readRevision,
 			)
 		if err != nil {
@@ -841,7 +841,9 @@ func (repository *TaskRepository) claimNextTask(
 			clearMutationValues(mutations)
 			return TaskAssignment{}, false, nil
 		}
-		conditions = append(conditions, scriptSourceConditions...)
+		defer scriptSource.Clear()
+		conditions = append(conditions, scriptSource.conditions...)
+		mutations = append(mutations, scriptSource.mutations...)
 		requirementEvidence, requirementApplies, requirementReady, err :=
 			repository.observeBlueprintRequirementGateForClaim(ctx, task, candidate.readRevision)
 		if err != nil {
@@ -1377,7 +1379,7 @@ func (repository *TaskRepository) TimeoutAgentAssignments(
 			ReconciliationRequired: true, ExecutionEpoch: assignment.Assignment.Record.ExecutionEpoch,
 			ReleaseRecoveryRecordSHA256: assignment.Assignment.Record.ReleaseRecoveryRecordSHA256,
 		}
-		if classified, candidate, classifyErr := repository.candidateReleaseTimeoutResult(ctx, assignment); candidate {
+		if classified, candidate, classifyErr := repository.preparedTaskTimeoutResult(ctx, assignment); candidate {
 			if classifyErr != nil {
 				return timedOut, classifyErr
 			}
@@ -1768,7 +1770,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			return Versioned[TaskRecord]{}, err
 		}
 		var recoveryAcknowledgement releaseRecoveryAcknowledgement
-		var terminalScriptSourceRelease blueprintTerminalScriptSourceRelease
+		var terminalScriptSourceRelease scriptTerminalSourceRelease
 		if executor == TaskExecutorAgent && result != nil && task.Params[TaskReleasePublicationParam] != "" &&
 			assignment.ExecutionMode == TaskExecutionModeRecoveryOnly {
 			recoveryAcknowledgement, err = repository.releaseRecoveryAcknowledgementAtRevision(
@@ -1788,12 +1790,10 @@ func (repository *TaskRepository) acknowledgeTask(
 			resolved := recoveryAcknowledgement.result
 			result = &resolved
 		}
-		if executor == TaskExecutorAgent && result != nil &&
-			task.Type == TaskUpdate &&
-			task.Params[TaskReleasePublicationParam] != "" &&
-			!result.ReconciliationRequired {
+		if executor == TaskExecutorAgent && result != nil && taskHasScriptClosingReport(task) &&
+			(task.Type == TaskScript || !result.ReconciliationRequired) {
 			var processed bool
-			terminalScriptSourceRelease, processed, err = repository.prepareBlueprintTerminalScriptSourceRelease(
+			terminalScriptSourceRelease, processed, err = repository.prepareTerminalScriptSourceRelease(
 				ctx, task, taskValue, assignment, assignmentValue, assignmentIndexValue,
 				recoveryAcknowledgement, terminalStatus, &terminalAt, primaryAndAssignment.ReadRevision,
 				submittedTerminalStatus, *submittedResult, false,
@@ -2897,7 +2897,7 @@ func (repository *TaskRepository) ExpireTimedOutTasks(ctx context.Context, now t
 				ReleaseRecoveryRecordSHA256: assignment.ReleaseRecoveryRecordSHA256,
 			}
 			if current, assignmentErr := repository.GetTaskAssignment(ctx, taskID); assignmentErr == nil {
-				if classified, candidate, classifyErr := repository.candidateReleaseTimeoutResult(ctx, current); candidate {
+				if classified, candidate, classifyErr := repository.preparedTaskTimeoutResult(ctx, current); candidate {
 					if classifyErr != nil {
 						return expired, classifyErr
 					}
@@ -3002,7 +3002,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			validateStableID(ids.KindNetwork, current.Record.Target) == nil &&
 			current.Record.Params[TaskZoneRemovalOperationParam] != ""
 		if current.Record.Status == TaskStatusAborted {
-			if err := repository.validateBlueprintPendingAbortReplay(ctx, current); err != nil {
+			if err := repository.validatePendingScriptAbortReplay(ctx, current); err != nil {
 				return Versioned[TaskRecord]{}, err
 			}
 			if environmentCreation {
@@ -3099,7 +3099,7 @@ func (repository *TaskRepository) AbortPendingTask(
 				"only a pending Task can be aborted before assignment",
 			)
 		}
-		blueprintAbortChange, err := repository.prepareBlueprintPendingAbort(ctx, current, terminalAt)
+		blueprintAbortChange, err := repository.preparePendingScriptAbort(ctx, current, terminalAt)
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}

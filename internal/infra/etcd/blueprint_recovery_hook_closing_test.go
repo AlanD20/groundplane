@@ -38,7 +38,7 @@ func (fixture *ExecutedArtifactFixture) ProveRecoveryHookTerminalReconnect(
 		after.Assignment.Revision != before.Assignment.Revision {
 		t.Fatalf("interrupted recovery changed execution authority: %v", err)
 	}
-	report, value, err := fixture.Tasks.readBlueprintClosingReport(ctx, after)
+	report, value, err := fixture.Tasks.readScriptClosingReport(ctx, after)
 	if err != nil || value == nil || report.Status != TaskStatusCompleted ||
 		!report.matches(TaskStatusCompleted, result) ||
 		report.Result.ReleaseRecoveryRecordSHA256 == "" ||

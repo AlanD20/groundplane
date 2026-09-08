@@ -1,7 +1,6 @@
 package etcd
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -43,6 +42,9 @@ const (
 	ScriptExecutionCleanupProven    ScriptExecutionState = "cleanup_proven"
 
 	ScriptControllerCleanupBlueprintPendingAbort        ScriptControllerCleanupAuthority = "blueprint_pending_abort"
+	ScriptControllerCleanupManualPendingAbort           ScriptControllerCleanupAuthority = "manual_pending_abort"
+	ScriptControllerCleanupManualAssignedAbort          ScriptControllerCleanupAuthority = "manual_assigned_abort"
+	ScriptControllerCleanupManualRetryExpiry            ScriptControllerCleanupAuthority = "manual_retry_expiry"
 	ScriptControllerCleanupReleaseRecoveryParentFailure ScriptControllerCleanupAuthority = "release_recovery_parent_failure"
 )
 
@@ -63,6 +65,8 @@ type ScriptExecutionRecord struct {
 	ReleaseID              string                           `json:"release_id"`
 	RenderGeneration       uint64                           `json:"render_generation"`
 	PlanHash               string                           `json:"plan_hash"`
+	SourceMembershipCount  uint64                           `json:"source_membership_count,omitempty"`
+	SourceMembershipSHA256 string                           `json:"source_membership_sha256,omitempty"`
 	SnapshotSHA256         string                           `json:"snapshot_sha256"`
 	BodySHA256             string                           `json:"body_sha256"`
 	RunnerProjectionSHA256 string                           `json:"runner_projection_sha256"`
@@ -617,373 +621,6 @@ func NewScriptExecutionRecords(
 	return records, nil
 }
 
-// PublishExecutionWithTask atomically claims the body generation, source
-// snapshot, Environment-owned Task, queue membership, and idempotency marker.
-func (repository *ScriptRepository) PublishExecutionWithTask(
-	ctx context.Context,
-	sources ScriptExecutionSources,
-	execution ScriptExecutionRecord,
-	task TaskRecord,
-	marker IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
-	if err := validateContext(ctx); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	execution.ScriptSetGeneration = sources.Script.Record.ScriptSetGeneration
-	if err := validateScriptExecutionSources(sources, execution); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if err := validateScriptExecutionRecord(execution); err != nil ||
-		execution.State != ScriptExecutionNotStarted || !execution.ActiveReference {
-		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindValidationFailed,
-			"new Script execution record is invalid",
-		)
-	}
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || !marker.CreatedAt.Equal(task.CreatedAt) ||
-		!marker.UpdatedAt.Equal(marker.CreatedAt) || task.ID != execution.CurrentTaskID ||
-		task.OperationID != execution.OperationID || len(task.Steps) != 1 || task.Steps[0].ID != execution.StepID {
-		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindValidationFailed,
-			"Script execution marker does not match its Task",
-		)
-	}
-	initiation, err := newEnvironmentTaskInitiation(
-		&sources.Tenant,
-		sources.Project,
-		sources.Environment,
-		TaskActorOperator,
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	task = cloneTaskRecord(task)
-	if task.IdempotencyKey == "" {
-		task.IdempotencyKey = marker.Locator.Key
-	}
-	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	if err := validateTaskInitiation(task, initiation, true); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if err := validateTaskRecord(task); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if sources.Script.Record.ActiveReferences == math.MaxUint64 {
-		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindStateConflict,
-			"Script active reference count is exhausted",
-		)
-	}
-	updatedScript := sources.Script.Record
-	updatedScript.ActiveReferences++
-
-	scriptValue, err := encodeScriptRecord(updatedScript)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clear(scriptValue)
-	executionValue, err := encodeEnvelope("script-execution", execution)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clear(executionValue)
-	snapshotValue, err := encodeEnvelope("script-runner-snapshot", struct {
-		ExecutionID string `json:"script_execution_id"`
-		SnapshotID  string `json:"snapshot_id"`
-		SHA256      string `json:"sha256"`
-		Payload     []byte `json:"payload"`
-	}{
-		ExecutionID: execution.ID, SnapshotID: execution.SnapshotID,
-		SHA256: execution.SnapshotSHA256, Payload: execution.Snapshot,
-	})
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clear(snapshotValue)
-	taskValue, err := encodeTaskRecord(task)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clear(taskValue)
-	taskReference, err := encodeTaskReference(task.ID)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clear(taskReference)
-	bodyReference, err := encodeEnvelope("script-body-reference", struct {
-		ExecutionID         string `json:"script_execution_id"`
-		ScriptID            string `json:"script_id"`
-		Generation          uint64 `json:"generation"`
-		ScriptSetGeneration string `json:"script_set_generation"`
-	}{ExecutionID: execution.ID, ScriptID: execution.ScriptID, Generation: execution.ScriptGeneration,
-		ScriptSetGeneration: execution.ScriptSetGeneration})
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clear(bodyReference)
-
-	conditions := []Condition{
-		{Key: scriptExecutionKey(execution.ID)},
-		{Key: scriptRunnerSnapshotKey(execution.SnapshotID)},
-		{
-			Key: scriptSetBodyForwardReferenceKey(
-				execution.EnvironmentID,
-				execution.ScriptSetGeneration,
-				execution.ScriptID,
-				execution.ScriptGeneration,
-				execution.ID,
-			),
-		},
-		{Key: scriptBodyReverseReferenceKey(execution.ID)},
-		{Key: taskKey(task.ID)},
-		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskActiveOperationKey(task.OperationID)},
-		{Key: taskQueueKey(task.Executor, task.ID)},
-		{
-			Key:         scriptSetScriptKey(execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID),
-			ModRevision: sources.Script.Revision,
-		},
-		{
-			Key: scriptSetBodyGenerationKey(
-				execution.EnvironmentID,
-				execution.ScriptSetGeneration,
-				execution.ScriptID,
-				execution.ScriptGeneration,
-			),
-			ModRevision: sources.BodyGeneration.Revision,
-		},
-		{Key: scriptSetActiveKey(execution.EnvironmentID)},
-		{Key: releaseProjectionKey(execution.ServiceID), ModRevision: sources.Release.ProjectionRevision},
-		{Key: releaseIntentStagingKey("", execution.ReleaseID), ModRevision: sources.Release.IntentRevision},
-		{Key: releaseRenderInputStagingKey("", execution.ReleaseID), ModRevision: sources.RenderInput.Revision},
-	}
-	sourceConditions, err := manualScriptSourceConditions(sources)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	conditions = append(conditions, sourceConditions...)
-	active, err := readActiveScriptSet(ctx, repository.store, execution.EnvironmentID, sources.Revision)
-	if err != nil || active.Record.GenerationID != execution.ScriptSetGeneration {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Script-set generation changed")
-	}
-	conditions[10].ModRevision = active.Revision
-	activeValue, err := encodeScriptSetGeneration(active.Record)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clear(activeValue)
-	mutations := []Mutation{
-		{
-			Type:  MutationPut,
-			Key:   scriptSetScriptKey(execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID),
-			Value: scriptValue,
-		},
-		{Type: MutationPut, Key: scriptExecutionKey(execution.ID), Value: executionValue},
-		{Type: MutationPut, Key: scriptRunnerSnapshotKey(execution.SnapshotID), Value: snapshotValue},
-		{
-			Type: MutationPut,
-			Key: scriptSetBodyForwardReferenceKey(
-				execution.EnvironmentID,
-				execution.ScriptSetGeneration,
-				execution.ScriptID,
-				execution.ScriptGeneration,
-				execution.ID,
-			),
-			Value: bodyReference,
-		},
-		{Type: MutationPut, Key: scriptBodyReverseReferenceKey(execution.ID), Value: bodyReference},
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: taskReference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
-		{Type: MutationPut, Key: scriptSetActiveKey(execution.EnvironmentID), Value: activeValue},
-	}
-	plan, err := newTaskIdempotencyMutationPlan(
-		task, initiation, conditions, mutations, classifyScriptExecutionPublication(len(conditions)),
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	idempotency, err := newIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return idempotency.Apply(ctx, marker, plan)
-}
-
-func (repository *ScriptRepository) GetScriptExecutionPlan(
-	ctx context.Context,
-	task TaskRecord,
-) (*agentpb.ExecutionPlan, error) {
-	executionID := task.Params[ScriptExecutionIDParam]
-	if ctx == nil || repository == nil || repository.store == nil || task.Type != TaskScript ||
-		!validRawScriptExecutionID(executionID) {
-		return nil, errs.New(errs.KindValidationFailed, "Script execution plan request is invalid")
-	}
-	read, err := repository.store.Get(ctx, scriptExecutionKey(executionID))
-	if err != nil {
-		return nil, err
-	}
-	if read == nil || read.Entry == nil {
-		return nil, errs.New(errs.KindStateConflict, "Script execution record is missing")
-	}
-	record, err := decodeEnvelope[ScriptExecutionRecord](read.Entry.Value, "script-execution")
-	if err != nil || validateScriptExecutionRecord(record) != nil || record.CurrentTaskID != task.ID ||
-		record.OperationID != task.OperationID || record.StepID != task.Steps[0].ID || record.PlanHash != task.PlanHash {
-		return nil, errs.New(errs.KindInternal, "Script execution record is corrupt")
-	}
-	plan := &agentpb.ExecutionPlan{}
-	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(record.Plan, plan); err != nil {
-		return nil, errs.New(errs.KindInternal, "Script execution plan is corrupt")
-	}
-	validated, err := executionplan.Validate(plan)
-	if err != nil || hex.EncodeToString(validated.PlanHash) != task.PlanHash {
-		return nil, errs.New(errs.KindInternal, "Script execution plan is corrupt")
-	}
-	return validated, nil
-}
-
-func (repository *ScriptRepository) GetReleaseScriptExecutionPlan(
-	ctx context.Context,
-	task TaskRecord,
-) (*agentpb.ExecutionPlan, bool, error) {
-	if ctx == nil || repository == nil || repository.store == nil ||
-		(task.Type != TaskDeploy && task.Type != TaskRollback &&
-			(task.Type != TaskUpdate || task.Params[TaskReleasePublicationParam] == "")) {
-		return nil, false, errs.New(errs.KindValidationFailed, "release Script execution plan request is invalid")
-	}
-	executionIDs := make(map[string]string)
-	for _, step := range task.Steps {
-		if executionID := task.Params[ReleaseHookStepExecutionParam(step.ID)]; executionID != "" {
-			if !validRawScriptExecutionID(executionID) {
-				return nil, false, errs.New(errs.KindInternal, "release Script execution identity is corrupt")
-			}
-			executionIDs[step.ID] = executionID
-		}
-	}
-	if len(executionIDs) == 0 {
-		return nil, false, nil
-	}
-	var sealed *agentpb.ExecutionPlan
-	var sealedBytes []byte
-	for stepID, executionID := range executionIDs {
-		read, err := repository.store.Get(ctx, scriptExecutionKey(executionID))
-		if err != nil {
-			return nil, false, err
-		}
-		if read == nil || read.Entry == nil {
-			return nil, false, errs.New(errs.KindStateConflict, "release Script execution record is missing")
-		}
-		record, err := decodeEnvelope[ScriptExecutionRecord](read.Entry.Value, "script-execution")
-		if err != nil || validateScriptExecutionRecord(record) != nil || record.ID != executionID ||
-			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID || record.StepID != stepID ||
-			record.PlanHash != task.PlanHash {
-			return nil, false, errs.New(errs.KindInternal, "release Script execution record is corrupt")
-		}
-		if task.Type == TaskUpdate {
-			if authorityErr := repository.validateBlueprintScriptExecutionAuthority(
-				ctx, task, record, read.ReadRevision,
-			); authorityErr != nil {
-				return nil, false, authorityErr
-			}
-		}
-		if sealed == nil {
-			sealed = &agentpb.ExecutionPlan{}
-			if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(record.Plan, sealed); err != nil {
-				return nil, false, errs.New(errs.KindInternal, "release Script execution plan is corrupt")
-			}
-			validated, err := executionplan.Validate(sealed)
-			if err != nil || hex.EncodeToString(validated.PlanHash) != task.PlanHash {
-				return nil, false, errs.New(errs.KindInternal, "release Script execution plan is corrupt")
-			}
-			sealed = validated
-			sealedBytes = append([]byte(nil), record.Plan...)
-		} else if !bytes.Equal(record.Plan, sealedBytes) {
-			return nil, false, errs.New(errs.KindInternal, "release Script execution plans disagree")
-		}
-	}
-	for _, step := range sealed.Steps {
-		if step.GetRunScript() != nil && executionIDs[step.StepId] != step.GetRunScript().ScriptExecutionId {
-			return nil, false, errs.New(errs.KindInternal, "release Script execution plan authority is incomplete")
-		}
-	}
-	return sealed, true, nil
-}
-
-func scriptAssignmentTaskOwnsPlan(task TaskRecord, plan *agentpb.ExecutionPlan) bool {
-	if task.Type == TaskScript || task.Type == TaskDeploy || task.Type == TaskRollback {
-		return true
-	}
-	return task.Type == TaskUpdate && task.Params[TaskReleasePublicationParam] != "" &&
-		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY && plan.TargetId == task.Target
-}
-
-// ResolveScriptAssignmentArtifacts returns the private body bytes only after
-// the durable execution, sealed plan, and immutable generation agree.
-func (repository *ScriptRepository) ResolveScriptAssignmentArtifacts(
-	ctx context.Context,
-	task TaskRecord,
-	plan *agentpb.ExecutionPlan,
-) (*agentpb.ScriptAssignmentArtifacts, error) {
-	validated, err := executionplan.Validate(plan)
-	if err != nil {
-		return nil, err
-	}
-	if repository == nil || repository.store == nil || len(validated.ScriptBodyArtifacts) == 0 ||
-		!scriptAssignmentTaskOwnsPlan(task, validated) ||
-		hex.EncodeToString(validated.PlanHash) != task.PlanHash {
-		return nil, errs.New(errs.KindValidationFailed, "Script assignment artifact request is invalid")
-	}
-	steps := make(map[string]string, len(validated.ScriptBodyArtifacts))
-	for _, step := range validated.Steps {
-		if run := step.GetRunScript(); run != nil {
-			steps[run.ScriptExecutionId] = step.StepId
-		}
-	}
-	artifacts := &agentpb.ScriptAssignmentArtifacts{}
-	for _, metadata := range validated.ScriptBodyArtifacts {
-		executionRead, readErr := repository.store.Get(ctx, scriptExecutionKey(metadata.ScriptExecutionId))
-		if readErr != nil {
-			return nil, readErr
-		}
-		if executionRead == nil || executionRead.Entry == nil {
-			return nil, errs.New(errs.KindStateConflict, "Script execution record is missing")
-		}
-		execution, decodeErr := decodeEnvelope[ScriptExecutionRecord](executionRead.Entry.Value, "script-execution")
-		if decodeErr != nil || validateScriptExecutionRecord(execution) != nil || execution.CurrentTaskID != task.ID ||
-			execution.OperationID != task.OperationID || execution.StepID != steps[metadata.ScriptExecutionId] ||
-			execution.PlanHash != task.PlanHash || !execution.ActiveReference {
-			return nil, errs.New(errs.KindInternal, "Script execution record is corrupt")
-		}
-		bodyRead, readErr := repository.store.Get(ctx, scriptSetBodyGenerationKey(
-			execution.EnvironmentID, execution.ScriptSetGeneration, metadata.ScriptId, metadata.Generation,
-		))
-		if readErr != nil {
-			return nil, readErr
-		}
-		if bodyRead == nil || bodyRead.Entry == nil {
-			return nil, errs.New(errs.KindInternal, "Script body generation is missing")
-		}
-		body, decodeErr := decodeScriptBodyGeneration(bodyRead.Entry.Value)
-		if decodeErr != nil || body.ScriptID != metadata.ScriptId || body.Generation != metadata.Generation ||
-			body.BodySize != metadata.Size || body.BodySHA256 != hex.EncodeToString(metadata.Sha256) ||
-			execution.BodySHA256 != body.BodySHA256 {
-			return nil, errs.New(errs.KindInternal, "Script body generation does not match its execution")
-		}
-		ownedBody := []byte(body.Body)
-		digest := sha256.Sum256(ownedBody)
-		if len(ownedBody) != int(metadata.Size) || hex.EncodeToString(digest[:]) != body.BodySHA256 {
-			clear(ownedBody)
-			return nil, errs.New(errs.KindInternal, "Script body generation content is corrupt")
-		}
-		artifacts.Bodies = append(artifacts.Bodies, &agentpb.ScriptBodyArtifact{
-			Metadata: proto.Clone(metadata).(*agentpb.ScriptBodyArtifactMetadata), Body: ownedBody,
-		})
-	}
-	return artifacts, nil
-}
-
 func validateScriptExecutionSources(sources ScriptExecutionSources, execution ScriptExecutionRecord) error {
 	if sources.Revision <= 0 || sources.Tenant.ReadRevision != sources.Revision ||
 		sources.Project.ReadRevision != sources.Revision || sources.Environment.ReadRevision != sources.Revision ||
@@ -1053,6 +690,10 @@ func scriptExecutionProjectionConditions(sources ScriptExecutionSources) []Condi
 }
 
 func validateScriptExecutionRecord(record ScriptExecutionRecord) error {
+	if (record.SourceMembershipCount == 0) != (record.SourceMembershipSHA256 == "") ||
+		(record.SourceMembershipCount > 0 && !validLowerSHA256(record.SourceMembershipSHA256)) {
+		return errs.New(errs.KindValidationFailed, "Script execution source membership is invalid")
+	}
 	if !validRawScriptExecutionID(record.ID) || !validRawScriptExecutionID(record.SnapshotID) ||
 		ids.Validate(ids.KindOperation, record.OperationID) != nil ||
 		ids.Validate(ids.KindTask, record.CurrentTaskID) != nil || ids.Validate(ids.KindStep, record.StepID) != nil ||

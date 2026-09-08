@@ -239,6 +239,12 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 			return scriptCheckpointAnchor{}, err
 		}
 	}
+	if task.Type == TaskScript {
+		blueprintConditions, err = repository.manualScriptExecutionAuthority(ctx, task, execution, primary.ReadRevision)
+		if err != nil {
+			return scriptCheckpointAnchor{}, err
+		}
+	}
 	claimKey := taskExecutionClaimKey(TaskExecutorAgent, input.AgentID, input.TaskID)
 	timeoutKey := taskTimeoutIndexKey(input.TaskID, assignment.Deadline)
 	claim, err := repository.store.GetMany(ctx, GetManyRequest{
@@ -424,7 +430,11 @@ func validateScriptExecutionCheckpointShape(record ScriptExecutionRecord) error 
 	if record.State == ScriptExecutionCleanupProven && record.AssignmentID == "" {
 		controllerCleanupMatches := record.Outcome != nil &&
 			(record.Outcome.Reason == ScriptOutcomeAbortBeforeStart &&
-				record.ControllerCleanup == ScriptControllerCleanupBlueprintPendingAbort ||
+				(record.ControllerCleanup == ScriptControllerCleanupBlueprintPendingAbort ||
+					record.ControllerCleanup == ScriptControllerCleanupManualPendingAbort ||
+					record.ControllerCleanup == ScriptControllerCleanupManualAssignedAbort) ||
+				record.Outcome.Reason == ScriptOutcomeExpiryBeforeStart &&
+					record.ControllerCleanup == ScriptControllerCleanupManualRetryExpiry ||
 				record.Outcome.Reason == ScriptOutcomeParentFailureBeforeStart &&
 					record.ControllerCleanup == ScriptControllerCleanupReleaseRecoveryParentFailure)
 		if record.StartAuthorized || record.BodyPrepared != nil || record.ContainerCreated != nil ||

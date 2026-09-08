@@ -1251,6 +1251,14 @@ Agent-channel dispatcher skips Controller-completed assignments without artifact
 resolution, quarantine or capacity consumption. No closed Script is reactivated
 or dispatched, and no absent legacy report is manufactured.
 
+Manual Script completion uses the same closed report shape under
+`/v1/records/manual-script-closing-reports/{task_id}`. It preserves the original
+Agent result while bounded source release advances, excludes late events and
+new execution admission, and lets reconnect finish from that report before
+dispatch. Final Task completion removes the report and source root atomically.
+This path retains the ordinary transaction budget; it does not acquire Blueprint
+publication or recovery-only authority.
+
 The key families are closed:
 
 ```text

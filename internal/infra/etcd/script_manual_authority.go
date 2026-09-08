@@ -1,0 +1,84 @@
+package etcd
+
+import (
+	"context"
+
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+// manualScriptRootMatches binds the source-set digest to the same durable
+// execution authority that seals the plan bytes and hash. Checkpoints and retry
+// may transfer execution ownership but never change this pair.
+func manualScriptRootMatches(execution ScriptExecutionRecord, root ScriptOperationSourceRoot) bool {
+	return execution.SourceMembershipCount > 0 && execution.OperationID == root.OperationID &&
+		execution.SourceMembershipCount == root.MembershipCount &&
+		execution.SourceMembershipSHA256 == root.MembershipSHA256
+}
+
+func (repository *ScriptRepository) manualScriptExecutionAtRevision(
+	ctx context.Context,
+	task TaskRecord,
+	revision int64,
+) (ScriptExecutionRecord, *KeyValue, error) {
+	if task.Type != TaskScript || len(task.Steps) != 1 || revision <= 0 {
+		return ScriptExecutionRecord{}, nil, errs.New(errs.KindInternal, "manual Script Task identity is corrupt")
+	}
+	key := scriptExecutionKey(task.Params[ScriptExecutionIDParam])
+	value, err := scriptExecutionValueAt(ctx, repository.store, key, revision)
+	if err != nil {
+		return ScriptExecutionRecord{}, nil, err
+	}
+	execution, err := decodeEnvelope[ScriptExecutionRecord](value.Value, "script-execution")
+	if err != nil || validateScriptExecutionRecord(execution) != nil || !taskOwnsScriptExecution(task, execution) ||
+		execution.CurrentTaskID != task.ID || execution.OperationID != task.OperationID ||
+		execution.EnvironmentID != task.Owner.EnvironmentID || execution.PlanHash != task.PlanHash ||
+		execution.SourceMembershipCount == 0 {
+		return ScriptExecutionRecord{}, nil, errs.New(errs.KindInternal, "manual Script execution authority is corrupt")
+	}
+	return execution, value, nil
+}
+
+func (repository *ScriptRepository) manualScriptExecutionAuthority(
+	ctx context.Context,
+	task TaskRecord,
+	execution ScriptExecutionRecord,
+	revision int64,
+) ([]Condition, error) {
+	if task.Type != TaskScript || !taskOwnsScriptExecution(task, execution) ||
+		execution.CurrentTaskID != task.ID || execution.OperationID != task.OperationID ||
+		execution.EnvironmentID != task.Owner.EnvironmentID || execution.PlanHash != task.PlanHash || !execution.ActiveReference {
+		return nil, errs.New(errs.KindStateConflict, "manual Script execution does not own its Task")
+	}
+	key := scriptSourceRootKey(task.OperationID)
+	value, err := scriptExecutionValueAt(ctx, repository.store, key, revision)
+	if err != nil {
+		return nil, err
+	}
+	root, err := decodeScriptOperationSourceRoot(value.Value)
+	if err != nil || !manualScriptRootMatches(execution, root) {
+		return nil, errs.New(errs.KindInternal, "manual Script source root does not match its sealed plan")
+	}
+	if root.Phase != ScriptOperationSourceActive || root.ReleasePath != ScriptSourceReleaseAbsent ||
+		(root.RetryDisposition != ScriptRetryDispositionUndecided && root.RetryDisposition != ScriptRetryDispositionTransferred) {
+		return nil, errs.New(errs.KindStateConflict, "manual Script source authority is closed to execution")
+	}
+	return []Condition{{Key: key, ModRevision: value.ModRevision}}, nil
+}
+
+func preparedScriptExecutionSteps(task TaskRecord) ([]releaseHookExecutionStep, error) {
+	if task.Type != TaskScript {
+		return releaseHookExecutionSteps(task)
+	}
+	if task.Executor != TaskExecutorAgent || task.Owner.EnvironmentID == "" || len(task.Steps) != 1 ||
+		!validRawScriptExecutionID(task.Params[ScriptExecutionIDParam]) {
+		return nil, errs.New(errs.KindInternal, "manual Script execution step is corrupt")
+	}
+	return []releaseHookExecutionStep{{stepID: task.Steps[0].ID, executionID: task.Params[ScriptExecutionIDParam]}}, nil
+}
+
+func pendingScriptCleanupAuthority(task TaskRecord) ScriptControllerCleanupAuthority {
+	if task.Type == TaskScript {
+		return ScriptControllerCleanupManualPendingAbort
+	}
+	return ScriptControllerCleanupBlueprintPendingAbort
+}
