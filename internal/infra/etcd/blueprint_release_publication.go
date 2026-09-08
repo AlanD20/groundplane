@@ -74,8 +74,8 @@ func (ledger *ReleaseLedger) GetBlueprintTaskRenderInput(
 		}
 		intent, decodeErr := decodeReleaseRecord[domain.Intent](intentValue.Value, "release-intent")
 		if decodeErr != nil || domain.ValidateIntent(intent) != nil || intent.ID != reference.ReleaseID ||
-			intent.ServiceID != reference.ServiceID || intent.OperationID != task.OperationID ||
-			intent.OperationKind != domain.OperationBlueprintApply || intent.OriginatingTaskID != task.ID {
+			intent.ServiceID != reference.ServiceID || intent.OperationKind != domain.OperationBlueprintApply ||
+			intent.OperationID != task.OperationID || intent.OriginatingTaskID != task.Params[EnvironmentDesiredRevisionParam] {
 			return ReleaseTaskRenderInput{}, corruptReleaseRecord()
 		}
 		raw, decodeErr := decodeReleaseRecord[json.RawMessage](renderValue.Value, "release-render-input")
