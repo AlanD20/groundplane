@@ -123,6 +123,10 @@ func buildVolumeMutationProjection(
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, nil, nil, err
 	}
+	// This second mutation retains only authored YAML. Its logical Service
+	// identities have no execution labels and are not runtime validation input;
+	// the complete runtime artifact was independently checked above.
+	normalizedArtifact.Services = nil
 	normalizedArtifact, err = controller.MutateEnvironmentVolumeArtifact(
 		normalizedArtifact,
 		controller.VolumeArtifactMutation{
