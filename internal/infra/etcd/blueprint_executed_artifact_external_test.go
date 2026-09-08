@@ -43,6 +43,15 @@ func testBlueprintExecutedArtifact(
 	addressable, servingRace bool,
 	afterProof ...func(*etcd.ExecutedArtifactFixture, *controller.TaskPlanResolver, etcd.ReleaseRenderInput, domain.Intent, *agentpb.ComposeArtifact),
 ) {
+	testBlueprintExecutedArtifactConfigured(t, addressable, servingRace, nil, afterProof...)
+}
+
+func testBlueprintExecutedArtifactConfigured(
+	t *testing.T,
+	addressable, servingRace bool,
+	configureProject func(*composetypes.Project),
+	afterProof ...func(*etcd.ExecutedArtifactFixture, *controller.TaskPlanResolver, etcd.ReleaseRenderInput, domain.Intent, *agentpb.ComposeArtifact),
+) {
 	ctx := context.Background()
 	fixture := etcd.NewExecutedArtifactFixture(t)
 	task := fixture.Task(t, 950)
@@ -71,6 +80,9 @@ func testBlueprintExecutedArtifact(
 		service := project.Services["api"]
 		service.Expose = []string{"8080"}
 		project.Services["api"] = service
+	}
+	if configureProject != nil {
+		configureProject(project)
 	}
 	normalized, err := project.MarshalYAML()
 	if err != nil {
