@@ -18,26 +18,27 @@ const TaskReleasePublicationParam = "release_publication_id"
 // candidate. It is staged before publication and never re-reads mutable labels,
 // Blueprint projection, image identity, or selected slot at dispatch time.
 type ReleaseRenderInput struct {
-	ReleaseID            string                `json:"release_id"`
-	PlanID               string                `json:"plan_id"`
-	ArtifactID           string                `json:"artifact_id"`
-	PriorArtifactID      string                `json:"prior_artifact_id,omitempty"`
-	ServiceID            string                `json:"service_id"`
-	ServiceName          string                `json:"service_name"`
-	CandidateWorkload    domain.WorkloadSeal   `json:"candidate_workload"`
-	PriorWorkload        *domain.WorkloadSeal  `json:"prior_workload,omitempty"`
-	Strategy             domain.Strategy       `json:"strategy"`
-	PriorStrategy        domain.Strategy       `json:"prior_strategy"`
-	Slot                 domain.Slot           `json:"slot,omitempty"`
-	PriorSlot            domain.Slot           `json:"prior_slot"`
-	CandidateTarget      domain.WorkloadTarget `json:"candidate_target"`
-	PriorTarget          domain.WorkloadTarget `json:"prior_target"`
-	ProxyGeneration      uint64                `json:"proxy_generation"`
-	PriorProxyGeneration uint64                `json:"prior_proxy_generation"`
-	ProxyPorts           []uint16              `json:"proxy_ports"`
-	ProxyConfigDigest    string                `json:"proxy_config_digest"`
-	PriorProxyDigest     string                `json:"prior_proxy_digest"`
-	ProxyImage           *ReleaseProxyImage    `json:"proxy_image,omitempty"`
+	ReleaseID            string                             `json:"release_id"`
+	PlanID               string                             `json:"plan_id"`
+	ArtifactID           string                             `json:"artifact_id"`
+	PriorArtifactID      string                             `json:"prior_artifact_id,omitempty"`
+	PriorRuntime         *ReleaseNativePredecessorAuthority `json:"prior_runtime,omitempty"`
+	ServiceID            string                             `json:"service_id"`
+	ServiceName          string                             `json:"service_name"`
+	CandidateWorkload    domain.WorkloadSeal                `json:"candidate_workload"`
+	PriorWorkload        *domain.WorkloadSeal               `json:"prior_workload,omitempty"`
+	Strategy             domain.Strategy                    `json:"strategy"`
+	PriorStrategy        domain.Strategy                    `json:"prior_strategy"`
+	Slot                 domain.Slot                        `json:"slot,omitempty"`
+	PriorSlot            domain.Slot                        `json:"prior_slot"`
+	CandidateTarget      domain.WorkloadTarget              `json:"candidate_target"`
+	PriorTarget          domain.WorkloadTarget              `json:"prior_target"`
+	ProxyGeneration      uint64                             `json:"proxy_generation"`
+	PriorProxyGeneration uint64                             `json:"prior_proxy_generation"`
+	ProxyPorts           []uint16                           `json:"proxy_ports"`
+	ProxyConfigDigest    string                             `json:"proxy_config_digest"`
+	PriorProxyDigest     string                             `json:"prior_proxy_digest"`
+	ProxyImage           *ReleaseProxyImage                 `json:"proxy_image,omitempty"`
 	core.ServiceDependencyPlans
 	TenantID            string                       `json:"tenant_id"`
 	TenantSlug          string                       `json:"tenant_slug"`
@@ -93,6 +94,9 @@ func decodeReleaseRenderInput(value []byte) (ReleaseRenderInput, error) {
 }
 
 func validateReleaseRenderInput(input ReleaseRenderInput) error {
+	if err := validateOrdinaryPriorRuntime(input); err != nil {
+		return err
+	}
 	if (len(input.ProxyPorts) != 0) != (input.ProxyImage != nil) ||
 		input.ProxyImage != nil && input.ProxyImage.Validate() != nil {
 		return errs.New(errs.KindValidationFailed, "release proxy image authority is invalid")
@@ -206,6 +210,12 @@ func releaseRenderTargetsGeneratedService(components []ComponentRecord, serviceI
 }
 
 func cloneReleaseRenderInput(input ReleaseRenderInput) ReleaseRenderInput {
+	if input.PriorRuntime != nil {
+		prior := *input.PriorRuntime
+		prior.CurrentArtifact = slices.Clone(prior.CurrentArtifact)
+		prior.RetainedPriorArtifact = slices.Clone(prior.RetainedPriorArtifact)
+		input.PriorRuntime = &prior
+	}
 	if input.ProxyImage != nil {
 		image := *input.ProxyImage
 		input.ProxyImage = &image

@@ -1179,6 +1179,13 @@ the assignment, writer, and execution epoch. Configured-only members select
 absence, not serving restoration. The Agent receives selections; it never
 derives them from Docker or current Controller projections.
 
+Ordinary Deploy/Rollback use the per-Service immutable native predecessor in
+ADR 0070. Their staged render records own the exact historical runtime artifacts;
+the aggregate publication marker does not duplicate them. The plan, claim,
+Agent, and terminal proof bind the same bytes and explicit prior references.
+The latest Environment artifact remains an independently fenced witness, not
+the serving-history selector for an ordinary Release.
+
 Each helper call restores or removes only its selected member. A serving probe
 may return the closed proof-free `restoration_required` result, which reaches
 only already-declared compensation. It cannot satisfy terminal proof. After

@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -260,6 +261,7 @@ func (repository *TaskRepository) ordinaryRecoveryProofKindAtRevision(
 		return releaseRecoveryProofExpectation{}, nil, corruptReleaseRecord()
 	}
 	var expectation releaseRecoveryProofExpectation
+	expectation.nativeArtifact = slices.Clone(render.PriorRuntime.CurrentArtifact)
 	switch render.Strategy {
 	case domain.StrategyRecreate:
 		expectation.kind, expectation.priorTopologyArtifactID = releaseRecoveryProofRecreate, render.PriorArtifactID
@@ -267,6 +269,9 @@ func (repository *TaskRepository) ordinaryRecoveryProofKindAtRevision(
 		expectation.kind = releaseRecoveryProofProxy
 	default:
 		return releaseRecoveryProofExpectation{}, nil, corruptReleaseRecord()
+	}
+	if len(render.PriorRuntime.RetainedPriorArtifact) != 0 {
+		expectation.kind, expectation.priorTopologyArtifactID = releaseRecoveryProofCaptured, ""
 	}
 	return expectation, []Condition{{Key: keys[0], ModRevision: read.Values[0].ModRevision},
 		{Key: keys[1], ModRevision: read.Values[1].ModRevision},
@@ -307,12 +312,22 @@ func ordinaryRecoveryIntentMatchesAttempt(task TaskRecord, intent domain.Intent,
 func recoveryRenderMatchesPredecessor(
 	render ReleaseRenderInput, intent domain.Intent, authority *ReleaseRestorationAuthority,
 ) bool {
-	if authority == nil || authority.AppliedPredecessor == nil || render.PriorArtifactID == "" ||
+	if authority == nil || render.PriorRuntime == nil || render.PriorArtifactID == "" ||
 		render.PriorWorkload == nil || intent.PriorServingReleaseID == "" {
 		return false
 	}
+	var encoded []byte
+	for _, witness := range authority.NativePredecessors {
+		if witness.ServiceID == render.ServiceID && bytes.Equal(witness.CurrentArtifact, render.PriorRuntime.CurrentArtifact) &&
+			bytes.Equal(witness.RetainedPriorArtifact, render.PriorRuntime.RetainedPriorArtifact) {
+			encoded = witness.CurrentArtifact
+		}
+	}
+	if len(encoded) == 0 {
+		return false
+	}
 	artifact := &agentpb.ComposeArtifact{}
-	if proto.Unmarshal(authority.AppliedPredecessor.ComposeArtifact, artifact) != nil {
+	if proto.Unmarshal(encoded, artifact) != nil || artifact.ArtifactId != render.PriorArtifactID {
 		return false
 	}
 	found := false

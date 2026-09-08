@@ -150,15 +150,17 @@ func recoveryProofFixture(
 	config := []byte(`{"apps":{"http":{"servers":{"gp_g1_` + strings.ToLower(priorRelease) + `_p":{}}}}}`)
 	configDigest := sha256.Sum256(config)
 	artifact := &agentpb.ComposeArtifact{
-		ArtifactId: priorArtifact,
-		OwnerKind:  agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
-		OwnerId:    task.Owner.EnvironmentID,
+		ArtifactId:  priorArtifact,
+		ProjectName: "gp-" + strings.ToLower(task.Owner.EnvironmentID),
+		OwnerKind:   agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		OwnerId:     task.Owner.EnvironmentID,
 		Services: []*agentpb.ComposeService{
 			{
 				ServiceId:        f.serviceID,
 				ComposeName:      "worker",
 				ImageReference:   releaseTestPriorWorkload("registry.example/worker:prior").LocalImageID,
 				ExpectedReplicas: 2,
+				HasHealthcheck:   true,
 				Role:             agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
 				ExpectedLabels: []*agentpb.LabelPair{
 					{Key: "com.groundplane.release-id", Value: priorRelease},
@@ -192,6 +194,15 @@ func recoveryProofFixture(
 		ComposeArtifact:       encoded,
 		ComposeArtifactSHA256: hex.EncodeToString(digest[:]),
 	}
+	native := proto.CloneOf(artifact)
+	native.ArtifactId = priorTopologyArtifact
+	nativeBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(native)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authority.NativePredecessors = []ReleaseNativePredecessorAuthority{{
+		ServiceID: f.serviceID, CurrentArtifact: nativeBytes,
+	}}
 	assignment.RestorationAuthoritySHA256, err = releaseRestorationAuthoritySHA256(*authority)
 	if err != nil {
 		t.Fatal(err)
@@ -210,6 +221,7 @@ func recoveryProofFixture(
 	render.PriorArtifactID, render.PriorWorkload = priorTopologyArtifact, releaseTestPriorWorkload(
 		"registry.example/worker:prior",
 	)
+	render.PriorRuntime = &authority.NativePredecessors[0]
 	render.CandidateWorkload.ReplicaCount, render.PriorWorkload.ReplicaCount = 3, 2
 	render.ProxyPorts, render.ProxyImage = []uint16{8080}, addressableReleaseProxyFixture().ProxyImage
 	render.ProxyGeneration, render.PriorProxyGeneration = 2, 1
@@ -274,6 +286,7 @@ func recoveryProofFixture(
 		ServingPredecessor: &agentpb.ServingPredecessorRestoration{
 			ProbeStepId:      task.Steps[1].ID,
 			CompensateStepId: task.Steps[2].ID,
+			PriorArtifactId:  priorTopologyArtifact, PriorReleaseId: priorRelease, PriorTarget: "singleton",
 		}}}}
 	procedureBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(procedure)
 	if err != nil {

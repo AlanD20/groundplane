@@ -127,6 +127,14 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 		Schema: 1, TaskID: task.ID, OperationID: task.OperationID, PlanHash: task.PlanHash,
 		EnvironmentID: task.Owner.EnvironmentID, CandidateArtifactID: artifactID, Candidates: candidates,
 	}
+	witnesses, sourceConditions, err := repository.ordinaryRestorationMembersAtRevision(ctx, task, manifest, procedure, revision)
+	if err != nil {
+		return ReleaseRestorationAuthority{}, "", nil, err
+	}
+	authority.NativePredecessors = witnesses
+	if err := validateNativeRestorationDescriptor(authority, procedure); err != nil {
+		return ReleaseRestorationAuthority{}, "", nil, err
+	}
 	projectionRevision := int64(0)
 	if read.Values[2] != nil {
 		projectionRevision = read.Values[2].ModRevision
@@ -151,11 +159,11 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 	if err != nil {
 		return ReleaseRestorationAuthority{}, "", nil, err
 	}
-	return authority, digest, []Condition{
+	return authority, digest, append(sourceConditions, []Condition{
 		{Key: keys[0], ModRevision: read.Values[0].ModRevision},
 		{Key: keys[1], ModRevision: read.Values[1].ModRevision},
 		{Key: keys[2], ModRevision: projectionRevision},
-	}, nil
+	}...), nil
 }
 
 func candidateReleaseTaskOperation(task TaskRecord) agentpb.PlanOperation {
@@ -357,7 +365,7 @@ func validateAssignmentRestorationDescriptor(
 			return corruptTaskAssignment()
 		}
 	}
-	if taskHasBlueprintCandidateAppliedAuthority(task) {
+	if taskHasBlueprintCandidateAppliedAuthority(task) || task.Type == TaskDeploy || task.Type == TaskRollback {
 		if err := validateNativeRestorationDescriptor(*authority, procedure); err != nil {
 			return err
 		}

@@ -611,7 +611,7 @@ func validateLabels(
 			labelPlan,
 			labelGeneration,
 		) {
-			retained, reason := validBlueprintRetainedOwnership(plan, artifact, resourceID, values)
+			retained, reason := validRetainedOwnership(plan, artifact, resourceID, values)
 			if !retained && (labelPlan != plan.PlanId || labelGeneration != strconv.FormatUint(plan.RenderGeneration, 10)) {
 				return errs.Newf(errs.KindValidationFailed,
 					"expected service labels do not identify the current plan (retained ownership: %s)", reason)

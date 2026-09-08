@@ -94,7 +94,7 @@ func invalidAssignmentRestorationWitness() error {
 // artifact references against the separately carried immutable witness. The
 // applied predecessor is intentionally not consulted here.
 func validateNativePlanReferences(plan *agentpb.ExecutionPlan, authority *agentpb.ReleaseRestorationAuthority) error {
-	if plan == nil || plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY ||
+	if plan == nil ||
 		len(authority.GetNativePredecessors()) != len(plan.GetCandidateReleaseProcedure().GetMembers()) {
 		return invalidAssignmentRestorationWitness()
 	}
@@ -111,9 +111,6 @@ func validateNativePlanReferences(plan *agentpb.ExecutionPlan, authority *agentp
 			return invalidAssignmentRestorationWitness()
 		}
 		prior := member.GetServingPredecessor()
-		if prior == nil {
-			return invalidAssignmentRestorationWitness()
-		}
 		if len(witness.GetCurrentArtifact()) == 0 {
 			if prior.GetPriorArtifactId() != "" || prior.GetPriorReleaseId() != "" || prior.GetPriorTarget() != "" ||
 				prior.GetRetainedPriorArtifactId() != "" {
@@ -130,6 +127,22 @@ func validateNativePlanReferences(plan *agentpb.ExecutionPlan, authority *agentp
 			witness.GetCurrentArtifact(), witness.GetRetainedPriorArtifact(),
 		) != nil {
 			return invalidAssignmentRestorationWitness()
+		}
+		for _, encoded := range [][]byte{witness.GetCurrentArtifact(), witness.GetRetainedPriorArtifact()} {
+			if len(encoded) == 0 {
+				continue
+			}
+			matched := false
+			for _, artifact := range plan.GetArtifacts() {
+				candidate, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+				if err == nil && bytes.Equal(candidate, encoded) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				return invalidAssignmentRestorationWitness()
+			}
 		}
 		artifact := new(agentpb.ComposeArtifact)
 		if (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(witness.GetCurrentArtifact(), artifact) != nil {
@@ -205,21 +218,14 @@ func validateCandidateReleaseAssignmentAuthority(assignment Assignment, plan *ag
 		len(authority.GetCandidates()) != len(procedure.GetMembers()) {
 		return errs.New(errs.KindInternal, "agent: candidate Release restoration authority is invalid")
 	}
-	if plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
-		len(authority.GetNativePredecessors()) != len(procedure.GetMembers()) {
-		return errs.New(errs.KindInternal, "agent: Blueprint native predecessor authority is incomplete")
-	}
-	if plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
-		len(authority.GetNativePredecessors()) != 0 {
-		return errs.New(errs.KindInternal, "agent: ordinary assignment carries native predecessor authority")
+	if len(authority.GetNativePredecessors()) != len(procedure.GetMembers()) {
+		return errs.New(errs.KindInternal, "agent: native predecessor authority is incomplete")
 	}
 	if err := validateAssignmentRestorationWitness(authority); err != nil {
 		return err
 	}
-	if plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY {
-		if err := validateNativePlanReferences(plan, authority); err != nil {
-			return err
-		}
+	if err := validateNativePlanReferences(plan, authority); err != nil {
+		return err
 	}
 	selectedStepIDs := make([]string, 0, len(procedure.GetMembers())*2)
 	compensateStepIDs := make([]string, 0, len(procedure.GetMembers()))

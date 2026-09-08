@@ -26,6 +26,12 @@ func TestOrdinaryRecreateCompilerKeepsPlanLocalPriorArtifactIdentity(t *testing.
 	const priorTopologyID = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FC1"
 	member := &input.Members[0]
 	member.Render.PriorArtifactID = priorTopologyID
+	priorWitness := proto.CloneOf(captured)
+	priorWitness.ArtifactId = priorTopologyID
+	member.Render.PriorRuntime.CurrentArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(priorWitness)
+	if err != nil {
+		t.Fatal(err)
+	}
 	member.Render.Projection.ComposeArtifact = capturedBytes
 	member.Render.Projection.RenderGeneration = 5
 	prepared, plan, err := resolver.PrepareReleaseTask(t.Context(), task, input)

@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
+	"google.golang.org/protobuf/proto"
 )
 
 const releaseMemberStepTimeoutSeconds = uint32(5 * 60)
@@ -177,80 +178,34 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 	}
 	artifacts := []*agentpb.ComposeArtifact{artifact}
 	priorArtifacts := make(map[string]*agentpb.ComposeArtifact, len(input.Members))
-	priorImages := make(map[string]domain.WorkloadSeal)
-	priorLabels := make(map[string]ComposeReleaseIdentity)
-	priorArtifactID := ""
 	for _, member := range input.Members {
 		if member.Render.PriorArtifactID == "" {
+			if member.Render.PriorRuntime != nil {
+				return nil, errs.New(errs.KindInternal, "first Release carries predecessor runtime")
+			}
 			continue
 		}
-		if member.Render.PriorWorkload == nil {
-			return nil, errs.New(errs.KindInternal, "release prior workload seal is missing")
+		witness := member.Render.PriorRuntime
+		if member.Render.PriorWorkload == nil || witness == nil || witness.ServiceID != member.Render.ServiceID ||
+			executionplan.ValidateNativePredecessorWitness(first.EnvironmentID, witness.ServiceID,
+				witness.CurrentArtifact, witness.RetainedPriorArtifact) != nil {
+			return nil, errs.New(errs.KindInternal, "release prior runtime authority is missing or invalid")
 		}
-		if priorArtifactID == "" {
-			priorArtifactID = member.Render.PriorArtifactID
-		} else if priorArtifactID != member.Render.PriorArtifactID {
-			return nil, errs.New(errs.KindInternal, "recreate members do not share one sealed prior artifact")
-		}
-		priorReleaseID := member.Intent.PriorServingReleaseID
-		priorImages[member.Render.ServiceName] = *member.Render.PriorWorkload
-		priorLabels[member.Render.ServiceID] = ComposeReleaseIdentity{
-			ProxyImage: member.Render.ProxyImage,
-			ReleaseID:  priorReleaseID, Target: member.Render.PriorTarget, Image: member.Render.PriorWorkload.LocalImageID,
-			ServingReleaseID: priorReleaseID, ServingTarget: member.Render.PriorTarget,
-			ServingProxyGeneration: member.Render.PriorProxyGeneration, Strategy: member.Render.PriorStrategy,
-		}
-	}
-	if priorArtifactID != "" {
-		priorArtifact, renderErr := resolver.renderPinnedEnvironmentArtifactWithReleases(
-			ctx,
-			task,
-			pinnedEnvironmentIdentity{
-				TenantID: first.TenantID, TenantSlug: first.TenantSlug,
-				ProjectID: first.ProjectID, ProjectSlug: first.ProjectSlug,
-				EnvironmentID: first.EnvironmentID, EnvironmentName: first.EnvironmentName,
-				AuthorizedVolumeDir: first.AuthorizedVolumeDir,
-			},
-			first.Projection.RevisionID,
-			priorArtifactID,
-			releaseProjection,
-			func(project *composetypes.Project, _ etcd.EnvironmentComposeProjection) ([]ComposeResourceIdentity, error) {
-				if err := projectReleaseWorkloadServices(project, releaseProjection); err != nil {
-					return nil, err
-				}
-				for name, image := range priorImages {
-					service, active := project.Services[name]
-					if !active {
-						var disabled bool
-						service, disabled = project.DisabledServices[name]
-						if !disabled {
-							return nil, errs.New(
-								errs.KindInternal,
-								"recreate prior service is missing from frozen Blueprint",
-							)
-						}
-					}
-					if err := applySealedWorkload(&service, image); err != nil {
-						return nil, err
-					}
-					if active {
-						project.Services[name] = service
-					} else {
-						project.DisabledServices[name] = service
-					}
-				}
-				return managedAttachExternalNetworks(project)
-			},
-			priorLabels,
-		)
-		if renderErr != nil {
-			return nil, renderErr
-		}
-		artifacts = append(artifacts, priorArtifact)
-		for _, member := range input.Members {
-			if member.Render.PriorArtifactID != "" {
-				priorArtifacts[member.Render.ServiceID] = priorArtifact
+		for index, encoded := range [][]byte{witness.CurrentArtifact, witness.RetainedPriorArtifact} {
+			if len(encoded) == 0 {
+				continue
 			}
+			prior := &agentpb.ComposeArtifact{}
+			if err := proto.Unmarshal(encoded, prior); err != nil {
+				return nil, errs.Wrap(errs.KindInternal, err)
+			}
+			if index == 0 {
+				if prior.ArtifactId != member.Render.PriorArtifactID {
+					return nil, errs.New(errs.KindInternal, "release prior runtime identity changed")
+				}
+				priorArtifacts[member.Render.ServiceID] = prior
+			}
+			artifacts = append(artifacts, prior)
 		}
 	}
 	operation := agentpb.PlanOperation_PLAN_OPERATION_DEPLOY
@@ -542,6 +497,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 			steps[len(steps)-5].PrerequisiteStepId = task.Steps[base-3].ID
 		}
 	}
+	bindRetainedOrdinaryRecovery(input.Members, steps)
 	totalPre, totalPost, totalFailure := 0, 0, 0
 	for _, member := range input.Members {
 		for _, hook := range member.Render.Hooks {
@@ -643,6 +599,16 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 		} else {
 			procedureMember.ServingPredecessor = &executionplan.ServingPredecessorInput{
 				ProbeStepID: task.Steps[base+3].ID, CompensateStepID: task.Steps[base+4].ID,
+				PriorArtifactID: member.Render.PriorArtifactID,
+				PriorReleaseID:  member.Intent.PriorServingReleaseID,
+				PriorTarget:     string(member.Render.PriorTarget),
+			}
+			if encoded := member.Render.PriorRuntime.RetainedPriorArtifact; len(encoded) != 0 {
+				retained := &agentpb.ComposeArtifact{}
+				if err := proto.Unmarshal(encoded, retained); err != nil {
+					return nil, errs.Wrap(errs.KindInternal, err)
+				}
+				procedureMember.ServingPredecessor.RetainedPriorArtifactID = retained.ArtifactId
 			}
 		}
 		procedureMembers[index] = procedureMember

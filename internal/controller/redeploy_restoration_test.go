@@ -222,6 +222,21 @@ func redeployRestorationInput(
 	if err != nil {
 		t.Fatal(err)
 	}
+	priorSource := member.Render
+	priorSource.ReleaseID, priorSource.ArtifactID = priorID, member.Render.PriorArtifactID
+	priorSource.CandidateWorkload = *member.Render.PriorWorkload
+	priorSource.Strategy, priorSource.Slot = member.Render.PriorStrategy, member.Render.PriorSlot
+	priorSource.CandidateTarget = member.Render.PriorTarget
+	priorSource.ProxyGeneration, priorSource.ProxyConfigDigest = member.Render.PriorProxyGeneration, member.Render.PriorProxyDigest
+	priorArtifacts, err := resolver.RenderRetainedServiceRuntime(t.Context(), etcd.ServiceLifecycleRelease{Current: priorSource})
+	if err != nil {
+		t.Fatal(err)
+	}
+	priorBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(priorArtifacts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	member.Render.PriorRuntime = &etcd.ReleaseNativePredecessorAuthority{ServiceID: serviceID, CurrentArtifact: priorBytes}
 	return resolver, task, etcd.ReleaseTaskRenderInput{PublicationID: publicationID,
 		Operation: etcd.ReleaseOperationHead{OperationID: task.OperationID, PublicationID: publicationID,
 			EnvironmentID: reader.environment.ID, FailurePolicy: domain.OnFailureSwitchBack},

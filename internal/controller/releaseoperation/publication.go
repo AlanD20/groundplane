@@ -88,13 +88,6 @@ func (service *Service) publish(
 	groupMembers := make([]domain.GroupMember, len(candidates))
 	renderMembers := make([]etcd.ReleaseTaskRenderMember, len(candidates))
 	fenceMembers := make([]etcd.ReleaseFenceMember, len(candidates))
-	priorTopologyArtifactID := ""
-	for _, candidate := range candidates {
-		if releaseNeedsPriorArtifact(candidate) {
-			priorTopologyArtifactID = ids.New(ids.KindConfig)
-			break
-		}
-	}
 	for index, candidate := range candidates {
 		releaseID := ids.New(ids.KindDeployment)
 		priorArtifactID := ""
@@ -111,7 +104,7 @@ func (service *Service) publish(
 			return etcd.IdempotencyResponse{}, err
 		}
 		if releaseNeedsPriorArtifact(candidate) {
-			priorArtifactID = priorTopologyArtifactID
+			priorArtifactID = ids.New(ids.KindConfig)
 		}
 		render := etcd.ReleaseRenderInput{
 			ReleaseID: releaseID, PlanID: planID, ArtifactID: artifactID, PriorArtifactID: priorArtifactID,
@@ -145,6 +138,9 @@ func (service *Service) publish(
 			priorRender = &prior.Record
 		}
 		if err := service.plans.PrepareReleaseProxyImage(&render, priorRender); err != nil {
+			return etcd.IdempotencyResponse{}, err
+		}
+		if err := service.captureServingRuntime(ctx, scope, &render, candidate.priorReleaseID); err != nil {
 			return etcd.IdempotencyResponse{}, err
 		}
 		raw, err := etcd.EncodeReleaseRenderInput(render)

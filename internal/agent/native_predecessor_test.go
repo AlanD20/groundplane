@@ -151,6 +151,7 @@ func nativeServingAssignment(t *testing.T) (Assignment, *agentpb.ComposeArtifact
 	authority.NativePredecessors = []*agentpb.ReleaseNativePredecessorAuthority{{
 		ServiceId: member.ServiceId, CurrentArtifact: currentBytes, RetainedPriorArtifact: retainedBytes,
 	}}
+	assignment.Plan.Artifacts = []*agentpb.ComposeArtifact{proto.CloneOf(current), proto.CloneOf(retained)}
 	return assignment, current, retained
 }
 
