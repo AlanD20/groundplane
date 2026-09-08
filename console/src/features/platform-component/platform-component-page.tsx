@@ -35,13 +35,14 @@ export default function PlatformComponentPage() {
     setComponentEnabled, updateComponentConfig, refreshPlatformComponents, refreshComponentConfig,
   } = useStore()
   const component = platform.components.find((c) => c.kind === params.component)
+  const componentId = component?.kind === 'coredns' ? component.id : undefined
 
   useEffect(() => {
-    if (!component || component.kind !== 'coredns') return
+    if (!componentId) return
     const controller = new AbortController()
-    void refreshComponentConfig(component.id, controller.signal).catch(() => undefined)
+    void refreshComponentConfig(componentId, controller.signal).catch(() => undefined)
     return () => controller.abort()
-  }, [component, refreshComponentConfig])
+  }, [componentId, refreshComponentConfig])
 
   const { unavailable: environmentsWithoutComponentProjection } = environmentPlatformIngress(tenantProjects)
   const dnsConfig = platform.dns.upstream !== undefined && platform.dns.upstreamAuto !== undefined && platform.dns.tailnetDelegation !== undefined && platform.dns.forwarders !== undefined && platform.dns.corefileTemplate !== undefined

@@ -24,6 +24,8 @@ test('CoreDNS presentation does not manufacture fields or forwarder identities',
 	assert.match(page, /navigator\.clipboard\.writeText/)
 	assert.match(page, /managedConfigLoading/)
 	assert.match(page, /managedConfigError/)
+  assert.match(page, /\[componentId, refreshComponentConfig\]/)
+  assert.doesNotMatch(page, /\[component,\s*refreshComponentConfig\]/)
   assert.match(page, /onRemoveForwarder/)
   assert.doesNotMatch(page, /Forwarder removal is unavailable|stable forwarder identity/)
   assert.match(page, /disabled=\{saving \|\| !configured\}/)
