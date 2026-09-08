@@ -188,7 +188,9 @@ func encodeReleaseRecord[T any](kind string, value T) ([]byte, error) {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
 	if len(encoded) > domain.MaximumRecordBytes {
-		return nil, errs.New(errs.KindValidationFailed, "release durable record exceeds size limit")
+		return nil, errs.Newf(errs.KindValidationFailed,
+			"release durable record %s exceeds size limit: %d bytes, maximum %d",
+			kind, len(encoded), domain.MaximumRecordBytes)
 	}
 	return encoded, nil
 }
