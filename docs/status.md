@@ -47,9 +47,18 @@ explicit switch. A tagged Controller build passed, then fresh group deploy
 and rollback completed. HTTP `/up` through Caddy returned 200 after both, and
 the post-rollback live proxy selected the restored singleton. This expands
 the evidence beyond container health; automated regression tests remain stopped.
-Standalone Component Enable still rejects a retained companion-file reference;
-the complete authored Blueprint successfully enabled Caddy. That separate
-operator-action defect is open, and public Tunnel acceptance is not proven.
+Component-only authoring now carries immutable native companion files from
+the exact revision-checked desired projection, with path-sorted bundle
+validation. External Blueprint submissions still require closed inputs.
+Normal Configure, Disable, and Enable completed on QA; all five stored routes
+survived disable as unserved, HTTP routing returned after enable, and retained
+application configuration file hashes were unchanged. WebSocket upgrade and
+the same transient fanout event passed through both replicas, the stable
+logical target, and the private Caddy origin. Tagged Controller build passed;
+no automated tests ran. Public Tunnel acceptance is still not proven.
+The standalone canonical YAML export's companion-file roundtrip remains a
+separate authoring-contract gap; the internal Component mutation fix does not
+claim to make an exported file-dependent document a complete external bundle.
 
 ### Historical scope alignment
 

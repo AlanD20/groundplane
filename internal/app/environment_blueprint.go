@@ -530,6 +530,13 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	candidateTaskID := ids.New(ids.KindTask)
 	candidateCreatedAt := service.now().UTC()
 
+	if preserveRoutes && hasProjection {
+		// Component-only edits preserve the selected native workload, including
+		// its companion files. The revision guard above binds these bytes to
+		// the authoring document; external Blueprint inputs remain closed.
+		bundle.Files = append(append([]core.BlueprintFile(nil), bundle.Files...), previousProjection.Record.RuntimeFiles...)
+		sort.Slice(bundle.Files, func(left, right int) bool { return bundle.Files[left].Path < bundle.Files[right].Path })
+	}
 	parsed, err := blueprintparser.Parse(ctx, blueprintparser.EnvironmentScope{
 		EnvironmentID: environmentID,
 		Tenant:        tenant.Record.Slug, Project: project.Record.Slug, Environment: environment.Record.Name,
