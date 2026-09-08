@@ -890,6 +890,7 @@ type ComponentConfig struct {
 
 // ComponentConfig0 defines model for ComponentConfig.0.
 type ComponentConfig0 struct {
+	Alias             *string `json:"alias,omitempty"`
 	CaddyfileTemplate *string `json:"caddyfile_template,omitempty"`
 
 	// ZoneIds Ordered selected Environment Zone IDs; the first router Zone is primary.
@@ -927,6 +928,7 @@ type ComponentConfigMutationRequest struct {
 
 // ComponentConfigMutationRequestConfig0 defines model for ComponentConfigMutationRequest.Config.0.
 type ComponentConfigMutationRequestConfig0 struct {
+	Alias             *string `json:"alias,omitempty"`
 	CaddyfileTemplate *string `json:"caddyfile_template,omitempty"`
 
 	// ZoneIds Ordered selected Environment Zone IDs; the first router Zone is primary.
@@ -1013,6 +1015,7 @@ type ComponentEnableRequest struct {
 
 // ComponentEnableRequestConfig0 defines model for ComponentEnableRequest.Config.0.
 type ComponentEnableRequestConfig0 struct {
+	Alias             *string `json:"alias,omitempty"`
 	CaddyfileTemplate *string `json:"caddyfile_template,omitempty"`
 
 	// ZoneIds Ordered selected Environment Zone IDs; the first router Zone is primary.

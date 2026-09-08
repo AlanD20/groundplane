@@ -119,7 +119,7 @@ type EnvironmentComponentBase = {
 
 export type CaddyComponent = EnvironmentComponentBase & {
   kind: 'caddy'
-  config: { zone_ids: string[]; caddyfile_template?: string } | null
+  config: { zone_ids: string[]; caddyfile_template?: string; alias?: string } | null
   state: { pinnedIPv4?: string }
 }
 

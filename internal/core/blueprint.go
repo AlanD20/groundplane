@@ -435,7 +435,8 @@ func (c Component) Validate() error {
 	case ComponentKindIngressCaddy:
 		if c.Owner != ComponentOwnerEnvironment || c.Config.CloudflareTunnel != nil || c.Config.CoreDNS != nil ||
 			(c.Enabled && (c.Config.Caddy == nil || len(c.Config.Caddy.ZoneIDs) == 0)) ||
-			(c.Config.Caddy != nil && validateComponentZoneIDs(c.Config.Caddy.ZoneIDs) != nil) {
+			(c.Config.Caddy != nil && (validateComponentZoneIDs(c.Config.Caddy.ZoneIDs) != nil ||
+				(c.Config.Caddy.Alias != "" && (!dnsname.ValidWithin(c.Config.Caddy.Alias, 63) || strings.Contains(c.Config.Caddy.Alias, "."))))) {
 			return fmt.Errorf("component %s: Caddy ownership or config is invalid", c.ID)
 		}
 	case ComponentKindEdgeCloudflare:

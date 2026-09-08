@@ -1176,6 +1176,7 @@ function RouterCard({ env }: { env: Environment }) {
   const [selectedZoneIds, setSelectedZoneIds] = useState<string[]>([])
   const [createdComponentZones, setCreatedComponentZones] = useState<Zone[]>([])
   const [creatingComponentZone, setCreatingComponentZone] = useState(false)
+  const [routerAlias, setRouterAlias] = useState(caddy?.config?.alias ?? '')
   const [caddyTemplate, setCaddyTemplate] = useState(caddy?.config?.caddyfile_template ?? '')
   const [caddyTemplateFileReading, setCaddyTemplateFileReading] = useState(false)
   const [caddyTemplateFileError, setCaddyTemplateFileError] = useState<string | null>(null)
@@ -1189,6 +1190,7 @@ function RouterCard({ env }: { env: Environment }) {
     setSelectedZoneIds(component.config?.zone_ids ?? [])
     setCreatedComponentZones([])
     if (component.kind === 'caddy') {
+      setRouterAlias(component.config?.alias ?? '')
       setCaddyTemplate(component.config?.caddyfile_template ?? '')
       setCaddyTemplateFileReading(false)
       setCaddyTemplateFileError(null)
@@ -1206,7 +1208,7 @@ function RouterCard({ env }: { env: Environment }) {
   const tunnelHasEgress = selectedZoneIds.some((id) => availableComponentZones.some((zone) => zone.id === id && !zone.internal))
   const operationDisabled = configuring && (creatingComponentZone || selectedZoneIds.length === 0 || (
     operation.component.kind === 'caddy'
-      ? caddyTemplateFileReading || caddyTemplateFileError !== null ||
+      ? (routerAlias !== '' && !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(routerAlias)) || caddyTemplateFileReading || caddyTemplateFileError !== null ||
         (caddyTemplate.length > 0 && caddyTemplateMarkerCount !== 1)
       : !tunnelHasEgress || (tunnelCredentialMode === 'existing'
         ? !tunnelSecret
@@ -1318,6 +1320,9 @@ function RouterCard({ env }: { env: Environment }) {
               {operation.component.kind === 'caddy' ? (
               <div className="flex flex-col gap-3">
                 <div className="flex flex-col gap-1">
+                  <Label htmlFor="router-alias">Router alias (optional)</Label>
+                  <Input id="router-alias" value={routerAlias} maxLength={63} placeholder="kobwnewe-router" onChange={(event) => setRouterAlias(event.target.value)} aria-describedby="router-alias-help" />
+                  <p id="router-alias-help" className="text-xs text-muted-foreground">One lowercase DNS label on the primary network. HTTP uses port 80. Leave empty to clear.</p>
                   <Label htmlFor="caddy-template">Caddyfile template</Label>
                   <textarea
                     id="caddy-template"
@@ -1443,6 +1448,7 @@ function RouterCard({ env }: { env: Environment }) {
             const config = operation.component.kind === 'caddy'
               ? {
                   zone_ids: selectedZoneIds,
+                  alias: routerAlias,
                   ...(caddyTemplate ? { caddyfile_template: caddyTemplate } : {}),
                 }
               : {

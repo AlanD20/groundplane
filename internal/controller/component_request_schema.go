@@ -120,17 +120,18 @@ func coreDNSComponentConfigSchema() *huma.Schema {
 
 func caddyComponentConfigSchema() *huma.Schema {
 	one := 1
-	two := 2
+	three := 3
 	return &huma.Schema{
 		Type:                 huma.TypeObject,
 		AdditionalProperties: false,
 		Properties: map[string]*huma.Schema{
 			"zone_ids":           componentZoneIDsSchema(),
 			"caddyfile_template": {Type: huma.TypeString},
+			"alias":              {Type: huma.TypeString, Pattern: "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)?$"},
 		},
 		Required:      []string{"zone_ids"},
 		MinProperties: &one,
-		MaxProperties: &two,
+		MaxProperties: &three,
 	}
 }
 

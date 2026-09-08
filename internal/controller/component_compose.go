@@ -107,6 +107,9 @@ func ProjectEnvironmentComponents(
 			}
 			owners[generated.ComponentID] = struct{}{}
 		}
+		if err := validateManagedNetworkAliases(projected, service); err != nil {
+			return EnvironmentComponentComposeProjection{}, err
+		}
 		projected.Services[generated.Name] = service
 		result.Services = append(result.Services, ComposeResourceIdentity{
 			ID: generated.Definition.ID, Name: generated.Name, ComponentID: generated.ComponentID,

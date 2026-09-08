@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/AlanD20/groundplane/internal/common/dnsname"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -15,6 +16,7 @@ import (
 type componentConfigWire struct {
 	ZoneIDs           json.RawMessage `json:"zone_ids"`
 	CaddyfileTemplate json.RawMessage `json:"caddyfile_template"`
+	Alias             json.RawMessage `json:"alias"`
 	SecretID          json.RawMessage `json:"secret_id"`
 	UpstreamAuto      json.RawMessage `json:"upstream_auto"`
 	UpstreamResolvers json.RawMessage `json:"upstream_resolvers"`
@@ -32,7 +34,8 @@ func (config ComponentConfig) MarshalJSON() ([]byte, error) {
 		return json.Marshal(struct {
 			ZoneIDs           []string `json:"zone_ids"`
 			CaddyfileTemplate string   `json:"caddyfile_template,omitempty"`
-		}{config.Caddy.ZoneIDs, config.Caddy.CaddyfileTemplate})
+			Alias             string   `json:"alias,omitempty"`
+		}{config.Caddy.ZoneIDs, config.Caddy.CaddyfileTemplate, config.Caddy.Alias})
 	case config.CloudflareTunnel != nil:
 		return json.Marshal(struct {
 			ZoneIDs  []string `json:"zone_ids"`
@@ -66,7 +69,7 @@ func (config *ComponentConfig) UnmarshalJSON(data []byte) error {
 		return malformedComponentConfig("component config requires exactly one variant")
 	}
 	switch {
-	case !present(wire.SecretID) && (present(wire.ZoneIDs) || present(wire.CaddyfileTemplate)):
+	case !present(wire.SecretID) && (present(wire.ZoneIDs) || (present(wire.CaddyfileTemplate) || present(wire.Alias))):
 		if present(wire.SecretID) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) ||
 			present(wire.Forwarders) ||
 			present(wire.TailnetDelegation) {
@@ -76,15 +79,21 @@ func (config *ComponentConfig) UnmarshalJSON(data []byte) error {
 		if err != nil {
 			return err
 		}
+		var alias string
+		if present(wire.Alias) {
+			if err := decodeRequiredField(wire.Alias, "alias", &alias); err != nil {
+				return err
+			}
+		}
 		var template string
 		if present(wire.CaddyfileTemplate) {
 			if err := decodeRequiredField(wire.CaddyfileTemplate, "caddyfile_template", &template); err != nil {
 				return err
 			}
 		}
-		*config = ComponentConfig{Caddy: &CaddyComponentConfig{ZoneIDs: zoneIDs, CaddyfileTemplate: template}}
+		*config = ComponentConfig{Caddy: &CaddyComponentConfig{ZoneIDs: zoneIDs, CaddyfileTemplate: template, Alias: alias}}
 	case present(wire.SecretID):
-		if present(wire.CaddyfileTemplate) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) ||
+		if (present(wire.CaddyfileTemplate) || present(wire.Alias)) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) ||
 			present(wire.Forwarders) ||
 			present(wire.TailnetDelegation) {
 			return malformedComponentConfig("component config Cloudflare Tunnel variant is mixed")
@@ -101,7 +110,7 @@ func (config *ComponentConfig) UnmarshalJSON(data []byte) error {
 			CloudflareTunnel: &CloudflareTunnelComponentConfig{ZoneIDs: zoneIDs, SecretID: secretID},
 		}
 	default:
-		if present(wire.ZoneIDs) || present(wire.CaddyfileTemplate) || present(wire.SecretID) ||
+		if present(wire.ZoneIDs) || (present(wire.CaddyfileTemplate) || present(wire.Alias)) || present(wire.SecretID) ||
 			!present(wire.CorefileTemplate) ||
 			!present(wire.UpstreamAuto) ||
 			!present(wire.UpstreamResolvers) ||
@@ -151,7 +160,7 @@ func (config ComponentConfig) validate() error {
 	if branches != 1 {
 		return invalidComponentConfig("component config requires exactly one variant")
 	}
-	if config.Caddy != nil && !validComponentZoneIDs(config.Caddy.ZoneIDs) {
+	if config.Caddy != nil && (!validComponentZoneIDs(config.Caddy.ZoneIDs) || !validRouterAlias(config.Caddy.Alias)) {
 		return invalidComponentConfig("component config Caddy zone_ids is invalid")
 	}
 	if config.CloudflareTunnel != nil && (!validStableID(config.CloudflareTunnel.SecretID, "sec_") ||
@@ -176,7 +185,7 @@ func (config ComponentConfig) Validate() error { return config.validate() }
 
 func componentConfigBranches(wire componentConfigWire) int {
 	branches := 0
-	if present(wire.CaddyfileTemplate) || present(wire.ZoneIDs) && !present(wire.SecretID) {
+	if (present(wire.CaddyfileTemplate) || present(wire.Alias)) || present(wire.ZoneIDs) && !present(wire.SecretID) {
 		branches++
 	}
 	if present(wire.SecretID) {
@@ -272,6 +281,10 @@ func invalidComponentConfig(format string, args ...any) error {
 
 func present(raw json.RawMessage) bool { return raw != nil }
 
+func validRouterAlias(value string) bool {
+	return value == "" || dnsname.ValidWithin(value, 63) && !strings.Contains(value, ".")
+}
+
 func validStableID(value, prefix string) bool {
 	if !strings.HasPrefix(value, prefix) || len(value) != len(prefix)+26 {
 		return false
@@ -287,6 +300,7 @@ func validStableID(value, prefix string) bool {
 type componentConfigMutationWire struct {
 	ZoneIDs           json.RawMessage `json:"zone_ids"`
 	CaddyfileTemplate json.RawMessage `json:"caddyfile_template"`
+	Alias             json.RawMessage `json:"alias"`
 	Credential        json.RawMessage `json:"credential"`
 	UpstreamAuto      json.RawMessage `json:"upstream_auto"`
 	UpstreamResolvers json.RawMessage `json:"upstream_resolvers"`
@@ -304,7 +318,8 @@ func (input ComponentConfigMutationInput) MarshalJSON() ([]byte, error) {
 		return json.Marshal(struct {
 			ZoneIDs           []string `json:"zone_ids"`
 			CaddyfileTemplate string   `json:"caddyfile_template,omitempty"`
-		}{input.Caddy.ZoneIDs, input.Caddy.CaddyfileTemplate})
+			Alias             string   `json:"alias,omitempty"`
+		}{input.Caddy.ZoneIDs, input.Caddy.CaddyfileTemplate, input.Caddy.Alias})
 	case input.CloudflareTunnel != nil:
 		return json.Marshal(struct {
 			ZoneIDs    []string                        `json:"zone_ids"`
@@ -331,7 +346,7 @@ func (input *ComponentConfigMutationInput) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	branches := 0
-	if present(wire.CaddyfileTemplate) || present(wire.ZoneIDs) && !present(wire.Credential) {
+	if (present(wire.CaddyfileTemplate) || present(wire.Alias)) || present(wire.ZoneIDs) && !present(wire.Credential) {
 		branches++
 	}
 	if present(wire.Credential) {
@@ -346,7 +361,7 @@ func (input *ComponentConfigMutationInput) UnmarshalJSON(data []byte) error {
 		return malformedComponentConfig("component config mutation requires exactly one variant")
 	}
 	switch {
-	case !present(wire.Credential) && (present(wire.ZoneIDs) || present(wire.CaddyfileTemplate)):
+	case !present(wire.Credential) && (present(wire.ZoneIDs) || (present(wire.CaddyfileTemplate) || present(wire.Alias))):
 		if present(wire.Credential) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) ||
 			present(wire.Forwarders) ||
 			present(wire.TailnetDelegation) {
@@ -356,6 +371,12 @@ func (input *ComponentConfigMutationInput) UnmarshalJSON(data []byte) error {
 		if err != nil {
 			return err
 		}
+		var alias string
+		if present(wire.Alias) {
+			if err := decodeRequiredField(wire.Alias, "alias", &alias); err != nil {
+				return err
+			}
+		}
 		var template string
 		if present(wire.CaddyfileTemplate) {
 			if err := decodeRequiredField(wire.CaddyfileTemplate, "caddyfile_template", &template); err != nil {
@@ -363,10 +384,10 @@ func (input *ComponentConfigMutationInput) UnmarshalJSON(data []byte) error {
 			}
 		}
 		*input = ComponentConfigMutationInput{
-			Caddy: &CaddyComponentConfigMutationInput{ZoneIDs: zoneIDs, CaddyfileTemplate: template},
+			Caddy: &CaddyComponentConfigMutationInput{ZoneIDs: zoneIDs, CaddyfileTemplate: template, Alias: alias},
 		}
 	case present(wire.Credential):
-		if present(wire.CaddyfileTemplate) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) ||
+		if (present(wire.CaddyfileTemplate) || present(wire.Alias)) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) ||
 			present(wire.Forwarders) ||
 			present(wire.TailnetDelegation) {
 			return malformedComponentConfig("component config mutation Cloudflare Tunnel variant is mixed")
@@ -383,7 +404,7 @@ func (input *ComponentConfigMutationInput) UnmarshalJSON(data []byte) error {
 			CloudflareTunnel: &CloudflareTunnelComponentConfigMutationInput{ZoneIDs: zoneIDs, Credential: credential},
 		}
 	default:
-		if present(wire.ZoneIDs) || present(wire.CaddyfileTemplate) || present(wire.Credential) ||
+		if present(wire.ZoneIDs) || (present(wire.CaddyfileTemplate) || present(wire.Alias)) || present(wire.Credential) ||
 			!present(wire.CorefileTemplate) ||
 			!present(wire.UpstreamAuto) ||
 			!present(wire.UpstreamResolvers) ||
@@ -433,7 +454,7 @@ func (input ComponentConfigMutationInput) validate() error {
 	if branches != 1 {
 		return invalidComponentConfig("component config mutation requires exactly one variant")
 	}
-	if input.Caddy != nil && !validComponentZoneIDs(input.Caddy.ZoneIDs) {
+	if input.Caddy != nil && (!validComponentZoneIDs(input.Caddy.ZoneIDs) || !validRouterAlias(input.Caddy.Alias)) {
 		return invalidComponentConfig("component config mutation Caddy zone_ids is invalid")
 	}
 	if input.CloudflareTunnel != nil {

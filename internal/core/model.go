@@ -331,6 +331,7 @@ const (
 )
 
 type CaddyComponentConfig struct {
+	Alias             string   `yaml:"alias,omitempty" json:"alias,omitempty"`
 	ZoneIDs           []string `yaml:"zone_ids" json:"zone_ids"`
 	CaddyfileTemplate string   `yaml:"caddyfile_template,omitempty" json:"caddyfile_template,omitempty"`
 }

@@ -51,11 +51,12 @@ func ActivateConfigCommand() []string {
 }
 
 type Config struct {
+	Alias             string
 	CaddyfileTemplate string
 }
 
 func ConfigFields() []string {
-	return []string{"zone_ids", "caddyfile_template"}
+	return []string{"zone_ids", "caddyfile_template", "alias"}
 }
 
 func Definition() (component.Definition, error) {
@@ -111,6 +112,9 @@ func Definition() (component.Definition, error) {
 
 func Plan(input component.HTTPRouterInput, config Config) (component.EnvironmentPlan, error) {
 	input = component.CloneHTTPRouterInput(input)
+	if !component.ValidRouterAlias(config.Alias) {
+		return component.EnvironmentPlan{}, fmt.Errorf("caddy: invalid router alias")
+	}
 	if err := component.ValidateHTTPRouterInput(input); err != nil {
 		return component.EnvironmentPlan{}, err
 	}
@@ -128,7 +132,7 @@ func Plan(input component.HTTPRouterInput, config Config) (component.Environment
 		Services: []component.ManagedService{{
 			ID: input.GeneratedServiceID, Name: ServiceName, Image: Image,
 			NetworkMode: component.ManagedNetworkModeZones,
-			Networks:    caddyNetworks(input.Zones),
+			Networks:    caddyNetworks(input.Zones, config.Alias),
 			Expose:      []string{"80", "443"}, Restart: "unless-stopped", Replicas: 1,
 			// Observe the running admin API, not a new process's version.
 			// https://caddyserver.com/docs/api#get-configpath
@@ -155,11 +159,14 @@ func Plan(input component.HTTPRouterInput, config Config) (component.Environment
 	}), nil
 }
 
-func caddyNetworks(zones []component.HTTPRouterZoneInput) []component.ManagedNetworkAttachment {
+func caddyNetworks(zones []component.HTTPRouterZoneInput, alias string) []component.ManagedNetworkAttachment {
 	networks := make([]component.ManagedNetworkAttachment, len(zones))
 	for index, zone := range zones {
 		networks[index] = component.ManagedNetworkAttachment{
 			Name: zone.Name, Aliases: []string{ServiceName}, StaticIPv4: zone.StaticIPv4,
+		}
+		if index == 0 && alias != "" && alias != ServiceName {
+			networks[index].Aliases = append(networks[index].Aliases, alias)
 		}
 	}
 	return networks

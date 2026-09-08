@@ -1,5 +1,11 @@
 # Groundplane Blueprint - the spec format
 
+HTTP router `settings.alias` optionally declares one lowercase DNS label
+(1–63 characters, alphanumeric ends). The alias exists on the first selected
+Zone only and must not collide with another Service name or alias there.
+Empty or omission declares no custom alias. It does not rename the managed
+Service or change ports; disable/re-enable and updates preserve it.
+
 The Groundplane Blueprint is the desired-state contract. It is a
 Compose-compatible superset: Docker Compose supplies the base grammar and
 Groundplane adds a namespaced `x-gp-*` grammar for identity, facts,

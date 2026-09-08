@@ -160,7 +160,7 @@ func validateBlueprintComponentSpec(
 		return core.ComponentKindIngressCaddy, nil
 	case core.ComponentCapabilityEdgeTunnel:
 		if spec.Implementation != core.ComponentKindEdgeCloudflare ||
-			spec.ImplementationConfig.CaddyfileTemplate != "" ||
+			spec.ImplementationConfig.CaddyfileTemplate != "" || spec.Settings.Alias != "" ||
 			(spec.Enabled && (spec.Settings.SecretID == "" || len(spec.Settings.ZoneIDs) == 0)) {
 			return "", errs.New(
 				errs.KindValidationFailed,
@@ -179,12 +179,12 @@ func validateBlueprintComponentSpec(
 func blueprintComponentConfig(kind core.ComponentKind, spec core.ComponentSpec) core.ComponentConfig {
 	switch kind {
 	case core.ComponentKindIngressCaddy:
-		if len(spec.Settings.ZoneIDs) == 0 && spec.ImplementationConfig.CaddyfileTemplate == "" {
+		if len(spec.Settings.ZoneIDs) == 0 && spec.ImplementationConfig.CaddyfileTemplate == "" && spec.Settings.Alias == "" {
 			return core.ComponentConfig{}
 		}
 		return core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
 			ZoneIDs:           append([]string(nil), spec.Settings.ZoneIDs...),
-			CaddyfileTemplate: spec.ImplementationConfig.CaddyfileTemplate,
+			CaddyfileTemplate: spec.ImplementationConfig.CaddyfileTemplate, Alias: spec.Settings.Alias,
 		}}
 	case core.ComponentKindEdgeCloudflare:
 		if spec.Settings.SecretID == "" && len(spec.Settings.ZoneIDs) == 0 {

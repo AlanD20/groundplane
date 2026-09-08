@@ -51,7 +51,7 @@ func registeredCaddyEnvironmentComponent(
 				)
 			}
 			plan, err := registeredcaddy.Plan(input, registeredcaddy.Config{
-				CaddyfileTemplate: instance.Config.Caddy.CaddyfileTemplate,
+				CaddyfileTemplate: instance.Config.Caddy.CaddyfileTemplate, Alias: instance.Config.Caddy.Alias,
 			})
 			if err != nil {
 				return componentsdk.EnvironmentPlan{}, errs.Wrap(errs.KindValidationFailed, err)
@@ -139,7 +139,7 @@ func projectRegisteredCaddyInput(
 			ServiceName: registeredcaddy.ServiceName,
 			URL:         registeredcaddy.OriginURL,
 		},
-	}, registeredcaddy.Config{CaddyfileTemplate: template}, nil
+	}, registeredcaddy.Config{CaddyfileTemplate: template, Alias: instance.Config.Caddy.Alias}, nil
 }
 
 func projectRegisteredCaddyZones(

@@ -1611,6 +1611,17 @@ reconcile loop and lands in the Activity journal.
 
 ## Desired state - the contract format
 
+HTTP router setup accepts one optional `alias`: a lowercase DNS label of 1–63
+letters, digits or hyphens, starting and ending with a letter or digit. It is
+an additional alias on the first (primary) selected Zone only, not a Service
+rename or port mapping. It cannot collide with another Service name or alias
+on that Zone. Empty clears it. A complete Blueprint omitting it declares no
+custom alias; CLI Configure/Enable preserves it unless `--alias` is supplied.
+Disable retains the declaration; re-enable, update and reconstruction restore
+it. Console, CLI, the existing configuration API (`alias`), and Blueprint
+`x-gp-components.http-router.settings.alias` expose the same decision. Caddy
+HTTP remains port 80.
+
 The Controller understands desired state as a set of YAML documents called the
 **Groundplane Blueprint** — the desired-state contract. Each entity is one
 schema-validated document. The Blueprint uses Docker Compose as its base

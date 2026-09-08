@@ -105,6 +105,7 @@ func newComponentCmd() *cobra.Command {
 	var forwarders []string
 	var tailnetDelegation bool
 	var configFile string
+	var alias string
 	var templateFile string
 	var zones []string
 	set := &cobra.Command{
@@ -120,9 +121,13 @@ func newComponentCmd() *cobra.Command {
 			componentFile := cmd.Flags().Changed("file")
 			componentTemplate := cmd.Flags().Changed("template-file")
 			componentZone := cmd.Flags().Changed("zone")
+			componentAlias := cmd.Flags().Changed("alias")
 			component, err := app.Client.ShowComponent(cmd.Context(), target(app, args[0]))
 			if err != nil {
 				return err
+			}
+			if componentAlias && component.Kind != "caddy" {
+				return fmt.Errorf("--alias is valid only for Caddy")
 			}
 			if componentZone && component.EnvironmentID == "" {
 				return fmt.Errorf("Zone placement requires an environment-owned Component")
@@ -163,7 +168,7 @@ func newComponentCmd() *cobra.Command {
 				}
 				coreDNS.CorefileTemplate = &value
 				body.CoreDNS = &coreDNS
-			} else if componentFile || componentZone {
+			} else if componentFile || componentZone || componentAlias {
 				if component.Kind == "caddy" {
 					if flagConfig {
 						return fmt.Errorf("Caddy config accepts only --file and --zone")
@@ -176,6 +181,7 @@ func newComponentCmd() *cobra.Command {
 					if current.Config != nil && current.Config.Caddy != nil {
 						caddy.ZoneIDs = append([]string(nil), current.Config.Caddy.ZoneIDs...)
 						caddy.CaddyfileTemplate = current.Config.Caddy.CaddyfileTemplate
+						caddy.Alias = current.Config.Caddy.Alias
 					}
 					if componentZone {
 						caddy.ZoneIDs = append([]string(nil), zoneIDs...)
@@ -186,6 +192,9 @@ func newComponentCmd() *cobra.Command {
 							return readErr
 						}
 						caddy.CaddyfileTemplate = value
+					}
+					if componentAlias {
+						caddy.Alias = alias
 					}
 					if len(caddy.ZoneIDs) == 0 {
 						return fmt.Errorf("Caddy config requires --zone when no current Zone is configured")
@@ -283,6 +292,7 @@ func newComponentCmd() *cobra.Command {
 		StringVar(&configFile, "file", "", "read a Caddyfile template (Caddy) or complete JSON config (other kinds) from PATH, or -")
 	set.Flags().
 		StringVar(&templateFile, "template-file", "", "read the required CoreDNS Corefile template from PATH, or -")
+	set.Flags().StringVar(&alias, "alias", "", "optional Caddy primary-Zone alias; empty clears it")
 	set.Flags().StringArrayVar(&zones, "zone", nil, "repeatable Zone slug; with global --id, repeatable stable Zone id")
 	config.AddCommand(set)
 	cmd.AddCommand(config)

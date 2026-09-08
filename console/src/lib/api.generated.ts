@@ -1703,6 +1703,7 @@ export interface components {
             status: "disabled" | "pending" | "healthy" | "degraded" | "unknown";
         };
         ComponentConfig: {
+            alias?: string;
             caddyfile_template?: string;
             /** @description Ordered selected Environment Zone IDs; the first router Zone is primary. */
             zone_ids: string[];
@@ -1728,6 +1729,7 @@ export interface components {
              */
             readonly $schema?: string;
             config: {
+                alias?: string;
                 caddyfile_template?: string;
                 /** @description Ordered selected Environment Zone IDs; the first router Zone is primary. */
                 zone_ids: string[];
@@ -1783,6 +1785,7 @@ export interface components {
              */
             readonly $schema?: string;
             config?: {
+                alias?: string;
                 caddyfile_template?: string;
                 /** @description Ordered selected Environment Zone IDs; the first router Zone is primary. */
                 zone_ids: string[];

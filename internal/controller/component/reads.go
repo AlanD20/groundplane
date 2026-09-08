@@ -164,7 +164,7 @@ func projectComponentConfig(component core.Component) *apiTypes.ComponentConfig 
 			Caddy: &apiTypes.CaddyComponentConfig{
 				ZoneIDs: append(
 					[]string(nil),
-					config.Caddy.ZoneIDs...), CaddyfileTemplate: config.Caddy.CaddyfileTemplate,
+					config.Caddy.ZoneIDs...), CaddyfileTemplate: config.Caddy.CaddyfileTemplate, Alias: config.Caddy.Alias,
 			},
 		}
 		return result

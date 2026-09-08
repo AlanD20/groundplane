@@ -341,6 +341,7 @@ func environmentBlueprintAuthoringComponents(
 			capability = core.ComponentCapabilityHTTPRouter
 			if record.Desired.Config.Caddy != nil {
 				spec.Settings.ZoneIDs = append([]string(nil), record.Desired.Config.Caddy.ZoneIDs...)
+				spec.Settings.Alias = record.Desired.Config.Caddy.Alias
 				spec.ImplementationConfig.CaddyfileTemplate =
 					record.Desired.Config.Caddy.CaddyfileTemplate
 			}

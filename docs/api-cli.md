@@ -1,5 +1,11 @@
 # Groundplane — CLI & API structure
 
+Router Configure/Enable accepts `--alias NAME` for Caddy (empty clears it;
+unspecified preserves the configured alias). The existing Component config
+request/response contains optional `alias`. Console Router setup exposes the
+same field; Blueprint mirrors it as `http-router.settings.alias`. This is a
+single primary-Zone DNS label, not a name change or port setting.
+
 Companion to `mvp.md` (the authoritative contract). Defines the shape
 of the human-facing surfaces: the **CLI** and the **API**. One resource
 model, three surfaces — Console, CLI, API — all speaking the same nouns and

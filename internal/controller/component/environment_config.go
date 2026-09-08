@@ -24,7 +24,7 @@ func (service *MutationService) environmentComponentConfig(
 		if input.Caddy != nil {
 			return apiTypes.ComponentConfig{Caddy: &apiTypes.CaddyComponentConfig{
 				ZoneIDs:           append([]string(nil), input.Caddy.ZoneIDs...),
-				CaddyfileTemplate: input.Caddy.CaddyfileTemplate,
+				CaddyfileTemplate: input.Caddy.CaddyfileTemplate, Alias: input.Caddy.Alias,
 			}}, nil
 		}
 	case core.ComponentKindEdgeCloudflare:
@@ -53,6 +53,7 @@ func applyEnvironmentComponentConfig(spec *yaml.Node, config apiTypes.ComponentC
 	switch {
 	case config.Caddy != nil:
 		settings.ZoneIDs = append([]string(nil), config.Caddy.ZoneIDs...)
+		settings.Alias = config.Caddy.Alias
 		implementation.CaddyfileTemplate = config.Caddy.CaddyfileTemplate
 	case config.CloudflareTunnel != nil:
 		settings.ZoneIDs = append([]string(nil), config.CloudflareTunnel.ZoneIDs...)

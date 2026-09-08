@@ -210,7 +210,7 @@ type ReusableSecretCreateInput = {
   | { projectId?: never; platform: true }
 )
 type ComponentConfigInput =
-  | { zone_ids: string[]; caddyfile_template?: string }
+  | { zone_ids: string[]; caddyfile_template?: string; alias?: string }
   | {
       zone_ids: string[]
       credential:
@@ -1048,13 +1048,14 @@ function environmentComponentFromAPI(item: ComponentResponse, environmentId: str
 		}
 		const zoneIDs = 'zone_ids' in config ? config.zone_ids : undefined
 		const caddyfileTemplate = 'caddyfile_template' in config ? config.caddyfile_template : undefined
-		if (!Array.isArray(zoneIDs) || zoneIDs.length === 0 || zoneIDs.some((id) => typeof id !== 'string') || new Set(zoneIDs).size !== zoneIDs.length || (caddyfileTemplate !== undefined && typeof caddyfileTemplate !== 'string')) {
+		const alias = 'alias' in config ? config.alias : undefined
+		if (!Array.isArray(zoneIDs) || zoneIDs.length === 0 || zoneIDs.some((id) => typeof id !== 'string') || new Set(zoneIDs).size !== zoneIDs.length || (caddyfileTemplate !== undefined && typeof caddyfileTemplate !== 'string') || (alias !== undefined && typeof alias !== 'string')) {
 			throw new Error('Controller returned invalid Caddy Component configuration')
 		}
 		return {
       ...common,
 		kind: 'caddy',
-		config: { zone_ids: [...zoneIDs], ...(caddyfileTemplate === undefined ? {} : { caddyfile_template: caddyfileTemplate }) },
+		config: { zone_ids: [...zoneIDs], ...(caddyfileTemplate === undefined ? {} : { caddyfile_template: caddyfileTemplate }), ...(typeof alias === 'string' ? { alias } : {}) },
       state: item.pinned_ipv4 ? { pinnedIPv4: item.pinned_ipv4 } : {},
     }
 	}

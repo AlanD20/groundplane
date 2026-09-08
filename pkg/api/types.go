@@ -527,6 +527,7 @@ type ManagedConfigFile struct {
 }
 
 type CaddyComponentConfig struct {
+	Alias             string   `json:"alias,omitempty"`
 	ZoneIDs           []string `json:"zone_ids"`
 	CaddyfileTemplate string   `json:"caddyfile_template,omitempty"`
 }
@@ -560,6 +561,7 @@ type ComponentConfigMutationInput struct {
 }
 
 type CaddyComponentConfigMutationInput struct {
+	Alias             string   `json:"alias,omitempty"`
 	ZoneIDs           []string `json:"zone_ids"`
 	CaddyfileTemplate string   `json:"caddyfile_template,omitempty"`
 }
