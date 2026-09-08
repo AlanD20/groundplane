@@ -73,12 +73,14 @@ func TestPrepareWithoutCandidatesPreservesMaterializationAndVolumePrefix(t *test
 	if err != nil {
 		t.Fatalf("BuildNormalizedServiceMemberships() error = %v", err)
 	}
+	taskID := ids.NewAt(ids.KindTask, at, 207)
 	task := etcd.TaskRecord{
-		ID: ids.NewAt(ids.KindTask, at, 207), OperationID: ids.NewAt(ids.KindOperation, at, 208),
+		ID: taskID, OperationID: ids.NewAt(ids.KindOperation, at, 208),
 		Executor: etcd.TaskExecutorAgent, PlanID: planID,
 		RenderGeneration: 1, Type: etcd.TaskUpdate, Target: environmentID,
 		Params: map[string]string{
 			taskcontract.EnvironmentBlueprintProcedureParam: string(taskcontract.BlueprintComposeProcedureNone),
+			etcd.EnvironmentDesiredRevisionParam:            taskID,
 		},
 		TimeoutSeconds: 120,
 	}

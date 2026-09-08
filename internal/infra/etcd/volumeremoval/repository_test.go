@@ -322,11 +322,14 @@ func assignEnvironmentVolumeRemovalTask(
 		t.Fatal(err)
 	}
 	agentID := ids.NewAt(ids.KindAgent, task.CreatedAt, 70)
+	deadline := assignedAt.Add(time.Duration(task.TimeoutSeconds) * time.Second)
 	assignment := etcd.TaskAssignmentRecord{
 		AssignmentID: ids.NewAt(ids.KindAssignment, task.CreatedAt, 71),
 		TaskID:       task.ID, Executor: etcd.TaskExecutorAgent, AgentID: agentID,
 		AgentGeneration: 3, ClaimedTaskRevision: stored.Entry.ModRevision,
-		AssignedAt: assignedAt, Deadline: assignedAt.Add(6 * time.Hour),
+		AssignedAt: assignedAt, Deadline: deadline,
+		RecoveryDeadline: deadline.Add(time.Duration(task.TimeoutSeconds) * time.Second),
+		ExecutionMode:    etcd.TaskExecutionModeForward, ExecutionEpoch: 1,
 	}
 	runningValue, err := etcd.EncodeCapabilityTaskRecord(running)
 	if err != nil {

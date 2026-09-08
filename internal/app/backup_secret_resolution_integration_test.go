@@ -323,10 +323,12 @@ func newAppBackupSecretFixture(t *testing.T) appBackupSecretFixture {
 		StartedAt:         &startedAt,
 	}
 	deadline := assignedAt.Add(time.Duration(appBackupTaskTimeoutSeconds) * time.Second)
+	recoveryDeadline := deadline.Add(time.Duration(appBackupTaskTimeoutSeconds) * time.Second)
 	assignment := etcd.TaskAssignmentRecord{
 		AssignmentID: assignmentID, TaskID: taskID, Executor: etcd.TaskExecutorAgent,
 		AgentID: agentID, AgentGeneration: 1, ClaimedTaskRevision: appBackupPublicationRevision,
-		AssignedAt: assignedAt, Deadline: deadline,
+		AssignedAt: assignedAt, Deadline: deadline, RecoveryDeadline: recoveryDeadline,
+		ExecutionMode: etcd.TaskExecutionModeForward, ExecutionEpoch: 1,
 	}
 	claim := etcd.TaskAssignment{
 		Task: etcd.Versioned[etcd.TaskRecord]{
@@ -579,17 +581,20 @@ func appBackupTaskValue(t *testing.T, task etcd.TaskRecord) []byte {
 func appBackupAssignmentValue(t *testing.T, assignment etcd.TaskAssignmentRecord) []byte {
 	t.Helper()
 	value, err := json.Marshal(struct {
-		Schema              int               `json:"schema"`
-		AssignmentID        string            `json:"assignment_id"`
-		TaskID              string            `json:"task_id"`
-		Executor            etcd.TaskExecutor `json:"executor"`
-		AgentID             string            `json:"agent_id"`
-		AgentGeneration     uint64            `json:"agent_generation"`
-		ClaimedTaskRevision int64             `json:"claimed_task_revision"`
-		AssignedAt          string            `json:"assigned_at"`
-		Deadline            string            `json:"deadline"`
+		Schema              int                    `json:"schema"`
+		AssignmentID        string                 `json:"assignment_id"`
+		TaskID              string                 `json:"task_id"`
+		Executor            etcd.TaskExecutor      `json:"executor"`
+		AgentID             string                 `json:"agent_id"`
+		AgentGeneration     uint64                 `json:"agent_generation"`
+		ClaimedTaskRevision int64                  `json:"claimed_task_revision"`
+		AssignedAt          string                 `json:"assigned_at"`
+		Deadline            string                 `json:"forward_deadline"`
+		RecoveryDeadline    string                 `json:"recovery_deadline"`
+		ExecutionMode       etcd.TaskExecutionMode `json:"execution_mode"`
+		ExecutionEpoch      uint32                 `json:"execution_epoch"`
 	}{
-		Schema:              1,
+		Schema:              3,
 		AssignmentID:        assignment.AssignmentID,
 		TaskID:              assignment.TaskID,
 		Executor:            assignment.Executor,
@@ -598,6 +603,9 @@ func appBackupAssignmentValue(t *testing.T, assignment etcd.TaskAssignmentRecord
 		ClaimedTaskRevision: assignment.ClaimedTaskRevision,
 		AssignedAt:          assignment.AssignedAt.Format(time.RFC3339Nano),
 		Deadline:            assignment.Deadline.Format(time.RFC3339Nano),
+		RecoveryDeadline:    assignment.RecoveryDeadline.Format(time.RFC3339Nano),
+		ExecutionMode:       assignment.ExecutionMode,
+		ExecutionEpoch:      assignment.ExecutionEpoch,
 	})
 	if err != nil {
 		t.Fatalf("encode assignment fixture: %v", err)
