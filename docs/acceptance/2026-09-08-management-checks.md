@@ -16,7 +16,7 @@ provider configuration changes, backup/restore work, or broad CI acceptance.
 | Project Secret creation and masked read | Passed | Disposable `sec_01M20YA9F0B5JZQ4S8A5RR64XW`; no value returned by show |
 | Service-scoped Secret Entry consumption | Blocked before publication | 422 retained-runtime coverage rejection; no Entry created |
 | Script creation and edit | Passed | Stable Script id retained; edit advanced generation from 1 to 2 |
-| Manual Script execution | Failed before Task publication | HTTP 500 on both `qa-initialize` and currently serving `app-api` |
+| Manual Script execution | Repaired; success/failure/abort checked | Follow-up Tasks below; post-execution removal remains blocked |
 | Disposable Script/Secret removal | Passed | Three removal Tasks completed; ids below |
 | Application logs | Passed | Bounded `service logs app-api --tail 5` returned normally |
 
@@ -50,10 +50,10 @@ The private previous Controller binary is retained as
 `controller-before-volume-diagnostic`. All temporary diagnostics were removed
 from source and the deployed Controller.
 
-Manual Scripts used only `test -r /var/www/html/artisan`; neither attempted Run
-returned a Task id. Successful deployment pre-hooks are separate evidence and
-do not prove this manual path. Runtime Script failure/abort behavior, new Secret
-Entry consumption/replacement, and Volume persistence/removal are not proven.
+The initial manual Scripts used only `test -r /var/www/html/artisan`; neither
+attempt returned a Task id. The publication repair and subsequent manual runtime
+checks are recorded below. New Secret Entry consumption/replacement and Volume
+persistence/removal remain unproven.
 The known full-Blueprint publication-size problem also remains open; a full
 bundle Apply was not repeated as part of this check.
 
@@ -75,3 +75,42 @@ host-local so its immutable Release history stays usable.
 Raw bounded Volume evidence and private log output are retained under
 `.tmp/qa-management-20260908/`; the existing fanout verifier is
 `.tmp/qa-fresh-20260908/reverb-public-hostname-fanout.php`.
+
+## Manual Script publication repair — 17:13–17:16 UTC
+
+Controller logs localized the original 500 to `idempotency plan contains a
+duplicate compare key`. The Service desired-state fence and Environment
+projection both compare the same Blueprint head. Manual publication now combines
+identical source conditions once and rejects conflicting revisions. Generic
+transaction duplicate-key validation is unchanged. Independent Service roots,
+immutable projection roots, and concurrent head-change fences are retained.
+
+The reproduction failed with that exact duplicate-key error before the fix.
+Focused race tests passed for `TestManualScriptSourceConditions`, immutable
+projection sources, and Script checkpoint evidence. The broader prefix selection
+`^Test(ManualScript|Script|ReleaseScript|ReleaseHook)` also passed with race and
+coverage collection. Tagged Controller build passed and was deployed to QA;
+the prior binary is retained as `controller-before-manual-script-fix`.
+
+Disposable Script `scr_01M2104ECJZ050QH7RMDSCFSWG`, slug
+`qa-manual-cas-proof`, targeted the existing `app-api` Service:
+
+| Body / action | Task | Terminal result (UTC) |
+| --- | --- | --- |
+| `test -r /var/www/html/artisan` | `task_01M2104XFFZEZH8EEQ6BEAQYY6` | completed 17:13:15 |
+| Edit to `exit 7`, then Run | `task_01M2106S9M61XWETZ4SRS8NPXP` | failed 17:14:16 |
+| Edit to `sleep 60`, Run, observe running, Abort | `task_01M210864YX5YA5GJ254TNVT4X` | aborted 17:15:26 |
+
+The Script retained its id across generations 1–3. Normal removal then rejected
+`resource.in_use: active Script executions fence deletion` despite all three
+Tasks being terminal. The disposable Script is retained, not force-deleted;
+see [manual Script terminal-reference cleanup](../issues/manual-script-terminal-references.md).
+Both public HTTP endpoints remained 200 with TLS verification result 0.
+
+A wider substring test selection additionally reached four failing subcases in
+`TestAbortPendingBlueprintReleasesScriptExecutionAuthorityBeforeTerminalization`:
+fixture publication returned `release durable record is corrupt`. All four
+reproduced using unchanged main source via a Go overlay, excluding the new
+manual-publication files. This is pre-existing fixture evidence, not a passing
+full-package result. The overlay and coverage are retained under
+`.tmp/qa-management-20260908/`. No full CI or backup/restore tests were run.

@@ -754,13 +754,15 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 			ModRevision: sources.BodyGeneration.Revision,
 		},
 		{Key: scriptSetActiveKey(execution.EnvironmentID)},
-		serviceDesiredCondition(sources.Service),
 		{Key: releaseProjectionKey(execution.ServiceID), ModRevision: sources.Release.ProjectionRevision},
 		{Key: releaseIntentStagingKey("", execution.ReleaseID), ModRevision: sources.Release.IntentRevision},
 		{Key: releaseRenderInputStagingKey("", execution.ReleaseID), ModRevision: sources.RenderInput.Revision},
 	}
-	conditions = append(conditions, scriptExecutionProjectionConditions(sources)...)
-	conditions[10].ModRevision = sources.Environment.ReadRevision
+	sourceConditions, err := manualScriptSourceConditions(sources)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	conditions = append(conditions, sourceConditions...)
 	active, err := readActiveScriptSet(ctx, repository.store, execution.EnvironmentID, sources.Revision)
 	if err != nil || active.Record.GenerationID != execution.ScriptSetGeneration {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Script-set generation changed")
@@ -1079,26 +1081,6 @@ func validScriptExecutionState(state ScriptExecutionState) bool {
 		return true
 	default:
 		return false
-	}
-}
-
-func classifyScriptExecutionPublication(expected int) idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
-		if len(values) != expected {
-			return errs.New(errs.KindInternal, "Script execution publication compare evidence is incomplete")
-		}
-		if values[6] != nil {
-			return errs.New(errs.KindStateConflict, "Script operation already has an active Task")
-		}
-		for index, value := range values {
-			if index < 8 && value != nil {
-				return errs.New(errs.KindInternal, "Script execution identity collided with durable state")
-			}
-			if index >= 8 && value == nil {
-				return errs.New(errs.KindStateConflict, "Script execution source changed before publication")
-			}
-		}
-		return errs.New(errs.KindStateConflict, "Script execution source changed before publication")
 	}
 }
 
