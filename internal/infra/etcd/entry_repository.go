@@ -458,65 +458,6 @@ func (repository *EntryRepository) ReplaceEntryIdempotent(
 	return idempotency.Apply(ctx, marker, plan)
 }
 
-func (repository *EntryRepository) DeleteEntry(
-	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
-	current Versioned[EntryRecord],
-) (int64, error) {
-	if err := validateEntryHierarchy(ctx, environment, project, current.Record); err != nil {
-		return 0, err
-	}
-	if err := validateEntryVersion(current); err != nil {
-		return 0, err
-	}
-	fence, ownerRevision, err := repository.loadEntryMutationFence(
-		ctx,
-		environment,
-		project,
-		[]string{
-			entryRecordKey(current.Record.Entry.ID),
-			entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID),
-			deletionTombstoneKey(string(DeletionTargetEntry), current.Record.Entry.ID),
-		},
-		1,
-		current.Record.Entry.ID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	epochMutation, err := fence.epochRewriteMutation()
-	if err != nil {
-		return 0, err
-	}
-	defer clear(epochMutation.Value)
-	conditions := append(
-		entryDeleteConditions(current, ownerRevision),
-		fence.transactionConditions()...,
-	)
-	result, err := repository.store.Transact(ctx, conditions, []Mutation{
-		{Type: MutationDelete, Key: entryRecordKey(current.Record.Entry.ID)},
-		{Type: MutationDelete, Key: entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID)},
-		{
-			Type: MutationDelete, Key: entryPlainValueGenerationPrefix + current.Record.Entry.ID + "/",
-			Prefix: true,
-		},
-		{
-			Type: MutationDelete, Key: entrySecretValueGenerationPrefix + current.Record.Entry.ID + "/",
-			Prefix: true,
-		},
-		epochMutation,
-	})
-	if err != nil {
-		return 0, err
-	}
-	if !result.Succeeded {
-		defer clearKeyValues(result.FailureReads)
-		return 0, classifyEntryDeleteConflict(result.FailureReads, current, ownerRevision, fence)
-	}
-	return result.Revision, nil
-}
-
 func prepareEntryGeneration(
 	record EntryRecord,
 	generation EntryValueGeneration,

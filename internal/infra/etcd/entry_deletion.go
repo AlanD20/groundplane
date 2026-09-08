@@ -142,6 +142,17 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		)
 	}
 	conditions = append(conditions, fence.transactionConditions()...)
+	scriptConditions, err := prepareEntryScriptAbsence(
+		ctx,
+		repository.store,
+		entry.Record.Entry.ID,
+		fence.readAtRevision(),
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	baseCount := len(conditions)
+	conditions = append(conditions, scriptConditions...)
 	mutations := []Mutation{
 		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
 		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
@@ -174,12 +185,16 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		initiation,
 		conditions,
 		mutations,
-		classifyEntryDeletionStartConflict(
-			entry,
-			projection,
-			ownerRevision,
-			task.OperationID,
-			fence,
+		classifyEntryScriptAbsenceConflict(
+			[]string{entry.Record.Entry.ID},
+			baseCount,
+			classifyEntryDeletionStartConflict(
+				entry,
+				projection,
+				ownerRevision,
+				task.OperationID,
+				fence,
+			),
 		),
 	)
 	if err != nil {

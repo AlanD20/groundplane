@@ -377,6 +377,16 @@ prefix as empty in the same transaction that removes the source. The count is
 the fast aggregate fence; prefix emptiness is the absence proof. One without
 the other is corruption, not permission to remove.
 
+Entry removal deletes all immutable value generations. Its bounded proof
+therefore compares the entire count and forward-membership prefixes under the
+stable Entry id as absent, covering every `cfg_` generation without enumerating
+history or adding another aggregate. Two one-item reads at one revision provide
+the preflight; both prefix comparisons remain in the final transaction.
+An orphan count or membership fails closed. Desired publication applies this
+guard only to removed Entry ids, not edits that retain the id. Entry retirement
+and source-count acquisition also compare each other's absence atomically;
+failed deletion Retry must reacquire the same absence proof.
+
 Tenant, Project, and Environment deletion include these exact fences in their
 fixed-revision membership proof. They must not prefix-delete Entry generations,
 Script generations, Secret ciphertext, or source records while any Script

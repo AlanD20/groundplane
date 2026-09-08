@@ -86,6 +86,10 @@ func (repository *TaskRepository) prepareEntryTaskRetry(
 	if err != nil {
 		return routeTaskChange{}, err
 	}
+	scriptConditions, err := prepareEntryScriptAbsence(ctx, repository.store, intent.EntryID, revision)
+	if err != nil {
+		return routeTaskChange{}, err
+	}
 	change := routeTaskChange{
 		applies: true,
 		conditions: []Condition{
@@ -102,6 +106,7 @@ func (repository *TaskRepository) prepareEntryTaskRetry(
 		}
 		change.conditions = append(change.conditions, condition)
 	}
+	change.conditions = append(change.conditions, scriptConditions...)
 	tombstone := DeletionTombstoneRecord{
 		TargetKind: DeletionTargetEntry, TargetID: intent.EntryID, TargetRevision: intent.EntryRevision,
 		TaskID: retry.ID, Phase: entryRemovalTombstonePhase(retryIntent),
@@ -327,6 +332,12 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 		})
 	}
 	if terminalStatus == TaskStatusCompleted {
+		scriptConditions, err := prepareEntryScriptAbsence(ctx, repository.store, intent.EntryID, revision)
+		if err != nil {
+			clearRouteTaskChange(change)
+			return routeTaskChange{}, err
+		}
+		change.conditions = append(change.conditions, scriptConditions...)
 		change.mutations = append(change.mutations,
 			Mutation{Type: MutationDelete, Key: entryOwnerKey(entry.EnvironmentID, entry.Entry.ID)},
 			Mutation{Type: MutationDelete, Key: entryRecordKey(intent.EntryID)},
