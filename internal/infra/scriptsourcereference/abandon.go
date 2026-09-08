@@ -20,6 +20,13 @@ func (repository *Repository) Abandon(
 	if err != nil {
 		return err
 	}
+	return repository.abandonPreparation(ctx, Preparation{
+		OperationID: operationID, MembershipCount: uint64(lenDeduplicated(input)), MembershipSHA256: digest,
+	})
+}
+
+func (repository *Repository) abandonPreparation(ctx context.Context, expected Preparation) error {
+	operationID := expected.OperationID
 	for {
 		read, readErr := repository.store.GetMany(ctx, []string{PreparationKey(operationID), RootKey(operationID)}, 0)
 		if readErr != nil {
@@ -38,8 +45,10 @@ func (repository *Repository) Abandon(
 		if decodeErr != nil {
 			return decodeErr
 		}
-		if descriptor.OperationID != operationID || descriptor.MembershipCount != uint64(lenDeduplicated(input)) ||
-			descriptor.MembershipSHA256 != digest {
+		if !validRecoverablePreparation(descriptor) {
+			return corruption("source preparation descriptor is invalid")
+		}
+		if !samePreparationSet(descriptor, expected) {
 			return conflict("source abandonment evidence does not match the prepared set")
 		}
 		if descriptor.Phase != PreparationAbandoning {
@@ -51,8 +60,12 @@ func (repository *Repository) Abandon(
 			if encodeErr != nil {
 				return encodeErr
 			}
-			result, transactErr := repository.store.Transact(ctx,
-				[]Condition{{Key: PreparationKey(operationID), ModRevision: read.Values[0].ModRevision}},
+			result, transactErr := repository.store.Transact(
+				ctx,
+				[]Condition{
+					{Key: PreparationKey(operationID), ModRevision: read.Values[0].ModRevision},
+					{Key: RootKey(operationID)},
+				},
 				[]Mutation{{Type: MutationPut, Key: PreparationKey(operationID), Value: value}},
 			)
 			clear(value)

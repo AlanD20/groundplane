@@ -270,6 +270,17 @@ and releases the exact prepared prefix through the same bounded release rules
 before disappearing. A crash resumes from the descriptor cursor; it never
 guesses from a partial prefix.
 
+The single Controller drains unpublished preparations during startup, before
+HTTP mutation handling, Agent dispatch, or schedulers begin. Recovery uses the
+durable descriptor's membership identity and committed preparation/release
+cursors, not the lost request's source list or freshly resolved sources. It
+pages descriptors and drains their symmetric memberships through the existing
+bounded abandonment path. A root already present is never abandonment
+authority; descriptor/root coexistence or invalid cursor/phase evidence fails
+startup closed. This is a startup barrier, not a background expiry policy for
+live preparations. Lost committed responses resume from the durable cursor on
+the next startup without a second decrement.
+
 ### Retry, close, and bounded release
 
 A permitted retry retains the operation id, execution ids, source root,
