@@ -36,7 +36,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 		validatePublicationID(publicationID) != nil || task.OperationID == "" || task.RenderGeneration <= 0 {
 		return false, corruptReleaseRecord()
 	}
-	if terminalStatus != TaskStatusCompleted && result.FailedStepID == "" &&
+	if terminalStatus != TaskStatusCompleted && result.FailedStepID == "" && !unassignedReleaseAbort(task, terminalStatus) &&
 		result.Diagnostic != TaskResultDiagnosticTimeoutBeforeEffect {
 		return false, errs.New(errs.KindStateConflict, "release failure is missing its failed step identity")
 	}
@@ -464,7 +464,7 @@ func releaseFailedMemberOrdinal(task TaskRecord, terminalStatus TaskStatus, resu
 		return 0, nil
 	}
 	ordinal := releaseFailedOrdinalFromResult(task, result)
-	if ordinal == 0 && result.Diagnostic == TaskResultDiagnosticTimeoutBeforeEffect {
+	if ordinal == 0 && (result.Diagnostic == TaskResultDiagnosticTimeoutBeforeEffect || unassignedReleaseAbort(task, terminalStatus)) {
 		return 1, nil
 	}
 	if ordinal == 0 {

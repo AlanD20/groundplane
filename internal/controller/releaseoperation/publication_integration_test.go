@@ -309,6 +309,38 @@ func TestPublishFirstBlueGreenCommitsTaskAndCandidateAuthority(t *testing.T) {
 		render.Record.ProxyImage.Platform != selected {
 		t.Fatalf("publication failed to persist exact compiled proxy identity: %v", err)
 	}
+	// Rationale: aborting an unassigned Release must retire its publication
+	// fence as well as the Task, otherwise every subsequent deployment locks.
+	store.failAbortCleanup = true
+	if _, err := tasks.AbortPendingTask(ctx, stored.Record.ID, time.Now().UTC().Add(time.Second)); err == nil {
+		t.Fatal("expected interrupted cleanup")
+	}
+	interrupted, err := tasks.GetTask(ctx, stored.Record.ID)
+	if err != nil || interrupted.Record.Status != etcd.TaskStatusAborted || interrupted.Record.StartedAt != nil {
+		t.Fatalf("cleanup interruption lost unassigned terminal Task: %v", err)
+	}
+	fence, err := store.Get(ctx, "/v1/runtime/release-fence-sets/"+environmentID)
+	if err != nil || fence.Entry == nil {
+		t.Fatalf("expected owned fence awaiting replay: %v", err)
+	}
+	aborted, err := tasks.AbortPendingTask(ctx, stored.Record.ID, time.Now().UTC().Add(2*time.Second))
+	if err != nil || aborted.Record.Status != etcd.TaskStatusAborted {
+		t.Fatalf("abort unassigned Release: %v", err)
+	}
+	if !aborted.Record.FinishedAt.Equal(*interrupted.Record.FinishedAt) {
+		t.Fatal("cleanup replay changed the original terminal timestamp")
+	}
+	fence, err = store.Get(ctx, "/v1/runtime/release-fence-sets/"+environmentID)
+	if err != nil || fence.Entry != nil {
+		t.Fatalf("aborted unassigned Release retained its Environment fence: %v", err)
+	}
+	revision := store.revision
+	if _, err := tasks.AbortPendingTask(ctx, stored.Record.ID, time.Now().UTC().Add(3*time.Second)); err != nil {
+		t.Fatalf("replay completed abort: %v", err)
+	}
+	if store.revision != revision {
+		t.Fatal("completed Abort replay mutated durable state")
+	}
 }
 
 type directPublicationImages struct{}
@@ -335,8 +367,9 @@ func (directPublicationImages) ResolveWorkloadImages(
 
 // Minimal revisioned CAS store for this sequential publication journey.
 type directPublicationStore struct {
-	revision int64
-	values   map[string]*etcd.KeyValue
+	revision         int64
+	values           map[string]*etcd.KeyValue
+	failAbortCleanup bool
 }
 
 func (s *directPublicationStore) Health(context.Context) error { return nil }
@@ -363,6 +396,10 @@ func (s *directPublicationStore) copyAt(key string, revision int64) *etcd.KeyVal
 	return &c
 }
 func (s *directPublicationStore) GetMany(_ context.Context, r etcd.GetManyRequest) (*etcd.GetManyResult, error) {
+	if s.failAbortCleanup && len(r.Keys) == 2 && strings.HasPrefix(r.Keys[1], "/v1/runtime/release-fence-sets/") {
+		s.failAbortCleanup = false
+		return nil, context.Canceled
+	}
 	revision := r.Revision
 	if revision == 0 {
 		revision = s.revision

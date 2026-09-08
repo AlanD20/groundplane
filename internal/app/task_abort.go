@@ -75,6 +75,12 @@ func (service *taskAbortService) AbortTask(
 		}
 		switch current.Record.Status {
 		case etcd.TaskStatusAborted:
+			if current.Record.StartedAt == nil && current.Record.Params[etcd.TaskReleasePublicationParam] != "" &&
+				(current.Record.Type == etcd.TaskDeploy || current.Record.Type == etcd.TaskRollback) {
+				if _, err := service.repository.AbortPendingTask(ctx, taskID, service.now().UTC()); err != nil {
+					return etcd.IdempotencyResponse{}, err
+				}
+			}
 			return taskAbortResponse(taskID)
 		case etcd.TaskStatusCompleted, etcd.TaskStatusFailed, etcd.TaskStatusTimedOut:
 			return etcd.IdempotencyResponse{}, errs.Newf(

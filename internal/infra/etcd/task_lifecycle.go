@@ -3091,7 +3091,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			); err != nil {
 				return Versioned[TaskRecord]{}, err
 			}
-			return current, nil
+			return repository.finishUnassignedReleaseAbort(ctx, current)
 		}
 		if current.Record.Status != TaskStatusPending {
 			return Versioned[TaskRecord]{}, errs.New(
@@ -3593,9 +3593,9 @@ func (repository *TaskRepository) AbortPendingTask(
 			}
 			continue
 		}
-		return Versioned[TaskRecord]{
+		return repository.finishUnassignedReleaseAbort(ctx, Versioned[TaskRecord]{
 			Record: terminal, Revision: transaction.Revision, ReadRevision: transaction.Revision,
-		}, nil
+		})
 	}
 }
 
