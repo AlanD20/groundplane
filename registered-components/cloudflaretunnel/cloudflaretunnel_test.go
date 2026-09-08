@@ -1,7 +1,6 @@
 package cloudflaretunnel
 
 import (
-	"reflect"
 	"slices"
 	"testing"
 
@@ -30,10 +29,16 @@ func TestPlanBuildsSecretBoundTunnelConnector(t *testing.T) {
 	service := plan.Services[0]
 	if service.Name != ServiceName || service.NetworkMode != component.ManagedNetworkModeZones ||
 		!service.Image.Equal(Image) ||
-		!reflect.DeepEqual(service.Networks, []component.ManagedNetworkAttachment{
+		!slices.EqualFunc(service.Networks, []component.ManagedNetworkAttachment{
 			{Name: "private"},
 			{Name: "frontend", GatewayPriority: 1},
 			{Name: "services"},
+		}, func(actual, expected component.ManagedNetworkAttachment) bool {
+			return actual.Name == expected.Name &&
+				(actual.Aliases == nil) == (expected.Aliases == nil) &&
+				slices.Equal(actual.Aliases, expected.Aliases) &&
+				actual.StaticIPv4 == expected.StaticIPv4 &&
+				actual.GatewayPriority == expected.GatewayPriority
 		}) || !slices.Equal(service.Command, []string{"tunnel", "--no-autoupdate", "--metrics", "127.0.0.1:2000", "run"}) ||
 		len(service.Dependencies) != 0 ||
 		len(service.SecretEnvironment) != 1 || service.SecretEnvironment[0].Name != tokenName ||
