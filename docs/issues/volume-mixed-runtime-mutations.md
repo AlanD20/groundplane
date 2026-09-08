@@ -1,5 +1,25 @@
 # Volume mutations after native Release deployment
 
+## Additional removal integration gap
+
+Local Script-source auditing also found that the accepted ADR0049 bounded
+runtime is not connected to the production Volume removal flow.
+`internal/volume/mutations.go` publishes through the ordinary desired-revision
+method, and `internal/controller/volume_plan.go` builds a fixed removal plan
+whose directory-removal step starts with a nil cursor. The
+`EnvironmentVolumeRemovalRuntimeRepository` constructor and its checkpoint/path
+methods have no production call sites. Its unit tests are not evidence that
+the real operator workflow persists those checkpoints.
+
+The ADR0062 Script count/membership publication guard is now locally integrated
+and tested, but is insufficient by itself. Before declaring removal safe,
+connect the accepted runtime/tombstone, exclusion of new Script reservations,
+assignment-owned bounded path calls, retry cursor, and terminal finalization.
+Do not add a second desired head or treat a protected publication as proof of
+physical cleanup. No host data was changed during this audit.
+
+## Retained-runtime mutation failure
+
 - Owner: Controller Volume capability
 - Severity: primary operator-journey blocker
 - MVP-required: yes; management acceptance is not complete

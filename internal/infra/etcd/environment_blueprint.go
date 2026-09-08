@@ -451,19 +451,10 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	}
 	defer clearPreparedEnvironmentBlueprintPoolChange(poolChange)
 	effectiveEnvironment := poolChange.environment
-	previous, hasPrevious, err := repository.getEnvironmentBlueprintProjectionAtRevision(
-		ctx, environment.Record.ID, fence.readAtRevision(),
+	scriptRemoval, err := repository.prepareDesiredScriptRemoval(
+		ctx, environment.Record.ID, expectedHeadRevision, fence.readAtRevision(), projection, task,
 	)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if (expectedHeadRevision == 0 && hasPrevious) ||
-		(expectedHeadRevision > 0 && (!hasPrevious || previous.Revision != expectedHeadRevision)) {
-		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Environment desired state changed")
-	}
-	if err := validateEnvironmentComposeProjectionPublicationAdvance(
-		previous.Record, hasPrevious, projection, task,
-	); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	zonePool, err := repository.prepareEnvironmentBlueprintZonePoolAtRevision(
@@ -631,7 +622,8 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	}
 	conditions = append(conditions, fence.transactionConditions()...)
 	mutations = append(mutations, epochMutation)
-	classified := baseClassifier
+	classified := scriptRemoval.classifyConflict(len(conditions), baseClassifier)
+	conditions = append(conditions, scriptRemoval.conditions...)
 	requirementBaseConditionCount := len(conditions)
 	conditions = append(conditions, requirementPublication.conditions...)
 	mutations = append(mutations, requirementPublication.mutations...)
