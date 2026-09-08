@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -78,6 +79,15 @@ func TestRegisteredTunnelSharesExplicitRouterZones(t *testing.T) {
 			service.Networks[1].GatewayPriority != 1 || service.Networks[1].StaticIPv4 != "" ||
 			len(service.Dependencies) != 0 {
 			t.Fatalf("Tunnel must honor selected Zones and egress without router lifecycle dependency: %#v", service)
+		}
+		if service.Healthcheck == nil ||
+			!slices.Equal(
+				service.Healthcheck.Command,
+				[]string{"cloudflared", "tunnel", "--metrics", "127.0.0.1:2000", "ready"},
+			) ||
+			service.Healthcheck.IntervalSeconds != 5 || service.Healthcheck.TimeoutSeconds != 3 ||
+			service.Healthcheck.StartPeriodSeconds != 10 || service.Healthcheck.Retries != 3 {
+			t.Fatalf("registered Tunnel readiness contract changed: %#v", service.Healthcheck)
 		}
 		return
 	}
