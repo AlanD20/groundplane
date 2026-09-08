@@ -1,7 +1,10 @@
 # Deferred issues
 
-Create one Markdown file per non-blocking finding. Do not record a landing
-blocker here instead of fixing it.
+Create one Markdown file per non-blocking finding. Do not record a build,
+security, data-safety, or runtime blocker here instead of fixing it.
+
+The current deployment-first deferral and complete frozen finding inventory are
+tracked in [Deferred architecture cleanup](deferred-architecture-cleanup.md).
 
 Use this form:
 
@@ -16,4 +19,5 @@ Use this form:
 ```
 
 Resolve every open issue marked `MVP-required: yes` before declaring the MVP
-goal complete.
+goal complete. A user-approved deferral must be explicit in the issue; it does
+not waive defects that become demonstrable hosting blockers.

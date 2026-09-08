@@ -1,0 +1,214 @@
+# Deferred architecture cleanup snapshot
+
+- Status: deferred by user on 2026-09-08 until Groundplane successfully hosts Kobwnewe
+- Owner: future architecture-cleanup owner, assigned only after fresh user authorization
+- Severity: low for architecture-only structure; reclassify any demonstrated runtime or safety defect
+- MVP-required: no under the current deployment-first authority
+- Snapshot: `787ab7a95` (`f6c52530` tree), before the six landed correction commits
+- Historical command: `make architecture-check`
+- Acceptance: after successful hosting and fresh authorization, close the applicable rows without
+  raising file allowances or frozen totals, then pass the architecture gate from a clean worktree
+
+## Authority and safety boundary
+
+On 2026-09-08 the user directed work to continue on `main`, prioritize deployment and actual
+Kobwnewe hosting, and defer unrelated refactoring and architecture cleanup until hosting succeeds
+and the user authorizes that work. The architecture gate may remain red solely for this deferred
+cleanup. This is not permission to ignore compile/build failures, security defects, data-safety
+risks, or runtime-correctness defects; those remain deployment blockers.
+
+The 108 count below is a frozen historical snapshot. The architecture gate has not been rerun on
+current `main`, so this document makes no claim about a current count or a green gate. Baseline
+allowances must not be weakened to hide findings.
+
+## Snapshot accounting
+
+| Group | Count | Classification |
+| --- | ---: | --- |
+| Imports | 25 | All test-only; absent on pre-consolidation `main` |
+| File size | 75 | 67 pre-main, 2 feature growth, 4 formatting-only, 2 stale baseline |
+| Frozen totals | 2 | Both pre-main |
+| Stale legacy entries | 6 | Baseline hygiene |
+| Total | 108 | Historical checker result |
+
+## Work completed after the snapshot
+
+- `286fafb5` replaced one registered-Component reflection import with typed equality.
+- `ea155830` removed three Controller concrete-Component test imports.
+- `91a429da` moved two Agent adapter test imports into app-owned composition.
+- These six import/reflection rows are source-fixed; 19 imports across nine etcd test files were
+  still present at the last source inspection. No gate rerun converts that observation into a
+  current checker count.
+- `4c70ba5b` extracted Compose invocation emission; `composehelper.go` moved from the snapshot's
+  785 lines to 638, below its unchanged 644-line allowance.
+- `fd4435e3` landed the MVCC Blueprint test Store prerequisite. It did not perform the remaining
+  public-fixture or nine cross-layer etcd test migrations.
+
+## Deferred work groups
+
+- Public test fixtures and cross-layer placement: migrate the nine etcd test files into app-owned
+  integration tests using public fixtures. Supplementary plan:
+  `.tmp/mvp-floor-correction-20260908/test-seams/fixture-closure.md`.
+- Service extraction: preserve branch `refactor/mvp-service-mutations-20260908` and worktree
+  `.tmp/mvp-service-mutations-20260908`. Its opaque-receipt/typed-Service extraction is unfinished
+  and unlanded; do not transplant it without fresh authorization.
+- Environment Blueprint extraction: a proposed extraction spanning seven production files and
+  roughly 3,927 lines depends on EntryGeneration and AttachFact prerequisites. It is a deferred
+  proposal, not approved implementation. Supplementary report:
+  `.tmp/mvp-floor-correction-20260908/app-scope/environment-blueprint-closure.md`.
+- Backup Task terminal seam: deferred proposal only. Supplementary report:
+  `.tmp/mvp-floor-correction-20260908/etcd-backup-task-terminal-seam.md`.
+- Broader file/frozen-total cleanup: group cohesive modules; never raise allowances as the fix.
+
+## Runtime issues are routed separately
+
+Architecture deferral does not waive a demonstrable hosting defect. In particular, the Attach
+network-only choice and nil-Release image authority may affect emitted runtime plans and must be
+treated as deployment/runtime work if the compile, build, or host journey demonstrates impact.
+Supplementary reports:
+
+- `.tmp/mvp-floor-correction-20260908/no-pull/attach-network-only-decision.md`
+- `.tmp/mvp-floor-correction-20260908/no-pull/attach-authority-closure.md`
+- `.tmp/mvp-floor-correction-20260908/no-pull/command-emission-closure.md`
+
+## Re-entry acceptance
+
+After Kobwnewe hosting succeeds and the user authorizes cleanup:
+
+1. Re-run the architecture gate and reconcile this historical snapshot with current findings.
+2. Prioritize by cohesive ownership, not raw line-count movement.
+3. Preserve or lower every `architecture-baseline.json` allowance and frozen total.
+4. Run focused tests for each extraction and the architecture gate from a clean worktree.
+5. Update this issue with landed commits and current evidence; do not rewrite the frozen appendix.
+
+## Appendix A: all 25 historical import findings
+
+```tsv
+rule	path	import	test_only	main_1cb9a05a	preformat_9af787496	current_787ab7a95	minimal_existing_compliant_seam
+layer-import	internal/agent/adapter_runtime_test.go	github.com/AlanD20/groundplane/internal/adapters	yes	no	yes	yes	adapter-runtime owner; internal/app composition registration
+layer-import	internal/agent/adapter_runtime_test.go	github.com/AlanD20/groundplane/internal/adapters/valkey9	yes	no	yes	yes	adapter-runtime owner; internal/app composition registration
+component-module-import	internal/controller/blueprintrelease/managed_service_plan_test.go	github.com/AlanD20/groundplane-registered-components/caddy	yes	no	yes	yes	controller SDK/image fixture; internal/app concrete-registration integration
+component-module-import	internal/controller/blueprintrelease/managed_service_plan_test.go	github.com/AlanD20/groundplane-registered-components/cloudflaretunnel	yes	no	yes	yes	controller SDK/image fixture; internal/app concrete-registration integration
+component-module-import	internal/controller/component_default_network_test.go	github.com/AlanD20/groundplane-registered-components/cloudflaretunnel	yes	no	yes	yes	controller SDK/image fixture; internal/app concrete-registration integration
+layer-import	internal/infra/etcd/blueprint_executed_artifact_external_test.go	github.com/AlanD20/groundplane/internal/controller	yes	no	yes	yes	internal/app cross-layer integration test
+layer-import	internal/infra/etcd/blueprint_mixed_observer_external_test.go	github.com/AlanD20/groundplane/internal/agent	yes	no	yes	yes	internal/app cross-layer integration test
+layer-import	internal/infra/etcd/blueprint_mixed_producer_external_test.go	github.com/AlanD20/groundplane/internal/controller	yes	no	yes	yes	internal/app cross-layer integration test
+layer-import	internal/infra/etcd/blueprint_mixed_producer_external_test.go	github.com/AlanD20/groundplane/internal/controller/blueprintrelease	yes	no	yes	yes	internal/app cross-layer integration test
+layer-import	internal/infra/etcd/blueprint_mixed_producer_external_test.go	github.com/AlanD20/groundplane/internal/controller/taskcontract	yes	no	yes	yes	internal/app cross-layer integration test
+layer-import	internal/infra/etcd/blueprint_mixed_runtime_external_test.go	github.com/AlanD20/groundplane/internal/controller	yes	no	yes	yes	internal/app cross-layer integration test
+layer-import	internal/infra/etcd/blueprint_mixed_runtime_external_test.go	github.com/AlanD20/groundplane/internal/controller/servicelifecycle	yes	no	yes	yes	internal/app cross-layer integration test
+layer-import	internal/infra/etcd/blueprint_mixed_runtime_external_test.go	github.com/AlanD20/groundplane/internal/controller/taskcontract	yes	no	yes	yes	internal/app cross-layer integration test
+layer-import	internal/infra/etcd/blueprint_mixed_worker_external_test.go	github.com/AlanD20/groundplane/internal/agent	yes	no	yes	yes	internal/app cross-layer integration test
+layer-import	internal/infra/etcd/blueprint_mixed_worker_external_test.go	github.com/AlanD20/groundplane/internal/controller	yes	no	yes	yes	internal/app cross-layer integration test
+layer-import	internal/infra/etcd/blueprint_native_predecessor_external_test.go	github.com/AlanD20/groundplane/internal/controller	yes	no	yes	yes	internal/app cross-layer integration test
+layer-import	internal/infra/etcd/blueprint_native_predecessor_external_test.go	github.com/AlanD20/groundplane/internal/controller/blueprintrelease	yes	no	yes	yes	internal/app cross-layer integration test
+layer-import	internal/infra/etcd/blueprint_native_predecessor_external_test.go	github.com/AlanD20/groundplane/internal/controller/taskcontract	yes	no	yes	yes	internal/app cross-layer integration test
+layer-import	internal/infra/etcd/blueprint_retained_producer_external_test.go	github.com/AlanD20/groundplane/internal/controller	yes	no	yes	yes	internal/app cross-layer integration test
+layer-import	internal/infra/etcd/blueprint_retained_producer_external_test.go	github.com/AlanD20/groundplane/internal/controller/blueprintrelease	yes	no	yes	yes	internal/app cross-layer integration test
+layer-import	internal/infra/etcd/blueprint_retained_producer_external_test.go	github.com/AlanD20/groundplane/internal/controller/taskcontract	yes	no	yes	yes	internal/app cross-layer integration test
+layer-import	internal/infra/etcd/blueprint_retained_rollback_external_test.go	github.com/AlanD20/groundplane/internal/controller	yes	no	yes	yes	internal/app cross-layer integration test
+layer-import	internal/infra/etcd/blueprint_retained_rollback_external_test.go	github.com/AlanD20/groundplane/internal/controller/blueprintrelease	yes	no	yes	yes	internal/app cross-layer integration test
+layer-import	internal/infra/etcd/blueprint_terminal_budget_external_test.go	github.com/AlanD20/groundplane/internal/controller	yes	no	yes	yes	internal/app cross-layer integration test
+component-module-import	registered-components/cloudflaretunnel/cloudflaretunnel_test.go	reflect	yes	no	yes	yes	slices.Equal or direct field assertions
+```
+
+## Appendix B: all 75 historical file-size findings
+
+```tsv
+rule	path	baseline	limit	main_lines	preformat_lines	formatted_lines	group
+oversized-file-growth	console/src/features/environment/environment-page.tsx	4005	600	4172	4256	4256	pre-existing-main
+missing-oversized-baseline	console/src/lib/environment-lifecycle.ts	none	600	608	608	608	pre-existing-main
+oversized-file-growth	console/src/lib/store.tsx	3251	600	3791	3796	3796	pre-existing-main
+oversized-file-growth	console/src/lib/types.ts	608	600	635	637	637	pre-existing-main
+missing-oversized-baseline	internal/agent/release_execution.go	none	600	559	645	645	feature-growth
+missing-oversized-baseline	internal/agent/worker.go	none	600	1425	1332	1332	pre-existing-main
+oversized-file-growth	internal/app/attach_mutations.go	1178	600	1266	1317	1317	pre-existing-main
+missing-oversized-baseline	internal/app/backing_service_creation.go	none	600	608	692	692	pre-existing-main
+oversized-file-growth	internal/app/controller.go	1223	600	1515	1513	1513	pre-existing-main
+missing-oversized-baseline	internal/app/entry_bulk_upsert.go	none	600	608	608	663	pre-existing-main
+missing-oversized-baseline	internal/app/entry_desired_mutation.go	none	600	924	924	961	pre-existing-main
+missing-oversized-baseline	internal/app/entry_edit.go	none	600	605	605	605	pre-existing-main
+oversized-file-growth	internal/app/environment_blueprint.go	1333	600	2179	2170	2200	pre-existing-main
+missing-oversized-baseline	internal/app/environment_blueprint_authoring.go	none	600	598	602	602	feature-growth
+oversized-file-growth	internal/app/service_mutations.go	861	600	1125	1127	1148	pre-existing-main
+missing-oversized-baseline	internal/architecturecheck/go_rules.go	none	600	602	602	605	pre-existing-main
+oversized-file-growth	internal/common/executionplan/plan.go	1186	600	1608	1548	1548	pre-existing-main
+oversized-file-growth	internal/controller/agentchannel/registry.go	602	600	803	803	803	pre-existing-main
+oversized-file-growth	internal/controller/agentchannel/server.go	1000	600	1279	1145	1145	pre-existing-main
+missing-oversized-baseline	internal/controller/agentchannel/server_test.go	none	1000	1574	1581	1581	pre-existing-main
+oversized-file-growth	internal/controller/blueprintparser/namespace.go	904	600	1047	1047	1047	pre-existing-main
+missing-oversized-baseline	internal/controller/blueprintrelease/service.go	none	600	577	589	635	formatting-only
+missing-oversized-baseline	internal/controller/dnsresolver/platform_component_render_planner.go	none	600	621	621	621	pre-existing-main
+missing-oversized-baseline	internal/controller/entry_removal_plan.go	none	600	699	699	699	pre-existing-main
+missing-oversized-baseline	internal/controller/entry_routes.go	none	600	704	704	704	pre-existing-main
+oversized-file-growth	internal/controller/localagent/localagent.go	967	600	977	977	977	pre-existing-main
+oversized-file-growth	internal/controller/localagent/localagent_test.go	1236	1000	1472	1472	1476	pre-existing-main
+missing-oversized-baseline	internal/controller/network/route_mutations.go	none	600	656	656	659	pre-existing-main
+missing-oversized-baseline	internal/controller/plan.go	none	600	1104	1101	1123	pre-existing-main
+missing-oversized-baseline	internal/controller/release_plan.go	none	600	538	571	737	formatting-only
+missing-oversized-baseline	internal/controller/script_runner_projection.go	none	600	720	695	709	pre-existing-main
+missing-oversized-baseline	internal/core/model.go	none	600	604	608	608	pre-existing-main
+oversized-file-growth	internal/infra/docker/composehelper/composehelper.go	644	600	943	785	785	pre-existing-main
+missing-oversized-baseline	internal/infra/docker/runner/host.go	none	600	906	906	959	pre-existing-main
+missing-oversized-baseline	internal/infra/docker/scriptrunner/runner.go	none	600	831	832	886	pre-existing-main
+oversized-file-growth	internal/infra/etcd/attach_repository.go	1521	600	1736	1736	1741	pre-existing-main
+oversized-file-growth	internal/infra/etcd/attach_repository_test.go	1203	1000	1423	1485	1485	pre-existing-main
+missing-oversized-baseline	internal/infra/etcd/backing_service_creation.go	none	600	604	604	650	pre-existing-main
+oversized-file-growth	internal/infra/etcd/backup_artifact_repository.go	2813	600	2912	2912	2912	pre-existing-main
+missing-oversized-baseline	internal/infra/etcd/backup_key_rotation.go	none	600	680	680	735	pre-existing-main
+oversized-file-growth	internal/infra/etcd/backup_policy_preparation.go	695	600	790	790	790	pre-existing-main
+oversized-file-growth	internal/infra/etcd/backup_policy_replacement.go	799	600	815	815	815	pre-existing-main
+missing-oversized-baseline	internal/infra/etcd/backup_policy_replacement_test.go	none	1000	1160	1160	1164	pre-existing-main
+oversized-file-growth	internal/infra/etcd/backup_runtime_record_test.go	1025	1000	1039	1039	1051	pre-existing-main
+oversized-file-growth	internal/infra/etcd/backup_runtime_repository.go	2058	600	2129	2129	2133	pre-existing-main
+oversized-file-growth	internal/infra/etcd/backup_runtime_repository_test.go	5337	1000	5374	5374	5379	pre-existing-main
+oversized-file-growth	internal/infra/etcd/backup_secret_resolution.go	992	600	997	997	998	pre-existing-main
+missing-oversized-baseline	internal/infra/etcd/blueprint_release_publication.go	none	600	787	711	778	pre-existing-main
+missing-oversized-baseline	internal/infra/etcd/component_task_lifecycle.go	none	600	790	790	805	pre-existing-main
+oversized-file-growth	internal/infra/etcd/connector_deletion_test.go	1713	1000	1737	1737	1737	pre-existing-main
+oversized-file-growth	internal/infra/etcd/deletion_tombstone.go	671	600	680	680	680	pre-existing-main
+oversized-file-growth	internal/infra/etcd/entry_repository.go	699	600	760	760	765	pre-existing-main
+oversized-file-growth	internal/infra/etcd/environment_acknowledgement.go	709	600	736	736	739	pre-existing-main
+missing-oversized-baseline	internal/infra/etcd/environment_blueprint_staging.go	none	600	850	850	860	pre-existing-main
+missing-oversized-baseline	internal/infra/etcd/environment_compose_projection.go	none	600	926	922	926	pre-existing-main
+oversized-file-growth	internal/infra/etcd/environment_deletion_lock_test.go	1375	1000	1505	1505	1508	pre-existing-main
+oversized-file-growth	internal/infra/etcd/hierarchy.go	899	600	955	955	955	pre-existing-main
+missing-oversized-baseline	internal/infra/etcd/hierarchy_deletion_controller_finalizer.go	none	600	676	676	722	pre-existing-main
+missing-oversized-baseline	internal/infra/etcd/hierarchy_deletion_membership.go	none	600	659	659	723	pre-existing-main
+missing-oversized-baseline	internal/infra/etcd/hierarchy_deletion_root_ack.go	none	600	574	574	642	formatting-only
+missing-oversized-baseline	internal/infra/etcd/host_resolution_reconciliation.go	none	600	1342	1342	1342	pre-existing-main
+oversized-file-growth	internal/infra/etcd/idempotency_test.go	1089	1000	1097	1097	1099	pre-existing-main
+missing-oversized-baseline	internal/infra/etcd/release_task_terminal.go	none	600	624	624	673	pre-existing-main
+missing-oversized-baseline	internal/infra/etcd/route_task_lifecycle.go	none	600	706	706	735	pre-existing-main
+oversized-file-growth	internal/infra/etcd/runner_repository.go	1132	600	1164	1164	1164	pre-existing-main
+oversized-file-growth	internal/infra/etcd/runner_task_lifecycle.go	1059	600	1060	1060	1060	pre-existing-main
+missing-oversized-baseline	internal/infra/etcd/script_execution.go	none	600	1072	1073	1139	pre-existing-main
+missing-oversized-baseline	internal/infra/etcd/script_repository.go	none	600	600	600	669	formatting-only
+stale-oversized-baseline	internal/infra/etcd/service_repository.go	904	600	490	504	504	stale-baseline
+oversized-file-growth	internal/infra/etcd/store.go	773	600	849	777	783	pre-existing-main
+oversized-file-growth	internal/infra/etcd/task_journal.go	1157	600	1307	1340	1342	pre-existing-main
+oversized-file-growth	internal/infra/etcd/task_lifecycle.go	3124	600	3943	3927	3956	pre-existing-main
+oversized-file-growth	internal/infra/etcd/task_pruning.go	844	600	922	922	922	pre-existing-main
+stale-oversized-baseline	internal/infra/etcd/task_repository.go	637	600	746	556	556	stale-baseline
+oversized-file-growth	pkg/api/types.go	836	600	1148	1151	1151	pre-existing-main
+```
+
+## Appendix C: both historical frozen-total findings
+
+```tsv
+path	baseline_total	main_total	preformat_total	formatted_total	group
+internal/app	16804	24114	24475	24733	pre-existing-main
+internal/infra/etcd	60604	91734	93999	96189	pre-existing-main
+```
+
+## Appendix D: all six historical stale-legacy findings
+
+```tsv
+rule	path	subject	message
+stale-legacy-finding	internal/core/envelope.go	ComponentSpec.Config	legacy finding open-model-field is no longer present
+stale-legacy-finding	internal/core/model.go	Component.Config	legacy finding open-model-field is no longer present
+stale-legacy-finding	internal/infra/etcd/route_removal_intent.go	reflect	legacy finding reflect-import is no longer present
+stale-legacy-finding	internal/infra/etcd/service_lifecycle.go	reflect	legacy finding reflect-import is no longer present
+stale-legacy-finding	pkg/api/types.go	Component.Config	legacy finding open-model-field is no longer present
+stale-legacy-finding	pkg/api/types.go	ComponentEnableRequest.Config	legacy finding open-model-field is no longer present
+```

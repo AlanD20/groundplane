@@ -1,7 +1,10 @@
 # C06 architecture debt
 
-- Status: MVP-required before final `make ci`
-- Owner: C06 Release integration owner
+- Status: deferred until successful Kobwnewe hosting and fresh user authorization;
+  scheduling superseded by [Deferred architecture cleanup](deferred-architecture-cleanup.md)
+- Owner: future architecture-cleanup owner
+- Severity: low for architecture-only structure
+- MVP-required: no under the current deployment-first authority
 - Scope: structural extraction only; the architecture baseline must not be
   raised or otherwise weakened
 
@@ -32,7 +35,14 @@ The authoritative command and full machine-readable finding set is:
 make architecture-check
 ```
 
+This evidence remains historical. The complete `787ab7a95` snapshot is now
+tracked in the superseding issue; no current gate count or green result is
+claimed. Compile/build, security, data-safety, and runtime defects remain
+blocking even while architecture-only cleanup is deferred.
+
 ## Acceptance
+
+After successful hosting and fresh user authorization:
 
 1. Extract Release application orchestration and Release persistence into
    cohesive subpackages so both frozen direct-production totals are at or below
