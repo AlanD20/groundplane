@@ -493,23 +493,6 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionConnector
 	return effects, nil
 }
 
-func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionSecretFinalizer(
-	ctx context.Context,
-	action HierarchyDeletionAction,
-) (hierarchyDeletionControllerEffects, error) {
-	primary, err := repository.readHierarchyDeletionPrimary(ctx, secretRecordKey(action.TargetID), action)
-	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
-	}
-	defer clear(primary.Value)
-	record, err := decodeSecretRecord(primary.Value)
-	if err != nil || record.Secret.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
-	}
-	keys := []string{secretOwnerKey(record.Secret), secretScopedKey(record.Secret), secretValueKey(action.TargetID)}
-	return repository.prepareHierarchyDeletionIndexedDelete(ctx, action, primary, keys)
-}
-
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReservationFinalizer(
 	ctx context.Context,
 	action HierarchyDeletionAction,

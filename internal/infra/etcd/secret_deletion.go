@@ -129,6 +129,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 	conditions = append(conditions, Condition{
 		Key: componentSecretReferencePrefix(secretID), Prefix: true,
 	})
+	conditions = append(conditions, secretScriptAbsenceConditions(secretID)...)
 	mutations := []Mutation{
 		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
 		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
@@ -182,7 +183,7 @@ func classifySecretDeletionStartConflict(
 	operationID string,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		expected := 10
+		expected := 12
 		if owner.Project != nil {
 			expected += 2
 			if owner.Project.Record.TenantID != "" {
@@ -192,7 +193,10 @@ func classifySecretDeletionStartConflict(
 		if len(values) != expected {
 			return errs.New(errs.KindInternal, "Secret deletion compare evidence is incomplete")
 		}
-		referencePosition := len(values) - 1
+		if err := classifySecretScriptReferences(current.Record.Secret.ID, values[len(values)-2:]); err != nil {
+			return err
+		}
+		referencePosition := len(values) - 3
 		if values[referencePosition] != nil {
 			return errs.New(errs.KindResourceInUse, "Secret is referenced by a Component")
 		}

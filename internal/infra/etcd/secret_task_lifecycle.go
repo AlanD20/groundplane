@@ -49,6 +49,10 @@ func (repository *TaskRepository) prepareSecretTaskRetry(
 	if err != nil || record.Secret.ID != source.Target {
 		return secretTaskChange{}, corruptSecretRecord()
 	}
+	fences, err := prepareSecretScriptAbsence(ctx, repository.store, source.Target)
+	if err != nil {
+		return secretTaskChange{}, err
+	}
 	dependencies, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{
 			secretOwnerKey(record.Secret), secretScopedKey(record.Secret), secretValueKey(record.Secret.ID),
@@ -74,6 +78,7 @@ func (repository *TaskRepository) prepareSecretTaskRetry(
 			{Key: deletionTombstoneKey(string(DeletionTargetSecret), record.Secret.ID)},
 		},
 	}
+	change.conditions = append(change.conditions, fences...)
 	if record.Secret.Scope == core.SecretScopeProject {
 		parents, err := repository.store.GetMany(ctx, GetManyRequest{
 			Keys: []string{
@@ -202,6 +207,11 @@ func (repository *TaskRepository) prepareSecretTaskAcknowledgement(
 		}},
 	}
 	if terminalStatus == TaskStatusCompleted {
+		fences, err := prepareSecretScriptAbsence(ctx, repository.store, task.Target)
+		if err != nil {
+			return secretTaskChange{}, err
+		}
+		change.conditions = append(change.conditions, fences...)
 		change.mutations = append(change.mutations,
 			Mutation{Type: MutationDelete, Key: secretOwnerKey(record.Secret)},
 			Mutation{Type: MutationDelete, Key: secretScopedKey(record.Secret)},

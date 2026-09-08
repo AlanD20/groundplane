@@ -196,6 +196,12 @@ func (repository *Repository) prepareBatch(
 		)
 	}
 	for index, source := range uniqueSources {
+		// Retirement and count acquisition must exclude each other; immutable
+		// source values remain present until deletion finalizes.
+		switch source.source.Kind {
+		case SourceSecretValue:
+			conditions = append(conditions, Condition{Key: "/v1/runtime/deletions/secret/" + source.source.SecretID})
+		}
 		key := CountKey(source.source)
 		current := lookups.Values[index]
 		count := Count{Source: source.source}

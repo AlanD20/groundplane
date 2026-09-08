@@ -384,6 +384,11 @@ func (repository *SecretRepository) DeleteSecret(
 		return 0, errs.New(errs.KindInternal, "Secret indexes or encrypted value are missing")
 	}
 	conditions := secretDeleteConditions(owner, current, dependencies.Values)
+	fences, err := prepareSecretScriptAbsence(ctx, repository.store, current.Record.Secret.ID)
+	if err != nil {
+		return 0, err
+	}
+	conditions = append(conditions, fences...)
 	result, err := repository.store.Transact(ctx, conditions, []Mutation{
 		{Type: MutationDelete, Key: secretRecordKey(current.Record.Secret.ID)},
 		{Type: MutationDelete, Key: secretOwnerKey(current.Record.Secret)},
