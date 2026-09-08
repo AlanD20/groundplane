@@ -83,7 +83,7 @@ func (r *blueprintPreflightRepository) GetEnvironment(
 // Rationale: a failed host-local image lookup must leave no durable Blueprint
 // claim, staged sources, Release ledger writes, Task, or idempotency publication.
 func TestApplyBlueprintImageFailurePrecedesEveryDurableWrite(t *testing.T) {
-	store := &blueprintPreflightStore{values: map[string]etcd.KeyValue{}, revision: 1}
+	store := &blueprintTestStore{values: map[string]etcd.KeyValue{}, revision: 1}
 	resolver := &blueprintPreflightResolver{}
 	hierarchy, err := etcd.NewEnvironmentBlueprintRepository(store)
 	if err != nil {

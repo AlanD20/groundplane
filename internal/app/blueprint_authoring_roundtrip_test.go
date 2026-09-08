@@ -48,7 +48,7 @@ func TestGetBlueprintNormalizedProjectParsesAgain(t *testing.T) {
 		t.Fatal(err)
 	}
 	normalized = zoneArtifact.CanonicalYaml
-	store := &blueprintPreflightStore{values: map[string]etcd.KeyValue{}, revision: 1}
+	store := &blueprintTestStore{values: map[string]etcd.KeyValue{}, revision: 1}
 	hierarchy, err := etcd.NewEnvironmentBlueprintRepository(store)
 	if err != nil {
 		t.Fatal(err)

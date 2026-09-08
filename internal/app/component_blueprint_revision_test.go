@@ -16,7 +16,7 @@ import (
 // Rationale: Component authoring reads current decisions; a concurrent desired
 // revision change must reject before any claim, staging or Task publication.
 func TestApplyComponentBlueprintPreservesAuthoringRevisionGuard(t *testing.T) {
-	store := &blueprintPreflightStore{values: map[string]etcd.KeyValue{}, revision: 1}
+	store := &blueprintTestStore{values: map[string]etcd.KeyValue{}, revision: 1}
 	hierarchy, err := etcd.NewEnvironmentBlueprintRepository(store)
 	if err != nil {
 		t.Fatal(err)
