@@ -939,6 +939,7 @@ message ScriptRunnerNetwork {
   string network_id = 1;
   ScriptNetworkAttachment rendered_attachment = 3;
   ScriptSourceAuthority source = 4;
+  string owner_environment_id = 5; // actual Zone owner, including backing-owned Attach Networks
 }
 
 message ScriptNetworkAttachment {

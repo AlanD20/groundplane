@@ -268,7 +268,7 @@ func validateScriptNetworks(
 			return errs.New(errs.KindValidationFailed, "Script runner network is invalid or unsorted")
 		}
 		dockerName, err := networkname.New(network.NetworkId)
-		if err != nil ||
+		if err != nil || ids.Validate(ids.KindEnvironment, network.OwnerEnvironmentId) != nil ||
 			network.NetworkId <= previous || network.RenderedAttachment == nil ||
 			network.RenderedAttachment.DockerNetworkName != dockerName ||
 			!validScriptString(network.RenderedAttachment.InterfaceName) {
