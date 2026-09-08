@@ -361,7 +361,8 @@ func (runtime *ComposeRuntime) waitHealthy(
 		var convergence composeConvergence
 		var convergeErr error
 		if len(wait.GetServiceIds()) > 0 &&
-			(plan.GetServiceLifecycleProcedure() != nil || plan.GetManagedComponentProcedure() != nil) {
+			(plan.GetServiceLifecycleProcedure() != nil || plan.GetManagedComponentProcedure() != nil ||
+				plan.GetCandidateReleaseProcedure() != nil) {
 			convergence, convergeErr = evaluateLifecycleComposeConvergence(artifact, observed, selected, true)
 		} else {
 			convergence, convergeErr = evaluateComposeConvergence(artifact, observed, selected)
