@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	ref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
@@ -240,6 +241,15 @@ func (authority *ScriptSourceReferenceAuthority) Abandon(
 	return mapScriptSourceReferenceError(authority.repository.Abandon(ctx, operationID, converted))
 }
 
+// RecoverPreparations must finish before the single Controller accepts new
+// mutations. Published source roots are not preparation cleanup authority.
+func (authority *ScriptSourceReferenceAuthority) RecoverPreparations(ctx context.Context) error {
+	if authority == nil || authority.repository == nil {
+		return errs.New(errs.KindValidationFailed, "Script source recovery authority is missing")
+	}
+	return mapScriptSourceReferenceError(authority.repository.RecoverPreparations(ctx))
+}
+
 func (authority *ScriptSourceReferenceAuthority) FinalPublicationFragment(
 	ctx context.Context,
 	prepared PreparedSourceSet,
@@ -282,19 +292,90 @@ func (authority *ScriptSourceReferenceAuthority) PrepareNormalRelease(
 	return result, nil
 }
 
+func (authority *ScriptSourceReferenceAuthority) PrepareRetryAvailable(
+	ctx context.Context, operationID string, rootRevision int64, expiresAt time.Time,
+) (ScriptSourceReleaseFragment, error) {
+	fragment, err := authority.repository.PrepareRetryAvailable(ctx, operationID, rootRevision, expiresAt)
+	if err != nil {
+		return ScriptSourceReleaseFragment{}, mapScriptSourceReferenceError(err)
+	}
+	defer fragment.Clear()
+	return ScriptSourceReleaseFragment{
+		conditions: convertScriptSourceConditions(fragment.Conditions),
+		mutations:  convertScriptSourceMutations(fragment.Mutations),
+	}, nil
+}
+
 func (authority *ScriptSourceReferenceAuthority) ReleaseNext(
 	ctx context.Context,
 	operationID string,
 	guards []Condition,
 ) (bool, bool, error) {
+	processed, drained, err := authority.repository.ReleaseNext(ctx, operationID, scriptSourceReleaseGuards(guards))
+	return processed, drained, mapScriptSourceReferenceError(err)
+}
+
+func (authority *ScriptSourceReferenceAuthority) ReleaseRetryExpiryNext(
+	ctx context.Context, operationID string, guards []Condition,
+) (bool, bool, error) {
+	processed, drained, err := authority.repository.ReleaseRetryExpiryNext(
+		ctx,
+		operationID,
+		scriptSourceReleaseGuards(guards),
+	)
+	return processed, drained, mapScriptSourceReferenceError(err)
+}
+
+func scriptSourceReleaseGuards(guards []Condition) []ref.Condition {
 	converted := make([]ref.Condition, len(guards))
 	for index, guard := range guards {
 		converted[index] = ref.Condition{
 			Key: guard.Key, ModRevision: guard.ModRevision, Prefix: guard.Prefix,
 		}
 	}
-	processed, drained, err := authority.repository.ReleaseNext(ctx, operationID, converted)
-	return processed, drained, mapScriptSourceReferenceError(err)
+	return converted
+}
+
+func (authority *ScriptSourceReferenceAuthority) PrepareRetryTransfer(
+	ctx context.Context, operationID string, rootRevision int64, at time.Time,
+) (ScriptSourceReleaseFragment, error) {
+	fragment, err := authority.repository.PrepareRetryTransfer(ctx, operationID, rootRevision, at)
+	if err != nil {
+		return ScriptSourceReleaseFragment{}, mapScriptSourceReferenceError(err)
+	}
+	defer fragment.Clear()
+	return ScriptSourceReleaseFragment{
+		conditions: convertScriptSourceConditions(fragment.Conditions),
+		mutations:  convertScriptSourceMutations(fragment.Mutations),
+	}, nil
+}
+
+func (authority *ScriptSourceReferenceAuthority) PrepareRetryActivation(
+	ctx context.Context, operationID string, rootRevision int64,
+) (ScriptSourceReleaseFragment, error) {
+	fragment, err := authority.repository.PrepareRetryActivation(ctx, operationID, rootRevision)
+	if err != nil {
+		return ScriptSourceReleaseFragment{}, mapScriptSourceReferenceError(err)
+	}
+	defer fragment.Clear()
+	return ScriptSourceReleaseFragment{
+		conditions: convertScriptSourceConditions(fragment.Conditions),
+		mutations:  convertScriptSourceMutations(fragment.Mutations),
+	}, nil
+}
+
+func (authority *ScriptSourceReferenceAuthority) PrepareRetryExpiry(
+	ctx context.Context, operationID string, rootRevision int64, now time.Time,
+) (ScriptSourceReleaseFragment, error) {
+	fragment, err := authority.repository.PrepareRetryExpiry(ctx, operationID, rootRevision, now)
+	if err != nil {
+		return ScriptSourceReleaseFragment{}, mapScriptSourceReferenceError(err)
+	}
+	defer fragment.Clear()
+	return ScriptSourceReleaseFragment{
+		conditions: convertScriptSourceConditions(fragment.Conditions),
+		mutations:  convertScriptSourceMutations(fragment.Mutations),
+	}, nil
 }
 
 func (authority *ScriptSourceReferenceAuthority) PrepareReleaseFinalization(
@@ -311,6 +392,20 @@ func (authority *ScriptSourceReferenceAuthority) PrepareReleaseFinalization(
 	}
 	fragment.Clear()
 	return result, nil
+}
+
+func (authority *ScriptSourceReferenceAuthority) PrepareRetryExpiryFinalization(
+	ctx context.Context, operationID string,
+) (ScriptSourceReleaseFragment, error) {
+	fragment, err := authority.repository.PrepareRetryExpiryFinalization(ctx, operationID)
+	if err != nil {
+		return ScriptSourceReleaseFragment{}, mapScriptSourceReferenceError(err)
+	}
+	defer fragment.Clear()
+	return ScriptSourceReleaseFragment{
+		conditions: convertScriptSourceConditions(fragment.Conditions),
+		mutations:  convertScriptSourceMutations(fragment.Mutations),
+	}, nil
 }
 
 func (authority *ScriptSourceReferenceAuthority) validateMembers(
