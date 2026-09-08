@@ -158,7 +158,7 @@ func (resolver *TaskPlanResolver) renderServiceLifecycleArtifact(
 	includeProxy bool,
 ) (*agentpb.ComposeArtifact, error) {
 	projection := releaseWorkloadProjection(source.Projection)
-	selected := projection.DesiredServices[:0]
+	selected := make([]etcd.EnvironmentServiceProjection, 0, 1)
 	for _, service := range projection.DesiredServices {
 		if service.Desired.ID == source.ServiceID {
 			selected = append(selected, service)
