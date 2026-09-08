@@ -120,6 +120,15 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 			ServingTarget:          member.Render.PriorTarget,
 			ServingProxyGeneration: member.Render.PriorProxyGeneration, Strategy: member.Render.Strategy,
 		}
+		if member.Render.Strategy == domain.StrategyRecreate {
+			// Recreate applies the proxy with the candidate workload; unlike
+			// blue-green, no later proxy-switch step replaces this config.
+			identity := labels[member.Render.ServiceID]
+			identity.ServingReleaseID = member.Intent.ID
+			identity.ServingTarget = member.Render.CandidateTarget
+			identity.ServingProxyGeneration = member.Render.ProxyGeneration
+			labels[member.Render.ServiceID] = identity
+		}
 	}
 	releaseProjection := releaseWorkloadProjection(first.Projection)
 	artifact, err := resolver.renderPinnedEnvironmentArtifactWithReleases(

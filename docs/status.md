@@ -39,6 +39,18 @@ work stayed stopped by user direction. These are bounded deployment results,
 not full CI, a capability acceptance promotion, Gate A, Gate B, or production
 readiness. Public ingress/policy and remaining floor acceptance remain open.
 
+A subsequent private Caddy origin check found that a completed recreate
+rollback could leave its stable proxy targeting the removed blue slot even
+while the restored workload was healthy. Ordinary recreate now renders the
+candidate proxy identity; blue-green retains the predecessor until its
+explicit switch. A tagged Controller build passed, then fresh group deploy
+and rollback completed. HTTP `/up` through Caddy returned 200 after both, and
+the post-rollback live proxy selected the restored singleton. This expands
+the evidence beyond container health; automated regression tests remain stopped.
+Standalone Component Enable still rejects a retained companion-file reference;
+the complete authored Blueprint successfully enabled Caddy. That separate
+operator-action defect is open, and public Tunnel acceptance is not proven.
+
 ### Historical scope alignment
 
 The documentation-only minimum-hosting scope landed on `main` in `37bc23120`.
