@@ -183,6 +183,7 @@ func (s *Server) deployReleaseGroup(
 		input.IdempotencyKey,
 	)
 	if err != nil {
+		slog.ErrorContext(ctx, "controller: deploy Release Group", "release_group_id", input.ID, "error", err)
 		return nil, normalizeProjectError(err)
 	}
 	return s.releaseGroupMutationResponse(response), nil

@@ -591,7 +591,13 @@ func releaseComposeTaskResult(state *releaseExecutionState) *agentpb.ComposeTask
 	}
 	sort.Strings(serviceIDs)
 	for _, serviceID := range serviceIDs {
-		result.ProxyEvidence = append(result.ProxyEvidence, state.evidence[serviceID])
+		evidence := proto.CloneOf(state.evidence[serviceID])
+		if state.recoveryClosed {
+			// Exact prior-state probes can make compensation a no-op. Once
+			// the complete recovery closes, they prove the same restored state.
+			evidence.Compensated = true
+		}
+		result.ProxyEvidence = append(result.ProxyEvidence, evidence)
 	}
 	recreateIDs := make([]string, 0, len(state.recreate))
 	for serviceID := range state.recreate {

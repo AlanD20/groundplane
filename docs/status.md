@@ -16,6 +16,31 @@ prove acceptance by themselves; acceptance requires the evidence named by
 
 ## Current hosting-floor alignment
 
+### Bounded deployment evidence (2026-09-08)
+
+Deployment-first fixes now cover candidate-bound hook source validation,
+abort assignment revision checks, in-flight event receipt lifetime, historical
+predecessor recovery observation, exact member-ID proof selection, and ordinary
+Release Group terminalization without Blueprint-only source cleanup.
+Tagged Controller and deployment Agent builds passed. The Agent image was
+updated through the normal idle-only Controller action and reported healthy.
+On disposable QA, a corrected Blueprint reapply completed, followed by a fresh
+ordered group deploy and rollback without manual repair. Both WebSocket
+replicas remained healthy with zero restarts; transient event fanout passed
+through each replica and the stable logical target after rollback.
+
+An earlier failed group attempt required manual network repair before its
+recovery could settle. Its original timeout remained recorded, all member
+releases became terminal, and hook references and the operation fence were
+released. That attempt is **not** automatic-recovery acceptance.
+Detailed task, image, runtime, and probe evidence remains in the ignored local
+workspace under the private-acceptance contract. Automated tests and fixture
+work stayed stopped by user direction. These are bounded deployment results,
+not full CI, a capability acceptance promotion, Gate A, Gate B, or production
+readiness. Public ingress/policy and remaining floor acceptance remain open.
+
+### Historical scope alignment
+
 The documentation-only minimum-hosting scope landed on `main` in `37bc23120`.
 That commit records contract alignment, not runtime alignment, deployment, or
 acceptance. C06 and C20 retain their historical singleton evidence, but their

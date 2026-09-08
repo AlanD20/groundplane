@@ -311,9 +311,8 @@ func (repository *ScriptRepository) loadExecutionSources(
 			intent.EnvironmentID != environment.ID || intent.ServiceID != target.Desired.ID {
 			return ScriptExecutionSources{}, corruptReleaseRecord()
 		}
-		if resolveErr := ledger.verifySuccessfulRelease(ctx, environment.ID, target.Desired.ID, intent, revision); resolveErr != nil {
-			return ScriptExecutionSources{}, resolveErr
-		}
+		// Hook policy selects a sealed candidate before it can have a terminal
+		// success record. Manual execution above still requires ResolveServing.
 		release = ServingRelease{
 			Intent: intent, IntentRevision: intentValue.ModRevision, Revision: revision,
 		}
@@ -321,6 +320,14 @@ func (repository *ScriptRepository) loadExecutionSources(
 	renderInput, err := ledger.GetReleaseRenderInputAt(ctx, release.Intent.ID, revision)
 	if err != nil {
 		return ScriptExecutionSources{}, err
+	}
+	if releaseID != "" {
+		value, encodeErr := EncodeReleaseRenderInput(renderInput.Record)
+		digest, digestErr := domain.Digest(json.RawMessage(value))
+		clear(value)
+		if encodeErr != nil || digestErr != nil || digest != release.Intent.RenderInputDigest {
+			return ScriptExecutionSources{}, corruptReleaseRecord()
+		}
 	}
 	if renderInput.Record.EnvironmentID != environment.ID || renderInput.Record.ServiceID != target.Desired.ID ||
 		renderInput.Record.Projection.RevisionID == "" || renderInput.Record.Projection.RenderGeneration == 0 {

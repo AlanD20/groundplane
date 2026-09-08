@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/workloadimage"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -15,6 +16,32 @@ type recreateObservationTarget struct {
 	releaseID   string
 	target      string
 	compensated bool
+}
+
+// A group may fail before reaching this member. Its unchanged predecessor
+// still has historical ownership, not the regenerated compensation labels.
+func (runtime *ComposeRuntime) observeRecreateRecovery(
+	ctx context.Context,
+	assignment Assignment,
+	step *agentpb.ExecutionStep,
+) (composeStepResult, error) {
+	probe := step.GetServiceRecreateProbe()
+	observation, err := executionplan.NewRestorationObservation(
+		assignment.Plan, assignment.RestorationAuthority, step.GetStepId(),
+	)
+	if err != nil {
+		return composeStepResult{ReconciliationRequired: true}, err
+	}
+	observed, err := runtime.observer.ObserveRestoration(ctx, observation)
+	if err == nil {
+		evidence := observedRecreateSetEvidence(observation.Artifact(), observed,
+			probe.GetServiceId(), probe.GetPriorReleaseId(), "", true)
+		if evidence != nil {
+			return composeStepResult{Observed: observed, RecreateEvidence: evidence}, nil
+		}
+	}
+	return runtime.observeRecreateSet(ctx, assignment.Plan, probe.GetCandidateArtifactId(),
+		probe.GetPriorArtifactId(), probe.GetServiceId(), probe.GetCandidateReleaseId(), probe.GetPriorReleaseId())
 }
 
 func (runtime *ComposeRuntime) observeRecreateSet(

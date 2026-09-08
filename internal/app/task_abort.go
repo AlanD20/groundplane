@@ -140,7 +140,7 @@ func (service *taskAbortService) abortAgentTask(ctx context.Context, assignment 
 	if err != nil {
 		return err
 	}
-	if current.Assignment.Record != record {
+	if current.Assignment.Revision != assignment.Assignment.Revision {
 		return errs.New(errs.KindStateConflict, "Agent Task assignment changed before abort delivery")
 	}
 	if err := service.agents.AbortTask(

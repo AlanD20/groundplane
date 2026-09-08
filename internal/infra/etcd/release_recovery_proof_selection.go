@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -15,8 +16,8 @@ type releaseRecoveryProofKind uint8
 
 type releaseRecoveryProofExpectation struct {
 	kind releaseRecoveryProofKind
-	// Only ordinary recreate uses a publication-owned, regenerated prior topology.
-	// Captured/Blueprint and proxy proofs retain their existing authority identity.
+	// Ordinary recreate may restore the publication-owned prior topology or
+	// observe the untouched historical witness. Both retain exact artifact identity.
 	priorTopologyArtifactID string
 	nativeArtifact          []byte
 }
@@ -122,7 +123,7 @@ func validateReleaseRecoveryProof(
 				}
 				evidence := result.RecreateEvidence[recreateIndex]
 				expectedArtifactID := artifact.GetArtifactId()
-				if kind == releaseRecoveryProofRecreate {
+				if kind == releaseRecoveryProofRecreate && evidence.ArtifactID != expectedArtifactID {
 					expectedArtifactID = expectation.priorTopologyArtifactID
 				}
 				if evidence.ServiceID != candidate.ServiceID || evidence.ArtifactID != expectedArtifactID ||
@@ -190,12 +191,14 @@ func (repository *TaskRepository) recoveryProofSelectionAtRevision(
 		if task.Type != TaskDeploy && task.Type != TaskRollback {
 			return nil, nil, nil, corruptReleaseRecord()
 		}
-		if index >= len(manifest.Members) || manifest.Members[index].ServiceID != candidate.ServiceID ||
-			manifest.Members[index].ReleaseID != candidate.ReleaseID {
+		memberIndex := slices.IndexFunc(manifest.Members, func(member ReleaseStagedMemberRef) bool {
+			return member.ServiceID == candidate.ServiceID && member.ReleaseID == candidate.ReleaseID
+		})
+		if memberIndex < 0 {
 			return nil, nil, nil, corruptReleaseRecord()
 		}
 		expectation, sourceConditions, err := repository.ordinaryRecoveryProofKindAtRevision(
-			ctx, task, assignment, manifest.Members[index], revision,
+			ctx, task, assignment, manifest.Members[memberIndex], revision,
 		)
 		if err != nil {
 			return nil, nil, nil, err

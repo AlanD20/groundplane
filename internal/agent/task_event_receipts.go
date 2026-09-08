@@ -81,7 +81,9 @@ func (p *WorkerPool) emitProgressAndWait(ctx context.Context, progress TaskProgr
 	if !registered {
 		return errs.New(errs.KindStateConflict, "agent: Task event acceptance is already pending")
 	}
-	defer p.removeTaskEventAck(key, receipt)
+	// Cancellation stops waiting, not delivery: once published, the exact
+	// receipt must survive until the Controller acknowledges it. Removing it
+	// here would turn an in-flight acknowledgement into a fatal stale event.
 	if !p.publishProgress(ctx, progress) {
 		p.removeTaskEventAck(key, receipt)
 		return ctx.Err()

@@ -327,8 +327,7 @@ func releaseRestorationWorkloadTargetProven(
 	serviceID, target, releaseID string,
 ) error {
 	if artifact == nil || observed == nil || artifact.GetProjectName() == "" ||
-		observed.GetProjectName() != artifact.GetProjectName() ||
-		len(observed.GetCollisions()) != 0 {
+		observed.GetProjectName() != artifact.GetProjectName() {
 		return errs.New(errs.KindStateConflict, "agent: release restoration observation identity diverges")
 	}
 	expected := make([]*agentpb.ComposeService, 0, 2)
@@ -350,6 +349,9 @@ func releaseRestorationWorkloadTargetProven(
 	}
 	if len(expected) == 0 {
 		return errs.New(errs.KindInternal, "agent: sealed predecessor workload is absent")
+	}
+	if scoped := scopeLifecycleComposeObservation(artifact, observed, known); len(scoped.GetCollisions()) != 0 {
+		return errs.New(errs.KindStateConflict, "agent: release restoration observation identity diverges")
 	}
 	for _, service := range expected {
 		if service.GetExpectedReplicas() < 1 || !workloadimage.LocalIDValid(service.GetImageReference()) ||

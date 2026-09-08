@@ -1789,7 +1789,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			result = &resolved
 		}
 		if executor == TaskExecutorAgent && result != nil &&
-			(task.Type == TaskUpdate || recoveryAcknowledgement.final) &&
+			task.Type == TaskUpdate &&
 			task.Params[TaskReleasePublicationParam] != "" &&
 			!result.ReconciliationRequired {
 			var processed bool
