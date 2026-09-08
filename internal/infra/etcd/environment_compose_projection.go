@@ -791,7 +791,9 @@ func validateEnvironmentProjectionArtifact(projection EnvironmentComposeProjecti
 	}
 	expectedServices := make(map[string]environmentArtifactServiceIdentity, len(projection.DesiredServices))
 	for _, service := range projection.DesiredServices {
-		expectedServices[service.Desired.ID] = environmentArtifactServiceIdentity{name: service.Desired.Name}
+		expectedServices[service.Desired.ID] = environmentArtifactServiceIdentity{
+			name: service.Desired.Name, renderGeneration: projection.RenderGeneration,
+		}
 	}
 	for _, component := range projection.Components {
 		if !component.Desired.Enabled {
@@ -831,11 +833,6 @@ func validateEnvironmentProjectionArtifact(projection EnvironmentComposeProjecti
 		}
 	}
 	return nil
-}
-
-type environmentArtifactServiceIdentity struct {
-	name        string
-	componentID string
 }
 
 func validateEnvironmentComposeProjectionAdvance(

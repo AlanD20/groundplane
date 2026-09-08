@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"strconv"
 	"testing"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -72,6 +73,58 @@ func TestEnvironmentArtifactLogicalRuntimeCoverage(t *testing.T) {
 				expected,
 			) == nil {
 				t.Fatal("changed runtime identity accepted")
+			}
+		})
+	}
+}
+
+// Rationale: a Component-only Blueprint retains the exact serving runtime;
+// an inactive slot without retained Release authority must not be invented.
+func TestEnvironmentArtifactRetainedSingleSlotCoverage(t *testing.T) {
+	serviceID := "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	planID := "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	for _, slot := range []string{"blue", "green"} {
+		t.Run(slot, func(t *testing.T) {
+			name, err := domain.WorkloadComposeName("api", domain.WorkloadTarget(slot))
+			if err != nil {
+				t.Fatal(err)
+			}
+			labels := func(generation uint64) []*agentpb.LabelPair {
+				return []*agentpb.LabelPair{
+					{Key: "com.groundplane.plan-id", Value: planID},
+					{Key: "com.groundplane.render-generation", Value: strconv.FormatUint(generation, 10)},
+				}
+			}
+			proxy := &agentpb.ComposeService{ServiceId: serviceID, ComposeName: "api",
+				Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY, ExpectedLabels: labels(4)}
+			workload := &agentpb.ComposeService{ServiceId: serviceID, ComposeName: name, Slot: slot,
+				Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT, ExpectedLabels: labels(4)}
+			expected := map[string]environmentArtifactServiceIdentity{serviceID: {name: "api", renderGeneration: 5}}
+			artifact := &agentpb.ComposeArtifact{Services: []*agentpb.ComposeService{proxy, workload}}
+			if err := validateEnvironmentArtifactServices(artifact, expected); err != nil {
+				t.Fatalf("retained serving slot: %v", err)
+			}
+			for _, change := range []string{"fresh", "future", "different generation", "different plan", "missing label", "duplicate label"} {
+				t.Run(change, func(t *testing.T) {
+					changed := proto.CloneOf(artifact)
+					switch change {
+					case "fresh":
+						changed.Services[0].ExpectedLabels, changed.Services[1].ExpectedLabels = labels(5), labels(5)
+					case "future":
+						changed.Services[0].ExpectedLabels, changed.Services[1].ExpectedLabels = labels(6), labels(6)
+					case "different generation":
+						changed.Services[1].ExpectedLabels = labels(3)
+					case "different plan":
+						changed.Services[1].ExpectedLabels[0].Value = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+					case "missing label":
+						changed.Services[1].ExpectedLabels = nil
+					case "duplicate label":
+						changed.Services[1].ExpectedLabels = append(changed.Services[1].ExpectedLabels, labels(4)[0])
+					}
+					if validateEnvironmentArtifactServices(changed, expected) == nil {
+						t.Fatal("unbound or fresh partial runtime accepted")
+					}
+				})
 			}
 		})
 	}
