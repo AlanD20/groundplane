@@ -60,7 +60,8 @@ func (repository *ServiceRepository) ValidateServiceRemovalReferences(
 	if err := repository.scanServiceRemovalRecords(ctx, projection.ReadRevision, current.Record); err != nil {
 		return err
 	}
-	return nil
+	_, err := prepareServiceScriptAbsence(ctx, repository.store, current.Record.Desired.ID, projection.ReadRevision)
+	return err
 }
 
 func (repository *ServiceRepository) scanServiceRemovalRecords(
@@ -272,6 +273,13 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	if err := binding.preparedConflict(originalClassify); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	scriptConditions, err := prepareServiceScriptAbsence(
+		ctx, repository.store, current.Record.Desired.ID, mutationContext.readRevision,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	finalConditions := append(binding.conditions, scriptConditions...)
 	initiation, err := newEnvironmentTaskInitiation(
 		versionedTenant,
 		versionedProject,
@@ -281,9 +289,15 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	plan, err := newTaskIdempotencyMutationPlan(task, initiation, binding.conditions, binding.mutations,
+	plan, err := newTaskIdempotencyMutationPlan(task, initiation, finalConditions, binding.mutations,
 		func(revision int64, values []*KeyValue) error {
-			return binding.classify(revision, values, originalClassify)
+			if len(values) != len(finalConditions) {
+				return errs.New(errs.KindInternal, "Service removal Script compare evidence is incomplete")
+			}
+			if err := classifyServiceScriptReferences(current.Record.Desired.ID, values[len(binding.conditions):]); err != nil {
+				return err
+			}
+			return binding.classify(revision, values[:len(binding.conditions)], originalClassify)
 		})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

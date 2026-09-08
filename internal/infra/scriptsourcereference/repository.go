@@ -203,6 +203,8 @@ func (repository *Repository) prepareBatch(
 			conditions = append(conditions, Condition{Key: "/v1/runtime/deletions/secret/" + source.source.SecretID})
 		case SourceEntryValue:
 			conditions = append(conditions, Condition{Key: "/v1/runtime/deletions/entry/" + source.source.EntryID})
+		case SourceService:
+			conditions = append(conditions, Condition{Key: "/v1/runtime/deletions/service/" + source.source.ServiceID})
 		}
 		key := CountKey(source.source)
 		current := lookups.Values[index]

@@ -128,6 +128,12 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	if terminalStatus != TaskStatusCompleted {
 		return change, nil
 	}
+	scriptConditions, err := prepareServiceScriptAbsence(ctx, repository.store, intent.ServiceID, revision)
+	if err != nil {
+		clearRouteTaskChange(change)
+		return routeTaskChange{}, err
+	}
+	change.conditions = append(change.conditions, scriptConditions...)
 	hierarchy := &HierarchyRepository{store: repository.store}
 	publication, err := hierarchy.prepareEnvironmentDirectPublication(
 		ctx,
