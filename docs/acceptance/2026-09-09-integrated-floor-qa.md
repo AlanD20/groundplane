@@ -179,3 +179,29 @@ The tagged Controller builds as `0.0.0-qa.floor20260909.4`, SHA-256
 `d667a8397a4f11350fb30bb2b60cde6ab5d65b4c26c33b88a8cc5c2a911d9fd0`.
 No Agent change is required. Live deployment and Script rerun are next; the
 Entry serving-slot defect remains open.
+
+## Fresh manual lifecycle passes on QA
+
+Signed `dcffe93f0` is now deployed as Controller `floor20260909.4` with the
+verified hash above. The exact preceding executable remains at
+`controller-before-manual-secret-key`. No Agent, workload, provider, or
+listener configuration changed during this deployment.
+
+The existing disposable Script then completed the normal live lifecycle:
+
+| Case | Task | Terminal result (UTC) |
+| --- | --- | --- |
+| `exit 0` | `task_01M23J0DMFYMHZ9VNX064ZWGS4` | completed, 17:03:51.341595397 |
+| `exit 7` | `task_01M23J1RQ547W1K3040GB74433` | failed as intended, 17:04:35.327271527 |
+| `sleep 45`, then normal Abort after observing running | `task_01M23J2CD0XG99HC1AP3BERS5T` | aborted, 17:05:27.323336515 |
+| Normal Script removal | `task_01M23J490SZZG48CAJMA97Z1J5` | completed, 17:05:56.778817398 |
+
+The Script is now absent by stable-id read and list. The list contains exactly
+the same three application Script ids as before the probe. Normal removal
+passed the active-reference guard without migration, force deletion, or source
+repair. Evidence is in the `script-*.json` and `scripts-{before,after}.json`
+files under `.tmp/qa-floor-20260909/`. The deleted test bodies were only the
+three inert probe commands above; Task history and local evidence remain.
+This closes the fresh success/failure/Abort/cleanup journey, not live Retry,
+crash injection, or independent filesystem inspection. Entry serving-slot
+selection, full-bundle Apply and required floor checks are still outstanding.
