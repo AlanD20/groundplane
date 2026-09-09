@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
+	"strconv"
 
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -16,6 +17,25 @@ import (
 type volumeRemovalInitialPublication struct {
 	conditions []Condition
 	mutations  []Mutation
+}
+
+// EnvironmentVolumeRemovalTaskParams is the single closed parameter contract
+// shared by initial publication and runtime attempt validation. The caller
+// validates the runtime and attempt ownership; this function only renders their
+// immutable references plus standard Task routing/materialization authority.
+func EnvironmentVolumeRemovalTaskParams(runtime removalrecord.Runtime, attemptOrdinal uint32) map[string]string {
+	return map[string]string{
+		TaskResourceKindParam:               TaskResourceVolume,
+		TaskMaterializationEnvironmentParam: runtime.EnvironmentID,
+		EnvironmentDesiredRevisionParam:     runtime.DesiredRevisionID,
+		removalrecord.EnvironmentParam:      runtime.EnvironmentID,
+		removalrecord.OriginTaskParam:       runtime.OriginTaskID,
+		removalrecord.AttemptParam:          strconv.FormatUint(uint64(attemptOrdinal), 10),
+		removalrecord.KeyParam:              runtime.Key,
+		removalrecord.ImpactParam:           hex.EncodeToString(runtime.ImpactSHA256[:]),
+		removalrecord.ManifestParam:         hex.EncodeToString(runtime.EvidenceManifestSHA256[:]),
+		removalrecord.IntentParam:           hex.EncodeToString(runtime.IntentSHA256[:]),
+	}
 }
 
 func prepareVolumeRemovalInitialPublication(
@@ -77,14 +97,7 @@ func validateVolumeRemovalInitialBinding(
 		!task.CreatedAt.Equal(runtime.CreatedAt) || !task.UpdatedAt.Equal(runtime.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "initial Volume removal Task does not match its records")
 	}
-	expectedParams := map[string]string{
-		EnvironmentDesiredRevisionParam: runtime.DesiredRevisionID,
-		removalrecord.EnvironmentParam:  runtime.EnvironmentID, removalrecord.OriginTaskParam: runtime.OriginTaskID,
-		removalrecord.AttemptParam: "1", removalrecord.KeyParam: runtime.Key,
-		removalrecord.ImpactParam:   hex.EncodeToString(runtime.ImpactSHA256[:]),
-		removalrecord.ManifestParam: hex.EncodeToString(runtime.EvidenceManifestSHA256[:]),
-		removalrecord.IntentParam:   hex.EncodeToString(runtime.IntentSHA256[:]),
-	}
+	expectedParams := EnvironmentVolumeRemovalTaskParams(runtime, 1)
 	if len(task.Params) != len(expectedParams) {
 		return errs.New(errs.KindValidationFailed, "initial Volume removal Task parameters changed")
 	}

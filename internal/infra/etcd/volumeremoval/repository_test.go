@@ -177,7 +177,7 @@ func TestEnvironmentVolumeRemovalSuccessorKeepsRootReplayAndAttemptChain(t *test
 		TaskID: successor.ID, PredecessorTaskID: terminal.ID,
 		Ordinal: 2, CreatedAt: successor.CreatedAt,
 	}
-	successor.Params = environmentVolumeRemovalTaskParams(nextRuntime, nextAttempt)
+	successor.Params = etcd.EnvironmentVolumeRemovalTaskParams(nextRuntime, nextAttempt.Ordinal)
 	advanced, err := repository.PublishSuccessorAttempt(ctx, runtime.OperationID, successor)
 	if err != nil {
 		t.Fatalf("PublishSuccessorAttempt() error = %v", err)
@@ -263,7 +263,7 @@ func environmentVolumeRemovalRuntimeFixture(
 		Ordinal: 1, CreatedAt: now,
 	}
 	task.RenderGeneration = int32(runtime.DesiredGeneration)
-	task.Params = environmentVolumeRemovalTaskParams(runtime, attempt)
+	task.Params = etcd.EnvironmentVolumeRemovalTaskParams(runtime, attempt.Ordinal)
 	if err := validateEnvironmentVolumeRemovalTask(task, runtime, attempt); err != nil {
 		t.Fatalf("fixture Task error = %v", err)
 	}

@@ -12,6 +12,27 @@ import (
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 )
 
+// Rationale: the exact Task accepted by removal publication must also expose
+// the standard Environment and resource authority used by the desired
+// publisher and materialization-writer admission.
+func TestVolumeRemovalInitialTaskDeclaresMaterializationAuthority(t *testing.T) {
+	initial, task, marker := volumeRemovalPublicationFixture(t)
+	publication, err := prepareVolumeRemovalInitialPublication(initial, task, marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clearBackupRuntimeMutations(publication.mutations)
+	environmentID, declared, err := taskMaterializationEnvironment(task)
+	if err != nil || !declared || environmentID != task.Owner.EnvironmentID ||
+		task.Params[TaskResourceKindParam] != TaskResourceVolume {
+		t.Fatalf(
+			"published removal Task has no standard materialization authority: declared=%t error=%v",
+			declared,
+			err,
+		)
+	}
+}
+
 // Rationale: the publisher consumes the existing runtime record contract and
 // a bounded create-only fragment, not a caller-authored set of store writes.
 func TestVolumeRemovalInitialPublicationFragment(t *testing.T) {
@@ -235,14 +256,7 @@ func volumeRemovalPublicationFixture(t *testing.T) (removalrecord.InitialPublica
 		OriginTaskID: task.ID, CurrentTaskID: task.ID, AttemptOrdinal: 1, StepID: task.Steps[0].ID,
 		Checkpoint: removalrecord.DesiredPublished, CreatedAt: now, UpdatedAt: now,
 	}
-	task.Params = map[string]string{
-		EnvironmentDesiredRevisionParam: runtime.DesiredRevisionID,
-		removalrecord.EnvironmentParam:  runtime.EnvironmentID, removalrecord.OriginTaskParam: task.ID,
-		removalrecord.AttemptParam: "1", removalrecord.KeyParam: runtime.Key,
-		removalrecord.ImpactParam:   hex.EncodeToString(runtime.ImpactSHA256[:]),
-		removalrecord.ManifestParam: hex.EncodeToString(runtime.EvidenceManifestSHA256[:]),
-		removalrecord.IntentParam:   hex.EncodeToString(runtime.IntentSHA256[:]),
-	}
+	task.Params = EnvironmentVolumeRemovalTaskParams(runtime, 1)
 	initial, err := removalrecord.PrepareInitialPublication(runtime)
 	if err != nil {
 		t.Fatal(err)

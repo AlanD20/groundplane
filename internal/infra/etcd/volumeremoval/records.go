@@ -2,8 +2,6 @@ package volumeremoval
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
-	"strconv"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -53,7 +51,7 @@ func validateEnvironmentVolumeRemovalTask(
 	if err := removalrecord.ValidateAttempt(attempt); err != nil {
 		return err
 	}
-	expectedParams := environmentVolumeRemovalTaskParams(runtime, attempt)
+	expectedParams := etcd.EnvironmentVolumeRemovalTaskParams(runtime, attempt.Ordinal)
 	if task.ID != attempt.TaskID || task.ID != runtime.CurrentTaskID ||
 		task.OperationID != runtime.OperationID || task.RetryOf != attempt.PredecessorTaskID ||
 		task.Owner.EnvironmentID != runtime.EnvironmentID || task.Actor != etcd.TaskActorOperator ||
@@ -65,22 +63,6 @@ func validateEnvironmentVolumeRemovalTask(
 		return errs.New(errs.KindValidationFailed, "Environment Volume removal Task inputs changed")
 	}
 	return nil
-}
-
-func environmentVolumeRemovalTaskParams(
-	runtime removalrecord.Runtime,
-	attempt removalrecord.Attempt,
-) map[string]string {
-	return map[string]string{
-		removalrecord.EnvironmentParam:       runtime.EnvironmentID,
-		etcd.EnvironmentDesiredRevisionParam: runtime.DesiredRevisionID,
-		removalrecord.OriginTaskParam:        runtime.OriginTaskID,
-		removalrecord.AttemptParam:           strconv.FormatUint(uint64(attempt.Ordinal), 10),
-		removalrecord.KeyParam:               runtime.Key,
-		removalrecord.ImpactParam:            hex.EncodeToString(runtime.ImpactSHA256[:]),
-		removalrecord.ManifestParam:          hex.EncodeToString(runtime.EvidenceManifestSHA256[:]),
-		removalrecord.IntentParam:            hex.EncodeToString(runtime.IntentSHA256[:]),
-	}
 }
 
 func equalVolumeRemovalParams(left, right map[string]string) bool {
