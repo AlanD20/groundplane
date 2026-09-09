@@ -3,6 +3,7 @@ package volumeremovalrecord
 import (
 	"crypto/sha256"
 	"math"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -18,6 +19,19 @@ const (
 	EvidenceTransactionOperations = 96
 	EvidenceTransactionBytes      = 900 * 1024
 )
+
+// EvidenceRoot is private staging, separate from the published runtime root
+// whose absence is fenced by the initial desired/operation publication.
+func EvidenceRoot(operationID string) string {
+	return "/v1/staging/volume-removal-evidence/" + encodeSegment(operationID) + "/"
+}
+
+func EvidenceManifestKey(operationID string) string { return EvidenceRoot(operationID) + "manifest" }
+func EvidenceCursorKey(operationID string) string   { return EvidenceRoot(operationID) + "cursor" }
+func EvidenceRowKey(operationID string, ordinal uint64) string {
+	value := strconv.FormatUint(ordinal, 10)
+	return EvidenceRoot(operationID) + "rows/" + strings.Repeat("0", 20-len(value)) + value
+}
 
 // EvidenceRow is one accepted consumer/mount intent, not desired state or
 // permission to run a filesystem helper. Ordinals are dense and one-based.
