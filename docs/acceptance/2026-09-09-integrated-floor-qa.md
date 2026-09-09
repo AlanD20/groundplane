@@ -1,5 +1,28 @@
 # Integrated disposable floor QA
 
+## Latest Entry serving-runtime attempt
+
+Signed `014ccaa2d` is deployed as `0.0.0-qa.floor20260909.5`, Controller SHA-256
+`1f19750ba5ac40b736343aaf6f8098d9e4e899e65c64a6c2552caae1c3002413`.
+Only the Controller was restarted. The exact prior `.4` executable is retained
+as `/usr/local/libexec/groundplane/controller-before-entry-serving`.
+Host API reports the expected version and healthy Controller/Agent.
+
+Editing the existing harmless probe to `two` rejected before publication with
+`state.conflict: retained Blueprint resource configuration changed`. All 65
+Tasks remain terminal, with no next page or new Task. The probe still requires
+normal cleanup after serving-runtime verification.
+
+The bounded read-only diagnostic compares resource names and changed paths,
+never values. Evidence `.tmp/qa-floor-20260909/entry-runtime-resource-diff.jsonl`
+identifies only `/content` changes in the Controller-generated proxy configs
+for `app-api` and `app-reverb`; network and Volume definitions match. The
+desired artifact still contains earlier proxy content. The test sequence
+native Apply -> retained Blueprint -> modeled Deploy/Rollback reproduces the
+same guard rejection. It must be corrected by replacing only the selected
+proxies' owned config definitions, not by loosening persistent-resource guards.
+The original local proof and live failure remain separate evidence.
+
 - Target: owner-authorized disposable QA `10.25.0.2`, no other host
 - Scope: retained Volume/Entry mutation, prepared manual Script lifecycle,
   and full Blueprint update; not Backup, Gate B, or full MVP acceptance
