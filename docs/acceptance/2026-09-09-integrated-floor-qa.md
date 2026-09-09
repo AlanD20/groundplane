@@ -98,3 +98,64 @@ detection: 1.214 seconds, selection-local 19.1% coverage in
 `.tmp/qa-floor-20260909/resource-operation.cover`. Tagged Controller
 `0.0.0-qa.floor20260909.3` builds; no new Agent is required. Live retry/cleanup
 remain unproven until the normal operations below are completed.
+
+## Volume lifecycle passes on the integrated runtime
+
+Controller `7774ff184` is deployed as `0.0.0-qa.floor20260909.3`, SHA-256
+`3b503a1445309bcaba8058366fa520f7a8ac2d64fa2e22b7db66d9e68853c2e8`.
+The exact prior executable is retained as `controller-before-resource-operation`.
+The timed-out rename's normal Retry completed as
+`task_01M23GEEEJZJA7H2H74G1BAQZM` at 16:36:33.159961289 UTC. Normal
+impact-confirmed DELETE completed as `task_01M23GFEWGA8XFF48EP0CG6HRY`
+at 16:37:07.114185236 UTC. Read-only checks confirm the old Volume is absent
+from the API, Docker, and its exact managed path. No application data was
+removed; this disposable Volume had no seeded files.
+
+The complete clean verifier rerun passed:
+`.tmp/qa-floor-20260909/evidence/volume-lifecycle-20260909T164052Z.if5gUc/`.
+Its Volume was `vol_01M23GPD8CAJVTN4SRBYWRFKVM`; the completed create,
+rename, and removal Tasks are respectively:
+
+- `task_01M23GPD8CAJVTN4SRBYWRFKVM`
+- `task_01M23GPEV4JGGQX7RYZRSB3YFM`
+- `task_01M23GPHFA609YG190B23VMSW8`
+
+API/CLI parity, stable id/key/path, in-progress and terminal replay, bounded
+impact confirmation, terminal Tasks, and exact Docker/directory cleanup passed.
+Tunnel and repo-local runtime cleanup passed; manual cleanup is not required.
+The earlier failed runs remain failed evidence, not retroactively green.
+This proves an unconsumed disposable Volume on a retained deployment, not
+mounted-consumer detachment, crash injection, or full floor acceptance.
+
+## Live Entry and fresh Script blockers
+
+The baseline contains 14 application Entries and three application Scripts.
+One non-secret API-scoped probe Entry, `ev_01M23GRBEHF1TK3A0N36Z1DEC8`
+(`GROUNDPLANE_FLOOR_PROBE=one`), was accepted. Its Task
+`task_01M23GRBEHF1TK3A0N36Z1DEC8` completed at 16:42:01.842480125 UTC.
+The generated service env file contains the probe, and the blue API slot was
+recreated with it. However, the stable proxy still serves `app-api--green:8080`,
+whose existing container lacks the probe. The serving Release is the green
+rollback `dep_01M20YD5V7MC42EB1349DAZHY6`. Entry acceptance is therefore **not
+passed**: plan completion did not update the serving workload. The disposable
+Entry is retained for diagnosis and eventual normal removal. No proxy was
+restarted or manually rerouted. Evidence is in the `entry-*.json` files beneath
+`.tmp/qa-floor-20260909/` and the exact serving-container probe assertion.
+
+A fresh API-created manual Script, `scr_01M23H18KYS4RGSRQN2QY10XG4`
+(`qa-floor-manual-20260909`, target `app-api`, body `exit 0`), was accepted.
+Normal Run rejected before execution with
+`state.conflict: Script execution source is missing at its fixed revision`.
+The disposable Script remains for diagnosis and normal cleanup. This is a
+fresh-run failure, not the already completed legacy-reference migration.
+At read revision 3139, read-only checks find the new Script metadata/body,
+active Script set, hierarchy records, desired head, and desired root present.
+The ordinary source loader and every selected Entry-generation read also pass
+through a bounded read-only diagnostic. Reference preparation instead treats
+valid authored Secret keys (`QA_APP_KEY`, for example) as stable Secret ids and
+looks under nonexistent primary/value keys. The key form is explicitly valid
+in `docs/blueprint.md`; a correction must resolve it at the pinned revision,
+retaining stable source identities and the existing deletion guards. No source
+is being invented or repaired out of band. Fresh success/failure/Abort and
+normal cleanup remain unproven. Full-bundle Apply and required floor checks
+also remain outstanding.
