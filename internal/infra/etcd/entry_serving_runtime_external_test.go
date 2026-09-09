@@ -31,6 +31,11 @@ func testEntryMutationServingRuntime(t *testing.T, race string) {
 		resolver *controller.TaskPlanResolver, original etcd.ReleaseRenderInput, originalIntent domain.Intent,
 		_ *agentpb.ComposeArtifact) {
 		ctx := t.Context()
+		project, err := controller.LoadNormalizedEnvironmentProject(ctx, original.Projection)
+		if err != nil {
+			t.Fatal(err)
+		}
+		proveRetainedBlueprintProducer(t, fixture, resolver, project, original.ServiceID, false)
 		currentRelease, intent := fixture.SeedRetainedRollback(t, original, originalIntent)
 		currentRelease = fixture.SeedNativeBlueGreenPredecessor(t, currentRelease, intent)
 		if err := resolver.EnableReleasePlans(fixture.Ledger); err != nil {

@@ -19,6 +19,12 @@ Current and captured retained workloads keep their exact Release, image, proxy
 and ownership metadata. Historical Entry decorations are removed before current
 Entry generations are attached, so deleted files do not return from history.
 The existing mixed-runtime merger preserves persistent-resource authority.
+Before that merge, the Entry assembler removes an old selected stable proxy's
+generated config only after proving its canonical name, exact sealed content
+and digest, sole proxy binding, and absence of any other Service reference.
+The captured proxy contributes its current config. Authored/shared config and
+Network/Volume guards are unchanged; a prior Deploy/Rollback config is not an
+operator edit to persistent resource configuration.
 
 The same immutable desired candidate stores the captured runtime. Reconstruction
 uses that candidate's runtime and the baseline revision's prior Entry decorations;

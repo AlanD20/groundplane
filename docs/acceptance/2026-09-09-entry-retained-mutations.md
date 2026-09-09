@@ -95,3 +95,21 @@ The tagged Controller builds as `0.0.0-qa.floor20260909.5`, SHA-256
 `1f19750ba5ac40b736343aaf6f8098d9e4e899e65c64a6c2552caae1c3002413`.
 The live serving-container proof follows. The earlier live failure is retained
 in the integrated QA report; this local correction is not yet a floor claim.
+
+## Retained proxy config correction
+
+Adding a retained Blueprint before the modeled Deploy/Rollback reproduced the
+live resource-config rejection (1.653s, 8.9% etcd selection coverage). The Entry
+assembler now removes only the selected stable proxy's verified, exclusively
+owned old config before the unchanged retained-resource merger inserts the
+captured current config. Shared, substituted, and Component-owned config reject;
+authored config and the immutable input remain unchanged. No generic resource
+guard or transaction limit changed.
+
+The final formatted focused race selection passes: Controller 1.506s/12.9%,
+etcd 4.352s/13.6%, profile
+`.tmp/qa-floor-20260909/entry-proxy-config-final.cover`. This includes actual
+Entry publication, reconstruction, epoch races, removal, and retained-resource
+checks. The tagged Controller builds as `0.0.0-qa.floor20260909.6`, SHA-256
+`968e27b4f52d1f8c2b6f1529e7b1ea5cefc8a33577870f221c70033829fe8f1f`.
+Live deployment and serving-container proof follow; no Agent change is needed.

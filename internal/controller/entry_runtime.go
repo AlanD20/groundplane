@@ -3,12 +3,15 @@ package controller
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"strings"
 
 	"github.com/AlanD20/groundplane/internal/controller/servicelifecycle"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
+	"gopkg.in/yaml.v3"
 )
 
 // EntryMutationRuntime captures the runtime onto which Entry decorations are
@@ -73,6 +76,10 @@ func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
 		retained = append(retained, desired.Desired.ID)
 	}
 	if len(retained) > 0 {
+		baseline, err = entryRuntimeWithoutReplacedProxyConfigs(baseline, sources)
+		if err != nil {
+			return EntryMutationRuntime{}, err
+		}
 		baseline, err = RetainBlueprintNativeRuntimeSources(baseline, sources, retained)
 		if err != nil {
 			return EntryMutationRuntime{}, err
@@ -89,4 +96,76 @@ func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
 		return EntryMutationRuntime{}, errs.Wrap(errs.KindInternal, err)
 	}
 	return EntryMutationRuntime{Projection: projection, EpochRevision: scope.EnvironmentEpochRevision}, nil
+}
+
+// Only a captured stable proxy can replace its old, exclusively owned config.
+// The ordinary retained-resource merger still checks every other resource.
+func entryRuntimeWithoutReplacedProxyConfigs(
+	baseline *agentpb.ComposeArtifact, sources []*agentpb.ComposeArtifact,
+) (*agentpb.ComposeArtifact, error) {
+	selected := make(map[string]bool)
+	for _, source := range sources {
+		for _, service := range source.Services {
+			if service.Role == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+				selected[service.ServiceId] = true
+			}
+		}
+	}
+	var document yaml.Node
+	if yaml.Unmarshal(baseline.CanonicalYaml, &document) != nil || len(document.Content) != 1 ||
+		document.Content[0].Kind != yaml.MappingNode {
+		return nil, errs.New(errs.KindValidationFailed, "Entry runtime YAML is invalid")
+	}
+	root := document.Content[0]
+	services, err := serviceArtifactMapping(root)
+	if err != nil {
+		return nil, err
+	}
+	for _, service := range baseline.Services {
+		if !selected[service.ServiceId] ||
+			service.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+			continue
+		}
+		configName := "gp-proxy-" + strings.ToLower(service.ServiceId)
+		configIndex, serviceIndex := mappingIndex(root, "configs"), mappingIndex(services, service.ComposeName)
+		if service.OwnerComponentId != "" || configIndex < 0 || serviceIndex < 0 {
+			return nil, errs.New(errs.KindStateConflict, "Entry proxy config ownership changed")
+		}
+		configs := root.Content[configIndex+1]
+		index := mappingIndex(configs, configName)
+		if index < 0 {
+			return nil, errs.New(errs.KindStateConflict, "Entry proxy config is absent")
+		}
+		config := configs.Content[index+1]
+		contentIndex := mappingIndex(config, "content")
+		digest := sha256.Sum256(service.ProxyConfigJson)
+		if len(config.Content) != 2 || contentIndex < 0 || len(service.ProxyConfigJson) == 0 ||
+			!bytes.Equal(digest[:], service.ProxyConfigSha256) ||
+			config.Content[contentIndex+1].Kind != yaml.ScalarNode ||
+			config.Content[contentIndex+1].Value != string(service.ProxyConfigJson) {
+			return nil, errs.New(errs.KindStateConflict, "Entry proxy config differs from sealed metadata")
+		}
+		for index := 0; index < len(services.Content); index += 2 {
+			references := make(map[string]map[string]bool)
+			if err := retainedServiceResourceReferences(services.Content[index+1], references); err != nil {
+				return nil, err
+			}
+			if index == serviceIndex {
+				if len(references["configs"]) != 1 || !references["configs"][configName] {
+					return nil, errs.New(errs.KindStateConflict, "Entry proxy config binding changed")
+				}
+			} else if references["configs"][configName] {
+				return nil, errs.New(errs.KindStateConflict, "Entry proxy config is shared with another Service")
+			}
+		}
+		removeMappingValue(configs, configName)
+	}
+	owned := proto.CloneOf(baseline)
+	owned.CanonicalYaml, err = yaml.Marshal(&document)
+	if err != nil {
+		return nil, errs.Wrap(errs.KindInternal, err)
+	}
+	digest := sha256.Sum256(owned.CanonicalYaml)
+	owned.YamlSha256 = digest[:]
+	return owned, nil
 }
