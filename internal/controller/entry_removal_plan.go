@@ -556,7 +556,7 @@ func entryRemovalEnvironmentServiceIdentities(
 		identities = append(identities, identity)
 		return nil
 	}
-	generatedIDs := make(map[string]struct{})
+	generatedIDs := make(map[string]string)
 	for _, component := range projection.Components {
 		for _, serviceID := range component.Runtime.GeneratedServices {
 			if serviceID == "" {
@@ -565,22 +565,15 @@ func entryRemovalEnvironmentServiceIdentities(
 			if _, duplicate := generatedIDs[serviceID]; duplicate {
 				return nil, errs.New(errs.KindInternal, "entry removal generated service identity is duplicated")
 			}
-			generatedIDs[serviceID] = struct{}{}
+			generatedIDs[serviceID] = component.Desired.ID
 		}
 	}
-	desiredIDs := make(map[string]struct{}, len(projection.DesiredServices))
 	for _, service := range projection.DesiredServices {
-		desiredIDs[service.Desired.ID] = struct{}{}
 		if _, generated := generatedIDs[service.Desired.ID]; generated {
 			continue
 		}
 		if err := add(entryRemovalServiceIdentity{ID: service.Desired.ID, Name: service.Desired.Name}); err != nil {
 			return nil, err
-		}
-	}
-	for serviceID := range generatedIDs {
-		if _, desired := desiredIDs[serviceID]; !desired {
-			return nil, errs.New(errs.KindInternal, "entry removal generated service is absent from desired projection")
 		}
 	}
 	artifact := &agentpb.ComposeArtifact{}
@@ -595,7 +588,8 @@ func entryRemovalEnvironmentServiceIdentities(
 		if _, generated := generatedIDs[service.GetServiceId()]; !generated {
 			continue
 		}
-		if service.GetComposeName() == "" {
+		if service.GetComposeName() == "" || service.GetOwnerComponentId() == "" ||
+			service.GetOwnerComponentId() != generatedIDs[service.GetServiceId()] {
 			return nil, errs.New(errs.KindInternal, "entry removal Compose artifact service metadata is invalid")
 		}
 		if _, duplicate := artifactServices[service.GetServiceId()]; duplicate {

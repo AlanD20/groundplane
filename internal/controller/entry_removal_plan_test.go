@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"slices"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type entryRemovalPlanReader struct {
@@ -213,6 +215,49 @@ func TestEntryRemovalMaterializationTemplateResolvesGeneratedComponentService(t 
 	}
 }
 
+// Rationale: canonical applied state owns generated Services through Component
+// runtime metadata, not authored Service declarations. Scoped ENV cleanup must
+// reconstruct without inventing an authored generated Service.
+func TestEntryRemovalReconstructsRuntimeOnlyComponentServiceIdentities(t *testing.T) {
+	reader, intent, task := entryRemovalPlanTestState(t, core.EnvEntry{
+		Kind: core.EntryKindEnv, Key: "REMOVE", Exposure: []string{"api"},
+	}, []core.EnvEntry{{Kind: core.EntryKindEnv, Key: "KEEP", Exposure: []string{"api"}}})
+	generatedID := intent.CandidateProjection.Components[0].Runtime.GeneratedServices[0]
+	_, _, _, _, catalog := componentPlanProjectionInput(t)
+	catalog[0].Plan = routeRemovalPlanProviderRenderer{}.Plan
+	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := resolver.prepareEntryRemovalTask(t.Context(), task, intent,
+		entryRemovalTaskProcedureIDs{ArtifactID: ids.New(ids.KindConfig)},
+		entryRemovalMaterializationResolverFake{content: []byte("KEEP=one\n")}, entryRemovalIdentityFromReader(reader))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader.intent = intent
+	plan, err := resolver.ResolveExecutionPlan(t.Context(), prepared)
+	if err != nil || hex.EncodeToString(plan.GetPlanHash()) != prepared.PlanHash {
+		t.Fatal("reconstruct runtime-only Component identity cleanup", err)
+	}
+	artifact := &agentpb.ComposeArtifact{}
+	if err := proto.Unmarshal(intent.CandidateProjection.ComposeArtifact, artifact); err != nil {
+		t.Fatal(err)
+	}
+	for _, service := range artifact.Services {
+		if service.ServiceId == generatedID {
+			service.OwnerComponentId = "foreign"
+		}
+	}
+	intent.CandidateProjection.ComposeArtifact, err = proto.Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := entryRemovalEnvironmentTemplate(intent, "api"); err == nil {
+		t.Fatal("cleanup accepted a foreign generated Service owner")
+	}
+}
+
 // Rationale: durable Entry removal records cross a capability boundary, so
 // every closed output and storage variant must be translated explicitly and
 // future variants must fail closed instead of passing through by string cast.
@@ -290,6 +335,22 @@ func entryRemovalPlanTestState(
 	baseReader, _, _ := routeRemovalPlanTestState(t)
 	at := time.Date(2026, 8, 23, 6, 0, 0, 0, time.UTC)
 	projection := baseReader.projection
+	// Keep generated Component Services in runtime, not authored Compose.
+	project, _, _, _, _ := componentPlanProjectionInput(t)
+	var err error
+	projection.NormalizedCompose, err = MarshalNormalizedEnvironmentProject(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	projection.DesiredServices = slices.DeleteFunc(projection.DesiredServices,
+		func(service etcd.EnvironmentServiceProjection) bool {
+			for _, component := range projection.Components {
+				if slices.Contains(component.Runtime.GeneratedServices, service.Desired.ID) {
+					return true
+				}
+			}
+			return false
+		})
 	projection.Entries = nil
 	removed.ID = ids.NewAt(ids.KindEnvEntry, at, 1)
 	removed.Source.Kind = core.SourceLiteral

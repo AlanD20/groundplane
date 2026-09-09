@@ -113,3 +113,34 @@ Entry publication, reconstruction, epoch races, removal, and retained-resource
 checks. The tagged Controller builds as `0.0.0-qa.floor20260909.6`, SHA-256
 `968e27b4f52d1f8c2b6f1529e7b1ea5cefc8a33577870f221c70033829fe8f1f`.
 Live deployment and serving-container proof follow; no Agent change is needed.
+
+## Scoped env cleanup with generated Component Services
+
+Live serving edit/bulk/file checks pass on `fd2d41468`; details and exact Task
+ids are in the integrated QA report. Normal file removal passed, but env cleanup
+rejected before publication because it required generated Component Services
+in authored `DesiredServices`. The canonical validator instead admits their
+ids from Component runtime ownership and their names from the sealed artifact.
+Cleanup now uses that same ownership source, requiring an exact nonempty
+Component owner; missing/duplicate identities still reject. The production
+file shrinks from 684 to 678 lines.
+
+The scoped env-cleanup regression failed with the live error, then passed
+preparation and immutable reconstruction (1.394s, 7.1% Controller coverage),
+including foreign Component-owner rejection. The focused publication/Agent/
+Retry/terminal selection passes in etcd (3.056s, 12.9%). Two older file-removal
+Controller fixtures initially failed `compose identity coverage is incomplete`:
+`TestTaskPlanResolverRebuildsFileEntryRemoval` and
+`TestTaskPlanResolverRebuildsEntryRemovalAfterHierarchyRename`. They construct
+generated Component Services as authored declarations. Their shared Entry
+fixture now uses the canonical authored/runtime split. The final formatted
+Controller cleanup selection, including both older reconstruction tests, passes
+(1.441s, 7.5%); profile
+`.tmp/qa-floor-20260909/entry-removal-identity-fixture-final.cover`.
+The new regression also fails against the unchanged production file via a
+read-only Go overlay without coverage (0.116s), isolating the correction.
+No broad Controller-suite green is claimed.
+
+Tagged Controller `0.0.0-qa.floor20260909.7` builds, SHA-256
+`c057385379c28817635e8c12a3a29eeccb70cb4358833edeac0b11f6382a2d99`.
+Normal live removal of both env probes follows deployment.

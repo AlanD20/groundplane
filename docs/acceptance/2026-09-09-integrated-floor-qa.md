@@ -1,5 +1,41 @@
 # Integrated disposable floor QA
 
+## Live serving Entry checks and cleanup follow-up
+
+Signed `fd2d41468` is deployed as `0.0.0-qa.floor20260909.6`, SHA-256
+`968e27b4f52d1f8c2b6f1529e7b1ea5cefc8a33577870f221c70033829fe8f1f`.
+Only the Controller restarted; its exact predecessor is retained as
+`/usr/local/libexec/groundplane/controller-before-entry-proxy`. Before restart,
+all 74 globally listed Tasks were terminal with no next page.
+
+- Existing probe edit `task_01M23SBTVK7NQZKD3A0M623772` completed at
+  19:12:29.876945381 UTC. Serving green contained `GROUNDPLANE_FLOOR_PROBE=two`.
+- Bulk upsert `task_01M23SE9DTZXHM8H5Y8TPYWFGS` completed at
+  19:13:49.623766947 UTC. The original Entry id survived; green contained
+  `GROUNDPLANE_FLOOR_PROBE=three` and `GROUNDPLANE_FLOOR_BULK=bulk=value`.
+- File create `task_01M23SG3RW7TJ97RGV8C5HD068` completed at
+  19:14:49.746623455 UTC. Exact harmless contents and `33:33`, mode `0444`
+  were verified inside green and at the authorized host path.
+- Normal file removal `task_01M23SJ003KA7BE4EHE15VSDPS` completed at
+  19:15:46.882734412 UTC. Normal environment-variable cleanup then rejected
+  before publishing a Task; the two disposable env Entries remain for cleanup.
+
+The stable proxy remains container `4741053372db` throughout; no manual proxy
+restart or out-of-band workload/config edit was used. Host-health API/CLI
+verification passed in
+`.tmp/qa-floor-20260909/evidence/host-health-20260909T191210Z.JNwi1t`.
+These are live Entry update/file results, not completed floor acceptance.
+
+The bounded read-only cleanup diagnostic identifies an incorrect requirement
+that Component-generated Services appear in authored `DesiredServices`.
+Both Caddy and Tunnel are absent there but present in their sealed runtime
+artifact, as the canonical projection validator allows. A real cleanup-plan
+regression reproduces the error. The correction resolves generated names from
+that artifact and verifies each exact Component owner. No resource/record limit
+is enlarged and no generated authoring declaration is invented. The diagnostic
+uses synthetic output bytes and refuses store writes; it is not a published
+operation or decrypted-value proof. Normal cleanup follows the corrected build.
+
 ## Latest Entry serving-runtime attempt
 
 Signed `014ccaa2d` is deployed as `0.0.0-qa.floor20260909.5`, Controller SHA-256
