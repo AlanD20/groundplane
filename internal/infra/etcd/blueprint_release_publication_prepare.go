@@ -45,13 +45,17 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 		return BlueprintReleasePublication{}, err
 	}
 	conditions = append(conditions, nativeConditions...)
+	nativeReferences, err := blueprintNativePredecessorReferences(evidence.NativePredecessors)
+	if err != nil {
+		return BlueprintReleasePublication{}, err
+	}
 	publicationValue, err := encodeReleaseRecord("release-publication", ReleasePublicationMarker{
 		PublicationID:              evidence.Manifest.Record.PublicationID,
 		OperationID:                evidence.Manifest.Record.OperationID,
 		ManifestDigest:             evidence.Manifest.Record.Digest,
 		CandidateReleaseDescriptor: executionplan.CloneCandidateReleaseDescriptor(evidence.CandidateReleaseDescriptor),
 		ExecutedComposeArtifact:    artifact,
-		NativePredecessors:         evidence.NativePredecessors,
+		NativePredecessors:         nativeReferences,
 		PublishedAt:                evidence.PublishedAt,
 	})
 	if err != nil {

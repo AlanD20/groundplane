@@ -20,7 +20,8 @@ four mutations: clear that execution's active flag, advance its timestamp,
 decrement the matching Script primary by one, and delete its two owned body
 references. No aggregate was reset, no source root was invented, and no Task,
 plan, snapshot, outcome, or cleanup evidence was rewritten. The shared count
-went3 ->2 ->1 ->0. The ordinary32-operation bound was preserved.
+went3 ->2 ->1 ->0. Each migration used16 operations, below both its own32-operation
+cap and the ordinary Store's unchanged96-operation ceiling.
 
 | Original Task | Result | Migration revision |
 | --- | --- | --- |

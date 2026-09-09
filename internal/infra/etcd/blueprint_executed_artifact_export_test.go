@@ -32,6 +32,7 @@ type ExecutedArtifactFixture struct {
 	head                int64
 	hookScripts         BlueprintScriptPublication
 	TerminalCommitFault string
+	publicationSize     *BlueprintPublicationSizeAudit
 }
 
 // Historical fixture builder for existing applied-witness unit controls. The
@@ -638,7 +639,7 @@ func (fixture *ExecutedArtifactFixture) tryPublish(
 	}
 	final, err := newEnvironmentBlueprintRepository(
 		fixture.store,
-		environmentBlueprintTestTransactionStore{hierarchyStore: fixture.store},
+		blueprintSizePublicationStore{hierarchyStore: fixture.store, audit: fixture.publicationSize},
 	)
 	if err != nil {
 		t.Fatal(err)

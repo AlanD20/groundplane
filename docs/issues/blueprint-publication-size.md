@@ -1,6 +1,6 @@
 # Blueprint Release publication exceeds its bounded record
 
-- Status: open runtime defect; not waived by successful split deployment
+- Status: local correction proven; integrated deployment and full-bundle QA pending
 - Owner: deployment implementation owner
 - Severity: high for full-Blueprint updates of running Services
 - MVP-required: yes for the full Blueprint update contract; not a reason to undo working QA hosting
@@ -25,10 +25,10 @@ that projection and 25,433 JSON bytes of native prior-runtime authority.
 Only identifiers and sizes were emitted; no configuration or secret contents
 were copied into the evidence.
 
-## Source-localized expansion
+## Reproduced expansion and correction
 
 `internal/controller/blueprintrelease/native_predecessor.go` captures a complete
-`ServiceLifecycleRelease` as `BlueprintNativePredecessor.Serving`. That embeds
+`ServiceLifecycleRelease` as the transient predecessor capture. The old marker embedded
 current and optional retained `ReleaseRenderInput` snapshots, each including an
 Environment projection. It also captures the rendered predecessor artifact bytes.
 
@@ -37,7 +37,7 @@ snapshots, native artifact bytes, the executed Environment artifact, and the
 candidate descriptor in one `ReleasePublicationMarker`.
 `encodeReleaseRecord` correctly rejects the oversized result.
 
-The duplicated snapshots are a demonstrated expansion mechanism. Their exact
+The duplicated snapshots were a demonstrated expansion mechanism. Their exact
 share of the historical 692,408-byte failed marker remains unmeasured. Do not
 claim that removing one field alone proves the full lifecycle fits.
 
@@ -59,6 +59,16 @@ claim that removing one field alone proves the full lifecycle fits.
 - Verify a relevant full-bundle change against QA without replaying an old,
   superseded desired revision over the working gateway.
 
-No production-code change, new test run, deployment, or live Apply was performed
-for this diagnosis. Broader tests remain paused; the prior focused-test approval
-was for ordinary per-Service recovery authority, not this storage correction.
+On September 9, a real two-Service running-update regression reproduced a
+412,657-byte marker. ADR 0072 moves exact native witness bytes into the existing
+candidate-owned immutable `PriorRuntime` field and keeps compact digest-bound
+references in the marker. The running marker is 71,808 bytes; complete
+publication and assignment transactions stay within unchanged bounds. Claim,
+terminal acknowledgement/replay, real Agent admission, missing/substituted
+witness rejection, source fences, native recovery/reconnect, and maximum-member
+proofs pass. Evidence: `docs/acceptance/2026-09-09-blueprint-bounded-publication.md`.
+
+Read-only QA inspection at revision 3016 finds 16 markers with zero inline
+serving witnesses; their existing absent-serving shape remains readable without
+migration. No other installation's inline-serving history is silently accepted.
+No new runtime or live full-bundle Apply is claimed yet.

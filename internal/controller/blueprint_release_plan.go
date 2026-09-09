@@ -260,7 +260,7 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 			}
 			prior := member.ServingPredecessor
 			prior.PriorArtifactId, prior.PriorReleaseId, prior.PriorTarget = artifact.ArtifactId, captured.Serving.ServingReleaseID, string(
-				captured.Serving.Current.CandidateTarget,
+				captured.Serving.Target,
 			)
 			if len(captured.RetainedPriorArtifact) != 0 {
 				retained := &agentpb.ComposeArtifact{}

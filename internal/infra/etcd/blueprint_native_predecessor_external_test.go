@@ -180,7 +180,7 @@ func proveNativeCandidatePreparation(
 		if proto.Unmarshal(witness.CurrentArtifact, active) != nil ||
 			proto.Unmarshal(witness.RetainedPriorArtifact, inactive) != nil ||
 			witness.Serving == nil ||
-			witness.Serving.RetainedPrior == nil ||
+			witness.Serving.RetainedPriorReleaseID == "" ||
 			len(active.Services) != 2 ||
 			len(inactive.Services) != 1 ||
 			members[0].GetServingPredecessor().GetPriorArtifactId() != active.ArtifactId ||

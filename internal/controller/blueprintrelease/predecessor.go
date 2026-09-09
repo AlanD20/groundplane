@@ -18,7 +18,7 @@ type predecessorSnapshot struct {
 	historical     etcd.Versioned[etcd.ReleaseRenderInput]
 	applied        etcd.Versioned[etcd.EnvironmentComposeProjection]
 	appliedPresent bool
-	native         etcd.BlueprintNativePredecessor
+	native         etcd.BlueprintNativePredecessorCapture
 }
 
 func (service *Service) preparePredecessor(
@@ -61,6 +61,10 @@ func (service *Service) preparePredecessor(
 	intent.PriorSuccessfulReleaseID = captured.planning.Projection.CurrentSuccessfulReleaseID
 	if captured.serving == nil {
 		return nil
+	}
+	render.PriorRuntime = &etcd.ReleaseNativePredecessorAuthority{
+		ServiceID: captured.native.ServiceID, CurrentArtifact: slices.Clone(captured.native.CurrentArtifact),
+		RetainedPriorArtifact: slices.Clone(captured.native.RetainedPriorArtifact),
 	}
 	return bindPredecessor(
 		render,

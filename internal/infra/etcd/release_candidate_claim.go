@@ -127,7 +127,13 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 		Schema: 1, TaskID: task.ID, OperationID: task.OperationID, PlanHash: task.PlanHash,
 		EnvironmentID: task.Owner.EnvironmentID, CandidateArtifactID: artifactID, Candidates: candidates,
 	}
-	witnesses, sourceConditions, err := repository.ordinaryRestorationMembersAtRevision(ctx, task, manifest, procedure, revision)
+	witnesses, sourceConditions, err := repository.ordinaryRestorationMembersAtRevision(
+		ctx,
+		task,
+		manifest,
+		procedure,
+		revision,
+	)
 	if err != nil {
 		return ReleaseRestorationAuthority{}, "", nil, err
 	}
@@ -228,10 +234,20 @@ func (repository *TaskRepository) prepareBlueprintRestorationAuthority(
 		}
 		composeArtifact = projection.ComposeArtifact
 	}
+	native, sourceConditions, err := repository.blueprintNativePredecessorsAtRevision(
+		ctx,
+		task,
+		marker,
+		manifest,
+		revision,
+	)
+	if err != nil {
+		return ReleaseRestorationAuthority{}, "", nil, err
+	}
 	authority, digest, err := buildBlueprintNativeRestorationAuthority(
 		task,
 		observed,
-		marker,
+		native,
 		manifest,
 		procedure,
 		composeArtifact,
@@ -251,7 +267,7 @@ func (repository *TaskRepository) prepareBlueprintRestorationAuthority(
 		{Key: keys[1], ModRevision: read.Values[1].ModRevision},
 		{Key: keys[2], ModRevision: projectionRevision},
 	}
-	return authority, digest, conditions, nil
+	return authority, digest, append(conditions, sourceConditions...), nil
 }
 
 func validateSelectedRestorationTargets(
@@ -296,7 +312,7 @@ func validateReleaseCandidateMarker(
 		return nil, err
 	}
 	if task.Type == TaskUpdate {
-		if err := validateBlueprintNativePredecessors(marker.NativePredecessors, procedure, task.Owner.EnvironmentID); err != nil {
+		if err := validateBlueprintNativePredecessorReferences(marker.NativePredecessors, procedure); err != nil {
 			return nil, err
 		}
 	} else if len(marker.NativePredecessors) != 0 {

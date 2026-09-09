@@ -62,9 +62,8 @@ func (ledger *ReleaseLedger) GetBlueprintTaskRenderInput(
 		return ReleaseTaskRenderInput{}, corruptReleaseRecord()
 	}
 	result := ReleaseTaskRenderInput{
-		PublicationID:      publicationID,
-		Members:            make([]ReleaseTaskRenderMember, len(manifest.Members)),
-		NativePredecessors: marker.NativePredecessors,
+		PublicationID: publicationID,
+		Members:       make([]ReleaseTaskRenderMember, len(manifest.Members)),
 	}
 	for index, reference := range manifest.Members {
 		intentValue, renderValue := loadedMembers.Values[index*2], loadedMembers.Values[index*2+1]
@@ -92,6 +91,10 @@ func (ledger *ReleaseLedger) GetBlueprintTaskRenderInput(
 			return ReleaseTaskRenderInput{}, corruptReleaseRecord()
 		}
 		result.Members[index] = ReleaseTaskRenderMember{Intent: intent, Render: render}
+	}
+	result.NativePredecessors, err = resolveBlueprintNativePredecessors(marker.NativePredecessors, result.Members)
+	if err != nil {
+		return ReleaseTaskRenderInput{}, err
 	}
 	return result, validateBlueprintNativeRenderInput(result, marker, task)
 }

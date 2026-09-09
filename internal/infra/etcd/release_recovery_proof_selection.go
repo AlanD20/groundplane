@@ -177,11 +177,26 @@ func (repository *TaskRepository) recoveryProofSelectionAtRevision(
 	}
 	conditions := []Condition{{Key: keys[0], ModRevision: read.Values[0].ModRevision},
 		{Key: keys[1], ModRevision: read.Values[1].ModRevision}}
+	var native []BlueprintNativePredecessor
+	if taskHasBlueprintCandidateAppliedAuthority(task) {
+		var sourceConditions []Condition
+		native, sourceConditions, err = repository.blueprintNativePredecessorsAtRevision(
+			ctx,
+			task,
+			marker,
+			manifest,
+			revision,
+		)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		conditions = append(conditions, sourceConditions...)
+	}
 	expectations := make([]releaseRecoveryProofExpectation, len(assignment.RestorationAuthority.Candidates))
 	for index, candidate := range assignment.RestorationAuthority.Candidates {
 		expectations[index].kind = releaseRecoveryProofCaptured
 		if taskHasBlueprintCandidateAppliedAuthority(task) {
-			if err := bindNativeRecoveryExpectation(&expectations[index], assignment, marker, procedure, index); err != nil {
+			if err := bindNativeRecoveryExpectation(&expectations[index], assignment, native, procedure, index); err != nil {
 				return nil, nil, nil, err
 			}
 			continue
@@ -318,7 +333,8 @@ func recoveryRenderMatchesPredecessor(
 	}
 	var encoded []byte
 	for _, witness := range authority.NativePredecessors {
-		if witness.ServiceID == render.ServiceID && bytes.Equal(witness.CurrentArtifact, render.PriorRuntime.CurrentArtifact) &&
+		if witness.ServiceID == render.ServiceID &&
+			bytes.Equal(witness.CurrentArtifact, render.PriorRuntime.CurrentArtifact) &&
 			bytes.Equal(witness.RetainedPriorArtifact, render.PriorRuntime.RetainedPriorArtifact) {
 			encoded = witness.CurrentArtifact
 		}

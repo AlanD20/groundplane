@@ -16,7 +16,7 @@ func (service *Service) captureNativePredecessor(
 	scope etcd.ReleasePlanningScope,
 	captured predecessorSnapshot,
 ) (predecessorSnapshot, error) {
-	captured.native = etcd.BlueprintNativePredecessor{
+	captured.native = etcd.BlueprintNativePredecessorCapture{
 		ServiceID:         captured.planning.Service.Record.Desired.ID,
 		FixedReadRevision: scope.ReadRevision, ProjectionRevision: captured.planning.ProjectionRevision,
 	}
@@ -61,7 +61,19 @@ func (service *Service) captureNativePredecessor(
 }
 
 func nativePredecessors(input PrepareInput, members []etcd.ReleaseTaskRenderMember) []etcd.BlueprintNativePredecessor {
-	result := make([]etcd.BlueprintNativePredecessor, 0, len(members))
+	captures := nativePredecessorCaptures(input, members)
+	result := make([]etcd.BlueprintNativePredecessor, len(captures))
+	for index, capture := range captures {
+		result[index] = capture.Runtime()
+	}
+	return result
+}
+
+func nativePredecessorCaptures(
+	input PrepareInput,
+	members []etcd.ReleaseTaskRenderMember,
+) []etcd.BlueprintNativePredecessorCapture {
+	result := make([]etcd.BlueprintNativePredecessorCapture, 0, len(members))
 	for _, member := range members {
 		if captured, found := input.Workloads.predecessors[member.Render.ServiceName]; found {
 			result = append(result, captured.native)

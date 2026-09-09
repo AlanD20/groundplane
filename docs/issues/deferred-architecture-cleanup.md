@@ -33,6 +33,13 @@ allowances must not be weakened to hide findings.
 
 ## Work completed after the snapshot
 
+- The September 9 bounded Blueprint correction adds two etcd external journey
+  files with three test-only imports across Controller/blueprintrelease/Agent
+  (`blueprint_publication_size_external_test.go` and
+  `blueprint_publication_assignment_external_test.go`). Move these with the
+  existing app-owned integration-fixture work. New production files are bounded;
+  the touched pre-existing oversized `blueprintrelease/service.go` remains
+  635 lines, unchanged from its current-main version. No allowance changed.
 - The September 9 Entry integration reran the gate; it remains red. Its two
   new etcd external journey files add three test-only layer-import findings
   (Agent/Controller in `entry_removal_agent_external_test.go`, Controller in

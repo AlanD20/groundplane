@@ -320,7 +320,7 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 		ctx,
 		service.sources,
 		etcd.BlueprintReleasePublicationEvidence{
-			NativePredecessors: nativePredecessors(input, members),
+			NativePredecessors: nativePredecessorCaptures(input, members),
 			Manifest:           manifest, EnvironmentID: input.Environment.Record.ID, Task: task, PublishedAt: input.CreatedAt,
 			CandidateReleaseDescriptor: candidateDescriptor,
 			Plan:                       plan,
