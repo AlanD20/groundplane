@@ -19,7 +19,7 @@ func TestVolumeRemovalGenericRetryAdvancesRetainedOperation(t *testing.T) {
 	for _, checkpoint := range []string{"published", "detached", "pending", "partial", "absent"} {
 		t.Run(checkpoint, func(t *testing.T) { proveVolumeRemovalRetry(t, checkpoint, "failed") })
 	}
-	for _, mode := range []string{"timeout", "stale agent", "repeated", "lost response"} {
+	for _, mode := range []string{"timeout", "stale agent", "repeated", "lost response", "partial"} {
 		t.Run("pending/"+mode, func(t *testing.T) { proveVolumeRemovalRetry(t, "pending", mode) })
 	}
 }
@@ -126,13 +126,17 @@ func proveVolumeRemovalRetry(t *testing.T, checkpoint, mode string) {
 	if _, err := fixture.Publish(ctx); err != nil || fixture.Revision() != revision {
 		t.Fatalf("root DELETE replay changed state: %v", err)
 	}
-	claimed, found, err := tasks.ClaimNextTask(ctx, assignment.AgentID, 1, retryAt.Add(time.Second))
+	generation := uint64(1)
+	if mode == "stale agent" {
+		generation = 2
+	}
+	claimed, found, err := tasks.ClaimNextTask(ctx, assignment.AgentID, generation, retryAt.Add(time.Second))
 	if err != nil || !found || claimed.Task.Record.ID != retryID {
 		t.Fatalf("claim successor: %v/%v", found, err)
 	}
 	next := volumeremoval.EnvironmentVolumeRemovalAssignment{
 		OperationID: runtime.OperationID, TaskID: retryID, AssignmentID: claimed.Assignment.Record.AssignmentID,
-		AgentID: assignment.AgentID, AgentGeneration: 1,
+		AgentID: assignment.AgentID, AgentGeneration: generation,
 	}
 	if checkpoint == "published" {
 		if _, err := removals.MarkConsumersDetached(ctx, next, retryAt.Add(2*time.Second)); err != nil {
@@ -146,6 +150,7 @@ func proveVolumeRemovalRetry(t *testing.T, checkpoint, mode string) {
 					Diagnostic: etcd.TaskResultDiagnosticNone}, retryAt.Add(2*time.Second)); err != nil {
 				t.Fatal(err)
 			}
+			fixture.AssertRemovalRecoveryBudget(t, "attempt")
 			retryAt = retryAt.Add(3 * time.Second)
 			retryID = ids.NewAt(ids.KindTask, retryAt, 94)
 			marker = volumeRemovalRetryMarker(fixture.Marker, retryID, retryAt)
@@ -158,6 +163,7 @@ func proveVolumeRemovalRetry(t *testing.T, checkpoint, mode string) {
 			if err != nil || conflict != nil || outcome != etcd.IdempotencyKnownApplied {
 				t.Fatal("second successor did not publish", err, conflict)
 			}
+			fixture.AssertRemovalRecoveryBudget(t, "retry")
 			claimed, found, err := tasks.ClaimNextTask(ctx, assignment.AgentID, 1, retryAt.Add(time.Second))
 			if err != nil || !found || claimed.Task.Record.ID != retryID {
 				t.Fatalf("claim repeated successor: %v/%v", found, err)
@@ -174,9 +180,16 @@ func proveVolumeRemovalRetry(t *testing.T, checkpoint, mode string) {
 		completion := removalrecord.Completion{OperationID: runtime.OperationID,
 			RequestOrdinal: pending.Record.RequestOrdinal, RequestSHA256: pending.Record.RequestSHA256,
 			DirectoryAbsent: true, CompletedAt: retryAt.Add(3 * time.Second)}
+		completionStage := "completion"
+		if mode == "partial" {
+			completion.DirectoryAbsent = false
+			completion.NextComponentStack, completion.NextCursor = []string{"nested"}, []byte("recovered-cursor")
+			completion.MutationCount, completionStage = 1, "progress"
+		}
 		result := volumeremoval.EnvironmentVolumeRemovalPathResult{
 			Assignment: assignment, RequestOrdinal: completion.RequestOrdinal, RequestSHA256: completion.RequestSHA256,
-			DirectoryAbsent: true, CompletedAt: completion.CompletedAt,
+			DirectoryAbsent: completion.DirectoryAbsent, CompletedAt: completion.CompletedAt,
+			NextComponentStack: completion.NextComponentStack, NextCursor: completion.NextCursor, MutationCount: completion.MutationCount,
 			ResponseBytes: removalrecord.PathResponseBytes(
 				completion,
 			), ResponseSHA256: removalrecord.PathResponseDigest(completion),
@@ -201,14 +214,36 @@ func proveVolumeRemovalRetry(t *testing.T, checkpoint, mode string) {
 		} else if err != nil {
 			t.Fatalf("successor completion: %v", err)
 		}
+		fixture.AssertRemovalRecoveryBudget(t, completionStage)
 		completedRevision := fixture.Revision()
 		if _, replay, err := removals.CompletePathCall(ctx, result); err != nil || !replay ||
 			fixture.Revision() != completedRevision {
 			t.Fatalf("successor completion replay: %v/%v", replay, err)
 		}
-		if _, err := tasks.AcknowledgeTask(ctx, next.AgentID, 1, next.TaskID, next.AssignmentID,
+		if mode == "partial" {
+			pending, replay, err := removals.BeginPathCall(ctx, next, retryAt.Add(4*time.Second))
+			if err != nil || replay || pending.Record.TaskID != next.TaskID ||
+				pending.Record.RequestOrdinal != completion.RequestOrdinal+1 ||
+				!bytes.Equal(pending.Record.Cursor, completion.NextCursor) || len(pending.Record.ComponentStack) != 1 ||
+				pending.Record.ComponentStack[0] != "nested" {
+				t.Fatalf("next call did not continue the recovered cursor: %v/%v", replay, err)
+			}
+			fixture.AssertRemovalRecoveryBudget(t, "next request")
+			completion = removalrecord.Completion{OperationID: runtime.OperationID,
+				RequestOrdinal: pending.Record.RequestOrdinal, RequestSHA256: pending.Record.RequestSHA256,
+				DirectoryAbsent: true, CompletedAt: retryAt.Add(5 * time.Second)}
+			if _, _, err := removals.CompletePathCall(ctx, volumeremoval.EnvironmentVolumeRemovalPathResult{
+				Assignment: next, RequestOrdinal: completion.RequestOrdinal, RequestSHA256: completion.RequestSHA256,
+				DirectoryAbsent: true, CompletedAt: completion.CompletedAt,
+				ResponseBytes: removalrecord.PathResponseBytes(completion), ResponseSHA256: removalrecord.PathResponseDigest(completion),
+			}); err != nil {
+				t.Fatalf("next call completion: %v", err)
+			}
+			fixture.AssertRemovalRecoveryBudget(t, "next completion")
+		}
+		if _, err := tasks.AcknowledgeTask(ctx, next.AgentID, next.AgentGeneration, next.TaskID, next.AssignmentID,
 			etcd.TaskStatusCompleted, etcd.TaskResultRecord{Kind: etcd.TaskResultEnvironmentDirectory,
-				Diagnostic: etcd.TaskResultDiagnosticNone}, retryAt.Add(4*time.Second)); err != nil {
+				Diagnostic: etcd.TaskResultDiagnosticNone}, completion.CompletedAt.Add(time.Second)); err != nil {
 			t.Fatalf("recovered operation terminalization: %v", err)
 		}
 		final, err := fixture.Store.GetMany(ctx, etcd.GetManyRequest{Keys: []string{

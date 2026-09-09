@@ -261,6 +261,36 @@ func (fixture *VolumePolicyDesiredFixture) AssertRemovalRetryBudget(t *testing.T
 	t.Logf("retry transaction: %d comparisons, %d mutations, %d protobuf bytes", compares, writes, size)
 }
 
+func (fixture *VolumePolicyDesiredFixture) AssertRemovalRecoveryBudget(t *testing.T, stage string) {
+	t.Helper()
+	compares, writes, size := len(fixture.store.conditions), len(fixture.store.mutations), fixture.store.bytes
+	var maximum, wantCompares, wantWrites, wantBytes int
+	switch stage {
+	case "attempt":
+		maximum, wantCompares, wantWrites, wantBytes = 24, 24, 11, 9658
+	case "retry":
+		maximum, wantCompares, wantWrites, wantBytes = 24, 24, 11, 9541
+	case "completion":
+		maximum, wantCompares, wantWrites, wantBytes = 16, 11, 4, 3316
+	case "progress":
+		maximum, wantCompares, wantWrites, wantBytes = 16, 11, 3, 2697
+	case "next request":
+		maximum, wantCompares, wantWrites, wantBytes = 16, 9, 1, 2176
+	case "next completion":
+		maximum, wantCompares, wantWrites, wantBytes = 16, 10, 4, 3196
+	default:
+		t.Fatalf("unknown pending recovery stage %s", stage)
+		return
+	}
+	if compares > maximum || writes > maximum || compares+writes > 2*maximum || size > 900*1024 {
+		t.Fatalf("%s recovery transaction exceeds ADR0049 budget: %d/%d/%d", stage, compares, writes, size)
+	}
+	if compares != wantCompares || writes != wantWrites || size != wantBytes {
+		t.Fatalf("%s recovery transaction shape changed: %d/%d/%d", stage, compares, writes, size)
+	}
+	t.Logf("%s recovery transaction: %d comparisons, %d mutations, %d protobuf bytes", stage, compares, writes, size)
+}
+
 func (fixture *VolumePolicyDesiredFixture) AssertRemovalTerminal(t *testing.T, revision int64, at time.Time) {
 	fixture.assertRemovalTerminal(t, revision, at, 24, 16, 11035)
 }
