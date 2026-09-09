@@ -1,5 +1,47 @@
 # Integrated disposable floor QA
 
+## Current result: Entry cleanup and full running Apply pass; reapply blocked
+
+Signed `5f2a6f47f` is deployed as `0.0.0-qa.floor20260909.7`, hash
+`c057385379c28817635e8c12a3a29eeccb70cb4358833edeac0b11f6382a2d99`.
+The exact `.6` binary remains `controller-before-entry-removal`; no Agent
+update occurred. Normal env-probe removals completed as
+`task_01M23TFX7DT142RNBWJ6B9CQNG` (19:32:07.178634049 UTC) and
+`task_01M23TGN8HVJVMVF0T9HCKY78K` (19:32:31.905307933 UTC).
+The original 14 Entry ids remain, with no probe ids or keys. The exact host
+probe file is absent and generated app-api env content has no probe keys.
+Green `e78d6ce64014`, blue `3471b7c4138c`, and proxy `4741053372db` were
+unchanged by cleanup. Already loaded process variables persist until a later
+deploy/reconcile, as the removal contract specifies.
+
+A fresh canonical export plus the three unchanged non-secret companions is
+in `.tmp/qa-floor-20260909/blueprint-current/`. It preserves all current Entry
+bindings and image references; the host's app `dev` and `qa-floor-20260908`
+tags both resolve to `023d784f3f53...`. Only the four previously prepared
+Identity support URLs changed to `https://ko.aland20.com`. Validation passed.
+The complete running Apply `task_01M23TR871DAW07J056E0KE3MP` completed
+19:37:10.430782224 UTC. All four Identity workloads are healthy; the application
+group and native stable proxies remain running. This closes the live oversized
+publication attempt, but not exact reapply or full floor acceptance.
+
+Exact reapply `task_01M23TVF1BW4YP95A7PA4T1E0N` failed at
+19:38:32.416859061 UTC. Nineteen operations completed; step
+`step_01M23TVF1BY692VHT9M8ZZHJ4S` failed. The bounded Agent log gives
+`state.conflict: compose project ownership collision prevents convergence`.
+The Task is terminal; do not bypass that ownership guard or delete containers
+out of band. Diagnose the selected operation and retained ownership next.
+
+Final Console checks used exact Node24.19.0/npm11.17.0. `npm ci` succeeded;
+the test run stopped on the existing `platform-component-live-state-contract`
+assertion that omits the now-supported optional Caddy `alias`. Build did not
+run. Audit reports three transitive findings: js-yaml high (fixed in4.3.2),
+its @redocly/openapi-core parent, and Hono moderate (fixed in4.13.5).
+No forced remediation or lockfile edit occurred; the lockfile-only dry-run
+reported no changes. These delivery checks remain open.
+An isolated real browser loads the deployed Console and QA Environment with
+no error/warning console messages. This read-only observation does not prove
+all Console mutation parity. Public HTTPS/fanout checks after Apply remain.
+
 ## Live serving Entry checks and cleanup follow-up
 
 Signed `fd2d41468` is deployed as `0.0.0-qa.floor20260909.6`, SHA-256
