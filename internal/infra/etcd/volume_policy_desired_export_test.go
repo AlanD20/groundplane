@@ -16,16 +16,17 @@ import (
 // VolumePolicyDesiredFixture uses real policy preparation and publication;
 // only the pre-existing desired baseline and storage are hermetic fixtures.
 type VolumePolicyDesiredFixture struct {
-	Store                  Store
-	Task                   TaskRecord
-	Marker                 IdempotencyMarker
-	Request                EnvironmentBlueprintStageRequest
-	HeadRevision           int64
-	Initial                *removalrecord.InitialPublication
-	OwnerBeforePublication *removalrecord.Owner
-	prepared               VolumeRemovalBackupPolicyPreparation
-	policy                 *backupPolicyReplacementFixture
-	store                  *volumePolicyDesiredAuditStore
+	Store                   Store
+	Task                    TaskRecord
+	Marker                  IdempotencyMarker
+	Request                 EnvironmentBlueprintStageRequest
+	HeadRevision            int64
+	Initial                 *removalrecord.InitialPublication
+	OwnerBeforePublication  *removalrecord.Owner
+	writerBeforePublication *taskMaterializationWriterRecord
+	prepared                VolumeRemovalBackupPolicyPreparation
+	policy                  *backupPolicyReplacementFixture
+	store                   *volumePolicyDesiredAuditStore
 }
 
 // PrepareRemovalRecords supplies the real closed initial-record input. This
@@ -62,11 +63,12 @@ func (fixture *VolumePolicyDesiredFixture) PrepareRemovalRecords(t *testing.T) r
 
 type volumePolicyDesiredAuditStore struct {
 	Store
-	conditions             []Condition
-	mutations              []Mutation
-	bytes                  int
-	finalPublications      int
-	ownerBeforePublication *removalrecord.Owner
+	conditions              []Condition
+	mutations               []Mutation
+	bytes                   int
+	finalPublications       int
+	ownerBeforePublication  *removalrecord.Owner
+	writerBeforePublication *taskMaterializationWriterRecord
 }
 
 func (audit *volumePolicyDesiredAuditStore) TransactEnvironmentBlueprint(
@@ -74,6 +76,18 @@ func (audit *volumePolicyDesiredAuditStore) TransactEnvironmentBlueprint(
 ) (TransactionResult, error) {
 	if err := validateEnvironmentBlueprintTransactionBudget(conditions, mutations); err != nil {
 		return TransactionResult{}, err
+	}
+	if audit.writerBeforePublication != nil {
+		writer := *audit.writerBeforePublication
+		value, err := encodeTaskMaterializationWriter(writer)
+		if err != nil {
+			return TransactionResult{}, err
+		}
+		defer clear(value)
+		if _, err := audit.Store.Put(ctx, taskMaterializationWriterKey(writer.EnvironmentID), value); err != nil {
+			return TransactionResult{}, err
+		}
+		audit.writerBeforePublication = nil
 	}
 	if audit.ownerBeforePublication != nil {
 		owner := *audit.ownerBeforePublication
@@ -236,6 +250,7 @@ func NewVolumePolicyDesiredFixture(t *testing.T) *VolumePolicyDesiredFixture {
 
 func (fixture *VolumePolicyDesiredFixture) Publish(ctx context.Context) (IdempotencyTransactionResult, error) {
 	fixture.store.ownerBeforePublication = fixture.OwnerBeforePublication
+	fixture.store.writerBeforePublication = fixture.writerBeforePublication
 	hierarchy, err := newHierarchyRepository(fixture.Store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -269,6 +284,25 @@ func (fixture *VolumePolicyDesiredFixture) Publish(ctx context.Context) (Idempot
 		fixture.Marker,
 		fixture.store,
 	)
+}
+
+func (fixture *VolumePolicyDesiredFixture) HoldMaterializationWriter(t *testing.T, late bool) {
+	t.Helper()
+	writer := taskMaterializationWriterRecord{
+		EnvironmentID: fixture.Task.Owner.EnvironmentID, TaskID: ids.New(ids.KindTask), RenderGeneration: 1,
+	}
+	if late {
+		fixture.writerBeforePublication = &writer
+		return
+	}
+	value, err := encodeTaskMaterializationWriter(writer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(value)
+	if _, err := fixture.Store.Put(context.Background(), taskMaterializationWriterKey(writer.EnvironmentID), value); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // UseMaximumSelection seeds the legal 12-source policy, then prepares the real
@@ -378,7 +412,7 @@ func (fixture *VolumePolicyDesiredFixture) AssertMaximumSelectionPublished(t *te
 	}
 	wantConditions, wantMutations := 38, 15
 	if fixture.Initial != nil {
-		wantConditions += 2
+		wantConditions += 3
 		wantMutations += 4
 	}
 	if len(fixture.store.conditions) != wantConditions || len(fixture.store.mutations) != wantMutations ||

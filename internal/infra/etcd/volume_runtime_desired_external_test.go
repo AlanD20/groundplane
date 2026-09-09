@@ -174,3 +174,30 @@ func TestVolumeRuntimeDesiredPublicationMaximumSelection(t *testing.T) {
 		t.Fatalf("maximum publication did not include runtime: %v", err)
 	}
 }
+
+// Rationale: an existing materialization writer may still be applying the old
+// desired state. Removal must not publish over it, even if it claims after reads.
+func TestVolumeRuntimeDesiredPublicationExcludesMaterializationWriter(t *testing.T) {
+	for _, late := range []bool{false, true} {
+		t.Run(map[bool]string{false: "held", true: "late claim"}[late], func(t *testing.T) {
+			fixture := etcd.NewVolumePolicyDesiredFixture(t)
+			fixture.PrepareRemovalRecords(t)
+			stageVolumePolicyDesired(t, fixture)
+			fixture.HoldMaterializationWriter(t, late)
+			before := fixture.Revision()
+			result, err := fixture.Publish(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			outcome, _, conflict, err := result.Classify()
+			if kind, _ := errs.KindOf(conflict); err != nil || outcome != etcd.IdempotencyKnownConflict ||
+				kind != errs.KindStateConflict {
+				t.Fatalf("removal published over active writer: %v/%v/%v", outcome, conflict, err)
+			}
+			if late {
+				before++ // Only the competing writer acquisition commits.
+			}
+			fixture.AssertUnpublished(t, before)
+		})
+	}
+}

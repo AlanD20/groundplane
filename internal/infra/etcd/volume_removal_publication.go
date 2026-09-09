@@ -53,7 +53,14 @@ func (repository *HierarchyRepository) prepareVolumeRemovalDesiredPublication(
 	if found {
 		for _, volume := range previous.Record.Volumes {
 			if volume.ID == runtime.VolumeID && volume.Key == runtime.Key {
-				return prepareVolumeRemovalInitialPublication(initial, task, marker)
+				publication, err := prepareVolumeRemovalInitialPublication(initial, task, marker)
+				if err != nil {
+					return volumeRemovalInitialPublication{}, err
+				}
+				publication.conditions = append(publication.conditions, Condition{
+					Key: taskMaterializationWriterKey(runtime.EnvironmentID),
+				})
+				return publication, nil
 			}
 		}
 	}
@@ -76,7 +83,7 @@ func (publication volumeRemovalInitialPublication) classifyConflict(
 		}
 		for _, value := range values[baseCount:] {
 			if value != nil {
-				return errs.New(errs.KindStateConflict, "Volume removal operation is already owned")
+				return errs.New(errs.KindStateConflict, "Volume removal publication authority changed")
 			}
 		}
 		return nil
