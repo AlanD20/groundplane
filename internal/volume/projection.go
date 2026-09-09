@@ -199,6 +199,7 @@ func cloneVolumeMutationProjection(current etcd.EnvironmentComposeProjection) et
 		VolumeMounts:           append([]etcd.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...),
 		Components:             append([]etcd.ComponentRecord(nil), current.Components...),
 		Entries:                append([]etcd.EntryRecord(nil), current.Entries...),
+		Backup:                 etcd.CloneEnvironmentBlueprintBackupPolicy(current.Backup),
 		ServiceDependencyPlans: current.ServiceDependencyPlans.Clone(),
 	}
 }
