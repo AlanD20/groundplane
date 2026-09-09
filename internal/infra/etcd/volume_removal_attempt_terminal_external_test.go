@@ -73,6 +73,7 @@ func TestVolumeRemovalAttemptTerminalRetainsOperation(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				fixture.AssertRemovalAttemptBudget(t, status)
 				current, err := tasks.GetTask(ctx, assignment.TaskID)
 				if err != nil || current.Record.Status != status || current.Record.Result == nil ||
 					current.Record.Result.Kind != etcd.TaskResultEnvironmentDirectory {

@@ -233,6 +233,22 @@ func (fixture *VolumePolicyDesiredFixture) LoseRemovalTerminalResponse() {
 	fixture.store.loseTerminalResponse = true
 }
 
+func (fixture *VolumePolicyDesiredFixture) AssertRemovalAttemptBudget(t *testing.T, status TaskStatus) {
+	t.Helper()
+	compares, writes, size := len(fixture.store.conditions), len(fixture.store.mutations), fixture.store.bytes
+	if compares > 24 || writes > 24 || compares+writes > 48 || size > 900*1024 {
+		t.Fatalf("attempt transaction exceeds ADR0049 budget: %d/%d/%d", compares, writes, size)
+	}
+	wantBytes := 7969
+	if status == TaskStatusTimedOut {
+		wantBytes = 7972
+	}
+	if compares != 23 || writes != 9 || size != wantBytes {
+		t.Fatalf("attempt transaction shape changed: %d/%d/%d", compares, writes, size)
+	}
+	t.Logf("attempt transaction: %d comparisons, %d mutations, %d protobuf bytes", compares, writes, size)
+}
+
 func (fixture *VolumePolicyDesiredFixture) AssertRemovalTerminal(t *testing.T, revision int64, at time.Time) {
 	t.Helper()
 	markerKey, err := idempotencyMarkerKey(fixture.Marker.Locator)

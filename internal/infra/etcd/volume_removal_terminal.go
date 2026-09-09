@@ -368,13 +368,13 @@ func (repository *TaskRepository) transactVolumeRemovalAttemptTerminal(
 		return TransactionResult{}, err
 	}
 	defer ancestry.clear()
-	if len(ancestry.conditions) > 26 || len(ancestry.mutations) > 26 {
+	if len(ancestry.conditions) > 24 || len(ancestry.mutations) > 24 {
 		return TransactionResult{}, errs.New(
 			errs.KindInternal,
 			"Volume removal attempt terminal transaction exceeds its operation budget",
 		)
 	}
-	if err := validateBlueprintTransaction(repository.store, ancestry.conditions, ancestry.mutations, 52, 900*1024); err != nil {
+	if err := validateBlueprintTransaction(repository.store, ancestry.conditions, ancestry.mutations, 48, 900*1024); err != nil {
 		return TransactionResult{}, err
 	}
 	return repository.store.Transact(ctx, ancestry.conditions, ancestry.mutations)
