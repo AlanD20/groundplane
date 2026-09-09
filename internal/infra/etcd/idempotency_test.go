@@ -844,23 +844,6 @@ func (store *markerOnlyRecoveryStore) Transact(
 	return TransactionResult{Revision: store.revision, FailureReads: reads}, nil
 }
 
-type collectorSnapshot struct {
-	rangeResult RangeResult
-	markers     GetManyResult
-}
-
-type collectorTestStore struct {
-	Store
-	mu                 sync.Mutex
-	snapshots          []collectorSnapshot
-	transactionResults []TransactionResult
-	transactionErrors  []error
-	rangeCalls         int
-	getManyCalls       int
-	transactionCalls   int
-	getManyRevisions   []int64
-}
-
 type replayLookupTestStore struct {
 	Store
 	targetKey      string
@@ -902,68 +885,6 @@ func (store *replayLookupTestStore) GetMany(
 	return &result, nil
 }
 
-func (store *collectorTestStore) Range(ctx context.Context, request RangeRequest) (*RangeResult, error) {
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if request.Prefix != idempotencyRetentionPrefix || request.Limit != maximumPruneMarkers || request.Revision != 0 ||
-		store.rangeCalls >= len(store.snapshots) {
-		return nil, errs.New(errs.KindInternal, "unexpected collector range")
-	}
-	snapshot := store.snapshots[store.rangeCalls]
-	store.rangeCalls++
-	result := snapshot.rangeResult
-	result.Values = cloneKeyValueSlice(result.Values)
-	return &result, nil
-}
-
-func (store *collectorTestStore) GetMany(
-	ctx context.Context,
-	request GetManyRequest,
-) (*GetManyResult, error) {
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if store.getManyCalls >= len(store.snapshots) ||
-		request.Revision != store.snapshots[store.getManyCalls].rangeResult.ReadRevision {
-		return nil, errs.New(errs.KindInternal, "unexpected collector multi-get")
-	}
-	snapshot := store.snapshots[store.getManyCalls]
-	store.getManyCalls++
-	store.getManyRevisions = append(store.getManyRevisions, request.Revision)
-	result := snapshot.markers
-	result.Values = cloneKeyValuePointers(result.Values)
-	return &result, nil
-}
-
-func (store *collectorTestStore) Transact(
-	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return TransactionResult{}, err
-	}
-	index := store.transactionCalls
-	store.transactionCalls++
-	if len(conditions) != 2 || len(mutations) != 2 {
-		return TransactionResult{}, errs.New(errs.KindInternal, "unexpected collector transaction")
-	}
-	if index < len(store.transactionErrors) && store.transactionErrors[index] != nil {
-		return TransactionResult{}, store.transactionErrors[index]
-	}
-	if index >= len(store.transactionResults) {
-		return TransactionResult{}, errs.New(errs.KindInternal, "missing collector transaction result")
-	}
-	return store.transactionResults[index], nil
-}
-
 type atomicClaimStore struct {
 	Store
 	mu       sync.Mutex
@@ -1002,42 +923,6 @@ func (store *atomicClaimStore) Transact(
 		return TransactionResult{}, errs.New(errs.KindInternal, "claim transaction omitted marker")
 	}
 	return TransactionResult{Succeeded: true, Revision: store.revision}, nil
-}
-
-func testCollectorSnapshot(
-	t *testing.T,
-	marker IdempotencyMarker,
-	revision int64,
-	retentionRevision int64,
-	markerRevision int64,
-) collectorSnapshot {
-	t.Helper()
-	markerKey, err := idempotencyMarkerKey(marker.Locator)
-	if err != nil {
-		t.Fatalf("idempotencyMarkerKey() error = %v", err)
-	}
-	retentionKey, err := idempotencyRetentionKey(markerKey, marker.RetainUntil)
-	if err != nil {
-		t.Fatalf("idempotencyRetentionKey() error = %v", err)
-	}
-	retentionValue, err := json.Marshal(retentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
-	if err != nil {
-		t.Fatalf("json.Marshal(retention) error = %v", err)
-	}
-	markerValue, err := encodeIdempotencyMarker(marker)
-	if err != nil {
-		t.Fatalf("encodeIdempotencyMarker() error = %v", err)
-	}
-	return collectorSnapshot{
-		rangeResult: RangeResult{
-			Values:       []KeyValue{{Key: retentionKey, Value: retentionValue, ModRevision: retentionRevision}},
-			ReadRevision: revision, ResponseRevision: revision,
-		},
-		markers: GetManyResult{
-			Values:       []*KeyValue{{Key: markerKey, Value: markerValue, ModRevision: markerRevision}},
-			ReadRevision: revision, ResponseRevision: revision,
-		},
-	}
 }
 
 func cloneKeyValueSlice(values []KeyValue) []KeyValue {
