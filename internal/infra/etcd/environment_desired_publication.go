@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -42,7 +43,7 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 		zoneChanges, serviceChanges, routeChanges, releaseGroupPreparation,
 		componentPreparation, attachPreparation, BlueprintBackupPolicyPreparation{},
 		BlueprintScriptPublication{}, BlueprintReleasePublication{},
-		BlueprintRequirementGate{}, VolumeRemovalBackupPolicyPreparation{}, task, marker, nil,
+		BlueprintRequirementGate{}, VolumeRemovalBackupPolicyPreparation{}, nil, task, marker, nil,
 	)
 }
 
@@ -82,7 +83,7 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintDes
 		project, environment, expectedHeadRevision, claim, revision, projection,
 		zoneChanges, serviceChanges, routeChanges, releaseGroupPreparation,
 		componentPreparation, attachPreparation, backupPreparation, scriptPublication, releasePublication,
-		requirementGate, VolumeRemovalBackupPolicyPreparation{}, task, marker, repository.transactions,
+		requirementGate, VolumeRemovalBackupPolicyPreparation{}, nil, task, marker, repository.transactions,
 	)
 }
 
@@ -107,6 +108,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	releasePublication BlueprintReleasePublication,
 	requirementGate BlueprintRequirementGate,
 	volumePolicyPreparation VolumeRemovalBackupPolicyPreparation,
+	volumeInitial *removalrecord.InitialPublication,
 	task TaskRecord,
 	marker IdempotencyMarker,
 	blueprintTransactions environmentBlueprintTransactionStore,
@@ -277,6 +279,23 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(epochMutation.Value)
+
+	var volumeRuntimePublication volumeRemovalInitialPublication
+	if volumeInitial != nil {
+		if volumePolicyPreparation.state == nil {
+			return IdempotencyTransactionResult{}, errs.New(
+				errs.KindValidationFailed,
+				"Volume removal policy preparation is required",
+			)
+		}
+		volumeRuntimePublication, err = repository.prepareVolumeRemovalDesiredPublication(
+			ctx, *volumeInitial, claim, projection, task, marker, scriptRemoval.volumeID, fence.readAtRevision(),
+		)
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		defer clearBackupRuntimeMutations(volumeRuntimePublication.mutations)
+	}
 
 	var volumePolicyPublication volumeRemovalBackupPolicyPublication
 	if volumePolicyPreparation.state != nil {
@@ -465,6 +484,11 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		classified = volumePolicyPublication.classifyConflict(len(conditions), classified)
 		conditions = append(conditions, volumePolicyPublication.conditions...)
 		mutations = append(mutations, volumePolicyPublication.mutations...)
+	}
+	if volumeInitial != nil {
+		classified = volumeRuntimePublication.classifyConflict(len(conditions), classified)
+		conditions = append(conditions, volumeRuntimePublication.conditions...)
+		mutations = append(mutations, volumeRuntimePublication.mutations...)
 	}
 	classifier := func(revision int64, values []*KeyValue) error {
 		if conflict := classified(revision, values); conflict != nil {

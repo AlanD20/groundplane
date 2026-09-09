@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
@@ -17,6 +18,69 @@ import (
 type volumeRemovalInitialPublication struct {
 	conditions []Condition
 	mutations  []Mutation
+}
+
+func (repository *HierarchyRepository) prepareVolumeRemovalDesiredPublication(
+	ctx context.Context,
+	initial removalrecord.InitialPublication,
+	claim EnvironmentBlueprintStageClaim,
+	projection EnvironmentComposeProjection,
+	task TaskRecord,
+	marker IdempotencyMarker,
+	removedVolumeID string,
+	readRevision int64,
+) (volumeRemovalInitialPublication, error) {
+	runtime, _, _, err := initial.Records()
+	if err != nil {
+		return volumeRemovalInitialPublication{}, err
+	}
+	if claim.SourceKind != EnvironmentBlueprintSourceMutation || runtime.VolumeID != removedVolumeID ||
+		runtime.EnvironmentID != projection.EnvironmentID || runtime.DesiredRevisionID != projection.RevisionID ||
+		runtime.DesiredGeneration != uint64(projection.RenderGeneration) {
+		return volumeRemovalInitialPublication{}, errs.New(
+			errs.KindValidationFailed,
+			"Volume removal records do not match desired publication",
+		)
+	}
+	previous, found, err := repository.getEnvironmentBlueprintProjectionAtRevision(
+		ctx,
+		runtime.EnvironmentID,
+		readRevision,
+	)
+	if err != nil {
+		return volumeRemovalInitialPublication{}, err
+	}
+	if found {
+		for _, volume := range previous.Record.Volumes {
+			if volume.ID == runtime.VolumeID && volume.Key == runtime.Key {
+				return prepareVolumeRemovalInitialPublication(initial, task, marker)
+			}
+		}
+	}
+	return volumeRemovalInitialPublication{}, errs.New(
+		errs.KindValidationFailed,
+		"Volume removal immutable key does not match desired baseline",
+	)
+}
+
+func (publication volumeRemovalInitialPublication) classifyConflict(
+	baseCount int,
+	previous idempotencyPlanClassifier,
+) idempotencyPlanClassifier {
+	return func(revision int64, values []*KeyValue) error {
+		if len(values) != baseCount+len(publication.conditions) {
+			return errs.New(errs.KindInternal, "Volume removal publication compare evidence is incomplete")
+		}
+		if err := previous(revision, values[:baseCount]); err != nil {
+			return err
+		}
+		for _, value := range values[baseCount:] {
+			if value != nil {
+				return errs.New(errs.KindStateConflict, "Volume removal operation is already owned")
+			}
+		}
+		return nil
+	}
 }
 
 // EnvironmentVolumeRemovalTaskParams is the single closed parameter contract

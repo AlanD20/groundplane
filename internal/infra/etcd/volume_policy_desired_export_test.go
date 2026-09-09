@@ -2,34 +2,71 @@ package etcd
 
 import (
 	"context"
+	"crypto/sha256"
 	"net/netip"
 	"testing"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // VolumePolicyDesiredFixture uses real policy preparation and publication;
 // only the pre-existing desired baseline and storage are hermetic fixtures.
 type VolumePolicyDesiredFixture struct {
-	Store        Store
-	Task         TaskRecord
-	Marker       IdempotencyMarker
-	Request      EnvironmentBlueprintStageRequest
-	HeadRevision int64
-	prepared     VolumeRemovalBackupPolicyPreparation
-	policy       *backupPolicyReplacementFixture
-	store        *volumePolicyDesiredAuditStore
+	Store                  Store
+	Task                   TaskRecord
+	Marker                 IdempotencyMarker
+	Request                EnvironmentBlueprintStageRequest
+	HeadRevision           int64
+	Initial                *removalrecord.InitialPublication
+	OwnerBeforePublication *removalrecord.Owner
+	prepared               VolumeRemovalBackupPolicyPreparation
+	policy                 *backupPolicyReplacementFixture
+	store                  *volumePolicyDesiredAuditStore
+}
+
+// PrepareRemovalRecords supplies the real closed initial-record input. This
+// fixture does not claim to prepare the still-unwired bounded removal evidence.
+func (fixture *VolumePolicyDesiredFixture) PrepareRemovalRecords(t *testing.T) removalrecord.Runtime {
+	t.Helper()
+	task, marker := &fixture.Task, &fixture.Marker
+	task.TimeoutSeconds = removalrecord.TimeoutSeconds
+	task.IdempotencyKey = marker.Locator.Key
+	runtime := removalrecord.Runtime{
+		OperationID: task.OperationID, EnvironmentID: task.Owner.EnvironmentID, VolumeID: task.Target,
+		Key: fixture.Request.Mutation.Volume.Key, DesiredRevisionID: task.ID,
+		DesiredGeneration:      uint64(task.RenderGeneration),
+		ImpactSHA256:           sha256.Sum256([]byte("fixture impact")),
+		EvidenceManifestSHA256: sha256.Sum256([]byte("fixture evidence")),
+		IntentSHA256: sha256.Sum256(
+			marker.Intent.Ciphertext,
+		), RootResponseSHA256: sha256.Sum256(marker.Response.Body),
+		RootLocator: removalrecord.ReplayLocator{
+			ScopeKind: string(marker.Locator.ScopeKind), ScopeID: marker.Locator.ScopeID,
+			Method: marker.Locator.Method, Route: marker.Locator.Route, Key: marker.Locator.Key,
+		},
+		OriginTaskID: task.ID, CurrentTaskID: task.ID, AttemptOrdinal: 1, StepID: task.Steps[0].ID,
+		Checkpoint: removalrecord.DesiredPublished, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt,
+	}
+	task.Params = EnvironmentVolumeRemovalTaskParams(runtime, 1)
+	initial, err := removalrecord.PrepareInitialPublication(runtime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.Initial = &initial
+	return runtime
 }
 
 type volumePolicyDesiredAuditStore struct {
 	Store
-	conditions        []Condition
-	mutations         []Mutation
-	bytes             int
-	finalPublications int
+	conditions             []Condition
+	mutations              []Mutation
+	bytes                  int
+	finalPublications      int
+	ownerBeforePublication *removalrecord.Owner
 }
 
 func (audit *volumePolicyDesiredAuditStore) TransactEnvironmentBlueprint(
@@ -37,6 +74,18 @@ func (audit *volumePolicyDesiredAuditStore) TransactEnvironmentBlueprint(
 ) (TransactionResult, error) {
 	if err := validateEnvironmentBlueprintTransactionBudget(conditions, mutations); err != nil {
 		return TransactionResult{}, err
+	}
+	if audit.ownerBeforePublication != nil {
+		owner := *audit.ownerBeforePublication
+		value, err := removalrecord.EncodeOwner(owner)
+		if err != nil {
+			return TransactionResult{}, err
+		}
+		defer clear(value)
+		if _, err := audit.Store.Put(ctx, removalrecord.OwnerKey(owner.VolumeID), value); err != nil {
+			return TransactionResult{}, err
+		}
+		audit.ownerBeforePublication = nil
 	}
 	audit.finalPublications++
 	return audit.Transact(ctx, conditions, mutations)
@@ -55,6 +104,42 @@ func (audit *volumePolicyDesiredAuditStore) Transact(
 		return TransactionResult{}, err
 	}
 	audit.bytes = bytes
+	// The older hierarchy double implements exact-key compares only. Model
+	// prefix absence at the same MVCC revision before its synchronous commit.
+	keys := make([]string, len(conditions))
+	for index, condition := range conditions {
+		keys[index] = condition.Key
+	}
+	read, err := audit.Store.GetMany(ctx, GetManyRequest{Keys: keys})
+	if err != nil {
+		return TransactionResult{}, err
+	}
+	prefixConflict := false
+	for index, condition := range conditions {
+		if !condition.Prefix {
+			continue
+		}
+		if condition.ModRevision != 0 {
+			return TransactionResult{}, errs.New(
+				errs.KindInternal,
+				"policy publication fixture only supports prefix absence",
+			)
+		}
+		matching, err := audit.Store.Range(
+			ctx,
+			RangeRequest{Prefix: condition.Key, Limit: 1, Revision: read.ReadRevision},
+		)
+		if err != nil {
+			return TransactionResult{}, err
+		}
+		if len(matching.Values) != 0 {
+			read.Values[index] = &matching.Values[0]
+			prefixConflict = true
+		}
+	}
+	if prefixConflict {
+		return TransactionResult{Revision: read.ReadRevision, FailureReads: read.Values}, nil
+	}
 	return audit.Store.Transact(ctx, conditions, mutations)
 }
 
@@ -150,6 +235,7 @@ func NewVolumePolicyDesiredFixture(t *testing.T) *VolumePolicyDesiredFixture {
 }
 
 func (fixture *VolumePolicyDesiredFixture) Publish(ctx context.Context) (IdempotencyTransactionResult, error) {
+	fixture.store.ownerBeforePublication = fixture.OwnerBeforePublication
 	hierarchy, err := newHierarchyRepository(fixture.Store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -178,6 +264,7 @@ func (fixture *VolumePolicyDesiredFixture) Publish(ctx context.Context) (Idempot
 		BlueprintReleasePublication{},
 		BlueprintRequirementGate{},
 		fixture.prepared,
+		fixture.Initial,
 		fixture.Task,
 		fixture.Marker,
 		fixture.store,
@@ -289,7 +376,13 @@ func (fixture *VolumePolicyDesiredFixture) AssertMaximumSelectionPublished(t *te
 			t.Fatal("publication lost an exact source primary fence")
 		}
 	}
-	if len(fixture.store.conditions) != 38 || len(fixture.store.mutations) != 15 || fixture.store.bytes > 1024*1024 {
+	wantConditions, wantMutations := 38, 15
+	if fixture.Initial != nil {
+		wantConditions += 2
+		wantMutations += 4
+	}
+	if len(fixture.store.conditions) != wantConditions || len(fixture.store.mutations) != wantMutations ||
+		fixture.store.bytes > 1024*1024 {
 		t.Fatalf(
 			"maximum policy/desired publication shape: %d/%d/%d bytes",
 			len(fixture.store.conditions),
