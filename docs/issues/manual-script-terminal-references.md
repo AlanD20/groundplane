@@ -4,6 +4,15 @@ Owner: Script execution / Task persistence.
 Severity: operator lifecycle blocker.
 MVP-required: yes, for exercised manual Script removal.
 
+September9 disposition: the owner-approved, exact-target migration released
+only the three proven-clean legacy body-reference pairs under CAS. Normal
+Script removal then completed as `task_01M23D4XMY7BGB5XJ9JNHBEXFS`; the disposable
+Script is absent and its original execution history is preserved.
+See [migration evidence](../acceptance/2026-09-09-manual-script-legacy-migration.md).
+The remaining acceptance is fresh live execution through the locally integrated
+prepared-source runtime after deployment. The diagnosis below describes the
+pre-migration baseline; no automatic legacy repair was added.
+
 After the manual publication compare-key repair, QA Script
 `scr_01M2104ECJZ050QH7RMDSCFSWG` completed one execution, failed another,
 and aborted a third. All three Tasks are terminal, but normal Script removal
