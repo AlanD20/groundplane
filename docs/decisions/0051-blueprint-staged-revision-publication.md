@@ -431,7 +431,8 @@ Direct Backup Policy replacement retains ADR 0046's idempotent source
 pre-ensure behavior. Blueprint does not use it: all missing three-record source
 tuples are created only in the final publication transaction.
 
-The exact legal publication shapes are:
+The baseline publication accounting, before later capability-specific fences
+and records, is:
 
 | Blueprint shape | Comparisons | Success | Failure | Selected success | Selected failure | Full request |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -446,6 +447,14 @@ publication. Removing or coalescing one would discard desired-head, Task,
 marker, Release, Script, source, Attach, or Backup authority. The Backup-only
 `152/90/152` shape remains useful accounting evidence, but it no longer defines
 a separate envelope.
+
+These baseline counts are not current acceptance evidence. ADR 0049's
+Environment Volume-removal lock adds one absence comparison and its failure
+read to Blueprint publication, without adding a success mutation. Other
+required capability records and source fences must also be counted in the
+complete current candidate. Never omit a required fence or record to reproduce
+an older baseline count. The focused tests pin the complete current shapes;
+their passing evidence, including encoded bytes, is required before acceptance.
 
 The final-publication builder enforces the configured etcd semantics directly:
 at most 256 comparisons, at most 256 success operations, at most 256 failure
@@ -475,15 +484,19 @@ unknown publication cannot expose a new head without all policy identities and
 execution authority, cannot expose source identities without the head, and
 cannot allocate a second age identity on replay.
 
-Required focused proofs are:
+Required focused proofs cover every candidate below. The numeric tuples in
+the first three bullets describe baseline accounting; each executable proof
+must assert the exact complete current comparison, success, and failure counts,
+including all subsequently required fences and records, and measure its
+encoded request against the unchanged envelope:
 
 - the legal QA candidate with eleven Release candidates, two hooks, and two
-  staged physical sources produces exactly `30/42/30`, a 72-operation selected
+  staged physical sources has baseline accounting `30/42/30`, a 72-operation selected
   success path, a 60-operation selected failure path, and 102 full operations;
-- the maximum legal non-Backup Script candidate produces exactly `44/98/44`,
-  and adding the maximum two candidate Attaches produces exactly `117/147/117`;
-- the maximum Backup-only candidate produces exactly `152/90/152`, while the
-  combined maximum Backup plus Script candidate produces exactly `174/175/174`,
+- the maximum legal non-Backup Script candidate has baseline accounting `44/98/44`,
+  and adding the maximum two candidate Attaches has baseline accounting `117/147/117`;
+- the maximum Backup-only candidate has baseline accounting `152/90/152`, while the
+  combined maximum Backup plus Script candidate has baseline accounting `174/175/174`,
   a 349-operation selected success path, a 348-operation selected failure path,
   and 523 full operations;
 - a byte-fitting synthetic boundary plan accepts 256 operations in each arm,
