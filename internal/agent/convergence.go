@@ -14,6 +14,29 @@ type composeConvergence struct {
 	Summary string
 }
 
+// Blueprint reapply can reconcile Components without a native candidate Release
+// procedure. Its selected Component health has the same shared-project boundary.
+func blueprintManagedHealthSelection(
+	plan *agentpb.ExecutionPlan,
+	artifact *agentpb.ComposeArtifact,
+	selected []string,
+) bool {
+	if plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY || len(selected) == 0 {
+		return false
+	}
+	services, err := convergenceServices(artifact, selected)
+	if err != nil {
+		return false
+	}
+	for _, service := range services {
+		if service.GetOwnerComponentId() == "" ||
+			service.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_UNSPECIFIED {
+			return false
+		}
+	}
+	return true
+}
+
 // evaluateComposeConvergence is the pure decision behind WaitHealthy. The
 // observer supplies evidence; this function never queries Docker and never
 // guesses whether a partial or healthcheck-less project is ready.

@@ -1,5 +1,39 @@
 # Integrated disposable floor QA
 
+## Exact-reapply correction, local proof
+
+Read-only diagnostic maps the failed step to Caddy health with
+`blueprint_compose_procedure=none`. The task and current sealed artifact ids
+match. Caddy and Tunnel have exact expected ownership labels. The retained
+app-api blue slot is outside the artifact; the stable proxy retains its older
+plan/generation labels. Those native containers are not selected by Caddy's
+health check. The existing health scoping was enabled by candidate Release
+presence, so a no-candidate reapply incorrectly used whole-project collision
+rejection.
+
+The Agent now selects the existing lifecycle convergence rule for Blueprint
+health selections consisting entirely of Component-owned, unspecified-role
+Services, even without a native candidate. No observer, helper, label,
+mutation-selection or machine-plan validation is weakened. Original collision
+evidence remains intact. The new regression fails with the exact live error
+before correction and passes afterward, including health warm-up and rejection
+of selected/renamed/unnamed containers, selected networks, Volumes, native
+selection and non-Blueprint operations.
+
+Focused race proof: Agent1.422s/5.6%, observer1.060s/53.7%, Controller managed
+startup1.404s/1.8%. The initial `TestObserve` selector also matched two unrelated
+`TestObservedRecreateProbe*` fixtures that reject missing sealed plan hashes;
+no full Agent-suite claim. Focused vet passes. Default Go1.27 causes the pinned
+Staticcheck to panic. Supported Go1.26.7 with repo-local XDG cache runs and
+reports only pre-existing `internal/agent/script_runtime.go:79` unused body
+assignment (SA4006), outside this correction. No analyzer-clean claim.
+Static Agent SHA256 is
+`71a5e605f0dbeb6bd172a71376a9cf34fb7e10ea077b2fccfc17d27c90d4c104`.
+The QA-only package reuses its exact existing runtime layers and has registry
+digest `a94a116e8e6514c89cc23eac56dcebebfc1479ba8d63ce018dc997d8a8417189`.
+Entrypoint, empty command, user0:0, Docker29.1.3 and Compose2.40.3 pass.
+Deployment and live reapply are not yet claimed.
+
 ## Current result: Entry cleanup and full running Apply pass; reapply blocked
 
 Signed `5f2a6f47f` is deployed as `0.0.0-qa.floor20260909.7`, hash

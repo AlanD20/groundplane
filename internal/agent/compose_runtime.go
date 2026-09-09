@@ -362,7 +362,7 @@ func (runtime *ComposeRuntime) waitHealthy(
 		var convergeErr error
 		if len(wait.GetServiceIds()) > 0 &&
 			(plan.GetServiceLifecycleProcedure() != nil || plan.GetManagedComponentProcedure() != nil ||
-				plan.GetCandidateReleaseProcedure() != nil) {
+				plan.GetCandidateReleaseProcedure() != nil || blueprintManagedHealthSelection(plan, artifact, selected)) {
 			convergence, convergeErr = evaluateLifecycleComposeConvergence(artifact, observed, selected, true)
 		} else {
 			convergence, convergeErr = evaluateComposeConvergence(artifact, observed, selected)

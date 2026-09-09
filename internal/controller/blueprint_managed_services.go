@@ -63,8 +63,8 @@ func BlueprintManagedServiceSteps(
 		steps = append(steps, apply)
 		prerequisite = applyID
 	}
-	// Health observes the whole sealed project. First reconcile every managed
-	// Service so a still-prior Component cannot collide with current ownership.
+	// Reconcile all managed Services before selected health. Unrelated retained
+	// native runtimes remain outside each Component's convergence authority.
 	for _, serviceID := range serviceIDs {
 		healthID := ids.DeriveAt(ids.KindStep, planTime, task.PlanID, "blueprint-managed-health:"+serviceID)
 		health := &agentpb.ExecutionStep{
