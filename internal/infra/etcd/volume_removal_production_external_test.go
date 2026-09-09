@@ -173,6 +173,15 @@ func newVolumeRemovalProductionJourney(t *testing.T) (
 	*etcd.VolumeRemovalProductionFixture, *volume.MutationService, *volume.ReadService, api.VolumeMutationResponse,
 ) {
 	t.Helper()
+	fixture, mutations, reads, created := newPendingVolumeProductionJourney(t)
+	fixture.CompleteCreate(t, created.TaskID)
+	return fixture, mutations, reads, created
+}
+
+func newPendingVolumeProductionJourney(t *testing.T) (
+	*etcd.VolumeRemovalProductionFixture, *volume.MutationService, *volume.ReadService, api.VolumeMutationResponse,
+) {
+	t.Helper()
 	fixture := etcd.NewVolumeRemovalProductionFixture(t)
 	protector, ciphertext := manualJourneyEncryptedValue(t, "volume-removal-test-intent")
 	clear(ciphertext)
@@ -219,6 +228,5 @@ func newVolumeRemovalProductionJourney(t *testing.T) (
 	if err := json.Unmarshal(response.Body, &created); err != nil {
 		t.Fatal(err)
 	}
-	fixture.CompleteCreate(t, created.TaskID)
 	return fixture, mutations, reads, created
 }

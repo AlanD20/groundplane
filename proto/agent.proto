@@ -887,6 +887,8 @@ message ManagedNetworkEnsure {
 message ManagedVolumeEnsure {
   string artifact_id = 1;
   string volume_id = 2;
+  // Read-only verification: absence or divergent ownership fails; never create.
+  bool require_existing = 3;
 }
 
 message RunScript {

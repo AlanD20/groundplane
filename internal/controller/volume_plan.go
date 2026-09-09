@@ -130,8 +130,11 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 			{
 				StepId:         task.Steps[1].ID,
 				TimeoutSeconds: uint32(task.TimeoutSeconds),
-				Payload: &agentpb.ExecutionStep_ComposeApply{
-					ComposeApply: &agentpb.ComposeApply{ArtifactId: candidateArtifactID, FullReconcile: true},
+				Payload: &agentpb.ExecutionStep_ManagedVolumeEnsure{
+					ManagedVolumeEnsure: &agentpb.ManagedVolumeEnsure{
+						ArtifactId: candidateArtifactID,
+						VolumeId:   task.Target,
+					},
 				},
 			},
 		}
@@ -150,8 +153,12 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 			VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
 			Operation: agentpb.PlanOperation_PLAN_OPERATION_RECONCILE, TargetID: task.Target,
 			Artifacts: []*agentpb.ComposeArtifact{candidateArtifact}, Steps: []*agentpb.ExecutionStep{{
-				StepId: task.Steps[0].ID, TimeoutSeconds: uint32(task.TimeoutSeconds), Payload: &agentpb.ExecutionStep_ComposeApply{
-					ComposeApply: &agentpb.ComposeApply{ArtifactId: candidateArtifactID, FullReconcile: true},
+				StepId: task.Steps[0].ID, TimeoutSeconds: uint32(task.TimeoutSeconds), Payload: &agentpb.ExecutionStep_ManagedVolumeEnsure{
+					ManagedVolumeEnsure: &agentpb.ManagedVolumeEnsure{
+						ArtifactId:      candidateArtifactID,
+						VolumeId:        task.Target,
+						RequireExisting: true,
+					},
 				},
 			}},
 		})
@@ -379,7 +386,7 @@ func rebindVolumeArtifactForPlan(
 	}
 	owned := proto.Clone(source).(*agentpb.ComposeArtifact)
 	owned.ArtifactId = artifactID
-	if err := validateVolumeRemovalServiceOwnership(owned); err != nil {
+	if err := validateVolumeServiceOwnership(owned); err != nil {
 		return nil, err
 	}
 	return owned, nil

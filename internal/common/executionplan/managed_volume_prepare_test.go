@@ -38,7 +38,7 @@ func TestManagedVolumeEnsureBindsOwnedManagedSelection(t *testing.T) {
 				operation = agentpb.PlanOperation_PLAN_OPERATION_REMOVE
 			}
 			err := validateManagedVolumeEnsure(
-				operation,
+				&agentpb.ExecutionPlan{Operation: operation},
 				ensure,
 				map[string]*agentpb.ComposeArtifact{"artifact": artifact},
 			)

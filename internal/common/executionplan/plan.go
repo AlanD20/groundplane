@@ -238,7 +238,7 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 	materializationIDs := make(map[string]struct{})
 	materializationDestinations := make(map[string]struct{})
 	for _, step := range plan.Steps {
-		if err := validateStep(plan.Operation, plan.RenderGeneration, step, artifacts, plan.Steps); err != nil {
+		if err := validateStep(plan, step, artifacts, plan.Steps); err != nil {
 			return err
 		}
 		if procedure := step.GetAdapterProcedure(); procedure != nil &&
@@ -412,7 +412,7 @@ func validateArtifactFreeAdapterPlan(plan *agentpb.ExecutionPlan) error {
 	}
 	stepIDs := make(map[string]struct{}, len(plan.Steps))
 	for _, step := range plan.Steps {
-		if err := validateStep(plan.Operation, plan.RenderGeneration, step, nil, nil); err != nil {
+		if err := validateStep(plan, step, nil, nil); err != nil {
 			return err
 		}
 		procedure := step.GetAdapterProcedure()
@@ -433,7 +433,7 @@ func validateArtifactFreeEnvironmentRemovePlan(plan *agentpb.ExecutionPlan) erro
 		return errs.New(errs.KindValidationFailed, "artifact-free Environment remove plan shape is invalid")
 	}
 	step := plan.Steps[0]
-	if err := validateStep(plan.Operation, plan.RenderGeneration, step, nil, nil); err != nil {
+	if err := validateStep(plan, step, nil, nil); err != nil {
 		return err
 	}
 	remove := step.GetEnvironmentDirectoryRemove()
@@ -449,7 +449,7 @@ func validateArtifactFreeManagedNetworkRemovePlan(plan *agentpb.ExecutionPlan) e
 		return errs.New(errs.KindValidationFailed, "artifact-free managed network remove plan shape is invalid")
 	}
 	step := plan.Steps[0]
-	if err := validateStep(plan.Operation, plan.RenderGeneration, step, nil, nil); err != nil {
+	if err := validateStep(plan, step, nil, nil); err != nil {
 		return err
 	}
 	remove := step.GetManagedNetworkRemove()
@@ -467,7 +467,7 @@ func validateEnvironmentCreatePlan(plan *agentpb.ExecutionPlan) error {
 		return errs.New(errs.KindValidationFailed, "environment create plan shape is invalid")
 	}
 	step := plan.Steps[0]
-	if err := validateStep(plan.Operation, plan.RenderGeneration, step, nil, nil); err != nil {
+	if err := validateStep(plan, step, nil, nil); err != nil {
 		return err
 	}
 	return validateEnvironmentDirectoryCreateTarget(plan, step)
@@ -670,12 +670,12 @@ func validateLabels(
 }
 
 func validateStep(
-	operation agentpb.PlanOperation,
-	renderGeneration uint64,
+	plan *agentpb.ExecutionPlan,
 	step *agentpb.ExecutionStep,
 	artifacts map[string]*agentpb.ComposeArtifact,
 	steps []*agentpb.ExecutionStep,
 ) error {
+	operation, renderGeneration := plan.GetOperation(), plan.GetRenderGeneration()
 	if step == nil || validateID(ids.KindStep, step.StepId) != nil || step.TimeoutSeconds == 0 {
 		return errs.New(errs.KindValidationFailed, "execution step identity or timeout is invalid")
 	}
@@ -771,7 +771,7 @@ func validateStep(
 	case *agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure:
 		return validateManagedVolumeDirectoriesEnsure(operation, payload.ManagedVolumeDirectoriesEnsure, artifacts)
 	case *agentpb.ExecutionStep_ManagedVolumeEnsure:
-		return validateManagedVolumeEnsure(operation, payload.ManagedVolumeEnsure, artifacts)
+		return validateManagedVolumeEnsure(plan, payload.ManagedVolumeEnsure, artifacts)
 	case *agentpb.ExecutionStep_ManagedVolumeRemove:
 		remove := payload.ManagedVolumeRemove
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE || remove == nil ||
@@ -872,7 +872,7 @@ func validateComponentApplyPlan(plan *agentpb.ExecutionPlan, artifacts map[strin
 		return errs.New(errs.KindValidationFailed, "component apply plan must contain two or four steps")
 	}
 	for _, step := range plan.Steps {
-		if err := validateStep(plan.Operation, plan.RenderGeneration, step, artifacts, plan.Steps); err != nil {
+		if err := validateStep(plan, step, artifacts, plan.Steps); err != nil {
 			return err
 		}
 	}

@@ -52,7 +52,12 @@ func TestBlueprintManagedNoDependenciesDoesNotAuthorizeNativeOrAmbiguousSelectio
 				TimeoutSeconds: 120,
 				Payload:        &agentpb.ExecutionStep_ComposeApply{ComposeApply: apply},
 			}
-			err := validateStep(operation, 1, step, map[string]*agentpb.ComposeArtifact{artifactID: artifact}, nil)
+			err := validateStep(
+				&agentpb.ExecutionPlan{Operation: operation, RenderGeneration: 1},
+				step,
+				map[string]*agentpb.ComposeArtifact{artifactID: artifact},
+				nil,
+			)
 			wantAllowed := name == "managed" || name == "native-force"
 			if (err == nil) != wantAllowed {
 				t.Fatalf("selection validation = %v, allowed=%t", err, wantAllowed)

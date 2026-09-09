@@ -79,6 +79,16 @@ func executeManagedVolumeEnsure(
 	}
 	executionCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
+	if ensure.RequireExisting {
+		inspection, exists, failure, err := inspectManagedComposeVolume(executionCtx, taskRunner, selected.DockerName)
+		if err != nil || failure != nil {
+			return failure, err
+		}
+		if !exists || !managedVolumeMatches(inspection, owned.Volumes[0], options["device"], artifact.ProjectName) {
+			return failedResponse(1), nil
+		}
+		return completedResponse(), nil
+	}
 	response, err := ensureManagedComposeVolumes(executionCtx, taskRunner, owned)
 	if err != nil || response != nil {
 		return response, err

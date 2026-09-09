@@ -102,19 +102,8 @@ func MutateEnvironmentVolumeArtifact(
 		}
 		owned.Volumes = kept
 	}
-	if mutation.Action == VolumeArtifactRemove {
-		if err := validateVolumeRemovalServiceOwnership(owned); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := rewriteArtifactOwnership(root, mutation.PlanID, mutation.RenderGeneration); err != nil {
-			return nil, err
-		}
-		for _, service := range owned.Services {
-			if err := rewriteServiceExpectedLabels(service.GetExpectedLabels(), mutation.PlanID, mutation.RenderGeneration); err != nil {
-				return nil, err
-			}
-		}
+	if err := validateVolumeServiceOwnership(owned); err != nil {
+		return nil, err
 	}
 	for _, network := range owned.Networks {
 		labels, err := stableExpectedLabels(network.GetExpectedLabels())
@@ -144,9 +133,9 @@ func MutateEnvironmentVolumeArtifact(
 	return owned, nil
 }
 
-// Removal changes mounts, not the serving Release's execution ownership.
+// Volume identity changes do not replace a serving Release's execution ownership.
 // Full plan validation still checks label ordering, resource identity and YAML.
-func validateVolumeRemovalServiceOwnership(artifact *agentpb.ComposeArtifact) error {
+func validateVolumeServiceOwnership(artifact *agentpb.ComposeArtifact) error {
 	for _, service := range artifact.Services {
 		plan, generation := "", ""
 		for _, label := range service.GetExpectedLabels() {

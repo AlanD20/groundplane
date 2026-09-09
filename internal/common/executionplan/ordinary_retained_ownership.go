@@ -15,7 +15,8 @@ func validRetainedOwnership(
 	if plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY {
 		return validBlueprintRetainedOwnership(plan, artifact, serviceID, labels)
 	}
-	if validOrdinaryRetainedOwnership(plan, artifact, serviceID, labels) {
+	if validOrdinaryRetainedOwnership(plan, artifact, serviceID, labels) ||
+		validVolumeResourceOnlyOwnership(plan, artifact, labels) {
 		return true, ""
 	}
 	return retainedOwnershipReject(retainedOwnershipInvalidInput)
@@ -55,13 +56,19 @@ func validOrdinaryRetainedOwnership(
 	for _, member := range plan.GetCandidateReleaseProcedure().GetMembers() {
 		prior := member.GetServingPredecessor()
 		if member.GetServiceId() != serviceID || prior == nil ||
-			artifact.GetArtifactId() != prior.GetPriorArtifactId() && artifact.GetArtifactId() != prior.GetRetainedPriorArtifactId() {
+			artifact.GetArtifactId() != prior.GetPriorArtifactId() &&
+				artifact.GetArtifactId() != prior.GetRetainedPriorArtifactId() {
 			continue
 		}
 		candidate := artifacts[member.GetCandidateArtifactId()]
 		if selected != nil || candidate == nil || candidate.OwnerId != artifact.OwnerId ||
 			candidate.ProjectName != artifact.ProjectName || candidate.AuthorizedVolumeDir != artifact.AuthorizedVolumeDir ||
-			validateCandidateServingPredecessorReferences(prior, serviceID, member.GetCandidateArtifactId(), artifacts) != nil {
+			validateCandidateServingPredecessorReferences(
+				prior,
+				serviceID,
+				member.GetCandidateArtifactId(),
+				artifacts,
+			) != nil {
 			return false
 		}
 		selected = member

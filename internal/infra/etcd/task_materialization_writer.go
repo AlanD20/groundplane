@@ -212,11 +212,16 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 			"task desired revision is unavailable",
 		)
 	}
-	// A configuration-only Blueprint did not execute the desired workload
-	// artifact. Preserve the complete prior acknowledged projection and revision.
-	if record.Type == TaskUpdate && !taskHasBlueprintCandidateAppliedAuthority(record) && state.Values[1] != nil {
-		if _, err := decodeEnvironmentComposeProjection(state.Values[1].Value); err != nil {
-			return taskMaterializationProjectionChange{}, err
+	// Configuration-only updates and Volume identity Tasks do not execute the
+	// desired workloads. Preserve prior applied authority, including its absence.
+	volumeIdentity := record.Params[TaskResourceKindParam] == TaskResourceVolume &&
+		(record.Type == TaskCreate || record.Type == TaskUpdate)
+	if volumeIdentity ||
+		record.Type == TaskUpdate && !taskHasBlueprintCandidateAppliedAuthority(record) && state.Values[1] != nil {
+		if state.Values[1] != nil {
+			if _, err := decodeEnvironmentComposeProjection(state.Values[1].Value); err != nil {
+				return taskMaterializationProjectionChange{}, err
+			}
 		}
 		return taskMaterializationProjectionChange{}, nil
 	}

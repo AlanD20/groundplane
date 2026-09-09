@@ -51,7 +51,8 @@ func buildVolumeMutationPlan(
 			artifactID: oldArtifact.ArtifactId, volumeID: request.volumeID, key: request.key, intent: intentDigest,
 		})
 	} else {
-		appendStep(volumeComposeApplyPayload{artifactID: newArtifact.ArtifactId, fullReconcile: true})
+		appendStep(volumeDockerEnsurePayload{artifactID: newArtifact.ArtifactId, volumeID: request.volumeID,
+			requireExisting: request.action == volumeMutationActionEdit})
 	}
 	plan, err := controller.BuildPlan(controller.PlanBuildInput{
 		VolumeRoot: volumeRoot, PlanID: planID, RenderGeneration: generation,
@@ -89,18 +90,28 @@ func (value volumeEnsurePayload) step(id string, timeout uint32) *agentpb.Execut
 }
 
 type volumeComposeApplyPayload struct {
-	artifactID    string
-	serviceIDs    []string
-	fullReconcile bool
+	artifactID string
+	serviceIDs []string
 }
 
 func (value volumeComposeApplyPayload) step(id string, timeout uint32) *agentpb.ExecutionStep {
 	return &agentpb.ExecutionStep{StepId: id, TimeoutSeconds: timeout, Payload: &agentpb.ExecutionStep_ComposeApply{
 		ComposeApply: &agentpb.ComposeApply{
 			ArtifactId: value.artifactID, ServiceIds: append([]string(nil), value.serviceIDs...),
-			FullReconcile: value.fullReconcile,
 		},
 	}}
+}
+
+type volumeDockerEnsurePayload struct {
+	artifactID, volumeID string
+	requireExisting      bool
+}
+
+func (value volumeDockerEnsurePayload) step(id string, timeout uint32) *agentpb.ExecutionStep {
+	return &agentpb.ExecutionStep{StepId: id, TimeoutSeconds: timeout,
+		Payload: &agentpb.ExecutionStep_ManagedVolumeEnsure{ManagedVolumeEnsure: &agentpb.ManagedVolumeEnsure{
+			ArtifactId: value.artifactID, VolumeId: value.volumeID, RequireExisting: value.requireExisting,
+		}}}
 }
 
 type volumeDockerRemovePayload struct{ volumeID string }

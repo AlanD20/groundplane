@@ -94,9 +94,28 @@ func TestResolveVolumeAddPlanReplaysStableHash(t *testing.T) {
 	ensure := first.Steps[0].GetManagedVolumeDirectoriesEnsure()
 	if ensure == nil || len(ensure.VolumeIds) != 1 || ensure.VolumeIds[0] != state.volumeID ||
 		!bytes.Equal(ensure.IntentSha256, state.intentDigest) ||
-		first.Steps[1].GetComposeApply() == nil || !first.Steps[1].GetComposeApply().FullReconcile ||
+		first.Steps[1].GetManagedVolumeEnsure() == nil || first.Steps[1].GetManagedVolumeEnsure().RequireExisting ||
 		!bytes.Equal(first.PlanHash, second.PlanHash) {
 		t.Fatalf("resolved add plans = %#v / %#v", first, second)
+	}
+}
+
+// Rationale: slug edits prove existing ownership without a full Compose apply,
+// which would restart independently serving workloads and create missing data.
+func TestResolveVolumeEditPlanOnlyVerifiesExistingVolume(t *testing.T) {
+	state := newVolumePlanState(t, false)
+	state.editTask.Steps = state.addTask.Steps[:1]
+	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", state.reader, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := resolver.ResolveExecutionPlan(t.Context(), state.editTask)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verify := plan.Steps[0].GetManagedVolumeEnsure()
+	if verify == nil || !verify.RequireExisting || verify.VolumeId != state.volumeID {
+		t.Fatal("slug edit can mutate runtime")
 	}
 }
 

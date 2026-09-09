@@ -8839,11 +8839,13 @@ func (x *ManagedNetworkEnsure) GetNetworkId() string {
 // Resource-only preparation of one owned managed bind volume before consumers.
 // The directory leaf is prepared separately by ManagedVolumeDirectoriesEnsure.
 type ManagedVolumeEnsure struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ArtifactId    string                 `protobuf:"bytes,1,opt,name=artifact_id,json=artifactId,proto3" json:"artifact_id,omitempty"`
-	VolumeId      string                 `protobuf:"bytes,2,opt,name=volume_id,json=volumeId,proto3" json:"volume_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	ArtifactId string                 `protobuf:"bytes,1,opt,name=artifact_id,json=artifactId,proto3" json:"artifact_id,omitempty"`
+	VolumeId   string                 `protobuf:"bytes,2,opt,name=volume_id,json=volumeId,proto3" json:"volume_id,omitempty"`
+	// Read-only verification: absence or divergent ownership fails; never create.
+	RequireExisting bool `protobuf:"varint,3,opt,name=require_existing,json=requireExisting,proto3" json:"require_existing,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ManagedVolumeEnsure) Reset() {
@@ -8888,6 +8890,13 @@ func (x *ManagedVolumeEnsure) GetVolumeId() string {
 		return x.VolumeId
 	}
 	return ""
+}
+
+func (x *ManagedVolumeEnsure) GetRequireExisting() bool {
+	if x != nil {
+		return x.RequireExisting
+	}
+	return false
 }
 
 type RunScript struct {
@@ -16688,11 +16697,12 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\vartifact_id\x18\x01 \x01(\tR\n" +
 	"artifactId\x12\x1d\n" +
 	"\n" +
-	"network_id\x18\x02 \x01(\tR\tnetworkId\"S\n" +
+	"network_id\x18\x02 \x01(\tR\tnetworkId\"~\n" +
 	"\x13ManagedVolumeEnsure\x12\x1f\n" +
 	"\vartifact_id\x18\x01 \x01(\tR\n" +
 	"artifactId\x12\x1b\n" +
-	"\tvolume_id\x18\x02 \x01(\tR\bvolumeId\"\xd8\x03\n" +
+	"\tvolume_id\x18\x02 \x01(\tR\bvolumeId\x12)\n" +
+	"\x10require_existing\x18\x03 \x01(\bR\x0frequireExisting\"\xd8\x03\n" +
 	"\tRunScript\x12.\n" +
 	"\x13script_execution_id\x18\x01 \x01(\tR\x11scriptExecutionId\x12\x1b\n" +
 	"\tscript_id\x18\x02 \x01(\tR\bscriptId\x12+\n" +

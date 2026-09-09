@@ -14,8 +14,22 @@ YAML and mount evidence. The new projection regression passes, including
 unrelated mount preservation and missing-label rejection. Reconstructed removal
 plans also pass. No coverage or plan ownership guard was relaxed.
 
-Volume add/edit and Entry still relabel and fully reconcile retained workloads.
-Their correction remains required. Removal consumer execution also needs a
+Volume add/edit now retain runtime ownership too. Add executes only its directory
+and selected Docker Volume ensure; edit verifies the existing Volume without
+creating or repairing it. The private helper's `require_existing` field is
+read-only. Historical ownership is accepted only for the exact one-Volume
+create/verify plan shapes; adding workload execution or another resource rejects.
+Both retained slot projections and a real native-renderer plan pass. A joined
+public create/edit, Agent-worker and terminal-acknowledgement test proves active
+creation, read-only rename and replay with faked Docker/filesystem effects.
+No Compose/container command is permitted in that test.
+The same journey reproduced a resource-only create falsely promoting the entire
+desired projection as applied. Create/edit terminal acknowledgement now preserves
+the prior applied-workload snapshot (or its absence), rather than asserting that
+unexecuted desired Service changes were deployed.
+
+Entry still relabels and fully reconciles retained workloads; its correction
+remains required. Removal consumer execution also needs a
 dependency-free selection proof; the existing targeted apply still permits
 Compose dependency expansion. These local checks are not live retained-runtime
 acceptance, and this issue remains a floor blocker.

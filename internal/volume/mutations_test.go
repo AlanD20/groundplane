@@ -43,7 +43,7 @@ func TestBuildVolumeMutationProjectionAndPlansRoundTripAddRemove(t *testing.T) {
 	}
 	if len(added.Volumes) != 1 || added.Volumes[0].ID != volumeID ||
 		len(addSteps) != 2 || addPlan.Steps[0].GetManagedVolumeDirectoriesEnsure() == nil ||
-		addPlan.Steps[1].GetComposeApply() == nil {
+		addPlan.Steps[1].GetManagedVolumeEnsure() == nil || addPlan.Steps[1].GetManagedVolumeEnsure().RequireExisting {
 		t.Fatalf("add projection/plan = %#v, %#v", added, addPlan)
 	}
 	artifactBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(addArtifact)

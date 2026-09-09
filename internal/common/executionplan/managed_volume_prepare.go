@@ -41,11 +41,12 @@ func validateManagedVolumeDirectoriesEnsure(
 }
 
 func validateManagedVolumeEnsure(
-	operation agentpb.PlanOperation,
+	plan *agentpb.ExecutionPlan,
 	ensure *agentpb.ManagedVolumeEnsure,
 	artifacts map[string]*agentpb.ComposeArtifact,
 ) error {
-	if ensure == nil || operation != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY ||
+	if ensure == nil ||
+		(plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY && !validVolumeResourceOnlyPlan(plan)) ||
 		validateID(ids.KindVolume, ensure.GetVolumeId()) != nil {
 		return errs.New(errs.KindValidationFailed, "managed volume preparation payload is invalid")
 	}
