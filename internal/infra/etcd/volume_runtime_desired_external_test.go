@@ -210,3 +210,43 @@ func TestVolumeRuntimeDesiredPublicationExcludesMaterializationWriter(t *testing
 		})
 	}
 }
+
+// Rationale: publishing another desired mutation while cleanup holds the
+// Environment lock would invalidate the removal Task's pinned desired head.
+func TestEnvironmentDesiredMutationExcludesVolumeRemovalLock(t *testing.T) {
+	for _, late := range []bool{false, true} {
+		t.Run(map[bool]string{false: "held", true: "late acquisition"}[late], func(t *testing.T) {
+			ctx := context.Background()
+			fixture := etcd.NewVolumePolicyDesiredFixture(t)
+			stageVolumePolicyDesired(t, fixture)
+			owner := removalrecord.Owner{
+				VolumeID: fixture.Task.Target, EnvironmentID: fixture.Task.Owner.EnvironmentID, OperationID: ids.New(ids.KindOperation),
+			}
+			if late {
+				fixture.EnvironmentLockBeforePublication = &owner
+			} else {
+				value, err := removalrecord.EncodeOwner(owner)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := fixture.Store.Put(ctx, removalrecord.EnvironmentLockKey(owner.EnvironmentID), value); err != nil {
+					t.Fatal(err)
+				}
+			}
+			before := fixture.Revision()
+			result, err := fixture.Publish(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			outcome, _, conflict, err := result.Classify()
+			if kind, _ := errs.KindOf(conflict); err != nil || outcome != etcd.IdempotencyKnownConflict ||
+				kind != errs.KindStateConflict {
+				t.Fatalf("desired mutation ignored removal lock: %v/%v/%v", outcome, conflict, err)
+			}
+			if late {
+				before++
+			}
+			fixture.AssertUnpublished(t, before)
+		})
+	}
+}

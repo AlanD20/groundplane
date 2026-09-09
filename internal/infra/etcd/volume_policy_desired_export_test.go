@@ -16,17 +16,18 @@ import (
 // VolumePolicyDesiredFixture uses real policy preparation and publication;
 // only the pre-existing desired baseline and storage are hermetic fixtures.
 type VolumePolicyDesiredFixture struct {
-	Store                   Store
-	Task                    TaskRecord
-	Marker                  IdempotencyMarker
-	Request                 EnvironmentBlueprintStageRequest
-	HeadRevision            int64
-	Initial                 *removalrecord.InitialPublication
-	OwnerBeforePublication  *removalrecord.Owner
-	writerBeforePublication *taskMaterializationWriterRecord
-	prepared                VolumeRemovalBackupPolicyPreparation
-	policy                  *backupPolicyReplacementFixture
-	store                   *volumePolicyDesiredAuditStore
+	Store                            Store
+	Task                             TaskRecord
+	Marker                           IdempotencyMarker
+	Request                          EnvironmentBlueprintStageRequest
+	HeadRevision                     int64
+	Initial                          *removalrecord.InitialPublication
+	OwnerBeforePublication           *removalrecord.Owner
+	EnvironmentLockBeforePublication *removalrecord.Owner
+	writerBeforePublication          *taskMaterializationWriterRecord
+	prepared                         VolumeRemovalBackupPolicyPreparation
+	policy                           *backupPolicyReplacementFixture
+	store                            *volumePolicyDesiredAuditStore
 }
 
 // PrepareRemovalRecords supplies the real closed initial-record input. This
@@ -63,12 +64,13 @@ func (fixture *VolumePolicyDesiredFixture) PrepareRemovalRecords(t *testing.T) r
 
 type volumePolicyDesiredAuditStore struct {
 	Store
-	conditions              []Condition
-	mutations               []Mutation
-	bytes                   int
-	finalPublications       int
-	ownerBeforePublication  *removalrecord.Owner
-	writerBeforePublication *taskMaterializationWriterRecord
+	conditions                       []Condition
+	mutations                        []Mutation
+	bytes                            int
+	finalPublications                int
+	ownerBeforePublication           *removalrecord.Owner
+	environmentLockBeforePublication *removalrecord.Owner
+	writerBeforePublication          *taskMaterializationWriterRecord
 }
 
 func (audit *volumePolicyDesiredAuditStore) TransactEnvironmentBlueprint(
@@ -100,6 +102,18 @@ func (audit *volumePolicyDesiredAuditStore) TransactEnvironmentBlueprint(
 			return TransactionResult{}, err
 		}
 		audit.ownerBeforePublication = nil
+	}
+	if audit.environmentLockBeforePublication != nil {
+		owner := *audit.environmentLockBeforePublication
+		value, err := removalrecord.EncodeOwner(owner)
+		if err != nil {
+			return TransactionResult{}, err
+		}
+		defer clear(value)
+		if _, err := audit.Store.Put(ctx, removalrecord.EnvironmentLockKey(owner.EnvironmentID), value); err != nil {
+			return TransactionResult{}, err
+		}
+		audit.environmentLockBeforePublication = nil
 	}
 	audit.finalPublications++
 	return audit.Transact(ctx, conditions, mutations)
@@ -250,6 +264,7 @@ func NewVolumePolicyDesiredFixture(t *testing.T) *VolumePolicyDesiredFixture {
 
 func (fixture *VolumePolicyDesiredFixture) Publish(ctx context.Context) (IdempotencyTransactionResult, error) {
 	fixture.store.ownerBeforePublication = fixture.OwnerBeforePublication
+	fixture.store.environmentLockBeforePublication = fixture.EnvironmentLockBeforePublication
 	fixture.store.writerBeforePublication = fixture.writerBeforePublication
 	hierarchy, err := newHierarchyRepository(fixture.Store)
 	if err != nil {
@@ -414,6 +429,8 @@ func (fixture *VolumePolicyDesiredFixture) AssertMaximumSelectionPublished(t *te
 	if fixture.Initial != nil {
 		wantConditions += 4
 		wantMutations += 5
+	} else {
+		wantConditions++ // Ordinary desired mutation must exclude the Environment removal lock too.
 	}
 	if len(fixture.store.conditions) != wantConditions || len(fixture.store.mutations) != wantMutations ||
 		fixture.store.bytes > 1024*1024 {

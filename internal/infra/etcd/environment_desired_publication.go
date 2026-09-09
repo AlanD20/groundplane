@@ -350,10 +350,18 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 			Mutation{Type: MutationPut, Key: environmentPoolRegistryKey, Value: poolChange.registryValue},
 		)
 	}
+	removalLockConditionIndex := -1
+	if volumeInitial == nil && claim.SourceKind == EnvironmentBlueprintSourceMutation {
+		removalLockConditionIndex = len(conditions)
+		conditions = append(conditions, Condition{Key: removalrecord.EnvironmentLockKey(environment.Record.ID)})
+	}
 	baseCount := len(conditions)
 	baseClassifier := func(_ int64, values []*KeyValue) error {
 		if len(values) != baseCount+len(fence.conditions) {
 			return errs.New(errs.KindInternal, "Environment desired publication compare evidence is incomplete")
+		}
+		if removalLockConditionIndex >= 0 && values[removalLockConditionIndex] != nil {
+			return errs.New(errs.KindStateConflict, "Environment Volume removal is in progress")
 		}
 		if values[2] != nil {
 			activeTaskID, decodeErr := decodeTaskReference(values[2].Value)
