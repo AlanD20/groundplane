@@ -33,6 +33,10 @@ allowances must not be weakened to hide findings.
 
 ## Work completed after the snapshot
 
+- The integrated QA direct-retention regression adds one Controller test-only
+  import in `volume_retained_publication_external_test.go`. It belongs to the
+  same app-owned integration-fixture move; the small publisher correction is
+  below the unchanged 600-line ceiling.
 - The September 9 bounded Blueprint correction adds two etcd external journey
   files with three test-only imports across Controller/blueprintrelease/Agent
   (`blueprint_publication_size_external_test.go` and

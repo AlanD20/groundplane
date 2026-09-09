@@ -178,11 +178,16 @@ func newVolumeRemovalProductionJourney(t *testing.T) (
 	return fixture, mutations, reads, created
 }
 
-func newPendingVolumeProductionJourney(t *testing.T) (
+func newPendingVolumeProductionJourney(t *testing.T, existing ...*etcd.VolumeRemovalProductionFixture) (
 	*etcd.VolumeRemovalProductionFixture, *volume.MutationService, *volume.ReadService, api.VolumeMutationResponse,
 ) {
 	t.Helper()
-	fixture := etcd.NewVolumeRemovalProductionFixture(t)
+	var fixture *etcd.VolumeRemovalProductionFixture
+	if len(existing) != 0 {
+		fixture = existing[0]
+	} else {
+		fixture = etcd.NewVolumeRemovalProductionFixture(t)
+	}
 	protector, ciphertext := manualJourneyEncryptedValue(t, "volume-removal-test-intent")
 	clear(ciphertext)
 	coordinator, err := idempotentintent.NewCoordinator(protector)

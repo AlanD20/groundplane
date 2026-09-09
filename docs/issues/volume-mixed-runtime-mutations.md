@@ -2,6 +2,16 @@
 
 ## Removal integration progress — 2026-09-09
 
+Integrated QA deployment exposed another publication boundary: retained physical
+runtime metadata made direct mutations demand an Apply-only Release fragment.
+The real native Apply -> retained managed Apply -> Volume create regression
+reproduced that exact 422. The shared publisher now scopes the check to Apply;
+direct mutations retain their sealed baseline and head fence, and still cannot
+publish Blueprint domains. Actual create/edit/DELETE and reconstruction pass,
+alongside Apply tamper/source fences and existing Agent/Entry terminal checks.
+The corrected Controller builds; live rerun remains pending. Evidence:
+`docs/acceptance/2026-09-09-integrated-floor-qa.md`.
+
 The actual DELETE publisher, Script exclusion, durable runtime, assignment-owned
 Agent checkpoints, bounded helper calls, Retry and terminal ownership release
 are connected. A hermetic DELETE/worker/terminal journey and separate real-file

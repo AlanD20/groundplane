@@ -163,8 +163,13 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	if err := releasePublication.validate(environment.Record.ID, task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := releasePublication.validateRetainedRuntime(task, projection); err != nil {
-		return IdempotencyTransactionResult{}, err
+	// Apply assembles independently captured Release sources. Direct mutations
+	// instead retain their sealed desired baseline, fenced by the head below;
+	// they cannot carry a Blueprint Release publication fragment.
+	if claim.SourceKind == EnvironmentBlueprintSourceApply {
+		if err := releasePublication.validateRetainedRuntime(task, projection); err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
 	}
 	task = cloneTaskRecord(task)
 	if task.IdempotencyKey == "" {

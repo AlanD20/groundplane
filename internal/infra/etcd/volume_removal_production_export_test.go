@@ -25,6 +25,25 @@ type VolumeRemovalProductionFixture struct {
 	authority     *ScriptSourceReferenceAuthority
 }
 
+func (fixture *ExecutedArtifactFixture) VolumeMutationFixture(t *testing.T) *VolumeRemovalProductionFixture {
+	t.Helper()
+	blueprint, err := newEnvironmentBlueprintRepository(
+		fixture.store,
+		environmentBlueprintTestTransactionStore{fixture.store},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idempotency, err := newIdempotencyRepository(fixture.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &VolumeRemovalProductionFixture{
+		Blueprint: blueprint, Idempotency: idempotency, Tasks: fixture.Tasks, Store: fixture.store,
+		Evidence: NewVolumeEvidenceStageAudit(fixture.store), EnvironmentID: fixture.Environment.Record.ID,
+	}
+}
+
 func NewVolumeRemovalProductionFixture(t *testing.T) *VolumeRemovalProductionFixture {
 	t.Helper()
 	store := &releasePlanningTestStore{memoryHierarchyStore: newMemoryHierarchyStore()}

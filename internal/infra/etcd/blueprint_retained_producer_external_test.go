@@ -164,7 +164,8 @@ func proveRetainedBlueprintProducer(
 		t.Fatal(err)
 	}
 	projection.Components = []etcd.ComponentRecord{caddy, tunnel}
-	projection.NormalizedCompose, err = project.MarshalYAML()
+	// Generated Component Services are runtime output, not authored native input.
+	projection.NormalizedCompose, err = nativeProject.MarshalYAML()
 	if err != nil {
 		t.Fatal(err)
 	}
