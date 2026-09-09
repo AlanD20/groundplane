@@ -31,6 +31,15 @@ type VolumePolicyDesiredFixture struct {
 	store                            *volumePolicyDesiredAuditStore
 }
 
+func (fixture *VolumePolicyDesiredFixture) TaskRepository(t *testing.T) *TaskRepository {
+	t.Helper()
+	repository, err := newTaskRepository(fixture.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return repository
+}
+
 func (fixture *VolumePolicyDesiredFixture) ParentDeletionBegin(
 	kind HierarchyDeletionTargetKind,
 ) HierarchyDeletionBegin {
@@ -86,6 +95,8 @@ type volumePolicyDesiredAuditStore struct {
 	environmentLockBeforePublication *removalrecord.Owner
 	parentBeforePublication          *HierarchyCoordinationRecord
 	writerBeforePublication          *taskMaterializationWriterRecord
+	terminalBeforeCommit             func()
+	loseTerminalResponse             bool
 }
 
 func (audit *volumePolicyDesiredAuditStore) TransactEnvironmentBlueprint(
@@ -195,7 +206,59 @@ func (audit *volumePolicyDesiredAuditStore) Transact(
 	if prefixConflict {
 		return TransactionResult{Revision: read.ReadRevision, FailureReads: read.Values}, nil
 	}
-	return audit.Store.Transact(ctx, conditions, mutations)
+	terminal := false
+	for _, mutation := range mutations {
+		if mutation.Type == MutationDelete && mutation.Prefix {
+			terminal = true
+		}
+	}
+	if terminal && audit.terminalBeforeCommit != nil {
+		beforeCommit := audit.terminalBeforeCommit
+		audit.terminalBeforeCommit = nil
+		beforeCommit()
+	}
+	result, err := audit.Store.Transact(ctx, conditions, mutations)
+	if err == nil && result.Succeeded && terminal && audit.loseTerminalResponse {
+		audit.loseTerminalResponse = false
+		return TransactionResult{}, errs.New(errs.KindRequestFailed, "fixture lost terminal response")
+	}
+	return result, err
+}
+
+func (fixture *VolumePolicyDesiredFixture) BeforeRemovalTerminalCommit(action func()) {
+	fixture.store.terminalBeforeCommit = action
+}
+
+func (fixture *VolumePolicyDesiredFixture) LoseRemovalTerminalResponse() {
+	fixture.store.loseTerminalResponse = true
+}
+
+func (fixture *VolumePolicyDesiredFixture) AssertRemovalTerminal(t *testing.T, revision int64, at time.Time) {
+	t.Helper()
+	markerKey, err := idempotencyMarkerKey(fixture.Marker.Locator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retentionKey, err := idempotencyRetentionKey(markerKey, at.Add(markerRetention))
+	if err != nil {
+		t.Fatal(err)
+	}
+	read, err := fixture.Store.Get(context.Background(), retentionKey)
+	if err != nil || read.Entry == nil || read.Entry.ModRevision != revision {
+		t.Fatalf("full-TTL root retention was not atomic: %v", err)
+	}
+	for _, mutation := range fixture.store.mutations {
+		if mutation.Key == environmentBlueprintHeadKey(fixture.Task.Owner.EnvironmentID) ||
+			mutation.Key == backupPolicyKey(fixture.Task.Owner.EnvironmentID) {
+			t.Fatal("runtime finalization republished desired state or Backup policy")
+		}
+	}
+	if len(fixture.store.conditions) != 26 || len(fixture.store.mutations) != 15 || fixture.store.bytes != 11325 {
+		t.Fatalf("terminal shape changed: %d/%d/%d", len(fixture.store.conditions),
+			len(fixture.store.mutations), fixture.store.bytes)
+	}
+	t.Logf("terminal transaction: %d comparisons, %d mutations, %d protobuf bytes",
+		len(fixture.store.conditions), len(fixture.store.mutations), fixture.store.bytes)
 }
 
 func NewVolumePolicyDesiredFixture(t *testing.T) *VolumePolicyDesiredFixture {
