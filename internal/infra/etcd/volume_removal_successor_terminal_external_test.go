@@ -1,6 +1,7 @@
 package etcd_test
 
 import (
+	"bytes"
 	"context"
 	"strconv"
 	"testing"
@@ -65,6 +66,157 @@ func TestVolumeRemovalSuccessorFailureRetainsReplay(t *testing.T) {
 	if outcome, _, conflict, err := replayed.Classify(); err != nil || conflict != nil ||
 		outcome != etcd.IdempotencyKnownExisting || fixture.Revision() != before {
 		t.Fatalf("retained Retry replay changed: %v/%v/%v", outcome, conflict, err)
+	}
+}
+
+// Rationale: Retry after proved directory absence must finish the same removal
+// operation without requiring another physical deletion or losing root replay.
+func TestVolumeRemovalSuccessorCompletesRetainedAbsence(t *testing.T) {
+	for _, mode := range []string{"normal", "late indexes", "lost response", "late Task"} {
+		t.Run(mode, func(t *testing.T) { proveVolumeRemovalSuccessorCompletion(t, mode) })
+	}
+}
+
+func proveVolumeRemovalSuccessorCompletion(t *testing.T, mode string) {
+	t.Helper()
+	ctx := context.Background()
+	fixture, tasks, assignment, runtime := prepareVolumeRemovalAttemptTerminal(t, "absent")
+	at := runtime.CreatedAt.Add(10 * time.Second)
+	result := etcd.TaskResultRecord{
+		Kind:       etcd.TaskResultEnvironmentDirectory,
+		Diagnostic: etcd.TaskResultDiagnosticNone,
+	}
+	if _, err := tasks.AcknowledgeTask(ctx, assignment.AgentID, 1, assignment.TaskID,
+		assignment.AssignmentID, etcd.TaskStatusFailed, result, at); err != nil {
+		t.Fatal(err)
+	}
+	original, err := fixture.Store.Get(ctx, etcd.CapabilityTaskKey(assignment.TaskID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	retryAt := at.Add(time.Second)
+	retryID := ids.NewAt(ids.KindTask, retryAt, 97)
+	marker := volumeRemovalRetryMarker(fixture.Marker, retryID, retryAt)
+	if published, err := tasks.RetryTask(ctx, assignment.TaskID, retryID, etcd.TaskActorOperator, marker); err != nil {
+		t.Fatal(err)
+	} else if outcome, _, conflict, err := published.Classify(); err != nil || conflict != nil || outcome != etcd.IdempotencyKnownApplied {
+		t.Fatalf("retry publication: %v/%v/%v", outcome, conflict, err)
+	}
+	claimed, found, err := tasks.ClaimNextTask(ctx, assignment.AgentID, 1, retryAt.Add(time.Second))
+	if err != nil || !found || claimed.Task.Record.ID != retryID {
+		t.Fatalf("claim successor: %v/%v", found, err)
+	}
+	finishedAt := retryAt.Add(2 * time.Second)
+	if mode == "late indexes" {
+		fixture.BeforeRemovalTerminalCommit(func() { fixture.PutRemovalDerivedIndexes(t, retryID, finishedAt) })
+	}
+	if mode == "lost response" {
+		fixture.LoseRemovalTerminalResponse()
+	}
+	if mode == "late Task" {
+		fixture.BeforeRemovalTerminalCommit(func() {
+			failed, err := etcd.TransitionCapabilityTaskStatus(
+				claimed.Task.Record,
+				etcd.TaskStatusRunning,
+				etcd.TaskStatusFailed,
+				finishedAt,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			value, err := etcd.EncodeCapabilityTaskRecord(failed)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := fixture.Store.Put(ctx, etcd.CapabilityTaskKey(retryID), value); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	_, err = tasks.AcknowledgeTask(ctx, assignment.AgentID, 1, retryID,
+		claimed.Assignment.Record.AssignmentID, etcd.TaskStatusCompleted, result, finishedAt)
+	if mode == "late Task" {
+		if err == nil {
+			t.Fatal("changed Task primary authorized finalization")
+		}
+		owner, readErr := fixture.Store.Get(ctx, removalrecord.OwnerKey(runtime.VolumeID))
+		if readErr != nil || owner.Entry == nil {
+			t.Fatalf("losing completion released owner: %v", readErr)
+		}
+		return
+	}
+	if mode == "lost response" {
+		if kind, _ := errs.KindOf(err); kind != errs.KindRequestFailed {
+			t.Fatalf("lost response: %v", err)
+		}
+		before := fixture.Revision()
+		_, err = tasks.AcknowledgeTask(ctx, assignment.AgentID, 1, retryID,
+			claimed.Assignment.Record.AssignmentID, etcd.TaskStatusCompleted, result, finishedAt)
+		if fixture.Revision() != before {
+			t.Fatal("completion recovery wrote state")
+		}
+	}
+	if err != nil {
+		t.Fatalf("complete successor: %v", err)
+	}
+	fixture.AssertRemovalSuccessorTerminal(t, fixture.Revision(), finishedAt)
+	rootKey, err := etcd.CapabilityIdempotencyMarkerKey(fixture.Marker.Locator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retryKey, err := etcd.CapabilityIdempotencyMarkerKey(marker.Locator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	markers, err := fixture.Store.GetMany(ctx, etcd.GetManyRequest{Keys: []string{rootKey, retryKey}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, locator := range []etcd.IdempotencyLocator{fixture.Marker.Locator, marker.Locator} {
+		entry := markers.Values[index]
+		if entry == nil || entry.ModRevision != fixture.Revision() {
+			t.Fatal("marker terminalization was not atomic")
+		}
+		decoded, err := etcd.DecodeCapabilityIdempotencyMarker(entry.Value, locator)
+		if err != nil || decoded.State != etcd.IdempotencyMarkerCompleted || !decoded.TerminalAt.Equal(finishedAt) ||
+			!decoded.RetainUntil.Equal(finishedAt.Add(90*24*time.Hour)) {
+			t.Fatalf("terminal replay retention: %v", err)
+		}
+	}
+	oldTask, err := fixture.Store.Get(ctx, etcd.CapabilityTaskKey(assignment.TaskID))
+	if err != nil || oldTask.Entry == nil || oldTask.Entry.ModRevision != original.Entry.ModRevision ||
+		!bytes.Equal(oldTask.Entry.Value, original.Entry.Value) {
+		t.Fatal("successor rewrote original Task", err)
+	}
+	for _, key := range []string{removalrecord.RuntimeKey(runtime.OperationID), removalrecord.OwnerKey(runtime.VolumeID),
+		removalrecord.EnvironmentLockKey(runtime.EnvironmentID), etcd.CapabilityTaskQueueKey(etcd.TaskExecutorAgent, retryID)} {
+		read, err := fixture.Store.Get(ctx, key)
+		if err != nil || read.Entry != nil {
+			t.Fatalf("completed successor retained %s: %v", key, err)
+		}
+	}
+	before := fixture.Revision()
+	if _, err := tasks.AcknowledgeTask(ctx, assignment.AgentID, 1, retryID,
+		claimed.Assignment.Record.AssignmentID, etcd.TaskStatusCompleted, result, finishedAt); err != nil ||
+		fixture.Revision() != before {
+		t.Fatalf("terminal acknowledgement replay: %v", err)
+	}
+	if _, err := fixture.Publish(ctx); err != nil || fixture.Revision() != before {
+		t.Fatalf("root replay: %v", err)
+	}
+	if _, err := tasks.RetryTask(ctx, assignment.TaskID, retryID, etcd.TaskActorOperator, marker); err != nil ||
+		fixture.Revision() != before {
+		t.Fatalf("retry replay: %v", err)
+	}
+	if mode == "normal" {
+		collector, err := etcd.NewIdempotencyRepository(fixture.Store)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if count, err := collector.PruneExpired(ctx, finishedAt.Add(90*24*time.Hour+time.Hour)); err != nil ||
+			count != 3 {
+			t.Fatalf("completed operation replay expiry: %d/%v", count, err)
+		}
 	}
 }
 

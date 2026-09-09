@@ -262,6 +262,30 @@ func (fixture *VolumePolicyDesiredFixture) AssertRemovalRetryBudget(t *testing.T
 }
 
 func (fixture *VolumePolicyDesiredFixture) AssertRemovalTerminal(t *testing.T, revision int64, at time.Time) {
+	fixture.assertRemovalTerminal(t, revision, at, 24, 16, 11035)
+}
+
+func (fixture *VolumePolicyDesiredFixture) AssertRemovalSuccessorTerminal(t *testing.T, revision int64, at time.Time) {
+	fixture.assertRemovalTerminal(t, revision, at, 26, 18, 13250)
+}
+
+func (fixture *VolumePolicyDesiredFixture) PutRemovalDerivedIndexes(t *testing.T, taskID string, at time.Time) {
+	t.Helper()
+	value, err := encodeTaskReference(taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := fixture.store.Store.Transact(context.Background(), nil, []Mutation{
+		{Type: MutationPut, Key: taskQueueKey(TaskExecutorAgent, taskID), Value: value},
+		{Type: MutationPut, Key: taskRetentionIndexKey(taskID, at.Add(markerRetention)), Value: value},
+	})
+	if err != nil || !result.Succeeded {
+		t.Fatalf("seed late Task indexes: %v", err)
+	}
+}
+
+func (fixture *VolumePolicyDesiredFixture) assertRemovalTerminal(t *testing.T, revision int64, at time.Time,
+	compares, writes, size int) {
 	t.Helper()
 	markerKey, err := idempotencyMarkerKey(fixture.Marker.Locator)
 	if err != nil {
@@ -281,7 +305,8 @@ func (fixture *VolumePolicyDesiredFixture) AssertRemovalTerminal(t *testing.T, r
 			t.Fatal("runtime finalization republished desired state or Backup policy")
 		}
 	}
-	if len(fixture.store.conditions) != 26 || len(fixture.store.mutations) != 15 || fixture.store.bytes != 11325 {
+	if len(fixture.store.conditions) != compares || len(fixture.store.mutations) != writes ||
+		fixture.store.bytes != size {
 		t.Fatalf("terminal shape changed: %d/%d/%d", len(fixture.store.conditions),
 			len(fixture.store.mutations), fixture.store.bytes)
 	}

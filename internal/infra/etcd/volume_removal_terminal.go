@@ -118,12 +118,27 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 	if err != nil || completion.OperationID != runtime.OperationID || !completion.DirectoryAbsent ||
 		completion.RequestOrdinal != progress.NextRequestOrdinal-1 || !completion.CompletedAt.Equal(progress.UpdatedAt) ||
 		completionRead.Values[0].ModRevision != read.Values[0].ModRevision ||
-		read.Values[0].ModRevision != runtimeRead.Entry.ModRevision {
+		read.Values[0].ModRevision > runtimeRead.Entry.ModRevision ||
+		(runtime.AttemptOrdinal == 1 && read.Values[0].ModRevision != runtimeRead.Entry.ModRevision) {
 		return TransactionResult{}, volumeRemovalTerminalConflict()
 	}
 	baseConditions := conditions
 	conditions = make([]Condition, 0, len(baseConditions)+len(keys)+2)
+	if task.RetainUntil == nil {
+		return TransactionResult{}, volumeRemovalTerminalConflict()
+	}
+	queueKey := taskQueueKey(task.Executor, task.ID)
+	taskRetentionKey := taskRetentionIndexKey(task.ID, *task.RetainUntil)
 	for _, condition := range baseConditions {
+		// These are derived indexes owned by the exact Task primary CAS.
+		// Rebuild its retention index and remove its queue entry at commit;
+		// neither index grants assignment or removal authority.
+		if condition.Key == queueKey || condition.Key == taskRetentionKey {
+			if condition.ModRevision != 0 || condition.Prefix {
+				return TransactionResult{}, volumeRemovalTerminalConflict()
+			}
+			continue
+		}
 		conditions, err = appendVolumeRemovalTerminalCondition(conditions, condition)
 		if err != nil {
 			return TransactionResult{}, err
@@ -189,6 +204,7 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 		Mutation{Type: MutationDelete, Key: removalrecord.Root(runtime.OperationID), Prefix: true},
 		Mutation{Type: MutationDelete, Key: keys[3]},
 		Mutation{Type: MutationDelete, Key: keys[4]},
+		Mutation{Type: MutationDelete, Key: queueKey},
 	)
 	if len(conditions) > 26 || len(mutations) > 26 {
 		return TransactionResult{}, errs.Newf(errs.KindInternal,
