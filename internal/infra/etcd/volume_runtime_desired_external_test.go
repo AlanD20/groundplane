@@ -21,6 +21,7 @@ func TestVolumeRuntimeDesiredPublicationIsAtomic(t *testing.T) {
 	want := fixture.PrepareRemovalRecords(t)
 	stageVolumePolicyDesired(t, fixture)
 	earliest := time.Now().UTC()
+	baselineRevision := fixture.Revision()
 	result, err := fixture.Publish(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -61,6 +62,7 @@ func TestVolumeRuntimeDesiredPublicationIsAtomic(t *testing.T) {
 		}
 	}
 	fixture.AssertAtomicPolicy(t, earliest)
+	fixture.AssertRemovalAncestry(t, baselineRevision)
 	before := fixture.Revision()
 	result, err = fixture.Publish(ctx)
 	if err != nil {
@@ -69,6 +71,36 @@ func TestVolumeRuntimeDesiredPublicationIsAtomic(t *testing.T) {
 	outcome, _, conflict, err = result.Classify()
 	if err != nil || conflict != nil || outcome != etcd.IdempotencyKnownExisting || fixture.Revision() != before {
 		t.Fatalf("equal publication rewrote removal state: %v/%v/%v", outcome, conflict, err)
+	}
+}
+
+// Rationale: a parent deletion epoch may change after removal preparation.
+// The whole desired/policy/runtime publication must lose that final commit race.
+func TestVolumeRuntimeDesiredPublicationRejectsChangedParentEpoch(t *testing.T) {
+	for _, kind := range []etcd.HierarchyDeletionTargetKind{etcd.HierarchyDeletionTargetProject, etcd.HierarchyDeletionTargetTenant} {
+		t.Run(string(kind), func(t *testing.T) {
+			fixture := etcd.NewVolumePolicyDesiredFixture(t)
+			fixture.PrepareRemovalRecords(t)
+			stageVolumePolicyDesired(t, fixture)
+			id := fixture.Task.Owner.ProjectID
+			if kind == etcd.HierarchyDeletionTargetTenant {
+				id = fixture.Task.Owner.TenantID
+			}
+			fixture.ParentBeforePublication = &etcd.HierarchyCoordinationRecord{
+				Schema: 1, TargetKind: kind, TargetID: id, MutationEpoch: 99,
+			}
+			before := fixture.Revision()
+			result, err := fixture.Publish(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			outcome, _, conflict, err := result.Classify()
+			if conflictKind, _ := errs.KindOf(conflict); err != nil || outcome != etcd.IdempotencyKnownConflict ||
+				conflictKind != errs.KindStateConflict {
+				t.Fatalf("removal ignored changed parent epoch: %v/%v/%v", outcome, conflict, err)
+			}
+			fixture.AssertUnpublished(t, before+1)
+		})
 	}
 }
 
@@ -99,6 +131,27 @@ func TestVolumeRuntimeDesiredPublicationRejectsLateOwner(t *testing.T) {
 	owner, err := removalrecord.DecodeOwner(read.Entry.Value)
 	if err != nil || owner != *fixture.OwnerBeforePublication {
 		t.Fatalf("winning owner overwritten: %v", err)
+	}
+}
+
+// Rationale: a missing or corrupt parent epoch cannot provide deletion
+// exclusion, and a valid record for another parent is not this parent's authority.
+func TestVolumeRuntimeDesiredPublicationRejectsInvalidParentEpoch(t *testing.T) {
+	for _, kind := range []etcd.HierarchyDeletionTargetKind{etcd.HierarchyDeletionTargetProject, etcd.HierarchyDeletionTargetTenant} {
+		for _, change := range []string{"missing", "corrupt", "identity"} {
+			t.Run(string(kind)+"/"+change, func(t *testing.T) {
+				fixture := etcd.NewVolumePolicyDesiredFixture(t)
+				fixture.PrepareRemovalRecords(t)
+				stageVolumePolicyDesired(t, fixture)
+				fixture.CorruptRemovalParent(t, kind, change)
+				before := fixture.Revision()
+				_, err := fixture.Publish(context.Background())
+				if got, _ := errs.KindOf(err); got != errs.KindInternal {
+					t.Fatalf("invalid parent epoch authorized removal: %v", err)
+				}
+				fixture.AssertUnpublished(t, before)
+			})
+		}
 	}
 }
 

@@ -80,6 +80,10 @@ func bindHierarchyMutation(
 			binding.clear()
 			return hierarchyMutationBinding{}, decodeErr
 		}
+		if HierarchyCoordinationKey(string(record.TargetKind), record.TargetID) != key {
+			binding.clear()
+			return hierarchyMutationBinding{}, corruptHierarchyDeletion()
+		}
 		record.MutationEpoch++
 		encoded, encodeErr := encodeHierarchyCoordination(record)
 		if encodeErr != nil {

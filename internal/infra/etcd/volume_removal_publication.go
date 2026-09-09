@@ -71,6 +71,15 @@ func (repository *HierarchyRepository) prepareVolumeRemovalDesiredPublication(
 				publication.mutations = append(publication.mutations, Mutation{
 					Type: MutationPut, Key: lockKey, Value: lockValue,
 				})
+				ancestry, err := bindHierarchyMutation(ctx, repository.store, readRevision,
+					HierarchyMutationScope{TenantID: task.Owner.TenantID, ProjectID: task.Owner.ProjectID}, nil, nil)
+				if err != nil {
+					clearBackupRuntimeMutations(publication.mutations)
+					return volumeRemovalInitialPublication{}, err
+				}
+				// The combined desired publisher owns and clears these epoch values.
+				publication.conditions = append(publication.conditions, ancestry.conditions...)
+				publication.mutations = append(publication.mutations, ancestry.mutations...)
 				return publication, nil
 			}
 		}
@@ -92,8 +101,8 @@ func (publication volumeRemovalInitialPublication) classifyConflict(
 		if err := previous(revision, values[:baseCount]); err != nil {
 			return err
 		}
-		for _, value := range values[baseCount:] {
-			if value != nil {
+		for index, value := range values[baseCount:] {
+			if !conditionMatchesRead(publication.conditions[index], value) {
 				return errs.New(errs.KindStateConflict, "Volume removal publication authority changed")
 			}
 		}

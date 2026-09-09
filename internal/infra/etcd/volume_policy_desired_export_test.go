@@ -24,6 +24,7 @@ type VolumePolicyDesiredFixture struct {
 	Initial                          *removalrecord.InitialPublication
 	OwnerBeforePublication           *removalrecord.Owner
 	EnvironmentLockBeforePublication *removalrecord.Owner
+	ParentBeforePublication          *HierarchyCoordinationRecord
 	writerBeforePublication          *taskMaterializationWriterRecord
 	prepared                         VolumeRemovalBackupPolicyPreparation
 	policy                           *backupPolicyReplacementFixture
@@ -70,6 +71,7 @@ type volumePolicyDesiredAuditStore struct {
 	finalPublications                int
 	ownerBeforePublication           *removalrecord.Owner
 	environmentLockBeforePublication *removalrecord.Owner
+	parentBeforePublication          *HierarchyCoordinationRecord
 	writerBeforePublication          *taskMaterializationWriterRecord
 }
 
@@ -78,6 +80,18 @@ func (audit *volumePolicyDesiredAuditStore) TransactEnvironmentBlueprint(
 ) (TransactionResult, error) {
 	if err := validateEnvironmentBlueprintTransactionBudget(conditions, mutations); err != nil {
 		return TransactionResult{}, err
+	}
+	if audit.parentBeforePublication != nil {
+		parent := *audit.parentBeforePublication
+		value, err := encodeHierarchyCoordination(parent)
+		if err != nil {
+			return TransactionResult{}, err
+		}
+		defer clear(value)
+		if _, err := audit.Store.Put(ctx, HierarchyCoordinationKey(string(parent.TargetKind), parent.TargetID), value); err != nil {
+			return TransactionResult{}, err
+		}
+		audit.parentBeforePublication = nil
 	}
 	if audit.writerBeforePublication != nil {
 		writer := *audit.writerBeforePublication
@@ -266,6 +280,7 @@ func (fixture *VolumePolicyDesiredFixture) Publish(ctx context.Context) (Idempot
 	fixture.store.ownerBeforePublication = fixture.OwnerBeforePublication
 	fixture.store.environmentLockBeforePublication = fixture.EnvironmentLockBeforePublication
 	fixture.store.writerBeforePublication = fixture.writerBeforePublication
+	fixture.store.parentBeforePublication = fixture.ParentBeforePublication
 	hierarchy, err := newHierarchyRepository(fixture.Store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -427,8 +442,8 @@ func (fixture *VolumePolicyDesiredFixture) AssertMaximumSelectionPublished(t *te
 	}
 	wantConditions, wantMutations := 38, 15
 	if fixture.Initial != nil {
-		wantConditions += 4
-		wantMutations += 5
+		wantConditions += 6
+		wantMutations += 7
 	} else {
 		wantConditions++ // Ordinary desired mutation must exclude the Environment removal lock too.
 	}
@@ -482,8 +497,14 @@ func (fixture *VolumePolicyDesiredFixture) AssertAtomicPolicy(t *testing.T, earl
 	if value := fixture.policy.store.valueAt(backupPolicyConnectorReferenceKey(fixture.policy.connector.Record.Connector.ID, fixture.Task.Owner.EnvironmentID), fixture.policy.store.revision); value != nil {
 		t.Fatal("disabled policy retained its active Connector reference")
 	}
-	if len(fixture.store.conditions) > 32 || len(fixture.store.mutations) > 32 || fixture.store.bytes > 900*1024 {
-		t.Fatal("combined policy/desired publication exceeds transaction bounds")
+	wantConditions, wantMutations := 28, 16
+	if fixture.Initial != nil {
+		wantConditions, wantMutations = 33, 23
+	}
+	if len(fixture.store.conditions) != wantConditions || len(fixture.store.mutations) != wantMutations ||
+		fixture.store.bytes > 900*1024 {
+		t.Fatalf("combined policy/desired publication shape: %d/%d/%d bytes",
+			len(fixture.store.conditions), len(fixture.store.mutations), fixture.store.bytes)
 	}
 	t.Logf(
 		"desired + last-source policy publication: %d comparisons, %d mutations, %d protobuf bytes",
@@ -494,6 +515,67 @@ func (fixture *VolumePolicyDesiredFixture) AssertAtomicPolicy(t *testing.T, earl
 }
 
 func (fixture *VolumePolicyDesiredFixture) Revision() int64 { return fixture.policy.store.revision }
+
+func (fixture *VolumePolicyDesiredFixture) AssertRemovalAncestry(t *testing.T, baselineRevision int64) {
+	t.Helper()
+	for _, identity := range []HierarchyCoordinationRecord{
+		{TargetKind: HierarchyDeletionTargetProject, TargetID: fixture.Task.Owner.ProjectID},
+		{TargetKind: HierarchyDeletionTargetTenant, TargetID: fixture.Task.Owner.TenantID},
+	} {
+		key := HierarchyCoordinationKey(string(identity.TargetKind), identity.TargetID)
+		previous, err := fixture.Store.GetMany(
+			context.Background(),
+			GetManyRequest{Keys: []string{key}, Revision: baselineRevision},
+		)
+		if err != nil || previous == nil || len(previous.Values) != 1 || previous.Values[0] == nil {
+			t.Fatalf("parent baseline: %v", err)
+		}
+		before, err := decodeHierarchyCoordination(previous.Values[0].Value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		current, err := fixture.Store.Get(context.Background(), key)
+		if err != nil || current == nil || current.Entry == nil {
+			t.Fatalf("parent publication: %v", err)
+		}
+		after, err := decodeHierarchyCoordination(current.Entry.Value)
+		before.MutationEpoch++
+		if err != nil || after != before || current.Entry.ModRevision != fixture.Revision() {
+			t.Fatalf("removal did not atomically advance %s deletion epoch: %v", identity.TargetKind, err)
+		}
+	}
+}
+
+func (fixture *VolumePolicyDesiredFixture) CorruptRemovalParent(
+	t *testing.T, kind HierarchyDeletionTargetKind, change string,
+) {
+	t.Helper()
+	id := fixture.Task.Owner.ProjectID
+	idKind := ids.KindProject
+	if kind == HierarchyDeletionTargetTenant {
+		id, idKind = fixture.Task.Owner.TenantID, ids.KindTenant
+	}
+	key := HierarchyCoordinationKey(string(kind), id)
+	if change == "missing" {
+		if _, err := fixture.Store.Transact(context.Background(), nil, []Mutation{{Type: MutationDelete, Key: key}}); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	value := []byte("corrupt")
+	if change == "identity" {
+		var err error
+		value, err = encodeHierarchyCoordination(HierarchyCoordinationRecord{
+			Schema: 1, TargetKind: kind, TargetID: ids.New(idKind), MutationEpoch: 1,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := fixture.Store.Put(context.Background(), key, value); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func (fixture *VolumePolicyDesiredFixture) Race(t *testing.T, authority string) {
 	t.Helper()
