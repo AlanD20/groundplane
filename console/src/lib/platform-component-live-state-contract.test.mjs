@@ -31,7 +31,7 @@ test('CoreDNS presentation does not manufacture fields or forwarder identities',
   assert.match(page, /disabled=\{saving \|\| !configured\}/)
   assert.match(page, /Save a complete resolver configuration before enabling CoreDNS/)
   assert.doesNotMatch(page, /function CoreDnsUnavailable/)
-  assert.match(types, /config: \{ zone_ids: string\[\]; caddyfile_template\?: string \} \| null/)
+  assert.match(types, /config: \{ zone_ids: string\[\]; caddyfile_template\?: string; alias\?: string \} \| null/)
   assert.match(types, /config: \{ zone_ids: string\[\]; secret_id: string \} \| null/)
   assert.doesNotMatch(store, /caddyfile_template[^\n]*\? config\.caddyfile_template : ''/)
   assert.doesNotMatch(store, /secret_id[^\n]*\? config\.secret_id : ''/)

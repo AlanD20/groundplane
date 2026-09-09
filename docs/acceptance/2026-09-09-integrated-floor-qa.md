@@ -1,5 +1,57 @@
 # Integrated disposable floor QA
 
+## Manual-QA handoff — 20:09 UTC
+
+All named runtime blockers in this integration are corrected and deployed.
+Normal Agent update `task_01M23W0K7H1V666JJZFFYQVNPV` completed at
+19:58:42.265871801 UTC. Agent container `c89f8ffb6666` runs the exact image and
+binary recorded below. Controller remains `.7`; the normal config API selected
+only the new immutable Agent image, with private before/request/after receipts.
+The first update request immediately after Controller restart returned 500
+without publishing a Task; after verified startup health, the normal retry
+completed. No in-flight operation was replaced.
+
+Exact unchanged complete-bundle reapply
+`task_01M23W2CKV8RNQPTRGGYEJ84WN` completed at19:59:54.27041242 UTC; all22steps
+completed. Native app workloads, serving green, retained blue, stable proxies
+and the two Reverb replicas were unchanged. Caddy/Tunnel reconciled and became
+healthy. There are84global Tasks, all terminal, with no next page. Controller,
+Agent and etcd report healthy.
+
+Public `https://koapi.aland20.com/up` and `https://ko.aland20.com/login` return200
+with certificate verification0. Both checked public internal paths
+`/internal/v1/health/ready` and `/internal/v1/identity-verification/status-events`
+return404 with verified TLS. Rediscovered replica addresses are10.40.20.6/.7.
+The existing ephemeral-channel probe passed both direct replicas, stable
+app-reverb, Caddy alias and public TLS Tunnel; no application record was created.
+
+Console delivery checks use exactNode24.19.0/npm11.17.0: scripts-disabled clean
+install,23/23tests, production build, fingerprinted assets and embedded-asset
+release smoke pass. The smoke temporarily removed generated `console/dist` and
+the verified output was restored. Tagged production Controller builds locally;
+no unnecessary Controller binary deployment followed the dev-tooling update.
+Protobuf, OpenAPI and both clients regenerated with zero diff.
+
+Only compatible transitive dependencies changed: Redocly1.34.19->1.34.20,
+js-yaml4.3.1->4.3.2 and Hono4.13.3->4.13.7. No manifest range or forced override
+changed. The YAML fix addresses the upstream
+[merge-work limit advisory](https://github.com/nodeca/js-yaml/security/advisories/GHSA-2883-xcg3-v3hh);
+the Hono patch includes the upstream
+[boundary-string escaping fix](https://github.com/honojs/hono/releases/tag/v4.13.7).
+The final native audit reports zero vulnerabilities;382registry signatures and
+93provenance attestations verify. The stale Caddy optional-alias assertion now
+matches ADR0069; no UI behavior was changed for that test.
+
+The isolated real browser loads the deployed Environment, with54successful API
+reads and no console errors/warnings. Reload still shows unavailable per-Service
+observations; the Service API lacks live observation fields. The generic ingress
+hint also remains. These are disclosed in
+[manual-QA follow-ups](../issues/floor-manual-qa-followups.md), not hidden behind
+Docker health. The task-owned browser tab was closed; the owner's tab remains.
+Full CI, full Gate A certification, Gate B, all-MVP acceptance and production
+readiness are not claimed. The owner-requested next step is manual QA of the
+deployed floor, with subsequent concrete adjustments.
+
 ## Exact-reapply correction, local proof
 
 Read-only diagnostic maps the failed step to Caddy health with
