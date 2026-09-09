@@ -26,9 +26,20 @@ type VolumePolicyDesiredFixture struct {
 
 type volumePolicyDesiredAuditStore struct {
 	Store
-	conditions []Condition
-	mutations  []Mutation
-	bytes      int
+	conditions        []Condition
+	mutations         []Mutation
+	bytes             int
+	finalPublications int
+}
+
+func (audit *volumePolicyDesiredAuditStore) TransactEnvironmentBlueprint(
+	ctx context.Context, conditions []Condition, mutations []Mutation,
+) (TransactionResult, error) {
+	if err := validateEnvironmentBlueprintTransactionBudget(conditions, mutations); err != nil {
+		return TransactionResult{}, err
+	}
+	audit.finalPublications++
+	return audit.Transact(ctx, conditions, mutations)
 }
 
 func (audit *volumePolicyDesiredAuditStore) Transact(
@@ -169,7 +180,128 @@ func (fixture *VolumePolicyDesiredFixture) Publish(ctx context.Context) (Idempot
 		fixture.prepared,
 		fixture.Task,
 		fixture.Marker,
-		nil,
+		fixture.store,
+	)
+}
+
+// UseMaximumSelection seeds the legal 12-source policy, then prepares the real
+// removal against that same desired baseline. It does not change any limit.
+func (fixture *VolumePolicyDesiredFixture) UseMaximumSelection(t *testing.T) {
+	t.Helper()
+	ctx := context.Background()
+	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+		EnvironmentID: fixture.Task.Owner.EnvironmentID, RevisionID: ids.New(ids.KindTask), RenderGeneration: 1,
+		Volumes: []EnvironmentVolumeIdentity{{ID: fixture.Task.Target, Slug: "backup-data", Key: "backup-data"}},
+	})
+	first := fixture.policy.sources[0].Source.Record
+	input := EnvironmentBlueprintBackupPolicyInput{
+		EnvironmentID: projection.EnvironmentID, TaskID: projection.RevisionID,
+		ReadRevision: fixture.Revision(), Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 7, Encryption: "none",
+		ConnectorName: fixture.policy.connector.Record.Connector.Name, CreatedAt: fixture.policy.now.Add(time.Minute),
+		Sources: []EnvironmentBlueprintBackupPolicySourceInput{
+			{CandidateID: first.ID, Kind: first.Kind, TargetID: first.TargetID},
+		},
+	}
+	for index := 1; index < MaximumBackupPolicySources; index++ {
+		volumeID := ids.New(ids.KindVolume)
+		label := "volume-" + string(rune('a'+index))
+		projection.Volumes = append(
+			projection.Volumes,
+			EnvironmentVolumeIdentity{ID: volumeID, Slug: label, Key: label},
+		)
+		input.Sources = append(input.Sources, EnvironmentBlueprintBackupPolicySourceInput{
+			CandidateID: ids.New(ids.KindBackupSource), Kind: core.BackupSourceVolume, TargetID: volumeID,
+		})
+	}
+	input.Projection = projection
+	seed, err := fixture.policy.repository.PrepareEnvironmentBlueprintBackupPolicy(ctx, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer seed.Clear()
+	projection.Backup = seed.Projection()
+	publication, err := prepareBlueprintBackupPolicyPublication(
+		TaskRecord{ID: projection.RevisionID, Target: projection.EnvironmentID}, projection,
+		BlueprintAttachTaskPreparation{}, seed,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clearPreparedBlueprintBackupPolicyPublication(publication)
+	result, err := fixture.policy.store.Transact(ctx, publication.conditions, publication.mutations)
+	if err != nil || !result.Succeeded {
+		t.Fatalf("seed maximum policy: %v", err)
+	}
+	projection = withTestEnvironmentComposeArtifact(projection)
+	seedServiceRepositoryTestDesiredProjection(t, fixture.policy.store, projection)
+	fixture.HeadRevision = fixture.Revision()
+	fixture.prepared, err = fixture.policy.repository.PrepareVolumeRemovalBackupPolicy(
+		ctx,
+		projection.EnvironmentID,
+		fixture.Task.Target,
+		fixture.Revision(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	precondition, err := EnvironmentBlueprintDependencyDigest(projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	projection.RevisionID, projection.RenderGeneration = fixture.Task.ID, 2
+	projection.Volumes = projection.Volumes[1:]
+	projection.Backup = fixture.prepared.Projection()
+	projection = withTestEnvironmentComposeArtifact(projection)
+	digest, err := EnvironmentBlueprintDependencyDigest(projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.Request.Projection, fixture.Request.DependencyDigest = projection, digest
+	fixture.Request.Mutation.Volume.PreconditionDigest = precondition
+}
+
+func (fixture *VolumePolicyDesiredFixture) AssertMaximumSelectionPublished(t *testing.T) {
+	t.Helper()
+	if fixture.store.finalPublications != 1 {
+		t.Fatal("Volume removal did not use the dedicated final publisher")
+	}
+	task := fixture.policy.store.valueAt(taskKey(fixture.Task.ID), fixture.Revision())
+	policy, found, err := fixture.policy.repository.GetBackupPolicy(
+		context.Background(),
+		fixture.Task.Owner.EnvironmentID,
+	)
+	if err != nil || !found || task == nil || task.ModRevision != policy.Revision || !policy.Record.Enabled ||
+		len(policy.Record.SourceIDs) != MaximumBackupPolicySources-1 {
+		t.Fatalf("maximum policy was not replaced with its Task: %v", err)
+	}
+	for _, source := range fixture.prepared.state.sources {
+		value := fixture.policy.store.valueAt(backupSourceKey(source.ID), fixture.Revision())
+		if value == nil {
+			t.Fatal("historical source was removed")
+		}
+		found := false
+		for _, condition := range fixture.store.conditions {
+			if condition.Key == value.Key && condition.ModRevision == value.ModRevision && !condition.Prefix {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatal("publication lost an exact source primary fence")
+		}
+	}
+	if len(fixture.store.conditions) != 38 || len(fixture.store.mutations) != 15 || fixture.store.bytes > 1024*1024 {
+		t.Fatalf(
+			"maximum policy/desired publication shape: %d/%d/%d bytes",
+			len(fixture.store.conditions),
+			len(fixture.store.mutations),
+			fixture.store.bytes,
+		)
+	}
+	t.Logf(
+		"maximum policy + desired publication: %d comparisons, %d mutations, %d protobuf bytes",
+		len(fixture.store.conditions),
+		len(fixture.store.mutations),
+		fixture.store.bytes,
 	)
 }
 

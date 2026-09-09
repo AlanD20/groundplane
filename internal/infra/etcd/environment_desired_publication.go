@@ -486,7 +486,11 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if !publishDomain {
+	// ADR0049 inherits ADR0051's final-publication envelope. Keep that
+	// transaction choice separate from permission to publish Blueprint domains;
+	// a Volume removal still cannot supply arbitrary Blueprint fragments.
+	finalPublication := publishDomain || volumePolicyPreparation.state != nil
+	if !finalPublication {
 		if err := plan.enforceTransactionBounds(validateEnvironmentDesiredPublicationBudget); err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
@@ -495,7 +499,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if publishDomain {
+	if finalPublication {
 		return idempotency.applyEnvironmentBlueprint(ctx, marker, plan, blueprintTransactions)
 	}
 	return idempotency.Apply(ctx, marker, plan)

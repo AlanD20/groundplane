@@ -101,3 +101,21 @@ func TestVolumePolicyDesiredPublicationRejectsDifferentStagedPolicy(t *testing.T
 	}
 	fixture.AssertUnpublished(t, before)
 }
+
+// Rationale: ADR0049 inherits ADR0051's bounded final-publication envelope;
+// the supported 12-source policy must not be rejected by an ordinary-mutation
+// partition guard, nor made to fit by dropping selected-source comparisons.
+func TestVolumePolicyDesiredPublicationMaximumSelection(t *testing.T) {
+	fixture := etcd.NewVolumePolicyDesiredFixture(t)
+	fixture.UseMaximumSelection(t)
+	stageVolumePolicyDesired(t, fixture)
+	result, err := fixture.Publish(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	outcome, _, conflict, err := result.Classify()
+	if err != nil || conflict != nil || outcome != etcd.IdempotencyKnownApplied {
+		t.Fatalf("maximum publication: %v/%v/%v", outcome, conflict, err)
+	}
+	fixture.AssertMaximumSelectionPublished(t)
+}
