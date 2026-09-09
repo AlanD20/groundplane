@@ -311,18 +311,20 @@ KiB and whose operation count is at most 96. For `n` selected rows it contains:
 
 ```text
 one manifest comparison
+one prior-cursor comparison
 n create-only row comparisons
 n row puts
 one cursor put
-= 2n + 2 operations; at n=44, at most 90 operations
+= 2n + 3 operations; at n=44, at most 91 operations
 ```
 
 The 44-row cap has a conservative byte proof that includes keys and etcd
-wrappers. A manifest comparison is at most 1 KiB; each row comparison is at
-most 1 KiB; each row put, including its key, 16-KiB value, and wrapper, is at
-most 17 KiB; the cursor put is at most 17 KiB; and the transaction envelope is
+wrappers. Each manifest, prior-cursor, or row comparison together with its
+failure lookup is at most 2 KiB; each row put, including its key, 16-KiB value,
+and wrapper, is at most 17 KiB; the cursor put is at most 17 KiB; and the transaction envelope is
 at most 16 KiB. At 44 rows the request is therefore at most
-`1 + 44 + (44 * 17) + 17 + 16 = 826 KiB`, below 900 KiB. The Controller still
+`(2 * (44 + 2)) + (44 * 17) + 17 + 16 = 873 KiB`, below 900 KiB. The Controller
+still
 measures the exact serialization and shortens the prefix if necessary. Failure
 of one valid row to fit these declared maxima is `internal`, not an unbounded
 fallback.

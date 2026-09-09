@@ -11,7 +11,13 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const EvidenceRecordBytes = 16 * 1024
+const (
+	EvidenceRecordBytes           = 16 * 1024
+	EvidenceKeyBytes              = 512
+	EvidenceBatchRows             = 44
+	EvidenceTransactionOperations = 96
+	EvidenceTransactionBytes      = 900 * 1024
+)
 
 // EvidenceRow is one accepted consumer/mount intent, not desired state or
 // permission to run a filesystem helper. Ordinals are dense and one-based.
