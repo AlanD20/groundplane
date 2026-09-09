@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/core"
+	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -121,6 +122,8 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	if input.Change.Current == nil {
 		conditions = append(conditions, Condition{Key: serviceRuntimeKey(serviceID)})
 	}
+	removalLockIndex := len(conditions)
+	conditions = append(conditions, Condition{Key: removalrecord.EnvironmentLockKey(input.Environment.Record.ID)})
 	conditions = append(conditions, referenceConditions...)
 	referenceOffset := len(conditions) - len(referenceConditions)
 	fenceOffset := len(conditions)
@@ -145,6 +148,9 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	classifier := func(_ int64, values []*KeyValue) error {
 		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "direct Service publication compare evidence is incomplete")
+		}
+		if values[removalLockIndex] != nil {
+			return errs.New(errs.KindStateConflict, "Environment Volume removal is in progress")
 		}
 		for index := 0; index < 3; index++ {
 			if values[index] == nil {

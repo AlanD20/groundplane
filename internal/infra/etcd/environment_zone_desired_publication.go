@@ -5,6 +5,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/networkname"
 	"github.com/AlanD20/groundplane/internal/core"
+	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -108,6 +109,8 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 		{Key: environmentBlueprintHeadKey(input.Revision.EnvironmentID), ModRevision: input.ExpectedHeadRevision},
 		{Key: zonePoolRegistryKey(input.Environment.Record.ID), ModRevision: registry.Revision},
 	}
+	removalLockIndex := len(conditions)
+	conditions = append(conditions, Condition{Key: removalrecord.EnvironmentLockKey(input.Environment.Record.ID)})
 	fenceOffset := len(conditions)
 	conditions = append(conditions, fence.transactionConditions()...)
 	mutations := []Mutation{
@@ -120,6 +123,9 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 	classifier := func(_ int64, values []*KeyValue) error {
 		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "direct Zone publication compare evidence is incomplete")
+		}
+		if values[removalLockIndex] != nil {
+			return errs.New(errs.KindStateConflict, "Environment Volume removal is in progress")
 		}
 		for index := 0; index < 3; index++ {
 			if values[index] == nil {
