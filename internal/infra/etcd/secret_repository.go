@@ -143,41 +143,7 @@ func (repository *SecretRepository) GetSecret(
 	ctx context.Context,
 	id string,
 ) (Versioned[SecretRecord], error) {
-	if err := validateContext(ctx); err != nil {
-		return Versioned[SecretRecord]{}, err
-	}
-	if err := validateID(ids.KindSecret, id); err != nil {
-		return Versioned[SecretRecord]{}, err
-	}
-	current, err := getRecord(
-		ctx,
-		repository.store,
-		secretRecordKey(id),
-		id,
-		errs.KindSecretNotFound,
-		decodeSecretRecord,
-		func(record SecretRecord) string { return record.Secret.ID },
-	)
-	if err != nil {
-		return Versioned[SecretRecord]{}, err
-	}
-	tombstones, err := repository.store.GetMany(ctx, GetManyRequest{
-		Keys:     []string{deletionTombstoneKey(string(DeletionTargetSecret), id)},
-		Revision: current.ReadRevision,
-	})
-	if err != nil {
-		return Versioned[SecretRecord]{}, err
-	}
-	if tombstones == nil || len(tombstones.Values) != 1 {
-		return Versioned[SecretRecord]{}, errs.New(errs.KindInternal, "Secret deletion fence read is incomplete")
-	}
-	if tombstones.Values[0] != nil {
-		if err := validateSecretDeletionFence(tombstones.Values[0], id); err != nil {
-			return Versioned[SecretRecord]{}, err
-		}
-		return Versioned[SecretRecord]{}, errs.New(errs.KindSecretNotFound, "Secret was not found")
-	}
-	return current, nil
+	return repository.getSecretAtRevision(ctx, id, 0)
 }
 
 func (repository *SecretRepository) GetSecretValue(
@@ -265,17 +231,23 @@ func (repository *SecretRepository) ResolveSecret(
 	projectID string,
 	reference string,
 ) (Versioned[SecretRecord], error) {
+	return repository.resolveSecretAtRevision(ctx, projectID, reference, 0)
+}
+
+func (repository *SecretRepository) resolveSecretAtRevision(
+	ctx context.Context, projectID, reference string, revision int64,
+) (Versioned[SecretRecord], error) {
 	if err := validateContext(ctx); err != nil {
 		return Versioned[SecretRecord]{}, err
 	}
 	if err := validateID(ids.KindProject, projectID); err != nil {
 		return Versioned[SecretRecord]{}, err
 	}
-	if reference == "" {
+	if reference == "" || revision < 0 {
 		return Versioned[SecretRecord]{}, errs.New(errs.KindValidationFailed, "Secret reference is required")
 	}
 	if ids.Validate(ids.KindSecret, reference) == nil {
-		record, err := repository.GetSecret(ctx, reference)
+		record, err := repository.getSecretAtRevision(ctx, reference, revision)
 		if err != nil {
 			return Versioned[SecretRecord]{}, err
 		}
@@ -289,11 +261,11 @@ func (repository *SecretRepository) ResolveSecret(
 	indexes, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
 		secretKeyIndexKey(core.SecretScopeProject, projectID, reference),
 		secretKeyIndexKey(core.SecretScopePlatform, "", reference),
-	}})
+	}, Revision: revision})
 	if err != nil {
 		return Versioned[SecretRecord]{}, err
 	}
-	if indexes == nil || len(indexes.Values) != 2 {
+	if indexes == nil || len(indexes.Values) != 2 || revision > 0 && indexes.ReadRevision != revision {
 		return Versioned[SecretRecord]{}, errs.New(errs.KindInternal, "Secret fallback index read is incomplete")
 	}
 	for index, selected := range indexes.Values {

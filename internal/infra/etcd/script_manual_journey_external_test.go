@@ -42,6 +42,12 @@ func TestManualScriptServingReleaseSecretReferenceJourney(t *testing.T) {
 	testManualScriptServingReleaseJourney(t, manualJourneySecretReference)
 }
 
+// Rationale: valid Blueprint Secret keys must resolve to stable source owners
+// before manual publication, just as stable Secret ids do.
+func TestManualScriptServingReleaseSecretKeyJourney(t *testing.T) {
+	testManualScriptServingReleaseJourney(t, manualJourneySecretKey)
+}
+
 type manualJourneyEntryKind uint8
 
 const (
@@ -49,11 +55,13 @@ const (
 	manualJourneyPlainEnv
 	manualJourneySecretFile
 	manualJourneySecretReference
+	manualJourneySecretKey
 )
 
 func testManualScriptServingReleaseJourney(t *testing.T, entryKind manualJourneyEntryKind) {
 	withEntry := entryKind != manualJourneyNoEntry
-	secretFile := entryKind == manualJourneySecretFile || entryKind == manualJourneySecretReference
+	secretReference := entryKind == manualJourneySecretReference || entryKind == manualJourneySecretKey
+	secretFile := entryKind == manualJourneySecretFile || secretReference
 	testBlueprintExecutedArtifactConfigured(t, false, false, func(project *composetypes.Project) {
 		service := project.Services["api"]
 		service.NetworkMode = ""
@@ -77,7 +85,7 @@ func testManualScriptServingReleaseJourney(t *testing.T, entryKind manualJourney
 				protector, ciphertext = manualJourneyEncryptedValue(t, entryValue)
 				defer clear(ciphertext)
 			}
-			if entryKind == manualJourneySecretReference {
+			if secretReference {
 				plaintext := []byte(entryValue)
 				envelope, err := protector.Seal(ctx, plaintext)
 				clear(plaintext)
@@ -92,7 +100,11 @@ func testManualScriptServingReleaseJourney(t *testing.T, entryKind manualJourney
 				secretID = fixture.CreateManualJourneySecret(t, secretCiphertext)
 				clear(secretCiphertext)
 			}
-			values, secrets, entry := fixture.PublishManualJourneyEntry(t, entryValue, ciphertext, secretID)
+			secretReference := secretID
+			if entryKind == manualJourneySecretKey {
+				secretReference = "manual-journey"
+			}
+			values, secrets, entry := fixture.PublishManualJourneyEntry(t, entryValue, ciphertext, secretReference)
 			entryRecord = entry
 			materializer, err = controller.NewTaskMaterializationResolver(
 				fixture.Hierarchy,

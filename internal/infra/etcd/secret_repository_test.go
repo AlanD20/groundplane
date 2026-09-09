@@ -73,6 +73,16 @@ func TestSecretRepositoryResolvesProjectBeforePlatformAndDeletesAtomically(t *te
 	if err != nil || resolved.Record.Secret.ID != platformID {
 		t.Fatalf("ResolveSecret(platform fallback) = %#v, %v", resolved, err)
 	}
+	// A Script prepared before removal must still resolve its exact snapshot,
+	// not silently substitute the now-visible platform fallback.
+	for _, reference := range []string{"API_TOKEN", projectID} {
+		pinned, err := repository.resolveSecretAtRevision(
+			context.Background(), project.Record.ID, reference, created.ReadRevision,
+		)
+		if err != nil || pinned.Record.Secret.ID != projectID || pinned.ReadRevision != created.ReadRevision {
+			t.Fatalf("pinned Secret resolution = %#v, %v", pinned, err)
+		}
+	}
 	deletedValue, err := store.Get(context.Background(), secretValueKey(projectID))
 	if err != nil || deletedValue.Entry != nil {
 		t.Fatalf("deleted ciphertext = %#v, %v", deletedValue, err)

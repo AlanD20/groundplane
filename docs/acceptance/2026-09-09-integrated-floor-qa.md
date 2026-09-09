@@ -159,3 +159,23 @@ retaining stable source identities and the existing deletion guards. No source
 is being invented or repaired out of band. Fresh success/failure/Abort and
 normal cleanup remain unproven. Full-bundle Apply and required floor checks
 also remain outstanding.
+
+The real serving-Release/Entry/manual-publication journey now has a named-key
+variant. It reproduced the exact live rejection before correction. Manual
+reference preparation now calls the existing Secret resolution policy at the
+execution's fixed read revision and records/deduplicates the resolved stable
+Secret id. The same read observes metadata and retirement together; no source
+record, public operation, protocol, or transaction ceiling changes. Existing
+project override/platform fallback behavior remains, and a captured pre-removal
+revision resolves its original Secret through either key or id instead of
+substituting the later fallback.
+
+The named-key and stable-id manual journeys, Secret repository checks, and
+Secret deletion/source-exclusion checks pass with race detection after final
+formatting: 2.529 seconds, selection-local 14.3% etcd coverage in
+`.tmp/qa-floor-20260909/manual-secret-key-final.cover`. This includes prepared
+reference retention through Retry, terminal draining and normal removal.
+The tagged Controller builds as `0.0.0-qa.floor20260909.4`, SHA-256
+`d667a8397a4f11350fb30bb2b60cde6ab5d65b4c26c33b88a8cc5c2a911d9fd0`.
+No Agent change is required. Live deployment and Script rerun are next; the
+Entry serving-slot defect remains open.

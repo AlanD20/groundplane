@@ -160,13 +160,13 @@ func (repository *ScriptRepository) manualScriptEntrySourceMembers(
 		if record.Entry.Source.Kind != core.SourceSecretRef {
 			continue
 		}
-		secretID := record.Entry.Source.SecretRef
-		if _, duplicate := secrets[secretID]; duplicate {
-			continue
-		}
-		secret, err := repository.manualScriptSecretSourceMember(ctx, sources, base, secretID)
+		secret, err := repository.manualScriptSecretSourceMember(ctx, sources, base, record.Entry.Source.SecretRef)
 		if err != nil {
 			return nil, err
+		}
+		secretID := secret.Reference.Source.SecretID
+		if _, duplicate := secrets[secretID]; duplicate {
+			continue
 		}
 		members = append(members, secret)
 		secrets[secretID] = struct{}{}
@@ -178,20 +178,18 @@ func (repository *ScriptRepository) manualScriptSecretSourceMember(
 	ctx context.Context,
 	sources ScriptExecutionSources,
 	base ScriptSourceReference,
-	secretID string,
+	reference string,
 ) (ScriptSourcePreparationMember, error) {
-	metadata, err := scriptExecutionValueAt(ctx, repository.store, secretRecordKey(secretID), sources.Revision)
+	secrets, err := newSecretRepository(repository.store)
 	if err != nil {
 		return ScriptSourcePreparationMember{}, err
 	}
-	record, err := decodeSecretRecord(metadata.Value)
-	if err != nil || record.Secret.ID != secretID ||
-		(record.Secret.ProjectID != "" && record.Secret.ProjectID != sources.Project.Record.ID) {
-		return ScriptSourcePreparationMember{}, errs.New(
-			errs.KindValidationFailed,
-			"manual Script Secret owner is invalid",
-		)
+	resolved, err := secrets.resolveSecretAtRevision(ctx, sources.Project.Record.ID, reference, sources.Revision)
+	if err != nil {
+		return ScriptSourcePreparationMember{}, err
 	}
+	record := resolved.Record
+	secretID := record.Secret.ID
 	value, err := scriptExecutionValueAt(ctx, repository.store, secretValueKey(secretID), sources.Revision)
 	if err != nil {
 		return ScriptSourcePreparationMember{}, err
@@ -201,18 +199,18 @@ func (repository *ScriptRepository) manualScriptSecretSourceMember(
 		return ScriptSourcePreparationMember{}, err
 	}
 	defer clear(secret.Ciphertext)
-	reference := base
-	reference.Source = ScriptSourceIdentity{
+	member := base
+	member.Source = ScriptSourceIdentity{
 		Kind:              ScriptSourceSecretValue,
 		SecretID:          secretID,
 		ValueGenerationID: secretID,
 	}
-	reference.SourceOwnerID = scriptSourcePlatformOwner
+	member.SourceOwnerID = scriptSourcePlatformOwner
 	if record.Secret.ProjectID != "" {
-		reference.SourceOwnerID = record.Secret.ProjectID
+		member.SourceOwnerID = record.Secret.ProjectID
 	}
-	reference.SourceModRevision, reference.SourceDigest = value.ModRevision, secret.CiphertextSHA256
-	return manualScriptExistingMember(reference, secretValueKey(secretID)), nil
+	member.SourceModRevision, member.SourceDigest = value.ModRevision, secret.CiphertextSHA256
+	return manualScriptExistingMember(member, secretValueKey(secretID)), nil
 }
 
 func manualScriptExistingMember(reference ScriptSourceReference, key string) ScriptSourcePreparationMember {
