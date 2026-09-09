@@ -305,6 +305,12 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) BeginPathCall(
 			"Environment Volume removal path is not mutable",
 		)
 	}
+	fence, err := repository.loadAssignmentFence(
+		ctx, assignment, state.Runtime.ReadRevision, state.Runtime.Record, state.Attempt,
+	)
+	if err != nil {
+		return etcd.Versioned[removalrecord.PendingPath]{}, false, err
+	}
 	if state.Pending != nil {
 		pending := state.Pending.Record
 		if pending.TaskID != assignment.TaskID || pending.AssignmentID != assignment.AssignmentID ||
@@ -315,11 +321,6 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) BeginPathCall(
 			)
 		}
 		return *state.Pending, true, nil
-	}
-	if _, err := repository.loadAssignmentFence(
-		ctx, assignment, state.Runtime.ReadRevision, state.Runtime.Record, state.Attempt,
-	); err != nil {
-		return etcd.Versioned[removalrecord.PendingPath]{}, false, err
 	}
 	pending := removalrecord.PendingPath{
 		OperationID:     state.Runtime.Record.OperationID,
@@ -347,12 +348,6 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) BeginPathCall(
 		{Key: removalrecord.ProgressKey(assignment.OperationID), ModRevision: state.Progress.Revision},
 		{Key: removalrecord.PendingPathKey(assignment.OperationID)},
 	}
-	fence, err := repository.loadAssignmentFence(
-		ctx, assignment, state.Runtime.ReadRevision, state.Runtime.Record, state.Attempt,
-	)
-	if err != nil {
-		return etcd.Versioned[removalrecord.PendingPath]{}, false, err
-	}
 	conditions = append(conditions, fence...)
 	mutations := []etcd.Mutation{{
 		Type: etcd.MutationPut, Key: removalrecord.PendingPathKey(assignment.OperationID), Value: value,
@@ -372,6 +367,11 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) BeginPathCall(
 				errs.KindStateConflict,
 				"Environment Volume removal path request raced",
 			)
+		}
+		if _, err := repository.loadAssignmentFence(
+			ctx, assignment, reloaded.Runtime.ReadRevision, reloaded.Runtime.Record, reloaded.Attempt,
+		); err != nil {
+			return etcd.Versioned[removalrecord.PendingPath]{}, false, err
 		}
 		return *reloaded.Pending, true, nil
 	}
