@@ -31,6 +31,19 @@ type VolumePolicyDesiredFixture struct {
 	store                            *volumePolicyDesiredAuditStore
 }
 
+func (fixture *VolumePolicyDesiredFixture) ParentDeletionBegin(
+	kind HierarchyDeletionTargetKind,
+) HierarchyDeletionBegin {
+	id, operation := fixture.Task.Owner.EnvironmentID, HierarchyDeletionOperationEnvironment
+	switch kind {
+	case HierarchyDeletionTargetProject:
+		id, operation = fixture.Task.Owner.ProjectID, HierarchyDeletionOperationProject
+	case HierarchyDeletionTargetTenant:
+		id, operation = fixture.Task.Owner.TenantID, HierarchyDeletionOperationTenant
+	}
+	return hierarchyDeletionCreationTestBegin(fixture.Task.CreatedAt, kind, id, operation, "7")
+}
+
 // PrepareRemovalRecords supplies the real closed initial-record input. This
 // fixture does not claim to prepare the still-unwired bounded removal evidence.
 func (fixture *VolumePolicyDesiredFixture) PrepareRemovalRecords(t *testing.T) removalrecord.Runtime {
