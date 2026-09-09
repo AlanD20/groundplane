@@ -171,7 +171,7 @@ type store struct {
 // New connects to the etcd cluster named in controller.yaml and scopes every
 // ordinary key operation beneath keyPrefix. Snapshot intentionally remains a
 // cluster operation: the MVP's etcd instance is dedicated to Groundplane.
-func New(ctx context.Context, endpoints []string, keyPrefix string) (EnvironmentBlueprintStore, error) {
+func New(ctx context.Context, endpoints []string, keyPrefix string) (*store, error) {
 	if err := validateConfig(endpoints, keyPrefix); err != nil {
 		return nil, err
 	}
