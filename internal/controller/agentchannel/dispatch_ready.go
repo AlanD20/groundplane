@@ -1,10 +1,20 @@
 package agentchannel
 
 import (
+	"log/slog"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+)
+
+type assignmentDispatch uint8
+
+const (
+	assignmentDeferred assignmentDispatch = iota
+	assignmentSent
+	assignmentQuarantined
 )
 
 func (s *Server) dispatchReady(
@@ -16,9 +26,14 @@ func (s *Server) dispatchReady(
 	delivered map[string]string,
 	quarantined map[string]string,
 ) error {
-	if capacity == 0 || !session.AssignmentsAllowed() {
+	if capacity == 0 {
 		return nil
 	}
+	release, allowed := session.beginDispatch()
+	if !allowed {
+		return nil
+	}
+	defer release()
 	recovered, err := s.tasks.ListAgentAssignments(
 		stream.Context(),
 		agentID,
@@ -63,16 +78,19 @@ func (s *Server) dispatchReady(
 		if remaining == 0 {
 			break
 		}
-		sent, err := s.dispatchTaskAssignment(session, stream, assignment, true)
+		disposition, err := s.dispatchTaskAssignment(session, stream, assignment, true)
 		if err != nil {
 			return err
 		}
-		if sent {
+		switch disposition {
+		case assignmentSent:
 			remaining--
 			session.recordDispatchCapacity(remaining)
 			delivered[assignment.Task.Record.ID] = assignment.Assignment.Record.AssignmentID
-		} else {
+		case assignmentQuarantined:
 			quarantined[assignment.Task.Record.ID] = assignment.Assignment.Record.AssignmentID
+		case assignmentDeferred:
+			return nil
 		}
 	}
 	for remaining > 0 {
@@ -101,23 +119,46 @@ func (s *Server) dispatchReady(
 		if !session.AssignmentsAllowed() {
 			return nil
 		}
-		sent, err := s.dispatchTaskAssignment(session, stream, assignment, false)
+		disposition, err := s.dispatchTaskAssignment(session, stream, assignment, false)
 		if err != nil {
 			return err
 		}
-		if !session.AssignmentsAllowed() {
-			return nil
-		}
-		if sent {
+		switch disposition {
+		case assignmentSent:
 			remaining--
 			session.recordDispatchCapacity(remaining)
 			delivered[assignment.Task.Record.ID] = assignment.Assignment.Record.AssignmentID
-		} else {
+		case assignmentQuarantined:
 			quarantined[assignment.Task.Record.ID] = assignment.Assignment.Record.AssignmentID
+		case assignmentDeferred:
+			return nil
 		}
 	}
 	session.recordDispatchCapacity(remaining)
 	return nil
+}
+
+func (s *Server) dispatchTaskAssignment(
+	session *Session,
+	stream agentpb.AgentChannel_ConnectServer,
+	claim etcd.TaskAssignment,
+	recovered bool,
+) (assignmentDispatch, error) {
+	assignment, err := s.taskAssignmentMessage(stream.Context(), claim, recovered)
+	if err != nil {
+		slog.Error(
+			"controller: quarantine Agent Task assignment",
+			slog.String("task_id", claim.Task.Record.ID),
+			slog.String("assignment_id", claim.Assignment.Record.AssignmentID),
+			slog.Any("error", err),
+		)
+		return assignmentQuarantined, nil
+	}
+	sent, err := s.dispatchResolvedTaskAssignment(session, stream, claim, assignment, recovered)
+	if sent {
+		return assignmentSent, err
+	}
+	return assignmentDeferred, err
 }
 
 func validateAgentDispatchClaim(

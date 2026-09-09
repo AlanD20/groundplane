@@ -360,25 +360,6 @@ func (s *Server) sendTaskAssignment(
 	return s.sendResolvedTaskAssignment(stream, claim, assignment)
 }
 
-func (s *Server) dispatchTaskAssignment(
-	session *Session,
-	stream agentpb.AgentChannel_ConnectServer,
-	claim etcd.TaskAssignment,
-	recovered bool,
-) (bool, error) {
-	assignment, err := s.taskAssignmentMessage(stream.Context(), claim, recovered)
-	if err != nil {
-		slog.Error(
-			"controller: quarantine Agent Task assignment",
-			slog.String("task_id", claim.Task.Record.ID),
-			slog.String("assignment_id", claim.Assignment.Record.AssignmentID),
-			slog.Any("error", err),
-		)
-		return false, nil
-	}
-	return s.dispatchResolvedTaskAssignment(session, stream, claim, assignment, recovered)
-}
-
 func (s *Server) dispatchResolvedTaskAssignment(
 	session *Session,
 	stream agentpb.AgentChannel_ConnectServer,

@@ -42,6 +42,8 @@ type Registry struct {
 type lifecycleFence struct {
 	quiescedThrough uint64
 	revokedThrough  uint64
+	pauses          map[*assignmentPause]struct{}
+	preparations    map[*assignmentPreparation]struct{}
 }
 
 type taskAbortCommand struct {
@@ -106,16 +108,6 @@ func (state *sessionState) fenceAssignmentSendsLocked() {
 	}
 	state.sendFenced = true
 	close(state.sendFence)
-}
-
-func drainAssignmentSend(ctx context.Context, state *sessionState) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-state.sendPermit:
-	}
-	state.sendPermit <- struct{}{}
-	return ctx.Err()
 }
 
 // WakeTaskDispatch notifies every connected Agent that new work may be
@@ -289,31 +281,6 @@ func (s *Session) invalidateReady() bool {
 	return true
 }
 
-// sendAssignment admits one complete assignment payload only while the
-// session owns its current generation. Fencing takes the registry lock before
-// this gate, so once fencing completes no new assignment send can begin.
-func (s *Session) sendAssignment(send func() error) (bool, error) {
-	select {
-	case <-s.ctx.Done():
-		return false, nil
-	case <-s.state.sendFence:
-		return false, nil
-	case <-s.state.sendPermit:
-	}
-	defer func() { s.state.sendPermit <- struct{}{} }()
-
-	s.registry.mu.Lock()
-	current := s.registry.agents[s.agentID]
-	if current != s.state || current.fence != s.state.fence || !current.online ||
-		current.assignmentsStopped || current.revoked {
-		s.registry.mu.Unlock()
-		return false, nil
-	}
-	s.registry.mu.Unlock()
-
-	return true, send()
-}
-
 // RecordReady records the most recent reported free capacity and binary
 // version for this session.
 func (s *Session) RecordReady(at time.Time, capacity int32, version string) error {
@@ -353,16 +320,6 @@ func (s *Session) RecordTaskTerminal(taskID string, assignmentID string) error {
 		agentID: s.agentID, generation: current.generation, taskID: taskID, assignmentID: assignmentID,
 	})
 	return nil
-}
-
-// AssignmentsAllowed reports whether this session may receive new work.
-func (s *Session) AssignmentsAllowed() bool {
-	s.registry.mu.Lock()
-	defer s.registry.mu.Unlock()
-
-	current := s.registry.agents[s.agentID]
-	return current == s.state && current.fence == s.state.fence && current.online &&
-		!current.assignmentsStopped && !current.revoked
 }
 
 func (s *Session) taskAborts() <-chan taskAbortCommand {
@@ -540,7 +497,7 @@ func (r *Registry) Snapshot(agentID string) (Snapshot, bool) {
 	return Snapshot{
 		Generation:         state.generation,
 		Online:             state.online,
-		AssignmentsStopped: state.assignmentsStopped,
+		AssignmentsStopped: state.assignmentsStopped || r.assignmentsPausedLocked(agentID, state.generation),
 		Revoked:            state.revoked,
 		LastReady:          state.lastReady,
 		Capacity:           state.capacity,
@@ -568,6 +525,7 @@ func (r *Registry) StopAssignments(ctx context.Context, agentID string, generati
 	if generation > lifecycle.quiescedThrough {
 		lifecycle.quiescedThrough = generation
 	}
+	lifecycle.discardPausedThrough(generation)
 	state, ok := r.agents[agentID]
 	if !ok {
 		r.mu.Unlock()
@@ -599,6 +557,7 @@ func (r *Registry) FenceThrough(ctx context.Context, agentID string, generation 
 	if generation > lifecycle.revokedThrough {
 		lifecycle.revokedThrough = generation
 	}
+	lifecycle.discardPausedThrough(generation)
 	state := r.agents[agentID]
 	if state == nil || state.generation > generation {
 		r.mu.Unlock()
@@ -643,6 +602,7 @@ func (r *Registry) Revoke(ctx context.Context, agentID string, generation uint64
 	if generation > lifecycle.revokedThrough {
 		lifecycle.revokedThrough = generation
 	}
+	lifecycle.discardPausedThrough(generation)
 	state, ok := r.agents[agentID]
 	if !ok {
 		r.mu.Unlock()
