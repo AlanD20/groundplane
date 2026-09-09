@@ -169,3 +169,74 @@ func volumeRemovalPolicyReplacement(
 	}
 	return replacement, projection
 }
+
+func (prepared VolumeRemovalBackupPolicyPreparation) validateDesiredPublication(
+	claim EnvironmentBlueprintStageClaim,
+	projection EnvironmentComposeProjection,
+	task TaskRecord,
+	marker IdempotencyMarker,
+	removedVolumeID string,
+) error {
+	state := prepared.state
+	if state == nil || claim.SourceKind != EnvironmentBlueprintSourceMutation ||
+		state.environmentID != claim.EnvironmentID || state.volumeID != removedVolumeID ||
+		task.Type != TaskRemove || task.Target != state.volumeID ||
+		task.Params[TaskResourceKindParam] != TaskResourceVolume ||
+		marker.Locator.Method != "DELETE" || marker.Locator.Route != "/volumes/{id}" ||
+		!equalEnvironmentBlueprintBackupPolicy(prepared.Projection(), projection.Backup) {
+		return errs.New(errs.KindValidationFailed, "Volume policy preparation does not match desired removal")
+	}
+	return nil
+}
+
+// The shared publisher already compares the Environment mutation epoch.
+// Equal fences collapse; different revisions reject rather than losing either
+// owner's fixed-revision authority to fit the publication budget.
+func (publication volumeRemovalBackupPolicyPublication) withExistingComparisons(
+	existing []Condition,
+) (volumeRemovalBackupPolicyPublication, error) {
+	seen := make(map[string]Condition, len(existing)+len(publication.conditions))
+	for _, condition := range existing {
+		seen[condition.Key] = condition
+	}
+	remaining := make([]Condition, 0, len(publication.conditions))
+	for _, condition := range publication.conditions {
+		if previous, found := seen[condition.Key]; found {
+			if previous != condition {
+				return volumeRemovalBackupPolicyPublication{}, errs.New(
+					errs.KindStateConflict, "Volume policy publication source revisions disagree",
+				)
+			}
+			continue
+		}
+		seen[condition.Key] = condition
+		remaining = append(remaining, condition)
+	}
+	publication.conditions = remaining
+	return publication, nil
+}
+
+func (publication volumeRemovalBackupPolicyPublication) classifyConflict(
+	baseCount int,
+	previous idempotencyPlanClassifier,
+) idempotencyPlanClassifier {
+	return func(revision int64, values []*KeyValue) error {
+		if len(values) != baseCount+len(publication.conditions) {
+			return errs.New(errs.KindInternal, "Volume policy publication compare evidence is incomplete")
+		}
+		if err := previous(revision, values[:baseCount]); err != nil {
+			return err
+		}
+		for index, condition := range publication.conditions {
+			value := values[baseCount+index]
+			if value != nil && value.Key != condition.Key {
+				return errs.New(errs.KindInternal, "Volume policy publication compare evidence is corrupt")
+			}
+			if (condition.ModRevision == 0 && value != nil) || (condition.ModRevision > 0 &&
+				(value == nil || value.ModRevision != condition.ModRevision)) {
+				return errs.New(errs.KindStateConflict, "Volume policy publication source changed")
+			}
+		}
+		return nil
+	}
+}

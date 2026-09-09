@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"net/netip"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -41,7 +42,7 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 		zoneChanges, serviceChanges, routeChanges, releaseGroupPreparation,
 		componentPreparation, attachPreparation, BlueprintBackupPolicyPreparation{},
 		BlueprintScriptPublication{}, BlueprintReleasePublication{},
-		BlueprintRequirementGate{}, task, marker, nil,
+		BlueprintRequirementGate{}, VolumeRemovalBackupPolicyPreparation{}, task, marker, nil,
 	)
 }
 
@@ -81,7 +82,7 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintDes
 		project, environment, expectedHeadRevision, claim, revision, projection,
 		zoneChanges, serviceChanges, routeChanges, releaseGroupPreparation,
 		componentPreparation, attachPreparation, backupPreparation, scriptPublication, releasePublication,
-		requirementGate, task, marker, repository.transactions,
+		requirementGate, VolumeRemovalBackupPolicyPreparation{}, task, marker, repository.transactions,
 	)
 }
 
@@ -105,6 +106,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	scriptPublication BlueprintScriptPublication,
 	releasePublication BlueprintReleasePublication,
 	requirementGate BlueprintRequirementGate,
+	volumePolicyPreparation VolumeRemovalBackupPolicyPreparation,
 	task TaskRecord,
 	marker IdempotencyMarker,
 	blueprintTransactions environmentBlueprintTransactionStore,
@@ -276,6 +278,23 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	}
 	defer clear(epochMutation.Value)
 
+	var volumePolicyPublication volumeRemovalBackupPolicyPublication
+	if volumePolicyPreparation.state != nil {
+		if err := volumePolicyPreparation.validateDesiredPublication(claim, projection, task, marker, scriptRemoval.volumeID); err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		// ADR0049 defines this as Controller UTC now immediately before the
+		// shared publication transaction is constructed, not staging time.
+		volumePolicyPublication, err = prepareVolumeRemovalBackupPolicyPublication(
+			volumePolicyPreparation,
+			time.Now().UTC(),
+		)
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		defer clearBackupRuntimeMutations(volumePolicyPublication.mutations)
+	}
+
 	conditions := []Condition{
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
@@ -437,6 +456,15 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 			}
 			return releaseForCompare.classify(values[releaseBaseConditionCount:])
 		}
+	}
+	if volumePolicyPreparation.state != nil {
+		volumePolicyPublication, err = volumePolicyPublication.withExistingComparisons(conditions)
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		classified = volumePolicyPublication.classifyConflict(len(conditions), classified)
+		conditions = append(conditions, volumePolicyPublication.conditions...)
+		mutations = append(mutations, volumePolicyPublication.mutations...)
 	}
 	classifier := func(revision int64, values []*KeyValue) error {
 		if conflict := classified(revision, values); conflict != nil {
