@@ -1,0 +1,171 @@
+package etcd
+
+import (
+	"context"
+	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+// VolumeRemovalBackupPolicyPreparation is immutable fixed-revision evidence.
+// Only the desired publisher may turn it into a policy replacement; preparation
+// neither changes selection nor deletes immutable historical source records.
+type VolumeRemovalBackupPolicyPreparation struct {
+	state *volumeRemovalBackupPolicyState
+}
+
+type volumeRemovalBackupPolicyState struct {
+	environmentID string
+	volumeID      string
+	policy        *BackupPolicyRecord
+	coordination  EnvironmentCoordinationRecord
+	sources       []BackupSourceRecord
+	conditions    []Condition
+}
+
+// Projection supplies the replacement decisions for ADR0051 staging. It does
+// not capture policy_now; the final publisher supplies that scheduling boundary.
+func (prepared VolumeRemovalBackupPolicyPreparation) Projection() *EnvironmentBlueprintBackupPolicy {
+	if prepared.state == nil || prepared.state.policy == nil {
+		return nil
+	}
+	_, projection := volumeRemovalPolicyReplacement(prepared.state)
+	return projection
+}
+
+func (repository *BackupPolicyRepository) PrepareVolumeRemovalBackupPolicy(
+	ctx context.Context,
+	environmentID, volumeID string,
+	readRevision int64,
+) (VolumeRemovalBackupPolicyPreparation, error) {
+	if err := validateContext(ctx); err != nil {
+		return VolumeRemovalBackupPolicyPreparation{}, err
+	}
+	if ids.Validate(ids.KindEnvironment, environmentID) != nil ||
+		ids.Validate(ids.KindVolume, volumeID) != nil || readRevision <= 0 {
+		return VolumeRemovalBackupPolicyPreparation{}, errs.New(
+			errs.KindValidationFailed,
+			"Volume policy removal identity is invalid",
+		)
+	}
+	keys := []string{
+		backupPolicyKey(environmentID),
+		environmentCoordinationKey(environmentID),
+		environmentMutationEpochKey(environmentID),
+	}
+	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: readRevision})
+	if err != nil {
+		return VolumeRemovalBackupPolicyPreparation{}, err
+	}
+	if read == nil || read.ReadRevision != readRevision || len(read.Values) != len(keys) || read.Values[2] == nil {
+		return VolumeRemovalBackupPolicyPreparation{}, corruptBackupRuntimeRecord()
+	}
+	defer clearKeyValues(read.Values)
+	state := &volumeRemovalBackupPolicyState{environmentID: environmentID, volumeID: volumeID}
+	epoch, err := decodeEnvironmentMutationEpochRecord(read.Values[2].Value)
+	if err != nil || epoch.EnvironmentID != environmentID {
+		return VolumeRemovalBackupPolicyPreparation{}, corruptBackupRuntimeRecord()
+	}
+	state.conditions = []Condition{
+		{Key: keys[0]}, {Key: keys[1]},
+		{Key: keys[2], ModRevision: read.Values[2].ModRevision},
+	}
+	if read.Values[1] != nil {
+		state.coordination, err = decodeEnvironmentCoordinationRecord(read.Values[1].Value)
+		if err != nil || state.coordination.EnvironmentID != environmentID {
+			return VolumeRemovalBackupPolicyPreparation{}, corruptBackupRuntimeRecord()
+		}
+		state.conditions[1].ModRevision = read.Values[1].ModRevision
+	}
+	if read.Values[0] == nil {
+		return VolumeRemovalBackupPolicyPreparation{state: state}, nil
+	}
+	if read.Values[1] == nil {
+		return VolumeRemovalBackupPolicyPreparation{}, corruptBackupRuntimeRecord()
+	}
+	policy, err := decodeBackupPolicyRecord(read.Values[0].Value)
+	if err != nil || policy.EnvironmentID != environmentID || len(policy.SourceIDs) > MaximumBackupPolicySources {
+		return VolumeRemovalBackupPolicyPreparation{}, corruptBackupRuntimeRecord()
+	}
+	state.policy = &policy
+	state.conditions[0].ModRevision = read.Values[0].ModRevision
+	if err := repository.loadVolumeRemovalPolicySources(ctx, state, readRevision); err != nil {
+		return VolumeRemovalBackupPolicyPreparation{}, err
+	}
+	return VolumeRemovalBackupPolicyPreparation{state: state}, nil
+}
+
+type volumeRemovalBackupPolicyPublication struct {
+	conditions []Condition
+	mutations  []Mutation
+	projection *EnvironmentBlueprintBackupPolicy
+}
+
+func prepareVolumeRemovalBackupPolicyPublication(
+	prepared VolumeRemovalBackupPolicyPreparation,
+	policyNow time.Time,
+) (volumeRemovalBackupPolicyPublication, error) {
+	state := prepared.state
+	if state == nil || !validUTCInstant(policyNow) {
+		return volumeRemovalBackupPolicyPublication{}, errs.New(
+			errs.KindValidationFailed,
+			"Volume policy preparation is required",
+		)
+	}
+	publication := volumeRemovalBackupPolicyPublication{conditions: append([]Condition(nil), state.conditions...)}
+	if state.policy == nil {
+		return publication, nil
+	}
+	replacement, projection := volumeRemovalPolicyReplacement(state)
+	replacement.UpdatedAt = policyNow
+	coordination, _, err := replaceEnvironmentCoordinationSchedule(state.coordination, replacement, policyNow)
+	if err != nil {
+		return volumeRemovalBackupPolicyPublication{}, err
+	}
+	policyValue, err := encodeBackupPolicyRecord(replacement)
+	if err != nil {
+		return volumeRemovalBackupPolicyPublication{}, err
+	}
+	coordinationValue, err := encodeEnvironmentCoordinationRecord(coordination)
+	if err != nil {
+		clear(policyValue)
+		return volumeRemovalBackupPolicyPublication{}, err
+	}
+	publication.projection = projection
+	publication.mutations = []Mutation{
+		{Type: MutationPut, Key: backupPolicyKey(state.environmentID), Value: policyValue},
+		{Type: MutationPut, Key: environmentCoordinationKey(state.environmentID), Value: coordinationValue},
+	}
+	if state.policy.Enabled && !replacement.Enabled {
+		publication.mutations = append(publication.mutations, Mutation{
+			Type: MutationDelete, Key: backupPolicyConnectorReferenceKey(state.policy.ConnectorID, state.environmentID),
+		})
+	}
+	return publication, nil
+}
+
+func volumeRemovalPolicyReplacement(
+	state *volumeRemovalBackupPolicyState,
+) (BackupPolicyRecord, *EnvironmentBlueprintBackupPolicy) {
+	replacement := *state.policy
+	replacement.SourceIDs = nil
+	projection := &EnvironmentBlueprintBackupPolicy{
+		Enabled: replacement.Enabled, Frequency: replacement.Frequency, Keep: replacement.Keep,
+		Encryption: replacement.Encryption, ConnectorID: replacement.ConnectorID,
+	}
+	for _, source := range state.sources {
+		if source.Kind == core.BackupSourceVolume && source.TargetID == state.volumeID {
+			continue
+		}
+		replacement.SourceIDs = append(replacement.SourceIDs, source.ID)
+		projection.Sources = append(projection.Sources, EnvironmentBlueprintBackupPolicySource{
+			ID: source.ID, Kind: source.Kind, TargetID: source.TargetID,
+		})
+	}
+	if len(replacement.SourceIDs) == 0 {
+		replacement.Enabled, projection.Enabled = false, false
+	}
+	return replacement, projection
+}

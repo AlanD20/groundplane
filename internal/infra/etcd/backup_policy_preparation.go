@@ -462,7 +462,7 @@ func validateBackupPolicyReplacementInput(
 	if input.Enabled || configured {
 		if input.Frequency == "" || input.Keep <= 0 || input.Keep > MaximumBackupPolicyKeep ||
 			(input.Encryption != "age" && input.Encryption != "none") ||
-			len(input.Sources) == 0 || input.Enabled && input.ConnectorID == "" {
+			input.Enabled && (len(input.Sources) == 0 || input.ConnectorID == "") {
 			return errs.New(errs.KindValidationFailed, "configured backup policy is incomplete")
 		}
 		if err := validateBackupPolicyFrequency(input.Frequency); err != nil {
