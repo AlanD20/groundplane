@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	removal "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -25,8 +26,12 @@ func buildVolumeMutationPlan(
 	consumerIDs []string,
 ) (*agentpb.ExecutionPlan, []etcd.TaskStepRecord, error) {
 	steps := make([]*agentpb.ExecutionStep, 0, 4)
+	timeout := volumeMutationTimeoutSeconds
+	if request.action == volumeMutationActionRemove {
+		timeout = removal.TimeoutSeconds
+	}
 	appendStep := func(payload isVolumeExecutionStepPayload) {
-		steps = append(steps, payload.step(ids.New(ids.KindStep), uint32(volumeMutationTimeoutSeconds)))
+		steps = append(steps, payload.step(ids.New(ids.KindStep), uint32(timeout)))
 	}
 	if request.action == volumeMutationActionAdd {
 		appendStep(

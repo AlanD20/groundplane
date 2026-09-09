@@ -36,6 +36,13 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 	task etcd.TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
 	params := task.Params
+	if task.Type == etcd.TaskRemove {
+		var err error
+		params, err = resolver.volumeRemovalPlanParams(ctx, task)
+		if err != nil {
+			return nil, err
+		}
+	}
 	action := params[VolumeTaskActionParam]
 	expectedParams := 7
 	if action == VolumeTaskActionRemove {

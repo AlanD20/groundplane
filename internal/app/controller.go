@@ -1073,12 +1073,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Backing-service mutations: %w", err)
 	}
-	volumeMutations, err := volume.NewMutationService(
+	volumeMutations, err := configureVolumeMutationPlans(
 		cfg.Storage.VolumeRoot,
 		environmentBlueprintRepository,
 		intentCoordinator,
 		idempotency,
-		volumeReads,
+		volumeReads, backupPolicyRecords, store, planResolver,
 	)
 	if err != nil {
 		_ = store.Close()

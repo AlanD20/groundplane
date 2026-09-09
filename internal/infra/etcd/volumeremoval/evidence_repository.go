@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
+
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	removal "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -36,6 +38,44 @@ func NewEvidenceRepository(backend evidenceStore) (*EvidenceRepository, error) {
 		return nil, errs.New(errs.KindInternal, "volume removal evidence store is required")
 	}
 	return &EvidenceRepository{store: backend}, nil
+}
+
+// Manifest recovers the immutable accepted read boundary. It grants no staging
+// or execution authority; Begin still requires exact equality and a valid cursor.
+func (repository *EvidenceRepository) Manifest(
+	ctx context.Context,
+	operationID string,
+) (removal.EvidenceManifest, bool, error) {
+	if err := etcd.ValidateCapabilityContext(ctx); err != nil {
+		return removal.EvidenceManifest{}, false, err
+	}
+	if ids.Validate(ids.KindOperation, operationID) != nil {
+		return removal.EvidenceManifest{}, false, evidenceConflict()
+	}
+	key := removal.EvidenceManifestKey(operationID)
+	read, err := repository.store.GetMany(ctx, etcd.GetManyRequest{Keys: []string{key}})
+	if err != nil {
+		return removal.EvidenceManifest{}, false, err
+	}
+	if read == nil || read.ReadRevision <= 0 || len(read.Values) != 1 {
+		return removal.EvidenceManifest{}, false, evidenceConflict()
+	}
+	defer clearKeyValues(read.Values)
+	entry := read.Values[0]
+	if entry == nil {
+		return removal.EvidenceManifest{}, false, nil
+	}
+	if entry.Key != key || entry.ModRevision <= 0 || entry.ModRevision > read.ReadRevision {
+		return removal.EvidenceManifest{}, false, evidenceConflict()
+	}
+	manifest, err := removal.DecodeEvidenceManifest(entry.Value)
+	if err != nil {
+		return removal.EvidenceManifest{}, false, err
+	}
+	if manifest.OperationID != operationID || manifest.ReadRevision >= entry.ModRevision {
+		return removal.EvidenceManifest{}, false, evidenceConflict()
+	}
+	return manifest, true, nil
 }
 
 // Begin creates an immutable manifest with its empty cursor. Equal calls resume

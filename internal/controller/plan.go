@@ -93,26 +93,19 @@ func BuildPlan(input PlanBuildInput) (*ExecutionPlan, error) {
 
 // TaskPlanResolver rebuilds plans from closed durable Task inputs and daemon-owned policy; plans are never stored.
 type TaskPlanResolver struct {
-	volumeRoot        string
-	blueprints        blueprintPlanStateReader
-	attaches          attachPlanRecordReader
-	services          attachPlanServiceReader
-	attachIdentities  attachPlanIdentityResolver
-	componentCatalog  []EnvironmentComponentRegistration
-	serviceProxyImage *etcd.ReleaseProxyImage
-	routeState        routeProviderStateReader
-	releases          *etcd.ReleaseLedger
-	backupRuns        backupRunPlanReader
-	componentPlans    ComponentTaskPlanResolver
-	scriptPlans       ScriptExecutionPlanReader
-}
-
-func (resolver *TaskPlanResolver) EnableRoutePlans(state routeProviderStateReader) error {
-	if resolver == nil || state == nil {
-		return errs.New(errs.KindInternal, "Route plan state reader is required")
-	}
-	resolver.routeState = state
-	return nil
+	volumeRoot         string
+	blueprints         blueprintPlanStateReader
+	attaches           attachPlanRecordReader
+	services           attachPlanServiceReader
+	attachIdentities   attachPlanIdentityResolver
+	componentCatalog   []EnvironmentComponentRegistration
+	serviceProxyImage  *etcd.ReleaseProxyImage
+	routeState         routeProviderStateReader
+	releases           *etcd.ReleaseLedger
+	backupRuns         backupRunPlanReader
+	componentPlans     ComponentTaskPlanResolver
+	scriptPlans        ScriptExecutionPlanReader
+	volumeRemovalPlans volumeRemovalPlanReader
 }
 
 type ComponentTaskPlanResolver interface {
@@ -1089,8 +1082,12 @@ func ComposeIdentitySnapshotFromProjection(
 					"Component generated Service render name is missing",
 				)
 			}
-			if desiredName, present := desiredServiceNames[service.GetServiceId()]; present && desiredName != service.GetComposeName() {
-				return ComposeIdentitySnapshot{}, errs.New(errs.KindInternal, "Component generated Service render name diverges")
+			if desiredName, present := desiredServiceNames[service.GetServiceId()]; present &&
+				desiredName != service.GetComposeName() {
+				return ComposeIdentitySnapshot{}, errs.New(
+					errs.KindInternal,
+					"Component generated Service render name diverges",
+				)
 			}
 			_, duplicateID := usedServiceIDs[service.GetServiceId()]
 			_, duplicateName := usedServiceNames[service.GetComposeName()]

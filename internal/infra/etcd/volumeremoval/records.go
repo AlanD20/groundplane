@@ -58,8 +58,8 @@ func validateEnvironmentVolumeRemovalTask(
 		task.Executor != etcd.TaskExecutorAgent || task.Type != etcd.TaskRemove || task.Target != runtime.VolumeID ||
 		task.RenderGeneration != int32(runtime.DesiredGeneration) ||
 		task.TimeoutSeconds != removalrecord.TimeoutSeconds ||
-		task.IdempotencyKey != runtime.RootLocator.Key || len(task.Steps) != 1 ||
-		task.Steps[0].ID != runtime.StepID || !equalVolumeRemovalParams(task.Params, expectedParams) {
+		task.IdempotencyKey != runtime.RootLocator.Key || !etcd.EnvironmentVolumeRemovalStepMatches(task.Steps, runtime.StepID) ||
+		!equalVolumeRemovalParams(task.Params, expectedParams) {
 		return errs.New(errs.KindValidationFailed, "Environment Volume removal Task inputs changed")
 	}
 	return nil

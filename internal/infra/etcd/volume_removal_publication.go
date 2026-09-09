@@ -246,7 +246,7 @@ func validateVolumeRemovalInitialBinding(
 		task.Actor != TaskActorOperator || task.Executor != TaskExecutorAgent || task.Type != TaskRemove ||
 		task.Status != TaskStatusPending || task.RenderGeneration != int32(runtime.DesiredGeneration) ||
 		task.TimeoutSeconds != removalrecord.TimeoutSeconds || task.IdempotencyKey != runtime.RootLocator.Key ||
-		len(task.Steps) != 1 || task.Steps[0].ID != runtime.StepID ||
+		!EnvironmentVolumeRemovalStepMatches(task.Steps, runtime.StepID) ||
 		!task.CreatedAt.Equal(runtime.CreatedAt) || !task.UpdatedAt.Equal(runtime.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "initial Volume removal Task does not match its records")
 	}
@@ -274,4 +274,11 @@ func validateVolumeRemovalInitialBinding(
 		return errs.New(errs.KindValidationFailed, "initial Volume removal marker does not match its records")
 	}
 	return nil
+}
+
+// EnvironmentVolumeRemovalStepMatches binds the path checkpoint to the final
+// step. Detachment and Docker removal may precede it; plan reconstruction
+// validates their exact payloads against the sealed source projection.
+func EnvironmentVolumeRemovalStepMatches(steps []TaskStepRecord, pathStepID string) bool {
+	return len(steps) >= 1 && len(steps) <= 3 && steps[len(steps)-1].ID == pathStepID
 }

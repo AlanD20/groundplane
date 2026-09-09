@@ -235,7 +235,7 @@ func volumeRemovalTaskMatchesRuntime(task TaskRecord, runtime removalrecord.Runt
 			runtime.UpdatedAt,
 		) || task.ID != runtime.CurrentTaskID || task.OperationID != runtime.OperationID ||
 		task.Target != runtime.VolumeID || task.Owner.EnvironmentID != runtime.EnvironmentID ||
-		task.RetryOf != runtime.PredecessorTaskID || len(task.Steps) != 1 || task.Steps[0].ID != runtime.StepID ||
+		task.RetryOf != runtime.PredecessorTaskID || !EnvironmentVolumeRemovalStepMatches(task.Steps, runtime.StepID) ||
 		task.RenderGeneration != int32(
 			runtime.DesiredGeneration,
 		) || task.TimeoutSeconds != removalrecord.TimeoutSeconds ||

@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"testing"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/compose-spec/compose-go/v2/types"
@@ -21,6 +23,11 @@ type volumePlanReader struct {
 	project     etcd.ProjectRecord
 	environment etcd.EnvironmentRecord
 	projections map[string]etcd.EnvironmentComposeProjection
+	manifest    removalrecord.EvidenceManifest
+}
+
+func (reader *volumePlanReader) Manifest(context.Context, string) (removalrecord.EvidenceManifest, bool, error) {
+	return reader.manifest, true, nil
 }
 
 func (reader *volumePlanReader) GetTenant(context.Context, string) (etcd.Versioned[etcd.TenantRecord], error) {
@@ -100,6 +107,9 @@ func TestResolveVolumeRemovePlanDetachesConsumersBeforeCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
 	}
+	if err := resolver.EnableVolumeRemovalPlans(state.reader); err != nil {
+		t.Fatal(err)
+	}
 	first, err := resolver.ResolveExecutionPlan(context.Background(), state.removeTask)
 	if err != nil {
 		t.Fatalf("ResolveExecutionPlan(remove) error = %v", err)
@@ -167,7 +177,7 @@ func newVolumePlanState(t *testing.T, removal bool) volumePlanState {
 	addPlanID := ids.NewAt(ids.KindPlan, at, 10)
 	removePlanID := ids.NewAt(ids.KindPlan, at, 11)
 	baselineArtifactID := ids.NewAt(ids.KindConfig, at, 12)
-	candidateArtifactID := ids.NewAt(ids.KindConfig, at, 13)
+	candidateArtifactID := ids.NewAt(ids.KindConfig, at, 9)
 	addArtifactID := ids.NewAt(ids.KindConfig, at, 14)
 	serviceStepID := ids.NewAt(ids.KindStep, at, 15)
 	dockerStepID := ids.NewAt(ids.KindStep, at, 16)
@@ -291,6 +301,25 @@ func newVolumePlanState(t *testing.T, removal bool) volumePlanState {
 			{Kind: etcd.TaskStepOperation, ID: directoryStepID},
 		},
 	)
+	if removal {
+		reader.manifest = removalrecord.EvidenceManifest{
+			OperationID: removeTask.OperationID, EnvironmentID: environmentID, VolumeID: volumeID, Key: volumeKey,
+			SourceRevisionID: baselineRevisionID, DesiredRevisionID: candidateRevisionID, ReadRevision: 1,
+			ImpactSHA256: sha256.Sum256(
+				[]byte("accepted plan fixture impact"),
+			), OrderedSHA256: removalrecord.EmptyEvidenceDigest(),
+		}
+		value, err := removalrecord.EncodeEvidenceManifest(reader.manifest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		removeTask.Params = etcd.EnvironmentVolumeRemovalTaskParams(removalrecord.Runtime{
+			EnvironmentID: environmentID, DesiredRevisionID: candidateRevisionID, OriginTaskID: removeTask.ID,
+			Key: volumeKey, ImpactSHA256: reader.manifest.ImpactSHA256,
+			EvidenceManifestSHA256: sha256.Sum256(value), IntentSHA256: [sha256.Size]byte(intentDigest),
+		}, 1)
+		removeTask.TimeoutSeconds = removalrecord.TimeoutSeconds
+	}
 	addTask.Steps = []etcd.TaskStepRecord{
 		{Kind: etcd.TaskStepOperation, ID: serviceStepID},
 		{Kind: etcd.TaskStepOperation, ID: dockerStepID},

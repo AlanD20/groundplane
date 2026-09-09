@@ -15,6 +15,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/volumeremoval"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -33,11 +34,13 @@ const (
 )
 
 type MutationService struct {
-	volumeRoot  string
-	repository  MutationRepository
-	idempotency *mutationIdempotency
-	reads       *ReadService
-	now         func() time.Time
+	volumeRoot      string
+	repository      MutationRepository
+	idempotency     *mutationIdempotency
+	reads           *ReadService
+	policies        *etcd.BackupPolicyRepository
+	removalEvidence *volumeremoval.EvidenceRepository
+	now             func() time.Time
 }
 
 func NewMutationService(
@@ -46,8 +49,10 @@ func NewMutationService(
 	coordinator *idempotentintent.Coordinator,
 	idempotencyRepository *etcd.IdempotencyRepository,
 	reads *ReadService,
+	policies *etcd.BackupPolicyRepository,
+	removalEvidence *volumeremoval.EvidenceRepository,
 ) (*MutationService, error) {
-	if volumeRoot == "" || repository == nil || reads == nil {
+	if volumeRoot == "" || repository == nil || reads == nil || policies == nil || removalEvidence == nil {
 		return nil, errs.New(errs.KindInternal, "Volume mutation service is not configured")
 	}
 	idempotency, err := newMutationIdempotency(coordinator, idempotencyRepository)
@@ -56,6 +61,7 @@ func NewMutationService(
 	}
 	return &MutationService{
 		volumeRoot: volumeRoot, repository: repository, idempotency: idempotency, reads: reads, now: time.Now,
+		policies: policies, removalEvidence: removalEvidence,
 	}, nil
 }
 
@@ -341,6 +347,19 @@ func (service *MutationService) mutateOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	createdAt := service.now().UTC()
+	var removalPolicy etcd.VolumeRemovalBackupPolicyPreparation
+	if request.action == volumeMutationActionRemove {
+		removalPolicy, err = service.policies.PrepareVolumeRemovalBackupPolicy(
+			ctx,
+			request.environmentID,
+			request.volumeID,
+			current.ReadRevision,
+		)
+		if err != nil {
+			return etcd.IdempotencyResponse{}, err
+		}
+		candidateProjection.Backup = removalPolicy.Projection()
+	}
 	claim, _, err := desiredrevision.PreflightAndClaim(
 		ctx, service.repository, candidateProjection, desiredrevision.ClaimInput{
 			EnvironmentID: request.environmentID, CandidateTaskID: candidateTaskID,
@@ -366,6 +385,9 @@ func (service *MutationService) mutateOnce(
 	intentDigest, err := hex.DecodeString(claim.Intent.CiphertextDigest)
 	if err != nil || len(intentDigest) != sha256.Size {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Volume protected intent digest is invalid")
+	}
+	if request.action == volumeMutationActionRemove {
+		candidate.Backup = removalPolicy.Projection()
 	}
 	planID := stableIDFromTask(ids.KindPlan, taskID)
 	artifactID := stableIDFromTask(ids.KindConfig, taskID)
@@ -440,23 +462,35 @@ func (service *MutationService) mutateOnce(
 		target := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetVolume, ID: request.volumeID}
 		marker.ReplayTarget = &target
 	}
-	result, mutationErr := service.repository.PublishEnvironmentDesiredRevisionWithTask(
-		ctx,
-		project,
-		environment,
-		expectedHeadRevision,
-		claim,
-		etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: request.environmentID, RevisionID: claim.RevisionID},
-		candidate,
-		nil,
-		nil,
-		nil,
-		etcd.ReleaseGroupBlueprintPreparedMutation{},
-		etcd.ComponentTaskPreparation{},
-		etcd.BlueprintAttachTaskPreparation{},
-		task,
-		marker,
-	)
+	var result etcd.IdempotencyTransactionResult
+	var mutationErr error
+	if request.action == volumeMutationActionRemove {
+		initial, preparationErr := service.prepareRemoval(ctx, current, request, &task, marker)
+		if preparationErr != nil {
+			return etcd.IdempotencyResponse{}, preparationErr
+		}
+		result, mutationErr = service.repository.PublishEnvironmentVolumeRemovalWithTask(
+			ctx, project, environment, expectedHeadRevision, claim, candidate, removalPolicy, initial, task, marker,
+		)
+	} else {
+		result, mutationErr = service.repository.PublishEnvironmentDesiredRevisionWithTask(
+			ctx,
+			project,
+			environment,
+			expectedHeadRevision,
+			claim,
+			etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: request.environmentID, RevisionID: claim.RevisionID},
+			candidate,
+			nil,
+			nil,
+			nil,
+			etcd.ReleaseGroupBlueprintPreparedMutation{},
+			etcd.ComponentTaskPreparation{},
+			etcd.BlueprintAttachTaskPreparation{},
+			task,
+			marker,
+		)
+	}
 	if mutationErr != nil {
 		if !isUnknownPublicationOutcome(mutationErr) {
 			return etcd.IdempotencyResponse{}, mutationErr

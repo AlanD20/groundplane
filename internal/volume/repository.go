@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	removal "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -42,6 +43,18 @@ type ReadRepository interface {
 
 type MutationRepository interface {
 	ReadRepository
+	PublishEnvironmentVolumeRemovalWithTask(
+		context.Context,
+		etcd.Versioned[etcd.ProjectRecord],
+		etcd.Versioned[etcd.EnvironmentRecord],
+		int64,
+		etcd.EnvironmentBlueprintStageClaim,
+		etcd.EnvironmentComposeProjection,
+		etcd.VolumeRemovalBackupPolicyPreparation,
+		removal.InitialPublication,
+		etcd.TaskRecord,
+		etcd.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
 	GetTenant(context.Context, string) (etcd.Versioned[etcd.TenantRecord], error)
 	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
 	GetEnvironmentBlueprintHead(
