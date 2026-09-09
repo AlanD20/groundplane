@@ -351,7 +351,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		)
 	}
 	removalLockConditionIndex := -1
-	if volumeInitial == nil && claim.SourceKind == EnvironmentBlueprintSourceMutation {
+	if volumeInitial == nil {
 		removalLockConditionIndex = len(conditions)
 		conditions = append(conditions, Condition{Key: removalrecord.EnvironmentLockKey(environment.Record.ID)})
 	}

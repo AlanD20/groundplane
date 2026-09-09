@@ -169,17 +169,17 @@ func TestEnvironmentBlueprintTopologyPublicationHasConstantCompactShape(t *testi
 			if err != nil {
 				t.Fatalf("PublishEnvironmentDesiredRevisionWithTask() error = %v", err)
 			}
-			if audited.comparisons != 21 || audited.successMutations != 12 {
+			if audited.comparisons != 22 || audited.successMutations != 12 {
 				t.Fatalf(
-					"publication partitions = %d/%d, want 21/12",
+					"publication partitions = %d/%d, want 22/12",
 					audited.comparisons,
 					audited.successMutations,
 				)
 			}
 			outcome, _, conflict, classifyErr := result.Classify()
 			if reject {
-				if audited.failureReads != 21 {
-					t.Fatalf("failure reads = %d, want 21", audited.failureReads)
+				if audited.failureReads != 22 {
+					t.Fatalf("failure reads = %d, want 22", audited.failureReads)
 				}
 				if classifyErr != nil || outcome != IdempotencyKnownConflict || conflict == nil {
 					t.Fatalf("rejected publication = %v/%v/%v", outcome, conflict, classifyErr)
