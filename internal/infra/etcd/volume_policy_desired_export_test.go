@@ -501,6 +501,24 @@ func (fixture *VolumePolicyDesiredFixture) Publish(ctx context.Context) (Idempot
 	fixture.store.writerBeforePublication = fixture.writerBeforePublication
 	fixture.store.parentBeforePublication = fixture.ParentBeforePublication
 	fixture.store.evidenceBeforePublication = fixture.EvidenceBeforePublication
+	if fixture.Initial != nil {
+		publisher, err := newEnvironmentBlueprintRepository(fixture.Store, fixture.store)
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+		return publisher.PublishEnvironmentVolumeRemovalWithTask(
+			ctx,
+			fixture.policy.project,
+			fixture.policy.environment,
+			fixture.HeadRevision,
+			fixture.Request.Claim,
+			fixture.Request.Projection,
+			fixture.prepared,
+			*fixture.Initial,
+			fixture.Task,
+			fixture.Marker,
+		)
+	}
 	hierarchy, err := newHierarchyRepository(fixture.Store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

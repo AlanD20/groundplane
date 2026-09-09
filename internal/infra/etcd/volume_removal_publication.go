@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
+	"net/netip"
 	"strconv"
 
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
@@ -18,6 +19,44 @@ import (
 type volumeRemovalInitialPublication struct {
 	conditions []Condition
 	mutations  []Mutation
+}
+
+// PublishEnvironmentVolumeRemovalWithTask is the closed Volume entry into the
+// sole desired publisher. It requires prepared policy and initial operation
+// authority; evidence, ownership and Task writes remain one transaction.
+func (repository *EnvironmentBlueprintRepository) PublishEnvironmentVolumeRemovalWithTask(
+	ctx context.Context,
+	project Versioned[ProjectRecord], environment Versioned[EnvironmentRecord],
+	expectedHeadRevision int64, claim EnvironmentBlueprintStageClaim,
+	projection EnvironmentComposeProjection, policy VolumeRemovalBackupPolicyPreparation,
+	initial removalrecord.InitialPublication, task TaskRecord, marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	return repository.publishEnvironmentDesiredRevisionWithTask(
+		ctx,
+		netip.Prefix{},
+		environment.Record.NetworkPool,
+		project,
+		environment,
+		expectedHeadRevision,
+		claim,
+		EnvironmentDesiredRevisionIdentity{EnvironmentID: claim.EnvironmentID, RevisionID: claim.RevisionID},
+		projection,
+		nil,
+		nil,
+		nil,
+		ReleaseGroupBlueprintPreparedMutation{},
+		ComponentTaskPreparation{},
+		BlueprintAttachTaskPreparation{},
+		BlueprintBackupPolicyPreparation{},
+		BlueprintScriptPublication{},
+		BlueprintReleasePublication{},
+		BlueprintRequirementGate{},
+		policy,
+		&initial,
+		task,
+		marker,
+		repository.transactions,
+	)
 }
 
 func (repository *HierarchyRepository) prepareVolumeRemovalDesiredPublication(
