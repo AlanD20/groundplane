@@ -601,7 +601,7 @@ func (repository *TaskRepository) validateRouteTaskAcknowledgementReplay(
 	if terminalStatus == TaskStatusCompleted {
 		return errs.New(errs.KindStateConflict, "completed Route removal retained its active intent")
 	}
-	staging, err := prepareRouteHeadPromotion(ctx, repository.store, intent, revision)
+	staging, err := prepareRouteHeadCandidate(ctx, repository.store, intent, revision)
 	if err != nil {
 		return err
 	}

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -107,6 +108,7 @@ func prepareRouteHeadPublication(
 			{Key: environmentBlueprintDescriptorKeyByID(claim.DescriptorID)},
 			{Key: environmentBlueprintRootKey(claim.EnvironmentID, claim.RevisionID)},
 			{Key: environmentBlueprintHeadKey(claim.EnvironmentID), ModRevision: expectedHeadRevision},
+			{Key: removalrecord.EnvironmentLockKey(claim.EnvironmentID)},
 		},
 		mutations: []Mutation{{
 			Type: MutationPut, Key: environmentBlueprintDescriptorKeyByID(claim.DescriptorID), Value: descriptorValue,
@@ -165,6 +167,27 @@ func prepareRouteHeadPublication(
 }
 
 func prepareRouteHeadPromotion(
+	ctx context.Context,
+	store hierarchyStore,
+	intent RouteRemovalIntent,
+	revision int64,
+) (routeHeadPublication, error) {
+	lock, err := store.GetMany(ctx, GetManyRequest{
+		Keys: []string{removalrecord.EnvironmentLockKey(intent.EnvironmentID)}, Revision: revision,
+	})
+	if err != nil {
+		return routeHeadPublication{}, err
+	}
+	if lock == nil || len(lock.Values) != 1 {
+		return routeHeadPublication{}, errs.New(errs.KindInternal, "Route removal lock evidence is incomplete")
+	}
+	if lock.Values[0] != nil {
+		return routeHeadPublication{}, errs.New(errs.KindStateConflict, "environment Volume removal is in progress")
+	}
+	return prepareRouteHeadCandidate(ctx, store, intent, revision)
+}
+
+func prepareRouteHeadCandidate(
 	ctx context.Context,
 	store hierarchyStore,
 	intent RouteRemovalIntent,
@@ -250,6 +273,7 @@ func prepareRouteHeadPromotion(
 			{Key: descriptorKey, ModRevision: state.Values[0].ModRevision},
 			{Key: rootKey, ModRevision: state.Values[1].ModRevision},
 			{Key: headKey, ModRevision: state.Values[2].ModRevision},
+			{Key: removalrecord.EnvironmentLockKey(intent.EnvironmentID)},
 		},
 		mutations: []Mutation{
 			{Type: MutationPut, Key: descriptorKey, Value: descriptorValue},
