@@ -190,6 +190,12 @@ defines its accepted token contract. Enrollment requires authenticated
 `max(3 * pull_interval, 30s)`. mTLS, CAs, and certificates are post-MVP.
 ADR 0016 is the accepted topology decision.
 
+Update preparation owns a reversible admission hold in the Agent session
+registry. It drains admitted claim/plan preparation and sends, including older
+connections of the same generation. Busy/pre-publication failures release only
+that hold and wake dispatch; uncertain publication remains fenced for recovery.
+Permanent deletion/revocation fences stay monotonic (ADR0010).
+
 Agent removal stops assignments, aborts active tasks with reason
 `agent_removed`, revokes the token, waits for the Agent to be offline, and then
 removes its container and records within a 120-second Controller Task deadline.

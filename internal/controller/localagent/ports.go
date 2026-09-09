@@ -155,9 +155,13 @@ type SessionSnapshot struct {
 // every session at or below its bound; a newer registered generation satisfies
 // that prior-generation fence without being stopped or revoked. Removal
 // operations are idempotent when the matching session is already absent or offline.
+// PauseAssignments drains admitted preparation and returns an idempotent,
+// in-memory release that remains usable after caller cancellation. It releases
+// only that operation's pause, never an irreversible lifecycle fence.
 type Sessions interface {
 	Ready(ctx context.Context, agentID string, generation uint64) (<-chan struct{}, error)
 	Snapshot(agentID string) (SessionSnapshot, bool)
+	PauseAssignments(ctx context.Context, agentID string, generation uint64) (func(), error)
 	StopAssignments(ctx context.Context, agentID string, generation uint64) error
 	FenceThrough(ctx context.Context, agentID string, generation uint64) error
 	Revoke(ctx context.Context, agentID string, generation uint64) error

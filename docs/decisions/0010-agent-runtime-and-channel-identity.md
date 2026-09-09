@@ -94,6 +94,15 @@ only while it has no active Task assignments. It fences new assignments before
 checking. A busy Agent fails with `resource.in_use` before credential, record,
 runtime-file, or container mutation. The update never aborts operator work.
 
+Update preparation uses an operation-owned reversible assignment pause, not the
+permanent deletion/revocation fence. It drains admitted claims and sends before
+checking for idle. A busy result or failed preparation releases only its own
+pause and wakes dispatch, including across an equal-generation reconnect.
+Cancellation does not cancel already running Agent work. Once replacement
+publication is attempted, an uncertain response retains the pause until durable
+recovery fences the predecessor; it is never treated as proof of no mutation.
+Valid assignments delayed by a pause remain dispatchable, not quarantined.
+
 For an accepted update, the Controller:
 
 1. retains the current image digest as the rollback digest;

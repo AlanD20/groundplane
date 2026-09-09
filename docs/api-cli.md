@@ -645,6 +645,11 @@ attachment on every authorized request.
 | host | `GET /host` → `200` (includes etcd status; etcd is host-level, not a component) |
 | agent | `POST /agents` → `202 {task_id}` creates the local Agent and Controller-managed container without returning credentials and requires authenticated `Ready` within 120 seconds · `GET /agents`, `GET /agents/{id}`, and `GET /agents/{id}/config` → `200` · `PUT /agents/{id}/config` → `200` · bodyless `POST /agents/{id}/update` → `202 {task_id}` uses configured `agent.image`, requires an idle Agent, rotates generation/token, waits 120 seconds for Ready, and rolls back the prior digest inside a 300-second Task · `DELETE /agents/{id}` → `202 {task_id}` has a 120-second Controller Task deadline, stops assignments, aborts active tasks with `agent_removed`, revokes the token, waits for offline, then removes the container and record; Agent is not a Component and has no Component projection |
 
+Agent update preparation is a reversible dispatch pause. Busy or failed
+preparation leaves active work untouched and resumes ordinary dispatch; an
+uncertain replacement publication stays fenced until durable recovery. This
+does not add a public pause/resume action or change the bodyless update request.
+
 ### Release Group rollback preview
 
 `release-group.rollback-preview` is a distinct operator-facing capability, not

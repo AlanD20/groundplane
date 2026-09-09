@@ -648,7 +648,9 @@ Semantics bound to the channel:
   config, and record. Its Controller Task deadline is 120 seconds. A removed
   token is never accepted again.
 - **Controller-owned Agent replacement** — an Agent update fences assignments
-  and proceeds only when the Agent is idle. The native Controller rotates the
+  and proceeds only when the Agent is idle. Rejected busy/preparation attempts
+  release their own reversible pause without reopening deletion/revocation;
+  uncertain replacement publication stays fenced for recovery. The native Controller rotates the
   token and generation, replaces the container at configured `agent.image`,
   requires authenticated Ready within 120 seconds, and otherwise rotates again
   and rolls back the previous digest. The Agent never receives a self-update
