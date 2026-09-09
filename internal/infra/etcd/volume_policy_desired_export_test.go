@@ -25,6 +25,7 @@ type VolumePolicyDesiredFixture struct {
 	OwnerBeforePublication           *removalrecord.Owner
 	EnvironmentLockBeforePublication *removalrecord.Owner
 	ParentBeforePublication          *HierarchyCoordinationRecord
+	EvidenceBeforePublication        func()
 	writerBeforePublication          *taskMaterializationWriterRecord
 	prepared                         VolumeRemovalBackupPolicyPreparation
 	policy                           *backupPolicyReplacementFixture
@@ -53,8 +54,9 @@ func (fixture *VolumePolicyDesiredFixture) ParentDeletionBegin(
 	return hierarchyDeletionCreationTestBegin(fixture.Task.CreatedAt, kind, id, operation, "7")
 }
 
-// PrepareRemovalRecords supplies the real closed initial-record input. This
-// fixture does not claim to prepare the still-unwired bounded removal evidence.
+// PrepareRemovalRecords supplies the real closed initial-record input with a
+// canonical empty-consumer evidence snapshot. Source discovery is not exercised
+// by this storage fixture; evidence publication tests run actual staging/sealing.
 func (fixture *VolumePolicyDesiredFixture) PrepareRemovalRecords(t *testing.T) removalrecord.Runtime {
 	t.Helper()
 	task, marker := &fixture.Task, &fixture.Marker
@@ -63,9 +65,8 @@ func (fixture *VolumePolicyDesiredFixture) PrepareRemovalRecords(t *testing.T) r
 	runtime := removalrecord.Runtime{
 		OperationID: task.OperationID, EnvironmentID: task.Owner.EnvironmentID, VolumeID: task.Target,
 		Key: fixture.Request.Mutation.Volume.Key, DesiredRevisionID: task.ID,
-		DesiredGeneration:      uint64(task.RenderGeneration),
-		ImpactSHA256:           sha256.Sum256([]byte("fixture impact")),
-		EvidenceManifestSHA256: sha256.Sum256([]byte("fixture evidence")),
+		DesiredGeneration: uint64(task.RenderGeneration),
+		ImpactSHA256:      sha256.Sum256([]byte("fixture impact")),
 		IntentSHA256: sha256.Sum256(
 			marker.Intent.Ciphertext,
 		), RootResponseSHA256: sha256.Sum256(marker.Response.Body),
@@ -76,6 +77,7 @@ func (fixture *VolumePolicyDesiredFixture) PrepareRemovalRecords(t *testing.T) r
 		OriginTaskID: task.ID, CurrentTaskID: task.ID, AttemptOrdinal: 1, StepID: task.Steps[0].ID,
 		Checkpoint: removalrecord.DesiredPublished, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt,
 	}
+	runtime.EvidenceManifestSHA256 = fixture.seedRemovalEvidence(t, runtime)
 	task.Params = EnvironmentVolumeRemovalTaskParams(runtime, 1)
 	initial, err := removalrecord.PrepareInitialPublication(runtime)
 	if err != nil {
@@ -83,6 +85,58 @@ func (fixture *VolumePolicyDesiredFixture) PrepareRemovalRecords(t *testing.T) r
 	}
 	fixture.Initial = &initial
 	return runtime
+}
+
+func (fixture *VolumePolicyDesiredFixture) seedRemovalEvidence(
+	t *testing.T,
+	runtime removalrecord.Runtime,
+) [sha256.Size]byte {
+	t.Helper()
+	ctx := context.Background()
+	hierarchy, err := newHierarchyRepository(fixture.Store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, found, err := hierarchy.GetEnvironmentComposeProjection(ctx, runtime.EnvironmentID)
+	if err != nil || !found {
+		t.Fatal("read evidence baseline", err)
+	}
+	manifest := removalrecord.EvidenceManifest{
+		OperationID: runtime.OperationID, EnvironmentID: runtime.EnvironmentID, VolumeID: runtime.VolumeID,
+		Key: runtime.Key, ReadRevision: fixture.Revision(), SourceRevisionID: source.Record.RevisionID,
+		DesiredRevisionID: runtime.DesiredRevisionID, ImpactSHA256: runtime.ImpactSHA256,
+		OrderedSHA256: removalrecord.EmptyEvidenceDigest(),
+	}
+	manifestValue, err := removalrecord.EncodeEvidenceManifest(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cursor, err := removalrecord.InitialEvidenceCursor(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cursorValue, err := removalrecord.EncodeEvidenceCursor(cursor, manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := fixture.Store.Transact(ctx, nil, []Mutation{
+		{Type: MutationPut, Key: removalrecord.EvidenceManifestKey(runtime.OperationID), Value: manifestValue},
+		{Type: MutationPut, Key: removalrecord.EvidenceCursorKey(runtime.OperationID), Value: cursorValue},
+	})
+	if err != nil || !result.Succeeded {
+		t.Fatal("seed evidence metadata", err)
+	}
+	sealValue, err := removalrecord.EncodeEvidenceSeal(removalrecord.EvidenceSeal{
+		ManifestSHA256: cursor.ManifestSHA256, ManifestRevision: result.Revision,
+		CursorRevision: result.Revision, VerifiedRevision: result.Revision,
+	}, manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.Store.Put(ctx, removalrecord.EvidenceSealKey(runtime.OperationID), sealValue); err != nil {
+		t.Fatal(err)
+	}
+	return cursor.ManifestSHA256
 }
 
 type volumePolicyDesiredAuditStore struct {
@@ -97,6 +151,7 @@ type volumePolicyDesiredAuditStore struct {
 	writerBeforePublication          *taskMaterializationWriterRecord
 	terminalBeforeCommit             func()
 	loseTerminalResponse             bool
+	evidenceBeforePublication        func()
 }
 
 func (audit *volumePolicyDesiredAuditStore) TransactEnvironmentBlueprint(
@@ -104,6 +159,11 @@ func (audit *volumePolicyDesiredAuditStore) TransactEnvironmentBlueprint(
 ) (TransactionResult, error) {
 	if err := validateEnvironmentBlueprintTransactionBudget(conditions, mutations); err != nil {
 		return TransactionResult{}, err
+	}
+	if audit.evidenceBeforePublication != nil {
+		before := audit.evidenceBeforePublication
+		audit.evidenceBeforePublication = nil
+		before()
 	}
 	if audit.parentBeforePublication != nil {
 		parent := *audit.parentBeforePublication
@@ -440,6 +500,7 @@ func (fixture *VolumePolicyDesiredFixture) Publish(ctx context.Context) (Idempot
 	fixture.store.environmentLockBeforePublication = fixture.EnvironmentLockBeforePublication
 	fixture.store.writerBeforePublication = fixture.writerBeforePublication
 	fixture.store.parentBeforePublication = fixture.ParentBeforePublication
+	fixture.store.evidenceBeforePublication = fixture.EvidenceBeforePublication
 	hierarchy, err := newHierarchyRepository(fixture.Store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -599,15 +660,18 @@ func (fixture *VolumePolicyDesiredFixture) AssertMaximumSelectionPublished(t *te
 			t.Fatal("publication lost an exact source primary fence")
 		}
 	}
-	wantConditions, wantMutations := 38, 15
+	// Publication-time JSON timestamps trim trailing fractional zeros; the
+	// nine-digit representation is the upper bound, not every request's size.
+	wantConditions, wantMutations, maximumBytes := 38, 15, 13286
 	if fixture.Initial != nil {
-		wantConditions += 6
+		wantConditions += 9
 		wantMutations += 7
+		maximumBytes = 17392
 	} else {
 		wantConditions++ // Ordinary desired mutation must exclude the Environment removal lock too.
 	}
 	if len(fixture.store.conditions) != wantConditions || len(fixture.store.mutations) != wantMutations ||
-		fixture.store.bytes > 1024*1024 {
+		fixture.store.bytes > maximumBytes || fixture.store.bytes > 1024*1024 {
 		t.Fatalf(
 			"maximum policy/desired publication shape: %d/%d/%d bytes",
 			len(fixture.store.conditions),
@@ -656,12 +720,13 @@ func (fixture *VolumePolicyDesiredFixture) AssertAtomicPolicy(t *testing.T, earl
 	if value := fixture.policy.store.valueAt(backupPolicyConnectorReferenceKey(fixture.policy.connector.Record.Connector.ID, fixture.Task.Owner.EnvironmentID), fixture.policy.store.revision); value != nil {
 		t.Fatal("disabled policy retained its active Connector reference")
 	}
-	wantConditions, wantMutations := 28, 16
+	wantConditions, wantMutations, maximumBytes := 28, 16, 11076
 	if fixture.Initial != nil {
-		wantConditions, wantMutations = 33, 23
+		wantConditions, wantMutations = 36, 23
+		maximumBytes = 15182
 	}
 	if len(fixture.store.conditions) != wantConditions || len(fixture.store.mutations) != wantMutations ||
-		fixture.store.bytes > 900*1024 {
+		fixture.store.bytes > maximumBytes || fixture.store.bytes > 900*1024 {
 		t.Fatalf("combined policy/desired publication shape: %d/%d/%d bytes",
 			len(fixture.store.conditions), len(fixture.store.mutations), fixture.store.bytes)
 	}
@@ -674,6 +739,31 @@ func (fixture *VolumePolicyDesiredFixture) AssertAtomicPolicy(t *testing.T, earl
 }
 
 func (fixture *VolumePolicyDesiredFixture) Revision() int64 { return fixture.policy.store.revision }
+
+// Rationale: fixed clock samples cannot be exact byte expectations for live
+// publication. Both policy and coordination timestamps trim fractional zeros.
+func TestVolumePublicationTimestampEncodingChangesWireSize(t *testing.T) {
+	fixture := NewVolumePolicyDesiredFixture(t)
+	sizes := make([]int, 2)
+	for index, nanos := range []int{1, 10} {
+		publication, err := prepareVolumeRemovalBackupPolicyPublication(fixture.prepared,
+			time.Date(2030, 1, 1, 0, 0, 0, nanos, time.UTC))
+		if err != nil {
+			t.Fatal(err)
+		}
+		sizes[index], err = (&store{root: "/groundplane"}).transactionSize(
+			publication.conditions,
+			publication.mutations,
+		)
+		clearBackupRuntimeMutations(publication.mutations)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if sizes[0]-sizes[1] != 2 {
+		t.Fatalf("timestamp wire-size delta: %v", sizes)
+	}
+}
 
 func (fixture *VolumePolicyDesiredFixture) AssertRemovalAncestry(t *testing.T, baselineRevision int64) {
 	t.Helper()
