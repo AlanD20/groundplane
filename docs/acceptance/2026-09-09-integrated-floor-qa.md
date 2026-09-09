@@ -64,3 +64,37 @@ pass with race detection: 3.505 seconds, selection-local 12.1% etcd coverage in
 Controller builds as `0.0.0-qa.floor20260909.2`; no Agent delta is needed.
 Live reruns remain required. No floor acceptance is claimed from healthy
 runtime or isolated local tests.
+
+## Corrected publication deployed; dispatch mapping correction
+
+Controller `0.0.0-qa.floor20260909.2` (SHA-256
+`283128f9443c5ab20e0c397f9ccd7e5a4792b323ad13ae39eaee9393d13e98a5`)
+was installed with the previous floor executable retained as
+`controller-before-retained-direct`. Agent and workload state were unchanged.
+A verifier retry failed before API calls because its repo-local SSH socket path
+was too long; evidence `volume-lifecycle-20260909T162913Z.kOY5dq` is retained.
+Use `TMPDIR=$PWD/.tmp`, not a deeper runtime directory, for this verifier.
+
+The next run (`volume-lifecycle-20260909T163013Z.Xu6FGr`) completed real Volume
+creation as `task_01M23G2WJP1SB14S0P2GAS84Z9` at 16:30:15.173521163 UTC.
+The Volume is `vol_01M23G2WJP1SB14S0P2GAS84Z9`, immutable key
+`qa-floor-volume-20260909`, current slug `qa-floor-volume-renamed-20260909`.
+The generated Docker Volume and managed directory exist. Do not remove them
+out of band: normal Retry and impact-confirmed DELETE are the next steps.
+
+Rename Task `task_01M23G2Y5YEYRBJ1PZVZCZJVCM` was quarantined at dispatch:
+plan id/hash/generation/target/steps matched, but its operation did not. It timed
+out at 16:32:20.429774118 UTC without dispatch. The later normal Abort request
+correctly returned `task.not_abortable` because timeout had already won.
+
+The channel operation matcher omitted direct Volume and Entry `TaskUpdate`
+reconcile plans. Both focused cases fail before correction. The matcher now
+admits those exact resource/target kinds as reconcile and rejects Blueprint
+Apply and wrong target kinds. Full plan validation remains mandatory. The
+existing matcher moved into one bounded file so the oversized server shrank
+by 52 lines; no allowance changed. Operation cross-pairs, Environment procedure,
+actual stream wake dispatch and durable assignment epoch checks pass with race
+detection: 1.214 seconds, selection-local 19.1% coverage in
+`.tmp/qa-floor-20260909/resource-operation.cover`. Tagged Controller
+`0.0.0-qa.floor20260909.3` builds; no new Agent is required. Live retry/cleanup
+remain unproven until the normal operations below are completed.
