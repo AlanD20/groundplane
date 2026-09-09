@@ -17,7 +17,7 @@ import (
 func TestVolumeRemovalExecutionRequiresExactOwner(t *testing.T) {
 	for _, family := range []string{"volume", "environment"} {
 		t.Run(family, func(t *testing.T) {
-			for _, action := range []string{"detach", "begin", "redeliver", "complete", "finalize", "retry"} {
+			for _, action := range []string{"detach", "begin", "redeliver", "complete", "retry"} {
 				changes := []string{"none", "missing", "operation", "environment", "volume", "corrupt"}
 				if action != "redeliver" { // Redelivery only reads; there is no commit race to inject.
 					changes = append(changes, "late")
@@ -50,7 +50,7 @@ func TestVolumeRemovalExecutionRequiresExactOwner(t *testing.T) {
 							}
 						}
 						var pathResult EnvironmentVolumeRemovalPathResult
-						if action == "redeliver" || action == "complete" || action == "finalize" {
+						if action == "redeliver" || action == "complete" {
 							pending, _, err := repository.BeginPathCall(
 								ctx,
 								assignment,
@@ -67,11 +67,6 @@ func TestVolumeRemovalExecutionRequiresExactOwner(t *testing.T) {
 							completion.ResponseBytes = removalrecord.PathResponseBytes(completion)
 							completion.ResponseSHA256 = removalrecord.PathResponseDigest(completion)
 							pathResult = environmentVolumeRemovalPathResult(assignment, completion)
-							if action == "finalize" {
-								if _, _, err := repository.CompletePathCall(ctx, pathResult); err != nil {
-									t.Fatal(err)
-								}
-							}
 						}
 						var successor etcd.TaskRecord
 						if action == "retry" {
@@ -142,17 +137,6 @@ func TestVolumeRemovalExecutionRequiresExactOwner(t *testing.T) {
 							_, _, err = repository.BeginPathCall(ctx, assignment, runtime.CreatedAt.Add(6*time.Second))
 						case "complete":
 							_, _, err = repository.CompletePathCall(ctx, pathResult)
-						case "finalize":
-							_, err = repository.FinalizeCheckpoint(
-								ctx,
-								assignment,
-								etcd.TaskStatusCompleted,
-								etcd.TaskResultRecord{
-									Kind:       etcd.TaskResultEnvironmentDirectory,
-									Diagnostic: etcd.TaskResultDiagnosticNone,
-								},
-								runtime.CreatedAt.Add(7*time.Second),
-							)
 						case "retry":
 							_, err = repository.PublishSuccessorAttempt(ctx, runtime.OperationID, successor)
 						}

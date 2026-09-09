@@ -139,14 +139,12 @@ func TestEnvironmentVolumeRemovalPathResumesPendingCallAndDeduplicatesCompletion
 	if err != nil || duplicate || !progress.Record.DirectoryAbsent {
 		t.Fatalf("CompletePathCall(absent) = %#v/%v/%v", progress, duplicate, err)
 	}
-	result := etcd.TaskResultRecord{
-		Kind: etcd.TaskResultEnvironmentDirectory, Diagnostic: etcd.TaskResultDiagnosticNone,
-	}
-	finalized, err := restarted.FinalizeCheckpoint(
-		ctx, assignment, etcd.TaskStatusCompleted, result, runtime.CreatedAt.Add(10*time.Second),
-	)
-	if err != nil || finalized.Record.Checkpoint != removalrecord.RuntimeFinalized {
-		t.Fatalf("FinalizeCheckpoint() = %#v, %v", finalized, err)
+	// Rationale: only the Task terminal transaction may finalize the operation;
+	// advancing a runtime record alone cannot release ownership or retain replay.
+	before := store.revision
+	if _, err := restarted.AdvanceCheckpoint(ctx, runtime.OperationID, removalrecord.RuntimeFinalized,
+		runtime.CreatedAt.Add(10*time.Second)); !isKind(err, errs.KindStateConflict) || store.revision != before {
+		t.Fatalf("standalone checkpoint finalized removal: %v", err)
 	}
 }
 

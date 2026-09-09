@@ -77,22 +77,6 @@ func equalVolumeRemovalParams(left, right map[string]string) bool {
 	return true
 }
 
-func validateEnvironmentVolumeRemovalTaskResult(
-	result etcd.TaskResultRecord,
-	steps []etcd.TaskStepRecord,
-	status etcd.TaskStatus,
-) error {
-	if err := etcd.ValidateCapabilityTaskResult(result, steps, status); err != nil {
-		return err
-	}
-	if result.Kind != etcd.TaskResultEnvironmentDirectory ||
-		result.Diagnostic != etcd.TaskResultDiagnosticNone || result.ReconciliationRequired ||
-		len(result.Projects) != 0 || (status == etcd.TaskStatusCompleted && result.ExitCode != 0) {
-		return errs.New(errs.KindValidationFailed, "Environment Volume removal result is invalid")
-	}
-	return nil
-}
-
 func volumeRemovalRootLocator(runtime removalrecord.Runtime) etcd.IdempotencyLocator {
 	locator := runtime.RootLocator
 	return etcd.IdempotencyLocator{

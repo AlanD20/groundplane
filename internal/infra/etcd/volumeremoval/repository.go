@@ -545,35 +545,3 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) replayPathCompletio
 		Record: progress, Revision: read.Values[1].ModRevision, ReadRevision: read.ReadRevision,
 	}, true, nil
 }
-
-func (repository *EnvironmentVolumeRemovalRuntimeRepository) FinalizeCheckpoint(
-	ctx context.Context,
-	assignment EnvironmentVolumeRemovalAssignment,
-	status etcd.TaskStatus,
-	result etcd.TaskResultRecord,
-	at time.Time,
-) (etcd.Versioned[removalrecord.Runtime], error) {
-	state, err := repository.Resume(ctx, assignment.OperationID)
-	if err != nil {
-		return etcd.Versioned[removalrecord.Runtime]{}, err
-	}
-	if state.Runtime.Record.Checkpoint != removalrecord.DirectoryAbsent ||
-		!state.Progress.Record.DirectoryAbsent || state.Pending != nil || status != etcd.TaskStatusCompleted {
-		return etcd.Versioned[removalrecord.Runtime]{}, errs.New(
-			errs.KindStateConflict,
-			"Environment Volume removal cannot be finalized",
-		)
-	}
-	task, _, err := repository.loadAssignedTask(
-		ctx, assignment, state.Runtime.ReadRevision, state.Runtime.Record, state.Attempt,
-	)
-	if err != nil {
-		return etcd.Versioned[removalrecord.Runtime]{}, err
-	}
-	if err := validateEnvironmentVolumeRemovalTaskResult(result, task.Steps, status); err != nil {
-		return etcd.Versioned[removalrecord.Runtime]{}, err
-	}
-	return repository.advanceCheckpoint(
-		ctx, state, removalrecord.RuntimeFinalized, at, &assignment,
-	)
-}
