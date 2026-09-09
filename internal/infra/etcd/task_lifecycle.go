@@ -344,17 +344,17 @@ func (repository *TaskRepository) retryTask(
 	}
 	if source.Record.Type == TaskBackup || source.Record.Type == TaskBackupPrune {
 		return IdempotencyTransactionResult{}, errs.New(
-			errs.KindTaskNotRetryable,
-			"backup retry requires its atomic domain retry protocol",
+			errs.KindTaskNotRetryable, "backup retry requires its atomic domain retry protocol",
 		)
 	}
 	if source.Record.Type == TaskRotate {
 		return repository.retryBackupKeyRotationTask(ctx, source, retryTaskID, actor, marker)
 	}
 	if source.Record.Params[TaskResourceKindParam] == TaskResourceHierarchyDeletion {
-		return repository.retryHierarchyDeletionTask(
-			ctx, source, retryTaskID, actor, provided, marker,
-		)
+		return repository.retryHierarchyDeletionTask(ctx, source, retryTaskID, actor, provided, marker)
+	}
+	if source.Record.Type == TaskRemove && source.Record.Params[TaskResourceKindParam] == TaskResourceVolume {
+		return repository.retryVolumeRemovalTask(ctx, source, retryTaskID, actor, marker)
 	}
 	retry, err := cloneRetryTask(source.Record, retryTaskID, actor, marker.CreatedAt)
 	if err != nil {

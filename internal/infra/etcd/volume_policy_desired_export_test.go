@@ -249,6 +249,18 @@ func (fixture *VolumePolicyDesiredFixture) AssertRemovalAttemptBudget(t *testing
 	t.Logf("attempt transaction: %d comparisons, %d mutations, %d protobuf bytes", compares, writes, size)
 }
 
+func (fixture *VolumePolicyDesiredFixture) AssertRemovalRetryBudget(t *testing.T) {
+	t.Helper()
+	compares, writes, size := len(fixture.store.conditions), len(fixture.store.mutations), fixture.store.bytes
+	if compares > 24 || writes > 24 || compares+writes > 48 || size > 900*1024 {
+		t.Fatalf("retry transaction exceeds ADR0049 budget: %d/%d/%d", compares, writes, size)
+	}
+	if compares != 23 || writes != 11 || size != 9421 {
+		t.Fatalf("retry transaction shape changed: %d/%d/%d", compares, writes, size)
+	}
+	t.Logf("retry transaction: %d comparisons, %d mutations, %d protobuf bytes", compares, writes, size)
+}
+
 func (fixture *VolumePolicyDesiredFixture) AssertRemovalTerminal(t *testing.T, revision int64, at time.Time) {
 	t.Helper()
 	markerKey, err := idempotencyMarkerKey(fixture.Marker.Locator)
