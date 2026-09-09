@@ -20,6 +20,20 @@ func (fixture *ExecutedArtifactFixture) PublishManualJourneyEntry(
 	ciphertext []byte,
 	secretID string,
 ) (*EntryValueGenerationRepository, *SecretRepository, EntryRecord) {
+	return fixture.publishJourneyEntry(t, value, ciphertext, secretID, "")
+}
+
+// PublishAppliedRemovalJourneyEntry supplies completed Agent evidence to the
+// Entry acknowledgement path; it does not execute a host materialization.
+func (fixture *ExecutedArtifactFixture) PublishAppliedRemovalJourneyEntry(
+	t *testing.T, value string,
+) (*EntryValueGenerationRepository, *SecretRepository, EntryRecord) {
+	return fixture.publishJourneyEntry(t, value, nil, "", TaskResourceEntry)
+}
+
+func (fixture *ExecutedArtifactFixture) publishJourneyEntry(
+	t *testing.T, value string, ciphertext []byte, secretID, resourceKind string,
+) (*EntryValueGenerationRepository, *SecretRepository, EntryRecord) {
 	t.Helper()
 	ctx := context.Background()
 	values, err := newEntryValueGenerationRepository(fixture.store)
@@ -76,6 +90,9 @@ func (fixture *ExecutedArtifactFixture) PublishManualJourneyEntry(
 		t.Fatalf("Entry journey desired projection = %t, %v", found, err)
 	}
 	task := fixture.Task(t, 952)
+	if resourceKind != "" {
+		task.Params[TaskResourceKindParam] = resourceKind
+	}
 	task.RenderGeneration = int32(current.Record.RenderGeneration + 1)
 	projection := current.Record
 	projection.RevisionID, projection.RenderGeneration = task.ID, uint64(task.RenderGeneration)

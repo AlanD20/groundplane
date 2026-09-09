@@ -33,6 +33,15 @@ allowances must not be weakened to hide findings.
 
 ## Work completed after the snapshot
 
+- The September 9 Entry integration reran the gate; it remains red. Its two
+  new etcd external journey files add three test-only layer-import findings
+  (Agent/Controller in `entry_removal_agent_external_test.go`, Controller in
+  `entry_removal_publication_external_test.go`). Include them in the same
+  app-owned integration-fixture migration below. New production files remain
+  bounded; the changed pre-existing oversized files did not grow relative to
+  their current-main versions. The gate also retains the earlier file-size,
+  frozen-total, test-placement, and stale-baseline findings. No allowance or
+  production import rule was weakened, and no full gate pass is claimed.
 - `286fafb5` replaced one registered-Component reflection import with typed equality.
 - `ea155830` removed three Controller concrete-Component test imports.
 - `91a429da` moved two Agent adapter test imports into app-owned composition.

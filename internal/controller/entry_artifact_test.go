@@ -13,6 +13,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Rationale: Entry exposure edits retain operator files and all other desired
+// resources while preserving the existing runtime ownership.
 func TestProjectEnvironmentEntryMutationReplacesOnlyEntryDecorations(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
@@ -33,7 +35,12 @@ func TestProjectEnvironmentEntryMutationReplacesOnlyEntryDecorations(t *testing.
 				filepath.FromSlash(ServiceEnvFileName(environmentID, "api")),
 			) + "\n        required: true\n      - path: /operator.env\n        required: true\n",
 		),
-		Services: []*agentpb.ComposeService{{ServiceId: serviceID, ComposeName: "api"}},
+		Services: []*agentpb.ComposeService{
+			{ServiceId: serviceID, ComposeName: "api", ExpectedLabels: []*agentpb.LabelPair{
+				{Key: composeLabelPlanID, Value: ids.NewAt(ids.KindPlan, now, 11)},
+				{Key: composeLabelRenderGen, Value: "1"},
+			}},
+		},
 	}
 	digest := []byte(strings.Repeat("x", 32))
 	artifact.YamlSha256 = digest

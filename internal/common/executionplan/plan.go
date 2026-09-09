@@ -142,6 +142,9 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 	} else if plan.RenderGeneration == 0 {
 		return errs.New(errs.KindValidationFailed, "execution plan render generation must be positive")
 	}
+	if err := validateRuntimeMutationProcedures(plan); err != nil {
+		return err
+	}
 	if plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_SCRIPT {
 		return validateManualScriptPlan(plan)
 	}
@@ -188,9 +191,6 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 			"execution plan must contain between 1 and %d Compose artifacts",
 			MaximumArtifacts,
 		)
-	}
-	if err := validateServiceLifecyclePlan(plan); err != nil {
-		return err
 	}
 	artifacts := make(map[string]*agentpb.ComposeArtifact, len(plan.Artifacts))
 	for _, artifact := range plan.Artifacts {

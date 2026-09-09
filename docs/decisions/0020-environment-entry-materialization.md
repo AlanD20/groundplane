@@ -264,12 +264,27 @@ no remaining Entry contributes a value.
 
 Entry removal has no Compose step and does not restart or recreate a Service.
 Environment values already loaded by a running process remain until a later
-deploy or reconciliation. Successful Agent acknowledgement atomically removes
-the Entry primary, owner index, all subordinate generations, removal intent,
-and tombstone while terminalizing the Task. Failure, timeout, or abort retains
+deploy or reconciliation. For head-backed Entries, the existing desired
+publisher seals the candidate and publishes the cleanup Task without advancing
+the visible head. The intent binds that candidate and the independent applied
+cleanup snapshot. Successful acknowledgement atomically advances the desired
+head, removes the Entry owner index and all subordinate generations, updates
+the applicable applied snapshot, and releases the tombstone and Environment
+ownership while terminalizing the Task. The terminal intent remains bound to
+that Task for acknowledgement replay and ordinary retention pruning.
+Failure, timeout, or abort retains
 the Entry and current applied projection, releases removal ownership, and
 allows a protected retry. Component credential reverse references belong to
 reusable Secret deletion and do not participate in Entry removal.
+
+The unpublished cleanup candidate remains sealed while its original Task is
+retained, including after response expiry. Task publication advances the staging
+descriptor in the same transaction, so the existing descriptor CAS fences a
+publication racing with the collector's fixed-revision Task-absence read. No
+staging transaction ceiling changes. The never-applied Controller finalizer
+reserves the existing Environment materialization writer at publication and
+releases only its own writer at terminal acknowledgement; queued Agent work
+cannot invalidate the no-host-cleanup decision in between.
 
 ## Threat boundary
 

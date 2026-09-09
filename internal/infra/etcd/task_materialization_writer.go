@@ -216,8 +216,10 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 	// desired workloads. Preserve prior applied authority, including its absence.
 	volumeIdentity := record.Params[TaskResourceKindParam] == TaskResourceVolume &&
 		(record.Type == TaskCreate || record.Type == TaskUpdate)
+	entryMutation := record.Params[TaskResourceKindParam] == TaskResourceEntry && record.Type == TaskUpdate
 	if volumeIdentity ||
-		record.Type == TaskUpdate && !taskHasBlueprintCandidateAppliedAuthority(record) && state.Values[1] != nil {
+		record.Type == TaskUpdate && !entryMutation && !taskHasBlueprintCandidateAppliedAuthority(record) &&
+			state.Values[1] != nil {
 		if state.Values[1] != nil {
 			if _, err := decodeEnvironmentComposeProjection(state.Values[1].Value); err != nil {
 				return taskMaterializationProjectionChange{}, err
@@ -280,6 +282,18 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 			)
 		}
 		projectionRevisionCondition = state.Values[1].ModRevision
+		if entryMutation {
+			// Entry execution changes materialized generations and their Compose
+			// bindings, not unrelated desired workload or resource decisions.
+			current.RevisionID, current.RenderGeneration = projection.RevisionID, projection.RenderGeneration
+			current.Entries, current.ComposeArtifact = projection.Entries, projection.ComposeArtifact
+			projection = current
+			clear(projectionValue)
+			projectionValue, err = encodeEnvironmentComposeProjection(projection)
+			if err != nil {
+				return taskMaterializationProjectionChange{}, err
+			}
+		}
 	}
 	conditions := []Condition{
 		{Key: rootKey, ModRevision: state.Values[0].ModRevision},

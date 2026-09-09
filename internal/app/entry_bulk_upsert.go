@@ -13,12 +13,10 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
-	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 const entryBulkUpsertRoute = "/entries/bulk"
@@ -357,73 +355,39 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	artifactID := entryStableIDFromRevision(ids.KindConfig, claim.RevisionID)
-	materializationRecords, steps, err := service.desired.entryMaterializations(
-		ctx, input.environmentID, artifactID, allocator, materializations,
+	materializationRecords, err := service.desired.entryMaterializations(
+		ctx, input.environmentID, allocator, materializations,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	steps = append(steps, &agentpb.ExecutionStep{
-		StepId:         allocator.Named(ids.KindStep, "entry-compose-apply"),
-		TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds),
-		Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
-			ArtifactId:    artifactID,
-			FullReconcile: true,
-		}},
-	})
-	stepRecords := make([]etcd.TaskStepRecord, len(steps))
-	for index, step := range steps {
-		stepRecords[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: step.StepId}
-	}
-	artifact := &agentpb.ComposeArtifact{}
-	if err := protoUnmarshalEntryArtifact(candidate.ComposeArtifact, artifact); err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
 	planID := entryStableIDFromRevision(ids.KindPlan, claim.RevisionID)
-	plan, err := controller.BuildPlan(controller.PlanBuildInput{
-		VolumeRoot:       service.desired.volumeRoot,
-		PlanID:           planID,
-		RenderGeneration: generation,
-		Operation:        agentpb.PlanOperation_PLAN_OPERATION_RECONCILE,
-		TargetID:         input.environmentID,
-		Artifacts:        []*agentpb.ComposeArtifact{artifact},
-		Steps:            steps,
-	})
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
 	owner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	task := etcd.TaskRecord{
-		ID:               claim.TaskID,
-		OperationID:      allocator.Named(ids.KindOperation, "entry-bulk-operation"),
-		IdempotencyKey:   idempotencyKey,
-		Owner:            owner,
-		Actor:            etcd.TaskActorOperator,
-		Executor:         etcd.TaskExecutorAgent,
-		PlanID:           planID,
-		PlanHash:         hex.EncodeToString(plan.PlanHash),
-		RenderGeneration: int32(generation),
-		Type:             etcd.TaskUpdate,
-		Target:           input.environmentID,
-		Params: map[string]string{
-			etcd.EnvironmentDesiredRevisionParam:         claim.RevisionID,
-			etcd.TaskMaterializationEnvironmentParam:     input.environmentID,
-			controller.EnvironmentBlueprintArtifactParam: artifactID,
-			taskcontract.EnvironmentBlueprintProcedureParam: string(
-				taskcontract.BlueprintComposeProcedureFullReconcile,
-			),
-		},
-		Steps:             stepRecords,
+		ID:                claim.TaskID,
+		OperationID:       allocator.Named(ids.KindOperation, "entry-bulk-operation"),
+		IdempotencyKey:    idempotencyKey,
+		Owner:             owner,
+		Actor:             etcd.TaskActorOperator,
+		Executor:          etcd.TaskExecutorAgent,
+		PlanID:            planID,
+		RenderGeneration:  int32(generation),
+		Type:              etcd.TaskUpdate,
+		Target:            input.environmentID,
 		Materializations:  materializationRecords,
 		TimeoutSeconds:    environmentBlueprintTimeoutSeconds,
 		Status:            etcd.TaskStatusPending,
 		NextEventSequence: 1,
 		CreatedAt:         claim.CreatedAt,
 		UpdatedAt:         claim.CreatedAt,
+	}
+	task, err = controller.PrepareEntryMutationTask(service.desired.volumeRoot, task, current.Record, candidate,
+		allocator.Named(ids.KindStep, "entry-compose-apply"))
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
 	}
 	response, err := entryBulkUpsertResponse(candidateRecords.changes, claim.TaskID)
 	if err != nil {

@@ -36,12 +36,12 @@ func (repository *Repository) AbandonEnvironmentBlueprintStage(
 	}
 	evidence, err := repository.store.GetMany(
 		ctx,
-		etcd.GetManyRequest{Keys: []string{descriptorKey, locatorKey, markerKey}},
+		etcd.GetManyRequest{Keys: []string{descriptorKey, locatorKey, markerKey, etcd.CapabilityTaskKey(claim.TaskID)}},
 	)
 	if err != nil {
 		return err
 	}
-	if evidence == nil || len(evidence.Values) != 3 || evidence.Values[0] == nil {
+	if evidence == nil || len(evidence.Values) != 4 || evidence.Values[0] == nil {
 		return etcd.CorruptDesiredRevisionStage()
 	}
 	defer clearKeyValues(evidence.Values)
@@ -53,7 +53,7 @@ func (repository *Repository) AbandonEnvironmentBlueprintStage(
 		return nil
 	}
 	if descriptor.State == etcd.EnvironmentBlueprintStagePublished || evidence.Values[1] == nil ||
-		evidence.Values[2] != nil {
+		evidence.Values[2] != nil || evidence.Values[3] != nil {
 		return errs.New(errs.KindStateConflict, "Blueprint staging claim cannot be abandoned")
 	}
 	owned, err := environmentBlueprintLocatorOwnedBy(evidence.Values[1].Value, descriptor)
@@ -186,16 +186,24 @@ func (repository *Repository) expireEnvironmentBlueprintStage(
 		return false, err
 	}
 	evidence, err := repository.store.GetMany(ctx, etcd.GetManyRequest{
-		Keys: []string{descriptorKey, locatorKey, markerKey}, Revision: revision,
+		Keys: []string{
+			descriptorKey,
+			locatorKey,
+			markerKey,
+			etcd.CapabilityTaskKey(descriptor.Claim.TaskID),
+		}, Revision: revision,
 	})
 	if err != nil {
 		return false, err
 	}
-	if evidence == nil || len(evidence.Values) != 3 || evidence.Values[0] == nil || evidence.Values[1] == nil {
+	if evidence == nil || len(evidence.Values) != 4 || evidence.Values[0] == nil || evidence.Values[1] == nil {
 		return false, etcd.CorruptDesiredRevisionStage()
 	}
 	defer clearKeyValues(evidence.Values)
-	if evidence.Values[0].ModRevision != descriptorRevision || evidence.Values[2] != nil {
+	// A deferred Entry cleanup keeps its candidate private while its durable
+	// Task exists, even after the root response expires. Task publication also
+	// advances the descriptor, so the existing CAS closes a late publication.
+	if evidence.Values[0].ModRevision != descriptorRevision || evidence.Values[2] != nil || evidence.Values[3] != nil {
 		return false, nil
 	}
 	owned, err := environmentBlueprintLocatorOwnedBy(evidence.Values[1].Value, descriptor)

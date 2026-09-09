@@ -77,7 +77,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 	}
 	descriptorID, locatorDigest, err := decodeEnvironmentBlueprintStageLocator(result.Values[2].Value)
 	protectedDigest, digestErr := protectedBlueprintIntentDigest(descriptor.Claim.Intent)
-	taskEnvironmentID, materializes, taskEnvironmentErr := taskMaterializationEnvironment(task)
+	taskEnvironmentID, materializes, taskEnvironmentErr := desiredRevisionTaskEnvironment(task)
 	if err != nil || digestErr != nil || !sameEnvironmentBlueprintStageClaim(descriptor.Claim, claim) ||
 		descriptorID != descriptor.Claim.DescriptorID || locatorDigest != protectedDigest ||
 		descriptor.State != EnvironmentBlueprintStageSealed || seal != environmentBlueprintSealFromDescriptor(descriptor) ||

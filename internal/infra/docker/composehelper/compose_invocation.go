@@ -122,6 +122,9 @@ func commandsFor(
 func applyServiceNames(
 	plan *agentpb.ExecutionPlan, step *agentpb.ExecutionStep, artifact *agentpb.ComposeArtifact,
 ) ([]string, error) {
+	if plan.GetEntryMutationProcedure() != nil {
+		return executionplan.EntryMutationServices(plan, step.StepId)
+	}
 	names, selected, err := executionplan.VolumeRemovalServices(plan, step.StepId)
 	if selected || err != nil {
 		return names, err

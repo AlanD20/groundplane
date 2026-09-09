@@ -132,6 +132,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 			errs.KindStateConflict, "Environment is not ready for desired-state publication",
 		)
 	}
+	taskEnvironment, ownsDesired, taskEnvironmentErr := desiredRevisionTaskEnvironment(task)
 	if validateStableID(ids.KindEnvironment, revision.EnvironmentID) != nil ||
 		validateStableID(ids.KindTask, revision.RevisionID) != nil ||
 		revision.EnvironmentID != environment.Record.ID ||
@@ -139,7 +140,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		claim.TaskID != task.ID || projection.EnvironmentID != revision.EnvironmentID ||
 		projection.RevisionID != revision.RevisionID ||
 		task.Params[EnvironmentDesiredRevisionParam] != revision.RevisionID ||
-		task.Params[TaskMaterializationEnvironmentParam] != revision.EnvironmentID ||
+		taskEnvironmentErr != nil || !ownsDesired || taskEnvironment != revision.EnvironmentID ||
 		task.Status != TaskStatusPending {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed, "Environment desired revision publication identity is invalid",
@@ -202,6 +203,18 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	entryPublication, err := repository.prepareDesiredEntryRemovalPublication(
+		ctx,
+		claim,
+		projection,
+		task,
+		scriptRemoval,
+		fence.readAtRevision(),
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clearBackupRuntimeMutations(entryPublication.mutations)
 	zonePool, err := repository.prepareEnvironmentBlueprintZonePoolAtRevision(
 		ctx, effectiveEnvironment.Record, projection.DesiredZones, fence.readAtRevision(),
 	)
@@ -498,6 +511,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		conditions = append(conditions, volumeRuntimePublication.conditions...)
 		mutations = append(mutations, volumeRuntimePublication.mutations...)
 	}
+	conditions, mutations, classified = entryPublication.bind(conditions, mutations, classified)
 	classifier := func(revision int64, values []*KeyValue) error {
 		if conflict := classified(revision, values); conflict != nil {
 			return conflict

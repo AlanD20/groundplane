@@ -28,11 +28,16 @@ desired projection as applied. Create/edit terminal acknowledgement now preserve
 the prior applied-workload snapshot (or its absence), rather than asserting that
 unexecuted desired Service changes were deployed.
 
-Entry still relabels and fully reconciles retained workloads; its correction
-remains required. Removal consumer execution also needs a
-dependency-free selection proof; the existing targeted apply still permits
-Compose dependency expansion. These local checks are not live retained-runtime
-acceptance, and this issue remains a floor blocker.
+Volume removal now selects only the baseline runtime instances mounting the
+selected Volume and disables dependency expansion. Entry create/edit/bulk-upsert
+preserve retained runtime metadata and select exposed workload instances without
+restarting stable proxies. Entry deletion defers the desired head until its
+materialization-only Agent cleanup (or never-applied Controller finalizer)
+succeeds. Reconstructed plans, real Agent-worker execution with a faked helper,
+terminal acknowledgement, Retry, expiry retention and writer exclusion pass.
+See `docs/acceptance/2026-09-09-entry-retained-mutations.md` and the Volume
+selection evidence. These local checks are not live retained-runtime acceptance;
+that remaining proof keeps this issue open as a floor blocker.
 
 ## Retained-runtime mutation failure
 

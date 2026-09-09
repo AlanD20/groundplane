@@ -102,7 +102,7 @@ func MutateEnvironmentVolumeArtifact(
 		}
 		owned.Volumes = kept
 	}
-	if err := validateVolumeServiceOwnership(owned); err != nil {
+	if err := validateRuntimeServiceOwnership(owned); err != nil {
 		return nil, err
 	}
 	for _, network := range owned.Networks {
@@ -135,22 +135,22 @@ func MutateEnvironmentVolumeArtifact(
 
 // Volume identity changes do not replace a serving Release's execution ownership.
 // Full plan validation still checks label ordering, resource identity and YAML.
-func validateVolumeServiceOwnership(artifact *agentpb.ComposeArtifact) error {
+func validateRuntimeServiceOwnership(artifact *agentpb.ComposeArtifact) error {
 	for _, service := range artifact.Services {
 		plan, generation := "", ""
 		for _, label := range service.GetExpectedLabels() {
 			if label == nil {
-				return errs.New(errs.KindInternal, "Volume removal Service ownership is corrupt")
+				return errs.New(errs.KindInternal, "retained Service ownership is corrupt")
 			}
 			switch label.Key {
 			case composeLabelPlanID:
 				if plan != "" {
-					return errs.New(errs.KindInternal, "Volume removal Service ownership is duplicated")
+					return errs.New(errs.KindInternal, "retained Service ownership is duplicated")
 				}
 				plan = label.Value
 			case composeLabelRenderGen:
 				if generation != "" {
-					return errs.New(errs.KindInternal, "Volume removal Service ownership is duplicated")
+					return errs.New(errs.KindInternal, "retained Service ownership is duplicated")
 				}
 				generation = label.Value
 			}
@@ -158,7 +158,7 @@ func validateVolumeServiceOwnership(artifact *agentpb.ComposeArtifact) error {
 		parsed, err := strconv.ParseUint(generation, 10, 64)
 		if ids.Validate(ids.KindPlan, plan) != nil || err != nil || parsed == 0 ||
 			strconv.FormatUint(parsed, 10) != generation {
-			return errs.New(errs.KindInternal, "Volume removal Service ownership is invalid")
+			return errs.New(errs.KindInternal, "retained Service ownership is invalid")
 		}
 	}
 	return nil

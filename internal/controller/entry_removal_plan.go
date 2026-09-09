@@ -38,26 +38,11 @@ type entryRemovalTaskProcedureIDs struct {
 	ArtifactID string
 }
 
-type EntryRemovalPlanner struct {
-	plans     *TaskPlanResolver
-	materials EntryRemovalMaterializationResolver
-}
-
-func NewEntryRemovalPlanner(
-	plans *TaskPlanResolver,
-	materials EntryRemovalMaterializationResolver,
-) (*EntryRemovalPlanner, error) {
-	if plans == nil || materials == nil {
-		return nil, errs.New(errs.KindInternal, "entry removal planner is not configured")
-	}
-	return &EntryRemovalPlanner{plans: plans, materials: materials}, nil
-}
-
 func (planner *EntryRemovalPlanner) PrepareEntryRemoval(
 	ctx context.Context,
 	request entrycapability.RemovalPlanRequest,
 ) (entrycapability.RemovalTaskPlan, error) {
-	if planner == nil || planner.plans == nil || planner.plans.blueprints == nil ||
+	if planner == nil || planner.plans == nil || planner.plans.blueprints == nil || planner.hierarchy == nil ||
 		ids.Validate(ids.KindTask, request.TaskID) != nil || ids.Validate(ids.KindPlan, request.PlanID) != nil ||
 		ids.Validate(ids.KindEnvEntry, request.EntryID) != nil ||
 		ids.Validate(ids.KindEnvironment, request.EnvironmentID) != nil ||
@@ -68,7 +53,7 @@ func (planner *EntryRemovalPlanner) PrepareEntryRemoval(
 		request.Identity.EnvironmentName == "" || request.Identity.AuthorizedVolumeDir == "" {
 		return entrycapability.RemovalTaskPlan{}, errs.New(errs.KindInternal, "entry removal plan request is invalid")
 	}
-	projection, found, err := planner.plans.blueprints.GetEnvironmentComposeProjection(ctx, request.EnvironmentID)
+	projection, found, err := planner.hierarchy.GetEnvironmentAppliedComposeProjection(ctx, request.EnvironmentID)
 	if err != nil {
 		return entrycapability.RemovalTaskPlan{}, err
 	}

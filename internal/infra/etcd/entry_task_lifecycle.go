@@ -64,6 +64,16 @@ func (repository *TaskRepository) prepareEntryTaskRetry(
 	if err := validateEntryRemovalTaskOwner(retry, retryIntent); err != nil {
 		return routeTaskChange{}, err
 	}
+	if intent.Desired != nil {
+		return repository.prepareDesiredEntryRemovalRetry(
+			ctx,
+			source,
+			retry,
+			retryIntent,
+			intentValue.ModRevision,
+			revision,
+		)
+	}
 	primary, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{
 			entryRecordKey(intent.EntryID),
@@ -247,6 +257,17 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 	if intent.Status != TaskStatusPending {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "entry removal intent is not pending")
 	}
+	if intent.Desired != nil {
+		return repository.prepareDesiredEntryRemovalAcknowledgement(
+			ctx,
+			task,
+			intent,
+			intentValue.ModRevision,
+			terminalStatus,
+			terminalAt,
+			revision,
+		)
+	}
 	state, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{
 			entryRecordKey(intent.EntryID),
@@ -396,6 +417,11 @@ func (repository *TaskRepository) validateEntryTaskAcknowledgementReplay(
 		!intent.TerminalAt.Equal(*task.FinishedAt) {
 		return errs.New(errs.KindStateConflict, "entry removal intent does not match terminal Task")
 	}
+	if intent.Desired != nil {
+		// The immutable terminal intent and Task were committed together. Later
+		// edits or removal retries cannot change this acknowledgement's result.
+		return nil
+	}
 	state, err := repository.store.GetMany(ctx, GetManyRequest{
 		Keys: []string{
 			entryRecordKey(intent.EntryID),
@@ -430,6 +456,10 @@ func validateEntryRemovalTaskOwner(task TaskRecord, intent EntryRemovalIntent) e
 	validParams := len(task.Params) == 2 &&
 		task.Params[TaskResourceKindParam] == TaskResourceEntry &&
 		task.Params[TaskEntryEnvironmentParam] == intent.EnvironmentID
+	if intent.Desired != nil && intent.CurrentProjection == nil {
+		validParams = len(task.Params) == 3 && task.Params[TaskResourceKindParam] == TaskResourceEntry &&
+			task.Params[TaskEntryEnvironmentParam] == intent.EnvironmentID
+	}
 	if intent.CurrentProjection != nil {
 		expectedExecutor = TaskExecutorAgent
 		validParams = intent.CandidateProjection != nil && len(task.Params) == 8 &&
@@ -441,6 +471,10 @@ func validateEntryRemovalTaskOwner(task TaskRecord, intent EntryRemovalIntent) e
 			task.Params[TaskEntryAuthorizedVolumeDirParam] != "" &&
 			(task.Owner.WorkspaceType == TaskWorkspacePlatform && task.Params[TaskEntryTenantSlugParam] == "" ||
 				task.Owner.WorkspaceType == TaskWorkspaceTenant && task.Params[TaskEntryTenantSlugParam] != "")
+	}
+	if intent.Desired != nil && (task.Params[EnvironmentDesiredRevisionParam] != intent.Desired.RevisionID ||
+		uint64(task.RenderGeneration) != intent.Desired.RenderGeneration) {
+		validParams = false
 	}
 	if task.ID != intent.TaskID || task.Executor != expectedExecutor || task.Type != TaskRemove ||
 		task.Target != intent.EntryID || !task.CreatedAt.Equal(intent.CreatedAt) || !validParams {

@@ -16,13 +16,10 @@ import (
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
-	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
 )
 
 type entryDesiredMutationRepository interface {
@@ -44,14 +41,15 @@ type entryDesiredMutationRepository interface {
 }
 
 type entryDesiredMutationService struct {
-	volumeRoot string
-	repository entryDesiredMutationRepository
-	generator  entryCreationGenerator
-	materials  environmentBlueprintMaterializationResolver
-	creation   entryCreationIdempotency
-	edit       entryEditIdempotency
-	removal    entryDesiredRemovalIdempotency
-	now        func() time.Time
+	volumeRoot  string
+	repository  entryDesiredMutationRepository
+	generator   entryCreationGenerator
+	materials   environmentBlueprintMaterializationResolver
+	creation    entryCreationIdempotency
+	edit        entryEditIdempotency
+	removal     entryDesiredRemovalIdempotency
+	removePlans *controller.EntryRemovalPlanner
+	now         func() time.Time
 }
 
 func newEntryDesiredMutationService(
@@ -62,14 +60,20 @@ func newEntryDesiredMutationService(
 	creation entryCreationIdempotency,
 	edit entryEditIdempotency,
 	removal entryDesiredRemovalIdempotency,
+	plans *controller.TaskPlanResolver,
+	hierarchy *etcd.HierarchyRepository,
 ) (*entryDesiredMutationService, error) {
 	if environmentpath.ValidateRoot(volumeRoot) != nil || repository == nil || generator == nil || materials == nil ||
 		creation == nil || edit == nil || removal == nil {
 		return nil, errs.New(errs.KindInternal, "Entry desired mutation service is not configured")
 	}
+	removePlans, err := controller.NewEntryRemovalPlanner(plans, materials, hierarchy)
+	if err != nil {
+		return nil, err
+	}
 	return &entryDesiredMutationService{
 		volumeRoot: volumeRoot, repository: repository, generator: generator, materials: materials,
-		creation: creation, edit: edit, removal: removal, now: time.Now,
+		creation: creation, edit: edit, removal: removal, removePlans: removePlans, now: time.Now,
 	}, nil
 }
 
@@ -583,37 +587,19 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	artifactID := entryStableIDFromRevision(ids.KindConfig, claim.RevisionID)
-	materializationRecords, steps, err := service.entryMaterializations(
-		ctx, request.environmentID, artifactID, allocator, materializations,
-	)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	applyStepID := allocator.Named(ids.KindStep, "entry-compose-apply")
-	steps = append(steps, &agentpb.ExecutionStep{
-		StepId: applyStepID, TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds),
-		Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
-			ArtifactId: artifactID, FullReconcile: true,
-		}},
-	})
-	stepRecords := make([]etcd.TaskStepRecord, len(steps))
-	for index, step := range steps {
-		stepRecords[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: step.StepId}
-	}
-	artifact := &agentpb.ComposeArtifact{}
-	if err := protoUnmarshalEntryArtifact(candidate.ComposeArtifact, artifact); err != nil {
-		return etcd.IdempotencyResponse{}, err
+	var materializationRecords []etcd.TaskMaterializationRecord
+	if request.action != entryDesiredMutationRemove {
+		materializationRecords, err = service.entryMaterializations(
+			ctx,
+			request.environmentID,
+			allocator,
+			materializations,
+		)
+		if err != nil {
+			return etcd.IdempotencyResponse{}, err
+		}
 	}
 	planID := entryStableIDFromRevision(ids.KindPlan, claim.RevisionID)
-	plan, err := controller.BuildPlan(controller.PlanBuildInput{
-		VolumeRoot: service.volumeRoot, PlanID: planID, RenderGeneration: generation,
-		Operation: agentpb.PlanOperation_PLAN_OPERATION_RECONCILE, TargetID: request.environmentID,
-		Artifacts: []*agentpb.ComposeArtifact{artifact}, Steps: steps,
-	})
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
 	owner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -621,19 +607,21 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	task := etcd.TaskRecord{
 		ID: claim.TaskID, OperationID: allocator.Named(ids.KindOperation, "entry-operation"),
 		IdempotencyKey: request.idempotencyKey, Owner: owner, Actor: etcd.TaskActorOperator,
-		Executor: etcd.TaskExecutorAgent, PlanID: planID, PlanHash: hex.EncodeToString(plan.PlanHash),
+		Executor: etcd.TaskExecutorAgent, PlanID: planID,
 		RenderGeneration: int32(generation), Type: etcd.TaskUpdate, Target: request.environmentID,
-		Params: map[string]string{
-			etcd.EnvironmentDesiredRevisionParam:         claim.RevisionID,
-			etcd.TaskMaterializationEnvironmentParam:     request.environmentID,
-			controller.EnvironmentBlueprintArtifactParam: artifactID,
-			taskcontract.EnvironmentBlueprintProcedureParam: string(
-				taskcontract.BlueprintComposeProcedureFullReconcile,
-			),
-		},
-		Steps: stepRecords, Materializations: materializationRecords,
-		TimeoutSeconds: environmentBlueprintTimeoutSeconds, Status: etcd.TaskStatusPending,
+		Materializations: materializationRecords,
+		TimeoutSeconds:   environmentBlueprintTimeoutSeconds, Status: etcd.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
+	}
+	if request.action == entryDesiredMutationRemove {
+		task.Type, task.Target = etcd.TaskRemove, request.entryID
+		task, err = service.removePlans.PrepareDesiredEntryRemoval(ctx, task, claim)
+	} else {
+		task, err = controller.PrepareEntryMutationTask(service.volumeRoot, task, current.Record, candidate,
+			allocator.Named(ids.KindStep, "entry-compose-apply"))
+	}
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
 	}
 	response, err := entryDesiredResponse(candidateRecord, claim.TaskID, request.status)
 	if err != nil {
@@ -820,22 +808,20 @@ func (service *entryDesiredMutationService) prepareEntryGeneration(
 func (service *entryDesiredMutationService) entryMaterializations(
 	ctx context.Context,
 	environmentID string,
-	artifactID string,
 	allocator *controllerrevision.BlueprintIdentityAllocator,
 	inputs []controller.EnvironmentEntryMaterialization,
-) ([]etcd.TaskMaterializationRecord, []*agentpb.ExecutionStep, error) {
+) ([]etcd.TaskMaterializationRecord, error) {
 	sort.Slice(inputs, func(left, right int) bool { return inputs[left].Destination < inputs[right].Destination })
 	records := make([]etcd.TaskMaterializationRecord, 0, len(inputs))
-	steps := make([]*agentpb.ExecutionStep, 0, len(inputs))
 	previous := ""
 	for _, input := range inputs {
 		if input.Destination == previous {
-			return nil, nil, errs.New(errs.KindNameConflict, "Environment materialization destination is duplicated")
+			return nil, errs.New(errs.KindNameConflict, "Environment materialization destination is duplicated")
 		}
 		content, err := service.materials.ResolveTaskMaterializationSource(ctx, environmentID, input.Source)
 		if err != nil {
 			clear(content)
-			return nil, nil, err
+			return nil, err
 		}
 		digest := sha256.Sum256(content)
 		record := etcd.TaskMaterializationRecord{
@@ -847,20 +833,11 @@ func (service *entryDesiredMutationService) entryMaterializations(
 			Length: uint64(len(content)), SHA256: hex.EncodeToString(digest[:]), Source: input.Source,
 		}
 		clear(content)
-		step, err := controller.BuildTaskMaterializationStep(
-			record,
-			artifactID,
-			uint32(environmentBlueprintTimeoutSeconds),
-		)
-		if err != nil {
-			return nil, nil, err
-		}
 		records = append(records, record)
-		steps = append(steps, step)
 		previous = input.Destination
 	}
 	sort.Slice(records, func(left, right int) bool { return records[left].StepID < records[right].StepID })
-	return records, steps, nil
+	return records, nil
 }
 
 func (service *entryDesiredMutationService) resolveCurrentEntry(
@@ -951,11 +928,4 @@ func entryStableIDFromRevision(kind ids.Kind, revisionID string) string {
 		return ""
 	}
 	return string(kind) + "_" + revisionID[len("task_"):]
-}
-
-func protoUnmarshalEntryArtifact(value []byte, artifact *agentpb.ComposeArtifact) error {
-	if err := proto.Unmarshal(value, artifact); err != nil {
-		return errs.New(errs.KindInternal, "Environment Entry candidate artifact is corrupt")
-	}
-	return nil
 }

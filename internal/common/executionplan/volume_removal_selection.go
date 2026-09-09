@@ -18,6 +18,9 @@ func dependencyFreeServiceSelection(
 	if blueprintManagedServiceSelection(plan.Operation, step.GetComposeApply(), artifacts) {
 		return true
 	}
+	if plan.GetEntryMutationProcedure() != nil {
+		return validateEntryMutationPlan(plan) == nil
+	}
 	_, selected, err := VolumeRemovalServices(plan, step.StepId)
 	return selected && err == nil
 }

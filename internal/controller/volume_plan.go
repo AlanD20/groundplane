@@ -390,7 +390,7 @@ func rebindVolumeArtifactForPlan(
 	}
 	owned := proto.Clone(source).(*agentpb.ComposeArtifact)
 	owned.ArtifactId = artifactID
-	if err := validateVolumeServiceOwnership(owned); err != nil {
+	if err := validateRuntimeServiceOwnership(owned); err != nil {
 		return nil, err
 	}
 	return owned, nil

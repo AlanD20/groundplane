@@ -22,9 +22,43 @@ type EntryRemovalIntent struct {
 	CurrentProjectionRevision int64                         `json:"current_projection_revision,omitempty"`
 	CurrentProjection         *EnvironmentComposeProjection `json:"current_projection,omitempty"`
 	CandidateProjection       *EnvironmentComposeProjection `json:"candidate_projection,omitempty"`
+	Desired                   *EntryRemovalDesiredRevision  `json:"desired,omitempty"`
 	Status                    TaskStatus                    `json:"status"`
 	CreatedAt                 time.Time                     `json:"created_at"`
 	TerminalAt                *time.Time                    `json:"terminal_at,omitempty"`
+}
+
+// EntryRemovalDesiredRevision binds the existing staged desired revision to
+// terminal removal. Applied cleanup authority remains independently pinned.
+type EntryRemovalDesiredRevision struct {
+	DescriptorID     string `json:"descriptor_id"`
+	BaseRevisionID   string `json:"base_revision_id"`
+	RevisionID       string `json:"revision_id"`
+	RenderGeneration uint64 `json:"render_generation"`
+}
+
+func NewDesiredEntryRemovalIntent(
+	entryID, baseRevisionID string, claim EnvironmentBlueprintStageClaim,
+	projection *Versioned[EnvironmentComposeProjection],
+) (EntryRemovalIntent, error) {
+	if err := validateEnvironmentBlueprintStageClaim(claim); err != nil {
+		return EntryRemovalIntent{}, err
+	}
+	intent, err := NewEntryRemovalIntent(claim.TaskID, claim.EnvironmentID, entryID,
+		claim.BaselineHeadRevision, projection, claim.CreatedAt)
+	if err != nil {
+		return EntryRemovalIntent{}, err
+	}
+	intent.Desired = &EntryRemovalDesiredRevision{DescriptorID: claim.DescriptorID,
+		BaseRevisionID: baseRevisionID, RevisionID: claim.RevisionID, RenderGeneration: claim.RenderGeneration}
+	if intent.CandidateProjection != nil {
+		intent.CandidateProjection.RevisionID = claim.RevisionID
+		intent.CandidateProjection.RenderGeneration = claim.RenderGeneration
+	}
+	if err := validateEntryRemovalIntent(intent); err != nil {
+		return EntryRemovalIntent{}, err
+	}
+	return intent, nil
 }
 
 func NewEntryRemovalIntent(
@@ -140,6 +174,14 @@ func validateEntryRemovalIntent(intent EntryRemovalIntent) error {
 	if err := validateTimestamp("Entry removal intent created_at", intent.CreatedAt); err != nil {
 		return err
 	}
+	if desired := intent.Desired; desired != nil {
+		if ids.Validate(ids.KindTask, "task_"+desired.DescriptorID) != nil ||
+			ids.Validate(ids.KindTask, desired.BaseRevisionID) != nil ||
+			ids.Validate(ids.KindTask, desired.RevisionID) != nil || desired.RenderGeneration == 0 ||
+			desired.RevisionID == desired.BaseRevisionID {
+			return errs.New(errs.KindValidationFailed, "Entry removal desired revision is invalid")
+		}
+	}
 	if intent.Status == TaskStatusPending {
 		if intent.TerminalAt != nil {
 			return errs.New(errs.KindValidationFailed, "pending Entry removal intent has a terminal timestamp")
@@ -168,6 +210,12 @@ func validateEntryRemovalIntent(intent EntryRemovalIntent) error {
 		return errs.New(errs.KindValidationFailed, "Entry removal intent projection is invalid")
 	}
 	expected, changed, err := RemoveEnvironmentEntry(*intent.CurrentProjection, intent.EntryID)
+	if desired := intent.Desired; desired != nil {
+		if desired.RenderGeneration <= intent.CurrentProjection.RenderGeneration {
+			return errs.New(errs.KindValidationFailed, "Entry removal desired generation does not advance")
+		}
+		expected.RevisionID, expected.RenderGeneration = desired.RevisionID, desired.RenderGeneration
+	}
 	if err != nil || !changed || !sameEntryRemovalProjection(expected, *intent.CandidateProjection) {
 		return errs.New(errs.KindValidationFailed, "Entry removal candidate projection changed")
 	}
@@ -182,6 +230,10 @@ func sameEntryRemovalProjection(left EnvironmentComposeProjection, right Environ
 
 func cloneEntryRemovalIntent(source EntryRemovalIntent) EntryRemovalIntent {
 	clone := source
+	if source.Desired != nil {
+		value := *source.Desired
+		clone.Desired = &value
+	}
 	if source.CurrentProjection != nil {
 		value := cloneEnvironmentComposeProjection(*source.CurrentProjection)
 		clone.CurrentProjection = &value

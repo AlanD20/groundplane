@@ -114,6 +114,9 @@ func mutateEnvironmentEntryArtifact(
 	mutation EnvironmentEntryArtifactMutation,
 ) (*agentpb.ComposeArtifact, error) {
 	owned := proto.Clone(current).(*agentpb.ComposeArtifact)
+	if err := validateRuntimeServiceOwnership(owned); err != nil {
+		return nil, err
+	}
 	var document yaml.Node
 	if yaml.Unmarshal(owned.GetCanonicalYaml(), &document) != nil || len(document.Content) != 1 ||
 		document.Content[0].Kind != yaml.MappingNode {
@@ -140,6 +143,9 @@ func mutateEnvironmentEntryArtifact(
 	serviceEnvironment := entryArtifactServiceEnvironment(mutation.Entries)
 	for index := 0; index+1 < len(services.Content); index += 2 {
 		name := services.Content[index].Value
+		if !entryArtifactIsWorkload(name, runtimeTargets) {
+			continue
+		}
 		service := services.Content[index+1]
 		if err := rewriteEntryArtifactEnvironmentFiles(
 			service, managedEnvPaths,
@@ -153,18 +159,6 @@ func mutateEnvironmentEntryArtifact(
 		if err := rewriteEntryArtifactMounts(service, name, runtimeTargets, oldMounts, newMounts); err != nil {
 			return nil, err
 		}
-	}
-	if err := rewriteArtifactOwnership(root, mutation.PlanID, mutation.RenderGeneration); err != nil {
-		return nil, err
-	}
-	for _, resource := range owned.GetServices() {
-		rewriteServiceArtifactLabelPairs(resource.GetExpectedLabels(), mutation.PlanID, mutation.RenderGeneration)
-	}
-	for _, resource := range owned.GetNetworks() {
-		rewriteServiceArtifactLabelPairs(resource.GetExpectedLabels(), mutation.PlanID, mutation.RenderGeneration)
-	}
-	for _, resource := range owned.GetVolumes() {
-		rewriteServiceArtifactLabelPairs(resource.GetExpectedLabels(), mutation.PlanID, mutation.RenderGeneration)
 	}
 	canonical, err := yaml.Marshal(&document)
 	if err != nil {
@@ -194,8 +188,10 @@ func entryArtifactRuntimeTargets(
 		if !exists || mappingIndex(services, name) < 0 {
 			return nil, errs.New(errs.KindInternal, "Environment Entry runtime Service identity is inconsistent")
 		}
-		result[logicalName] = append(result[logicalName], name)
 		seenRuntime[name] = struct{}{}
+		if service.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+			result[logicalName] = append(result[logicalName], name)
+		}
 	}
 	if len(seenRuntime) != len(services.Content)/2 {
 		return nil, errs.New(errs.KindInternal, "Environment Entry runtime Service metadata is incomplete")
@@ -204,6 +200,17 @@ func entryArtifactRuntimeTargets(
 		sort.Strings(result[name])
 	}
 	return result, nil
+}
+
+func entryArtifactIsWorkload(name string, targets map[string][]string) bool {
+	for _, names := range targets {
+		for _, candidate := range names {
+			if candidate == name {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func entryArtifactManagedEnvironmentPaths(

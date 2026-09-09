@@ -10,6 +10,35 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+func (fixture *ExecutedArtifactFixture) EntryRemovalStore() Store { return fixture.store }
+
+func (fixture *ExecutedArtifactFixture) QueueEntryRemovalCompetingWriter(t *testing.T) string {
+	t.Helper()
+	task := materializationLifecycleTask(time.Now().UTC(), fixture.Environment.Record.ID, 3)
+	createLifecycleTask(t, fixture.Tasks, task)
+	return task.ID
+}
+
+func (fixture *ExecutedArtifactFixture) EntryRemovalTask(t *testing.T, entryID string) (TaskRecord, IdempotencyMarker) {
+	t.Helper()
+	task := fixture.Task(t, 956)
+	task.Type, task.Target = TaskRemove, entryID
+	marker := environmentBlueprintTestMarker(task, fixture.Environment.Record.ID)
+	marker.Locator.Method, marker.Locator.Route = "DELETE", "/entries/{id}"
+	marker.ReplayTarget = &IdempotencyReplayTarget{Kind: IdempotencyReplayTargetEntry, ID: entryID}
+	return task, marker
+}
+
+func (fixture *ExecutedArtifactFixture) EntryRemovalRetryMarker(
+	t *testing.T,
+	failed TaskRecord,
+) (string, IdempotencyMarker) {
+	t.Helper()
+	createdAt := failed.FinishedAt.Add(time.Second)
+	id := ids.New(ids.KindTask)
+	return id, pendingRetryMarker(failed, id, createdAt, "entry-desired-removal-retry")
+}
+
 func (fixture *ExecutedArtifactFixture) CheckManualJourneyEntryRemoval(t *testing.T, entryID string, active bool) {
 	t.Helper()
 	ctx := context.Background()

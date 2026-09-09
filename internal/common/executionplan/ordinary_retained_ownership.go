@@ -16,7 +16,7 @@ func validRetainedOwnership(
 		return validBlueprintRetainedOwnership(plan, artifact, serviceID, labels)
 	}
 	if validOrdinaryRetainedOwnership(plan, artifact, serviceID, labels) ||
-		validVolumeResourceOnlyOwnership(plan, artifact, labels) {
+		validVolumeResourceOnlyOwnership(plan, artifact, labels) || validEntryMutationOwnership(plan, labels) {
 		return true, ""
 	}
 	return retainedOwnershipReject(retainedOwnershipInvalidInput)

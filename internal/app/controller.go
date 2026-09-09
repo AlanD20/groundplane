@@ -987,7 +987,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	environmentBlueprintRepository.backups, environmentBlueprintRepository.connectors = backupPolicyRecords, connectorRecords
 	entryDesiredMutations, err := newEntryDesiredMutationService(
 		cfg.Storage.VolumeRoot, environmentBlueprintRepository, entryGeneration, materializationResolver,
-		entryCreationIdempotency, entryEditIdempotency, entryRemovalIdempotency,
+		entryCreationIdempotency, entryEditIdempotency, entryRemovalIdempotency, planResolver, hierarchyRecords,
 	)
 	if err != nil {
 		_ = store.Close()

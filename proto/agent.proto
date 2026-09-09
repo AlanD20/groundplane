@@ -661,6 +661,15 @@ message ExecutionPlan {
   CandidateReleaseProcedure candidate_release_procedure = 14;
   ManagedComponentProcedure managed_component_procedure = 15;
   ServiceLifecycleProcedure service_lifecycle_procedure = 16;
+  EntryMutationProcedure entry_mutation_procedure = 17;
+}
+
+// EntryMutationProcedure confines configuration reconciliation to retained
+// workloads. The baseline proves runtime identity; the candidate supplies only
+// Entry decorations and pinned materializations. Stable proxies are untouched.
+message EntryMutationProcedure {
+  string baseline_artifact_id = 1;
+  string candidate_artifact_id = 2;
 }
 
 // ServiceLifecycleProcedure narrowly authorizes lifecycle steps to act on

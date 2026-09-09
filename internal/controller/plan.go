@@ -62,6 +62,7 @@ type PlanBuildInput struct {
 	CandidateReleaseProcedure    *agentpb.CandidateReleaseProcedure
 	ManagedComponentProcedure    *agentpb.ManagedComponentProcedure
 	ServiceLifecycleProcedure    *agentpb.ServiceLifecycleProcedure
+	EntryMutationProcedure       *agentpb.EntryMutationProcedure
 }
 
 // BuildPlan owns schema selection, defensive copying, deterministic hashing,
@@ -81,6 +82,7 @@ func BuildPlan(input PlanBuildInput) (*ExecutionPlan, error) {
 		CandidateReleaseProcedure:    input.CandidateReleaseProcedure,
 		ManagedComponentProcedure:    input.ManagedComponentProcedure,
 		ServiceLifecycleProcedure:    input.ServiceLifecycleProcedure,
+		EntryMutationProcedure:       input.EntryMutationProcedure,
 	})
 	if err != nil {
 		return nil, err
@@ -221,10 +223,7 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 		}
 	}
 	if task.Type == etcd.TaskUpdate {
-		if ids.Validate(ids.KindRoute, task.Target) == nil {
-			return resolver.resolveRouteMutationPlan(ctx, task)
-		}
-		return resolver.resolveEnvironmentBlueprintPlan(ctx, task)
+		return resolver.resolveUpdatePlan(ctx, task)
 	}
 	if task.Type == etcd.TaskCreate && ids.Validate(ids.KindRoute, task.Target) == nil {
 		return resolver.resolveRouteMutationPlan(ctx, task)
