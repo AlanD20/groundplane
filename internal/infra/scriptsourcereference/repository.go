@@ -3,6 +3,8 @@ package scriptsourcereference
 import (
 	"context"
 	"math"
+
+	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 )
 
 type Repository struct {
@@ -205,6 +207,8 @@ func (repository *Repository) prepareBatch(
 			conditions = append(conditions, Condition{Key: "/v1/runtime/deletions/entry/" + source.source.EntryID})
 		case SourceService:
 			conditions = append(conditions, Condition{Key: "/v1/runtime/deletions/service/" + source.source.ServiceID})
+		case SourceVolume:
+			conditions = append(conditions, Condition{Key: removalrecord.OwnerKey(source.source.VolumeID)})
 		}
 		key := CountKey(source.source)
 		current := lookups.Values[index]

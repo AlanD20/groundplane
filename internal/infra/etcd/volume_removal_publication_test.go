@@ -10,6 +10,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // Rationale: the exact Task accepted by removal publication must also expose
@@ -33,6 +34,163 @@ func TestVolumeRemovalInitialTaskDeclaresMaterializationAuthority(t *testing.T) 
 	}
 }
 
+// Rationale: a retained snapshot must not authorize new Script mounts once
+// removal publication owns the Volume, including before a Script Task exists.
+func TestVolumeRemovalInitialOwnershipExcludesScriptPreparation(t *testing.T) {
+	for _, removing := range []bool{false, true} {
+		t.Run(map[bool]string{false: "unowned control", true: "removal owns Volume"}[removing], func(t *testing.T) {
+			ctx := context.Background()
+			store, operationID, members, _, _, _ := scriptRunnerSnapshotSourceFixture(t)
+			member := members[2]
+			if member.Reference.Source.Kind != ScriptSourceVolume {
+				t.Fatal("fixture has no Volume")
+			}
+			if removing {
+				initial, task, marker := volumeRemovalPublicationFixture(t)
+				runtime, _, _, err := initial.Records()
+				if err != nil {
+					t.Fatal(err)
+				}
+				runtime.EnvironmentID = member.Reference.SourceOwnerID
+				runtime.VolumeID = member.Reference.Source.VolumeID
+				runtime.RootLocator.ScopeID = runtime.EnvironmentID
+				task.Owner.EnvironmentID, task.Target = runtime.EnvironmentID, runtime.VolumeID
+				task.Params = EnvironmentVolumeRemovalTaskParams(runtime, 1)
+				marker.Locator.ScopeID, marker.ReplayTarget.ID = runtime.EnvironmentID, runtime.VolumeID
+				initial, err = removalrecord.PrepareInitialPublication(runtime)
+				if err != nil {
+					t.Fatal(err)
+				}
+				publication, err := prepareVolumeRemovalInitialPublication(initial, task, marker)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer clearBackupRuntimeMutations(publication.mutations)
+				result, err := store.Transact(ctx, publication.conditions, publication.mutations)
+				if err != nil || !result.Succeeded {
+					t.Fatalf("publish initial records: %v", err)
+				}
+			}
+			authority, err := newScriptSourceReferenceAuthority(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = authority.Prepare(ctx, operationID, []ScriptSourcePreparationMember{member})
+			if !removing {
+				if err != nil {
+					t.Fatalf("unowned source rejected: %v", err)
+				}
+				return
+			}
+			if !isKind(err, errs.KindStateConflict) {
+				t.Fatalf("Script reserved a Volume already owned by removal: %v", err)
+			}
+			if count := store.valueAt(scriptSourceCountKey(member.Reference.Source), store.revision); count != nil {
+				t.Fatal("rejected acquisition installed a source count")
+			}
+		})
+	}
+}
+
+type volumeSourceOwnerRaceStore struct {
+	hierarchyStore
+	owner    removalrecord.Owner
+	injected bool
+}
+
+func (store *volumeSourceOwnerRaceStore) Transact(
+	ctx context.Context,
+	conditions []Condition,
+	mutations []Mutation,
+) (TransactionResult, error) {
+	for _, mutation := range mutations {
+		if !store.injected && mutation.Key == scriptSourceCountKey(volumeScriptSource(store.owner.VolumeID)) {
+			value, err := removalrecord.EncodeOwner(store.owner)
+			if err != nil {
+				return TransactionResult{}, err
+			}
+			defer clear(value)
+			guards := append(
+				volumeScriptAbsenceConditions(store.owner.VolumeID),
+				Condition{Key: removalrecord.OwnerKey(store.owner.VolumeID)},
+			)
+			result, err := store.hierarchyStore.Transact(
+				ctx,
+				guards,
+				[]Mutation{{Type: MutationPut, Key: removalrecord.OwnerKey(store.owner.VolumeID), Value: value}},
+			)
+			if err != nil {
+				return TransactionResult{}, err
+			}
+			if !result.Succeeded {
+				return TransactionResult{}, errs.New(errs.KindInternal, "fixture owner race did not commit")
+			}
+			store.injected = true
+			break
+		}
+	}
+	return store.hierarchyStore.Transact(ctx, conditions, mutations)
+}
+
+// Rationale: an owner acquired after the source read must still defeat the
+// source-count transaction. Testing only a pre-existing owner misses this race.
+func TestVolumeRemovalInitialOwnershipWinsSourceAcquisitionRace(t *testing.T) {
+	store, operationID, members, _, _, _ := scriptRunnerSnapshotSourceFixture(t)
+	member := members[2]
+	transactions := &volumeSourceOwnerRaceStore{hierarchyStore: store, owner: removalrecord.Owner{
+		VolumeID: member.Reference.Source.VolumeID, EnvironmentID: member.Reference.SourceOwnerID,
+		OperationID: ids.New(ids.KindOperation),
+	}}
+	authority, err := newScriptSourceReferenceAuthority(transactions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = authority.Prepare(context.Background(), operationID, []ScriptSourcePreparationMember{member})
+	if !transactions.injected || !isKind(err, errs.KindStateConflict) {
+		t.Fatalf("late owner did not exclude source acquisition: %v", err)
+	}
+	if store.valueAt(scriptSourceCountKey(member.Reference.Source), store.revision) != nil ||
+		store.valueAt(scriptSourceForwardReferenceKey(member.Reference), store.revision) != nil {
+		t.Fatal("losing source acquisition installed a count or membership")
+	}
+}
+
+// Rationale: the owner lookup is a bounded, typed operation reference, not an
+// unvalidated alternate runtime record or caller-controlled path.
+func TestVolumeRemovalInitialOwnerCodecRejectsCorruption(t *testing.T) {
+	_, task, _ := volumeRemovalPublicationFixture(t)
+	owner := removalrecord.Owner{
+		VolumeID:      task.Target,
+		EnvironmentID: task.Owner.EnvironmentID,
+		OperationID:   task.OperationID,
+	}
+	value, err := removalrecord.EncodeOwner(owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(value) > 1024 || len(removalrecord.OwnerKey(owner.VolumeID)) > 512 {
+		t.Fatal("owner record or key exceeds its bound")
+	}
+	decoded, err := removalrecord.DecodeOwner(value)
+	if err != nil || decoded != owner {
+		t.Fatalf("owner round trip: %v", err)
+	}
+	for _, invalid := range [][]byte{nil, value[:len(value)-1], append(append([]byte(nil), value...), 0), make([]byte, 1025)} {
+		if _, err := removalrecord.DecodeOwner(invalid); !isKind(err, errs.KindInternal) {
+			t.Fatalf("malformed owner accepted: %v", err)
+		}
+	}
+	for _, invalid := range []removalrecord.Owner{
+		{EnvironmentID: owner.EnvironmentID, OperationID: owner.OperationID},
+		{VolumeID: owner.VolumeID, OperationID: owner.OperationID},
+		{VolumeID: owner.VolumeID, EnvironmentID: owner.EnvironmentID},
+	} {
+		if _, err := removalrecord.EncodeOwner(invalid); !isKind(err, errs.KindValidationFailed) {
+			t.Fatalf("invalid owner identity accepted: %v", err)
+		}
+	}
+}
+
 // Rationale: the publisher consumes the existing runtime record contract and
 // a bounded create-only fragment, not a caller-authored set of store writes.
 func TestVolumeRemovalInitialPublicationFragment(t *testing.T) {
@@ -42,7 +200,7 @@ func TestVolumeRemovalInitialPublicationFragment(t *testing.T) {
 		t.Fatalf("bind initial publication: %v", err)
 	}
 	defer clearBackupRuntimeMutations(publication.mutations)
-	if len(publication.conditions) != 1 || len(publication.mutations) != 3 {
+	if len(publication.conditions) != 2 || len(publication.mutations) != 4 {
 		t.Fatalf(
 			"unexpected initial fragment: %d compares, %d mutations",
 			len(publication.conditions),
@@ -51,10 +209,19 @@ func TestVolumeRemovalInitialPublicationFragment(t *testing.T) {
 	}
 	wantKeys := []string{
 		removalrecord.RuntimeKey(task.OperationID), removalrecord.AttemptKey(task.OperationID, 1),
-		removalrecord.ProgressKey(task.OperationID), removalrecord.PendingPathKey(task.OperationID),
+		removalrecord.ProgressKey(task.OperationID), removalrecord.OwnerKey(task.Target),
+		removalrecord.PendingPathKey(task.OperationID),
 	}
 	if publication.conditions[0] != (Condition{Key: removalrecord.Root(task.OperationID), Prefix: true}) {
 		t.Fatal("initial fragment does not require complete operation absence")
+	}
+	if publication.conditions[1] != (Condition{Key: removalrecord.OwnerKey(task.Target)}) {
+		t.Fatal("initial fragment does not exclude a different removal owner")
+	}
+	owner, err := removalrecord.DecodeOwner(publication.mutations[3].Value)
+	if err != nil || owner.VolumeID != task.Target || owner.EnvironmentID != task.Owner.EnvironmentID ||
+		owner.OperationID != task.OperationID {
+		t.Fatalf("initial ownership encoding: %v", err)
 	}
 	runtime, err := removalrecord.DecodeRuntime(publication.mutations[0].Value)
 	if err != nil || runtime.CurrentTaskID != task.ID || runtime.Checkpoint != removalrecord.DesiredPublished {

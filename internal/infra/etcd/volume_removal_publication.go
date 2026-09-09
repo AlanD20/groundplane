@@ -50,17 +50,26 @@ func prepareVolumeRemovalInitialPublication(
 	if err := validateVolumeRemovalInitialBinding(runtime, task, marker); err != nil {
 		return volumeRemovalInitialPublication{}, err
 	}
+	ownerValue, err := removalrecord.EncodeOwner(removalrecord.Owner{
+		VolumeID: runtime.VolumeID, EnvironmentID: runtime.EnvironmentID, OperationID: runtime.OperationID,
+	})
+	if err != nil {
+		return volumeRemovalInitialPublication{}, err
+	}
 	runtimeValue, err := removalrecord.EncodeRuntime(runtime)
 	if err != nil {
+		clear(ownerValue)
 		return volumeRemovalInitialPublication{}, err
 	}
 	attemptValue, err := removalrecord.EncodeAttempt(attempt)
 	if err != nil {
+		clear(ownerValue)
 		clear(runtimeValue)
 		return volumeRemovalInitialPublication{}, err
 	}
 	progressValue, err := removalrecord.EncodeProgress(progress)
 	if err != nil {
+		clear(ownerValue)
 		clear(runtimeValue)
 		clear(attemptValue)
 		return volumeRemovalInitialPublication{}, err
@@ -68,11 +77,15 @@ func prepareVolumeRemovalInitialPublication(
 	return volumeRemovalInitialPublication{
 		// Any retained record excludes operation-id reuse, including orphaned
 		// successor/completion evidence. One bounded prefix fence covers them.
-		conditions: []Condition{{Key: removalrecord.Root(runtime.OperationID), Prefix: true}},
+		conditions: []Condition{
+			{Key: removalrecord.Root(runtime.OperationID), Prefix: true},
+			{Key: removalrecord.OwnerKey(runtime.VolumeID)},
+		},
 		mutations: []Mutation{
 			{Type: MutationPut, Key: removalrecord.RuntimeKey(runtime.OperationID), Value: runtimeValue},
 			{Type: MutationPut, Key: removalrecord.AttemptKey(runtime.OperationID, 1), Value: attemptValue},
 			{Type: MutationPut, Key: removalrecord.ProgressKey(runtime.OperationID), Value: progressValue},
+			{Type: MutationPut, Key: removalrecord.OwnerKey(runtime.VolumeID), Value: ownerValue},
 		},
 	}, nil
 }
