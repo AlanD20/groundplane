@@ -163,9 +163,9 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	if err := releasePublication.validate(environment.Record.ID, task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	// Apply assembles independently captured Release sources. Direct mutations
-	// instead retain their sealed desired baseline, fenced by the head below;
-	// they cannot carry a Blueprint Release publication fragment.
+	// Apply assembles independently captured Release sources. Direct Entry
+	// capture uses the Environment epoch below; other direct mutations retain
+	// their sealed desired baseline. None can publish Blueprint Release changes.
 	if claim.SourceKind == EnvironmentBlueprintSourceApply {
 		if err := releasePublication.validateRetainedRuntime(task, projection); err != nil {
 			return IdempotencyTransactionResult{}, err
@@ -189,6 +189,11 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	fence, err := repository.loadEnvironmentBlueprintMutationFence(ctx, project, environment)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
+	}
+	if claim.SourceKind == EnvironmentBlueprintSourceMutation {
+		if err := validateEntryRuntimePublication(task, fence); err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
 	}
 	poolChange, err := repository.prepareEnvironmentBlueprintPoolChangeAtRevision(
 		ctx,

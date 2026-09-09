@@ -70,3 +70,28 @@ record ceiling, ownership guard or publication limit was relaxed.
 Manual Script cleanup, oversized Blueprint Apply, integrated live Volume/Entry
 verification and required floor gates remain open. This is neither deployment
 evidence nor a completed floor-MVP claim.
+
+## Serving-slot correction after live QA
+
+Live QA found that the desired baseline still selected blue after ordinary
+Rollback had made green the serving workload. Task completion alone was not
+acceptance. ADR 0073 records the correction: capture the per-Service immutable
+runtime at a fixed revision, replace only Entry decorations, seal that runtime
+in the existing candidate, and bind its Environment epoch to the ordinary
+publication fence. No publication or record ceiling changed.
+
+Three regressions failed before their corrections: missing serving green,
+reconstruction against the stale desired baseline, and acceptance after the
+capture epoch changed before publication. The actual publisher, immutable
+reconstruction, both retained workload selection without proxy/dependencies,
+commit-time race rejection, and read-only replay now pass. Existing Entry
+projection and removal checks pass. Final formatted race evidence is
+`.tmp/qa-floor-20260909/entry-runtime-final.cover`: etcd 3.513s/13.3%,
+Controller 1.740s/11.8%; app composition compiles with no selected tests.
+The two pre-existing oversized app files did not grow (931 and 625 lines).
+No Agent, protobuf, Console, CLI, or public API contract changed.
+
+The tagged Controller builds as `0.0.0-qa.floor20260909.5`, SHA-256
+`1f19750ba5ac40b736343aaf6f8098d9e4e899e65c64a6c2552caae1c3002413`.
+The live serving-container proof follows. The earlier live failure is retained
+in the integrated QA report; this local correction is not yet a floor claim.

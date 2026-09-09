@@ -49,6 +49,7 @@ type entryDesiredMutationService struct {
 	edit        entryEditIdempotency
 	removal     entryDesiredRemovalIdempotency
 	removePlans *controller.EntryRemovalPlanner
+	plans       *controller.TaskPlanResolver
 	now         func() time.Time
 }
 
@@ -73,7 +74,7 @@ func newEntryDesiredMutationService(
 	}
 	return &entryDesiredMutationService{
 		volumeRoot: volumeRoot, repository: repository, generator: generator, materials: materials,
-		creation: creation, edit: edit, removal: removal, removePlans: removePlans, now: time.Now,
+		creation: creation, edit: edit, removal: removal, removePlans: removePlans, plans: plans, now: time.Now,
 	}, nil
 }
 
@@ -512,6 +513,13 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 			"Entry mutation requires initialized Environment desired state",
 		)
 	}
+	runtime := controller.EntryMutationRuntime{Projection: current.Record}
+	if request.action != entryDesiredMutationRemove {
+		runtime, err = service.plans.CaptureEntryMutationRuntime(ctx, current)
+		if err != nil {
+			return etcd.IdempotencyResponse{}, err
+		}
+	}
 	now := service.now().UTC()
 	candidateTaskID := ids.New(ids.KindTask)
 	candidateRecord, previous, err := entryDesiredCandidateRecord(current.Record, request, candidateTaskID)
@@ -519,7 +527,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	candidate, _, err := controller.ProjectEnvironmentEntryMutation(
-		current.Record,
+		runtime.Projection,
 		controller.EnvironmentEntryArtifactMutation{
 			RevisionID: candidateTaskID, ArtifactID: entryStableIDFromRevision(ids.KindConfig, candidateTaskID),
 			PlanID: entryStableIDFromRevision(ids.KindPlan, candidateTaskID), RenderGeneration: generation,
@@ -530,10 +538,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	candidate = cloneEnvironmentDesiredProjection(candidate)
-	claim, _, err := controllerrevision.PreflightAndClaim(
-		ctx,
-		service.repository,
-		candidate,
+	claim, _, err := controllerrevision.PreflightAndClaim(ctx, service.repository, candidate,
 		controllerrevision.ClaimInput{
 			EnvironmentID: request.environmentID, CandidateTaskID: candidateTaskID,
 			Locator: request.locator, Intent: request.evidence.durable,
@@ -558,7 +563,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	}
 	entries := replaceProjectedEntry(current.Record.Entries, previous, candidateRecord)
 	candidate, materializations, err := controller.ProjectEnvironmentEntryMutation(
-		current.Record,
+		runtime.Projection,
 		controller.EnvironmentEntryArtifactMutation{
 			RevisionID: claim.RevisionID, ArtifactID: entryStableIDFromRevision(ids.KindConfig, claim.RevisionID),
 			PlanID: entryStableIDFromRevision(ids.KindPlan, claim.RevisionID), RenderGeneration: generation,
@@ -587,14 +592,9 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	var materializationRecords []etcd.TaskMaterializationRecord
+	var references []etcd.TaskMaterializationRecord
 	if request.action != entryDesiredMutationRemove {
-		materializationRecords, err = service.entryMaterializations(
-			ctx,
-			request.environmentID,
-			allocator,
-			materializations,
-		)
+		references, err = service.entryMaterializations(ctx, request.environmentID, allocator, materializations)
 		if err != nil {
 			return etcd.IdempotencyResponse{}, err
 		}
@@ -609,7 +609,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		IdempotencyKey: request.idempotencyKey, Owner: owner, Actor: etcd.TaskActorOperator,
 		Executor: etcd.TaskExecutorAgent, PlanID: planID,
 		RenderGeneration: int32(generation), Type: etcd.TaskUpdate, Target: request.environmentID,
-		Materializations: materializationRecords,
+		Materializations: references,
 		TimeoutSeconds:   environmentBlueprintTimeoutSeconds, Status: etcd.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
@@ -617,7 +617,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		task.Type, task.Target = etcd.TaskRemove, request.entryID
 		task, err = service.removePlans.PrepareDesiredEntryRemoval(ctx, task, claim)
 	} else {
-		task, err = controller.PrepareEntryMutationTask(service.volumeRoot, task, current.Record, candidate,
+		task, err = runtime.PrepareTask(service.volumeRoot, task, candidate,
 			allocator.Named(ids.KindStep, "entry-compose-apply"))
 	}
 	if err != nil {

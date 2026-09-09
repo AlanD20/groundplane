@@ -81,8 +81,12 @@ func TestEntryMutationPlanReconstructsAndSelectsRetainedWorkload(t *testing.T) {
 			Length: 10, SHA256: hex.EncodeToString(digest[:]), Source: material.Source,
 		})
 	}
-	task, err = PrepareEntryMutationTask("/var/lib/groundplane/vol", task, current, candidate,
-		"step_01ARZ3NDEKTSV4RRFFQ69G5FC9")
+	task, err = (EntryMutationRuntime{Projection: current, EpochRevision: 1}).PrepareTask(
+		"/var/lib/groundplane/vol",
+		task,
+		candidate,
+		"step_01ARZ3NDEKTSV4RRFFQ69G5FC9",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -258,13 +258,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	expectedHeadRevision, generation, err := serviceDesiredState(
-		input.environmentID,
-		head,
-		hasHead,
-		current,
-		hasCurrent,
-	)
+	headRevision, generation, err := serviceDesiredState(input.environmentID, head, hasHead, current, hasCurrent)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -274,6 +268,10 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 			"Entry mutation requires initialized Environment desired state",
 		)
 	}
+	runtime, err := service.desired.plans.CaptureEntryMutationRuntime(ctx, current)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	now := service.desired.now().UTC()
 	candidateTaskID := ids.New(ids.KindTask)
 	candidateRecords, err := buildEntryBulkCandidate(current.Record, input, candidateTaskID)
@@ -281,7 +279,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	candidate, _, err := controller.ProjectEnvironmentEntryMutation(
-		current.Record,
+		runtime.Projection,
 		controller.EnvironmentEntryArtifactMutation{
 			RevisionID:       candidateTaskID,
 			ArtifactID:       entryStableIDFromRevision(ids.KindConfig, candidateTaskID),
@@ -306,7 +304,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 			MatchExistingIntent: func(ctx context.Context, existing etcd.ProtectedIntentRecord) (bool, error) {
 				return service.idempotency.MatchesStaged(ctx, evidence, existing)
 			},
-			BaselineHeadRevision: expectedHeadRevision,
+			BaselineHeadRevision: headRevision,
 			SourceKind:           etcd.EnvironmentBlueprintSourceMutation,
 			RenderGeneration:     generation,
 			CreatedAt:            now,
@@ -327,7 +325,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 		}
 	}
 	candidate, materializations, err := controller.ProjectEnvironmentEntryMutation(
-		current.Record,
+		runtime.Projection,
 		controller.EnvironmentEntryArtifactMutation{
 			RevisionID:       claim.RevisionID,
 			ArtifactID:       entryStableIDFromRevision(ids.KindConfig, claim.RevisionID),
@@ -384,7 +382,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 		CreatedAt:         claim.CreatedAt,
 		UpdatedAt:         claim.CreatedAt,
 	}
-	task, err = controller.PrepareEntryMutationTask(service.desired.volumeRoot, task, current.Record, candidate,
+	task, err = runtime.PrepareTask(service.desired.volumeRoot, task, candidate,
 		allocator.Named(ids.KindStep, "entry-compose-apply"))
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -434,7 +432,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	result, publicationErr := service.desired.repository.PublishEnvironmentDesiredRevisionWithTask(
-		ctx, project, environment, expectedHeadRevision, claim,
+		ctx, project, environment, headRevision, claim,
 		etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: input.environmentID, RevisionID: claim.RevisionID},
 		candidate, nil, nil, nil, etcd.ReleaseGroupBlueprintPreparedMutation{},
 		etcd.ComponentTaskPreparation{}, etcd.BlueprintAttachTaskPreparation{}, task, marker,

@@ -6,6 +6,7 @@ import (
 	"math"
 	"slices"
 	"sort"
+	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -16,12 +17,16 @@ import (
 
 const EntryMutationBaselineRevisionParam = "entry_baseline_revision_id"
 
-// PrepareEntryMutationTask uses one procedure for initial publication and later
+// PrepareTask uses one procedure for initial publication and later
 // reconstruction. Only Entry create/edit/bulk-upsert use this path; removal has
 // its own terminal-publication and no-restart contract.
-func PrepareEntryMutationTask(
-	volumeRoot string, task etcd.TaskRecord, baseline, candidate etcd.EnvironmentComposeProjection, applyStepID string,
+func (runtime EntryMutationRuntime) PrepareTask(
+	volumeRoot string, task etcd.TaskRecord, candidate etcd.EnvironmentComposeProjection, applyStepID string,
 ) (etcd.TaskRecord, error) {
+	baseline := runtime.Projection
+	if runtime.EpochRevision <= 0 {
+		return etcd.TaskRecord{}, errs.New(errs.KindInternal, "Entry runtime capture epoch is absent")
+	}
 	artifact, err := entryMutationArtifact(candidate)
 	if err != nil {
 		return etcd.TaskRecord{}, err
@@ -36,6 +41,7 @@ func PrepareEntryMutationTask(
 		etcd.EnvironmentDesiredRevisionParam:     candidate.RevisionID,
 		etcd.TaskComposeArtifactParam:            artifact.ArtifactId,
 		EntryMutationBaselineRevisionParam:       baseline.RevisionID,
+		etcd.TaskEntryRuntimeEpochParam:          strconv.FormatInt(runtime.EpochRevision, 10),
 	}
 	references := append([]etcd.TaskMaterializationRecord(nil), task.Materializations...)
 	sort.Slice(
@@ -102,7 +108,7 @@ func buildEntryMutationPlan(
 	volumeRoot string, task etcd.TaskRecord, baseline, candidate etcd.EnvironmentComposeProjection,
 ) (*agentpb.ExecutionPlan, error) {
 	if task.Type != etcd.TaskUpdate || task.Executor != etcd.TaskExecutorAgent || task.RenderGeneration <= 0 ||
-		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(task.Params) != 5 ||
+		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(task.Params) != 6 ||
 		task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceEntry ||
 		task.Target != candidate.EnvironmentID || baseline.EnvironmentID != candidate.EnvironmentID ||
 		task.Params[etcd.TaskMaterializationEnvironmentParam] != candidate.EnvironmentID ||
@@ -113,11 +119,21 @@ func buildEntryMutationPlan(
 		) || baseline.RenderGeneration >= candidate.RenderGeneration {
 		return nil, errs.New(errs.KindInternal, "Entry mutation Task identity is invalid")
 	}
+	if _, err := etcd.EntryRuntimeEpochRevision(task); err != nil {
+		return nil, err
+	}
 	oldArtifact, err := entryMutationArtifact(baseline)
 	if err != nil {
 		return nil, err
 	}
 	newArtifact, err := entryMutationArtifact(candidate)
+	if err != nil {
+		return nil, err
+	}
+	// The sealed candidate owns the captured serving runtime. The older desired
+	// revision supplies only the previous Entry decorations, not live slot choice.
+	oldArtifact, err = mutateEnvironmentEntryArtifact(newArtifact, candidate,
+		EnvironmentEntryArtifactMutation{ArtifactID: oldArtifact.ArtifactId, Entries: baseline.Entries})
 	if err != nil {
 		return nil, err
 	}
