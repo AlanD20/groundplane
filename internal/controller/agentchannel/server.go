@@ -149,15 +149,6 @@ type BackupCheckpointer interface {
 	) (*agentpb.BackupCheckpointAck, error)
 }
 
-type ScriptCheckpointer interface {
-	CheckpointScript(
-		context.Context,
-		string,
-		uint64,
-		*agentpb.ScriptCheckpointRequest,
-	) (*agentpb.ScriptCheckpointAck, error)
-}
-
 // Server terminates the authenticated Controller side of AgentChannel.Connect.
 type Server struct {
 	agentpb.UnimplementedAgentChannelServer
@@ -170,6 +161,7 @@ type Server struct {
 	secrets           BackupSecretSlotResolver
 	checkpoints       BackupCheckpointer
 	scriptCheckpoints ScriptCheckpointer
+	volumeCheckpoints VolumeRemovalCheckpointer
 	scriptArtifacts   ScriptArtifactResolver
 	now               func() time.Time
 }
@@ -275,12 +267,14 @@ func NewWithScriptRuntimeServices(
 	managed ManagedConfigResolver,
 	scripts ScriptArtifactResolver,
 	scriptCheckpoints ScriptCheckpointer,
+	volumeCheckpoints VolumeRemovalCheckpointer,
 ) *Server {
 	server := NewWithManagedRuntimeServices(
 		auth, sessions, tasks, plans, materials, secrets, checkpoints, managed,
 	)
 	server.scriptArtifacts = scripts
 	server.scriptCheckpoints = scriptCheckpoints
+	server.volumeCheckpoints = volumeCheckpoints
 	return server
 }
 

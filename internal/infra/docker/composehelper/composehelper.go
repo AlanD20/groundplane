@@ -153,7 +153,7 @@ func execute(
 	if err != nil {
 		return nil, err
 	}
-	if response, handled, removeErr := executeManagedRemove(ctx, taskRunner, owned.TimeoutSeconds, step); handled {
+	if response, handled, removeErr := executeManagedRemove(ctx, taskRunner, owned, step); handled {
 		return response, removeErr
 	}
 	if ensure := step.GetManagedNetworkEnsure(); ensure != nil {

@@ -336,6 +336,21 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				}
 				continue
 			}
+			if request := result.message.GetVolumeRemovalCheckpointRequest(); request != nil {
+				ack, err := s.checkpointVolumeRemoval(
+					stream.Context(),
+					authenticate.AgentId,
+					authorization.Generation,
+					request,
+				)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if err := stream.Send(ack); err != nil {
+					return err
+				}
+				continue
+			}
 			if result.message.GetObservedState() != nil {
 				return status.Error(
 					codes.Unimplemented,

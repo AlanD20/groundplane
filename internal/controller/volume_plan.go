@@ -255,7 +255,7 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 			Payload: &agentpb.ExecutionStep_ManagedVolumeDirectoryRemove{
 				ManagedVolumeDirectoryRemove: &agentpb.ManagedVolumeDirectoryRemove{
 					ArtifactId: cleanupArtifact.ArtifactId, VolumeId: task.Target, ComposeKey: key,
-					IntentSha256: intentDigest, Cursor: nil,
+					IntentSha256: intentDigest,
 				},
 			},
 		},

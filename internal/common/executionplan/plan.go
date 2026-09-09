@@ -784,7 +784,7 @@ func validateStep(
 		remove := payload.ManagedVolumeDirectoryRemove
 		if operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE || remove == nil ||
 			validateID(ids.KindVolume, remove.VolumeId) != nil || !validManagedVolumeComposeKey(remove.ComposeKey) ||
-			len(remove.IntentSha256) != sha256.Size || len(remove.Cursor) > maximumVolumeTraversalCursorBytes {
+			len(remove.IntentSha256) != sha256.Size {
 			return errs.New(errs.KindValidationFailed, "managed Volume directory remove payload is invalid")
 		}
 		artifact := artifacts[remove.ArtifactId]

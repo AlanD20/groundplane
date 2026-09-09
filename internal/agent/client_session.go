@@ -148,6 +148,13 @@ func (c *Client) runSession(
 				receiveNext(streamCtx, stream, received)
 				continue
 			}
+			if acknowledgement := result.message.GetVolumeRemovalCheckpointAck(); acknowledgement != nil {
+				if err := c.pool.AcceptVolumeRemovalCheckpointAck(acknowledgement); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
 			shutdown, err := c.handleControllerMessage(streamCtx, result.message)
 			if err != nil {
 				return false, err
@@ -157,6 +164,18 @@ func (c *Client) runSession(
 			}
 			receiveNext(streamCtx, stream, received)
 		case output := <-c.pool.Outputs():
+			if output.VolumeCheckpoint != nil {
+				if output.ScriptCheckpoint != nil || output.BackupCheckpoint != nil || output.Progress != nil ||
+					output.Result != nil {
+					return false, errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
+				}
+				if err := stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_VolumeRemovalCheckpointRequest{
+					VolumeRemovalCheckpointRequest: output.VolumeCheckpoint,
+				}}); err != nil {
+					return agentChannelTransportResult(ctx, err, "agent: send Volume removal checkpoint", false)
+				}
+				continue
+			}
 			if output.ScriptCheckpoint != nil {
 				if output.BackupCheckpoint != nil ||
 					output.Progress != nil || output.Result != nil {

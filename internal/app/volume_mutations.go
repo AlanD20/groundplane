@@ -1,8 +1,6 @@
 package app
 
 import (
-	"context"
-
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -11,16 +9,14 @@ import (
 )
 
 type volumeEvidenceStore interface {
-	GetMany(context.Context, etcd.GetManyRequest) (*etcd.GetManyResult, error)
-	Range(context.Context, etcd.RangeRequest) (*etcd.RangeResult, error)
-	Transact(context.Context, []etcd.Condition, []etcd.Mutation) (etcd.TransactionResult, error)
+	etcd.Store
 	VolumeRemovalEvidenceTransactionSize([]etcd.Condition, []etcd.Mutation) (int, error)
 }
 
 func configureVolumeMutationPlans(
 	volumeRoot string, repository volume.MutationRepository, coordinator *idempotentintent.Coordinator,
 	idempotency *etcd.IdempotencyRepository, reads *volume.ReadService, policies *etcd.BackupPolicyRepository,
-	store volumeEvidenceStore, plans *controller.TaskPlanResolver,
+	store volumeEvidenceStore, plans *controller.TaskPlanResolver, channel *agentChannelRuntime,
 ) (*volume.MutationService, error) {
 	evidence, err := volumeremoval.NewEvidenceRepository(store)
 	if err != nil {
@@ -29,5 +25,14 @@ func configureVolumeMutationPlans(
 	if err := plans.EnableVolumeRemovalPlans(evidence); err != nil {
 		return nil, err
 	}
+	runtime, err := volumeremoval.NewEnvironmentVolumeRemovalRuntimeRepository(store)
+	if err != nil {
+		return nil, err
+	}
+	checkpoints, err := controller.NewVolumeRemovalCheckpointService(runtime)
+	if err != nil {
+		return nil, err
+	}
+	channel.volumeCheckpoints = checkpoints
 	return volume.NewMutationService(volumeRoot, repository, coordinator, idempotency, reads, policies, evidence)
 }

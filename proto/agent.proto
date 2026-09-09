@@ -47,6 +47,7 @@ message AgentMessage {
     LogReady log_ready = 9;
     ScriptCheckpointRequest script_checkpoint_request = 10;
     WorkloadImageResolutionResult workload_image_resolution_result = 11;
+    VolumeRemovalCheckpointRequest volume_removal_checkpoint_request = 12;
   }
 }
 
@@ -327,6 +328,7 @@ message ControllerMessage {
     ManagedConfigTransfer managed_config_transfer = 10;
     ScriptCheckpointAck script_checkpoint_ack = 11;
     ResolveWorkloadImages resolve_workload_images = 12;
+    VolumeRemovalCheckpointAck volume_removal_checkpoint_ack = 13;
     TaskEventAck task_event_ack = 22;
   }
 }
@@ -1640,7 +1642,29 @@ message ManagedVolumeDirectoryRemove {
   string volume_id = 2;
   string compose_key = 3;
   bytes intent_sha256 = 4;
-  bytes cursor = 5;
+  reserved 5; // traversal belongs to the durable per-call protocol, not the plan
+}
+
+// Private removal boundaries on the authenticated Agent stream. Binary values
+// use the single volumeremovalrecord encoding; they are not operator inputs.
+message VolumeRemovalCheckpointRequest {
+  string request_id = 1;
+  string task_id = 2;
+  string operation_id = 3;
+  string assignment_id = 4;
+  string step_id = 5;
+  bytes plan_hash = 6;
+  bool consumers_detached = 7; // request first/pending call after mount absence proof
+  bytes completion = 8; // alternatively acknowledge the exact helper result
+}
+
+message VolumeRemovalCheckpointAck {
+  string request_id = 1;
+  string task_id = 2;
+  string operation_id = 3;
+  string assignment_id = 4;
+  bytes pending_path = 5; // already durable before the helper may run
+  bool directory_absent = 6; // exclusive with pending_path
 }
 
 // ManagedNetworkRemove is the closed Zone-removal procedure. The helper may
@@ -1730,6 +1754,7 @@ message EnvironmentDirectoryHelperRequest {
   string step_id = 5;
   uint32 timeout_seconds = 6; // remaining bounded execution time
   string assignment_id = 7;
+  bytes volume_removal_pending_path = 8;
 }
 
 message EnvironmentDirectoryHelperResponse {
@@ -1740,6 +1765,7 @@ message EnvironmentDirectoryHelperResponse {
   uint32 mutation_count = 5;
   bool complete = 6;
   bytes response_sha256 = 7;
+  bytes volume_removal_completion = 8;
 }
 
 // ComposeHelperRequest is the single length-framed stdin message accepted by

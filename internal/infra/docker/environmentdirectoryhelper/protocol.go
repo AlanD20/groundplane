@@ -71,6 +71,7 @@ type ManagedVolumeDirectoryRemoveResult struct {
 	MutationCount  uint32
 	Complete       bool
 	ResponseSHA256 []byte
+	Completion     []byte
 }
 
 type ManagedVolumeDirectoryRemover interface {
@@ -188,11 +189,12 @@ func Execute(
 		})
 	}
 	response := &agentpb.EnvironmentDirectoryHelperResponse{
-		Schema:         SchemaVersion,
-		NextCursor:     result.NextCursor,
-		MutationCount:  result.MutationCount,
-		Complete:       result.Complete,
-		ResponseSha256: result.ResponseSHA256,
+		Schema:                  SchemaVersion,
+		NextCursor:              result.NextCursor,
+		MutationCount:           result.MutationCount,
+		Complete:                result.Complete,
+		ResponseSha256:          result.ResponseSHA256,
+		VolumeRemovalCompletion: result.Completion,
 	}
 	return withResponseDigest(response)
 }
@@ -244,14 +246,7 @@ func executeDirectoryMutation(
 				if artifact.ArtifactId != remove.ArtifactId {
 					continue
 				}
-				return managedRemover.RemoveManagedVolume(ctx, ManagedVolumeDirectoryRemoveRequest{
-					TaskID: request.TaskId, OperationID: request.OperationId,
-					IntentSHA256: append(
-						[]byte(nil),
-						remove.IntentSha256...), Cursor: append([]byte(nil), remove.Cursor...),
-					VolumeRoot: volumeRoot, VolumeDir: artifact.AuthorizedVolumeDir,
-					VolumeID: remove.VolumeId, ComposeKey: remove.ComposeKey,
-				})
+				return executeVolumePath(ctx, managedRemover, request, remove, volumeRoot, artifact.AuthorizedVolumeDir)
 			}
 			return ManagedVolumeDirectoryRemoveResult{}, errs.New(
 				errs.KindInternal,
@@ -339,6 +334,9 @@ func validateRequest(
 	} else if step.GetManagedVolumeDirectoriesEnsure() == nil && step.GetManagedVolumeDirectoryRemove() == nil {
 		return nil, nil, errs.New(errs.KindValidationFailed, "Environment directory helper step is unsupported")
 	}
+	if err := validateVolumePathRequest(request, step); err != nil {
+		return nil, nil, err
+	}
 	owned := proto.Clone(request).(*agentpb.EnvironmentDirectoryHelperRequest)
 	owned.Plan = plan
 	for _, candidate := range owned.Plan.Steps {
@@ -358,6 +356,9 @@ func validateResponse(response *agentpb.EnvironmentDirectoryHelperResponse) erro
 	}
 	if len(response.NextCursor) > 16*1024 || response.MutationCount > 128 {
 		return errs.New(errs.KindValidationFailed, "Environment directory helper progress is outside its bounds")
+	}
+	if err := validateVolumePathResponse(response); err != nil {
+		return err
 	}
 	if len(response.ResponseSha256) != sha256.Size {
 		return errs.New(errs.KindValidationFailed, "Environment directory helper response digest is invalid")

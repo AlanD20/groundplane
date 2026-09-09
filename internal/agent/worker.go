@@ -83,15 +83,6 @@ type TaskProgress struct {
 	Chunk          []byte
 }
 
-// WorkerOutput is a closed ordered union. Exactly one member is non-nil, and
-// each Task's terminal step progress is emitted before its final result.
-type WorkerOutput struct {
-	Progress         *TaskProgress
-	Result           *TaskResult
-	BackupCheckpoint *agentpb.BackupCheckpointRequest
-	ScriptCheckpoint *agentpb.ScriptCheckpointRequest
-}
-
 type taskReservation struct {
 	assignment    Assignment
 	ctx           context.Context
@@ -136,6 +127,7 @@ type WorkerPool struct {
 	backupSecrets          *backupSecretSlotInbox
 	backupCheckpoints      *backupCheckpointInbox
 	scriptCheckpoints      *scriptCheckpointInbox
+	volumeCheckpoints      *volumeCheckpointInbox
 	taskEventAcks          *taskEventAckInbox
 
 	mu           sync.Mutex
@@ -158,6 +150,7 @@ func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger
 		backupSecrets:     newBackupSecretSlotInbox(),
 		backupCheckpoints: newBackupCheckpointInbox(),
 		scriptCheckpoints: newScriptCheckpointInbox(),
+		volumeCheckpoints: &volumeCheckpointInbox{pending: make(map[string]*volumeCheckpointWaiter)},
 		taskEventAcks:     &taskEventAckInbox{receipts: make(map[taskEventAckKey]*taskEventReceipt)},
 		adapter:           NewAdapterRuntime(taskRunner),
 	}
@@ -303,7 +296,7 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			step.GetManagedVolumeDirectoriesEnsure() != nil || step.GetManagedVolumeDirectoryRemove() != nil) &&
 			p.environmentDirectories != nil {
 			var stepResult environmentDirectoryStepResult
-			stepResult, err = p.environmentDirectories.executeStep(stepCtx, reservation.assignment, step)
+			stepResult, err = p.environmentDirectories.executeStep(stepCtx, reservation.assignment, step, p.CheckpointVolumeRemoval)
 			if stepResult.ExitCode != 0 {
 				exitCode = stepResult.ExitCode
 			}

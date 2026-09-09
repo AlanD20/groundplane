@@ -181,6 +181,9 @@ func removeManagedVolume(
 	defer unix.Close(environmentFD)
 	leafFD, err := openDirectoryAt(environmentFD, request.ComposeKey)
 	if errors.Is(err, syscall.ENOENT) {
+		if err := unix.Fsync(environmentFD); err != nil {
+			return ManagedVolumeDirectoryRemoveResult{}, errs.Wrap(errs.KindInternal, err)
+		}
 		return ManagedVolumeDirectoryRemoveResult{Complete: true}, nil
 	}
 	if err != nil {
@@ -205,6 +208,27 @@ func removeManagedVolume(
 		}
 		current := &cursor.Frames[len(cursor.Frames)-1]
 		currentFD, openErr := openRelativeDirectory(leafFD, current.Path)
+		if errors.Is(openErr, syscall.ENOENT) && len(cursor.Frames) > 1 {
+			// A lost response may have removed the saved child already. Reopen
+			// its authorized parent and sync the observed absence before advancing.
+			childName := path.Base(current.Path)
+			cursor.Frames = cursor.Frames[:len(cursor.Frames)-1]
+			parent := &cursor.Frames[len(cursor.Frames)-1]
+			parent.After = childName
+			parentFD, parentErr := openRelativeDirectory(leafFD, parent.Path)
+			if errors.Is(parentErr, syscall.ENOENT) {
+				continue
+			}
+			if parentErr != nil {
+				return ManagedVolumeDirectoryRemoveResult{}, errs.Wrap(errs.KindInternal, parentErr)
+			}
+			syncErr := unix.Fsync(parentFD)
+			_ = unix.Close(parentFD)
+			if syncErr != nil {
+				return ManagedVolumeDirectoryRemoveResult{}, errs.Wrap(errs.KindInternal, syncErr)
+			}
+			continue
+		}
 		if openErr != nil {
 			return ManagedVolumeDirectoryRemoveResult{}, errs.Wrap(
 				errs.KindInternal,

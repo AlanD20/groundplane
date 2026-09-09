@@ -20,9 +20,10 @@ const (
 )
 
 type agentChannelRuntime struct {
-	registry  *agentchannel.Registry
-	listen    func(context.Context) (net.Listener, error)
-	newServer func(*agentchannel.Registry) agentChannelGRPCServer
+	registry          *agentchannel.Registry
+	listen            func(context.Context) (net.Listener, error)
+	newServer         func(*agentchannel.Registry) agentChannelGRPCServer
+	volumeCheckpoints agentchannel.VolumeRemovalCheckpointer
 }
 
 type agentChannelGRPCServer interface {
@@ -68,22 +69,20 @@ func newAgentChannelRuntimeWithManagedConfigAndScripts(
 	scripts agentchannel.ScriptArtifactResolver,
 	scriptCheckpoints agentchannel.ScriptCheckpointer,
 ) *agentChannelRuntime {
-	return &agentChannelRuntime{
-		registry: agentchannel.NewRegistry(),
-		listen:   agentlistener.Listen,
-		newServer: func(registry *agentchannel.Registry) agentChannelGRPCServer {
-			server := grpc.NewServer(
-				grpc.MaxRecvMsgSize(agentChannelControllerMaximumReceiveMessageBytes),
-				grpc.MaxSendMsgSize(agentChannelControllerMaximumSendMessageBytes),
-			)
-			channel := agentchannel.NewWithScriptRuntimeServices(
-				authenticator, registry, tasks, plans, materials, secrets, checkpoints, managed,
-				scripts, scriptCheckpoints,
-			)
-			agentpb.RegisterAgentChannelServer(server, channel)
-			return server
-		},
+	runtime := &agentChannelRuntime{registry: agentchannel.NewRegistry(), listen: agentlistener.Listen}
+	runtime.newServer = func(registry *agentchannel.Registry) agentChannelGRPCServer {
+		server := grpc.NewServer(
+			grpc.MaxRecvMsgSize(agentChannelControllerMaximumReceiveMessageBytes),
+			grpc.MaxSendMsgSize(agentChannelControllerMaximumSendMessageBytes),
+		)
+		channel := agentchannel.NewWithScriptRuntimeServices(
+			authenticator, registry, tasks, plans, materials, secrets, checkpoints, managed,
+			scripts, scriptCheckpoints, runtime.volumeCheckpoints,
+		)
+		agentpb.RegisterAgentChannelServer(server, channel)
+		return server
 	}
+	return runtime
 }
 
 func (runtime *agentChannelRuntime) Run(ctx context.Context) (resultErr error) {

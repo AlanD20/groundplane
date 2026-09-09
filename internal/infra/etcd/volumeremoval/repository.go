@@ -401,7 +401,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) CompletePathCall(
 	if err := removalrecord.ValidateCompletion(completion); err != nil {
 		return etcd.Versioned[removalrecord.Progress]{}, false, err
 	}
-	if state.Pending == nil {
+	if state.Pending == nil || state.Pending.Record.RequestOrdinal == completion.RequestOrdinal+1 {
 		return repository.replayPathCompletion(ctx, state, completion)
 	}
 	pending := state.Pending.Record

@@ -33,7 +33,7 @@ func TestEnvironmentDirectoryRuntimeReturnsClosedHelperResult(t *testing.T) {
 		t.Fatalf("NewEnvironmentDirectoryRuntime() error = %v", err)
 	}
 	assignment := environmentDirectoryAssignment(t)
-	result, err := runtime.executeStep(context.Background(), assignment, assignment.Plan.Steps[0])
+	result, err := runtime.executeStep(context.Background(), assignment, assignment.Plan.Steps[0], nil)
 	if err != nil || result.ExitCode != 0 || result.FailedStepID != "" {
 		t.Fatalf("executeStep() = %#v, %v", result, err)
 	}
@@ -45,7 +45,7 @@ func TestEnvironmentDirectoryRuntimeReturnsClosedHelperResult(t *testing.T) {
 	helper.response = &agentpb.EnvironmentDirectoryHelperResponse{
 		Schema: environmentDirectoryHelperSchema, ExitCode: 1, FailedStepId: workerTestStepID,
 	}
-	result, err = runtime.executeStep(context.Background(), assignment, assignment.Plan.Steps[0])
+	result, err = runtime.executeStep(context.Background(), assignment, assignment.Plan.Steps[0], nil)
 	if result.ExitCode != 1 || result.FailedStepID != workerTestStepID ||
 		!errors.Is(err, errs.New(errs.KindRequestFailed, "")) {
 		t.Fatalf("executeStep(failed) = %#v, %v", result, err)

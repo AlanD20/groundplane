@@ -9,8 +9,6 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-const maximumVolumeTraversalCursorBytes = 16 * 1024
-
 // AuthorizeVolumeDirectories applies daemon-owned host policy after generic
 // plan validation. The trusted root never enters the sealed plan or its hash.
 func AuthorizeVolumeDirectories(plan *agentpb.ExecutionPlan, volumeRoot string) error {

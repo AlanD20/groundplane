@@ -42,6 +42,7 @@ func (runtime *EnvironmentDirectoryRuntime) executeStep(
 	ctx context.Context,
 	assignment Assignment,
 	step *agentpb.ExecutionStep,
+	checkpoint volumeRemovalCheckpoint,
 ) (environmentDirectoryStepResult, error) {
 	if runtime == nil || runtime.helper == nil {
 		return environmentDirectoryStepResult{}, errs.New(
@@ -51,6 +52,9 @@ func (runtime *EnvironmentDirectoryRuntime) executeStep(
 	}
 	if err := ctx.Err(); err != nil {
 		return environmentDirectoryStepResult{}, err
+	}
+	if step.GetManagedVolumeDirectoryRemove() != nil {
+		return runtime.executeVolumeRemoval(ctx, assignment, step, checkpoint)
 	}
 	if step.GetEnvironmentDirectoryCreate() == nil && step.GetEnvironmentDirectoryRemove() == nil &&
 		step.GetManagedVolumeDirectoriesEnsure() == nil && step.GetManagedVolumeDirectoryRemove() == nil {
@@ -79,15 +83,6 @@ func (runtime *EnvironmentDirectoryRuntime) executeStep(
 		ExitCode: response.ExitCode, FailedStepID: response.FailedStepId,
 		NextCursor: append([]byte(nil), response.NextCursor...), MutationCount: response.MutationCount,
 		Complete: response.Complete, ResponseSHA256: append([]byte(nil), response.ResponseSha256...),
-	}
-	if step.GetManagedVolumeDirectoryRemove() != nil && response.ExitCode == 0 {
-		if response.MutationCount > 128 || len(response.ResponseSha256) != 32 ||
-			(response.Complete && len(response.NextCursor) != 0) || (!response.Complete && len(response.NextCursor) == 0) {
-			return result, errs.New(
-				errs.KindInternal,
-				"agent: managed volume directory helper returned invalid progress",
-			)
-		}
 	}
 	if response.ExitCode == 0 {
 		if response.FailedStepId != "" {

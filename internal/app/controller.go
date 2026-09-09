@@ -1078,7 +1078,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		environmentBlueprintRepository,
 		intentCoordinator,
 		idempotency,
-		volumeReads, backupPolicyRecords, store, planResolver,
+		volumeReads, backupPolicyRecords, store, planResolver, agentRuntime,
 	)
 	if err != nil {
 		_ = store.Close()
