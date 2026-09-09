@@ -76,10 +76,11 @@ accepted impact, or immutable Volume key.
 - Work locally on main; no subagents, review loops, or new worktrees.
 - No deployment until the complete operation journey and its failure recovery
   are verified and the remaining release blockers are addressed.
-- Backup/restore work remains paused. Preserve existing Backup data and guards.
-  If atomic Volume publication requires changing the accepted Backup policy
-  transform, stop that integration point and request scope authorization; do
-  not omit the transform, weaken its fences, or declare those cases complete.
+- The owner confirmed on September9 that Volume removal includes the required
+  Backup-policy transform and its persistence/publication changes. Implement
+  that dependency without another approval request. Unrelated Backup/restore
+  work remains paused. Preserve historical Backup data and all required guards;
+  do not omit the atomic transform or weaken its fences.
 - Real-host verification remains limited to disposable QA `10.25.0.2`, after
   local proof and the existing deployment restrictions are satisfied.
 - No direct cleanup of old rootless Script records and no source-count repair.

@@ -118,6 +118,12 @@ func TestBackupPolicyRecordRejectsEveryPartialDisabledConfiguration(t *testing.T
 			if fields&sourcesField != 0 {
 				record.SourceIDs = []string{"spt_01ARZ3NDEKTSV4RRFFQ69G5FAV"}
 			}
+			if fields == allConfiguredFields&^sourcesField {
+				if err := validateBackupPolicyRecord(record); err != nil {
+					t.Fatalf("retained disabled configuration without sources: %v", err)
+				}
+				return
+			}
 			if err := validateBackupPolicyRecord(record); !errors.Is(
 				err,
 				errs.New(errs.KindValidationFailed, ""),
@@ -134,6 +140,34 @@ func TestBackupPolicyRecordRejectsEveryPartialDisabledConfiguration(t *testing.T
 	configured.SourceIDs = []string{"spt_01ARZ3NDEKTSV4RRFFQ69G5FAV"}
 	if err := validateBackupPolicyRecord(configured); err != nil {
 		t.Fatalf("validateBackupPolicyRecord(configured disabled) error = %v", err)
+	}
+}
+
+// Rationale: ADR0049 retains policy configuration after the last Volume source
+// is removed, but an enabled policy still requires a selected source.
+func TestBackupPolicyRecordRetainsConfigurationAfterLastVolumeSource(t *testing.T) {
+	t.Parallel()
+	record := BackupPolicyRecord{
+		EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		Frequency:     "*-*-* 03:15:00", Keep: 7, Encryption: "age",
+		ConnectorID: "con_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		UpdatedAt:   time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC),
+	}
+	encoded, err := encodeBackupPolicyRecord(record)
+	if err != nil {
+		t.Fatalf("encode retained policy after last source removal: %v", err)
+	}
+	defer clear(encoded)
+	decoded, err := decodeBackupPolicyRecord(encoded)
+	if err != nil || decoded.Enabled || len(decoded.SourceIDs) != 0 ||
+		decoded.Frequency != record.Frequency || decoded.Keep != record.Keep ||
+		decoded.Encryption != record.Encryption || decoded.ConnectorID != record.ConnectorID ||
+		decoded.EnvironmentID != record.EnvironmentID || !decoded.UpdatedAt.Equal(record.UpdatedAt) {
+		t.Fatalf("retained policy did not survive persistence: %v", err)
+	}
+	record.Enabled = true
+	if _, err := encodeBackupPolicyRecord(record); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("enabled policy without a source accepted: %v", err)
 	}
 }
 

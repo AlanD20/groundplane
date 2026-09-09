@@ -136,7 +136,7 @@ func validateBackupPolicyRecord(record BackupPolicyRecord) error {
 		record.ConnectorID != "" || len(record.SourceIDs) != 0
 	if record.Enabled || configured {
 		if record.Frequency == "" || record.Keep <= 0 || record.Encryption == "" ||
-			record.ConnectorID == "" || len(record.SourceIDs) == 0 {
+			record.ConnectorID == "" || (record.Enabled && len(record.SourceIDs) == 0) {
 			return errs.New(errs.KindValidationFailed, "configured Backup Policy is incomplete")
 		}
 	}
