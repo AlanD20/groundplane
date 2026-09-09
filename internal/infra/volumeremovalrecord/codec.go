@@ -1,4 +1,4 @@
-package volumeremoval
+package volumeremovalrecord
 
 import (
 	"crypto/sha256"
@@ -7,11 +7,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func environmentVolumeRemovalPathRequestDigest(record EnvironmentVolumeRemovalPendingPath) [sha256.Size]byte {
+func PathRequestDigest(record PendingPath) [sha256.Size]byte {
 	writer := volumeRemovalWriter{}
 	writer.string(record.OperationID)
 	writer.string(record.VolumeID)
@@ -24,15 +23,15 @@ func environmentVolumeRemovalPathRequestDigest(record EnvironmentVolumeRemovalPe
 	return sha256.Sum256(writer.value)
 }
 
-func environmentVolumeRemovalPathResponseDigest(record EnvironmentVolumeRemovalPathCompletion) [sha256.Size]byte {
+func PathResponseDigest(record Completion) [sha256.Size]byte {
 	return sha256.Sum256(environmentVolumeRemovalPathResponseEncoding(record))
 }
 
-func environmentVolumeRemovalPathResponseBytes(record EnvironmentVolumeRemovalPathCompletion) uint32 {
+func PathResponseBytes(record Completion) uint32 {
 	return uint32(len(environmentVolumeRemovalPathResponseEncoding(record)))
 }
 
-func environmentVolumeRemovalPathResponseEncoding(record EnvironmentVolumeRemovalPathCompletion) []byte {
+func environmentVolumeRemovalPathResponseEncoding(record Completion) []byte {
 	writer := volumeRemovalWriter{}
 	writer.string(record.OperationID)
 	writer.uint64(record.RequestOrdinal)
@@ -104,7 +103,7 @@ func (writer *volumeRemovalWriter) strings(values []string) {
 	}
 }
 func (writer *volumeRemovalWriter) timestamp(value time.Time) {
-	if etcd.ValidateCapabilityTimestamp("Environment Volume removal timestamp", value) != nil || value.UnixNano() < 0 {
+	if validateTimestamp("Environment Volume removal timestamp", value) != nil || value.UnixNano() < 0 {
 		writer.err = errs.New(errs.KindValidationFailed, "Environment Volume removal timestamp is invalid")
 		return
 	}
@@ -119,7 +118,7 @@ type volumeRemovalReader struct {
 
 func (reader *volumeRemovalReader) take(length int) []byte {
 	if reader.err != nil || length < 0 || reader.offset > len(reader.value)-length {
-		reader.err = corruptEnvironmentVolumeRemovalRuntime()
+		reader.err = Corrupt()
 		return nil
 	}
 	value := reader.value[reader.offset : reader.offset+length]
@@ -157,7 +156,7 @@ func (reader *volumeRemovalReader) uint64() uint64 {
 func (reader *volumeRemovalReader) boolean() bool {
 	value := reader.uint8()
 	if value > 1 {
-		reader.err = corruptEnvironmentVolumeRemovalRuntime()
+		reader.err = Corrupt()
 	}
 	return value == 1
 }
@@ -169,7 +168,7 @@ func (reader *volumeRemovalReader) digest() [sha256.Size]byte {
 func (reader *volumeRemovalReader) bytes(maximum int) []byte {
 	length := reader.uint32()
 	if reader.err != nil || uint64(length) > uint64(maximum) {
-		reader.err = corruptEnvironmentVolumeRemovalRuntime()
+		reader.err = Corrupt()
 		return nil
 	}
 	return append([]byte(nil), reader.take(int(length))...)
@@ -177,7 +176,7 @@ func (reader *volumeRemovalReader) bytes(maximum int) []byte {
 func (reader *volumeRemovalReader) string(maximum int) string {
 	value := reader.bytes(maximum)
 	if reader.err != nil || !utf8.Valid(value) {
-		reader.err = corruptEnvironmentVolumeRemovalRuntime()
+		reader.err = Corrupt()
 		return ""
 	}
 	return string(value)
@@ -185,7 +184,7 @@ func (reader *volumeRemovalReader) string(maximum int) string {
 func (reader *volumeRemovalReader) strings(maximumCount, maximumBytes int) []string {
 	count := int(reader.uint16())
 	if reader.err != nil || count > maximumCount {
-		reader.err = corruptEnvironmentVolumeRemovalRuntime()
+		reader.err = Corrupt()
 		return nil
 	}
 	values := make([]string, count)
@@ -197,20 +196,20 @@ func (reader *volumeRemovalReader) strings(maximumCount, maximumBytes int) []str
 func (reader *volumeRemovalReader) timestamp() time.Time {
 	value := reader.uint64()
 	if value > math.MaxInt64 {
-		reader.err = corruptEnvironmentVolumeRemovalRuntime()
+		reader.err = Corrupt()
 		return time.Time{}
 	}
 	return time.Unix(0, int64(value)).UTC()
 }
 func (reader *volumeRemovalReader) done() error {
 	if reader.err != nil || reader.offset != len(reader.value) {
-		return corruptEnvironmentVolumeRemovalRuntime()
+		return Corrupt()
 	}
 	return nil
 }
 
-func encodeEnvironmentVolumeRemovalRuntime(record EnvironmentVolumeRemovalRuntimeRecord) ([]byte, error) {
-	if err := validateEnvironmentVolumeRemovalRuntime(record); err != nil {
+func EncodeRuntime(record Runtime) ([]byte, error) {
+	if err := ValidateRuntime(record); err != nil {
 		return nil, err
 	}
 	writer := volumeRemovalWriter{value: []byte("GVRR")}
@@ -237,12 +236,12 @@ func encodeEnvironmentVolumeRemovalRuntime(record EnvironmentVolumeRemovalRuntim
 	return finishVolumeRemovalEncoding(writer)
 }
 
-func decodeEnvironmentVolumeRemovalRuntime(value []byte) (EnvironmentVolumeRemovalRuntimeRecord, error) {
+func DecodeRuntime(value []byte) (Runtime, error) {
 	reader, err := newVolumeRemovalReader(value, "GVRR")
 	if err != nil {
-		return EnvironmentVolumeRemovalRuntimeRecord{}, err
+		return Runtime{}, err
 	}
-	record := EnvironmentVolumeRemovalRuntimeRecord{
+	record := Runtime{
 		OperationID: reader.string(
 			128,
 		), EnvironmentID: reader.string(128), VolumeID: reader.string(128), Key: reader.string(255),
@@ -250,17 +249,17 @@ func decodeEnvironmentVolumeRemovalRuntime(value []byte) (EnvironmentVolumeRemov
 		ImpactSHA256: reader.digest(), EvidenceManifestSHA256: reader.digest(), IntentSHA256: reader.digest(),
 		RootLocator: decodeVolumeRemovalLocator(&reader), RootResponseSHA256: reader.digest(),
 		OriginTaskID: reader.string(128), CurrentTaskID: reader.string(128), PredecessorTaskID: reader.string(128),
-		AttemptOrdinal: reader.uint32(), StepID: reader.string(128), Checkpoint: EnvironmentVolumeRemovalCheckpoint(reader.uint8()),
+		AttemptOrdinal: reader.uint32(), StepID: reader.string(128), Checkpoint: Checkpoint(reader.uint8()),
 		CreatedAt: reader.timestamp(), UpdatedAt: reader.timestamp(),
 	}
-	if reader.done() != nil || validateEnvironmentVolumeRemovalRuntime(record) != nil {
-		return EnvironmentVolumeRemovalRuntimeRecord{}, corruptEnvironmentVolumeRemovalRuntime()
+	if reader.done() != nil || ValidateRuntime(record) != nil {
+		return Runtime{}, Corrupt()
 	}
 	return record, nil
 }
 
-func encodeEnvironmentVolumeRemovalAttempt(record EnvironmentVolumeRemovalAttemptRecord) ([]byte, error) {
-	if err := validateEnvironmentVolumeRemovalAttempt(record); err != nil {
+func EncodeAttempt(record Attempt) ([]byte, error) {
+	if err := ValidateAttempt(record); err != nil {
 		return nil, err
 	}
 	writer := volumeRemovalWriter{value: []byte("GVRA")}
@@ -274,12 +273,12 @@ func encodeEnvironmentVolumeRemovalAttempt(record EnvironmentVolumeRemovalAttemp
 	return finishVolumeRemovalEncoding(writer)
 }
 
-func decodeEnvironmentVolumeRemovalAttempt(value []byte) (EnvironmentVolumeRemovalAttemptRecord, error) {
+func DecodeAttempt(value []byte) (Attempt, error) {
 	reader, err := newVolumeRemovalReader(value, "GVRA")
 	if err != nil {
-		return EnvironmentVolumeRemovalAttemptRecord{}, err
+		return Attempt{}, err
 	}
-	record := EnvironmentVolumeRemovalAttemptRecord{
+	record := Attempt{
 		OperationID:       reader.string(128),
 		OriginTaskID:      reader.string(128),
 		TaskID:            reader.string(128),
@@ -287,14 +286,14 @@ func decodeEnvironmentVolumeRemovalAttempt(value []byte) (EnvironmentVolumeRemov
 		Ordinal:           reader.uint32(),
 		CreatedAt:         reader.timestamp(),
 	}
-	if reader.done() != nil || validateEnvironmentVolumeRemovalAttempt(record) != nil {
-		return EnvironmentVolumeRemovalAttemptRecord{}, corruptEnvironmentVolumeRemovalRuntime()
+	if reader.done() != nil || ValidateAttempt(record) != nil {
+		return Attempt{}, Corrupt()
 	}
 	return record, nil
 }
 
-func encodeEnvironmentVolumeRemovalProgress(record EnvironmentVolumeRemovalPathProgress) ([]byte, error) {
-	if err := validateEnvironmentVolumeRemovalProgress(record); err != nil {
+func EncodeProgress(record Progress) ([]byte, error) {
+	if err := ValidateProgress(record); err != nil {
 		return nil, err
 	}
 	writer := volumeRemovalWriter{value: []byte("GVRP")}
@@ -308,27 +307,27 @@ func encodeEnvironmentVolumeRemovalProgress(record EnvironmentVolumeRemovalPathP
 	return finishVolumeRemovalEncoding(writer)
 }
 
-func decodeEnvironmentVolumeRemovalProgress(value []byte) (EnvironmentVolumeRemovalPathProgress, error) {
+func DecodeProgress(value []byte) (Progress, error) {
 	reader, err := newVolumeRemovalReader(value, "GVRP")
 	if err != nil {
-		return EnvironmentVolumeRemovalPathProgress{}, err
+		return Progress{}, err
 	}
-	record := EnvironmentVolumeRemovalPathProgress{
+	record := Progress{
 		OperationID:        reader.string(128),
 		NextRequestOrdinal: reader.uint64(),
 		ComponentStack:     reader.strings(128, 255),
-		Cursor:             reader.bytes(environmentVolumeRemovalCursorBytes),
+		Cursor:             reader.bytes(CursorBytes),
 		DirectoryAbsent:    reader.boolean(),
 		UpdatedAt:          reader.timestamp(),
 	}
-	if reader.done() != nil || validateEnvironmentVolumeRemovalProgress(record) != nil {
-		return EnvironmentVolumeRemovalPathProgress{}, corruptEnvironmentVolumeRemovalRuntime()
+	if reader.done() != nil || ValidateProgress(record) != nil {
+		return Progress{}, Corrupt()
 	}
 	return record, nil
 }
 
-func encodeEnvironmentVolumeRemovalPendingPath(record EnvironmentVolumeRemovalPendingPath) ([]byte, error) {
-	if err := validateEnvironmentVolumeRemovalPendingPath(record); err != nil {
+func EncodePendingPath(record PendingPath) ([]byte, error) {
+	if err := ValidatePendingPath(record); err != nil {
 		return nil, err
 	}
 	writer := volumeRemovalWriter{value: []byte("GVRQ")}
@@ -350,12 +349,12 @@ func encodeEnvironmentVolumeRemovalPendingPath(record EnvironmentVolumeRemovalPe
 	return finishVolumeRemovalEncoding(writer)
 }
 
-func decodeEnvironmentVolumeRemovalPendingPath(value []byte) (EnvironmentVolumeRemovalPendingPath, error) {
+func DecodePendingPath(value []byte) (PendingPath, error) {
 	reader, err := newVolumeRemovalReader(value, "GVRQ")
 	if err != nil {
-		return EnvironmentVolumeRemovalPendingPath{}, err
+		return PendingPath{}, err
 	}
-	record := EnvironmentVolumeRemovalPendingPath{
+	record := PendingPath{
 		OperationID:     reader.string(128),
 		VolumeID:        reader.string(128),
 		Key:             reader.string(255),
@@ -363,7 +362,7 @@ func decodeEnvironmentVolumeRemovalPendingPath(value []byte) (EnvironmentVolumeR
 		RequestOrdinal:  reader.uint64(),
 		MutationBudget:  reader.uint32(),
 		ComponentStack:  reader.strings(128, 255),
-		Cursor:          reader.bytes(environmentVolumeRemovalCursorBytes),
+		Cursor:          reader.bytes(CursorBytes),
 		RequestSHA256:   reader.digest(),
 		TaskID:          reader.string(128),
 		AssignmentID:    reader.string(128),
@@ -371,14 +370,14 @@ func decodeEnvironmentVolumeRemovalPendingPath(value []byte) (EnvironmentVolumeR
 		AgentGeneration: reader.uint64(),
 		CreatedAt:       reader.timestamp(),
 	}
-	if reader.done() != nil || validateEnvironmentVolumeRemovalPendingPath(record) != nil {
-		return EnvironmentVolumeRemovalPendingPath{}, corruptEnvironmentVolumeRemovalRuntime()
+	if reader.done() != nil || ValidatePendingPath(record) != nil {
+		return PendingPath{}, Corrupt()
 	}
 	return record, nil
 }
 
-func encodeEnvironmentVolumeRemovalCompletion(record EnvironmentVolumeRemovalPathCompletion) ([]byte, error) {
-	if err := validateEnvironmentVolumeRemovalCompletion(record); err != nil {
+func EncodeCompletion(record Completion) ([]byte, error) {
+	if err := ValidateCompletion(record); err != nil {
 		return nil, err
 	}
 	writer := volumeRemovalWriter{value: []byte("GVRC")}
@@ -396,12 +395,12 @@ func encodeEnvironmentVolumeRemovalCompletion(record EnvironmentVolumeRemovalPat
 	return finishVolumeRemovalEncoding(writer)
 }
 
-func decodeEnvironmentVolumeRemovalCompletion(value []byte) (EnvironmentVolumeRemovalPathCompletion, error) {
+func DecodeCompletion(value []byte) (Completion, error) {
 	reader, err := newVolumeRemovalReader(value, "GVRC")
 	if err != nil {
-		return EnvironmentVolumeRemovalPathCompletion{}, err
+		return Completion{}, err
 	}
-	record := EnvironmentVolumeRemovalPathCompletion{
+	record := Completion{
 		OperationID:        reader.string(128),
 		RequestOrdinal:     reader.uint64(),
 		RequestSHA256:      reader.digest(),
@@ -409,17 +408,17 @@ func decodeEnvironmentVolumeRemovalCompletion(value []byte) (EnvironmentVolumeRe
 		ResponseBytes:      reader.uint32(),
 		MutationCount:      reader.uint32(),
 		NextComponentStack: reader.strings(128, 255),
-		NextCursor:         reader.bytes(environmentVolumeRemovalCursorBytes),
+		NextCursor:         reader.bytes(CursorBytes),
 		DirectoryAbsent:    reader.boolean(),
 		CompletedAt:        reader.timestamp(),
 	}
-	if reader.done() != nil || validateEnvironmentVolumeRemovalCompletion(record) != nil {
-		return EnvironmentVolumeRemovalPathCompletion{}, corruptEnvironmentVolumeRemovalRuntime()
+	if reader.done() != nil || ValidateCompletion(record) != nil {
+		return Completion{}, Corrupt()
 	}
 	return record, nil
 }
 
-func encodeVolumeRemovalLocator(writer *volumeRemovalWriter, locator etcd.IdempotencyLocator) {
+func encodeVolumeRemovalLocator(writer *volumeRemovalWriter, locator ReplayLocator) {
 	writer.string(string(locator.ScopeKind))
 	writer.string(locator.ScopeID)
 	writer.string(locator.Method)
@@ -427,9 +426,9 @@ func encodeVolumeRemovalLocator(writer *volumeRemovalWriter, locator etcd.Idempo
 	writer.string(locator.Key)
 }
 
-func decodeVolumeRemovalLocator(reader *volumeRemovalReader) etcd.IdempotencyLocator {
-	return etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeKind(reader.string(32)),
+func decodeVolumeRemovalLocator(reader *volumeRemovalReader) ReplayLocator {
+	return ReplayLocator{
+		ScopeKind: reader.string(32),
 		ScopeID:   reader.string(128),
 		Method:    reader.string(16),
 		Route:     reader.string(1024),
@@ -439,11 +438,11 @@ func decodeVolumeRemovalLocator(reader *volumeRemovalReader) etcd.IdempotencyLoc
 
 func newVolumeRemovalReader(value []byte, magic string) (volumeRemovalReader, error) {
 	if len(value) < 6 || string(value[:4]) != magic {
-		return volumeRemovalReader{}, corruptEnvironmentVolumeRemovalRuntime()
+		return volumeRemovalReader{}, Corrupt()
 	}
 	reader := volumeRemovalReader{value: value[4:]}
 	if reader.uint16() != 1 {
-		return volumeRemovalReader{}, corruptEnvironmentVolumeRemovalRuntime()
+		return volumeRemovalReader{}, Corrupt()
 	}
 	return reader, nil
 }
@@ -460,6 +459,6 @@ func finishVolumeRemovalEncoding(writer volumeRemovalWriter) ([]byte, error) {
 	return writer.value, nil
 }
 
-func corruptEnvironmentVolumeRemovalRuntime() error {
+func Corrupt() error {
 	return errs.New(errs.KindInternal, "Environment Volume removal runtime is corrupt")
 }

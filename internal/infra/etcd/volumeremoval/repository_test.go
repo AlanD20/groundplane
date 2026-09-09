@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -19,11 +21,11 @@ import (
 func TestEnvironmentVolumeRemovalRuntimeCodecIsDeterministicBinary(t *testing.T) {
 	t.Parallel()
 	_, _, runtime, _, _ := environmentVolumeRemovalRuntimeFixture(t)
-	encoded, err := encodeEnvironmentVolumeRemovalRuntime(runtime)
+	encoded, err := removalrecord.EncodeRuntime(runtime)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := encodeEnvironmentVolumeRemovalRuntime(runtime)
+	second, err := removalrecord.EncodeRuntime(runtime)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,13 +33,13 @@ func TestEnvironmentVolumeRemovalRuntimeCodecIsDeterministicBinary(t *testing.T)
 		!bytesEqual(encoded, second) {
 		t.Fatalf("runtime is not deterministic binary: %x", encoded)
 	}
-	decoded, err := decodeEnvironmentVolumeRemovalRuntime(encoded)
+	decoded, err := removalrecord.DecodeRuntime(encoded)
 	if err != nil || !sameEnvironmentVolumeRemovalRuntime(decoded, runtime) {
 		t.Fatalf("runtime round trip = %#v, %v", decoded, err)
 	}
 	encoded = append(encoded, 0)
-	if _, err := decodeEnvironmentVolumeRemovalRuntime(encoded); err == nil {
-		t.Fatal("decodeEnvironmentVolumeRemovalRuntime() accepted corrupt state")
+	if _, err := removalrecord.DecodeRuntime(encoded); err == nil {
+		t.Fatal("removalrecord.DecodeRuntime() accepted corrupt state")
 	}
 }
 
@@ -49,17 +51,17 @@ func TestEnvironmentVolumeRemovalPathResumesPendingCallAndDeduplicatesCompletion
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
-	if created.Runtime.Record.Checkpoint != EnvironmentVolumeRemovalIntentSealed {
+	if created.Runtime.Record.Checkpoint != removalrecord.IntentSealed {
 		t.Fatalf("created checkpoint = %v", created.Runtime.Record.Checkpoint)
 	}
 	if _, err := repository.AdvanceCheckpoint(
-		ctx, runtime.OperationID, EnvironmentVolumeRemovalRevisionStaged,
+		ctx, runtime.OperationID, removalrecord.RevisionStaged,
 		runtime.CreatedAt.Add(time.Second),
 	); err != nil {
 		t.Fatalf("AdvanceCheckpoint(revision staged) error = %v", err)
 	}
 	if _, err := repository.AdvanceCheckpoint(
-		ctx, runtime.OperationID, EnvironmentVolumeRemovalDesiredPublished,
+		ctx, runtime.OperationID, removalrecord.DesiredPublished,
 		runtime.CreatedAt.Add(2*time.Second),
 	); err != nil {
 		t.Fatalf("AdvanceCheckpoint(desired published) error = %v", err)
@@ -76,7 +78,7 @@ func TestEnvironmentVolumeRemovalPathResumesPendingCallAndDeduplicatesCompletion
 		ctx, assignment, runtime.CreatedAt.Add(5*time.Second),
 	)
 	if err != nil || existing || pending.Record.RequestOrdinal != 1 ||
-		pending.Record.MutationBudget != environmentVolumeRemovalMutationBudget {
+		pending.Record.MutationBudget != removalrecord.MutationBudget {
 		t.Fatalf("BeginPathCall() = %#v/%v/%v", pending, existing, err)
 	}
 
@@ -97,14 +99,14 @@ func TestEnvironmentVolumeRemovalPathResumesPendingCallAndDeduplicatesCompletion
 		t.Fatalf("BeginPathCall(restart) = %#v/%v/%v", redelivered, existing, err)
 	}
 
-	firstCompletion := EnvironmentVolumeRemovalPathCompletion{
+	firstCompletion := removalrecord.Completion{
 		OperationID: runtime.OperationID, RequestOrdinal: 1,
 		RequestSHA256: pending.Record.RequestSHA256,
 		MutationCount: 12, NextComponentStack: []string{"nested"},
 		NextCursor: []byte("cursor-1"), CompletedAt: runtime.CreatedAt.Add(7 * time.Second),
 	}
-	firstCompletion.ResponseBytes = environmentVolumeRemovalPathResponseBytes(firstCompletion)
-	firstCompletion.ResponseSHA256 = environmentVolumeRemovalPathResponseDigest(firstCompletion)
+	firstCompletion.ResponseBytes = removalrecord.PathResponseBytes(firstCompletion)
+	firstCompletion.ResponseSHA256 = removalrecord.PathResponseDigest(firstCompletion)
 	firstResult := environmentVolumeRemovalPathResult(assignment, firstCompletion)
 	progress, duplicate, err := restarted.CompletePathCall(ctx, firstResult)
 	if err != nil || duplicate || progress.Record.NextRequestOrdinal != 2 ||
@@ -123,14 +125,14 @@ func TestEnvironmentVolumeRemovalPathResumesPendingCallAndDeduplicatesCompletion
 		!bytesEqual(secondPending.Record.Cursor, []byte("cursor-1")) {
 		t.Fatalf("BeginPathCall(second) = %#v/%v/%v", secondPending, existing, err)
 	}
-	secondCompletion := EnvironmentVolumeRemovalPathCompletion{
+	secondCompletion := removalrecord.Completion{
 		OperationID: runtime.OperationID, RequestOrdinal: 2,
 		RequestSHA256: secondPending.Record.RequestSHA256,
 		MutationCount: 1, DirectoryAbsent: true,
 		CompletedAt: runtime.CreatedAt.Add(9 * time.Second),
 	}
-	secondCompletion.ResponseBytes = environmentVolumeRemovalPathResponseBytes(secondCompletion)
-	secondCompletion.ResponseSHA256 = environmentVolumeRemovalPathResponseDigest(secondCompletion)
+	secondCompletion.ResponseBytes = removalrecord.PathResponseBytes(secondCompletion)
+	secondCompletion.ResponseSHA256 = removalrecord.PathResponseDigest(secondCompletion)
 	progress, duplicate, err = restarted.CompletePathCall(
 		ctx, environmentVolumeRemovalPathResult(assignment, secondCompletion),
 	)
@@ -143,7 +145,7 @@ func TestEnvironmentVolumeRemovalPathResumesPendingCallAndDeduplicatesCompletion
 	finalized, err := restarted.FinalizeCheckpoint(
 		ctx, assignment, etcd.TaskStatusCompleted, result, runtime.CreatedAt.Add(10*time.Second),
 	)
-	if err != nil || finalized.Record.Checkpoint != EnvironmentVolumeRemovalRuntimeFinalized {
+	if err != nil || finalized.Record.Checkpoint != removalrecord.RuntimeFinalized {
 		t.Fatalf("FinalizeCheckpoint() = %#v, %v", finalized, err)
 	}
 }
@@ -170,7 +172,7 @@ func TestEnvironmentVolumeRemovalSuccessorKeepsRootReplayAndAttemptChain(t *test
 	nextRuntime.PredecessorTaskID = terminal.ID
 	nextRuntime.AttemptOrdinal = 2
 	nextRuntime.UpdatedAt = successor.CreatedAt
-	nextAttempt := EnvironmentVolumeRemovalAttemptRecord{
+	nextAttempt := removalrecord.Attempt{
 		OperationID: runtime.OperationID, OriginTaskID: runtime.OriginTaskID,
 		TaskID: successor.ID, PredecessorTaskID: terminal.ID,
 		Ordinal: 2, CreatedAt: successor.CreatedAt,
@@ -187,14 +189,14 @@ func TestEnvironmentVolumeRemovalSuccessorKeepsRootReplayAndAttemptChain(t *test
 		t.Fatalf("successor state = %#v", advanced)
 	}
 	originTaskID, found, err := repository.ReplayRootResponse(
-		ctx, runtime.OperationID, runtime.RootLocator, runtime.IntentSHA256,
+		ctx, runtime.OperationID, volumeRemovalRootLocator(runtime), runtime.IntentSHA256,
 	)
 	if err != nil || !found || originTaskID != task.ID {
 		t.Fatalf("ReplayRootResponse() = %q/%v/%v", originTaskID, found, err)
 	}
 	different := sha256.Sum256([]byte("different protected delete intent"))
 	if _, _, err := repository.ReplayRootResponse(
-		ctx, runtime.OperationID, runtime.RootLocator, different,
+		ctx, runtime.OperationID, volumeRemovalRootLocator(runtime), different,
 	); !isKind(err, errs.KindIdempotencyMismatch) {
 		t.Fatalf("ReplayRootResponse(mismatch) error = %v", err)
 	}
@@ -206,7 +208,7 @@ func TestEnvironmentVolumeRemovalSuccessorKeepsRootReplayAndAttemptChain(t *test
 
 func environmentVolumeRemovalRuntimeFixture(
 	t *testing.T,
-) (*memoryHierarchyStore, *EnvironmentVolumeRemovalRuntimeRepository, EnvironmentVolumeRemovalRuntimeRecord, etcd.TaskRecord, etcd.IdempotencyMarker) {
+) (*memoryHierarchyStore, *EnvironmentVolumeRemovalRuntimeRepository, removalrecord.Runtime, etcd.TaskRecord, etcd.IdempotencyMarker) {
 	t.Helper()
 	store := newMemoryHierarchyStore()
 	repository, err := newEnvironmentVolumeRemovalRuntimeRepository(store)
@@ -230,7 +232,7 @@ func environmentVolumeRemovalRuntimeFixture(
 	}
 	task.Type = etcd.TaskRemove
 	task.Target = volumeID
-	task.TimeoutSeconds = environmentVolumeRemovalTimeoutSeconds
+	task.TimeoutSeconds = removalrecord.TimeoutSeconds
 	task.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: stepID}}
 	task.IdempotencyKey = "volume-remove-idempotency-key-0001"
 	marker := pendingVolumeRemovalMarker(task)
@@ -241,19 +243,22 @@ func environmentVolumeRemovalRuntimeFixture(
 	marker.TaskID = task.ID
 	marker.Response.Status = http.StatusAccepted
 	rootResponseSHA256 := sha256.Sum256(marker.Response.Body)
-	runtime := EnvironmentVolumeRemovalRuntimeRecord{
+	runtime := removalrecord.Runtime{
 		OperationID: operationID, EnvironmentID: environmentID, VolumeID: volumeID,
 		Key: "application_data", DesiredRevisionID: ids.NewAt(ids.KindTask, now, 17),
 		DesiredGeneration:      1,
 		ImpactSHA256:           sha256.Sum256([]byte("impact")),
 		EvidenceManifestSHA256: sha256.Sum256([]byte("manifest")),
 		IntentSHA256:           sha256.Sum256([]byte("canonical protected delete intent")),
-		RootLocator:            marker.Locator, RootResponseSHA256: rootResponseSHA256,
+		RootLocator: removalrecord.ReplayLocator{
+			ScopeKind: string(marker.Locator.ScopeKind), ScopeID: marker.Locator.ScopeID,
+			Method: marker.Locator.Method, Route: marker.Locator.Route, Key: marker.Locator.Key,
+		}, RootResponseSHA256: rootResponseSHA256,
 		OriginTaskID: task.ID, CurrentTaskID: task.ID, AttemptOrdinal: 1,
-		StepID: stepID, Checkpoint: EnvironmentVolumeRemovalIntentSealed,
+		StepID: stepID, Checkpoint: removalrecord.IntentSealed,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	attempt := EnvironmentVolumeRemovalAttemptRecord{
+	attempt := removalrecord.Attempt{
 		OperationID: operationID, OriginTaskID: task.ID, TaskID: task.ID,
 		Ordinal: 1, CreatedAt: now,
 	}
@@ -404,7 +409,7 @@ func terminalEnvironmentVolumeRemovalTask(
 
 func environmentVolumeRemovalPathResult(
 	assignment EnvironmentVolumeRemovalAssignment,
-	completion EnvironmentVolumeRemovalPathCompletion,
+	completion removalrecord.Completion,
 ) EnvironmentVolumeRemovalPathResult {
 	return EnvironmentVolumeRemovalPathResult{
 		Assignment: assignment, RequestOrdinal: completion.RequestOrdinal,

@@ -619,6 +619,12 @@ runtime destruction, proves consumer detachment, and traverses the leaf
 descriptor-relatively in bounded resumable calls. Volume runtime states and
 removal locks never become desired authority.
 
+ADR 0071 places the concrete Volume-removal binary record contract in
+`internal/infra/volumeremovalrecord`, shared by the desired publisher and runtime
+repository. It owns validated record encoding and keys, not storage operations
+or Task transitions. The etcd parent does not import its capability children;
+the runtime repository retains assignment, checkpoint, and retry ownership.
+
 Before Blueprint pre-hooks mount a managed Volume, a separate resource-only
 `ManagedVolumeEnsure` step binds its stable id to the immutable rendered Volume,
 managed directory leaf, local bind options, and Groundplane plus Compose

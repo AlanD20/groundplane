@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"net/http"
 
+	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -20,15 +22,15 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) PublishSuccessorAtt
 	if err != nil {
 		return EnvironmentVolumeRemovalResumeState{}, err
 	}
-	if state.Runtime.Record.Checkpoint == EnvironmentVolumeRemovalRuntimeFinalized || state.Pending != nil {
+	if state.Runtime.Record.Checkpoint == removalrecord.RuntimeFinalized || state.Pending != nil {
 		return EnvironmentVolumeRemovalResumeState{}, errs.New(
 			errs.KindStateConflict,
 			"Environment Volume removal attempt cannot advance",
 		)
 	}
-	rootMarkerKey, err := etcd.CapabilityIdempotencyMarkerKey(state.Runtime.Record.RootLocator)
+	rootMarkerKey, err := etcd.CapabilityIdempotencyMarkerKey(volumeRemovalRootLocator(state.Runtime.Record))
 	if err != nil {
-		return EnvironmentVolumeRemovalResumeState{}, corruptEnvironmentVolumeRemovalRuntime()
+		return EnvironmentVolumeRemovalResumeState{}, removalrecord.Corrupt()
 	}
 	read, err := repository.store.GetMany(ctx, etcd.GetManyRequest{Keys: []string{
 		etcd.CapabilityTaskKey(state.Runtime.Record.CurrentTaskID),
@@ -60,7 +62,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) PublishSuccessorAtt
 	); err != nil {
 		return EnvironmentVolumeRemovalResumeState{}, err
 	}
-	attempt := EnvironmentVolumeRemovalAttemptRecord{
+	attempt := removalrecord.Attempt{
 		OperationID:       operationID,
 		OriginTaskID:      state.Runtime.Record.OriginTaskID,
 		TaskID:            successor.ID,
@@ -95,13 +97,13 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) PublishSuccessorAtt
 		clear(taskValue)
 		return EnvironmentVolumeRemovalResumeState{}, err
 	}
-	attemptValue, err := encodeEnvironmentVolumeRemovalAttempt(attempt)
+	attemptValue, err := removalrecord.EncodeAttempt(attempt)
 	if err != nil {
 		clear(taskValue)
 		clear(reference)
 		return EnvironmentVolumeRemovalResumeState{}, err
 	}
-	runtimeValue, err := encodeEnvironmentVolumeRemovalRuntime(updated)
+	runtimeValue, err := removalrecord.EncodeRuntime(updated)
 	if err != nil {
 		clear(taskValue)
 		clear(reference)
@@ -113,10 +115,10 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) PublishSuccessorAtt
 	defer clear(attemptValue)
 	defer clear(runtimeValue)
 	conditions := []etcd.Condition{
-		{Key: environmentVolumeRemovalRuntimeKey(operationID), ModRevision: state.Runtime.Revision},
+		{Key: removalrecord.RuntimeKey(operationID), ModRevision: state.Runtime.Revision},
 		{Key: etcd.CapabilityTaskKey(source.ID), ModRevision: read.Values[0].ModRevision},
 		{Key: rootMarkerKey, ModRevision: read.Values[1].ModRevision},
-		{Key: environmentVolumeRemovalAttemptKey(operationID, attempt.Ordinal)},
+		{Key: removalrecord.AttemptKey(operationID, attempt.Ordinal)},
 		{Key: etcd.CapabilityTaskKey(successor.ID)},
 		{Key: etcd.CapabilityTaskOperationIndexKey(operationID, successor.ID)},
 		{Key: etcd.CapabilityTaskActiveOperationKey(operationID)},
@@ -133,10 +135,10 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) PublishSuccessorAtt
 		{Type: etcd.MutationPut, Key: etcd.CapabilityTaskQueueKey(successor.Executor, successor.ID), Value: reference},
 		{
 			Type:  etcd.MutationPut,
-			Key:   environmentVolumeRemovalAttemptKey(operationID, attempt.Ordinal),
+			Key:   removalrecord.AttemptKey(operationID, attempt.Ordinal),
 			Value: attemptValue,
 		},
-		{Type: etcd.MutationPut, Key: environmentVolumeRemovalRuntimeKey(operationID), Value: runtimeValue},
+		{Type: etcd.MutationPut, Key: removalrecord.RuntimeKey(operationID), Value: runtimeValue},
 	}
 	if err := validateEnvironmentVolumeRemovalTransaction(repository.store, conditions, mutations, 48); err != nil {
 		return EnvironmentVolumeRemovalResumeState{}, err
@@ -164,7 +166,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) ReplayRootResponse(
 	if err != nil {
 		return "", false, err
 	}
-	if state.Runtime.Record.RootLocator != locator || state.Runtime.Record.IntentSHA256 != intentSHA256 {
+	if volumeRemovalRootLocator(state.Runtime.Record) != locator || state.Runtime.Record.IntentSHA256 != intentSHA256 {
 		return "", false, errs.New(
 			errs.KindIdempotencyMismatch,
 			"Environment Volume removal idempotency intent changed",
@@ -172,7 +174,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) ReplayRootResponse(
 	}
 	markerKey, err := etcd.CapabilityIdempotencyMarkerKey(locator)
 	if err != nil {
-		return "", false, corruptEnvironmentVolumeRemovalRuntime()
+		return "", false, removalrecord.Corrupt()
 	}
 	read, err := repository.store.GetMany(ctx, etcd.GetManyRequest{
 		Keys: []string{markerKey}, Revision: state.Runtime.ReadRevision,
@@ -199,8 +201,8 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadAssignmentFence
 	ctx context.Context,
 	input EnvironmentVolumeRemovalAssignment,
 	revision int64,
-	runtime EnvironmentVolumeRemovalRuntimeRecord,
-	attempt EnvironmentVolumeRemovalAttemptRecord,
+	runtime removalrecord.Runtime,
+	attempt removalrecord.Attempt,
 ) ([]etcd.Condition, error) {
 	_, conditions, err := repository.loadAssignedTask(ctx, input, revision, runtime, attempt)
 	return conditions, err
@@ -210,8 +212,8 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadAssignedTask(
 	ctx context.Context,
 	input EnvironmentVolumeRemovalAssignment,
 	revision int64,
-	runtime EnvironmentVolumeRemovalRuntimeRecord,
-	attempt EnvironmentVolumeRemovalAttemptRecord,
+	runtime removalrecord.Runtime,
+	attempt removalrecord.Attempt,
 ) (etcd.TaskRecord, []etcd.Condition, error) {
 	if input.OperationID != runtime.OperationID || input.TaskID != runtime.CurrentTaskID ||
 		ids.Validate(ids.KindAssignment, input.AssignmentID) != nil ||
@@ -286,11 +288,11 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadAssignedTask(
 
 func validateEnvironmentVolumeRemovalRootMarker(
 	value []byte,
-	runtime EnvironmentVolumeRemovalRuntimeRecord,
+	runtime removalrecord.Runtime,
 ) error {
-	marker, err := etcd.DecodeCapabilityIdempotencyMarker(value, runtime.RootLocator)
+	marker, err := etcd.DecodeCapabilityIdempotencyMarker(value, volumeRemovalRootLocator(runtime))
 	if err != nil || marker.Kind != etcd.IdempotencyMarkerTask || marker.State != etcd.IdempotencyMarkerPending ||
-		marker.TaskID != runtime.OriginTaskID || marker.Locator != runtime.RootLocator ||
+		marker.TaskID != runtime.OriginTaskID || marker.Locator != volumeRemovalRootLocator(runtime) ||
 		marker.Response.Status != http.StatusAccepted ||
 		sha256.Sum256(marker.Response.Body) != runtime.RootResponseSHA256 {
 		return errs.New(
@@ -342,8 +344,8 @@ func validateEnvironmentVolumeRemovalTransaction(
 }
 
 func sameEnvironmentVolumeRemovalRuntime(
-	left EnvironmentVolumeRemovalRuntimeRecord,
-	right EnvironmentVolumeRemovalRuntimeRecord,
+	left removalrecord.Runtime,
+	right removalrecord.Runtime,
 ) bool {
 	return left.OperationID == right.OperationID && left.EnvironmentID == right.EnvironmentID &&
 		left.VolumeID == right.VolumeID && left.Key == right.Key &&
@@ -358,8 +360,8 @@ func sameEnvironmentVolumeRemovalRuntime(
 }
 
 func sameEnvironmentVolumeRemovalProgress(
-	left EnvironmentVolumeRemovalPathProgress,
-	right EnvironmentVolumeRemovalPathProgress,
+	left removalrecord.Progress,
+	right removalrecord.Progress,
 ) bool {
 	return left.OperationID == right.OperationID && left.NextRequestOrdinal == right.NextRequestOrdinal &&
 		left.DirectoryAbsent == right.DirectoryAbsent && left.UpdatedAt.Equal(right.UpdatedAt) &&
@@ -367,8 +369,8 @@ func sameEnvironmentVolumeRemovalProgress(
 }
 
 func sameEnvironmentVolumeRemovalPendingPath(
-	left EnvironmentVolumeRemovalPendingPath,
-	right EnvironmentVolumeRemovalPendingPath,
+	left removalrecord.PendingPath,
+	right removalrecord.PendingPath,
 ) bool {
 	return left.OperationID == right.OperationID && left.VolumeID == right.VolumeID && left.Key == right.Key &&
 		left.IntentSHA256 == right.IntentSHA256 && left.RequestOrdinal == right.RequestOrdinal &&
@@ -379,8 +381,8 @@ func sameEnvironmentVolumeRemovalPendingPath(
 }
 
 func sameEnvironmentVolumeRemovalCompletion(
-	left EnvironmentVolumeRemovalPathCompletion,
-	right EnvironmentVolumeRemovalPathCompletion,
+	left removalrecord.Completion,
+	right removalrecord.Completion,
 ) bool {
 	return left.OperationID == right.OperationID && left.RequestOrdinal == right.RequestOrdinal &&
 		left.RequestSHA256 == right.RequestSHA256 && left.ResponseSHA256 == right.ResponseSHA256 &&
