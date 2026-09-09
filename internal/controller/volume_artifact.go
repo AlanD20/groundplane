@@ -102,14 +102,18 @@ func MutateEnvironmentVolumeArtifact(
 		}
 		owned.Volumes = kept
 	}
-	if err := rewriteArtifactOwnership(root, mutation.PlanID, mutation.RenderGeneration); err != nil {
-		return nil, err
-	}
-	for _, service := range owned.Services {
-		if err := rewriteServiceExpectedLabels(
-			service.GetExpectedLabels(), mutation.PlanID, mutation.RenderGeneration,
-		); err != nil {
+	if mutation.Action == VolumeArtifactRemove {
+		if err := validateVolumeRemovalServiceOwnership(owned); err != nil {
 			return nil, err
+		}
+	} else {
+		if err := rewriteArtifactOwnership(root, mutation.PlanID, mutation.RenderGeneration); err != nil {
+			return nil, err
+		}
+		for _, service := range owned.Services {
+			if err := rewriteServiceExpectedLabels(service.GetExpectedLabels(), mutation.PlanID, mutation.RenderGeneration); err != nil {
+				return nil, err
+			}
 		}
 	}
 	for _, network := range owned.Networks {
@@ -138,6 +142,37 @@ func MutateEnvironmentVolumeArtifact(
 	owned.CanonicalYaml = canonical
 	owned.YamlSha256 = digest[:]
 	return owned, nil
+}
+
+// Removal changes mounts, not the serving Release's execution ownership.
+// Full plan validation still checks label ordering, resource identity and YAML.
+func validateVolumeRemovalServiceOwnership(artifact *agentpb.ComposeArtifact) error {
+	for _, service := range artifact.Services {
+		plan, generation := "", ""
+		for _, label := range service.GetExpectedLabels() {
+			if label == nil {
+				return errs.New(errs.KindInternal, "Volume removal Service ownership is corrupt")
+			}
+			switch label.Key {
+			case composeLabelPlanID:
+				if plan != "" {
+					return errs.New(errs.KindInternal, "Volume removal Service ownership is duplicated")
+				}
+				plan = label.Value
+			case composeLabelRenderGen:
+				if generation != "" {
+					return errs.New(errs.KindInternal, "Volume removal Service ownership is duplicated")
+				}
+				generation = label.Value
+			}
+		}
+		parsed, err := strconv.ParseUint(generation, 10, 64)
+		if ids.Validate(ids.KindPlan, plan) != nil || err != nil || parsed == 0 ||
+			strconv.FormatUint(parsed, 10) != generation {
+			return errs.New(errs.KindInternal, "Volume removal Service ownership is invalid")
+		}
+	}
+	return nil
 }
 
 func removeVolumeArtifactMounts(root *yaml.Node, key string) error {

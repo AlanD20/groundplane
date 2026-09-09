@@ -149,15 +149,9 @@ func buildVolumeMutationProjection(
 		if cleanupErr != nil {
 			return etcd.EnvironmentComposeProjection{}, nil, nil, cleanupErr
 		}
-		oldArtifact, err = controller.MutateEnvironmentVolumeArtifact(oldArtifact, controller.VolumeArtifactMutation{
-			Action: controller.VolumeArtifactEdit, VolumeID: request.volumeID, Key: request.key,
-			ArtifactID: cleanupArtifactID,
-			PlanID:     stableIDFromTask(ids.KindPlan, revisionID), TenantID: tenantID, ProjectID: projectID,
-			RenderGeneration: generation,
-		})
-		if err != nil {
-			return etcd.EnvironmentComposeProjection{}, nil, nil, err
-		}
+		// The cleanup artifact is the exact historical mount/ownership evidence;
+		// only its plan-local artifact id changes.
+		oldArtifact.ArtifactId = cleanupArtifactID
 	}
 	return candidate, oldArtifact, newArtifact, nil
 }

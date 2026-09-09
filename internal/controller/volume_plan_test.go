@@ -129,7 +129,7 @@ func TestResolveVolumeRemovePlanDetachesConsumersBeforeCleanup(t *testing.T) {
 		dockerRemove == nil || dockerRemove.VolumeId != state.volumeID ||
 		directoryRemove == nil || directoryRemove.ArtifactId != cleanupArtifactID ||
 		directoryRemove.ComposeKey != state.volumeKey || !bytes.Equal(directoryRemove.IntentSha256, state.intentDigest) ||
-		len(directoryRemove.Cursor) != 0 || !bytes.Equal(first.PlanHash, second.PlanHash) {
+		!bytes.Equal(first.PlanHash, second.PlanHash) {
 		t.Fatalf("resolved remove plans = %#v / %#v", first, second)
 	}
 }

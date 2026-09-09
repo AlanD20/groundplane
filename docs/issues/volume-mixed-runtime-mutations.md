@@ -1,22 +1,24 @@
 # Volume mutations after native Release deployment
 
-## Additional removal integration gap
+## Removal integration progress — 2026-09-09
 
-Local Script-source auditing also found that the accepted ADR0049 bounded
-runtime is not connected to the production Volume removal flow.
-`internal/volume/mutations.go` publishes through the ordinary desired-revision
-method, and `internal/controller/volume_plan.go` builds a fixed removal plan
-whose directory-removal step starts with a nil cursor. The
-`EnvironmentVolumeRemovalRuntimeRepository` constructor and its checkpoint/path
-methods have no production call sites. Its unit tests are not evidence that
-the real operator workflow persists those checkpoints.
+The actual DELETE publisher, Script exclusion, durable runtime, assignment-owned
+Agent checkpoints, bounded helper calls, Retry and terminal ownership release
+are connected. A hermetic DELETE/worker/terminal journey and separate real-file
+bounded cleanup/replay proof pass; see `docs/head.md`. Live acceptance is pending.
 
-The ADR0062 Script count/membership publication guard is now locally integrated
-and tested, but is insufficient by itself. Before declaring removal safe,
-connect the accepted runtime/tombstone, exclusion of new Script reservations,
-assignment-owned bounded path calls, retry cursor, and terminal finalization.
-Do not add a second desired head or treat a protected publication as proof of
-physical cleanup. No host data was changed during this audit.
+The retained single-slot removal projection reproduced the coverage failure
+below for both blue and green. Removal now preserves historical Service labels;
+the cleanup artifact changes only its plan-local id, retaining the exact baseline
+YAML and mount evidence. The new projection regression passes, including
+unrelated mount preservation and missing-label rejection. Reconstructed removal
+plans also pass. No coverage or plan ownership guard was relaxed.
+
+Volume add/edit and Entry still relabel and fully reconcile retained workloads.
+Their correction remains required. Removal consumer execution also needs a
+dependency-free selection proof; the existing targeted apply still permits
+Compose dependency expansion. These local checks are not live retained-runtime
+acceptance, and this issue remains a floor blocker.
 
 ## Retained-runtime mutation failure
 

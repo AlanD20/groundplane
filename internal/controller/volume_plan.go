@@ -14,7 +14,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
-	"gopkg.in/yaml.v3"
 )
 
 // These are the only Volume-specific Task parameters. The generic desired
@@ -379,37 +378,9 @@ func rebindVolumeArtifactForPlan(
 		return nil, errs.New(errs.KindInternal, "historical Volume artifact identity is invalid")
 	}
 	owned := proto.Clone(source).(*agentpb.ComposeArtifact)
-	var document yaml.Node
-	if yaml.Unmarshal(owned.CanonicalYaml, &document) != nil || len(document.Content) != 1 ||
-		document.Content[0].Kind != yaml.MappingNode || rewriteArtifactOwnership(document.Content[0], planID, renderGeneration) != nil {
-		return nil, errs.New(errs.KindInternal, "historical Volume artifact YAML is corrupt")
-	}
-	canonical, err := yaml.Marshal(&document)
-	if err != nil {
-		return nil, errs.Wrap(errs.KindInternal, err)
-	}
-	digest := sha256.Sum256(canonical)
 	owned.ArtifactId = artifactID
-	owned.CanonicalYaml = canonical
-	owned.YamlSha256 = digest[:]
-	for _, service := range owned.Services {
-		if err := rewriteServiceExpectedLabels(service.GetExpectedLabels(), planID, renderGeneration); err != nil {
-			return nil, err
-		}
-	}
-	for _, network := range owned.Networks {
-		labels, err := stableExpectedLabels(network.GetExpectedLabels())
-		if err != nil {
-			return nil, err
-		}
-		network.ExpectedLabels = labels
-	}
-	for _, volume := range owned.Volumes {
-		labels, err := stableExpectedLabels(volume.GetExpectedLabels())
-		if err != nil {
-			return nil, err
-		}
-		volume.ExpectedLabels = labels
+	if err := validateVolumeRemovalServiceOwnership(owned); err != nil {
+		return nil, err
 	}
 	return owned, nil
 }
