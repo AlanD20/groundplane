@@ -11,6 +11,7 @@ import (
 
 type evidenceStore interface {
 	GetMany(context.Context, etcd.GetManyRequest) (*etcd.GetManyResult, error)
+	Range(context.Context, etcd.RangeRequest) (*etcd.RangeResult, error)
 	Transact(context.Context, []etcd.Condition, []etcd.Mutation) (etcd.TransactionResult, error)
 	VolumeRemovalEvidenceTransactionSize([]etcd.Condition, []etcd.Mutation) (int, error)
 }
