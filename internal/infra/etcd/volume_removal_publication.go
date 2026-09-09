@@ -53,12 +53,23 @@ func (repository *HierarchyRepository) prepareVolumeRemovalDesiredPublication(
 	if found {
 		for _, volume := range previous.Record.Volumes {
 			if volume.ID == runtime.VolumeID && volume.Key == runtime.Key {
-				publication, err := prepareVolumeRemovalInitialPublication(initial, task, marker)
+				lockValue, err := removalrecord.EncodeOwner(removalrecord.Owner{
+					VolumeID: runtime.VolumeID, EnvironmentID: runtime.EnvironmentID, OperationID: runtime.OperationID,
+				})
 				if err != nil {
 					return volumeRemovalInitialPublication{}, err
 				}
-				publication.conditions = append(publication.conditions, Condition{
-					Key: taskMaterializationWriterKey(runtime.EnvironmentID),
+				publication, err := prepareVolumeRemovalInitialPublication(initial, task, marker)
+				if err != nil {
+					clear(lockValue)
+					return volumeRemovalInitialPublication{}, err
+				}
+				lockKey := removalrecord.EnvironmentLockKey(runtime.EnvironmentID)
+				publication.conditions = append(publication.conditions,
+					Condition{Key: taskMaterializationWriterKey(runtime.EnvironmentID)}, Condition{Key: lockKey},
+				)
+				publication.mutations = append(publication.mutations, Mutation{
+					Type: MutationPut, Key: lockKey, Value: lockValue,
 				})
 				return publication, nil
 			}

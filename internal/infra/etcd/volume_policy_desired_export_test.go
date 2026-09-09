@@ -412,8 +412,8 @@ func (fixture *VolumePolicyDesiredFixture) AssertMaximumSelectionPublished(t *te
 	}
 	wantConditions, wantMutations := 38, 15
 	if fixture.Initial != nil {
-		wantConditions += 3
-		wantMutations += 4
+		wantConditions += 4
+		wantMutations += 5
 	}
 	if len(fixture.store.conditions) != wantConditions || len(fixture.store.mutations) != wantMutations ||
 		fixture.store.bytes > 1024*1024 {

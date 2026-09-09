@@ -46,11 +46,18 @@ func TestVolumeRuntimeDesiredPublicationIsAtomic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{removalrecord.OwnerKey(want.VolumeID), removalrecord.AttemptKey(want.OperationID, 1),
+	for _, key := range []string{removalrecord.OwnerKey(want.VolumeID), removalrecord.EnvironmentLockKey(want.EnvironmentID), removalrecord.AttemptKey(want.OperationID, 1),
 		etcd.CapabilityTaskKey(fixture.Task.ID), markerKey} {
 		read, err := fixture.Store.Get(ctx, key)
 		if err != nil || read.Entry == nil || read.Entry.ModRevision != resumed.Runtime.Revision {
 			t.Fatalf("removal companion was not atomic: %s: %v", key, err)
+		}
+		if key == removalrecord.EnvironmentLockKey(want.EnvironmentID) {
+			owner, err := removalrecord.DecodeOwner(read.Entry.Value)
+			if err != nil || owner.VolumeID != want.VolumeID || owner.EnvironmentID != want.EnvironmentID ||
+				owner.OperationID != want.OperationID {
+				t.Fatalf("Environment lock has a different removal owner: %v", err)
+			}
 		}
 	}
 	fixture.AssertAtomicPolicy(t, earliest)
@@ -98,7 +105,7 @@ func TestVolumeRuntimeDesiredPublicationRejectsLateOwner(t *testing.T) {
 // Rationale: prior ownership or orphaned operation evidence must defeat the
 // entire desired/policy/Task publication, not just a later runtime write.
 func TestVolumeRuntimeDesiredPublicationRejectsOccupiedRecords(t *testing.T) {
-	for _, occupied := range []string{"owner", "completion"} {
+	for _, occupied := range []string{"owner", "completion", "environment lock"} {
 		t.Run(occupied, func(t *testing.T) {
 			ctx := context.Background()
 			fixture := etcd.NewVolumePolicyDesiredFixture(t)
@@ -107,6 +114,8 @@ func TestVolumeRuntimeDesiredPublicationRejectsOccupiedRecords(t *testing.T) {
 			key := removalrecord.OwnerKey(runtime.VolumeID)
 			if occupied == "completion" {
 				key = removalrecord.CompletionKey(runtime.OperationID, 1)
+			} else if occupied == "environment lock" {
+				key = removalrecord.EnvironmentLockKey(runtime.EnvironmentID)
 			}
 			if _, err := fixture.Store.Put(ctx, key, []byte("occupied")); err != nil {
 				t.Fatal(err)

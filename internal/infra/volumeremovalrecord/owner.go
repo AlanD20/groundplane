@@ -5,8 +5,8 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// Owner is the stable Volume-to-operation lookup held through cleanup and
-// successor attempts. It is execution ownership, never desired-state authority.
+// Owner binds the Volume and its Environment to one removal operation through
+// cleanup and successor attempts. It never supplies desired-state authority.
 type Owner struct {
 	VolumeID      string
 	EnvironmentID string
@@ -17,6 +17,12 @@ type Owner struct {
 // identity, without scanning operation records or depending on a Task attempt.
 func OwnerKey(volumeID string) string {
 	return "/v1/runtime/volume-removal-owners/" + encodeSegment(volumeID)
+}
+
+// EnvironmentLockKey serializes desired publication throughout one Volume
+// removal operation. Its Owner value remains stable across Task attempts.
+func EnvironmentLockKey(environmentID string) string {
+	return "/v1/runtime/environment-volume-removal-locks/" + encodeSegment(environmentID)
 }
 
 func validateOwner(owner Owner) error {
