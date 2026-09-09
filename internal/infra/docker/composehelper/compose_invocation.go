@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -38,6 +39,10 @@ func commandsFor(
 	}
 	var commands []runner.RunCmdOpts
 	if apply := step.GetComposeApply(); apply != nil {
+		names, err := applyServiceNames(request.Plan, step, artifact)
+		if err != nil || !apply.FullReconcile && len(names) == 0 {
+			return nil, err
+		}
 		validation := base
 		validation.Args = append(append([]string(nil), prefix...), "config", "--quiet", "--no-interpolate")
 		commands = append(commands, validation)
@@ -64,7 +69,7 @@ func commandsFor(
 		if apply.FullReconcile {
 			mutation.Args = append(mutation.Args, "--remove-orphans")
 		} else {
-			mutation.Args = append(mutation.Args, serviceNames(artifact, apply.ServiceIds)...)
+			mutation.Args = append(mutation.Args, names...)
 		}
 		commands = append(commands, mutation)
 		return commands, nil
@@ -112,6 +117,16 @@ func commandsFor(
 		return nil, errs.New(errs.KindValidationFailed, "Compose helper step payload is unsupported")
 	}
 	return []runner.RunCmdOpts{mutation}, nil
+}
+
+func applyServiceNames(
+	plan *agentpb.ExecutionPlan, step *agentpb.ExecutionStep, artifact *agentpb.ComposeArtifact,
+) ([]string, error) {
+	names, selected, err := executionplan.VolumeRemovalServices(plan, step.StepId)
+	if selected || err != nil {
+		return names, err
+	}
+	return serviceNames(artifact, step.GetComposeApply().ServiceIds), nil
 }
 
 func composeProjectDirectory(artifact *agentpb.ComposeArtifact) string {

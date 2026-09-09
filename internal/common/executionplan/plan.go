@@ -691,7 +691,7 @@ func validateStep(
 		if payload.ComposeApply.FullReconcile &&
 			(payload.ComposeApply.ForceRecreate || payload.ComposeApply.NoDependencies) ||
 			payload.ComposeApply.NoDependencies && !payload.ComposeApply.ForceRecreate &&
-				!blueprintManagedServiceSelection(operation, payload.ComposeApply, artifacts) {
+				!dependencyFreeServiceSelection(plan, step, artifacts) {
 			return errs.New(errs.KindValidationFailed, "Compose apply replacement options are inconsistent")
 		}
 		return validateSelection(payload.ComposeApply.ArtifactId, selected, artifacts, false)

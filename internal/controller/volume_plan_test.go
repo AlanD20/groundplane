@@ -119,6 +119,7 @@ func TestResolveVolumeEditPlanOnlyVerifiesExistingVolume(t *testing.T) {
 	}
 }
 
+// Rationale: detaching a Volume must not start dependencies of its consumers.
 func TestResolveVolumeRemovePlanDetachesConsumersBeforeCleanup(t *testing.T) {
 	t.Parallel()
 	state := newVolumePlanState(t, true)
@@ -144,7 +145,8 @@ func TestResolveVolumeRemovePlanDetachesConsumersBeforeCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StableVolumeCleanupArtifactID() error = %v", err)
 	}
-	if apply == nil || apply.FullReconcile || len(apply.ServiceIds) != 1 || apply.ServiceIds[0] != state.serviceID ||
+	if apply == nil || apply.FullReconcile || !apply.NoDependencies || apply.ForceRecreate ||
+		len(apply.ServiceIds) != 1 || apply.ServiceIds[0] != state.serviceID ||
 		dockerRemove == nil || dockerRemove.VolumeId != state.volumeID ||
 		directoryRemove == nil || directoryRemove.ArtifactId != cleanupArtifactID ||
 		directoryRemove.ComposeKey != state.volumeKey || !bytes.Equal(directoryRemove.IntentSha256, state.intentDigest) ||

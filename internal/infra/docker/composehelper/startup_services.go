@@ -29,7 +29,10 @@ func StartupServices(request *agentpb.ComposeHelperRequest) ([]*agentpb.ComposeS
 				}
 			}
 		} else {
-			names = serviceNames(artifact, apply.ServiceIds)
+			names, err = applyServiceNames(owned.Plan, step, artifact)
+			if err != nil {
+				return nil, err
+			}
 		}
 	case step.GetComposeWorkloadApply() != nil:
 		apply := step.GetComposeWorkloadApply()

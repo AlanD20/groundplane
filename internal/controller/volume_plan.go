@@ -238,7 +238,11 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 	if len(consumers) != 0 {
 		steps = append(steps, &agentpb.ExecutionStep{
 			StepId: task.Steps[stepIndex].ID, TimeoutSeconds: uint32(task.TimeoutSeconds), Payload: &agentpb.ExecutionStep_ComposeApply{
-				ComposeApply: &agentpb.ComposeApply{ArtifactId: candidateArtifactID, ServiceIds: consumers},
+				ComposeApply: &agentpb.ComposeApply{
+					ArtifactId:     candidateArtifactID,
+					ServiceIds:     consumers,
+					NoDependencies: true,
+				},
 			},
 		})
 		stepIndex++

@@ -97,7 +97,7 @@ type volumeComposeApplyPayload struct {
 func (value volumeComposeApplyPayload) step(id string, timeout uint32) *agentpb.ExecutionStep {
 	return &agentpb.ExecutionStep{StepId: id, TimeoutSeconds: timeout, Payload: &agentpb.ExecutionStep_ComposeApply{
 		ComposeApply: &agentpb.ComposeApply{
-			ArtifactId: value.artifactID, ServiceIds: append([]string(nil), value.serviceIDs...),
+			ArtifactId: value.artifactID, ServiceIds: append([]string(nil), value.serviceIDs...), NoDependencies: true,
 		},
 	}}
 }
