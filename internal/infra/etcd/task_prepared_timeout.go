@@ -10,6 +10,10 @@ func (repository *TaskRepository) preparedTaskTimeoutResult(
 	ctx context.Context,
 	assignment TaskAssignment,
 ) (TaskResultRecord, bool, error) {
+	if assignment.Task.Record.Type == TaskRemove &&
+		assignment.Task.Record.Params[TaskResourceKindParam] == TaskResourceVolume {
+		return TaskResultRecord{Kind: TaskResultEnvironmentDirectory, Diagnostic: TaskResultDiagnosticNone}, true, nil
+	}
 	if assignment.Task.Record.Type != TaskScript {
 		return repository.candidateReleaseTimeoutResult(ctx, assignment)
 	}
