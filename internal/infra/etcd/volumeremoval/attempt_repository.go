@@ -28,7 +28,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) PublishSuccessorAtt
 			"Environment Volume removal attempt cannot advance",
 		)
 	}
-	ownerFence, err := repository.loadOwnerFence(ctx, state.Runtime.Record, state.Runtime.ReadRevision)
+	ownerFences, err := repository.loadOwnerFences(ctx, state.Runtime.Record, state.Runtime.ReadRevision)
 	if err != nil {
 		return EnvironmentVolumeRemovalResumeState{}, err
 	}
@@ -118,8 +118,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) PublishSuccessorAtt
 	defer clear(reference)
 	defer clear(attemptValue)
 	defer clear(runtimeValue)
-	conditions := []etcd.Condition{
-		ownerFence,
+	conditions := append(ownerFences, []etcd.Condition{
 		{Key: removalrecord.RuntimeKey(operationID), ModRevision: state.Runtime.Revision},
 		{Key: etcd.CapabilityTaskKey(source.ID), ModRevision: read.Values[0].ModRevision},
 		{Key: rootMarkerKey, ModRevision: read.Values[1].ModRevision},
@@ -128,7 +127,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) PublishSuccessorAtt
 		{Key: etcd.CapabilityTaskOperationIndexKey(operationID, successor.ID)},
 		{Key: etcd.CapabilityTaskActiveOperationKey(operationID)},
 		{Key: etcd.CapabilityTaskQueueKey(successor.Executor, successor.ID)},
-	}
+	}...)
 	mutations := []etcd.Mutation{
 		{Type: etcd.MutationPut, Key: etcd.CapabilityTaskKey(successor.ID), Value: taskValue},
 		{
@@ -280,12 +279,11 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadAssignedTask(
 		)
 	}
 	defer clearKeyValues(claim.Values)
-	ownerFence, err := repository.loadOwnerFence(ctx, runtime, revision)
+	ownerFences, err := repository.loadOwnerFences(ctx, runtime, revision)
 	if err != nil {
 		return etcd.TaskRecord{}, nil, err
 	}
-	return task, []etcd.Condition{
-		ownerFence,
+	return task, append(ownerFences, []etcd.Condition{
 		{Key: etcd.CapabilityTaskKey(input.TaskID), ModRevision: primary.Values[0].ModRevision},
 		{Key: etcd.CapabilityTaskAssignmentIndexKey(input.TaskID), ModRevision: primary.Values[1].ModRevision},
 		{Key: claimKey, ModRevision: claim.Values[0].ModRevision},
@@ -293,30 +291,37 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadAssignedTask(
 			Key:         etcd.CapabilityTaskTimeoutIndexKey(input.TaskID, assignment.Deadline),
 			ModRevision: claim.Values[1].ModRevision,
 		},
-	}, nil
+	}...), nil
 }
 
-func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadOwnerFence(
+func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadOwnerFences(
 	ctx context.Context,
 	runtime removalrecord.Runtime,
 	revision int64,
-) (etcd.Condition, error) {
-	key := removalrecord.OwnerKey(runtime.VolumeID)
-	read, err := repository.store.GetMany(ctx, etcd.GetManyRequest{Keys: []string{key}, Revision: revision})
+) ([]etcd.Condition, error) {
+	keys := []string{removalrecord.OwnerKey(runtime.VolumeID), removalrecord.EnvironmentLockKey(runtime.EnvironmentID)}
+	read, err := repository.store.GetMany(ctx, etcd.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
-		return etcd.Condition{}, err
+		return nil, err
 	}
-	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 ||
-		read.Values[0] == nil || read.Values[0].ModRevision <= 0 {
-		return etcd.Condition{}, errs.New(errs.KindStateConflict, "volume removal owner is missing")
+	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
+		return nil, errs.New(errs.KindStateConflict, "volume removal ownership evidence is missing")
 	}
 	defer clearKeyValues(read.Values)
-	owner, err := removalrecord.DecodeOwner(read.Values[0].Value)
-	if err != nil || owner.VolumeID != runtime.VolumeID || owner.EnvironmentID != runtime.EnvironmentID ||
-		owner.OperationID != runtime.OperationID {
-		return etcd.Condition{}, errs.New(errs.KindStateConflict, "volume removal owner changed")
+	conditions := make([]etcd.Condition, len(keys))
+	for index, key := range keys {
+		value := read.Values[index]
+		if value == nil || value.Key != key || value.ModRevision <= 0 {
+			return nil, errs.New(errs.KindStateConflict, "volume removal ownership is missing")
+		}
+		owner, err := removalrecord.DecodeOwner(value.Value)
+		if err != nil || owner.VolumeID != runtime.VolumeID || owner.EnvironmentID != runtime.EnvironmentID ||
+			owner.OperationID != runtime.OperationID {
+			return nil, errs.New(errs.KindStateConflict, "volume removal ownership changed")
+		}
+		conditions[index] = etcd.Condition{Key: key, ModRevision: value.ModRevision}
 	}
-	return etcd.Condition{Key: key, ModRevision: read.Values[0].ModRevision}, nil
+	return conditions, nil
 }
 
 func validateEnvironmentVolumeRemovalRootMarker(

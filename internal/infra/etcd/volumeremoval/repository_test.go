@@ -298,10 +298,12 @@ func persistEnvironmentVolumeRemovalTaskAndMarker(
 	result, err := store.Transact(context.Background(), []etcd.Condition{
 		{Key: etcd.CapabilityTaskKey(task.ID)}, {Key: markerKey},
 		{Key: removalrecord.OwnerKey(task.Target)},
+		{Key: removalrecord.EnvironmentLockKey(task.Owner.EnvironmentID)},
 	}, []etcd.Mutation{
 		{Type: etcd.MutationPut, Key: etcd.CapabilityTaskKey(task.ID), Value: taskValue},
 		{Type: etcd.MutationPut, Key: markerKey, Value: markerValue},
 		{Type: etcd.MutationPut, Key: removalrecord.OwnerKey(task.Target), Value: ownerValue},
+		{Type: etcd.MutationPut, Key: removalrecord.EnvironmentLockKey(task.Owner.EnvironmentID), Value: ownerValue},
 	})
 	if err != nil || !result.Succeeded {
 		t.Fatalf("persist root Task/marker = %#v, %v", result, err)
