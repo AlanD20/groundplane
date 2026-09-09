@@ -338,7 +338,10 @@ func (repository *TaskRepository) transactVolumeRemovalAttemptTerminal(
 	}
 	if read.Values[3] != nil {
 		pending, err := removalrecord.DecodePendingPath(read.Values[3].Value)
-		if err != nil || pending.OperationID != runtime.OperationID || pending.TaskID != task.ID ||
+		// Failure retains the pending request; it does not execute or reassign
+		// it. A successor may fail while the original attempt's call remains.
+		if err != nil || pending.OperationID != runtime.OperationID ||
+			(runtime.AttemptOrdinal == 1 && pending.TaskID != task.ID) ||
 			pending.VolumeID != runtime.VolumeID || pending.Key != runtime.Key || pending.IntentSHA256 != runtime.IntentSHA256 ||
 			pending.RequestOrdinal != progress.NextRequestOrdinal || runtime.Checkpoint != removalrecord.ConsumersDetached {
 			return TransactionResult{}, volumeRemovalTerminalConflict()

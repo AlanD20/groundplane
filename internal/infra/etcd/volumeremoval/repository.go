@@ -312,13 +312,8 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) BeginPathCall(
 		return etcd.Versioned[removalrecord.PendingPath]{}, false, err
 	}
 	if state.Pending != nil {
-		pending := state.Pending.Record
-		if pending.TaskID != assignment.TaskID || pending.AssignmentID != assignment.AssignmentID ||
-			pending.AgentID != assignment.AgentID || pending.AgentGeneration != assignment.AgentGeneration {
-			return etcd.Versioned[removalrecord.PendingPath]{}, false, errs.New(
-				errs.KindStateConflict,
-				"Environment Volume removal has a pending call for another assignment",
-			)
+		if _, err := repository.pendingRecoveryFence(ctx, state, assignment); err != nil {
+			return etcd.Versioned[removalrecord.PendingPath]{}, false, err
 		}
 		return *state.Pending, true, nil
 	}
@@ -411,10 +406,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) CompletePathCall(
 	}
 	pending := state.Pending.Record
 	if pending.OperationID != completion.OperationID || pending.RequestOrdinal != completion.RequestOrdinal ||
-		pending.RequestSHA256 != completion.RequestSHA256 ||
-		pending.TaskID != input.Assignment.TaskID || pending.AssignmentID != input.Assignment.AssignmentID ||
-		pending.AgentID != input.Assignment.AgentID ||
-		pending.AgentGeneration != input.Assignment.AgentGeneration {
+		pending.RequestSHA256 != completion.RequestSHA256 {
 		return etcd.Versioned[removalrecord.Progress]{}, false, errs.New(
 			errs.KindStateConflict,
 			"Environment Volume removal completion does not match its pending call",
@@ -463,6 +455,11 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) CompletePathCall(
 		return etcd.Versioned[removalrecord.Progress]{}, false, err
 	}
 	conditions = append(conditions, fence...)
+	recovery, err := repository.pendingRecoveryFence(ctx, state, input.Assignment)
+	if err != nil {
+		return etcd.Versioned[removalrecord.Progress]{}, false, err
+	}
+	conditions = append(conditions, recovery...)
 	mutations := []etcd.Mutation{
 		{
 			Type:  etcd.MutationPut,
@@ -508,6 +505,36 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) CompletePathCall(
 	return etcd.Versioned[removalrecord.Progress]{
 		Record: progress, Revision: result.Revision, ReadRevision: result.Revision,
 	}, false, nil
+}
+
+func (repository *EnvironmentVolumeRemovalRuntimeRepository) pendingRecoveryFence(
+	ctx context.Context, state EnvironmentVolumeRemovalResumeState, assignment EnvironmentVolumeRemovalAssignment,
+) ([]etcd.Condition, error) {
+	pending := state.Pending.Record
+	if pending.TaskID == assignment.TaskID && pending.AssignmentID == assignment.AssignmentID &&
+		pending.AgentID == assignment.AgentID && pending.AgentGeneration == assignment.AgentGeneration {
+		return nil, nil
+	}
+	key := etcd.CapabilityTaskKey(pending.TaskID)
+	read, err := repository.store.GetMany(
+		ctx,
+		etcd.GetManyRequest{Keys: []string{key}, Revision: state.Runtime.ReadRevision},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if read == nil || read.ReadRevision != state.Runtime.ReadRevision || len(read.Values) != 1 ||
+		read.Values[0] == nil || read.Values[0].Key != key || read.Values[0].ModRevision <= 0 {
+		return nil, errs.New(errs.KindStateConflict, "volume removal pending attempt is missing")
+	}
+	defer clearKeyValues(read.Values)
+	origin, err := etcd.DecodeCapabilityTaskRecord(read.Values[0].Value)
+	if err != nil || etcd.ValidateEnvironmentVolumeRemovalPendingRecovery(
+		state.Runtime.Record, state.Progress.Record, pending, origin,
+	) != nil {
+		return nil, errs.New(errs.KindStateConflict, "volume removal pending attempt changed")
+	}
+	return []etcd.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}, nil
 }
 
 func (repository *EnvironmentVolumeRemovalRuntimeRepository) replayPathCompletion(

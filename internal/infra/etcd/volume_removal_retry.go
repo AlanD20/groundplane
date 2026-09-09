@@ -1,9 +1,12 @@
 package etcd
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"net/http"
+	"slices"
+	"strconv"
 
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -94,8 +97,9 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		{Key: taskActiveOperationKey(retry.OperationID)}, {Key: taskQueueKey(retry.Executor, retry.ID)},
 		{Key: runtimeKey, ModRevision: runtimeRead.Values[0].ModRevision}}
 	for index, value := range read.Values {
-		absent := index == 1 || index >= 8
-		if absent && value != nil || !absent && (value == nil || value.Key != keys[index] || value.ModRevision <= 0) {
+		absent := index >= 8
+		if absent && value != nil || !absent && index != 1 && value == nil ||
+			value != nil && (value.Key != keys[index] || value.ModRevision <= 0) {
 			return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
 		}
 		// Reserved idempotency keys are bound by the closed commit below, not
@@ -108,6 +112,36 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 	if err != nil || progress.OperationID != runtime.OperationID || retry.CreatedAt.Before(progress.UpdatedAt) ||
 		progress.DirectoryAbsent != (runtime.Checkpoint == removalrecord.DirectoryAbsent) {
 		return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
+	}
+	if read.Values[1] != nil {
+		pending, err := removalrecord.DecodePendingPath(read.Values[1].Value)
+		if err != nil {
+			return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
+		}
+		origin := source.Record
+		if pending.TaskID != source.Record.ID {
+			key := taskKey(pending.TaskID)
+			prior, err := repository.store.GetMany(
+				ctx,
+				GetManyRequest{Keys: []string{key}, Revision: source.ReadRevision},
+			)
+			if err != nil {
+				return IdempotencyTransactionResult{}, err
+			}
+			if prior == nil || prior.ReadRevision != source.ReadRevision || len(prior.Values) != 1 ||
+				prior.Values[0] == nil || prior.Values[0].Key != key || prior.Values[0].ModRevision <= 0 {
+				return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
+			}
+			defer clearKeyValues(prior.Values)
+			origin, err = decodeTaskRecord(prior.Values[0].Value)
+			if err != nil {
+				return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
+			}
+			conditions = append(conditions, Condition{Key: key, ModRevision: prior.Values[0].ModRevision})
+		}
+		if ValidateEnvironmentVolumeRemovalPendingRecovery(runtime, progress, pending, origin) != nil {
+			return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
+		}
 	}
 	attempt, err := removalrecord.DecodeAttempt(read.Values[2].Value)
 	if err != nil || attempt.OperationID != runtime.OperationID || attempt.TaskID != source.Record.ID ||
@@ -128,7 +162,8 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 	}
 	defer clear(root.Intent.Ciphertext)
 	defer clear(root.Response.Body)
-	if root.Kind != IdempotencyMarkerTask || root.State != IdempotencyMarkerPending || root.TaskID != runtime.OriginTaskID ||
+	if root.Kind != IdempotencyMarkerTask || root.State != IdempotencyMarkerPending ||
+		root.TaskID != runtime.OriginTaskID ||
 		root.Response.Status != http.StatusAccepted ||
 		root.ReplayTarget == nil ||
 		root.ReplayTarget.Kind != IdempotencyReplayTargetVolume ||
@@ -235,4 +270,38 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 			return result, nil
 		},
 	)
+}
+
+// ValidateEnvironmentVolumeRemovalPendingRecovery binds an unchanged helper
+// request to its terminal originating attempt, independently of the current
+// execution assignment. Callers fence both Task primaries at their read revision.
+func ValidateEnvironmentVolumeRemovalPendingRecovery(
+	runtime removalrecord.Runtime,
+	progress removalrecord.Progress,
+	pending removalrecord.PendingPath,
+	origin TaskRecord,
+) error {
+	ordinal, err := strconv.ParseUint(origin.Params[removalrecord.AttemptParam], 10, 32)
+	if err != nil || ordinal == 0 || ordinal > uint64(runtime.AttemptOrdinal) ||
+		removalrecord.ValidatePendingPath(pending) != nil || origin.ID != pending.TaskID ||
+		origin.Type != TaskRemove || (ordinal == 1) != (origin.ID == runtime.OriginTaskID) ||
+		(ordinal == 1 && origin.RetryOf != "") ||
+		(origin.Status != TaskStatusFailed && origin.Status != TaskStatusTimedOut) ||
+		origin.CreatedAt.After(pending.CreatedAt) ||
+		(uint32(ordinal) == runtime.AttemptOrdinal) != (origin.ID == runtime.CurrentTaskID) ||
+		runtime.Checkpoint != removalrecord.ConsumersDetached || progress.DirectoryAbsent ||
+		pending.OperationID != runtime.OperationID || pending.VolumeID != runtime.VolumeID || pending.Key != runtime.Key ||
+		pending.IntentSHA256 != runtime.IntentSHA256 || pending.RequestOrdinal != progress.NextRequestOrdinal ||
+		pending.CreatedAt.Before(
+			progress.UpdatedAt,
+		) || !slices.Equal(pending.ComponentStack, progress.ComponentStack) ||
+		!bytes.Equal(pending.Cursor, progress.Cursor) {
+		return volumeRemovalTerminalConflict()
+	}
+	runtime.CurrentTaskID, runtime.PredecessorTaskID = origin.ID, origin.RetryOf
+	runtime.AttemptOrdinal, runtime.UpdatedAt = uint32(ordinal), pending.CreatedAt
+	if !volumeRemovalTaskMatchesRuntime(origin, runtime) {
+		return volumeRemovalTerminalConflict()
+	}
+	return nil
 }
