@@ -17,7 +17,7 @@ import (
 func TestVolumeRemovalExecutionRequiresExactOwner(t *testing.T) {
 	for _, family := range []string{"volume", "environment"} {
 		t.Run(family, func(t *testing.T) {
-			for _, action := range []string{"detach", "begin", "redeliver", "complete", "retry"} {
+			for _, action := range []string{"detach", "begin", "redeliver", "complete"} {
 				changes := []string{"none", "missing", "operation", "environment", "volume", "corrupt"}
 				if action != "redeliver" { // Redelivery only reads; there is no commit race to inject.
 					changes = append(changes, "late")
@@ -38,13 +38,10 @@ func TestVolumeRemovalExecutionRequiresExactOwner(t *testing.T) {
 								t.Fatal(err)
 							}
 						}
-						var assignment EnvironmentVolumeRemovalAssignment
-						if action != "retry" {
-							assignment = assignEnvironmentVolumeRemovalTask(
-								t, store, task.ID, runtime.OperationID, runtime.CreatedAt.Add(3*time.Second),
-							)
-						}
-						if action != "detach" && action != "retry" {
+						assignment := assignEnvironmentVolumeRemovalTask(
+							t, store, task.ID, runtime.OperationID, runtime.CreatedAt.Add(3*time.Second),
+						)
+						if action != "detach" {
 							if _, err := repository.MarkConsumersDetached(ctx, assignment, runtime.CreatedAt.Add(4*time.Second)); err != nil {
 								t.Fatal(err)
 							}
@@ -67,26 +64,6 @@ func TestVolumeRemovalExecutionRequiresExactOwner(t *testing.T) {
 							completion.ResponseBytes = removalrecord.PathResponseBytes(completion)
 							completion.ResponseSHA256 = removalrecord.PathResponseDigest(completion)
 							pathResult = environmentVolumeRemovalPathResult(assignment, completion)
-						}
-						var successor etcd.TaskRecord
-						if action == "retry" {
-							terminal := terminalEnvironmentVolumeRemovalTask(
-								t,
-								store,
-								task.ID,
-								runtime.CreatedAt.Add(4*time.Second),
-							)
-							var err error
-							successor, err = etcd.CloneCapabilityRetryTask(
-								terminal,
-								ids.NewAt(ids.KindTask, runtime.CreatedAt, 91),
-								etcd.TaskActorOperator,
-								runtime.CreatedAt.Add(5*time.Second),
-							)
-							if err != nil {
-								t.Fatal(err)
-							}
-							successor.Params = etcd.EnvironmentVolumeRemovalTaskParams(runtime, 2)
 						}
 						owner := removalrecord.Owner{
 							VolumeID:      runtime.VolumeID,
@@ -137,8 +114,6 @@ func TestVolumeRemovalExecutionRequiresExactOwner(t *testing.T) {
 							_, _, err = repository.BeginPathCall(ctx, assignment, runtime.CreatedAt.Add(6*time.Second))
 						case "complete":
 							_, _, err = repository.CompletePathCall(ctx, pathResult)
-						case "retry":
-							_, err = repository.PublishSuccessorAttempt(ctx, runtime.OperationID, successor)
 						}
 						if change == "none" {
 							if err != nil {

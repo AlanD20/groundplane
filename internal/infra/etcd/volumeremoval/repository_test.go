@@ -148,44 +148,16 @@ func TestEnvironmentVolumeRemovalPathResumesPendingCallAndDeduplicatesCompletion
 	}
 }
 
-func TestEnvironmentVolumeRemovalSuccessorKeepsRootReplayAndAttemptChain(t *testing.T) {
+// Rationale: root replay remains read-only and rejects a changed protected
+// intent; successor publication is tested through the actual Task repository.
+func TestEnvironmentVolumeRemovalRootReplayPreservesOriginalResponse(t *testing.T) {
 	ctx := context.Background()
 	store, repository, runtime, task, marker := environmentVolumeRemovalRuntimeFixture(t)
 	persistEnvironmentVolumeRemovalTaskAndMarker(t, store, task, marker)
 	if _, err := repository.Create(ctx, runtime, task); err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
-	terminal := terminalEnvironmentVolumeRemovalTask(
-		t, store, task.ID, runtime.CreatedAt.Add(time.Second),
-	)
-	successor, err := etcd.CloneCapabilityRetryTask(
-		terminal, ids.NewAt(ids.KindTask, runtime.CreatedAt, 91),
-		etcd.TaskActorOperator, runtime.CreatedAt.Add(3*time.Second),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	nextRuntime := runtime
-	nextRuntime.CurrentTaskID = successor.ID
-	nextRuntime.PredecessorTaskID = terminal.ID
-	nextRuntime.AttemptOrdinal = 2
-	nextRuntime.UpdatedAt = successor.CreatedAt
-	nextAttempt := removalrecord.Attempt{
-		OperationID: runtime.OperationID, OriginTaskID: runtime.OriginTaskID,
-		TaskID: successor.ID, PredecessorTaskID: terminal.ID,
-		Ordinal: 2, CreatedAt: successor.CreatedAt,
-	}
-	successor.Params = etcd.EnvironmentVolumeRemovalTaskParams(nextRuntime, nextAttempt.Ordinal)
-	advanced, err := repository.PublishSuccessorAttempt(ctx, runtime.OperationID, successor)
-	if err != nil {
-		t.Fatalf("PublishSuccessorAttempt() error = %v", err)
-	}
-	if advanced.Runtime.Record.OriginTaskID != task.ID ||
-		advanced.Runtime.Record.CurrentTaskID != successor.ID ||
-		advanced.Runtime.Record.AttemptOrdinal != 2 ||
-		advanced.Attempt.PredecessorTaskID != task.ID {
-		t.Fatalf("successor state = %#v", advanced)
-	}
+	before := store.revision
 	originTaskID, found, err := repository.ReplayRootResponse(
 		ctx, runtime.OperationID, volumeRemovalRootLocator(runtime), runtime.IntentSHA256,
 	)
@@ -198,9 +170,8 @@ func TestEnvironmentVolumeRemovalSuccessorKeepsRootReplayAndAttemptChain(t *test
 	); !isKind(err, errs.KindIdempotencyMismatch) {
 		t.Fatalf("ReplayRootResponse(mismatch) error = %v", err)
 	}
-	stored, err := store.Get(ctx, etcd.CapabilityTaskKey(successor.ID))
-	if err != nil || stored.Entry == nil {
-		t.Fatalf("successor Task = %#v, %v", stored, err)
+	if store.revision != before {
+		t.Fatal("root replay wrote state")
 	}
 }
 
@@ -374,45 +345,6 @@ func assignEnvironmentVolumeRemovalTask(
 		OperationID: operationID, TaskID: task.ID, AssignmentID: assignment.AssignmentID,
 		AgentID: agentID, AgentGeneration: assignment.AgentGeneration,
 	}
-}
-
-func terminalEnvironmentVolumeRemovalTask(
-	t *testing.T,
-	store *memoryHierarchyStore,
-	taskID string,
-	startedAt time.Time,
-) etcd.TaskRecord {
-	t.Helper()
-	ctx := context.Background()
-	stored, err := store.Get(ctx, etcd.CapabilityTaskKey(taskID))
-	if err != nil || stored.Entry == nil {
-		t.Fatalf("source Task = %#v, %v", stored, err)
-	}
-	task, err := etcd.DecodeCapabilityTaskRecord(stored.Entry.Value)
-	if err != nil {
-		t.Fatal(err)
-	}
-	running, err := etcd.TransitionCapabilityTaskStatus(task, etcd.TaskStatusPending, etcd.TaskStatusRunning, startedAt)
-	if err != nil {
-		t.Fatal(err)
-	}
-	failed, err := etcd.TransitionCapabilityTaskStatus(
-		running, etcd.TaskStatusRunning, etcd.TaskStatusFailed, startedAt.Add(time.Second),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	value, err := etcd.EncodeCapabilityTaskRecord(failed)
-	if err != nil {
-		t.Fatal(err)
-	}
-	result, err := store.Transact(ctx, []etcd.Condition{{
-		Key: etcd.CapabilityTaskKey(taskID), ModRevision: stored.Entry.ModRevision,
-	}}, []etcd.Mutation{{Type: etcd.MutationPut, Key: etcd.CapabilityTaskKey(taskID), Value: value}})
-	if err != nil || !result.Succeeded {
-		t.Fatalf("terminalize source Task = %#v, %v", result, err)
-	}
-	return failed
 }
 
 func environmentVolumeRemovalPathResult(

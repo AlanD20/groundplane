@@ -125,7 +125,11 @@ func proveVolumeRemovalRetry(t *testing.T, checkpoint string) {
 // changes, including a replacement immediately before the final transaction.
 func TestVolumeRemovalGenericRetryRejectsChangedOwner(t *testing.T) {
 	for _, family := range []string{"volume", "environment", "root response"} {
-		for _, mode := range []string{"held", "late"} {
+		modes := []string{"held", "late"}
+		if family != "root response" {
+			modes = append(modes, "missing", "corrupt", "wrong environment", "wrong volume")
+		}
+		for _, mode := range modes {
 			t.Run(family+"/"+mode, func(t *testing.T) {
 				ctx := context.Background()
 				fixture, tasks, assignment, runtime := prepareVolumeRemovalAttemptTerminal(t, "published")
@@ -140,8 +144,15 @@ func TestVolumeRemovalGenericRetryRejectsChangedOwner(t *testing.T) {
 				if family == "environment" {
 					key = removalrecord.EnvironmentLockKey(runtime.EnvironmentID)
 				}
-				value, err := removalrecord.EncodeOwner(removalrecord.Owner{VolumeID: runtime.VolumeID,
-					EnvironmentID: runtime.EnvironmentID, OperationID: ids.New(ids.KindOperation)})
+				owner := removalrecord.Owner{VolumeID: runtime.VolumeID,
+					EnvironmentID: runtime.EnvironmentID, OperationID: ids.New(ids.KindOperation)}
+				if mode == "wrong environment" {
+					owner.OperationID, owner.EnvironmentID = runtime.OperationID, ids.New(ids.KindEnvironment)
+				}
+				if mode == "wrong volume" {
+					owner.OperationID, owner.VolumeID = runtime.OperationID, ids.New(ids.KindVolume)
+				}
+				value, err := removalrecord.EncodeOwner(owner)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -158,13 +169,22 @@ func TestVolumeRemovalGenericRetryRejectsChangedOwner(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
+				if mode == "corrupt" {
+					value = []byte("corrupt owner")
+				}
 				inject := func() {
+					if mode == "missing" {
+						if _, err := fixture.Store.Transact(ctx, nil, []etcd.Mutation{{Type: etcd.MutationDelete, Key: key}}); err != nil {
+							t.Fatal(err)
+						}
+						return
+					}
 					if _, err := fixture.Store.Put(ctx, key, value); err != nil {
 						t.Fatal(err)
 					}
 				}
 				backend := &volumeAttemptTerminalRaceStore{Store: fixture.Store}
-				if mode == "held" {
+				if mode != "late" {
 					inject()
 				} else {
 					backend.before = inject
