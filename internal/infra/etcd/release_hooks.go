@@ -15,7 +15,7 @@ import (
 )
 
 // ListPlanningHookScriptIDs returns the fixed-revision hook selection for one
-// release member in deterministic scoped-slug order.
+// release member in deterministic numeric order then scoped slug.
 func (ledger *ReleaseLedger) ListPlanningHookScriptIDs(
 	ctx context.Context,
 	scope ReleasePlanningScope,
@@ -34,8 +34,7 @@ func (ledger *ReleaseLedger) ListPlanningHookScriptIDs(
 	} else {
 		return nil, errs.New(errs.KindValidationFailed, "release hook operation is invalid")
 	}
-	type selectedHook struct{ id, slug string }
-	selected := make([]selectedHook, 0)
+	selected := make([]core.Script, 0)
 	active, err := readActiveScriptSet(ctx, ledger.store, scope.Environment.Record.ID, scope.ReadRevision)
 	if err != nil {
 		return nil, err
@@ -64,13 +63,14 @@ func (ledger *ReleaseLedger) ListPlanningHookScriptIDs(
 				return nil, readErr
 			}
 			record, decodeErr := decodeScriptRecord(primary.Value)
-			if decodeErr != nil || record.EnvironmentID != scope.Environment.Record.ID ||
+			if decodeErr != nil || record.Desired.ID != scriptID ||
+				record.EnvironmentID != scope.Environment.Record.ID ||
 				record.ScriptSetGeneration != active.Record.GenerationID {
 				return nil, corruptReleaseRecord()
 			}
 			if record.ServiceID == serviceID {
 				if _, exists := allowed[record.Desired.When]; exists {
-					selected = append(selected, selectedHook{id: scriptID, slug: record.Desired.Slug})
+					selected = append(selected, record.Desired)
 				}
 			}
 		}
@@ -79,10 +79,10 @@ func (ledger *ReleaseLedger) ListPlanningHookScriptIDs(
 		}
 		start = page.Values[len(page.Values)-1].Key
 	}
-	sort.Slice(selected, func(i, j int) bool { return selected[i].slug < selected[j].slug })
+	sort.Slice(selected, func(i, j int) bool { return core.ScriptBefore(selected[i], selected[j]) })
 	result := make([]string, len(selected))
 	for index := range selected {
-		result[index] = selected[index].id
+		result[index] = selected[index].ID
 	}
 	return result, nil
 }
@@ -112,6 +112,7 @@ type ReleaseHookRenderInput struct {
 	ScriptSlug              string          `json:"script_slug"`
 	ServiceID               string          `json:"service_id"`
 	When                    core.ScriptHook `json:"when"`
+	Order                   uint16          `json:"order,omitempty"`
 	ScriptGeneration        uint64          `json:"script_generation"`
 	ScriptExecutionID       string          `json:"script_execution_id"`
 	RunnerSnapshotID        string          `json:"runner_snapshot_id"`

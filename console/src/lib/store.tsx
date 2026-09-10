@@ -1,4 +1,5 @@
 'use client'
+import { scriptFromAPI, type ScriptCreateRequest, type ScriptCreateResponse, type ScriptEditRequest, type ScriptEditResponse } from './script-api'
 import { taskTypeFromAPI } from '@/lib/task-read-model'
 import { assertOptionalBackupPolicyKeep } from '@/lib/backup-policy-contract'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
@@ -135,10 +136,6 @@ type RouteEditAccepted = { route: RouteEditResponse; task_id: string }
 type RouteShowResponse = RouteCreateResponse
 type ZoneShowResponse = operations['zone.show']['responses'][200]['content']['application/json']
 type ScriptPageResponse = operations['script.list']['responses'][200]['content']['application/json']
-type ScriptCreateRequest = operations['script.create']['requestBody']['content']['application/json']
-type ScriptCreateResponse = operations['script.create']['responses'][201]['content']['application/json']
-type ScriptEditRequest = operations['script.edit']['requestBody']['content']['application/json']
-type ScriptEditResponse = operations['script.edit']['responses'][200]['content']['application/json']
 type ScriptRunResponse = operations['script.run']['responses'][202]['content']['application/json']
 type ServicePageResponse = operations['service.list']['responses'][200]['content']['application/json']
 type ServiceCreateRequest = operations['service.create']['requestBody']['content']['application/json']
@@ -723,32 +720,6 @@ async function listAllRoutes(environmentId: string, signal?: AbortSignal): Promi
   return routes
 }
 
-const scriptHooks: Script['when'][] = [
-  'manual',
-  'pre-deploy',
-  'post-deploy',
-  'pre-rollback',
-  'post-rollback',
-  'on-failure',
-]
-
-function scriptFromAPI(script: ScriptCreateResponse | ScriptEditResponse): Script {
-  if (!scriptHooks.includes(script.when as Script['when'])) {
-    throw new Error(`Controller returned unknown Script hook ${script.when}`)
-  }
-  return {
-    id: script.id,
-    environmentId: script.environment_id,
-    slug: script.slug,
-    serviceId: script.service_id,
-    service: script.service,
-    body: script.script,
-    when: script.when as Script['when'],
-    origin: script.origin,
-    reconciliationKey: script.reconciliation_key,
-    activeGeneration: script.active_generation,
-  }
-}
 
 async function listAllScripts(environmentId: string, signal?: AbortSignal): Promise<Script[]> {
   const scripts: Script[] = []
@@ -1611,8 +1582,8 @@ type StoreContext = State & ReturnType<typeof useControllerPlatform> & {
   updateVolume: (envId: string, volumeId: string, patch: Pick<Volume, 'slug'>) => Promise<Volume>
   getVolumeDeletionImpact: (volumeId: string, cursor?: string, limit?: number) => Promise<VolumeDeletionImpactPage>
   removeVolume: (envId: string, volumeId: string, impactToken: string, confirmKey: string) => Promise<string>
-	addScript: (envId: string, script: Pick<Script, 'slug' | 'service' | 'body' | 'when'>) => Promise<Script>
-	updateScript: (envId: string, scriptId: string, patch: Partial<Pick<Script, 'slug' | 'body' | 'when'>>) => Promise<Script>
+	addScript: (envId: string, script: Pick<Script, 'slug' | 'service' | 'body' | 'when' | 'order'>) => Promise<Script>
+	updateScript: (envId: string, scriptId: string, patch: Partial<Pick<Script, 'slug' | 'body' | 'when' | 'order'>>) => Promise<Script>
 	runScript: (scriptId: string) => Promise<string>
   removeScript: (envId: string, scriptId: string) => Promise<string>
   addAttach: (envId: string, input: AttachCreateInput) => Promise<string>
@@ -3285,6 +3256,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           service_id: targetService.id,
           script: script.body,
           when: script.when,
+          order: script.order,
         }
         const created = scriptFromAPI(await tenantRequest<ScriptCreateResponse>('/scripts', 201, {
           method: 'POST',
@@ -3303,6 +3275,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 		if (patch.slug !== undefined) body.slug = patch.slug
         if (patch.body !== undefined) body.script = patch.body
         if (patch.when !== undefined) body.when = patch.when
+        if (patch.order !== undefined) body.order = patch.order
         const edited = scriptFromAPI(await tenantRequest<ScriptEditResponse>(
           `/scripts/${encodeURIComponent(scriptId)}`,
           200,

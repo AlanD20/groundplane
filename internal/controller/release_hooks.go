@@ -44,6 +44,7 @@ func BuildReleaseHookRenderInput(
 		ScriptSlug:        input.Sources.Script.Record.Desired.Slug,
 		ServiceID:         input.Sources.Service.Record.Desired.ID,
 		When:              input.Sources.Script.Record.Desired.When,
+		Order:             input.Sources.Script.Record.Desired.Order,
 		ScriptGeneration:  input.Sources.BodyGeneration.Record.Generation,
 		ScriptExecutionID: input.ExecutionID, RunnerSnapshotID: input.SnapshotID,
 		BodySize: body.Size, BodySHA256: hex.EncodeToString(body.Sha256),
@@ -76,7 +77,7 @@ type ReleaseHookPlan struct {
 	Bodies       []*agentpb.ScriptBodyArtifactMetadata
 }
 
-// BuildReleaseHookPlan orders hooks by scoped Script slug and chains each
+// BuildReleaseHookPlan orders hooks by captured numeric order then slug and chains each
 // phase to its release checkpoint. It never starts a container or creates a
 // compatibility execution path.
 func BuildReleaseHookPlan(input ReleaseHookPlanInput) (ReleaseHookPlan, error) {
@@ -96,9 +97,9 @@ func BuildReleaseHookPlan(input ReleaseHookPlanInput) (ReleaseHookPlan, error) {
 			failure = append(failure, hook)
 		}
 	}
-	sort.SliceStable(pre, func(i, j int) bool { return pre[i].ScriptSlug < pre[j].ScriptSlug })
-	sort.SliceStable(post, func(i, j int) bool { return post[i].ScriptSlug < post[j].ScriptSlug })
-	sort.SliceStable(failure, func(i, j int) bool { return failure[i].ScriptSlug < failure[j].ScriptSlug })
+	sort.SliceStable(pre, func(i, j int) bool { return releaseHookBefore(pre[i], pre[j]) })
+	sort.SliceStable(post, func(i, j int) bool { return releaseHookBefore(post[i], post[j]) })
+	sort.SliceStable(failure, func(i, j int) bool { return releaseHookBefore(failure[i], failure[j]) })
 	if len(input.PreStepIDs) != len(pre) || len(input.PostStepIDs) != len(post) ||
 		len(input.FailureStepIDs) != len(failure) {
 		return output, errs.New(errs.KindValidationFailed, "release hook step IDs do not match selected hooks")
@@ -140,6 +141,13 @@ func BuildReleaseHookPlan(input ReleaseHookPlanInput) (ReleaseHookPlan, error) {
 		return output, err
 	}
 	return output, nil
+}
+
+func releaseHookBefore(left, right etcd.ReleaseHookRenderInput) bool {
+	return core.ScriptBefore(
+		core.Script{Order: left.Order, Slug: left.ScriptSlug},
+		core.Script{Order: right.Order, Slug: right.ScriptSlug},
+	)
 }
 
 func buildReleaseHookStep(

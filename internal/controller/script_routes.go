@@ -9,6 +9,7 @@ import (
 	"reflect"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/scriptdefinition"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -133,7 +134,7 @@ func (s *Server) listScripts(ctx context.Context, request *scriptListInput) (*sc
 		NextCursor: page.NextCursor,
 	}
 	for index, item := range page.Items {
-		response.Items[index] = scriptResponse(item.Record)
+		response.Items[index] = scriptdefinition.Response(item.Record)
 	}
 	return &scriptPageOutput{Body: response}, nil
 }
@@ -146,7 +147,7 @@ func (s *Server) showScript(ctx context.Context, request *scriptShowInput) (*scr
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
-	return &scriptOutput{Body: scriptResponse(script.Record)}, nil
+	return &scriptOutput{Body: scriptdefinition.Response(script.Record)}, nil
 }
 
 func (s *Server) createScript(ctx context.Context, request *scriptCreateInput) (*scriptMutationOutput, error) {
@@ -241,13 +242,4 @@ func scriptListRequest(environmentID string, limit int, cursor string) (etcd.Pag
 		return etcd.PageRequest{}, errs.New(errs.KindValidationFailed, "Script list limit must be a positive integer")
 	}
 	return etcd.PageRequest{Limit: limit, Cursor: cursor}, nil
-}
-
-func scriptResponse(record etcd.ScriptRecord) apiTypes.Script {
-	return apiTypes.Script{
-		ID: record.Desired.ID, EnvironmentID: record.EnvironmentID, Slug: record.Desired.Slug,
-		ServiceID: record.ServiceID, ServiceName: record.Desired.ServiceName,
-		Body: record.Desired.Body, When: string(record.Desired.When), Origin: record.Origin,
-		ReconciliationKey: record.ReconciliationKey, ActiveGeneration: record.ActiveGeneration,
-	}
 }

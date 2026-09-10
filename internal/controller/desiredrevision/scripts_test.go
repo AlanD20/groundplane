@@ -26,7 +26,7 @@ func TestReconcileBlueprintScriptsDerivesAndPreservesIdentityByReconciliationKey
 	authored := map[string]core.ScriptSpec{
 		"migration-hook": {
 			Slug: "migrate", Service: "api", When: core.ScriptPreDeploy,
-			Script: "php artisan migrate --force",
+			Script: "php artisan migrate --force", Order: 10,
 		},
 	}
 
@@ -37,7 +37,9 @@ func TestReconcileBlueprintScriptsDerivesAndPreservesIdentityByReconciliationKey
 	wantID := ids.DeriveAt(ids.KindScript, at, authority, "test/script/migration-hook")
 	if len(first.Current) != 1 || first.Current[0].Desired.ID != wantID ||
 		first.Current[0].ReconciliationKey != "migration-hook" || first.Current[0].Origin != "blueprint" ||
-		len(first.BodyGenerations) != 1 || first.BodyGenerations[0].ScriptID != wantID {
+		len(
+			first.BodyGenerations,
+		) != 1 || first.BodyGenerations[0].ScriptID != wantID || first.Current[0].Desired.Order != 10 {
 		t.Fatalf("first reconciliation = %#v", first)
 	}
 
@@ -57,6 +59,21 @@ func TestReconcileBlueprintScriptsDerivesAndPreservesIdentityByReconciliationKey
 	if len(replayed.Current) != 1 || replayed.Current[0] != first.Current[0] ||
 		len(replayed.BodyGenerations) != 0 {
 		t.Fatalf("reapplied reconciliation = %#v", replayed)
+	}
+	// Rationale: order edits affect later captures without allocating body content.
+	reset := authored["migration-hook"]
+	reset.Order = 0
+	authored["migration-hook"] = reset
+	changed, err := ReconcileBlueprintScripts(
+		environmentID,
+		authored,
+		[]etcd.ServiceRecord{service},
+		first.Current,
+		allocate,
+	)
+	if err != nil || len(changed.Current) != 1 || changed.Current[0].Desired.Order != 0 ||
+		changed.Current[0].ActiveGeneration != 1 || len(changed.BodyGenerations) != 0 {
+		t.Fatalf("order reset = %#v, %v", changed, err)
 	}
 }
 

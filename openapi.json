@@ -4260,6 +4260,12 @@
           "id": {
             "type": "string"
           },
+          "order": {
+            "format": "int32",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          },
           "origin": {
             "enum": [
               "api",
@@ -4294,6 +4300,7 @@
           "service",
           "script",
           "when",
+          "order",
           "origin",
           "active_generation"
         ],
@@ -4313,6 +4320,12 @@
           },
           "environment_id": {
             "type": "string"
+          },
+          "order": {
+            "format": "int32",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
           },
           "script": {
             "type": "string"
@@ -4347,6 +4360,12 @@
             "format": "uri",
             "readOnly": true,
             "type": "string"
+          },
+          "order": {
+            "format": "int32",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
           },
           "script": {
             "type": "string"

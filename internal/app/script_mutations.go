@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	"github.com/AlanD20/groundplane/internal/controller/scriptdefinition"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -275,18 +276,12 @@ func (service *scriptMutationService) CreateScript(
 	if ctx == nil {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script creation context is required")
 	}
-	if err := validateScriptCreationInput(input); err != nil {
+	if err := scriptdefinition.ValidateCreation(input); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	intent := scriptMutationIntent{
 		method: http.MethodPost, route: scriptCreationRoute, environmentID: input.EnvironmentID,
-		body: idempotentintent.Object(
-			idempotentintent.Field{Name: "environment_id", Value: idempotentintent.String(input.EnvironmentID)},
-			idempotentintent.Field{Name: "slug", Value: idempotentintent.String(input.Slug)},
-			idempotentintent.Field{Name: "script", Value: idempotentintent.String(input.Body)},
-			idempotentintent.Field{Name: "service_id", Value: idempotentintent.String(input.ServiceID)},
-			idempotentintent.Field{Name: "when", Value: idempotentintent.String(input.When)},
-		),
+		body: scriptdefinition.CreateIntentBody(input),
 	}
 	for attempt := 0; attempt < maximumScriptMutationAttempts; attempt++ {
 		response, err := service.createScriptOnce(ctx, input, idempotencyKey, intent)
@@ -324,10 +319,11 @@ func (service *scriptMutationService) createScriptOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	record, err := etcd.NewScriptRecord(input.EnvironmentID, input.ServiceID, core.Script{
-		ID: ids.New(ids.KindScript), Slug: input.Slug, ServiceName: target.Record.Desired.Name,
-		Body: input.Body, When: core.ScriptHook(input.When),
-	})
+	record, err := etcd.NewScriptRecord(
+		input.EnvironmentID,
+		input.ServiceID,
+		scriptdefinition.CreateDesired(input, ids.New(ids.KindScript), target.Record.Desired.Name),
+	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -358,11 +354,8 @@ func (service *scriptMutationService) EditScript(
 			"Script edit requires a stable Script id",
 		)
 	}
-	if input.Slug == nil && input.Body == nil && input.When == nil {
-		return etcd.IdempotencyResponse{}, errs.New(
-			errs.KindValidationFailed,
-			"Script edit requires slug, script, or when",
-		)
+	if err := scriptdefinition.ValidateEdit(input); err != nil {
+		return etcd.IdempotencyResponse{}, err
 	}
 	for attempt := 0; attempt < maximumScriptMutationAttempts; attempt++ {
 		response, err := service.editScriptOnce(ctx, scriptID, input, idempotencyKey)
@@ -407,17 +400,7 @@ func (service *scriptMutationService) editScriptOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	desired := current.Record.Desired
-	desired.ServiceName = target.Record.Desired.Name
-	if input.Slug != nil {
-		desired.Slug = *input.Slug
-	}
-	if input.Body != nil {
-		desired.Body = *input.Body
-	}
-	if input.When != nil {
-		desired.When = core.ScriptHook(*input.When)
-	}
+	desired := scriptdefinition.EditDesired(current.Record.Desired, target.Record.Desired.Name, input)
 	replacement, err := etcd.ReplaceScriptDesired(current.Record, desired)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -439,20 +422,10 @@ func scriptEditMutationIntent(
 	environmentID string,
 	input apiTypes.ScriptEdit,
 ) scriptMutationIntent {
-	fields := make([]idempotentintent.Field, 0, 3)
-	if input.Slug != nil {
-		fields = append(fields, idempotentintent.Field{Name: "slug", Value: idempotentintent.String(*input.Slug)})
-	}
-	if input.Body != nil {
-		fields = append(fields, idempotentintent.Field{Name: "script", Value: idempotentintent.String(*input.Body)})
-	}
-	if input.When != nil {
-		fields = append(fields, idempotentintent.Field{Name: "when", Value: idempotentintent.String(*input.When)})
-	}
 	return scriptMutationIntent{
 		method: http.MethodPatch, route: scriptEditRoute, environmentID: environmentID,
 		path: []idempotentintent.PathBinding{{Name: "id", Value: scriptID}},
-		body: idempotentintent.Object(fields...),
+		body: scriptdefinition.EditIntentBody(input),
 	}
 }
 
@@ -490,7 +463,7 @@ func (service *scriptMutationService) scriptResponseMarker(
 	record etcd.ScriptRecord,
 	status int,
 ) (etcd.IdempotencyResponse, etcd.IdempotencyMarker, error) {
-	body, err := json.Marshal(scriptAPIResponse(record))
+	body, err := json.Marshal(scriptdefinition.Response(record))
 	if err != nil {
 		return etcd.IdempotencyResponse{}, etcd.IdempotencyMarker{}, errs.Wrap(errs.KindInternal, err)
 	}
@@ -553,31 +526,6 @@ func scriptReplayResponse(resolution idempotentintent.Resolution) (etcd.Idempote
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script replay resolution is invalid")
 	}
 	return cloneIdempotencyResponse(resolution.Response), nil
-}
-
-func validateScriptCreationInput(input apiTypes.ScriptCreate) error {
-	if ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil {
-		return errs.New(errs.KindValidationFailed, "Script creation requires a stable Environment id")
-	}
-	if ids.Validate(ids.KindService, input.ServiceID) != nil {
-		return errs.New(errs.KindValidationFailed, "Script creation requires a stable target Service id")
-	}
-	if err := (core.Script{
-		ID: ids.New(ids.KindScript), Slug: input.Slug, ServiceName: "validated-after-service-resolution",
-		Body: input.Body, When: core.ScriptHook(input.When),
-	}).Validate(); err != nil {
-		return errs.Wrap(errs.KindValidationFailed, err)
-	}
-	return nil
-}
-
-func scriptAPIResponse(record etcd.ScriptRecord) apiTypes.Script {
-	return apiTypes.Script{
-		ID: record.Desired.ID, EnvironmentID: record.EnvironmentID, Slug: record.Desired.Slug,
-		ServiceID: record.ServiceID, ServiceName: record.Desired.ServiceName,
-		Body: record.Desired.Body, When: string(record.Desired.When), Origin: record.Origin,
-		ReconciliationKey: record.ReconciliationKey, ActiveGeneration: record.ActiveGeneration,
-	}
 }
 
 func isUnknownScriptMutationOutcome(err error) bool {

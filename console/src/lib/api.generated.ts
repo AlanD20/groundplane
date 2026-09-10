@@ -2807,6 +2807,8 @@ export interface components {
             active_generation: number;
             environment_id: string;
             id: string;
+            /** Format: int32 */
+            order: number;
             /** @enum {string} */
             origin: "api" | "blueprint";
             reconciliation_key?: string;
@@ -2824,6 +2826,8 @@ export interface components {
              */
             readonly $schema?: string;
             environment_id: string;
+            /** Format: int32 */
+            order?: number;
             script: string;
             service_id: string;
             slug: string;
@@ -2836,6 +2840,8 @@ export interface components {
              * @example /api/v1/ScriptEdit.json
              */
             readonly $schema?: string;
+            /** Format: int32 */
+            order?: number;
             script?: string;
             slug?: string;
             when?: string;

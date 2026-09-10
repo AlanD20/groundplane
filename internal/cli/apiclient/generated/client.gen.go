@@ -2079,6 +2079,7 @@ type Script struct {
 	ActiveGeneration  int64        `json:"active_generation"`
 	EnvironmentId     string       `json:"environment_id"`
 	Id                string       `json:"id"`
+	Order             int32        `json:"order"`
 	Origin            ScriptOrigin `json:"origin"`
 	ReconciliationKey *string      `json:"reconciliation_key,omitempty"`
 	Script            string       `json:"script"`
@@ -2098,6 +2099,7 @@ type ScriptCreate struct {
 	// Examples: /api/v1/ScriptCreate.json
 	Schema        *string `json:"$schema,omitempty"`
 	EnvironmentId string  `json:"environment_id"`
+	Order         *int32  `json:"order,omitempty"`
 	Script        string  `json:"script"`
 	ServiceId     string  `json:"service_id"`
 	Slug          string  `json:"slug"`
@@ -2110,6 +2112,7 @@ type ScriptEdit struct {
 	//
 	// Examples: /api/v1/ScriptEdit.json
 	Schema *string `json:"$schema,omitempty"`
+	Order  *int32  `json:"order,omitempty"`
 	Script *string `json:"script,omitempty"`
 	Slug   *string `json:"slug,omitempty"`
 	When   *string `json:"when,omitempty"`

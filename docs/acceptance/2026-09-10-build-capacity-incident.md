@@ -24,6 +24,21 @@ with certificate verification. That is availability evidence, not proof of
 persisted-data integrity. No filesystem repair, forced persistence rewrite,
 Controller update or Caddy mutation was performed after the incident.
 
+At the owner's subsequent space-cleanup request, the checkout measured33GiB,
+including31GiB of ignored`.tmp`state. Seven additional stale Go caches were
+verified by cache signature, ignored/untracked membership, exact canonical path
+and absence of active builds, then cleared with Go's cache-clean command:
+`gocache`, `go-cache`, `go-cache-deploy`, `attach-effective-cache`,
+`consolidation-20260908/gocache`, `cache/go-build`and
+`hosting-review-20260910/go-cache`, all under repository-local`.tmp`.
+This reclaimed17,769,828,352bytes (16.55GiB); the checkout became17GiB and
+available filesystem space reached29GiB. The current initiative cache was kept.
+Git status matched byte-for-byte before and after cleanup. No source, history,
+5.1GiB recovery archive, evidence, credential, Docker artifact or application
+data was removed. These caches regenerate on later builds. Evidence:
+`space-cleanup-{before,after,source-before,source-after}.txt`in the same evidence
+directory. This cleanup is capacity recovery, not guest-storage qualification.
+
 ## Correction and proof
 
 Deployment now requires10GiB checkout-filesystem headroom before target access,

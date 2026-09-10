@@ -185,6 +185,7 @@ type ScriptSpec struct {
 	Service string     `yaml:"service"`
 	When    ScriptHook `yaml:"when"`
 	Script  string     `yaml:"script"`
+	Order   uint16     `yaml:"order,omitempty"`
 }
 
 // ComponentSpec is one x-gp-components entry keyed by Component Capability.

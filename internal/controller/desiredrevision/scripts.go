@@ -148,7 +148,7 @@ func ReconcileBlueprintScripts(
 			}
 			desired := core.Script{
 				ID: current.Desired.ID, Slug: spec.Slug, ServiceName: service.Desired.Name,
-				Body: spec.Script, When: spec.When,
+				Body: spec.Script, When: spec.When, Order: spec.Order,
 			}
 			bodyChanged := desired.Body != current.Desired.Body
 			updated, replaceErr := etcd.ReplaceScriptDesired(current, desired)
@@ -221,7 +221,7 @@ func validateBlueprintScriptSpec(key string, spec core.ScriptSpec) error {
 	}
 	candidate := core.Script{
 		ID: "script-validation", Slug: spec.Slug, ServiceName: spec.Service,
-		Body: spec.Script, When: spec.When,
+		Body: spec.Script, When: spec.When, Order: spec.Order,
 	}
 	if err := candidate.Validate(); err != nil {
 		return errs.Wrap(errs.KindValidationFailed, err)
@@ -238,7 +238,7 @@ func newBlueprintScriptRecord(
 ) (etcd.ScriptRecord, error) {
 	record, err := etcd.NewScriptRecord(environmentID, service.Desired.ID, core.Script{
 		ID: scriptID, Slug: spec.Slug, ServiceName: service.Desired.Name,
-		Body: spec.Script, When: spec.When,
+		Body: spec.Script, When: spec.When, Order: spec.Order,
 	})
 	if err != nil {
 		return etcd.ScriptRecord{}, errs.Wrap(errs.KindValidationFailed, err)

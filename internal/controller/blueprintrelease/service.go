@@ -493,8 +493,7 @@ func deployScriptsByService(
 	}
 	for serviceID := range result {
 		sort.Slice(result[serviceID], func(left, right int) bool {
-			return result[serviceID][left].Desired.Slug <
-				result[serviceID][right].Desired.Slug
+			return core.ScriptBefore(result[serviceID][left].Desired, result[serviceID][right].Desired)
 		})
 	}
 	return result

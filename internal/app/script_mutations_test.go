@@ -9,21 +9,6 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
-func TestValidateScriptCreationInputUsesStableOwnersAndClosedHook(t *testing.T) {
-	// Rationale: Controller input must carry stable ownership while leaving the Service label derived.
-	input := apiTypes.ScriptCreate{
-		EnvironmentID: ids.New(ids.KindEnvironment), Slug: "migrate", ServiceID: ids.New(ids.KindService),
-		Body: "php artisan migrate --force", When: "pre-deploy",
-	}
-	if err := validateScriptCreationInput(input); err != nil {
-		t.Fatalf("validateScriptCreationInput(): %v", err)
-	}
-	input.When = "scheduled"
-	if err := validateScriptCreationInput(input); err == nil {
-		t.Fatal("validateScriptCreationInput() accepted an unknown hook")
-	}
-}
-
 func TestScriptEditMutationIntentIncludesOnlyAuthoredFields(t *testing.T) {
 	// Rationale: omitted PATCH fields must not collide with an explicit empty Script body.
 	body := ""

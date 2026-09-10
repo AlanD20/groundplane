@@ -33,6 +33,7 @@ type storedScriptDesired struct {
 	Slug        string          `json:"slug"`
 	ServiceName string          `json:"service"`
 	When        core.ScriptHook `json:"when"`
+	Order       uint16          `json:"order,omitempty"`
 }
 
 type storedScriptRecord struct {
@@ -191,7 +192,7 @@ func encodeScriptRecord(record ScriptRecord) ([]byte, error) {
 		ActiveReferences: record.ActiveReferences, ScriptSetGeneration: record.ScriptSetGeneration,
 		Desired: storedScriptDesired{
 			ID: record.Desired.ID, Slug: record.Desired.Slug,
-			ServiceName: record.Desired.ServiceName, When: record.Desired.When,
+			ServiceName: record.Desired.ServiceName, When: record.Desired.When, Order: record.Desired.Order,
 		},
 	}
 	return encodeEnvelope("script", stored)
@@ -208,7 +209,7 @@ func decodeScriptRecord(value []byte) (ScriptRecord, error) {
 		ActiveReferences: stored.ActiveReferences, ScriptSetGeneration: stored.ScriptSetGeneration,
 		Desired: core.Script{
 			ID: stored.Desired.ID, Slug: stored.Desired.Slug,
-			ServiceName: stored.Desired.ServiceName, When: stored.Desired.When,
+			ServiceName: stored.Desired.ServiceName, When: stored.Desired.When, Order: stored.Desired.Order,
 		},
 	}
 	if err := validateScriptMetadataRecord(record); err != nil {

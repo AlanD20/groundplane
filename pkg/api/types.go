@@ -443,35 +443,6 @@ type Attach struct {
 	Status               string           `json:"status"`
 }
 
-type Script struct {
-	ID                string `json:"id"`
-	EnvironmentID     string `json:"environment_id"`
-	Slug              string `json:"slug"`
-	ServiceID         string `json:"service_id"`
-	ServiceName       string `json:"service"`
-	Body              string `json:"script"`
-	When              string `json:"when"`
-	Origin            string `json:"origin" enum:"api,blueprint"`
-	ReconciliationKey string `json:"reconciliation_key,omitempty"`
-	ActiveGeneration  uint64 `json:"active_generation"`
-}
-
-// ScriptCreate is the complete operator-authored durable Script input.
-type ScriptCreate struct {
-	EnvironmentID string `json:"environment_id"`
-	Slug          string `json:"slug"`
-	ServiceID     string `json:"service_id"`
-	Body          string `json:"script"`
-	When          string `json:"when"`
-}
-
-// ScriptEdit contains the mutable Script desired-state fields.
-type ScriptEdit struct {
-	Slug *string `json:"slug,omitempty"`
-	Body *string `json:"script,omitempty"`
-	When *string `json:"when,omitempty"`
-}
-
 // Component is the generic environment-component record. Caddy and Cloudflare
 // Tunnel are component KINDS ("caddy", "cloudflare-tunnel"),
 // not bespoke resources — see blueprint.md, "x-gp-components".

@@ -16,11 +16,12 @@ func (c *Client) CreateScript(ctx context.Context, input apiTypes.ScriptCreate) 
 	if err != nil {
 		return apiTypes.Script{}, err
 	}
+	order := int32(input.Order)
 	response, err := client.ScriptCreateWithResponse(ctx, &generated.ScriptCreateParams{
 		IdempotencyKey: ids.NewULID(),
 	}, generated.ScriptCreateJSONRequestBody{
 		EnvironmentId: input.EnvironmentID, Slug: input.Slug, ServiceId: input.ServiceID,
-		Script: input.Body, When: input.When,
+		Script: input.Body, When: input.When, Order: &order,
 	})
 	if err != nil {
 		return apiTypes.Script{}, generatedCallError(ctx, http.MethodPost, "/api/v1/scripts", err)
@@ -137,9 +138,14 @@ func (c *Client) EditScript(ctx context.Context, id string, input apiTypes.Scrip
 		return apiTypes.Script{}, err
 	}
 	path := "/api/v1/scripts/" + id
+	var order *int32
+	if input.Order != nil {
+		value := int32(*input.Order)
+		order = &value
+	}
 	response, err := client.ScriptEditWithResponse(ctx, id, &generated.ScriptEditParams{
 		IdempotencyKey: ids.NewULID(),
-	}, generated.ScriptEditJSONRequestBody{Slug: input.Slug, Script: input.Body, When: input.When})
+	}, generated.ScriptEditJSONRequestBody{Slug: input.Slug, Script: input.Body, When: input.When, Order: order})
 	if err != nil {
 		return apiTypes.Script{}, generatedCallError(ctx, http.MethodPatch, path, err)
 	}
@@ -183,7 +189,7 @@ func (c *Client) RemoveScript(ctx context.Context, id string) (apiTypes.TaskAcce
 }
 
 func scriptFromGenerated(script generated.Script) (apiTypes.Script, error) {
-	if !script.Origin.Valid() || script.ActiveGeneration < 1 {
+	if !script.Origin.Valid() || script.ActiveGeneration < 1 || script.Order < 0 || script.Order > 65535 {
 		return apiTypes.Script{}, errs.New(errs.KindInternal, "Controller returned an invalid Script")
 	}
 	reconciliationKey := ""
@@ -193,7 +199,7 @@ func scriptFromGenerated(script generated.Script) (apiTypes.Script, error) {
 	return apiTypes.Script{
 		ID: script.Id, EnvironmentID: script.EnvironmentId, Slug: script.Slug,
 		ServiceID: script.ServiceId, ServiceName: script.Service, Body: script.Script,
-		When: script.When, Origin: string(script.Origin), ReconciliationKey: reconciliationKey,
+		When: script.When, Order: uint16(script.Order), Origin: string(script.Origin), ReconciliationKey: reconciliationKey,
 		ActiveGeneration: uint64(script.ActiveGeneration),
 	}, nil
 }

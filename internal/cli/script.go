@@ -49,6 +49,7 @@ func newScriptCmd() *cobra.Command {
 	})
 
 	var service, body, when string
+	var order uint16
 	add := &cobra.Command{
 		Use: "add <slug>", Short: "Add a script", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -62,7 +63,7 @@ func newScriptCmd() *cobra.Command {
 				return err
 			}
 			script, err := app.Client.CreateScript(cmd.Context(), apiTypes.ScriptCreate{
-				EnvironmentID: environmentID, Slug: args[0], ServiceID: serviceID, Body: body, When: when,
+				EnvironmentID: environmentID, Slug: args[0], ServiceID: serviceID, Body: body, When: when, Order: order,
 			})
 			if err != nil {
 				return err
@@ -73,6 +74,7 @@ func newScriptCmd() *cobra.Command {
 	}
 	add.Flags().StringVar(&service, "service", "", "service the script runs against")
 	add.Flags().StringVar(&body, "script", "", "one-line or multi-line script body")
+	add.Flags().Uint16Var(&order, "order", 0, "hook order within this Service and phase (0-65535; then slug)")
 	add.Flags().StringVar(
 		&when, "when", "manual",
 		"manual | pre-deploy | post-deploy | pre-rollback | post-rollback | on-failure",
@@ -82,6 +84,7 @@ func newScriptCmd() *cobra.Command {
 	cmd.AddCommand(add)
 
 	var editSlug, editBody, editWhen string
+	var editOrder uint16
 	edit := &cobra.Command{
 		Use: "edit <slug>", Short: "Edit a script", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -95,8 +98,11 @@ func newScriptCmd() *cobra.Command {
 			if cmd.Flags().Changed("when") {
 				input.When = &editWhen
 			}
-			if input.Slug == nil && input.Body == nil && input.When == nil {
-				return errs.New(errs.KindValidationFailed, "Script edit requires --slug, --script, or --when")
+			if cmd.Flags().Changed("order") {
+				input.Order = &editOrder
+			}
+			if input.Slug == nil && input.Body == nil && input.When == nil && input.Order == nil {
+				return errs.New(errs.KindValidationFailed, "Script edit requires --slug, --script, --when, or --order")
 			}
 			scriptID, err := resolveScriptTarget(cmd, args[0])
 			if err != nil {
@@ -112,6 +118,7 @@ func newScriptCmd() *cobra.Command {
 	}
 	edit.Flags().StringVar(&editSlug, "slug", "", "new Environment-unique Script slug")
 	edit.Flags().StringVar(&editBody, "script", "", "new script body")
+	edit.Flags().Uint16Var(&editOrder, "order", 0, "new hook order (0-65535; then slug)")
 	edit.Flags().StringVar(
 		&editWhen, "when", "",
 		"new hook: manual | pre-deploy | post-deploy | pre-rollback | post-rollback | on-failure",
@@ -179,7 +186,7 @@ func resolveScriptTarget(cmd *cobra.Command, value string) (string, error) {
 func scriptFields(script apiTypes.Script) map[string]any {
 	return map[string]any{
 		"id": script.ID, "slug": script.Slug, "service": script.ServiceName,
-		"service_id": script.ServiceID, "script": script.Body, "when": script.When,
+		"service_id": script.ServiceID, "script": script.Body, "when": script.When, "order": script.Order,
 		"origin": script.Origin, "active_generation": script.ActiveGeneration,
 	}
 }

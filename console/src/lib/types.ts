@@ -152,26 +152,8 @@ export type PlatformReusableSecret = ReusableSecretBase & {
 
 export type ReusableSecret = ProjectReusableSecret | PlatformReusableSecret
 
-export type ScriptHook =
-  | 'manual'
-  | 'pre-deploy'
-  | 'post-deploy'
-  | 'pre-rollback'
-  | 'post-rollback'
-  | 'on-failure'
-
-export type Script = {
-  id: string
-  environmentId: string
-  slug: string
-  serviceId: string
-  service: string
-  when: ScriptHook
-  body: string
-  origin: 'api' | 'blueprint'
-  reconciliationKey?: string
-  activeGeneration: number
-}
+export type { Script, ScriptHook } from './script-types'
+import type { Script } from './script-types'
 
 // A backup source is an ATTACH's database, a VOLUME, or the environment's
 // CONFIG (env entries: vars, files, secrets — values included, age-encrypted).

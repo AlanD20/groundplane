@@ -8,6 +8,36 @@ import (
 
 const MaximumScriptBodyBytes = 65_536
 
+// ScriptHook selects a manual run or one closed Release hook phase.
+type ScriptHook string
+
+const (
+	ScriptManual       ScriptHook = "manual"
+	ScriptPreDeploy    ScriptHook = "pre-deploy"
+	ScriptPostDeploy   ScriptHook = "post-deploy"
+	ScriptPreRollback  ScriptHook = "pre-rollback"
+	ScriptPostRollback ScriptHook = "post-rollback"
+	ScriptOnFailure    ScriptHook = "on-failure"
+)
+
+// Script is an Environment-scoped body associated with one real Service.
+type Script struct {
+	ID          string     `yaml:"id"      json:"id"` // scr_<ulid>
+	Slug        string     `yaml:"slug"    json:"slug"`
+	ServiceName string     `yaml:"service" json:"service"`
+	Body        string     `yaml:"script"  json:"script"`
+	When        ScriptHook `yaml:"when"    json:"when"`
+	Order       uint16     `yaml:"order,omitempty" json:"order,omitempty"`
+}
+
+// ScriptBefore orders already-selected hooks within one Service and phase.
+func ScriptBefore(left, right Script) bool {
+	if left.Order != right.Order {
+		return left.Order < right.Order
+	}
+	return left.Slug < right.Slug
+}
+
 var scriptHooks = map[ScriptHook]struct{}{
 	"manual":        {},
 	"pre-deploy":    {},

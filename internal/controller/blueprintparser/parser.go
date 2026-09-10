@@ -226,6 +226,9 @@ func parseRoot(content []byte) (core.Envelope, Extensions, []byte, error) {
 	}
 
 	var authored rootDocument
+	if err := validateScriptOrderNodes(typed); err != nil {
+		return core.Envelope{}, Extensions{}, nil, err
+	}
 	if err := decodeKnownFields(typed, &authored); err != nil {
 		return core.Envelope{}, Extensions{}, nil, validationError("blueprint root extension is invalid")
 	}
@@ -308,7 +311,7 @@ func normalizeScripts(values map[string]core.ScriptSpec) (map[string]core.Script
 		}
 		candidate := core.Script{
 			ID: "script-validation", Slug: value.Slug, ServiceName: value.Service,
-			Body: value.Script, When: value.When,
+			Body: value.Script, When: value.When, Order: value.Order,
 		}
 		if err := candidate.Validate(); err != nil {
 			return nil, validationError("x-gp-scripts entry is invalid")

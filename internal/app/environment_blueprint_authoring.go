@@ -5,6 +5,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/controller/scriptdefinition"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
@@ -228,7 +230,7 @@ func (service *environmentBlueprintService) environmentBlueprintAuthoringDocumen
 	if err != nil {
 		return blueprintparser.AuthoringDocument{}, err
 	}
-	input.Scripts, err = environmentBlueprintAuthoringScripts(scripts)
+	input.Scripts, err = scriptdefinition.Authoring(scripts)
 	if err != nil {
 		return blueprintparser.AuthoringDocument{}, err
 	}
@@ -302,28 +304,6 @@ func environmentBlueprintAuthoringEntries(
 		result[record.BlueprintKey] = core.EntrySpec{
 			Kind: entry.Kind, Path: entry.Path, UID: entry.UID, GID: entry.GID,
 			Source: source, Exposure: append([]string(nil), entry.Exposure...), Secret: entry.Secret,
-		}
-	}
-	return result, nil
-}
-
-func environmentBlueprintAuthoringScripts(
-	records []etcd.Versioned[etcd.ScriptRecord],
-) (map[string]core.ScriptSpec, error) {
-	result := make(map[string]core.ScriptSpec)
-	for _, versioned := range records {
-		record := versioned.Record
-		if record.Origin != "blueprint" || record.ReconciliationKey == "" {
-			continue
-		}
-		if _, duplicate := result[record.ReconciliationKey]; duplicate {
-			return nil, errs.New(errs.KindInternal, "Environment Blueprint Script key is duplicated")
-		}
-		result[record.ReconciliationKey] = core.ScriptSpec{
-			Slug:    record.Desired.Slug,
-			Service: record.Desired.ServiceName,
-			When:    record.Desired.When,
-			Script:  record.Desired.Body,
 		}
 	}
 	return result, nil

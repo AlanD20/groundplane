@@ -433,28 +433,6 @@ type Route struct {
 	Exposure        string `yaml:"exposure"                   json:"exposure"` // "public" | "internal"
 }
 
-// Script is a first-class per-environment concept, executed against a
-// service as a task; When doubles as a deploy/rollback hook. See mvp.md,
-// "Scripts".
-type ScriptHook string
-
-const (
-	ScriptManual       ScriptHook = "manual"
-	ScriptPreDeploy    ScriptHook = "pre-deploy"
-	ScriptPostDeploy   ScriptHook = "post-deploy"
-	ScriptPreRollback  ScriptHook = "pre-rollback"
-	ScriptPostRollback ScriptHook = "post-rollback"
-	ScriptOnFailure    ScriptHook = "on-failure"
-)
-
-type Script struct {
-	ID          string     `yaml:"id"      json:"id"` // scr_<ulid>
-	Slug        string     `yaml:"slug"    json:"slug"`
-	ServiceName string     `yaml:"service" json:"service"`
-	Body        string     `yaml:"script"  json:"script"` // one line or many
-	When        ScriptHook `yaml:"when"    json:"when"`
-}
-
 // BackupSource selects what a backup run backs up. The canonical source
 // kinds are attach, volume, and config; an attach resolves its adapter from
 // the referenced backing service. See mvp.md, "Backup", and blueprint.md,
