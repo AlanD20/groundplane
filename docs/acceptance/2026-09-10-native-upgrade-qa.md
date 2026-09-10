@@ -83,14 +83,53 @@ Agent image
 No transient recovery unit remained after completion. Application container
 identities remained unchanged. Five held WebSocket paths and verified-TLS HTTP
 sampling remained successful across this isolated native activation window;
-their longer qualification run continues.
+the full600-iteration run completed with3000WebSocket deliveries and1200HTTP
+requests, with zero failures.
 Evidence: `native-activation-b-retry.log`, `native-b-completed-proof.txt`,
 `qa-native-b-current.txt`, `activation-websocket-continuity.log` and
 `activation-http-continuity.jsonl`, under the same evidence parent.
 
+## Busy drain, cancellation and predecessor recovery
+
+With B installed, native Task `task_01M24RE5RYG03GM1AD3GQSMJPV` exhausted
+its120-second preparation drain and failed without aborting the active240-second
+Script. A follow-up Script completed, proving dispatch resumed. Native Task
+`task_01M24RMM78T3KG1CVS5H14RBA0` was then aborted through the CLI during
+preparation; `task_01M24RMMCTXEF6FCG2WVFC6WQW` completed afterward. All three
+disposable probe Scripts were removed through normal operations after their
+Tasks settled. Controller B, Agent B and application identities were unchanged.
+
+A privately staged non-executable candidate failed automatically, without SSH
+restoration. Original Task `task_01M24RSDMV50HHENNR555A1G1W` remained failed
+and Host phase became `recovered`, with Controller B and its Agent healthy.
+An unready candidate was then interrupted only after binding a pidfd to the
+exact journal-selected trial process and verifying its executable and argv.
+Task `task_01M24RYAZFZ1GSKNTWHB3Z86A4` likewise retained its identity and
+failed with automatic predecessor recovery. No manual binary or journal rollback
+was performed. The valid B candidate was restaged afterward; private immutable
+failed releases remain available as evidence.
+
+Raw evidence: `native-busy-qa.log`, `native-abort-qa.log`, `bad-exec-update.log`,
+`bad-exec-recovery-observation.txt`, `interrupted-native-qa.log`,
+`qa-good-candidate-restaged.txt`, and the separate `recovery-*-continuity` logs.
+Recovery traffic probes are still running; no full-run claim yet.
+
+## Distribution correction under qualification
+
+Two full unpaced OCI archive transfers correlated with public Tunnel timeouts
+before any native activation. Internal paths and application container identities
+remained stable. Shared-path congestion/resource burst is a hypothesis, not a
+proven root cause. Distribution now sends64KiB chunks at a fixed maximum4MiB/s,
+without catch-up bursts, and reaps only its owned save/load processes on failure.
+Focused failing-first tests prove byte identity, pacing and child cleanup; all44
+deployment tests pass. The
+normal full-distribution journey must still qualify this correction under fresh
+held public WebSocket and verified-TLS HTTP probes.
+
 ## Remaining proof
 
-Failed candidate recovery, busy drain/pre-activation cancellation, interruption
-and safe image distribution remain unproven. A→B and its same-Task restart now
-pass; that does not erase the earlier failed distribution samples.
+Safe image distribution and coordinated Agent-failure rollback remain unproven
+live. A→B, busy preparation, Abort and failed/interrupted Controller recovery now
+pass; that does not erase the earlier failed distribution samples. Compatibility
+refusal and watchdog/changed-boot recovery retain local automated proof only.
 No whole upgrade-safety, full-CI or production-readiness claim is made.

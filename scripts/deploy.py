@@ -20,6 +20,8 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from image_transfer import transfer_images
+
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 LOCAL_DEPLOY_ROOT = REPOSITORY_ROOT / ".tmp"
@@ -703,28 +705,6 @@ def prepare_target(deployment: Deployment) -> None:
     run([*deployment.ssh_base, "sh", "-s"], input_text=REMOTE_SETUP)
 
 
-def stream_images(
-    deployment: Deployment,
-    source_agent_image: str,
-    source_runner_image: str,
-) -> None:
-    save_command = ["docker", "save", source_agent_image, source_runner_image]
-    load_command = [*deployment.ssh_base, "docker", "load"]
-    print(f"+ {command_text(save_command)} | {command_text(load_command)}", flush=True)
-    with subprocess.Popen(save_command, stdout=subprocess.PIPE) as save:
-        if save.stdout is None:
-            raise RuntimeError("docker save did not expose its output stream")
-        try:
-            load = subprocess.run(load_command, check=False, stdin=save.stdout)
-        finally:
-            save.stdout.close()
-        save_status = save.wait()
-    if save_status != 0:
-        raise subprocess.CalledProcessError(save_status, save_command)
-    if load.returncode != 0:
-        raise subprocess.CalledProcessError(load.returncode, load_command)
-
-
 def cleanup_temporary_images(images: tuple[str, ...]) -> None:
     temporary_pattern = re.compile(r"^groundplane-(?:agent|runner):deploy-[0-9a-f]{32}$")
     for image in images:
@@ -762,7 +742,7 @@ def deploy(deployment: Deployment) -> None:
                 deployment,
                 invocation_id,
             )
-            stream_images(deployment, source_agent_image, source_runner_image)
+            transfer_images(deployment.ssh_base, (source_agent_image, source_runner_image))
             create_transfer_archive(transfer_archive)
             transfer_and_deploy(
                 Deployment(
