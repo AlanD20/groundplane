@@ -26,11 +26,12 @@ import (
 // cmd/controller and pass down; handlers are methods on *Server so they
 // share the store/logger without globals.
 type Server struct {
-	Store       etcd.Store
-	Logger      *slog.Logger
-	Mux         *http.ServeMux
-	API         huma.API
-	onHTTPReady func()
+	Store             etcd.Store
+	Logger            *slog.Logger
+	Mux               *http.ServeMux
+	API               huma.API
+	onHTTPReady       func()
+	mutationAdmission MutationAdmission
 
 	host                    HostReader
 	controllerConfig        ControllerConfigStore
@@ -99,6 +100,7 @@ type Server struct {
 
 type Options struct {
 	OnHTTPReady             func()
+	MutationAdmission       MutationAdmission
 	Host                    HostReader
 	ControllerConfig        ControllerConfigStore
 	ControllerUpdates       ControllerUpdater
@@ -179,6 +181,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		Mux:                     mux,
 		API:                     humago.NewWithPrefix(mux, "/api/v1", config),
 		onHTTPReady:             options.OnHTTPReady,
+		mutationAdmission:       options.MutationAdmission,
 		host:                    options.Host,
 		controllerConfig:        options.ControllerConfig,
 		controllerUpdates:       options.ControllerUpdates,

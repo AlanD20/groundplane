@@ -99,6 +99,29 @@ continues at normal startup. After committed activation, Abort returns
 ordinary exact Task Abort applies. Clients retain/reread the Task id across the
 brief API disconnect.
 
+### Trial mutation isolation
+
+Opening listeners is a qualification prerequisite, not permission for candidate
+code to write forward-only metadata. Once an activation journal exists and is
+unfinished, ordinary HTTP mutations fail with`resource.in_use`before dispatch to
+their services, and scheduler mutation passes wait. Reads and the existing
+read-only POSTs continue. Controller Update retains its own protected same-Task
+acceptance replay; its active-journal publication check forbids a new operation.
+Only the exact native Task's Abort can reach the normal Abort service during the
+hold, where committed activation still rejects cancellation. Invalid/unreadable
+journal evidence fails closed. Qualified Healthy, recovered failure and cancelled
+preparation restore ordinary admission. Busy drain before journal publication
+still runs in the predecessor and retains the existing cancellation behavior.
+
+The native Task executor stays live for qualification/recovery and serializes
+other Controller Tasks behind its durable claim. Agent dispatch remains paused.
+Native recovery/Agent lifecycle and existing startup recovery may write their
+unchanged predecessor-readable records; new schema-emitting startup work needs
+separate compatibility proof. In particular, unpublished Script-source cleanup
+changes counts without adding default order/context fields. Authored nondefault
+fields are only published after qualification. This is not a general data
+migration or proof that arbitrary older releases can be selected as downgrades.
+
 ### Bootstrap and ownership
 
 Bootstrap installs Controller and root-owned recovery executables before

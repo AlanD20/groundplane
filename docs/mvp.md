@@ -156,6 +156,12 @@ rewriting Controller YAML. An unfinished native update blocks new image
 selection. A failed later trial retains the last successful selection. Native
 update acceptance replays the same Task for an equal idempotency key, including
 while active; ordinary Task Retry is unavailable for this host operation.
+An unfinished activation journal pauses ordinary API mutations and scheduled
+maintenance/publication with`resource.in_use`for operator writes. HTTP readiness
+alone does not authorize a trial to write new metadata. Reads, read-only POSTs,
+native acceptance replay and the exact native Task's Abort path remain available;
+Abort still obeys the activation boundary above. Ordinary writes resume only
+after qualified success, recovered failure or cancelled preparation.
 The Controller page shows the actual running executable digest, verified staged
 candidate and latest retained native update Task, including queued or
 pre-activation-failed attempts. Missing candidate/history is explicitly absent;

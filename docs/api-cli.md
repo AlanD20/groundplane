@@ -997,6 +997,11 @@ without aborting it, and survives Controller restart. Failed candidates restore
 their predecessor and fail the Task. Pre-activation Abort retains current
 runtime; Abort after committed activation returns `resource.in_use`. ADR0074
 defines compatibility and recovery.
+While its activation journal is unfinished, other API mutations return
+`resource.in_use`before reaching their mutation services. Reads and the existing
+read-only POSTs remain available, as do protected Controller Update replay and
+the exact native Task's Abort path. Scheduler mutation passes pause too. Missing
+or invalid recovery evidence fails closed rather than admitting trial writes.
 Later Agent enrollment/update requests use the last qualified native manifest's
 image, falling back to bootstrap `agent.image` only before any qualified native
 release. Unfinished native recovery blocks new image selection. Failed subsequent

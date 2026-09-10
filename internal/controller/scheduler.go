@@ -90,6 +90,14 @@ func (sch *Scheduler) tick(ctx context.Context) error {
 	if sch == nil || sch.tasks == nil || sch.idempotency == nil || sch.agents == nil || sch.now == nil {
 		return errs.New(errs.KindInternal, "scheduler task maintenance is not configured")
 	}
+	if sch.Server != nil && sch.Server.mutationAdmission != nil {
+		if err := sch.Server.mutationAdmission.CheckMutation(ctx, ""); err != nil {
+			if kind, ok := errs.KindOf(err); ok && kind == errs.KindResourceInUse {
+				return nil // An unfinished native operation deliberately holds this pass.
+			}
+			return err
+		}
+	}
 	now := sch.now().UTC()
 	if _, err := sch.tasks.ExpireTimedOutTasks(ctx, now); err != nil {
 		return err

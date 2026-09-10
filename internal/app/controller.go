@@ -1184,8 +1184,8 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	logService := controller.NewLogService(environmentReads, serviceReads, releaseLedger, agentRuntime.registry)
 	srv := controller.New(store, logger, controller.Options{
 		Host: platform.host, ControllerConfig: controllerConfig, ControllerUpdates: platform.upgrades,
-		OnHTTPReady: platform.readiness.MarkHTTPReady,
-		Agents:      platform.reads, AgentMutations: platform.mutations, Tenants: hierarchyService,
+		OnHTTPReady: platform.readiness.MarkHTTPReady, MutationAdmission: platform.upgrades,
+		Agents: platform.reads, AgentMutations: platform.mutations, Tenants: hierarchyService,
 		Projects:                hierarchyService,
 		ProjectMutations:        projectMutations,
 		ProjectChanges:          projectChanges,

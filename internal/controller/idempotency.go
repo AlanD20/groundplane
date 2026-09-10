@@ -14,6 +14,10 @@ func (s *Server) requestHandler() http.Handler {
 }
 
 func (s *Server) serveAPIRequest(w http.ResponseWriter, r *http.Request) {
+	if err := s.admitHTTPMutation(r); err != nil {
+		s.writeProblem(w, err)
+		return
+	}
 	if requiresIdempotencyKey(r) && !hasValidIdempotencyKey(r.Header.Values(idempotencyKeyHeader)) {
 		s.writeProblem(w, errs.New(
 			errs.KindValidationFailed,

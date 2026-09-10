@@ -269,6 +269,13 @@ failed later trial retains the last successful manifest. The private selected
 release is persisted before replacing its Healthy journal. Native publication
 replays the same protected accepted Task even while pending and cannot enter
 the generic retry clone path.
+The capability also supplies the HTTP/scheduler mutation-admission port. It
+checks the validated durable journal on each admission; listener readiness is
+not trial write authority. Ordinary writes pause through unfinished recovery.
+Only protected native acceptance replay and exact-native-Task Abort bypass the
+ordinary hold, and their existing services still enforce their closed rules.
+Startup and recovery writes must retain predecessor-readable encoding; additive
+desired fields are not automatically safe for strict predecessor decoders.
 
 Controller/Agent updates use the native runner's closed recovery executor, not
 ordinary timeout-and-ack handling. Startup restores their Task-owned admission
