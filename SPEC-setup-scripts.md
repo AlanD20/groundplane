@@ -60,8 +60,12 @@ not once per replica. This is not a second Jobs or workflow system.
 Existing Script create/edit/read and bodyless run actions remain1:1. Console
 adds order and inherited/explicit context controls. CLI adds`--order`and
 `--execution-file`to add/edit, and`--inherit-execution`to edit; the file uses
-Blueprint-style Volume/Entry references, resolved by normal scoped CLI lookup
-(`--id`opts into ids). API create/edit accept`order`and`execution`; a supplied
+Blueprint-style shape in one YAML mapping, at most65,536bytes, with`-`for stdin.
+Scoped Volume slugs and immutable Entry reconciliation keys resolve by normal
+paginated CLI lookup (`--id`opts into ids; API-owned Entries require ids).
+Entry list/show exposes the existing non-secret immutable reconciliation key
+for Blueprint-owned records, not new edit or reveal authority.
+API create/edit accept`order`and`execution`; a supplied
 execution replaces the complete context rather than merging grant lists.
 
 Pure desired shape/validation lives in`internal/core`; the Blueprint parser and

@@ -1,5 +1,7 @@
 'use client'
-import { scriptFromAPI, type ScriptCreateRequest, type ScriptCreateResponse, type ScriptEditRequest, type ScriptEditResponse } from './script-api'
+import { scriptFromAPI, scriptCreateToAPI, scriptPatchToAPI, type ScriptCreateResponse, type ScriptEditResponse } from './script-api'
+import type { ScriptInput, ScriptPatch } from './script-types'
+import { entryFromAPI } from './entry-api'
 import { taskTypeFromAPI } from '@/lib/task-read-model'
 import { assertOptionalBackupPolicyKeep } from '@/lib/backup-policy-contract'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
@@ -601,49 +603,6 @@ function projectFromAPI(project: ProjectCreateResponse | ProjectShowResponse): P
 		description: project.description,
 		kind: project.kind,
 		deletionTaskId: project.deletion_task_id,
-  }
-}
-
-function entryFromAPI(entry: EntryResponse): EnvironmentEntry {
-  if (entry.type !== 'env' && entry.type !== 'file') {
-    throw new Error(`Controller returned unknown Entry type ${entry.type}`)
-  }
-  if (!entry.exposure || entry.exposure.length === 0) {
-    throw new Error(`Controller returned Entry ${entry.id} without exposure`)
-  }
-  let source: EnvironmentEntry['source']
-  switch (entry.source.kind) {
-    case 'literal':
-      source = { kind: 'literal', literal: entry.source.literal }
-      break
-    case 'secret_ref':
-      if (!entry.source.secret_ref) throw new Error(`Controller returned invalid secret_ref Entry ${entry.id}`)
-      source = { kind: 'secret_ref', secretRef: entry.source.secret_ref }
-      break
-    case 'fact':
-      if (!entry.source.attach_id || !entry.source.fact) {
-        throw new Error(`Controller returned invalid fact Entry ${entry.id}`)
-      }
-      source = {
-        kind: 'fact',
-        attachId: entry.source.attach_id,
-        grantAttachId: entry.source.grant_attach_id,
-        fact: entry.source.fact,
-      }
-      break
-    default:
-      throw new Error(`Controller returned unknown Entry source ${entry.source.kind}`)
-  }
-  return {
-    id: entry.id,
-    type: entry.type,
-    key: entry.key,
-    path: entry.path,
-    uid: entry.uid,
-    gid: entry.gid,
-    source,
-    exposure: [...entry.exposure],
-    secret: entry.secret,
   }
 }
 
@@ -1582,8 +1541,8 @@ type StoreContext = State & ReturnType<typeof useControllerPlatform> & {
   updateVolume: (envId: string, volumeId: string, patch: Pick<Volume, 'slug'>) => Promise<Volume>
   getVolumeDeletionImpact: (volumeId: string, cursor?: string, limit?: number) => Promise<VolumeDeletionImpactPage>
   removeVolume: (envId: string, volumeId: string, impactToken: string, confirmKey: string) => Promise<string>
-	addScript: (envId: string, script: Pick<Script, 'slug' | 'service' | 'body' | 'when' | 'order'>) => Promise<Script>
-	updateScript: (envId: string, scriptId: string, patch: Partial<Pick<Script, 'slug' | 'body' | 'when' | 'order'>>) => Promise<Script>
+	addScript: (envId: string, script: ScriptInput) => Promise<Script>
+	updateScript: (envId: string, scriptId: string, patch: ScriptPatch) => Promise<Script>
 	runScript: (scriptId: string) => Promise<string>
   removeScript: (envId: string, scriptId: string) => Promise<string>
   addAttach: (envId: string, input: AttachCreateInput) => Promise<string>
@@ -3250,14 +3209,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const generation = nextEnvironmentGeneration(envId, 'child')
         const targetService = (await listAllServices(envId)).find((service) => service.name === script.service)
         if (!targetService) throw new Error(`Service ${script.service} was not found in this Environment`)
-        const body: ScriptCreateRequest = {
-          environment_id: envId,
-          slug: script.slug,
-          service_id: targetService.id,
-          script: script.body,
-          when: script.when,
-          order: script.order,
-        }
+        const body = scriptCreateToAPI(envId, targetService.id, script)
         const created = scriptFromAPI(await tenantRequest<ScriptCreateResponse>('/scripts', 201, {
           method: 'POST',
           body,
@@ -3271,11 +3223,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       updateScript: async (envId, scriptId, patch) => {
         assertEnvironmentMutable(envId, 'Script mutation')
         const generation = nextEnvironmentGeneration(envId, 'child')
-        const body: ScriptEditRequest = {}
-		if (patch.slug !== undefined) body.slug = patch.slug
-        if (patch.body !== undefined) body.script = patch.body
-        if (patch.when !== undefined) body.when = patch.when
-        if (patch.order !== undefined) body.order = patch.order
+        const body = scriptPatchToAPI(patch)
         const edited = scriptFromAPI(await tenantRequest<ScriptEditResponse>(
           `/scripts/${encodeURIComponent(scriptId)}`,
           200,

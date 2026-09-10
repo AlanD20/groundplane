@@ -1653,6 +1653,9 @@
           "path": {
             "type": "string"
           },
+          "reconciliation_key": {
+            "type": "string"
+          },
           "secret": {
             "type": "boolean"
           },
@@ -4257,6 +4260,9 @@
           "environment_id": {
             "type": "string"
           },
+          "execution": {
+            "$ref": "#/components/schemas/ScriptExecution"
+          },
           "id": {
             "type": "string"
           },
@@ -4301,6 +4307,7 @@
           "script",
           "when",
           "order",
+          "execution",
           "origin",
           "active_generation"
         ],
@@ -4320,6 +4327,9 @@
           },
           "environment_id": {
             "type": "string"
+          },
+          "execution": {
+            "$ref": "#/components/schemas/ScriptExecution"
           },
           "order": {
             "format": "int32",
@@ -4361,6 +4371,9 @@
             "readOnly": true,
             "type": "string"
           },
+          "execution": {
+            "$ref": "#/components/schemas/ScriptExecution"
+          },
           "order": {
             "format": "int32",
             "maximum": 65535,
@@ -4377,6 +4390,116 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "ScriptExecution": {
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "mode": {
+                "enum": [
+                  "inherited"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "mode"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "entry_ids": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 64,
+                "type": "array"
+              },
+              "image": {
+                "type": "string"
+              },
+              "mode": {
+                "enum": [
+                  "explicit"
+                ],
+                "type": "string"
+              },
+              "user": {
+                "type": "string"
+              },
+              "volumes": {
+                "items": {
+                  "$ref": "#/components/schemas/ScriptVolumeGrant"
+                },
+                "maxItems": 32,
+                "type": "array"
+              }
+            },
+            "required": [
+              "mode",
+              "image",
+              "user"
+            ],
+            "type": "object"
+          }
+        ],
+        "properties": {
+          "entry_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          "image": {
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "inherited",
+              "explicit"
+            ],
+            "type": "string"
+          },
+          "user": {
+            "type": "string"
+          },
+          "volumes": {
+            "items": {
+              "$ref": "#/components/schemas/ScriptVolumeGrant"
+            },
+            "maxItems": 32,
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "type": "object"
+      },
+      "ScriptVolumeGrant": {
+        "additionalProperties": false,
+        "properties": {
+          "read_only": {
+            "type": "boolean"
+          },
+          "target": {
+            "type": "string"
+          },
+          "volume_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "volume_id",
+          "target",
+          "read_only"
+        ],
         "type": "object"
       },
       "Secret": {

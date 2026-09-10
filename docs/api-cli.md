@@ -690,10 +690,17 @@ exposure are validated against frozen sources before execution publication.
 Explicit mode has no network or inherited Service environment; see Blueprint
 and ADR0076 for mount safety and immutable image/source requirements.
 
+Entry list/show metadata includes optional read-only `reconciliation_key` for
+Blueprint-owned Entries, including file Entries. API-owned Entries omit it;
+it is neither an editable label nor a value reveal.
+
 CLI add/edit expose `--order N` and `--execution-file FILE`; edit additionally has
 `--inherit-execution`, mutually exclusive with the file. The bounded YAML file
-uses the Blueprint execution shape, with scoped Volume slugs and Entry keys
-resolved to ids (`--id` selects ids). Console create/edit expose the same order,
+is one YAML mapping document of at most 65,536 bytes (`-` reads stdin). It uses
+the Blueprint execution shape, with scoped Volume slugs and immutable Entry
+reconciliation keys resolved through paginated metadata reads (`--id` selects
+ids, required for API-owned Entries). Unknown/duplicate fields, null choices
+and implicit read-only decisions fail. Console create/edit expose the same order,
 mode, pinned image, numeric user and exact resource selections. Bodyless run,
 Task outcomes, Abort and unsafe-retry rules do not change; no new endpoint or
 secondary Task exists.

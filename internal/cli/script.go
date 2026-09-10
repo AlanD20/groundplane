@@ -7,8 +7,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// script: list | show | add | edit | run | remove. Metadata mutations are
-// durable; task-backed run and removal remain explicit Controller placeholders.
+// script: list | show | add | edit | run | remove. Context edits replace the
+// complete choice; run and removal use the existing Task-backed operations.
 func newScriptCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "script", Short: "Per-environment scripts, optionally hooked into deploy/rollback"}
 
@@ -48,7 +48,7 @@ func newScriptCmd() *cobra.Command {
 		},
 	})
 
-	var service, body, when string
+	var service, body, when, executionFile string
 	var order uint16
 	add := &cobra.Command{
 		Use: "add <slug>", Short: "Add a script", Args: cobra.ExactArgs(1),
@@ -62,8 +62,16 @@ func newScriptCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			var execution *apiTypes.ScriptExecution
+			if cmd.Flags().Changed("execution-file") {
+				execution, err = loadScriptExecution(cmd, executionFile)
+				if err != nil {
+					return err
+				}
+			}
 			script, err := app.Client.CreateScript(cmd.Context(), apiTypes.ScriptCreate{
 				EnvironmentID: environmentID, Slug: args[0], ServiceID: serviceID, Body: body, When: when, Order: order,
+				Execution: execution,
 			})
 			if err != nil {
 				return err
@@ -75,6 +83,8 @@ func newScriptCmd() *cobra.Command {
 	add.Flags().StringVar(&service, "service", "", "service the script runs against")
 	add.Flags().StringVar(&body, "script", "", "one-line or multi-line script body")
 	add.Flags().Uint16Var(&order, "order", 0, "hook order within this Service and phase (0-65535; then slug)")
+	add.Flags().
+		StringVar(&executionFile, "execution-file", "", "complete execution context YAML (64 KiB max; - reads stdin)")
 	add.Flags().StringVar(
 		&when, "when", "manual",
 		"manual | pre-deploy | post-deploy | pre-rollback | post-rollback | on-failure",
@@ -83,7 +93,8 @@ func newScriptCmd() *cobra.Command {
 	_ = add.MarkFlagRequired("script")
 	cmd.AddCommand(add)
 
-	var editSlug, editBody, editWhen string
+	var editSlug, editBody, editWhen, editExecutionFile string
+	var inheritExecution bool
 	var editOrder uint16
 	edit := &cobra.Command{
 		Use: "edit <slug>", Short: "Edit a script", Args: cobra.ExactArgs(1),
@@ -101,8 +112,18 @@ func newScriptCmd() *cobra.Command {
 			if cmd.Flags().Changed("order") {
 				input.Order = &editOrder
 			}
-			if input.Slug == nil && input.Body == nil && input.When == nil && input.Order == nil {
-				return errs.New(errs.KindValidationFailed, "Script edit requires --slug, --script, --when, or --order")
+			if cmd.Flags().Changed("execution-file") {
+				execution, err := loadScriptExecution(cmd, editExecutionFile)
+				if err != nil {
+					return err
+				}
+				input.Execution = execution
+			} else if inheritExecution {
+				input.Execution = &apiTypes.ScriptExecution{Mode: "inherited"}
+			}
+			if input.Slug == nil && input.Body == nil && input.When == nil && input.Order == nil &&
+				input.Execution == nil {
+				return errs.New(errs.KindValidationFailed, "Script edit requires a changed field or execution context")
 			}
 			scriptID, err := resolveScriptTarget(cmd, args[0])
 			if err != nil {
@@ -119,6 +140,11 @@ func newScriptCmd() *cobra.Command {
 	edit.Flags().StringVar(&editSlug, "slug", "", "new Environment-unique Script slug")
 	edit.Flags().StringVar(&editBody, "script", "", "new script body")
 	edit.Flags().Uint16Var(&editOrder, "order", 0, "new hook order (0-65535; then slug)")
+	edit.Flags().
+		StringVar(&editExecutionFile, "execution-file", "", "replacement execution context YAML (64 KiB max; - reads stdin)")
+	edit.Flags().
+		BoolVar(&inheritExecution, "inherit-execution", false, "replace execution context with inherited Service context")
+	edit.MarkFlagsMutuallyExclusive("execution-file", "inherit-execution")
 	edit.Flags().StringVar(
 		&editWhen, "when", "",
 		"new hook: manual | pre-deploy | post-deploy | pre-rollback | post-rollback | on-failure",
@@ -187,6 +213,7 @@ func scriptFields(script apiTypes.Script) map[string]any {
 	return map[string]any{
 		"id": script.ID, "slug": script.Slug, "service": script.ServiceName,
 		"service_id": script.ServiceID, "script": script.Body, "when": script.When, "order": script.Order,
-		"origin": script.Origin, "active_generation": script.ActiveGeneration,
+		"execution": script.Execution,
+		"origin":    script.Origin, "active_generation": script.ActiveGeneration,
 	}
 }

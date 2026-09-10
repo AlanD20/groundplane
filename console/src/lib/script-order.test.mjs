@@ -6,6 +6,7 @@ import { parseScriptOrder } from '../features/script/script-order.ts'
 const script = {
   id: 'scr_one', environment_id: 'env_one', slug: 'migrate', service_id: 'svc_one', service: 'api',
   script: 'echo migrate', when: 'pre-deploy', order: 10, origin: 'api', active_generation: 1,
+  execution: { mode: 'inherited' },
 }
 
 // Rationale: the Console shows the Controller's exact bounded order, including

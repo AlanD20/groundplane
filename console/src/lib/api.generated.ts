@@ -1957,6 +1957,7 @@ export interface components {
             id: string;
             key?: string;
             path?: string;
+            reconciliation_key?: string;
             secret: boolean;
             source: components["schemas"]["EntrySource"];
             type: string;
@@ -2806,6 +2807,7 @@ export interface components {
             /** Format: int64 */
             active_generation: number;
             environment_id: string;
+            execution: components["schemas"]["ScriptExecution"];
             id: string;
             /** Format: int32 */
             order: number;
@@ -2826,6 +2828,7 @@ export interface components {
              */
             readonly $schema?: string;
             environment_id: string;
+            execution?: components["schemas"]["ScriptExecution"];
             /** Format: int32 */
             order?: number;
             script: string;
@@ -2840,11 +2843,35 @@ export interface components {
              * @example /api/v1/ScriptEdit.json
              */
             readonly $schema?: string;
+            execution?: components["schemas"]["ScriptExecution"];
             /** Format: int32 */
             order?: number;
             script?: string;
             slug?: string;
             when?: string;
+        };
+        ScriptExecution: {
+            entry_ids?: string[];
+            image?: string;
+            /** @enum {string} */
+            mode: "inherited" | "explicit";
+            user?: string;
+            volumes?: components["schemas"]["ScriptVolumeGrant"][];
+        } & ({
+            /** @enum {string} */
+            mode: "inherited";
+        } | {
+            entry_ids?: string[];
+            image: string;
+            /** @enum {string} */
+            mode: "explicit";
+            user: string;
+            volumes?: components["schemas"]["ScriptVolumeGrant"][];
+        });
+        ScriptVolumeGrant: {
+            read_only: boolean;
+            target: string;
+            volume_id: string;
         };
         Secret: {
             /**

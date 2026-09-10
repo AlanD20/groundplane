@@ -1891,7 +1891,39 @@ candidate is applied and started but before readiness observation and the
 strategy's proxy switch or recreate acknowledgement. This permits a
 migration-dependent healthcheck without deadlocking the Release.
 `pre/post-rollback` plus `on-failure` hooks cover rollbacks and failed
-deploys/rollbacks. One Blueprint apply publishes Script desired state and
+deploys/rollbacks.
+
+`order` is an integer from 0 through 65535, default 0. Within each selected
+Service and phase, order ascending precedes current Script slug bytes. Service
+dependency topology and Release Group member order remain authoritative across
+Services; order never selects additional hooks or makes manual Scripts automatic.
+Omitted `execution` inherits the sealed Service/Release context. An explicit
+`{mode: inherited}` selects the same behavior and accepts no other fields.
+`{mode: explicit}` requires a repository image pinned by a lowercase SHA-256
+digest and a canonical numeric `uid:gid` user, plus up to 32 exact managed Volume
+grants and 64 Entry grants. Omitted grant lists grant nothing. Volumes must be
+in the same Environment; Entries must also be exposed to the associated Service.
+Each Volume has a canonical absolute container target and an explicit read-only
+decision. Root, traversal, reserved runtime/system paths, overlapping mounts and
+Entry file targets fail; `docs/blueprint.md` defines the exact mount exclusions.
+Explicit mounts disable image-to-empty-Volume copying. Explicit execution has
+no network, Service environment/runtime options, host paths, Docker socket,
+published ports or serving aliases. Working directory is `/`; only image
+defaults, the fixed runner/body and exact declared resources are available.
+
+Existing Console/CLI/API create/edit/read actions expose order and the complete
+context. Omission on create inherits; omission on edit preserves; a supplied
+context replaces the whole choice, never merges grants. API grants use stable
+ids. Blueprint grants name immutable Volume/Entry keys; CLI files resolve scoped
+Volume slugs and Entry reconciliation keys, or take ids with `--id`. Read metadata
+exposes an Entry's immutable `reconciliation_key` when it originated in a
+Blueprint; API-owned Entries have no such key. Context/order-only edits do not
+advance body generations or change already captured runs. Format is validated
+on write, while availability, ownership and exposure are fenced against frozen
+sources before execution publication. Manual run still needs a serving Release;
+first-start setup is the real candidate consumer's pre-deploy hook (ADR0076).
+
+One Blueprint apply publishes Script desired state and
   implicitly selects only a newly introduced or materially changed logical
   Service whose effective `runtime_intent` is `running`, regardless of its
   replica count; stopped or absent existing Services retain desired changes for a
@@ -1903,8 +1935,8 @@ the sealed candidate projection and executes matching `pre-deploy` and
 `post-deploy` Scripts in the same Environment update Task, operation id, and
 Agent assignment. Within each phase Services run in dependency-topological
 order with slug-byte ordering as the tie breaker; each Service's Scripts run in
-slug-byte order, once per selected logical Service Release rather than once per
-replica. Exact reapply, or an apply with no selected changed candidate, runs no
+numeric order then slug-byte order, once per selected logical Service Release
+rather than once per replica. Exact reapply, or an apply with no selected changed candidate, runs no
 hooks. Manual Scripts do not execute during apply. The complete selection
 across pre-deploy, post-deploy, and possible `on-failure` execution is limited
 to 16 hooks and 1,048,576 aggregate UTF-8 body bytes, rejected before Task
@@ -1945,9 +1977,10 @@ receipt. Unknown commit status requires exact durable terminal replay, never
 inferred success from workload health or fabricated reports for old Tasks.
 
 TLS-first setup uses this generic contract: a project-authored `pre-deploy`
-Script runs `/bin/sh` plus `openssl` from its target Service's externally built,
-selected host-local image as the sealed numeric Service user. It stages,
-validates, sets ownership and modes, and atomically publishes a certificate
+Script runs `/bin/sh` plus author-supplied `openssl`, either from its inherited
+Service context or a separately pinned explicit setup image and numeric user.
+An explicit setup writer can initialize a Volume mounted read-only by consumers.
+It stages, validates, sets ownership and modes, and atomically publishes a certificate
 bundle into a declared read-write Volume; consumers mount that Volume read-only,
 and Entries do not own the same output subtree. An existing valid bundle is an
 author-owned idempotent no-op. Groundplane does not supply tools, assume they
@@ -1963,7 +1996,7 @@ may publish a new immutable generation but never overwrites or prunes the
 referenced generation. This active-operation fence is distinct from an ordinary
 late-bound desired Secret reference, which remains non-blocking.
 
-Every Script runner consumes the applicable sealed Release's exact
+Every inherited Script runner consumes the applicable sealed Release's exact
 `local_image_id` and Service definition plus typed env/file Entry bindings from
 one fixed-revision projection. A newly authored candidate requested reference
 is resolved through the Agent once before publication. Manual runs use the
@@ -1972,7 +2005,12 @@ Deploy, Rollback, and Blueprint apply plans use their exact sealed candidate or
 predecessor Release and candidate or applied projection. Private assignment
 artifacts carry the exact pinned Entry-generation bytes. Historical, retry,
 recovery, and failure paths validate their stored local id directly; no runner
-re-resolves a tag or discovers identity from a Compose result. The Controller
+re-resolves a tag or discovers identity from a Compose result. Explicit runners
+separately seal the setup image's host-local Docker id, resolved through the
+authenticated Agent before publication, and the applicable consumer Release
+identity. The setup image must already be available; there is no pull, build or
+late resolution. Exact context/resource revisions and immutable source
+generations remain fenced through publication, retry and cleanup. The Controller
 durably acknowledges
 `start_authorized`, `body_prepared`, `container_created`, `outcome_recorded`,
 and `cleanup_proven`; an Agent reconnect resumes that execution rather than

@@ -13,12 +13,14 @@ type scriptEditFields ScriptEdit
 
 type scriptCreateWire struct {
 	scriptCreateFields
-	Order json.RawMessage `json:"order"`
+	Order     json.RawMessage `json:"order"`
+	Execution json.RawMessage `json:"execution"`
 }
 
 type scriptEditWire struct {
 	scriptEditFields
-	Order json.RawMessage `json:"order"`
+	Order     json.RawMessage `json:"order"`
+	Execution json.RawMessage `json:"execution"`
 }
 
 // UnmarshalJSON distinguishes omitted default order from explicit JSON null.
@@ -32,6 +34,10 @@ func (input *ScriptCreate) UnmarshalJSON(value []byte) error {
 		return err
 	}
 	decoded := ScriptCreate(wire.scriptCreateFields)
+	decoded.Execution, err = decodeScriptExecution(wire.Execution)
+	if err != nil {
+		return err
+	}
 	if order != nil {
 		decoded.Order = *order
 	}
@@ -50,12 +56,18 @@ func (input *ScriptEdit) UnmarshalJSON(value []byte) error {
 		return err
 	}
 	decoded := ScriptEdit(wire.scriptEditFields)
+	decoded.Execution, err = decodeScriptExecution(wire.Execution)
+	if err != nil {
+		return err
+	}
 	decoded.Order = order
 	*input = decoded
 	return nil
 }
 
-func decodeScriptRequest[T scriptCreateWire | scriptEditWire](value []byte) (T, error) {
+func decodeScriptRequest[T scriptCreateWire | scriptEditWire | scriptExecutionWire | scriptVolumeGrantWire](
+	value []byte,
+) (T, error) {
 	var wire T
 	trimmed := bytes.TrimSpace(value)
 	if len(trimmed) == 0 || trimmed[0] != '{' {

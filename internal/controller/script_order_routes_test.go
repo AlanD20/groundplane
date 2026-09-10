@@ -88,6 +88,6 @@ func (*scriptOrderRouteMutations) RunScript(context.Context, string, string) (et
 }
 
 func scriptOrderRouteResponse(order uint16, status int) (etcd.IdempotencyResponse, error) {
-	body, err := json.Marshal(apiTypes.Script{Order: order})
+	body, err := json.Marshal(apiTypes.Script{Order: order, Execution: apiTypes.ScriptExecution{Mode: "inherited"}})
 	return etcd.IdempotencyResponse{Status: status, ContentKind: "application/json", Body: body}, err
 }

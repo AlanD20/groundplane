@@ -13,7 +13,7 @@ func TestScriptAddAndEditCarryNumericOrder(t *testing.T) {
 	const scriptID = "scr_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	const response = `{"id":"` + scriptID + `","environment_id":"` + environmentID +
 		`","service_id":"` + serviceID + `","slug":"migrate","service":"api","script":"echo migrate",` +
-		`"when":"pre-deploy","order":65535,"origin":"api","active_generation":1}`
+		`"when":"pre-deploy","order":65535,"origin":"api","active_generation":1,"execution":{"mode":"inherited"}}`
 	create := exactRequestServer(t, http.MethodPost, "/api/v1/scripts",
 		`{"environment_id":"`+environmentID+`","order":65535,"script":"echo migrate","service_id":"`+serviceID+
 			`","slug":"migrate","when":"pre-deploy"}`, http.StatusCreated, response)

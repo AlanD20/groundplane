@@ -22,6 +22,7 @@ func (c *Client) CreateScript(ctx context.Context, input apiTypes.ScriptCreate) 
 	}, generated.ScriptCreateJSONRequestBody{
 		EnvironmentId: input.EnvironmentID, Slug: input.Slug, ServiceId: input.ServiceID,
 		Script: input.Body, When: input.When, Order: &order,
+		Execution: scriptExecutionToGenerated(input.Execution),
 	})
 	if err != nil {
 		return apiTypes.Script{}, generatedCallError(ctx, http.MethodPost, "/api/v1/scripts", err)
@@ -31,19 +32,7 @@ func (c *Client) CreateScript(ctx context.Context, input apiTypes.ScriptCreate) 
 	); err != nil {
 		return apiTypes.Script{}, err
 	}
-	parsed := response.JSON201
-	if parsed == nil {
-		parsed = &generated.Script{}
-		if err := decodeSingleJSON(
-			http.MethodPost,
-			"/api/v1/scripts",
-			bytes.NewReader(response.Body),
-			parsed,
-		); err != nil {
-			return apiTypes.Script{}, err
-		}
-	}
-	return scriptFromGenerated(*parsed)
+	return decodeScriptResponse(http.MethodPost, "/api/v1/scripts", response.Body)
 }
 
 func (c *Client) ListScripts(
@@ -73,32 +62,14 @@ func (c *Client) ListScripts(
 	); err != nil {
 		return apiTypes.Page[apiTypes.Script]{}, err
 	}
-	parsed := response.JSON200
-	if parsed == nil {
-		parsed = &generated.PageScript{}
-		if err := decodeSingleJSON(
-			http.MethodGet,
-			"/api/v1/scripts",
-			bytes.NewReader(response.Body),
-			parsed,
-		); err != nil {
+	var page apiTypes.Page[apiTypes.Script]
+	if err := decodeSingleJSON(http.MethodGet, "/api/v1/scripts", bytes.NewReader(response.Body), &page); err != nil {
+		return apiTypes.Page[apiTypes.Script]{}, err
+	}
+	for _, item := range page.Items {
+		if err := validateScriptResponse(item); err != nil {
 			return apiTypes.Page[apiTypes.Script]{}, err
 		}
-	}
-	items := []generated.Script(nil)
-	if parsed.Items != nil {
-		items = *parsed.Items
-	}
-	page := apiTypes.Page[apiTypes.Script]{Items: make([]apiTypes.Script, len(items))}
-	if parsed.NextCursor != nil {
-		page.NextCursor = *parsed.NextCursor
-	}
-	for index, item := range items {
-		converted, convertErr := scriptFromGenerated(item)
-		if convertErr != nil {
-			return apiTypes.Page[apiTypes.Script]{}, convertErr
-		}
-		page.Items[index] = converted
 	}
 	return page, nil
 }
@@ -122,14 +93,7 @@ func (c *Client) GetScript(ctx context.Context, id string) (apiTypes.Script, err
 	); err != nil {
 		return apiTypes.Script{}, err
 	}
-	parsed := response.JSON200
-	if parsed == nil {
-		parsed = &generated.Script{}
-		if err := decodeSingleJSON(http.MethodGet, path, bytes.NewReader(response.Body), parsed); err != nil {
-			return apiTypes.Script{}, err
-		}
-	}
-	return scriptFromGenerated(*parsed)
+	return decodeScriptResponse(http.MethodGet, path, response.Body)
 }
 
 func (c *Client) EditScript(ctx context.Context, id string, input apiTypes.ScriptEdit) (apiTypes.Script, error) {
@@ -145,7 +109,8 @@ func (c *Client) EditScript(ctx context.Context, id string, input apiTypes.Scrip
 	}
 	response, err := client.ScriptEditWithResponse(ctx, id, &generated.ScriptEditParams{
 		IdempotencyKey: ids.NewULID(),
-	}, generated.ScriptEditJSONRequestBody{Slug: input.Slug, Script: input.Body, When: input.When, Order: order})
+	}, generated.ScriptEditJSONRequestBody{Slug: input.Slug, Script: input.Body, When: input.When, Order: order,
+		Execution: scriptExecutionToGenerated(input.Execution)})
 	if err != nil {
 		return apiTypes.Script{}, generatedCallError(ctx, http.MethodPatch, path, err)
 	}
@@ -158,14 +123,7 @@ func (c *Client) EditScript(ctx context.Context, id string, input apiTypes.Scrip
 	); err != nil {
 		return apiTypes.Script{}, err
 	}
-	parsed := response.JSON200
-	if parsed == nil {
-		parsed = &generated.Script{}
-		if err := decodeSingleJSON(http.MethodPatch, path, bytes.NewReader(response.Body), parsed); err != nil {
-			return apiTypes.Script{}, err
-		}
-	}
-	return scriptFromGenerated(*parsed)
+	return decodeScriptResponse(http.MethodPatch, path, response.Body)
 }
 
 func (c *Client) RemoveScript(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
@@ -188,18 +146,20 @@ func (c *Client) RemoveScript(ctx context.Context, id string) (apiTypes.TaskAcce
 	return generatedTaskAccepted(http.MethodDelete, path, response.Body, response.JSON202)
 }
 
-func scriptFromGenerated(script generated.Script) (apiTypes.Script, error) {
-	if !script.Origin.Valid() || script.ActiveGeneration < 1 || script.Order < 0 || script.Order > 65535 {
-		return apiTypes.Script{}, errs.New(errs.KindInternal, "Controller returned an invalid Script")
+func decodeScriptResponse(method, path string, body []byte) (apiTypes.Script, error) {
+	// Decode original HTTP bytes so generated scalar defaults cannot erase
+	// missing decisions in the closed execution context.
+	var script apiTypes.Script
+	if err := decodeSingleJSON(method, path, bytes.NewReader(body), &script); err != nil {
+		return apiTypes.Script{}, err
 	}
-	reconciliationKey := ""
-	if script.ReconciliationKey != nil {
-		reconciliationKey = *script.ReconciliationKey
+	return script, validateScriptResponse(script)
+}
+
+func validateScriptResponse(script apiTypes.Script) error {
+	if (script.Origin != "api" && script.Origin != "blueprint") || script.ActiveGeneration < 1 ||
+		(script.Execution.Mode != "inherited" && script.Execution.Mode != "explicit") {
+		return errs.New(errs.KindInternal, "Controller returned an invalid Script")
 	}
-	return apiTypes.Script{
-		ID: script.Id, EnvironmentID: script.EnvironmentId, Slug: script.Slug,
-		ServiceID: script.ServiceId, ServiceName: script.Service, Body: script.Script,
-		When: script.When, Order: uint16(script.Order), Origin: string(script.Origin), ReconciliationKey: reconciliationKey,
-		ActiveGeneration: uint64(script.ActiveGeneration),
-	}, nil
+	return nil
 }

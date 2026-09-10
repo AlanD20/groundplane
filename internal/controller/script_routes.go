@@ -70,6 +70,7 @@ type scriptMutationOutput struct {
 }
 
 func (s *Server) registerScripts() {
+	scriptExecutionSchema(s.API.OpenAPI().Components.Schemas)
 	scriptSchema := s.API.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[apiTypes.Script](), true, "Script")
 	huma.Register(s.API, huma.Operation{
 		OperationID: "script.list", Method: http.MethodGet, Path: "/scripts",

@@ -291,6 +291,9 @@ func entryFromGenerated(entry generated.Entry) (apiTypes.Entry, error) {
 	if entry.Key != nil {
 		result.Key = *entry.Key
 	}
+	if entry.ReconciliationKey != nil {
+		result.ReconciliationKey = *entry.ReconciliationKey
+	}
 	if entry.Path != nil {
 		result.Path = *entry.Path
 	}

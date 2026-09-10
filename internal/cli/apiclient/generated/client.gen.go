@@ -457,6 +457,54 @@ func (e ScriptOrigin) Valid() bool {
 	}
 }
 
+// Defines values for ScriptExecutionMode.
+const (
+	ScriptExecutionModeExplicit  ScriptExecutionMode = "explicit"
+	ScriptExecutionModeInherited ScriptExecutionMode = "inherited"
+)
+
+// Valid indicates whether the value is a known member of the ScriptExecutionMode enum.
+func (e ScriptExecutionMode) Valid() bool {
+	switch e {
+	case ScriptExecutionModeExplicit:
+		return true
+	case ScriptExecutionModeInherited:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ScriptExecution0Mode.
+const (
+	ScriptExecution0ModeInherited ScriptExecution0Mode = "inherited"
+)
+
+// Valid indicates whether the value is a known member of the ScriptExecution0Mode enum.
+func (e ScriptExecution0Mode) Valid() bool {
+	switch e {
+	case ScriptExecution0ModeInherited:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ScriptExecution1Mode.
+const (
+	ScriptExecution1ModeExplicit ScriptExecution1Mode = "explicit"
+)
+
+// Valid indicates whether the value is a known member of the ScriptExecution1Mode enum.
+func (e ScriptExecution1Mode) Valid() bool {
+	switch e {
+	case ScriptExecution1ModeExplicit:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TaskActor.
 const (
 	Operator TaskActor = "operator"
@@ -1201,16 +1249,17 @@ type Entry struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Entry.json
-	Schema   *string     `json:"$schema,omitempty"`
-	Exposure *[]string   `json:"exposure"`
-	Gid      *int64      `json:"gid,omitempty"`
-	Id       string      `json:"id"`
-	Key      *string     `json:"key,omitempty"`
-	Path     *string     `json:"path,omitempty"`
-	Secret   bool        `json:"secret"`
-	Source   EntrySource `json:"source"`
-	Type     string      `json:"type"`
-	Uid      *int64      `json:"uid,omitempty"`
+	Schema            *string     `json:"$schema,omitempty"`
+	Exposure          *[]string   `json:"exposure"`
+	Gid               *int64      `json:"gid,omitempty"`
+	Id                string      `json:"id"`
+	Key               *string     `json:"key,omitempty"`
+	Path              *string     `json:"path,omitempty"`
+	ReconciliationKey *string     `json:"reconciliation_key,omitempty"`
+	Secret            bool        `json:"secret"`
+	Source            EntrySource `json:"source"`
+	Type              string      `json:"type"`
+	Uid               *int64      `json:"uid,omitempty"`
 }
 
 // EntryBulkItem defines model for EntryBulkItem.
@@ -2075,18 +2124,19 @@ type Script struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Script.json
-	Schema            *string      `json:"$schema,omitempty"`
-	ActiveGeneration  int64        `json:"active_generation"`
-	EnvironmentId     string       `json:"environment_id"`
-	Id                string       `json:"id"`
-	Order             int32        `json:"order"`
-	Origin            ScriptOrigin `json:"origin"`
-	ReconciliationKey *string      `json:"reconciliation_key,omitempty"`
-	Script            string       `json:"script"`
-	Service           string       `json:"service"`
-	ServiceId         string       `json:"service_id"`
-	Slug              string       `json:"slug"`
-	When              string       `json:"when"`
+	Schema            *string         `json:"$schema,omitempty"`
+	ActiveGeneration  int64           `json:"active_generation"`
+	EnvironmentId     string          `json:"environment_id"`
+	Execution         ScriptExecution `json:"execution"`
+	Id                string          `json:"id"`
+	Order             int32           `json:"order"`
+	Origin            ScriptOrigin    `json:"origin"`
+	ReconciliationKey *string         `json:"reconciliation_key,omitempty"`
+	Script            string          `json:"script"`
+	Service           string          `json:"service"`
+	ServiceId         string          `json:"service_id"`
+	Slug              string          `json:"slug"`
+	When              string          `json:"when"`
 }
 
 // ScriptOrigin defines model for Script.Origin.
@@ -2097,13 +2147,14 @@ type ScriptCreate struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/ScriptCreate.json
-	Schema        *string `json:"$schema,omitempty"`
-	EnvironmentId string  `json:"environment_id"`
-	Order         *int32  `json:"order,omitempty"`
-	Script        string  `json:"script"`
-	ServiceId     string  `json:"service_id"`
-	Slug          string  `json:"slug"`
-	When          string  `json:"when"`
+	Schema        *string          `json:"$schema,omitempty"`
+	EnvironmentId string           `json:"environment_id"`
+	Execution     *ScriptExecution `json:"execution,omitempty"`
+	Order         *int32           `json:"order,omitempty"`
+	Script        string           `json:"script"`
+	ServiceId     string           `json:"service_id"`
+	Slug          string           `json:"slug"`
+	When          string           `json:"when"`
 }
 
 // ScriptEdit defines model for ScriptEdit.
@@ -2111,11 +2162,52 @@ type ScriptEdit struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/ScriptEdit.json
-	Schema *string `json:"$schema,omitempty"`
-	Order  *int32  `json:"order,omitempty"`
-	Script *string `json:"script,omitempty"`
-	Slug   *string `json:"slug,omitempty"`
-	When   *string `json:"when,omitempty"`
+	Schema    *string          `json:"$schema,omitempty"`
+	Execution *ScriptExecution `json:"execution,omitempty"`
+	Order     *int32           `json:"order,omitempty"`
+	Script    *string          `json:"script,omitempty"`
+	Slug      *string          `json:"slug,omitempty"`
+	When      *string          `json:"when,omitempty"`
+}
+
+// ScriptExecution defines model for ScriptExecution.
+type ScriptExecution struct {
+	EntryIds *[]string            `json:"entry_ids,omitempty"`
+	Image    *string              `json:"image,omitempty"`
+	Mode     ScriptExecutionMode  `json:"mode"`
+	User     *string              `json:"user,omitempty"`
+	Volumes  *[]ScriptVolumeGrant `json:"volumes,omitempty"`
+	union    json.RawMessage
+}
+
+// ScriptExecutionMode defines model for ScriptExecution.Mode.
+type ScriptExecutionMode string
+
+// ScriptExecution0 defines model for ScriptExecution.0.
+type ScriptExecution0 struct {
+	Mode ScriptExecution0Mode `json:"mode"`
+}
+
+// ScriptExecution0Mode defines model for ScriptExecution.0.Mode.
+type ScriptExecution0Mode string
+
+// ScriptExecution1 defines model for ScriptExecution.1.
+type ScriptExecution1 struct {
+	EntryIds *[]string            `json:"entry_ids,omitempty"`
+	Image    string               `json:"image"`
+	Mode     ScriptExecution1Mode `json:"mode"`
+	User     string               `json:"user"`
+	Volumes  *[]ScriptVolumeGrant `json:"volumes,omitempty"`
+}
+
+// ScriptExecution1Mode defines model for ScriptExecution.1.Mode.
+type ScriptExecution1Mode string
+
+// ScriptVolumeGrant defines model for ScriptVolumeGrant.
+type ScriptVolumeGrant struct {
+	ReadOnly bool   `json:"read_only"`
+	Target   string `json:"target"`
+	VolumeId string `json:"volume_id"`
 }
 
 // Secret defines model for Secret.
@@ -3728,6 +3820,156 @@ func (t *ConnectorCredentialInput) UnmarshalJSON(b []byte) error {
 		err = json.Unmarshal(raw, &t.Value)
 		if err != nil {
 			return fmt.Errorf("error reading 'value': %w", err)
+		}
+	}
+
+	return err
+}
+
+// AsScriptExecution0 returns the union data inside the ScriptExecution as a ScriptExecution0
+func (t ScriptExecution) AsScriptExecution0() (ScriptExecution0, error) {
+	var body ScriptExecution0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromScriptExecution0 overwrites any union data inside the ScriptExecution as the provided ScriptExecution0
+func (t *ScriptExecution) FromScriptExecution0(v ScriptExecution0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeScriptExecution0 performs a merge with any union data inside the ScriptExecution, using the provided ScriptExecution0
+func (t *ScriptExecution) MergeScriptExecution0(v ScriptExecution0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsScriptExecution1 returns the union data inside the ScriptExecution as a ScriptExecution1
+func (t ScriptExecution) AsScriptExecution1() (ScriptExecution1, error) {
+	var body ScriptExecution1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromScriptExecution1 overwrites any union data inside the ScriptExecution as the provided ScriptExecution1
+func (t *ScriptExecution) FromScriptExecution1(v ScriptExecution1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeScriptExecution1 performs a merge with any union data inside the ScriptExecution, using the provided ScriptExecution1
+func (t *ScriptExecution) MergeScriptExecution1(v ScriptExecution1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ScriptExecution) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if t.EntryIds != nil {
+		object["entry_ids"], err = json.Marshal(t.EntryIds)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'entry_ids': %w", err)
+		}
+	}
+
+	if t.Image != nil {
+		object["image"], err = json.Marshal(t.Image)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'image': %w", err)
+		}
+	}
+
+	object["mode"], err = json.Marshal(t.Mode)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'mode': %w", err)
+	}
+
+	if t.User != nil {
+		object["user"], err = json.Marshal(t.User)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'user': %w", err)
+		}
+	}
+
+	if t.Volumes != nil {
+		object["volumes"], err = json.Marshal(t.Volumes)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'volumes': %w", err)
+		}
+	}
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *ScriptExecution) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["entry_ids"]; found {
+		err = json.Unmarshal(raw, &t.EntryIds)
+		if err != nil {
+			return fmt.Errorf("error reading 'entry_ids': %w", err)
+		}
+	}
+
+	if raw, found := object["image"]; found {
+		err = json.Unmarshal(raw, &t.Image)
+		if err != nil {
+			return fmt.Errorf("error reading 'image': %w", err)
+		}
+	}
+
+	if raw, found := object["mode"]; found {
+		err = json.Unmarshal(raw, &t.Mode)
+		if err != nil {
+			return fmt.Errorf("error reading 'mode': %w", err)
+		}
+	}
+
+	if raw, found := object["user"]; found {
+		err = json.Unmarshal(raw, &t.User)
+		if err != nil {
+			return fmt.Errorf("error reading 'user': %w", err)
+		}
+	}
+
+	if raw, found := object["volumes"]; found {
+		err = json.Unmarshal(raw, &t.Volumes)
+		if err != nil {
+			return fmt.Errorf("error reading 'volumes': %w", err)
 		}
 	}
 

@@ -20,6 +20,7 @@ func ValidateCreation(input apiTypes.ScriptCreate) error {
 	if err := (core.Script{
 		ID: ids.New(ids.KindScript), Slug: input.Slug, ServiceName: "validated-after-service-resolution",
 		Body: input.Body, When: core.ScriptHook(input.When), Order: input.Order,
+		Execution: executionFromAPI(input.Execution),
 	}).Validate(); err != nil {
 		return errs.Wrap(errs.KindValidationFailed, err)
 	}
@@ -33,6 +34,7 @@ func Response(record etcd.ScriptRecord) apiTypes.Script {
 		ServiceID: record.ServiceID, ServiceName: record.Desired.ServiceName,
 		Body: record.Desired.Body, When: string(record.Desired.When), Order: record.Desired.Order, Origin: record.Origin,
 		ReconciliationKey: record.ReconciliationKey, ActiveGeneration: record.ActiveGeneration,
+		Execution: executionResponse(record.Desired.Execution),
 	}
 }
 
@@ -52,12 +54,16 @@ func CreateIntentBody(input apiTypes.ScriptCreate) idempotentintent.Value {
 			idempotentintent.Field{Name: "order", Value: idempotentintent.Integer(int64(input.Order))},
 		)
 	}
+	// Inheritance is the create default and keeps earlier protected intent identity.
+	if input.Execution != nil && input.Execution.Mode != "inherited" {
+		fields = append(fields, idempotentintent.Field{Name: "execution", Value: executionIntent(*input.Execution)})
+	}
 	return idempotentintent.Object(fields...)
 }
 
 // EditIntentBody retains precisely the supplied patch fields.
 func EditIntentBody(input apiTypes.ScriptEdit) idempotentintent.Value {
-	fields := make([]idempotentintent.Field, 0, 4)
+	fields := make([]idempotentintent.Field, 0, 5)
 	if input.Slug != nil {
 		fields = append(fields, idempotentintent.Field{Name: "slug", Value: idempotentintent.String(*input.Slug)})
 	}
@@ -73,7 +79,9 @@ func EditIntentBody(input apiTypes.ScriptEdit) idempotentintent.Value {
 			idempotentintent.Field{Name: "order", Value: idempotentintent.Integer(int64(*input.Order))},
 		)
 	}
-
+	if input.Execution != nil {
+		fields = append(fields, idempotentintent.Field{Name: "execution", Value: executionIntent(*input.Execution)})
+	}
 	return idempotentintent.Object(fields...)
 }
 
@@ -82,6 +90,7 @@ func CreateDesired(input apiTypes.ScriptCreate, scriptID, serviceName string) co
 	return core.Script{
 		ID: scriptID, Slug: input.Slug, ServiceName: serviceName,
 		Body: input.Body, When: core.ScriptHook(input.When), Order: input.Order,
+		Execution: executionFromAPI(input.Execution),
 	}
 }
 
@@ -101,13 +110,19 @@ func EditDesired(current core.Script, serviceName string, input apiTypes.ScriptE
 	if input.Order != nil {
 		desired.Order = *input.Order
 	}
+	if input.Execution != nil {
+		desired.Execution = executionFromAPI(input.Execution)
+	}
 	return desired
 }
 
 // ValidateEdit rejects an empty mutation.
 func ValidateEdit(input apiTypes.ScriptEdit) error {
-	if input.Slug == nil && input.Body == nil && input.When == nil && input.Order == nil {
-		return errs.New(errs.KindValidationFailed, "Script edit requires slug, script, when, or order")
+	if input.Slug == nil && input.Body == nil && input.When == nil && input.Order == nil && input.Execution == nil {
+		return errs.New(errs.KindValidationFailed, "Script edit requires slug, script, when, order, or execution")
+	}
+	if execution := executionFromAPI(input.Execution); execution != nil {
+		return execution.Validate()
 	}
 	return nil
 }

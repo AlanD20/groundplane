@@ -1,4 +1,6 @@
 import type { EnvironmentNetworkCapacity } from './environment-types'
+import type { EnvironmentEntry } from './entry-types'
+export type { EnvironmentEntry, EnvironmentEntrySource } from './entry-types'
 
 // Groundplane desired-state model (prototype). Mirrors the Blueprint contract.
 export type HealthState = 'healthy' | 'degraded' | 'failed' | 'stopped' | 'pending' | 'unknown'
@@ -315,23 +317,6 @@ export type BlueprintApplyAudit = {
   interpolationKeys: string[]
   files: BlueprintFileAudit[]
   appliedAt: string
-}
-
-export type EnvironmentEntrySource =
-  | { kind: 'literal'; literal?: string }
-  | { kind: 'secret_ref'; secretRef: string }
-  | { kind: 'fact'; attachId: string; grantAttachId?: string; fact: string }
-
-export type EnvironmentEntry = {
-  id: string
-  type: 'env' | 'file'
-  key?: string
-  path?: string
-  uid?: number
-  gid?: number
-  source: EnvironmentEntrySource
-  exposure: string[]
-  secret: boolean
 }
 
 export type Environment = {

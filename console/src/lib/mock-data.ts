@@ -761,10 +761,10 @@ function storefrontEnv(env: 'staging' | 'production'): Environment {
       keyEra: prod ? 2 : 1,
     },
     scripts: [
-      { id: fixtureId('scr', `migrate-${env}`), environmentId: envId, slug: 'migrate', serviceId: svcId('app-api', env), service: 'app-api', when: 'pre-deploy', body: 'php artisan migrate --force --isolated', origin: 'blueprint', reconciliationKey: 'migrate', activeGeneration: 1, order: 0 },
-      { id: fixtureId('scr', `preflight-${env}`), environmentId: envId, slug: 'realtime-preflight', serviceId: svcId('app-websocket', env), service: 'app-websocket', when: 'post-deploy', body: 'php artisan realtime:preflight', origin: 'blueprint', reconciliationKey: 'realtime-preflight', activeGeneration: 1, order: 0 },
-      { id: fixtureId('scr', `cache-${env}`), environmentId: envId, slug: 'clear-cache', serviceId: svcId('app-api', env), service: 'app-api', when: 'manual', body: 'php artisan optimize:clear\nphp artisan config:cache', origin: 'api', activeGeneration: 1, order: 0 },
-      { id: fixtureId('scr', `onfail-${env}`), environmentId: envId, slug: 'notify-failure', serviceId: svcId('app-api', env), service: 'app-api', when: 'on-failure', body: 'php artisan groundplane:notify --channel=ops "deploy failed"', origin: 'blueprint', reconciliationKey: 'notify-failure', activeGeneration: 1, order: 0 },
+      { id: fixtureId('scr', `migrate-${env}`), environmentId: envId, slug: 'migrate', serviceId: svcId('app-api', env), service: 'app-api', when: 'pre-deploy', body: 'php artisan migrate --force --isolated', origin: 'blueprint', reconciliationKey: 'migrate', activeGeneration: 1, order: 0, execution: { mode: 'inherited' } },
+      { id: fixtureId('scr', `preflight-${env}`), environmentId: envId, slug: 'realtime-preflight', serviceId: svcId('app-websocket', env), service: 'app-websocket', when: 'post-deploy', body: 'php artisan realtime:preflight', origin: 'blueprint', reconciliationKey: 'realtime-preflight', activeGeneration: 1, order: 0, execution: { mode: 'inherited' } },
+      { id: fixtureId('scr', `cache-${env}`), environmentId: envId, slug: 'clear-cache', serviceId: svcId('app-api', env), service: 'app-api', when: 'manual', body: 'php artisan optimize:clear\nphp artisan config:cache', origin: 'api', activeGeneration: 1, order: 0, execution: { mode: 'inherited' } },
+      { id: fixtureId('scr', `onfail-${env}`), environmentId: envId, slug: 'notify-failure', serviceId: svcId('app-api', env), service: 'app-api', when: 'on-failure', body: 'php artisan groundplane:notify --channel=ops "deploy failed"', origin: 'blueprint', reconciliationKey: 'notify-failure', activeGeneration: 1, order: 0, execution: { mode: 'inherited' } },
     ],
     backup: {
       enabled: true,
@@ -935,8 +935,8 @@ function sampleSiteEnv(env: 'staging' | 'production'): Environment {
       keyEra: 1,
     },
     scripts: [
-      { id: fixtureId('scr', `sample-site-migrate-${env}`), environmentId: envId, slug: 'migrate', serviceId: svcId('cms', env), service: 'cms', when: 'pre-deploy', body: 'node ./bin/migrate.js', origin: 'blueprint', reconciliationKey: 'migrate', activeGeneration: 1, order: 0 },
-      { id: fixtureId('scr', `sample-site-seed-${env}`), environmentId: envId, slug: 'seed-content', serviceId: svcId('cms', env), service: 'cms', when: 'manual', body: 'node ./bin/seed.js --content', origin: 'api', activeGeneration: 1, order: 0 },
+      { id: fixtureId('scr', `sample-site-migrate-${env}`), environmentId: envId, slug: 'migrate', serviceId: svcId('cms', env), service: 'cms', when: 'pre-deploy', body: 'node ./bin/migrate.js', origin: 'blueprint', reconciliationKey: 'migrate', activeGeneration: 1, order: 0, execution: { mode: 'inherited' } },
+      { id: fixtureId('scr', `sample-site-seed-${env}`), environmentId: envId, slug: 'seed-content', serviceId: svcId('cms', env), service: 'cms', when: 'manual', body: 'node ./bin/seed.js --content', origin: 'api', activeGeneration: 1, order: 0, execution: { mode: 'inherited' } },
     ],
     backup: {
       // staging never backs up — demo of the backups-off state

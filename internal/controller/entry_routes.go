@@ -605,7 +605,7 @@ func (s *Server) listEntries(ctx context.Context, request *entryListInput) (*ent
 		Items: make([]apiTypes.Entry, len(page.Items)), NextCursor: page.NextCursor,
 	}
 	for index, item := range page.Items {
-		response.Items[index] = entryResponse(item.Record)
+		response.Items[index] = entrycapability.Response(item.Record)
 	}
 	return &entryPageOutput{Body: response}, nil
 }
@@ -618,7 +618,7 @@ func (s *Server) showEntry(ctx context.Context, request *entryShowInput) (*entry
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
-	return &entryOutput{Body: entryResponse(stored.Record)}, nil
+	return &entryOutput{Body: entrycapability.Response(stored.Record)}, nil
 }
 
 func (s *Server) revealEntry(ctx context.Context, request *entryShowInput) (*entryValueOutput, error) {
@@ -630,31 +630,6 @@ func (s *Server) revealEntry(ctx context.Context, request *entryShowInput) (*ent
 		return nil, normalizeProjectError(err)
 	}
 	return &entryValueOutput{Body: apiTypes.EntryValue{Value: value}}, nil
-}
-
-func entryResponse(record etcd.EntryRecord) apiTypes.Entry {
-	entry := record.Entry
-	response := apiTypes.Entry{
-		ID: entry.ID, Type: string(entry.Kind), Key: entry.Key, Path: entry.Path,
-		Source: apiTypes.EntrySource{
-			Kind: string(entry.Source.Kind), Literal: entry.Source.Literal, SecretRef: entry.Source.SecretRef,
-		},
-		Exposure: append([]string(nil), entry.Exposure...), Secret: entry.Secret,
-	}
-	if entry.UID != nil {
-		value := int64(*entry.UID)
-		response.UID = &value
-	}
-	if entry.GID != nil {
-		value := int64(*entry.GID)
-		response.GID = &value
-	}
-	if entry.Source.Fact != nil {
-		response.Source.AttachID = entry.Source.Fact.Attach
-		response.Source.GrantAttachID = entry.Source.Fact.Grant
-		response.Source.Fact = entry.Source.Fact.Key
-	}
-	return response
 }
 
 func (s *Server) rejectEntryQuery(ctx huma.Context, next func(huma.Context)) {

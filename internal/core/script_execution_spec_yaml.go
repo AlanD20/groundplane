@@ -16,7 +16,7 @@ type scriptExecutionYAML struct {
 	Unknown map[string]yaml.Node `yaml:",inline"`
 }
 
-// UnmarshalYAML is shared by Blueprint and CLI authoring. Null/string coercion
+// UnmarshalYAML validates Blueprint authoring. Null/string coercion
 // cannot supply a decision; aliases and merges cannot erase field presence.
 func (spec *ScriptExecutionSpec) UnmarshalYAML(node *yaml.Node) error {
 	var fields scriptExecutionYAML
