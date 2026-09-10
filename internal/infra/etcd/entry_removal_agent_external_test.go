@@ -49,7 +49,7 @@ func runEntryRemovalAgent(t *testing.T, fixture *etcd.ExecutedArtifactFixture,
 		t.Fatal("reconstruct Entry cleanup", err)
 	}
 	helper := &entryRemovalHelper{}
-	runtime, err := agent.NewMaterializationRuntime(helper)
+	runtime, err := agent.NewMaterializationRuntime(helper, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

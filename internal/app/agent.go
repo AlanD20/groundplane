@@ -131,13 +131,6 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 	if err != nil {
 		return nil, preferAgentComposeCleanup(err, errors.Join(directoryHelper.Close(), resources.Close()))
 	}
-	materializer, err := agent.NewMaterializationRuntime(materializerHelper)
-	if err != nil {
-		return nil, preferAgentComposeCleanup(
-			err,
-			errors.Join(materializerHelper.Close(), directoryHelper.Close(), resources.Close()),
-		)
-	}
 	managedConfigs, err := managedconfighelpercontainer.New(image)
 	if err != nil {
 		return nil, preferAgentComposeCleanup(
@@ -151,6 +144,16 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 			err,
 			errors.Join(managedConfigs.Close(), materializerHelper.Close(), directoryHelper.Close(), resources.Close()),
 		)
+	}
+	componentFiles, err := newComponentFileValidator(actionCatalog, managedConfigs)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err,
+			errors.Join(managedConfigs.Close(), materializerHelper.Close(), directoryHelper.Close(), resources.Close()))
+	}
+	materializer, err := agent.NewMaterializationRuntime(materializerHelper, componentFiles)
+	if err != nil {
+		return nil, preferAgentComposeCleanup(err,
+			errors.Join(managedConfigs.Close(), materializerHelper.Close(), directoryHelper.Close(), resources.Close()))
 	}
 	dnsObserver, err := dnsresolverobserver.New()
 	if err != nil {

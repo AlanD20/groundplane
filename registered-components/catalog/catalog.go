@@ -97,6 +97,7 @@ type ContainerConfigActionRecipe struct {
 	actionID      component.ActionID
 	relativePath  string
 	containerPath string
+	preflightArgs []string
 	validateArgs  []string
 	activateArgs  []string
 	image         component.OCIImage
@@ -143,27 +144,34 @@ func NewContainerConfigActionRecipe(
 	actionID component.ActionID,
 	relativePath string,
 	containerPath string,
+	preflightArgs []string,
 	validateArgs []string,
 	activateArgs []string,
 	image component.OCIImage,
 ) (ContainerConfigActionRecipe, error) {
 	if actionID == "" || !validManagedConfigRelativePath(relativePath) ||
 		!path.IsAbs(containerPath) || path.Clean(containerPath) != containerPath ||
-		!validContainerCommand(validateArgs) || !validContainerCommand(activateArgs) ||
+		!validContainerCommand(
+			preflightArgs,
+		) || !validContainerCommand(validateArgs) || !validContainerCommand(activateArgs) ||
 		image.Validate() != nil {
 		return ContainerConfigActionRecipe{}, fmt.Errorf("component catalog: container-config action recipe is invalid")
 	}
 	return ContainerConfigActionRecipe{
 		actionID: actionID, relativePath: relativePath, containerPath: containerPath,
-		validateArgs: append([]string(nil), validateArgs...),
-		activateArgs: append([]string(nil), activateArgs...),
-		image:        cloneOCIImage(image),
+		preflightArgs: append([]string(nil), preflightArgs...),
+		validateArgs:  append([]string(nil), validateArgs...),
+		activateArgs:  append([]string(nil), activateArgs...),
+		image:         cloneOCIImage(image),
 	}, nil
 }
 
 func (recipe ContainerConfigActionRecipe) ActionID() component.ActionID { return recipe.actionID }
 func (recipe ContainerConfigActionRecipe) RelativePath() string         { return recipe.relativePath }
 func (recipe ContainerConfigActionRecipe) ContainerPath() string        { return recipe.containerPath }
+func (recipe ContainerConfigActionRecipe) PreflightArgs() []string {
+	return append([]string(nil), recipe.preflightArgs...)
+}
 func (recipe ContainerConfigActionRecipe) ValidateArgs() []string {
 	return append([]string(nil), recipe.validateArgs...)
 }
@@ -237,7 +245,9 @@ func NewRegistered(registrations ...Registration) (Catalog, error) {
 				action.Operation() != component.OperationActivate ||
 				!validManagedConfigRelativePath(recipe.relativePath) ||
 				!path.IsAbs(recipe.containerPath) || path.Clean(recipe.containerPath) != recipe.containerPath ||
-				!validContainerCommand(recipe.validateArgs) || !validContainerCommand(recipe.activateArgs) ||
+				!validContainerCommand(
+					recipe.preflightArgs,
+				) || !validContainerCommand(recipe.validateArgs) || !validContainerCommand(recipe.activateArgs) ||
 				recipe.image.Validate() != nil ||
 				!registeredImageMatches(images, definition.Implementation(), recipe.image) {
 				return Catalog{}, fmt.Errorf(

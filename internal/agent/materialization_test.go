@@ -120,7 +120,7 @@ func TestMaterializationRuntimeStreamsVerifiedHelperFrame(t *testing.T) {
 		}
 	}
 	helper := &decodingMaterializationHelper{}
-	runtime, err := NewMaterializationRuntime(helper)
+	runtime, err := NewMaterializationRuntime(helper, nil)
 	if err != nil {
 		t.Fatalf("NewMaterializationRuntime() error = %v", err)
 	}
@@ -144,7 +144,7 @@ func TestWorkerExecutesMaterializationAfterVerifiedTransfer(t *testing.T) {
 	content := []byte("services: {}\n")
 	assignment := materializationAssignment(t, content)
 	helper := &decodingMaterializationHelper{}
-	runtime, err := NewMaterializationRuntime(helper)
+	runtime, err := NewMaterializationRuntime(helper, nil)
 	if err != nil {
 		t.Fatalf("NewMaterializationRuntime() error = %v", err)
 	}
@@ -195,7 +195,7 @@ func TestWorkerRetiresAndDrainsUnreachedMaterializationAfterTerminalResult(t *te
 	lateContent := []byte("late private materialization\n")
 	assignment := twoMaterializationAssignment(t, firstContent, lateContent)
 	helper := &decodingMaterializationHelper{err: errors.New("stop after first materialization")}
-	runtime, err := NewMaterializationRuntime(helper)
+	runtime, err := NewMaterializationRuntime(helper, nil)
 	if err != nil {
 		t.Fatalf("NewMaterializationRuntime() error = %v", err)
 	}

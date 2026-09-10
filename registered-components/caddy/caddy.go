@@ -38,6 +38,10 @@ var Image = component.OCIImage{
 	},
 }
 
+func PreflightConfigCommand() []string {
+	return []string{"caddy", "validate", "--config", "-", "--adapter", "caddyfile"}
+}
+
 func ValidateConfigCommand() []string {
 	return []string{"caddy", "validate", "--config", CaddyfileContainer, "--adapter", "caddyfile"}
 }

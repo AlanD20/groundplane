@@ -66,6 +66,7 @@ func newRegisteredActionCatalog() (registeredActionCatalog, error) {
 		registeredcaddy.ActivateConfigAction,
 		registeredcaddy.CaddyfileSource,
 		registeredcaddy.CaddyfileContainer,
+		registeredcaddy.PreflightConfigCommand(),
 		registeredcaddy.ValidateConfigCommand(),
 		registeredcaddy.ActivateConfigCommand(),
 		registeredcaddy.Image,

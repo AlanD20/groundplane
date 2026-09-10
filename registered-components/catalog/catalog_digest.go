@@ -14,8 +14,8 @@ func catalogDigest(
 	containerActions []registeredContainerConfigAction,
 	observations []registeredDNSResolverObservation,
 ) [sha256.Size]byte {
-	encoded := appendLength(nil, len("groundplane-component-catalog-v10"))
-	encoded = append(encoded, "groundplane-component-catalog-v10"...)
+	encoded := appendLength(nil, len("groundplane-component-catalog-v11"))
+	encoded = append(encoded, "groundplane-component-catalog-v11"...)
 	encoded = appendLength(encoded, len(definitions))
 	for _, definition := range definitions {
 		implementation := string(definition.Implementation())
@@ -63,7 +63,7 @@ func catalogDigest(
 		}
 		encoded = appendLength(encoded, len(action.recipe.image.Repository))
 		encoded = append(encoded, action.recipe.image.Repository...)
-		for _, command := range [][]string{action.recipe.validateArgs, action.recipe.activateArgs} {
+		for _, command := range [][]string{action.recipe.preflightArgs, action.recipe.validateArgs, action.recipe.activateArgs} {
 			encoded = appendLength(encoded, len(command))
 			for _, argument := range command {
 				encoded = appendLength(encoded, len(argument))

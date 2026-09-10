@@ -16,14 +16,18 @@ type MaterializationHelper interface {
 }
 
 type MaterializationRuntime struct {
-	helper MaterializationHelper
+	helper         MaterializationHelper
+	componentFiles ComponentFileValidator
 }
 
-func NewMaterializationRuntime(helper MaterializationHelper) (*MaterializationRuntime, error) {
+func NewMaterializationRuntime(
+	helper MaterializationHelper,
+	componentFiles ComponentFileValidator,
+) (*MaterializationRuntime, error) {
 	if helper == nil {
 		return nil, errs.New(errs.KindValidationFailed, "agent: materialization helper is required")
 	}
-	return &MaterializationRuntime{helper: helper}, nil
+	return &MaterializationRuntime{helper: helper, componentFiles: componentFiles}, nil
 }
 
 func (runtime *MaterializationRuntime) executeStep(
@@ -40,6 +44,11 @@ func (runtime *MaterializationRuntime) executeStep(
 	if materialization == nil || artifact == nil || payload.Header.TaskID() != assignment.TaskID ||
 		payload.Header.StepID() != step.GetStepId() {
 		return closeMaterializationSource(payload.Source, "agent: materialization runtime input is invalid")
+	}
+	var err error
+	payload, err = runtime.preflightComponentFile(ctx, assignment, step, payload)
+	if err != nil {
+		return err
 	}
 	reader, writer := io.Pipe()
 	encoded := make(chan error, 1)

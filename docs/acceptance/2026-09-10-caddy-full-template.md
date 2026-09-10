@@ -1,7 +1,8 @@
 # Full Caddyfile templates — implementation checkpoint
 
-Owner-approved production initiative, task3. Local source and browser proof,
-not yet deployment, live policy qualification, full CI or production acceptance.
+Owner-approved production initiative, task3. Source and browser proof plus the
+guarded QA upgrade and namespace transition. Full policy, bad-edit retention,
+full CI and production acceptance are not yet qualified.
 
 ## Implemented contract
 
@@ -44,8 +45,10 @@ Go1.26.7, Node24.19.0/npm11.17.0, all managed temporary/cache paths repo-local:
   Component read revision is deliberately newer than its modification revision;
   the test also proves these reads do not write. This is not a live-etcd test.
 - Focused app registration, CLI full-file/Enable, Component API/core/staging,
-  DNS projector, generic validation-before-activation, invalid-config rejection
-  and managed-publication rollback race tests pass. The CLI regression first
+  DNS projector and generic validation/managed-publication rollback race tests
+  pass. Those generic managed-config tests cover the platform path, not the
+  Environment's pre-Compose Caddyfile write; the live follow-up found that gap
+  below. The CLI regression first
   failed because repair attempted the old saved preview GET.
 - Affected Component/DNS/app/CLI vet passes. Protobuf, OpenAPI and both clients
   regenerate unchanged. Console25test-file suites and production build pass;
@@ -70,10 +73,44 @@ focus to Configure. Document widths equal390and1440px viewports; the390px
 dialog screenshot was inspected. No warning/error/issue console messages were
 observed. Both task-owned local servers and the isolated tab were closed.
 
-QA still runs the previous Controller, whose config GET truthfully returns no
-managed Caddy file. The new rendered preview therefore still requires live
-proof after upgrade, including failure/retry/loading behavior. Local evidence
-is retained under `.tmp/production-mvp-20260910/` with `caddy-` prefixes.
+The subsequent GET-only browser check used upgraded QA. The retired marker
+returned422, shown as an error with usable Refresh. A held read showed Loading
+and disabled Refresh; closing the dialog aborted it, and its late completion
+could not replace the reopened draft. After normal namespace replacement,
+Refresh recovered without reopening the dialog and displayed the actual896-byte
+read-only saved output while leaving its unsaved old draft unchanged. Three
+expected422resource errors were the only browser console errors. The task-owned
+tab/server were closed, preserving the owner's QA tab. The browser provider
+could not save an evidence file into the local workspace; result snapshots are
+retained in the session. Local evidence is under `.tmp/production-mvp-20260910/`.
+
+## Guarded upgrade and namespace transition
+
+Source27f194d12 upgraded QA to`0.0.0-qa.native20260910.8` through completed Task
+`task_01M250FDHK70JJFC3Q9Z2J9T08`, created06:35:56UTC. Controller SHA256 is
+`fa6a03b96c402063471df579ae6a42449f5e9219187eab2c04f0a88f9438701a`;
+Agent registry digest is
+`008d39c1dc8475fcbc010de64483e82e5d8362bb0361555ae58485506e9a90e1`.
+The full uncached build/distribution/activation sample passed3000held WebSocket
+deliveries and1200verified-TLS HTTP requests with zero failures. Application and
+ingress container identities were unchanged by that upgrade.
+
+Normal CLI Configure replaced only the retired marker, preserving `auto_https
+off`, primary Zone, alias and IPv4. Task`task_01M250YYNPDB7TXZYHM3E9GCM0`
+completed06:44:40UTC. Serving Caddyfile SHA256 remained exactly
+`86af0b07deb16cc9b5bff2af79825665038692973c2c642692b15369aee373e8`.
+The Configure path recreated Caddy and Tunnel containers because it reconciles
+new Component plan/generation labels; application containers were retained.
+This is not interruption-free Configure proof. The old Tunnel container was
+already removed before its bounded log capture, so no clean-Tunnel-log claim
+is made for H. The HTTP/WebSocket sample itself had already completed.
+
+Inspection then found native validation after the Environment Compose step,
+not before the serving-file write. Bad-file QA was paused before submitting an
+invalid candidate. The failing-first Agent regression proved unvalidated bytes
+could reach the writer. The correction and its proof are in
+`2026-09-10-caddy-native-preflight.md`; deployment and end-to-end rejection proof
+follow that correction, not the earlier generic platform tests.
 
 ## Next authorized QA checks
 

@@ -866,7 +866,9 @@ The `GET /components/{id}/config` response is the generator-safe envelope
 `{config:<variant>|null,managed_files:[...]}`; its nested `config` is null under
 the same disabled or unconfigured rule, and `managed_files` is always an array.
 Each generic managed-file projection contains `path`, the durable authored
-`template`, and the Controller `rendered` output. CoreDNS returns
+`template`, and the Controller `rendered` output. Caddy returns
+`components/caddy/Caddyfile` from one revision-pinned Environment decision view.
+CoreDNS returns
 `/etc/groundplane/coredns/Corefile`, derived side-effect-free from durable
 config, the already-persisted host resolver baseline, and current host
 resolution through the registered renderer. Other Components return `[]`

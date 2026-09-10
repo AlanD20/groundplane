@@ -1250,7 +1250,8 @@ http://{gp.route:api.example.com:/:host} {
 
 The existing Component config read returns the current template and rendered
 managed-file preview without mutation. It is not draft validation or a live
-observation. Complete staged output must pass Caddy validation before reload;
+observation. Complete staged output must pass Caddy validation before serving-file
+replacement or candidate-router start, and again before reload;
 invalid output retains the previous serving config. Primary-Zone IPAM and
 operator-owned LAN/provider configuration are unchanged.
 

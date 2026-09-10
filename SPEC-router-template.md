@@ -35,7 +35,9 @@ upstream, port, Route name or template-binding resource is introduced.
   managed-file preview. This is a read-only current-decision preview, not an
   unsaved-draft Caddy syntax-validation endpoint or proof of live application.
 - The Agent validates the complete staged file with the pinned Caddy image
-  before reload. Invalid output retains the previous serving config; failed
+  before its materialization can replace serving bytes or Compose can start a
+  candidate router. The existing in-container validation still precedes reload.
+  Invalid output retains the previous serving config; failed
   restoration cannot be reported as successful application.
 - Primary-Zone IPAM, router alias,80/443 on the pinned router interface and
   independently configured Tunnel membership/ingress remain unchanged. Host

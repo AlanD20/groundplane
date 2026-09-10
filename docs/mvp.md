@@ -1113,7 +1113,8 @@ tenants and one database.
   provider generation was applied, not that every request must be allowed.
   The config read exposes the current template and rendered-file preview;
   preview is not live observation or unsaved-draft syntax validation. The
-  complete candidate Caddyfile is validated before reload, retaining the
+  complete candidate Caddyfile is validated before replacing its serving file
+  or starting a candidate router, and again before reload, retaining the
   previous serving config on invalid output. Exact internal Route
   hostnames use Caddy's internal CA; the enable/reconcile Task installs that
   Environment root into the host trust store. LAN clients may install the

@@ -44,6 +44,31 @@ Native syntax and reload semantics are defined by the pinned Caddy implementatio
 [reverse proxy/WebSocket handling](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy).
 Invalid candidate output must preserve the previous serving configuration.
 
+The complete candidate receives a native stdin preflight before its Environment
+materialization can replace serving bytes or Compose can start a new router.
+Its sealed Component action identifies the exact materialization, destination,
+digest and generation. The compiled container-action recipe supplies the pinned
+image and stdin validation command; catalog identity includes that command.
+The existing in-container file validation still runs before reload. This closes
+the older ordering gap where the candidate router could start before validation.
+
+Preflight provisions the native configuration without starting listeners, in one
+bounded disposable container: no network, host/serving mounts, Docker socket,
+retained logging or writable root filesystem; numeric unprivileged user; only
+the existing `NET_BIND_SERVICE` capability needed by the pinned executable;
+limited CPU, memory and PIDs. XDG data/config writes use bounded private tmpfs.
+This creates no new arbitrary file or Secret grant. Success requires exact zero
+exit, output drain and owned-container cleanup. Failure, cancellation, unknown
+exit, changed bytes or missing recipe prevents the file writer from running.
+Native validation is not merely Caddyfile-to-JSON adaptation; the documented
+`caddy validate --config - --adapter caddyfile` provisions the modules too.
+
+Current Environment Configure still reconciles the complete Component runtime
+and changes its plan/generation ownership labels, which may recreate Caddy and
+Tunnel containers. No interruption-free Configure claim is made. This is
+separate from a native Controller/Agent upgrade, which must preserve application
+and ingress containers. Invalid native files must not reach that Compose step.
+
 Primary-Zone allocation and ADR0069 aliases are unchanged. This grants no host,
-firewall, Tunnel/provider, PKI or extra Component execution authority. Registered
+firewall, Tunnel/provider, PKI or operator-supplied execution authority. Registered
 Components still receive no filesystem, repository, secrets or arbitrary command.
