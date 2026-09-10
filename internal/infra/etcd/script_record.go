@@ -29,11 +29,12 @@ type scriptLocatorRecord struct {
 }
 
 type storedScriptDesired struct {
-	ID          string          `json:"id"`
-	Slug        string          `json:"slug"`
-	ServiceName string          `json:"service"`
-	When        core.ScriptHook `json:"when"`
-	Order       uint16          `json:"order,omitempty"`
+	ID          string                `json:"id"`
+	Slug        string                `json:"slug"`
+	ServiceName string                `json:"service"`
+	When        core.ScriptHook       `json:"when"`
+	Order       uint16                `json:"order,omitempty"`
+	Execution   *core.ScriptExecution `json:"execution,omitempty"`
 }
 
 type storedScriptRecord struct {
@@ -193,6 +194,7 @@ func encodeScriptRecord(record ScriptRecord) ([]byte, error) {
 		Desired: storedScriptDesired{
 			ID: record.Desired.ID, Slug: record.Desired.Slug,
 			ServiceName: record.Desired.ServiceName, When: record.Desired.When, Order: record.Desired.Order,
+			Execution: record.Desired.Execution,
 		},
 	}
 	return encodeEnvelope("script", stored)
@@ -210,6 +212,7 @@ func decodeScriptRecord(value []byte) (ScriptRecord, error) {
 		Desired: core.Script{
 			ID: stored.Desired.ID, Slug: stored.Desired.Slug,
 			ServiceName: stored.Desired.ServiceName, When: stored.Desired.When, Order: stored.Desired.Order,
+			Execution: stored.Desired.Execution,
 		},
 	}
 	if err := validateScriptMetadataRecord(record); err != nil {

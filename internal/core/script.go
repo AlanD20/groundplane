@@ -22,12 +22,13 @@ const (
 
 // Script is an Environment-scoped body associated with one real Service.
 type Script struct {
-	ID          string     `yaml:"id"      json:"id"` // scr_<ulid>
-	Slug        string     `yaml:"slug"    json:"slug"`
-	ServiceName string     `yaml:"service" json:"service"`
-	Body        string     `yaml:"script"  json:"script"`
-	When        ScriptHook `yaml:"when"    json:"when"`
-	Order       uint16     `yaml:"order,omitempty" json:"order,omitempty"`
+	ID          string           `yaml:"id"      json:"id"` // scr_<ulid>
+	Slug        string           `yaml:"slug"    json:"slug"`
+	ServiceName string           `yaml:"service" json:"service"`
+	Body        string           `yaml:"script"  json:"script"`
+	When        ScriptHook       `yaml:"when"    json:"when"`
+	Order       uint16           `yaml:"order,omitempty" json:"order,omitempty"`
+	Execution   *ScriptExecution `yaml:"execution,omitempty" json:"execution,omitempty"`
 }
 
 // ScriptBefore orders already-selected hooks within one Service and phase.
@@ -69,7 +70,9 @@ func (script Script) ValidateMetadata() error {
 	if _, ok := scriptHooks[script.When]; !ok {
 		return fmt.Errorf("script hook %q is invalid", script.When)
 	}
-
+	if script.Execution != nil {
+		return script.Execution.Validate()
+	}
 	return nil
 }
 

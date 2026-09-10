@@ -664,7 +664,7 @@ func validateScriptExecutionSources(sources ScriptExecutionSources, execution Sc
 			return errs.New(errs.KindValidationFailed, "Script execution network source revision is invalid")
 		}
 	}
-	return nil
+	return validateStoredScriptContext(sources, execution)
 }
 
 func scriptExecutionProjectionConditions(sources ScriptExecutionSources) []Condition {

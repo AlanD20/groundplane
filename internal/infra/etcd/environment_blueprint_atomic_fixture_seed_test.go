@@ -515,7 +515,7 @@ func prepareEnvironmentBlueprintReleaseShape(
 		}
 		task.Params[ReleaseHookStepExecutionParam(record.StepID)] = record.ID
 		task.Steps = append(task.Steps, TaskStepRecord{Kind: TaskStepOperation, ID: record.StepID})
-		hooks[index] = ReleaseHookExecutionPublication{Execution: record}
+		hooks[index] = ReleaseHookExecutionPublication{Execution: withScriptContextSnapshot(t, record)}
 	}
 	ledger := &ReleaseLedger{store: &releasePlanningTestStore{memoryHierarchyStore: store}}
 	hookPrepared, err := ledger.PrepareBlueprintReleaseHooks(ctx, *task, hooks)

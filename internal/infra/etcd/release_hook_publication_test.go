@@ -14,7 +14,7 @@ import (
 func TestPrepareReleaseHookPublicationBindsInitialPostDeployScriptSetGeneration(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-	record := scriptCheckpointTestRecord(at)
+	record := withScriptContextSnapshot(t, scriptCheckpointTestRecord(at))
 	generationID := record.ID
 	revision := int64(41)
 	script, err := NewScriptRecord(record.EnvironmentID, record.ServiceID, core.Script{

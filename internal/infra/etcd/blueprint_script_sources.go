@@ -43,6 +43,9 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 				"Blueprint Script runner snapshot evidence is invalid",
 			)
 		}
+		if err := validateScriptContextSources(sources, &snapshot); err != nil {
+			return nil, err
+		}
 		base := ScriptSourceReference{
 			OperationID:       execution.OperationID,
 			ScriptExecutionID: execution.ID,

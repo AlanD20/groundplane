@@ -434,7 +434,8 @@ func prepareBlueprintReleaseHookPublicationFragment(
 		if execution.ScriptSetGeneration == "" {
 			execution.ScriptSetGeneration = hook.Sources.Script.Record.ScriptSetGeneration
 		}
-		if validateScriptExecutionRecord(execution) != nil || execution.State != ScriptExecutionNotStarted ||
+		if validateStoredScriptContext(hook.Sources, execution) != nil ||
+			validateScriptExecutionRecord(execution) != nil || execution.State != ScriptExecutionNotStarted ||
 			!execution.ActiveReference || execution.CurrentTaskID != task.ID || execution.OperationID != task.OperationID ||
 			execution.PlanHash != task.PlanHash || task.Params[ReleaseHookStepExecutionParam(execution.StepID)] != execution.ID {
 			clearReleaseHookPublicationFragment(fragment)

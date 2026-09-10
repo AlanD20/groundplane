@@ -54,7 +54,7 @@ func TestBlueprintReleasePublicationCarriesPreparedSourceRootAndAbandonsExactly(
 func TestBlueprintReleaseHookPublicationStoresExecutionAndSnapshot(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 9, 2, 13, 0, 0, 0, time.UTC)
-	record := scriptCheckpointTestRecord(at)
+	record := withScriptContextSnapshot(t, scriptCheckpointTestRecord(at))
 	task := TaskRecord{
 		ID: record.CurrentTaskID, OperationID: record.OperationID, PlanHash: record.PlanHash,
 		Params: map[string]string{ReleaseHookStepExecutionParam(record.StepID): record.ID},
