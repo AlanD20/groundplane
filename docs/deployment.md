@@ -73,6 +73,14 @@ defines the per-process execution limit. Neither is a hard memory or whole-host
 resource guarantee. Provision separate build capacity when application traffic
 cannot tolerate shared CPU, storage or network pressure.
 
+The checkout filesystem must have at least10GiB free before target access and
+before each uncached build stage; at least2GiB must remain before image transfer
+or publication. Deployment refuses insufficient or unreadable capacity and does
+not delete anything automatically. These are conservative admission checks, not
+reservations or a whole-host guarantee: independently provision and monitor
+Docker, Go cache, target and VM backing storage when they use other filesystems.
+Never fill a filesystem that also backs an active application's virtual disk.
+
 Only a `completed` Task is success. A recovered failed update remains failed.
 The Controller owns drain, activation, Agent replacement and recovery. Deployment
 does not overwrite executables, YAML, keys or systemd units, abort work, or

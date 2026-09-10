@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from image_transfer import prepare_images, transfer_images
+from deployment_capacity import require_capacity, TRANSFER_HEADROOM
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -613,6 +614,7 @@ def local_image_id(image: str) -> str | None:
 
 
 def build_artifacts(deployment: Deployment, invocation_id: str, *, include_runner: bool = True) -> tuple[str, str]:
+    require_capacity(REPOSITORY_ROOT)
     source_agent_image = f"groundplane-agent:deploy-{invocation_id}"
     source_runner_image = f"groundplane-runner:deploy-{invocation_id}"
     run(
@@ -623,6 +625,7 @@ def build_artifacts(deployment: Deployment, invocation_id: str, *, include_runne
     for kind in (("agent", "runner") if include_runner else ("agent",)):
         cache = f"groundplane-{kind}:cache-{image_input_digest(kind, deployment.version)}"
         if local_image_id(cache) is None:
+            require_capacity(REPOSITORY_ROOT)
             command = ["make", f"{kind}-image", f"{kind.upper()}_IMAGE={cache}"]
             if kind == "agent":
                 command.append(f"AGENT_VERSION={deployment.version}")
@@ -717,6 +720,7 @@ def cleanup_temporary_images(images: tuple[str, ...]) -> None:
 
 def deploy(deployment: Deployment) -> None:
     require_local_tools()
+    require_capacity(REPOSITORY_ROOT)
     verify_architecture(deployment)
     prepare_target(deployment)
     include_runner = runner_required(deployment)
@@ -740,6 +744,7 @@ def deploy(deployment: Deployment) -> None:
                 include_runner=include_runner,
             )
             selected_images = (source_agent_image, source_runner_image) if include_runner else (source_agent_image,)
+            require_capacity(REPOSITORY_ROOT, TRANSFER_HEADROOM)
             missing_images = prepare_images(deployment.ssh_base, selected_images)
             transfer_images(deployment.ssh_base, missing_images)
             create_transfer_archive(transfer_archive)
