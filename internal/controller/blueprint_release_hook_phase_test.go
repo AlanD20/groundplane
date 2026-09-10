@@ -19,6 +19,7 @@ import (
 
 // Rationale: per-Service apply/post/health sequencing starts later Services
 // after earlier hooks. Blueprint requires global barriers across every member.
+// A separate setup image must keep this barrier and the consumer image binding.
 func TestPrepareBlueprintReleaseTaskGlobalHookPhases(t *testing.T) {
 	reader, task := blueprintPlanTestState(t)
 	task.Params[etcd.TaskReleasePublicationParam] = "publication"
@@ -56,8 +57,8 @@ func TestPrepareBlueprintReleaseTaskGlobalHookPhases(t *testing.T) {
 			},
 		}
 		member.Render.Hooks = []etcd.ReleaseHookRenderInput{
-			blueprintPhaseHookForTest(t, task, member, core.ScriptPreDeploy, int64(600+index*10)),
-			blueprintPhaseHookForTest(t, task, member, core.ScriptPostDeploy, int64(400+index*10)),
+			blueprintPhaseHookForTest(t, task, member, core.ScriptPreDeploy, int64(600+index*10), index == 0),
+			blueprintPhaseHookForTest(t, task, member, core.ScriptPostDeploy, int64(400+index*10), false),
 		}
 		input.Members = append(input.Members, member)
 		stepID := func(offset int64) string { return ids.NewAt(ids.KindStep, task.CreatedAt, int64(500+index*10)+offset) }
@@ -82,6 +83,21 @@ func TestPrepareBlueprintReleaseTaskGlobalHookPhases(t *testing.T) {
 	}
 	if _, err := executionplan.Validate(plan); err != nil {
 		t.Fatal(err)
+	}
+	var explicitCount int
+	for _, snapshot := range plan.ScriptRunnerSnapshots {
+		if snapshot.ExplicitExecution == nil {
+			continue
+		}
+		explicitCount++
+		if snapshot.LocalImageId != "sha256:"+strings.Repeat("c", 64) ||
+			snapshot.ExplicitExecution.ReleaseLocalImageId != input.Members[0].Intent.CandidateWorkload.LocalImageID ||
+			snapshot.LocalImageId == snapshot.ExplicitExecution.ReleaseLocalImageId {
+			t.Fatal("setup and consumer image authority were not preserved independently")
+		}
+	}
+	if explicitCount != 1 {
+		t.Fatalf("explicit setup snapshots = %d, want 1", explicitCount)
 	}
 	// Rationale: a first Script mount must not implicitly create an unowned
 	// Docker volume before the candidate Compose step supplies its bind options.
@@ -169,6 +185,7 @@ func blueprintPhaseHookForTest(
 	member etcd.ReleaseTaskRenderMember,
 	when core.ScriptHook,
 	sequence int64,
+	explicit bool,
 ) etcd.ReleaseHookRenderInput {
 	t.Helper()
 	executionID := strings.TrimPrefix(ids.NewAt(ids.KindConfig, task.CreatedAt, sequence), "cfg_")
@@ -194,6 +211,9 @@ func blueprintPhaseHookForTest(
 		SnapshotId: snapshotID, Name: "gp-script-" + strings.ToLower(executionID), Image: member.Render.CandidateWorkload.LocalImageID,
 		Entrypoint: []string{"/bin/sh"}, Command: []string{"/groundplane-script-body"}, StopGraceSeconds: 10,
 	}
+	if explicit {
+		projection.Image, projection.WorkingDir = "sha256:"+strings.Repeat("c", 64), "/"
+	}
 	for _, key := range keys {
 		projection.Labels = append(projection.Labels, &agentpb.ScriptStringPair{Key: key, Value: labels[key]})
 	}
@@ -214,6 +234,20 @@ func blueprintPhaseHookForTest(
 		BlueprintBundleGeneration: task.ID, RenderGeneration: uint64(task.RenderGeneration), NetworkTopologySource: source(),
 		AppliedEnvironmentRevisionId: task.ID, AppliedEnvironmentRenderGeneration: uint64(task.RenderGeneration),
 		AppliedEnvironmentSource: source(), RunnerProjectionSha256: projectionHash[:],
+	}
+	if explicit {
+		context := &agentpb.ScriptExplicitExecutionContext{
+			ImageReference: "example.test/setup@sha256:" + strings.Repeat("c", 64), User: "0:0",
+		}
+		digest, err := executionplan.ScriptExecutionContextDigest(context)
+		if err != nil {
+			t.Fatal(err)
+		}
+		snapshot.ExplicitExecution = &agentpb.ScriptExplicitExecutionAuthority{
+			Context: context, ContextSha256: digest, ScriptModRevision: 1,
+			ReleaseLocalImageId: member.Render.CandidateWorkload.LocalImageID,
+		}
+		snapshot.LocalImageId = projection.Image
 	}
 	snapshotBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(snapshot)
 	if err != nil {

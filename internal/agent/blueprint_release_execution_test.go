@@ -152,15 +152,31 @@ func TestExecuteBlueprintReleaseRunsSetupBeforeHooksAndStopsOnHookFailure(t *tes
 	}
 }
 
+// Rationale: a separate setup image keeps the same durable cleanup barrier as
+// inherited hooks; neither successful nor failed setup may start a consumer early.
 func TestExecuteBlueprintReleaseWaitsForRealScriptCleanupAcknowledgement(t *testing.T) {
-	for _, fail := range []bool{false, true} {
+	for _, test := range []struct {
+		name     string
+		fail     bool
+		explicit bool
+		abort    bool
+	}{
+		{name: "inherited success"},
+		{name: "inherited failure", fail: true},
+		{name: "explicit success", explicit: true},
+		{name: "explicit failure", fail: true, explicit: true},
+		{name: "explicit abort", fail: true, explicit: true, abort: true},
+	} {
 		t.Run(
-			map[bool]string{false: "cleanup before candidate", true: "failed runner cleaned without candidate"}[fail],
+			test.name,
 			func(t *testing.T) {
 				assignment, hook, digest := capturedContainerFailureFixture()
 				assignment.Plan.Operation = agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY
 				assignment.Plan.ScriptRunnerSnapshots[0].LocalImageId = "sha256:" + strings.Repeat("b", 64)
 				assignment.Plan.ScriptRunnerProjections[0].Image = assignment.Plan.ScriptRunnerSnapshots[0].LocalImageId
+				if test.explicit {
+					setExplicitScriptFixture(t, &assignment)
+				}
 				hook.Policy, hook.TimeoutSeconds = agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_PRE_HOOK, 5
 				prefix := &agentpb.ExecutionStep{
 					StepId:         "volumes",
@@ -176,9 +192,14 @@ func TestExecuteBlueprintReleaseWaitsForRealScriptCleanupAcknowledgement(t *test
 				assignment.Plan.Steps = []*agentpb.ExecutionStep{prefix, hook, apply}
 				assignment.Plan.Artifacts = []*agentpb.ComposeArtifact{releaseTestArtifact("candidate-artifact")}
 				events := []string{}
-				engine := &checkpointOrderScriptEngine{events: &events, bodyDigest: digest}
-				if fail {
+				engine := &capturedProjectionScriptEngine{
+					checkpointOrderScriptEngine: &checkpointOrderScriptEngine{events: &events, bodyDigest: digest},
+				}
+				if test.fail {
 					engine.runErr = errors.New("migration failed")
+				}
+				if test.abort {
+					engine.runErr = context.Canceled
 				}
 				scripts, err := NewDockerScriptRuntime(engine)
 				if err != nil {
@@ -230,8 +251,11 @@ func TestExecuteBlueprintReleaseWaitsForRealScriptCleanupAcknowledgement(t *test
 						}
 						<-done
 						wantTerminal := TaskTerminalCompleted
-						if fail {
+						if test.fail {
 							wantTerminal = TaskTerminalFailed
+						}
+						if test.abort {
+							wantTerminal = TaskTerminalAborted
 						}
 						if output.Result.Terminal != wantTerminal {
 							t.Fatalf("result = %#v; events = %v", output.Result, runtime.events)
@@ -244,7 +268,7 @@ func TestExecuteBlueprintReleaseWaitsForRealScriptCleanupAcknowledgement(t *test
 							"ack:SCRIPT_EXECUTION_STATE_OUTCOME_RECORDED",
 							"ack:SCRIPT_EXECUTION_STATE_CLEANUP_PROVEN",
 						}
-						if !fail {
+						if !test.fail {
 							want = append(want, "compose:candidate")
 						}
 						if !slices.Equal(runtime.events, want) {
@@ -261,6 +285,9 @@ func TestExecuteBlueprintReleaseWaitsForRealScriptCleanupAcknowledgement(t *test
 							},
 						) {
 							t.Fatalf("engine calls = %v", events)
+						}
+						if test.explicit {
+							assertExplicitScriptCapture(t, assignment, engine)
 						}
 						return
 					case <-resultTimeout.C:
