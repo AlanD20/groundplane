@@ -263,6 +263,13 @@ A predecessor-owned startup guard plus transient manager-owned recovery mode
 protects a failed candidate without an Agent assignment, Component projection,
 generic host executor or second persistent Groundplane service.
 
+Controller/Agent updates use the native runner's closed recovery executor, not
+ordinary timeout-and-ack handling. Startup restores their Task-owned admission
+before Agent listeners start. Unresolved host/storage recovery retains the claim
+after deadline expiry; each further pass remains bounded. Only a proven settled
+runtime authorizes terminal acknowledgement and release of that operation's
+hold. The ordinary Controller Task handler cannot bypass this path.
+
 Concrete types are the default. An interface exists only at a real behavior or
 side-effect seam, is declared by its consumer, exposes only the methods that
 consumer calls, and is never used to recover implementation behavior through a

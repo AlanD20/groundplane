@@ -131,9 +131,16 @@ The Agent id, operator config, labels, enrollment Task identity, creation time,
 and first-ready time survive both replacement and rollback. The update Task
 has a 300-second deadline. Successful replacement completes the Task. A
 successful rollback leaves the Agent ready on its previous digest but fails
-the update Task. A failed rollback also fails the Task and leaves the durable
-record available for Controller reconciliation; it never reports false
-success or deletes the Agent.
+the update Task. An unresolved rollback retains the running native claim and
+its all-generation admission hold, including after deadline expiry. Subsequent
+bounded passes recover the pinned predecessor before the failed/timed-out
+terminal acknowledgement; they never report false success or delete the Agent.
+The starting Controller restores this hold before opening the Agent channel and
+revision-fences any old publication attempt before issuing a new credential.
+If the candidate is already durably Ready, replay confirms fresh authenticated
+readiness and completes without another rotation, even if a lost Task
+acknowledgement crossed the deadline. Abort and qualification have one winner;
+an accepted pre-qualification Abort restores the predecessor before finishing.
 
 The one-for-one operator surfaces are:
 

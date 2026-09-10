@@ -255,9 +255,31 @@ func (manager *Manager) resumeReplacement(ctx context.Context, stored StoredReco
 	if err := manager.convergeRuntime(ctx, stored.Record); err != nil {
 		return err
 	}
+	if err := manager.waitReplacementReady(ctx, stored.Record); err != nil {
+		return err
+	}
+	updated, err := manager.repository.MarkReplacementReady(
+		ctx,
+		stored.Record.ID,
+		stored.Record.Generation,
+		stored.Revision,
+	)
+	if err != nil {
+		return safePortError(ctx, err, "local agent replacement ready transition failed")
+	}
+	if err := validateStored(updated); err != nil {
+		return err
+	}
+	if updated.Record.Phase != PhaseReady || !updated.Record.ReadyAt.Equal(stored.Record.ReadyAt) {
+		return errs.New(errs.KindInternal, "local agent repository did not preserve replacement identity")
+	}
+	return nil
+}
+
+func (manager *Manager) waitReplacementReady(ctx context.Context, record Record) error {
 	readyContext, cancelReady := context.WithCancel(ctx)
 	defer cancelReady()
-	ready, err := manager.sessions.Ready(readyContext, stored.Record.ID, stored.Record.Generation)
+	ready, err := manager.sessions.Ready(readyContext, record.ID, record.Generation)
 	if err != nil {
 		return safePortError(ctx, err, "local agent replacement readiness subscription failed")
 	}
@@ -279,23 +301,5 @@ func (manager *Manager) resumeReplacement(ctx context.Context, stored StoredReco
 		)
 	case <-ready:
 	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	updated, err := manager.repository.MarkReplacementReady(
-		ctx,
-		stored.Record.ID,
-		stored.Record.Generation,
-		stored.Revision,
-	)
-	if err != nil {
-		return safePortError(ctx, err, "local agent replacement ready transition failed")
-	}
-	if err := validateStored(updated); err != nil {
-		return err
-	}
-	if updated.Record.Phase != PhaseReady || !updated.Record.ReadyAt.Equal(stored.Record.ReadyAt) {
-		return errs.New(errs.KindInternal, "local agent repository did not preserve replacement identity")
-	}
-	return nil
+	return ctx.Err()
 }

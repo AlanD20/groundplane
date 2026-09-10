@@ -246,6 +246,12 @@ func newAgentUpdateTask(
 	startingGeneration uint64,
 	idempotencyKey string,
 ) (etcd.TaskRecord, error) {
+	if startingGeneration == 0 || startingGeneration > ^uint64(0)-2 {
+		return etcd.TaskRecord{}, errs.New(
+			errs.KindStateConflict,
+			"agent generation has no replacement and recovery capacity",
+		)
+	}
 	params := map[string]string{
 		etcd.TaskResourceKindParam:     etcd.TaskResourceAgent,
 		agentTaskPreviousImageKey:      previousImage,

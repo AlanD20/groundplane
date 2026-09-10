@@ -4,6 +4,7 @@ const (
 	// TaskResourceKindParam closes the durable Controller Task dispatch catalog.
 	TaskResourceKindParam                = "resource_kind"
 	TaskResourceAgent                    = "agent"
+	TaskResourceController               = "controller"
 	TaskResourceEntry                    = "entry"
 	TaskResourceRoute                    = "route"
 	TaskResourceScript                   = "script"

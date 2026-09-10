@@ -68,6 +68,7 @@ func TestRunnerWakeClaimsWorkBeforeRecoveryInterval(t *testing.T) {
 	runner, err := New(
 		store,
 		&fakeHandler{},
+		nil,
 		time.Hour,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)
@@ -97,6 +98,7 @@ func testRunner(t *testing.T, store Store, handler Handler, now time.Time) *Runn
 	runner, err := New(
 		store,
 		handler,
+		nil,
 		time.Second,
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 	)

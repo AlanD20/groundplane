@@ -184,9 +184,7 @@ type fakeControllerTaskLocalAgents struct {
 	healthCalls    int
 	enrollCalls    int
 	reconcileCalls int
-	updateCalls    int
 	request        localagent.EnrollRequest
-	updateRequest  localagent.UpdateRequest
 }
 
 type fakeControllerTaskRunners struct {
@@ -212,15 +210,6 @@ func (agents *fakeControllerTaskLocalAgents) Enroll(
 
 func (agents *fakeControllerTaskLocalAgents) Reconcile(context.Context) error {
 	agents.reconcileCalls++
-	return nil
-}
-
-func (agents *fakeControllerTaskLocalAgents) Update(
-	_ context.Context,
-	request localagent.UpdateRequest,
-) error {
-	agents.updateCalls++
-	agents.updateRequest = request
 	return nil
 }
 

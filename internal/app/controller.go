@@ -21,7 +21,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/backupkey"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	componentcapability "github.com/AlanD20/groundplane/internal/controller/component"
-	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	desiredrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	controllerdns "github.com/AlanD20/groundplane/internal/controller/dnsresolver"
 	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
@@ -1274,19 +1273,10 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Controller Task handler: %w", err)
 	}
-	backupKeyTaskDispatcher, err := controllertask.NewDispatcher(controllerTaskHandler, backupKeys)
-	if err != nil {
-		_ = containerManager.Close()
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize backup key Task dispatcher: %w", err)
-	}
-	hierarchyTaskDispatcher, err := newHierarchyDeletionTaskDispatcher(backupKeyTaskDispatcher, hierarchyDeletions)
-	if err != nil {
-		_ = containerManager.Close()
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize hierarchy deletion Task dispatcher: %w", err)
-	}
-	controllerTaskRunner, err := controllertask.New(tasks, hierarchyTaskDispatcher, tick, logger)
+	controllerTaskRunner, err := newControllerTaskRuntime(
+		ctx, tasks, controllerTaskHandler, backupKeys, hierarchyDeletions,
+		localAgentManager, agentRuntime.registry, tick, logger,
+	)
 	if err != nil {
 		_ = containerManager.Close()
 		_ = store.Close()

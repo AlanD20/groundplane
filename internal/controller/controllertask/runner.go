@@ -33,6 +33,7 @@ type Handler interface {
 type Runner struct {
 	store    Store
 	handler  Handler
+	updates  UpdateExecutor
 	interval time.Duration
 	logger   *slog.Logger
 	now      func() time.Time
@@ -48,14 +49,17 @@ type activeExecution struct {
 	done          chan struct{}
 	operatorAbort bool
 	result        error
+	update        bool
 }
 
-func New(store Store, handler Handler, interval time.Duration, logger *slog.Logger) (*Runner, error) {
+func New(
+	store Store, handler Handler, updates UpdateExecutor, interval time.Duration, logger *slog.Logger,
+) (*Runner, error) {
 	if store == nil || handler == nil || interval <= 0 || logger == nil {
 		return nil, errs.New(errs.KindInternal, "Controller Task runner dependencies are invalid")
 	}
 	return &Runner{
-		store: store, handler: handler, interval: interval, logger: logger,
+		store: store, handler: handler, updates: updates, interval: interval, logger: logger,
 		now: time.Now, wake: make(chan struct{}, 1),
 	}, nil
 }
@@ -137,6 +141,9 @@ func (runner *Runner) execute(ctx context.Context, claim etcd.TaskAssignment) (r
 		return errs.New(errs.KindInternal, "Controller Task runner received an invalid claim")
 	}
 	deadline := claim.Assignment.Record.Deadline
+	if isPlatformUpdate(claim.Task.Record) {
+		return runner.executeUpdate(ctx, claim)
+	}
 	now := runner.now().UTC()
 	if !now.Before(deadline) {
 		_, err := runner.store.AcknowledgeControllerTask(
@@ -155,13 +162,7 @@ func (runner *Runner) execute(ctx context.Context, claim etcd.TaskAssignment) (r
 	runner.active = active
 	runner.mu.Unlock()
 	defer func() {
-		runner.mu.Lock()
-		active.result = result
-		if runner.active == active {
-			runner.active = nil
-		}
-		close(active.done)
-		runner.mu.Unlock()
+		runner.finishExecution(active, result)
 	}()
 	executionErr := runner.handler.Execute(executionContext, claim.Task.Record)
 	cancel()
@@ -203,12 +204,22 @@ func (runner *Runner) AbortTask(ctx context.Context, taskID string) error {
 		runner.mu.Unlock()
 		return errs.New(errs.KindStateConflict, "Controller Task is not executing in this process")
 	}
+	if active.update {
+		runner.mu.Unlock()
+		if err := runner.updates.Abort(ctx, taskID); err != nil {
+			return err
+		}
+		return runner.waitExecution(ctx, active)
+	}
 	active.operatorAbort = true
 	active.cancel()
-	done := active.done
 	runner.mu.Unlock()
+	return runner.waitExecution(ctx, active)
+}
+
+func (runner *Runner) waitExecution(ctx context.Context, active *activeExecution) error {
 	select {
-	case <-done:
+	case <-active.done:
 		runner.mu.Lock()
 		result := active.result
 		runner.mu.Unlock()
@@ -216,6 +227,16 @@ func (runner *Runner) AbortTask(ctx context.Context, taskID string) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func (runner *Runner) finishExecution(active *activeExecution, result error) {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	active.result = result
+	if runner.active == active {
+		runner.active = nil
+	}
+	close(active.done)
 }
 
 func errorCode(err error) string {

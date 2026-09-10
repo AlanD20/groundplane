@@ -649,6 +649,11 @@ Agent update preparation is a reversible dispatch pause. Busy or failed
 preparation leaves active work untouched and resumes ordinary dispatch; an
 uncertain replacement publication stays fenced until durable recovery. This
 does not add a public pause/resume action or change the bodyless update request.
+On Controller restart, the same update Task restores admission before the Agent
+channel starts. An expired unresolved replacement still recovers its predecessor
+before terminal acknowledgement; failed recovery retains the claim and hold for
+bounded subsequent passes. Already durably Ready replacement replay does not
+rotate again merely because its Task acknowledgement was lost.
 
 ### Release Group rollback preview
 

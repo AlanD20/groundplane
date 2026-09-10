@@ -663,7 +663,12 @@ Semantics bound to the channel:
   requires authenticated Ready within 120 seconds, and otherwise rotates again
   and rolls back the previous digest. The Agent never receives a self-update
   command and never recreates itself. The bodyless Task has a 300-second
-  deadline; bundles and release-signature policy are post-MVP (ADR 0010).
+  deadline. Restart restores admission from the same durable Task before the
+  Agent channel opens. Expiry never discards unresolved replacement authority:
+  bounded recovery continues with admission held until authenticated readiness.
+  An already durably Ready candidate is replayed without another rotation,
+  including after a lost Task acknowledgement. Bundles and release-signature
+  policy are post-MVP (ADR 0010).
 - **Multi-host** — the MVP channel token authenticates the one local Agent and
   the Controller dispatches by labels. Remote transport identity, mTLS, CA
   lifecycle, and certificates are post-MVP decisions.

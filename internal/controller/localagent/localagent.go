@@ -526,7 +526,7 @@ func validateUpdateRequest(request UpdateRequest) error {
 	if request.PreviousImage == request.DesiredImage {
 		return errs.New(errs.KindStateConflict, "agent already runs the configured image")
 	}
-	if request.StartingGeneration == 0 || request.StartingGeneration == ^uint64(0) {
+	if request.StartingGeneration == 0 || request.StartingGeneration > ^uint64(0)-2 {
 		return errs.New(errs.KindValidationFailed, "agent update starting generation is invalid")
 	}
 	return nil

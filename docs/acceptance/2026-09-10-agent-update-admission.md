@@ -80,3 +80,30 @@ unchanged in this increment; correction belongs to Script/CI qualification and
 is not waived. Cold Controller restart still needs admission restoration and
 replacement-attempt fencing from the durable native Task before this initiative
 can claim complete upgrade safety. No new QA deployment is implied.
+
+## Cold-start Task recovery increment
+
+The standalone Agent update now has one recovery-aware native execution path.
+Controller construction restores an all-generation hold from the running Task
+before any Agent listener starts. Each replay fences the current primary
+revision before generating credentials, including when the prior process lost
+its publication response. Expired partial replacements restore their pinned
+predecessor before terminal acknowledgement. Storage/readiness failures retain
+the same claim and hold for bounded subsequent recovery passes. A durably Ready
+candidate whose Task ACK was lost is confirmed and completed without rotation.
+
+Local proof, same Go1.26.7 and repo-local caches:
+
+- Full race tests for `localagent`, `controllertask` and `agentchannel`: pass.
+- App race selection `^(TestLocalAgent|TestAgentUpdate|TestControllerTask)`: pass.
+- Vet for `localagent`, `controllertask` and `app`: pass.
+- New checks cover expired untouched/partial Tasks, old delayed transactions,
+  future-generation/reconnect holds, authenticated readiness while paused,
+  unavailable storage, lost ACK replay, Abort/qualification and independent holds.
+- The first Abort race test exposed a fake-clock/absolute-deadline mismatch;
+  execution now derives bounded durations from the injected clock, consistent
+  with the native runner. Corrected race tests pass.
+
+The ordinary app handler no longer provides an alternate unsafe update path.
+Native Controller activation coordination and its operator surfaces are still
+pending. Nothing from this increment has been installed on QA.
