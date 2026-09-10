@@ -206,7 +206,7 @@ Command tree:
     ├── activity         list [--limit N] [--cursor VALUE] [--tenant NAME [--project NAME [--env NAME]] | --workspace platform|<tenant>]
     │                    (exact alias of `task list` — the journal IS tasks)
     ├── host             show
-    ├── controller       config show | config set --file PATH | serve | key show | etcd show
+    ├── controller       update --release SHA256 | config show | config set --file PATH | serve | key show | etcd show
     ├── agent-run        run               (foreground, for debugging)
     ├── version
     └── completion       bash | zsh | fish
@@ -916,9 +916,26 @@ operator-facing Controller capabilities:
 - local process commands: `controller serve` and `agent-run run`;
 - same-host diagnostics: `controller key show` and `controller etcd show`;
 - local CLI tooling: `version` and `completion`.
+- machine deployment/bootstrap: root-owned immutable Controller-release staging
+  and fixed private Controller recovery/startup modes (ADR0074). These are not
+  public CLI commands or an arbitrary binary-upload API.
 
 These exceptions are closed and explicit. Adding a new exception is a product
 contract change, not a convenient way to bypass the Console.
+
+### Native Controller update
+
+`POST /controller/update` accepts `{release:"sha256:<64 lowercase hex>"}` and
+returns `202 {task_id}` with protected idempotency. Controller Update in the
+Console and `controller update --release` invoke exactly this endpoint.
+Existing `GET /host`/`host show` reports installed Controller digest, staged
+candidate and last update summary. Deployment tooling stages release bytes;
+this API never uploads them. The native Task freezes manifest and predecessor
+identities, has a 600-second deadline, drains active work for up to 120 seconds
+without aborting it, and survives Controller restart. Failed candidates restore
+their predecessor and fail the Task. Pre-activation Abort retains current
+runtime; Abort after committed activation returns `resource.in_use`. ADR0074
+defines compatibility and recovery.
 
 ### Agent read representation
 

@@ -255,6 +255,14 @@ persistence-only procedures accepted by the product contracts. Handlers and
 the scheduler publish Tasks; they never perform asynchronous side effects
 directly.
 
+Native Controller upgrade is the closed host-self-lifecycle procedure in
+ADR0074. A capability-owned coordinator resumes the same durable Controller
+Task across executable replacement. Immutable release/journal values cross a
+named shared leaf; filesystem mechanics and systemd activation stay in infra.
+A predecessor-owned startup guard plus transient manager-owned recovery mode
+protects a failed candidate without an Agent assignment, Component projection,
+generic host executor or second persistent Groundplane service.
+
 Concrete types are the default. An interface exists only at a real behavior or
 side-effect seam, is declared by its consumer, exposes only the methods that
 consumer calls, and is never used to recover implementation behavior through a

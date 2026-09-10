@@ -1,8 +1,8 @@
 # Spec: upgrade-safety
 
 Status: approved outcome/scope, 2026-09-10. See `CAPABILITY_MAP.md`. Record new
-Controller activation/surface choices in the authoritative contracts and an ADR
-before implementing them. The first increment repairs existing Agent behavior.
+Controller activation/surface choices are recorded in ADR0074 and mirrored in
+the authoritative contracts. The first increment repairs existing Agent behavior.
 
 ## Objective and authority
 

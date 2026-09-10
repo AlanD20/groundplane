@@ -1,5 +1,5 @@
-// Package systemd handles the sole Groundplane systemd unit, the Controller's
-// self-update via staged-binary swap, and backup-schedule calendar validation.
+// Package systemd handles Groundplane-owned native unit control and
+// backup-schedule calendar validation. Native release recovery is ADR0074.
 //
 // DOCUMENTED os/exec EXCEPTION (docs/standards.md, section 5):
 // this package is one of the three listed exceptions ("systemd unit
@@ -215,19 +215,4 @@ func commandDetail(output []byte, fallback error) string {
 		detail = detail[:limit] + "..."
 	}
 	return detail
-}
-
-// SelfUpdate performs the Controller's staged-binary swap: write the new
-// binary alongside the running one, validate it (e.g. `--version`),
-// exec into it, falling back to the old binary on any failure. This is
-// the ONE systemd unit that never becomes a container (see mvp.md) — its
-// own recovery is systemd's job (docker.service restarts itself; the
-// Controller surviving docker death is why it's a systemd unit at all).
-//
-// This handoff is ALSO a documented os/exec exception (section 5, "the
-// staged-binary swap handoff") — the exec() call that replaces the
-// running process can't itself go through a Runner it's in the process
-// of superseding.
-func SelfUpdate(ctx context.Context, newBinaryPath string) error {
-	return errs.New(errs.KindNotImplemented, "systemd: not implemented")
 }

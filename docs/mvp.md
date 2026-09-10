@@ -138,10 +138,18 @@ roots. The
 Controller itself is the one **systemd unit that never becomes a container**:
 docker recovery is systemd's job (`docker.service` restarts itself), and the
 Controller reconciles the Agent container when Docker returns. It updates
-itself through a
-staged-binary Agent task that validates before exec with the old binary as
-fallback — an operator surface like any other action (`groundplane
-component update controller --platform`, `POST /components/{id}/update`).
+itself through a native Controller Task using a digest-pinned staged release,
+bounded active-work drain and predecessor-owned recovery (ADR0074). The normal
+surfaces are Update on `/platform/controller`, `groundplane controller update
+--release sha256:<digest>` and `POST /controller/update`. An immutable manifest
+pins the Controller binary and Agent image; storage epoch and channel schema
+must match before activation. The 600-second Task survives the brief API
+disconnect. Failed candidates restore the prior Controller/Agent identities;
+recovery success still means update failure. A fixed native startup guard and
+transient recovery process protect activation without another persistent unit.
+Abort is supported before activation; committed activation returns
+`resource.in_use` so cancellation cannot kill recovery. Release staging and
+guard installation are closed deployment/bootstrap tooling, not file-upload APIs.
 The Controller orchestrates and validates; the Agent performs workload host
 mutations, while the Controller alone mutates the Agent container lifecycle.
 The Console shows this on the **Platform page**: an overview
