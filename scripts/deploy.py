@@ -20,7 +20,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from image_transfer import transfer_images
+from image_transfer import prepare_images, transfer_images
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -742,7 +742,8 @@ def deploy(deployment: Deployment) -> None:
                 deployment,
                 invocation_id,
             )
-            transfer_images(deployment.ssh_base, (source_agent_image, source_runner_image))
+            missing_images = prepare_images(deployment.ssh_base, (source_agent_image, source_runner_image))
+            transfer_images(deployment.ssh_base, missing_images)
             create_transfer_archive(transfer_archive)
             transfer_and_deploy(
                 Deployment(

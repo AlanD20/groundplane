@@ -1,10 +1,37 @@
 """Bounded OCI archive transport; no Controller or application lifecycle actions."""
 import shlex
+import re
 import subprocess
 import time
 
 BYTES_PER_SECOND = 4 << 20
 CHUNK_BYTES = 64 << 10
+
+
+def prepare_images(ssh, images, *, run=subprocess.run):
+    missing = []
+    for name in images:
+        if re.fullmatch(r"groundplane-(?:agent|runner):deploy-[0-9a-f]{32}", name) is None:
+            raise ValueError("image reuse requires an invocation-owned image name")
+        result = run(["docker", "image", "inspect", "--format", "{{.Id}}", name],
+                     check=True, capture_output=True, text=True, timeout=30)
+        identity = result.stdout.strip()
+        if re.fullmatch(r"sha256:[0-9a-f]{64}", identity) is None:
+            raise ValueError("local image content identity is invalid")
+        inspection = shlex.join(["docker", "image", "inspect", "--format", "{{.Id}}", identity])
+        result = run([*ssh, inspection], check=False, capture_output=True, text=True, timeout=30)
+        if result.returncode == 1:
+            missing.append(name)
+            continue
+        if result.returncode != 0:
+            raise subprocess.CalledProcessError(result.returncode, [*ssh, inspection])
+        if result.stdout.strip() != identity:
+            raise ValueError("target image content identity differs")
+        # This aliases verified local content for the existing remote publisher;
+        # runtime identity is still the registry-reported RepoDigest, never this id.
+        run([*ssh, shlex.join(["docker", "tag", identity, name])], check=True, timeout=30)
+        print(f"Reusing target image content: {name} ({identity})", flush=True)
+    return tuple(missing)
 
 
 def copy_paced(source, destination, rate, now=time.monotonic, sleep=time.sleep):
@@ -40,6 +67,8 @@ def stop_child(process):
 
 
 def transfer_images(ssh, images, *, spawn=subprocess.Popen):
+    if not images:
+        return
     save_command = ["docker", "save", *images]
     load_command = [*ssh[:-1], "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2",
                     ssh[-1], "docker", "load"]

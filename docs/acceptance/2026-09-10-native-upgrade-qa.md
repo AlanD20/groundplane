@@ -112,7 +112,8 @@ failed releases remain available as evidence.
 Raw evidence: `native-busy-qa.log`, `native-abort-qa.log`, `bad-exec-update.log`,
 `bad-exec-recovery-observation.txt`, `interrupted-native-qa.log`,
 `qa-good-candidate-restaged.txt`, and the separate `recovery-*-continuity` logs.
-Recovery traffic probes are still running; no full-run claim yet.
+Recovery probes completed600iterations:3000held WebSocket deliveries and1200
+verified-TLS HTTP requests, with zero failures.
 
 ## Distribution correction under qualification
 
@@ -126,10 +127,80 @@ deployment tests pass. The
 normal full-distribution journey must still qualify this correction under fresh
 held public WebSocket and verified-TLS HTTP probes.
 
+## Release C and qualification isolation
+
+Source `c2eea5b2d` built version `0.0.0-qa.native20260910.3`. The paced archive
+transferred1,294,483,968bytes. Native Task `task_01M24SR4NW9SYE0ZP84G4SAKJG`,
+created04:38:22.140UTC, completed normally. Controller SHA256 is
+`53248ff3f5390e119b9625190cfee3385370917e889d83fc81fe5be29773f6ea`; release is
+`sha256:e35bb89e867fe96a7066d46013fcb27e07e955a8cc7fe3b6e6fc8fe2f1ef42db`.
+Agent image is
+`localhost:5000/groundplane-agent@sha256:233aedb40be555ef25bdc49ef274c745cc1ce86ded60169558a2647328c03ca2`.
+
+This whole-build sample still failed before activation. All four Tunnel QUIC
+connections timed out04:33:32–33UTC; the held public WebSocket dropped and one
+HTTP request returned502. Pacing did not eliminate the failure. The captured QA
+host sample showed no OOM/kernel event or sustained CPU/I/O pressure; HTTP
+recovered while transfer continued. Local build-network disconnect04:32:20UTC
+preceded the failure, but a separate no-op container did not reproduce it.
+An isolated uncached build also passed its300-iteration held probe, with1500
+deliveries. Neither build-only nor cached transfer reproduced the composed
+failure. No host/provider network configuration was changed.
+
+A fresh late probe passed all1500deliveries through five paths over300iterations,
+including C activation. Repeating complete stage-only distribution with cached
+Agent/Runner images then completed under600probe iterations:3000held WebSocket
+deliveries and1200verified-TLS HTTP requests, with zero failures and no Tunnel
+log events. This proves that named cached-distribution window, not whole-build
+continuity or a root cause for the failed samples.
+
+The transport now verifies local/target Docker content ids and reuses matching
+images, removing the unchanged roughly1GBRunner from repeated archives. Missing
+images retain paced transport; runtime identity still comes from the registry.
+Five failing-first reuse tests and all49deployment tests pass. The new-release
+whole-build retry of this narrower transport remains pending.
+
+Evidence: `qa-native-update-c-deploy.log`, `native-c-current.txt`,
+`paced-websocket-continuity.log`, `paced-http-continuity.jsonl`,
+`paced-late-websocket-continuity.log`, `paced-transfer-host-diagnostic.txt`,
+`paced-transfer-tunnel-diagnostic.txt`, `qa-cached-stage-c.log`,
+`cached-transfer-tunnel-log.txt`, `cached-*-continuity` logs, `qa-build-only.log`,
+`build-only-websocket-continuity.log` and `build-only-vmstat.txt`.
+
+## Coordinated Agent rollback and compatibility refusal
+
+A valid B Controller paired with a deliberately unready digest-pinned QA Agent
+exercised both recovery halves. Task `task_01M24SXMMDX2TBFJYVHTP2AH57`, created
+04:41:22.317UTC, failed04:43:29.433UTC after the120-second authenticated-Ready
+deadline. Groundplane automatically restored Controller C and Agent C, retained
+the same failed Task and reported `recovered`. Stable Agent id and enrollment
+time were preserved; replacement container `46dd5b2ba3de` runs the exact C digest.
+No SSH rollback, application redeploy or Script replay was used. Held five-path
+WebSockets and verified-TLS HTTP remained successful throughout recovery.
+
+Storage-epoch and channel-schema mismatch fixtures each returned422
+`validation.failed` before Task publication, with unchanged Controller digest
+and native Task history. The exact good C candidate was restaged afterward.
+The first HTTP instrument used an incorrect unversioned API path and returned400;
+that attempt is retained separately and is not compatibility evidence.
+
+The standalone Agent busy-path attempt returned `state.conflict: Agent already
+runs the selected image` before update publication. It did not exercise busy
+drain. A pre-native image-mismatch fixture remains required for that exact live
+path; focused race tests and native busy/Abort proof remain valid. The disposable
+Script completed and its normal removal Task completed.
+
+Evidence: `bad-agent-build.log`, `bad-agent-publish.log`, `bad-agent-release.txt`,
+`agent-rollback-native-qa.log`, `agent-after-rollback.txt`,
+`incompatible-native-qa-02.log`, `agent-busy-rejection.txt`,
+`agent-busy-probe-removed.txt`. Private failed releases remain retained as QA
+evidence, not selected production inputs.
+
 ## Remaining proof
 
-Safe image distribution and coordinated Agent-failure rollback remain unproven
-live. A→B, busy preparation, Abort and failed/interrupted Controller recovery now
-pass; that does not erase the earlier failed distribution samples. Compatibility
-refusal and watchdog/changed-boot recovery retain local automated proof only.
+Whole-build public traffic continuity remains under diagnosis. A→B→C, cached
+distribution, native busy preparation, Abort, failed/interrupted Controller
+recovery, coordinated Agent rollback and compatibility refusal pass in their
+named live windows. Watchdog/changed-boot recovery and standalone Agent busy
+drain retain local automated proof only.
 No whole upgrade-safety, full-CI or production-readiness claim is made.

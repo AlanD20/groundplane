@@ -55,6 +55,12 @@ Run the same command without `--bootstrap`. On a guarded host it:
 4. Persists a protected request receipt, submits `POST /controller/update` and
    follows that exact Task through the brief Controller disconnect.
 
+Distribution reuses an image only after the local and target Docker content ids
+match exactly, then creates its invocation-owned transport tag. Missing images
+use a4MiB/s paced archive; unchanged Runner bytes are not retransferred. This
+transport optimization does not authorize a local image id as runtime identity:
+the remote publisher still resolves the registry-reported Agent RepoDigest.
+
 Only a `completed` Task is success. A recovered failed update remains failed.
 The Controller owns drain, activation, Agent replacement and recovery. Deployment
 does not overwrite executables, YAML, keys or systemd units, abort work, or
