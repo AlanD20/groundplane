@@ -764,8 +764,17 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script mutation idempotency: %w", err)
 	}
+	scriptPreparation, err := controller.NewScriptRunnerPreparationService(
+		scriptArtifacts,
+		agents,
+		agentRuntime.registry,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Script runner preparation: %w", err)
+	}
 	scriptMutations, err := newScriptMutationService(
-		scriptMutationRepository, scriptMutationIdempotency, scriptArtifacts,
+		scriptMutationRepository, scriptMutationIdempotency, scriptPreparation,
 	)
 	if err != nil {
 		_ = store.Close()

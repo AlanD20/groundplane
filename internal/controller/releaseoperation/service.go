@@ -38,7 +38,7 @@ type Service struct {
 	coordinator *idempotentintent.Coordinator
 	plans       *controllerpkg.TaskPlanResolver
 	scripts     *etcd.ScriptRepository
-	artifacts   *controllerpkg.ScriptArtifactService
+	preparation *controllerpkg.ScriptRunnerPreparationService
 	timeout     time.Duration
 	now         func() time.Time
 }
@@ -83,10 +83,14 @@ func NewService(
 			"release execution timeout must be an integral duration from 40m through 24h",
 		)
 	}
+	preparation, err := controllerpkg.NewScriptRunnerPreparationService(artifacts, agents, images)
+	if err != nil {
+		return nil, err
+	}
 	return &Service{
 		agents: agents, images: images,
 		ledger: ledger, services: services, groups: groups, idempotency: idempotency,
-		coordinator: coordinator, plans: plans, scripts: scripts, artifacts: artifacts,
+		coordinator: coordinator, plans: plans, scripts: scripts, preparation: preparation,
 		timeout: timeout, now: time.Now,
 	}, nil
 }

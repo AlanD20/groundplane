@@ -26,13 +26,13 @@ import (
 )
 
 type Service struct {
-	agents    *etcd.LocalAgentRepository
-	images    workloadseal.Resolver
-	ledger    *etcd.ReleaseLedger
-	scripts   *etcd.ScriptRepository
-	plans     *controller.TaskPlanResolver
-	artifacts *controller.ScriptArtifactService
-	sources   *etcd.ScriptSourceReferenceAuthority
+	agents      *etcd.LocalAgentRepository
+	images      workloadseal.Resolver
+	ledger      *etcd.ReleaseLedger
+	scripts     *etcd.ScriptRepository
+	plans       *controller.TaskPlanResolver
+	preparation *controller.ScriptRunnerPreparationService
+	sources     *etcd.ScriptSourceReferenceAuthority
 }
 
 func NewService(
@@ -48,14 +48,18 @@ func NewService(
 		images == nil {
 		return nil, errs.New(errs.KindInternal, "Blueprint Release dependencies are not configured")
 	}
+	preparation, err := controller.NewScriptRunnerPreparationService(artifacts, agents, images)
+	if err != nil {
+		return nil, err
+	}
 	return &Service{
-		ledger:    ledger,
-		scripts:   scripts,
-		plans:     plans,
-		artifacts: artifacts,
-		sources:   sources,
-		agents:    agents,
-		images:    images,
+		ledger:      ledger,
+		scripts:     scripts,
+		plans:       plans,
+		preparation: preparation,
+		sources:     sources,
+		agents:      agents,
+		images:      images,
 	}, nil
 }
 
@@ -403,7 +407,7 @@ func (service *Service) prepareDeployHooks(
 			if err != nil {
 				return preparedHooks{}, err
 			}
-			bindings, err := service.artifacts.BuildScriptEntryBindings(ctx, sources)
+			prepared, err := service.preparation.Prepare(ctx, sources)
 			if err != nil {
 				return preparedHooks{}, err
 			}
@@ -433,7 +437,7 @@ func (service *Service) prepareDeployHooks(
 			hook, err := controller.BuildReleaseHookRenderInput(ctx, controller.ManualScriptPlanInput{
 				TaskID: task.ID, OperationID: task.OperationID, PlanID: task.PlanID,
 				StepID: stepID, ExecutionID: executionID, SnapshotID: snapshotID,
-				Sources: sources, EntryBindings: bindings,
+				Sources: sources, Preparation: prepared,
 				Candidate: &controller.BlueprintScriptCandidateSources{
 					EnvironmentID:     input.Environment.Record.ID,
 					RevisionID:        input.Projection.RevisionID,

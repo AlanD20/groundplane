@@ -127,17 +127,37 @@ func testManualScriptServingReleaseJourney(t *testing.T, entryKind manualJourney
 			t.Fatal("source discovery substituted the serving Release")
 		}
 		resolveArtifacts := scripts.ResolveScriptAssignmentArtifacts
-		var bindings []*agentpb.ScriptRunnerEntryBinding
+		var prepared controller.ScriptRunnerPreparation
 		if withEntry {
 			service, err := controller.NewScriptArtifactService(scripts, materializer)
 			if err != nil {
 				t.Fatal(err)
 			}
-			bindings, err = service.BuildScriptEntryBindings(ctx, sources)
-			if err != nil || len(bindings) != 1 {
-				t.Fatalf("stored Entry bindings = %d, %v", len(bindings), err)
+			preparation, err := controller.NewScriptRunnerPreparationService(
+				service,
+				&etcd.LocalAgentRepository{},
+				retainedUnexpectedImageResolver{t: t},
+			)
+			if err != nil {
+				t.Fatal(err)
 			}
-			if bindings[0].EntryId != entryRecord.Entry.ID ||
+			prepared, err = preparation.Prepare(ctx, sources)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resolveArtifacts = service.ResolveScriptAssignmentArtifacts
+		}
+		plan, err := controller.BuildManualScriptPlan(ctx, controller.ManualScriptPlanInput{
+			TaskID: task.ID, OperationID: task.OperationID, PlanID: task.PlanID, StepID: task.Steps[0].ID,
+			ExecutionID: task.Params[etcd.ScriptExecutionIDParam], SnapshotID: ids.NewULID(), Sources: sources,
+			Preparation: prepared,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		bindings := plan.ScriptRunnerSnapshots[0].EntryBindings
+		if withEntry {
+			if len(bindings) != 1 || bindings[0].EntryId != entryRecord.Entry.ID ||
 				bindings[0].ValueGenerationId != entryRecord.CurrentValueGenerationID {
 				t.Fatal("binding substituted the published Entry generation")
 			}
@@ -146,15 +166,6 @@ func testManualScriptServingReleaseJourney(t *testing.T, entryKind manualJourney
 				bindings[0].Uid != 1000 || bindings[0].Gid != 1000 || bindings[0].Mode != 0o600) {
 				t.Fatal("secret file binding lost destination, owner, or private mode")
 			}
-			resolveArtifacts = service.ResolveScriptAssignmentArtifacts
-		}
-		plan, err := controller.BuildManualScriptPlan(ctx, controller.ManualScriptPlanInput{
-			TaskID: task.ID, OperationID: task.OperationID, PlanID: task.PlanID, StepID: task.Steps[0].ID,
-			ExecutionID: task.Params[etcd.ScriptExecutionIDParam], SnapshotID: ids.NewULID(), Sources: sources,
-			EntryBindings: bindings,
-		})
-		if err != nil {
-			t.Fatal(err)
 		}
 		encoded, err := proto.Marshal(plan)
 		if err != nil || bytes.Contains(encoded, []byte(entryValue)) {

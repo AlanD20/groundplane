@@ -27,7 +27,7 @@ func (service *Service) prepareReleaseHooks(
 	task etcd.TaskRecord,
 	members []etcd.ReleaseTaskRenderMember,
 ) (preparedReleaseHooks, error) {
-	if service.scripts == nil || service.artifacts == nil || revision <= 0 {
+	if service.scripts == nil || service.preparation == nil || revision <= 0 {
 		return preparedReleaseHooks{}, errs.New(errs.KindInternal, "release hook dependencies are not configured")
 	}
 	selectionScope := scope.Clone()
@@ -61,7 +61,7 @@ func (service *Service) prepareReleaseHooks(
 					}
 				}
 			}
-			bindings, err := service.artifacts.BuildScriptEntryBindings(ctx, sources)
+			prepared, err := service.preparation.Prepare(ctx, sources)
 			if err != nil {
 				return preparedReleaseHooks{}, err
 			}
@@ -69,7 +69,7 @@ func (service *Service) prepareReleaseHooks(
 			hook, err := controller.BuildReleaseHookRenderInput(ctx, controller.ManualScriptPlanInput{
 				TaskID: task.ID, OperationID: task.OperationID, PlanID: task.PlanID,
 				StepID: stepID, ExecutionID: executionID, SnapshotID: snapshotID,
-				Sources: sources, EntryBindings: bindings,
+				Sources: sources, Preparation: prepared,
 			})
 			if err != nil {
 				return preparedReleaseHooks{}, err

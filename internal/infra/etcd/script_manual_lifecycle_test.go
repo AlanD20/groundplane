@@ -133,6 +133,12 @@ func TestManualScriptPendingAbortReleasesSourcesAndReplays(t *testing.T) {
 func manualScriptLifecycleFixture(t *testing.T) (
 	*memoryHierarchyStore, ScriptExecutionSources, ScriptExecutionRecord, TaskRecord, IdempotencyMarker,
 ) {
+	return manualScriptLifecycleContextFixture(t, nil)
+}
+
+func manualScriptLifecycleContextFixture(t *testing.T, executionContext *core.ScriptExecution) (
+	*memoryHierarchyStore, ScriptExecutionSources, ScriptExecutionRecord, TaskRecord, IdempotencyMarker,
+) {
 	t.Helper()
 	ctx := context.Background()
 	_, store, environment, project, target := routeRepositoryTestHierarchy(t)
@@ -140,7 +146,7 @@ func manualScriptLifecycleFixture(t *testing.T) (
 	at := environment.Record.CreatedAt.Add(time.Minute)
 	script, err := NewScriptRecord(environment.Record.ID, target.Record.Desired.ID, core.Script{
 		ID: ids.NewAt(ids.KindScript, at, 1), Slug: "manual-proof", ServiceName: target.Record.Desired.Name,
-		Body: "exit 0", When: core.ScriptManual,
+		Body: "exit 0", When: core.ScriptManual, Execution: executionContext,
 	})
 	if err != nil {
 		t.Fatal(err)

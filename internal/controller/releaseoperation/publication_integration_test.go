@@ -230,7 +230,7 @@ func TestPublishFirstBlueGreenCommitsTaskAndCandidateAuthority(t *testing.T) {
 		ledger:      ledger,
 		plans:       plans,
 		scripts:     scripts,
-		artifacts:   &controller.ScriptArtifactService{},
+		preparation: &controller.ScriptRunnerPreparationService{},
 		agents:      publicationAgent{},
 		images:      directPublicationImages{},
 		coordinator: coordinator,

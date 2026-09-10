@@ -241,19 +241,19 @@ type scriptMutationService struct {
 	idempotency scriptMutationIdempotency
 	deletions   *scriptDeletionService
 	now         func() time.Time
-	artifacts   *controller.ScriptArtifactService
+	preparation *controller.ScriptRunnerPreparationService
 }
 
 func newScriptMutationService(
 	repository scriptMutationRepository,
 	idempotency scriptMutationIdempotency,
-	artifacts *controller.ScriptArtifactService,
+	preparation *controller.ScriptRunnerPreparationService,
 ) (*scriptMutationService, error) {
-	if repository == nil || idempotency == nil || artifacts == nil {
+	if repository == nil || idempotency == nil || preparation == nil {
 		return nil, errs.New(errs.KindInternal, "Script mutation service is not configured")
 	}
 	return &scriptMutationService{
-		repository: repository, idempotency: idempotency, artifacts: artifacts, now: time.Now,
+		repository: repository, idempotency: idempotency, preparation: preparation, now: time.Now,
 	}, nil
 }
 

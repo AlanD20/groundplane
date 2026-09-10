@@ -22,15 +22,15 @@ import (
 )
 
 type ManualScriptPlanInput struct {
-	TaskID        string
-	OperationID   string
-	PlanID        string
-	StepID        string
-	ExecutionID   string
-	SnapshotID    string
-	Sources       etcd.ScriptExecutionSources
-	EntryBindings []*agentpb.ScriptRunnerEntryBinding
-	Candidate     *BlueprintScriptCandidateSources
+	TaskID      string
+	OperationID string
+	PlanID      string
+	StepID      string
+	ExecutionID string
+	SnapshotID  string
+	Sources     etcd.ScriptExecutionSources
+	Preparation ScriptRunnerPreparation
+	Candidate   *BlueprintScriptCandidateSources
 }
 
 // BlueprintScriptCandidateSources is the exact same-Blueprint source stage.
@@ -97,9 +97,6 @@ func buildScriptRunnerPlan(
 		return nil, err
 	}
 	service.Networks = desiredService.Networks
-	if err := validateScriptServiceDisposition(service); err != nil {
-		return nil, err
-	}
 	serviceDefinition, err := json.Marshal(service)
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
@@ -107,19 +104,7 @@ func buildScriptRunnerPlan(
 	serviceDigest := sha256.Sum256(serviceDefinition)
 	clear(serviceDefinition)
 
-	uid, gid, err := parseScriptNumericUser(service.User)
-	if err != nil {
-		return nil, err
-	}
-	networks, err := projectScriptNetworks(service, sources, input.Candidate)
-	if err != nil {
-		return nil, err
-	}
-	mounts, err := projectScriptMounts(desiredService, sources, input.Candidate)
-	if err != nil {
-		return nil, err
-	}
-	projection, err := projectScriptRunner(input, service, uid, gid, networks, mounts, input.EntryBindings)
+	projection, err := projectScriptRunnerContext(input, service, desiredService)
 	if err != nil {
 		return nil, err
 	}
@@ -141,15 +126,18 @@ func buildScriptRunnerPlan(
 		ServiceId: sources.Service.Record.Desired.ID, ServiceSource: serviceSource,
 		ServiceDefinitionSha256: serviceDigest[:],
 		ReleaseId:               sources.Release.Intent.ID, ReleaseModRevision: uint64(sources.Release.IntentRevision),
-		LocalImageId:              service.Image,
+		LocalImageId:              projection.Image,
 		BlueprintBundleGeneration: sources.RenderInput.Record.Projection.RevisionID,
 		RenderGeneration:          sources.RenderInput.Record.Projection.RenderGeneration,
 		NetworkTopologySource:     projectionSource,
-		Networks:                  cloneScriptNetworks(networks), Mounts: cloneScriptMounts(mounts),
+		Networks: cloneScriptNetworks(
+			projection.Networks,
+		), Mounts: cloneScriptMounts(projection.Mounts),
 		AppliedEnvironmentRevisionId:       sources.DesiredProjection.Record.RevisionID,
 		AppliedEnvironmentRenderGeneration: sources.DesiredProjection.Record.RenderGeneration,
 		AppliedEnvironmentSource:           projectionSource,
-		EntryBindings:                      cloneScriptEntryBindings(input.EntryBindings),
+		EntryBindings:                      cloneScriptEntryBindings(projection.EntryBindings),
+		ExplicitExecution:                  proto.CloneOf(input.Preparation.explicit),
 		RunnerProjectionSha256:             projectionDigest,
 	}
 	snapshotDigest, err := deterministicScriptProtoDigest(snapshot)
@@ -170,7 +158,7 @@ func buildScriptRunnerPlan(
 		ScriptBodyArtifacts: []*agentpb.ScriptBodyArtifactMetadata{{
 			ScriptExecutionId: input.ExecutionID, ScriptId: sources.Script.Record.Desired.ID,
 			Generation: sources.BodyGeneration.Record.Generation,
-			Size:       sources.BodyGeneration.Record.BodySize, Sha256: bodyDigest, Uid: uid, Gid: gid,
+			Size:       sources.BodyGeneration.Record.BodySize, Sha256: bodyDigest, Uid: projection.Uid, Gid: projection.Gid,
 		}},
 		Steps: []*agentpb.ExecutionStep{{
 			StepId: input.StepID, TimeoutSeconds: executionplan.ScriptExecutionTimeoutSeconds,
@@ -284,98 +272,6 @@ func projectScriptRunner(
 		Mounts: mounts, Networks: networks, EntryBindings: cloneScriptEntryBindings(entryBindings), Labels: labels,
 		Entrypoint: []string{"/bin/sh"}, Command: []string{"/groundplane-script-body"}, StopGraceSeconds: 10,
 	}, nil
-}
-
-func validateScriptServiceDisposition(service composetypes.ServiceConfig) error {
-	if service.Configs != nil || service.EnvFiles != nil || service.Secrets != nil {
-		return errs.New(
-			errs.KindValidationFailed,
-			"Script runner Entry artifacts must be resolved through the private assignment channel",
-		)
-	}
-	if field := scriptServiceUnsupportedField(service); field != "" {
-		return unsupportedScriptServiceField(field)
-	}
-	return nil
-}
-
-func unsupportedScriptServiceField(name string) error {
-	return errs.Newf(errs.KindValidationFailed, "Script runner does not support Compose service field %s", name)
-}
-
-func scriptServiceUnsupportedField(service composetypes.ServiceConfig) string {
-	switch {
-	case service.Annotations != nil:
-		return "Annotations"
-	case service.Build != nil:
-		return "Build"
-	case service.Develop != nil:
-		return "Develop"
-	case service.CapAdd != nil:
-		return "CapAdd"
-	case service.CgroupParent != "":
-		return "CgroupParent"
-	case service.Cgroup != "":
-		return "Cgroup"
-	case service.CredentialSpec != nil:
-		return "CredentialSpec"
-	case service.DeviceCgroupRules != nil:
-		return "DeviceCgroupRules"
-	case service.Devices != nil:
-		return "Devices"
-	case service.Dockerfile != "":
-		return "Dockerfile"
-	case service.DomainName != "":
-		return "DomainName"
-	case service.Provider != nil:
-		return "Provider"
-	case service.Extends != nil:
-		return "Extends"
-	case service.ExternalLinks != nil:
-		return "ExternalLinks"
-	case service.Gpus != nil:
-		return "Gpus"
-	case service.Hostname != "":
-		return "Hostname"
-	case service.Ipc != "":
-		return "Ipc"
-	case service.MacAddress != "":
-		return "MacAddress"
-	case service.Models != nil:
-		return "Models"
-	case service.LabelFiles != nil:
-		return "LabelFiles"
-	case service.Links != nil:
-		return "Links"
-	case service.Net != "":
-		return "Net"
-	case service.NetworkMode != "":
-		return "NetworkMode"
-	case service.Pid != "":
-		return "Pid"
-	case service.Privileged:
-		return "Privileged"
-	case service.UserNSMode != "":
-		return "UserNSMode"
-	case service.Uts != "":
-		return "Uts"
-	case service.UseAPISocket:
-		return "UseAPISocket"
-	case service.VolumeDriver != "":
-		return "VolumeDriver"
-	case service.VolumesFrom != nil:
-		return "VolumesFrom"
-	case service.PreStart != nil:
-		return "PreStart"
-	case service.PostStart != nil:
-		return "PostStart"
-	case service.PreStop != nil:
-		return "PreStop"
-	case service.Extensions != nil:
-		return "Extensions"
-	default:
-		return ""
-	}
 }
 
 func projectScriptMounts(
@@ -573,25 +469,6 @@ func scriptDeployResources(
 		return nil, nil, err
 	}
 	return limits, reservations, nil
-}
-
-func parseScriptNumericUser(value string) (uint32, uint32, error) {
-	if value == "" {
-		return 0, 0, nil
-	}
-	parts := strings.Split(value, ":")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return 0, 0, errs.New(errs.KindValidationFailed, "Script runner user must be an explicit numeric uid:gid")
-	}
-	uid, err := strconv.ParseUint(parts[0], 10, 32)
-	if err != nil {
-		return 0, 0, errs.New(errs.KindValidationFailed, "Script runner uid is invalid")
-	}
-	gid, err := strconv.ParseUint(parts[1], 10, 32)
-	if err != nil {
-		return 0, 0, errs.New(errs.KindValidationFailed, "Script runner gid is invalid")
-	}
-	return uint32(uid), uint32(gid), nil
 }
 
 func digestPinnedImageBytes(value string) ([]byte, error) {

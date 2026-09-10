@@ -61,8 +61,21 @@ func (service *ScriptArtifactService) BuildScriptEntryBindings(
 	if err != nil {
 		return nil, err
 	}
+	return service.buildScriptEntryBindings(ctx, sources, entries)
+}
+
+func (service *ScriptArtifactService) buildScriptEntryBindings(
+	ctx context.Context, sources etcd.ScriptExecutionSources, entries []etcd.EntryRecord,
+) ([]*agentpb.ScriptRunnerEntryBinding, error) {
+	if service.values == nil {
+		return nil, errs.New(errs.KindInternal, "Script Entry values are not configured")
+	}
 	bindings := make([]*agentpb.ScriptRunnerEntryBinding, 0, len(entries))
 	for _, record := range entries {
+		binding, err := scriptEntryBindingMetadata(record)
+		if err != nil {
+			return nil, err
+		}
 		value, err := service.resolveScriptEntryValue(ctx, sources.Environment.Record.ID, record)
 		if err != nil {
 			clear(value)
@@ -74,30 +87,35 @@ func (service *ScriptArtifactService) BuildScriptEntryBindings(
 		}
 		digest := sha256.Sum256(value)
 		clear(value)
-		binding := &agentpb.ScriptRunnerEntryBinding{
-			EntryId: record.Entry.ID, ValueGenerationId: record.CurrentValueGenerationID,
-			Sha256: append([]byte(nil), digest[:]...), Secret: record.Entry.Secret,
-		}
-		switch record.Entry.Kind {
-		case core.EntryKindEnv:
-			binding.Kind = agentpb.ScriptEntryBindingKind_SCRIPT_ENTRY_BINDING_KIND_ENV
-			binding.EnvironmentKey = record.Entry.Key
-		case core.EntryKindFile:
-			binding.Kind = agentpb.ScriptEntryBindingKind_SCRIPT_ENTRY_BINDING_KIND_FILE
-			binding.FileTarget = path.Join("/", record.Entry.Path)
-			binding.Uid = *record.Entry.UID
-			binding.Gid = *record.Entry.GID
-			binding.Mode = 0o444
-			if record.Entry.Secret {
-				binding.Mode = 0o600
-			}
-		default:
-			return nil, errs.New(errs.KindInternal, "Script Entry kind is invalid")
-		}
+		binding.Sha256 = append([]byte(nil), digest[:]...)
 		bindings = append(bindings, binding)
 	}
 	sort.Slice(bindings, func(left, right int) bool { return bindings[left].EntryId < bindings[right].EntryId })
 	return bindings, nil
+}
+
+func scriptEntryBindingMetadata(record etcd.EntryRecord) (*agentpb.ScriptRunnerEntryBinding, error) {
+	binding := &agentpb.ScriptRunnerEntryBinding{
+		EntryId: record.Entry.ID, ValueGenerationId: record.CurrentValueGenerationID, Secret: record.Entry.Secret,
+	}
+	switch record.Entry.Kind {
+	case core.EntryKindEnv:
+		binding.Kind = agentpb.ScriptEntryBindingKind_SCRIPT_ENTRY_BINDING_KIND_ENV
+		binding.EnvironmentKey = record.Entry.Key
+	case core.EntryKindFile:
+		if record.Entry.UID == nil || record.Entry.GID == nil {
+			return nil, errs.New(errs.KindValidationFailed, "Script Entry file ownership is required")
+		}
+		binding.Kind = agentpb.ScriptEntryBindingKind_SCRIPT_ENTRY_BINDING_KIND_FILE
+		binding.FileTarget = path.Join("/", record.Entry.Path)
+		binding.Uid, binding.Gid, binding.Mode = *record.Entry.UID, *record.Entry.GID, 0o444
+		if record.Entry.Secret {
+			binding.Mode = 0o600
+		}
+	default:
+		return nil, errs.New(errs.KindInternal, "Script Entry kind is invalid")
+	}
+	return binding, nil
 }
 
 func (service *ScriptArtifactService) ResolveScriptAssignmentArtifacts(

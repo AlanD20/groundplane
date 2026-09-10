@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -23,7 +24,23 @@ type ManualScriptAdmissionFixture struct {
 
 func NewManualScriptAdmissionFixture(t *testing.T) *ManualScriptAdmissionFixture {
 	t.Helper()
-	store, sources, execution, task, marker := manualScriptLifecycleFixture(t)
+	return newManualScriptAdmissionFixture(t, nil)
+}
+
+func NewExplicitManualScriptAdmissionFixture(
+	t *testing.T,
+	execution core.ScriptExecution,
+) *ManualScriptAdmissionFixture {
+	t.Helper()
+	return newManualScriptAdmissionFixture(t, &execution)
+}
+
+func newManualScriptAdmissionFixture(
+	t *testing.T,
+	executionContext *core.ScriptExecution,
+) *ManualScriptAdmissionFixture {
+	t.Helper()
+	store, sources, execution, task, marker := manualScriptLifecycleContextFixture(t, executionContext)
 	// Use an explicit isolated runner with no physical Network or Volume inputs.
 	sources.RenderInput.Record.ServiceName = sources.Service.Record.Desired.Name
 	sources.RenderInput.Record.CandidateWorkload = sources.Release.Intent.CandidateWorkload

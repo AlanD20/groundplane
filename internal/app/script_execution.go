@@ -22,7 +22,7 @@ func (service *scriptMutationService) RunScript(
 	scriptID string,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
-	if service == nil || service.repository == nil || service.idempotency == nil || service.artifacts == nil ||
+	if service == nil || service.repository == nil || service.idempotency == nil || service.preparation == nil ||
 		ctx == nil {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script execution service is not configured")
 	}
@@ -70,14 +70,14 @@ func (service *scriptMutationService) RunScript(
 		TimeoutSeconds: executionplan.ScriptExecutionTimeoutSeconds,
 		Status:         etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
-	entryBindings, err := service.artifacts.BuildScriptEntryBindings(ctx, sources)
+	prepared, err := service.preparation.Prepare(ctx, sources)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	plan, err := controller.BuildManualScriptPlan(ctx, controller.ManualScriptPlanInput{
 		TaskID: task.ID, OperationID: task.OperationID, PlanID: task.PlanID, StepID: task.Steps[0].ID,
 		ExecutionID: task.Params[etcd.ScriptExecutionIDParam], SnapshotID: ids.NewULID(), Sources: sources,
-		EntryBindings: entryBindings,
+		Preparation: prepared,
 	})
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
