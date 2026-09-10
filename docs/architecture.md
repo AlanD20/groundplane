@@ -822,13 +822,15 @@ An initial Blueprint apply implicitly selects both `pre-deploy` and
 `post-deploy` Scripts for each newly introduced or materially changed,
 effectively running logical Service that is not a Release Group member. Its
 candidate requested references resolve once through the Agent before
-publication, and every runner consumes the applicable Release's sealed
-host-local Docker image id; there is no deferred Compose-result image authority.
+publication. Inherited runners consume the applicable Release's sealed
+host-local Docker image id; explicit runners consume their separately sealed
+ADR0076 image source while retaining the real Release binding. There is no
+deferred Compose-result image authority.
 Exact reapply and an apply with no selected changed candidate run no hooks. The
 single assignment materializes Entries and files; ensures Volumes; performs
 required Attach adapter provisioning and grants plus Network resource
 preparation without applying consumer Compose memberships; and runs all pre
-hooks in sealed dependency-topology/current-Service-slug/current-Script-slug
+hooks in sealed dependency-topology/current-Service-slug/Script-order/Script-slug
 order with cleanup after each. Only after that barrier does the candidate
 workload phase apply each targeted consumer's prepared Network membership and
 apply/start the candidate. No hidden consumer Compose start or recreate may
@@ -845,9 +847,13 @@ and cleans its runner before `on-failure`; earlier materialization, Volume,
 Attach, or Network changes remain accounted effects. Retry never crosses a
 Script `start_authorized` or unknown-state barrier and never automatically
 starts a replacement. TLS-first setup is an ordinary project-authored
-pre-deploy Script using `/bin/sh` and externally supplied `openssl` from its
-selected workload image, a sealed numeric Service user, a declared read-write
-Volume, and read-only consumer mounts. Entries cannot own its output subtree;
+pre-deploy Script using `/bin/sh` and externally supplied `openssl`, either from
+its inherited Service context or an explicit ADR0076 setup context. Explicit
+mode uses a separately pinned image, numeric user and declared same-Environment
+Volume/eligible Entry grants, without network or inherited Service environment.
+Its immutable snapshot/source fences capture this context separately from the
+real consumer Release. A declared read-write Volume grant can coexist with
+read-only consumer mounts. Entries cannot own its output subtree;
 the author owns idempotent stage, validation, ownership/mode, and atomic publish
 logic. No generic PKI capability, tool guarantee, arbitrary-output atomicity,
 or live automatic certificate rotation is introduced.

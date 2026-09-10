@@ -670,6 +670,34 @@ before terminal acknowledgement; failed recovery retains the claim and hold for
 bounded subsequent passes. Already durably Ready replacement replay does not
 rotate again merely because its Task acknowledgement was lost.
 
+### Script order and execution context
+
+Script create accepts the existing required fields plus optional `order` and
+`execution`; edit accepts a nonempty subset of `slug`, `script`, `when`, `order`
+and `execution`. `service_id` remains immutable. Read/create/edit responses include
+the numeric order and effective execution choice. Order is 0 through 65535 and
+defaults to 0; it precedes the slug tie-break within a Service/phase (ADR0076).
+
+Omitted execution on create selects inherited mode. Omission on PATCH preserves
+the current choice. A supplied execution replaces the complete choice:
+`{mode:"inherited"}` accepts no other members, while explicit mode requires
+`{mode:"explicit",image,user,volumes?,entry_ids?}`. Image is a repository
+SHA-256 digest reference; user is canonical numeric `uid:gid`. A Volume grant is
+`{volume_id,target,read_only}`, and each Entry reference is a stable id. Grant
+lists are bounded to 32 Volumes and 64 Entries and never merge or implicitly inherit.
+Format is validated on write; referenced availability, ownership and Entry
+exposure are validated against frozen sources before execution publication.
+Explicit mode has no network or inherited Service environment; see Blueprint
+and ADR0076 for mount safety and immutable image/source requirements.
+
+CLI add/edit expose `--order N` and `--execution-file FILE`; edit additionally has
+`--inherit-execution`, mutually exclusive with the file. The bounded YAML file
+uses the Blueprint execution shape, with scoped Volume slugs and Entry keys
+resolved to ids (`--id` selects ids). Console create/edit expose the same order,
+mode, pinned image, numeric user and exact resource selections. Bodyless run,
+Task outcomes, Abort and unsafe-retry rules do not change; no new endpoint or
+secondary Task exists.
+
 ### Release Group rollback preview
 
 `release-group.rollback-preview` is a distinct operator-facing capability, not

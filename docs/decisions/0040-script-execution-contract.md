@@ -1,6 +1,7 @@
 # ADR 0040: Script execution contract
 
-- Status: Accepted; atomic bulk reference publication and close amended by ADR 0062
+- Status: Accepted; reference publication/close amended by ADR0062; explicit
+  execution context and intra-Service order amended by ADR0076
 - Date: 2026-08-23
 - Capability: C09 Scripts
 
@@ -53,7 +54,7 @@ without normalization. Duplicate YAML keys are invalid. Slugs are also unique
 within the owning Environment, are renamable labels, are stored without
 normalization, and their raw ASCII bytes define deterministic ordering.
 
-Each map value contains exactly:
+Each map value has these required fields:
 
 - `slug`: required; the current scoped Script slug;
 - `service`: required; the current name of one Service in the same
@@ -63,11 +64,12 @@ Each map value contains exactly:
 - `script`: required; a non-blank valid UTF-8 body with no NUL byte and a
   maximum encoded size of 65,536 bytes.
 
-Unknown fields are rejected. There is no repeated reconciliation-key field and
-there are no authored parameters, arguments, timeout, interpreter, user,
-working directory, or environment overrides. Desired state must not contain
-literal secret values; a body consumes only values and files already resolved
-for its target Service.
+ADR0076 adds optional `order` and `execution`. Unknown fields are rejected. There
+is no repeated reconciliation-key field and no authored parameters, arguments,
+timeout, interpreter, working-directory or environment override. User selection
+is available only in a complete explicit execution context. Desired state must
+not contain literal secret values. Inherited bodies consume the target Service's
+resolved context; explicit bodies consume only their declared eligible resources.
 
 `x-gp-scripts` clean-replaces the old `scripts.<name>` and authored
 `x-gp-task` Script wording in the Blueprint. Neither old form is accepted.
@@ -81,7 +83,7 @@ slug is only the CLI lookup and display label. The target is stored and
 returned as a stable Service id; a Service name is presentation.
 
 Reapplying the same Environment and exact reconciliation key preserves the
-Script id and reconciles `slug`, body, and `when` from that immutable submitted
+Script id and reconciles `slug`, body, `when`, `order` and `execution` from that immutable submitted
 bundle generation. The target Service is immutable in the MVP. Omitting an
 existing Script does not delete it, and apply never infers a rename or identity
 from an omitted key and a new key. A new key whose desired slug is already
@@ -90,9 +92,9 @@ owned fails conflict; it never adopts the existing Script.
 A Script created through the human create capability stores `origin=api` and
 has no reconciliation key. Blueprint apply never adopts it. A Blueprint key
 whose slug collides with it fails conflict. Conversely, human edit may change
-the slug, body, or `when` of either origin, but it never mutates an immutable
+the slug, body, `when`, order or execution context of either origin, but it never mutates an immutable
 submitted Blueprint bundle or the reconciliation key. The next successful
-apply of a Blueprint-origin Script deterministically restores those three
+apply of a Blueprint-origin Script deterministically restores those authored
 fields from the newly submitted bundle. This apply-wins rule is the complete
 precedence contract; no hidden override record exists.
 
@@ -104,7 +106,7 @@ PATCH /scripts/{id}
 ```
 
 The existing edit request accepts exactly any non-empty subset of `slug`,
-`script`, and `when`; it rejects `service_id` and unknown fields. The endpoint
+`script`, `when`, `order` and `execution`; it rejects `service_id` and unknown fields. The endpoint
 requires `Idempotency-Key`, addresses the Script by stable id, returns the
 complete Script with `200`, and returns conflict when the replacement slug is
 already owned in the Environment. The mutation atomically replaces the scoped
@@ -309,8 +311,9 @@ secret_values[]: owning resource id, immutable value generation id, digest
 runner_projection_sha256
 ```
 
-Every runner image comes from the applicable immutable Release's one
-`WorkloadSeal`. Before publication, a newly authored candidate requested
+Every inherited runner image comes from the applicable immutable Release's one
+`WorkloadSeal`. Explicit context uses ADR0076's separately sealed image authority
+and still retains the real consumer Release binding. Before publication, a newly authored candidate requested
 reference is resolved once through ADR 0052's bounded read-only Agent request
 and the resulting host-local Docker `local_image_id` is sealed in that Release.
 Manual runners use the serving Release's sealed local id; pre/post runners use
@@ -318,7 +321,7 @@ the candidate Release's sealed local id; historical, retry, recovery, and
 `on-failure` runners validate their selected Release's stored local id directly.
 No Script runner resolves a mutable requested reference after publication, and
 there is no deferred Compose-apply image result, observed-container discovery,
-fabricated repository digest, or second image authority.
+fabricated repository digest, or unsealed alternative image authority.
 Missing or mismatched sealed local identity fails before Script or workload
 mutation.
 
@@ -419,8 +422,8 @@ Task state.
 
 Docker exec is not part of the Script contract. Every Script execution creates
 one task-scoped one-off container through ADR 0022's sealed-local-image-id,
-framed, fixed-environment task helper, using the applicable Service/Release
-definition. This rule applies equally to manual, pre, post, and `on-failure`
+framed, fixed-environment task helper, using the applicable inherited Service/Release
+or explicit ADR0076 definition. This rule applies equally to manual, pre, post, and `on-failure`
 Scripts; no Script enters a serving container.
 
 ADR 0022 otherwise permits only Compose-CLI writes and a read-only Moby port.
@@ -815,11 +818,11 @@ explicit.
 Release publication snapshots current Script ids, slugs, generations, bodies,
 target Services, and every immutable runner snapshot/source reference
 atomically with the release plan. Within one Service and phase, hooks run in
-ascending current scoped Script slug byte order. A later rename does not reorder
+ascending numeric `order` then current scoped Script slug byte order. A later edit does not reorder
 the captured operation.
 
 For a release group, the declared Service group order is primary. Within each
-Service and each phase, current Script slug byte order is secondary. The limit
+Service and each phase, numeric `order` then Script slug byte order is secondary. The limit
 of 16 selected executions and aggregate 1 MiB of bodies applies to the entire
 group operation, not separately per Service. The plan budgets an exact 900
 seconds for each selected execution.
@@ -853,7 +856,7 @@ Task owns one operation id and one Agent assignment; it creates no child Deploy
 Task or hidden Deploy request.
 
 Within each phase, Services are ordered by sealed dependency topology then
-current Service slug bytes, and each Service's hooks by current Script slug
+current Service slug bytes, and each Service's hooks by numeric `order` then current Script slug
 bytes. The 16-execution and 1,048,576-byte limits apply once across pre, post,
 and possible `on-failure` execution and are rejected before Task publication.
 The sealed assignment runs: materialize Entries and files; ensure Volumes;
@@ -884,8 +887,8 @@ execution without an automatic replacement.
 
 TLS-first setup is one ordinary project-authored `pre-deploy` Script, not a new
 Script condition or PKI capability. It uses `/bin/sh` and `openssl` from its
-target Service's externally built, selected host-local image, runs as the
-Service's sealed numeric user, and writes through a declared read-write Volume;
+inherited Service context or explicit ADR0076 setup image/user, and writes
+through a declared read-write Volume grant;
 consuming Services mount that Volume read-only. Entries must not own the same
 output subtree. The Script author owns staging, validation, ownership and mode
 setting, idempotent no-op when an existing bundle is valid, and atomic

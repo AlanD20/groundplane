@@ -505,7 +505,7 @@ operation has:
   observed state, so `active-slot` and `image-history` stop being ad-hoc files.
 
 Scripts use the closed `RunScript` Agent step. The Controller seals the
-  immutable body generation, logical Service and Release snapshot, resolved
+immutable body generation, logical Service and Release snapshot, resolved
 runner projection, and operation identity; the Agent executes it only in a
 task-scoped one-off container. Manual scripts and deploy/rollback hooks are in
 the MVP. Their immutable runner sources use ADR 0062's prepared reference
@@ -513,6 +513,21 @@ generations, so accepted hook and plan bounds never depend on one oversized
 publication or close transaction. Scheduled scripts are deferred; if added later, the Controller
 scheduler will turn them into the same typed Script operation rather than
 introducing a second execution mechanism.
+
+ADR0076 separates the real Service hook from its runner context. Omitted
+`execution` inherits the sealed Service/Release; explicit execution selects a
+digest-pinned image, canonical numeric user and only declared same-Environment
+Volume/eligible Entry grants. It has no network or inherited Service environment.
+It does not require a sleeping initializer Service. The Agent resolves and seals
+the explicit image before publication, separately from the real Release image.
+Manual runs still require a serving Release; first-start setup is a candidate
+pre-deploy hook. Order/context edits affect future captures only; body generation
+and published source/cleanup/retry authority remain unchanged. The optional
+`order`integer0through65535 defaults to0 and precedes the ASCII Script-slug
+tie-break within each Service/phase; cross-Service topology/group order remains.
+All selected pre-hooks finish cleanup before candidate consumers start. Exact
+reapply does not repeat setup or migrations. Authors own safe Script output and
+data migration semantics, including atomic publication of TLS/storage state.
 
 ### Baked-in actions become Tasks
 
@@ -1717,7 +1732,8 @@ declared serial order and `on_failure` policy.
 Matching `pre-deploy` and `post-deploy` Scripts are selected against the sealed
 candidate Service and applicable Release inputs. Within each phase, Services
 follow the sealed dependency topology with current Service slug bytes as the
-tie-break, and Scripts for each Service follow current Script slug bytes.
+tie-break, and Scripts for each Service follow numeric `order` then current Script
+slug bytes.
 Manual Scripts never execute during apply. Exact reapply, or an apply with no
 selected changed candidate, executes no hooks. The complete selection across
 pre-deploy, post-deploy, and possible `on-failure` execution is limited to 16

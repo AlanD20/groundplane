@@ -410,7 +410,8 @@ group Deploy/Rollback retains declared serial order and `on_failure` policy.
 Matching `pre-deploy` and `post-deploy` Scripts are selected from the same
 sealed Service and Release inputs. Within each phase, Services execute in
 sealed dependency-topology order, breaking incomparable ties by current Service
-slug bytes; Scripts for each Service execute by current Script slug bytes.
+slug bytes; Scripts for each Service execute by numeric `order` then current Script
+slug bytes.
 Manual Scripts never execute during Blueprint apply. Exact reapply, or an apply
 with no selected changed candidate, executes no hooks. The complete selection
 across pre-deploy, post-deploy, and possible `on-failure` execution is limited
@@ -612,9 +613,9 @@ reconciliation key. Duplicate YAML keys are invalid. Reconciliation keys and
 slugs are each unique within the Environment, stored without normalization,
 1 through 63 ASCII bytes, and match
 `^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`. The map key is immutable identity;
-`slug` is a renamable label whose raw ASCII bytes define deterministic order.
-Map values contain exactly the four required fields shown below; every field
-is required and unknown fields are invalid:
+`slug` is a renamable label whose raw ASCII bytes break equal-order ties.
+Map values contain the four required fields shown below and the optional
+`order`and`execution`fields defined afterward; unknown fields are invalid:
 
 ```yaml
 x-gp-scripts:
@@ -630,15 +631,53 @@ x-gp-scripts:
 stable id. `when` is exactly `manual`, `pre-deploy`,
 `post-deploy`, `pre-rollback`, `post-rollback`, or `on-failure`. `script` is
 required, non-blank valid UTF-8 without NUL, and at most 65,536 encoded bytes.
-There are no authored parameters, arguments, timeout, interpreter, user,
-working-directory, or environment overrides, and literal secret values are
+There are no authored parameters, arguments, timeout, interpreter,
+working-directory or environment overrides. Numeric user selection exists only
+inside the complete explicit execution context below. Literal secret values are
 invalid. `x-gp-scripts` clean-replaces the superseded `scripts.<name>` and
 task-hook Script forms; neither superseded form is accepted.
 
-TLS-first provisioning needs no additional grammar. A project may target an
-ordinary Service with a `pre-deploy` Script that invokes `/bin/sh` and
-`openssl` from that Service's externally built, selected host-local image and
-runs as its sealed numeric user. The Script owns staging, validation, ownership
+`order`is an integer0through65535, default0. Selected hooks for each logical
+Service and phase execute by order ascending, then current Script slug bytes.
+Cross-Service dependency topology and Release Group order are unchanged. Order
+does not select a prerequisite or cause an unselected/manual hook to execute.
+
+Omitted`execution`inherits the existing sealed Service/Release projection.
+`execution: {mode: inherited}`explicitly selects the same behavior and accepts
+no other fields. An explicit context is a complete replacement:
+
+```yaml
+execution:
+  mode: explicit
+  image: registry.example/setup@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  user: "0:0"
+  volumes:
+    - volume: storage
+      target: /data
+      read_only: false
+  entries: [SETUP_INPUT]
+```
+
+`image`must be a repository reference pinned by a lower-case SHA-256 digest,
+already available on the Agent host; local Docker ids and mutable tags are not
+authored image authority. `user`is canonical decimal`uid:gid`, both32-bit unsigned
+integers, with no leading zero except zero itself. There are at most32Volume
+grants and64Entry grants. Optional omitted lists grant nothing; duplicates fail.
+`volume`names the immutable Compose Volume key in this Environment;`entries`
+names immutable`x-gp-entry`map keys, each exposed to the associated real Service.
+Volume targets are canonical absolute container paths, excluding root, traversal,
+reserved kernel/system paths, the Script-body target, overlapping mounts and
+Entry file targets. Each Volume's`read_only`boolean is explicit. Host paths,
+Docker sockets, networking and all unknown execution fields are forbidden.
+An explicit runner has no network or inherited Service runtime/environment;
+its working directory is`/`. Image defaults and only selected Entry values are
+available. The Controller seals the declared grants and separately resolved
+execution-image identity before any Task is executable (ADR0076).
+
+TLS-first provisioning targets a real consumer with a`pre-deploy`Script using
+`/bin/sh`and author-supplied`openssl`. It can inherit the consumer context or use
+the explicit setup image/user and read-write Volume grants above while consumers
+mount output read-only. The Script owns staging, validation, ownership
 and modes, idempotent no-op for an existing valid bundle, and atomic publication
 into a declared read-write Volume. Consumer mounts of that Volume are
 read-only, and `x-gp-entry` must not own the same output subtree. Groundplane
