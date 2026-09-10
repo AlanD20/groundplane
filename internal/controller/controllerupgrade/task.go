@@ -30,16 +30,7 @@ func (input Input) Validate() error {
 		input.Manifest.ControllerSHA256 == input.PreviousController {
 		return errs.New(errs.KindValidationFailed, "controller update identities are invalid or unchanged")
 	}
-	raw, err := json.Marshal(input.Manifest)
-	if err != nil {
-		return errs.Wrap(errs.KindInternal, err)
-	}
-	canonical, err := jcs.Canonicalize(raw)
-	if err != nil {
-		return err
-	}
-	_, err = upgrade.ParseManifest(canonical, input.Release)
-	return err
+	return (upgrade.Release{Release: input.Release, Manifest: input.Manifest}).Validate()
 }
 
 func NewTask(now time.Time, idempotencyKey string, input Input) (etcd.TaskRecord, error) {
@@ -75,7 +66,7 @@ func DecodeTask(task etcd.TaskRecord, started, deadline time.Time) (upgrade.Jour
 	if task.Executor != etcd.TaskExecutorController || task.Type != etcd.TaskUpdate || task.Target != Target ||
 		task.Owner != etcd.PlatformTaskOwner() || task.Actor != etcd.TaskActorOperator || ids.Validate(ids.KindTask, task.ID) != nil ||
 		ids.Validate(ids.KindOperation, task.OperationID) != nil || ids.Validate(ids.KindPlan, task.PlanID) != nil ||
-		task.TimeoutSeconds != upgrade.TaskTimeoutSeconds || task.RenderGeneration != 1 || len(task.Steps) != 0 ||
+		task.TimeoutSeconds != upgrade.TaskTimeoutSeconds || task.RenderGeneration != 1 || task.RetryOf != "" || len(task.Steps) != 0 ||
 		len(task.Materializations) != 0 ||
 		len(task.Params) != 2 || task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceController ||
 		deadline.Sub(started) != upgrade.TaskTimeoutSeconds*time.Second {

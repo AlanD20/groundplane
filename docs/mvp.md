@@ -150,6 +150,12 @@ transient recovery process protect activation without another persistent unit.
 Abort is supported before activation; committed activation returns
 `resource.in_use` so cancellation cannot kill recovery. Release staging and
 guard installation are closed deployment/bootstrap tooling, not file-upload APIs.
+The last qualified native manifest supplies the desired Agent image for later
+bodyless enrollment/update requests, overriding bootstrap `agent.image` without
+rewriting Controller YAML. An unfinished native update blocks new image
+selection. A failed later trial retains the last successful selection. Native
+update acceptance replays the same Task for an equal idempotency key, including
+while active; ordinary Task Retry is unavailable for this host operation.
 The Controller orchestrates and validates; the Agent performs workload host
 mutations, while the Controller alone mutates the Agent container lifecycle.
 The Console shows this on the **Platform page**: an overview
@@ -569,9 +575,10 @@ in etcd:
   runtime-file mechanics are in ADR 0011. mTLS and certificates are post-MVP.
 
   Initial enrollment input is host bootstrap configuration, not human API
-  input. `controller.yaml` owns `agent.image` plus `agent.runtime`.
-  `agent.image` may be empty while the Controller runs, but enrollment rejects
-  it until it is a digest-pinned OCI reference; mutable tags and host-derived
+  input. `controller.yaml` owns bootstrap `agent.image` plus `agent.runtime`;
+  a qualified native Controller release overrides the desired image (ADR0074).
+  Bootstrap `agent.image` may be empty while the Controller runs, but enrollment
+  requires a selected digest-pinned OCI reference; mutable tags and host-derived
   image selection are forbidden. Initial runtime defaults are exactly a
   2-second pull interval, three concurrent Tasks, and an empty labels map.
   They are copied into the durable Agent config at enrollment and subsequent
@@ -659,7 +666,8 @@ Semantics bound to the channel:
   and proceeds only when the Agent is idle. Rejected busy/preparation attempts
   release their own reversible pause without reopening deletion/revocation;
   uncertain replacement publication stays fenced for recovery. The native Controller rotates the
-  token and generation, replaces the container at configured `agent.image`,
+  token and generation, replaces the container at the selected immutable image
+  (qualified native release, otherwise bootstrap `agent.image`),
   requires authenticated Ready within 120 seconds, and otherwise rotates again
   and rolls back the previous digest. The Agent never receives a self-update
   command and never recreates itself. The bodyless Task has a 300-second

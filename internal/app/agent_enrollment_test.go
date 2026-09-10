@@ -22,7 +22,7 @@ func TestAgentEnrollmentServiceCreatesControllerTaskFromBootstrapInput(t *testin
 		Kind: idempotentintent.ResolutionApplied,
 	}}
 	service, err := newAgentEnrollmentService(
-		testAppAgentImage,
+		fixedAgentImage(testAppAgentImage),
 		localagent.Config{
 			PullIntervalSeconds: 2, MaxConcurrentTasks: 3,
 			Labels: map[string]string{"arch": "arm64"},
@@ -72,7 +72,7 @@ func TestAgentEnrollmentServiceReturnsExactReplay(t *testing.T) {
 		Body: []byte(`{"task_id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`),
 	}
 	service, err := newAgentEnrollmentService(
-		testAppAgentImage,
+		fixedAgentImage(testAppAgentImage),
 		localagent.Config{PullIntervalSeconds: 2, MaxConcurrentTasks: 3, Labels: map[string]string{}},
 		&fakeAgentEnrollmentTasks{},
 		&fakeAgentEnrollmentIdempotency{resolution: idempotentintent.Resolution{
@@ -126,6 +126,18 @@ type fakeAgentEnrollmentIdempotency struct {
 
 func (idempotency *fakeAgentEnrollmentIdempotency) Prepare(context.Context) (agentEnrollmentEvidence, error) {
 	return agentEnrollmentEvidence{}, nil
+}
+
+func (idempotency *fakeAgentEnrollmentIdempotency) ResolveExisting(
+	context.Context, etcd.IdempotencyLocator, agentEnrollmentEvidence,
+) (idempotentintent.Resolution, bool, error) {
+	return idempotency.resolution, idempotency.resolution.Kind == idempotentintent.ResolutionReplay, nil
+}
+
+type fixedAgentImage string
+
+func (image fixedAgentImage) DesiredAgentImage(context.Context) (string, error) {
+	return string(image), nil
 }
 
 func (idempotency *fakeAgentEnrollmentIdempotency) ResolveKnown(

@@ -82,11 +82,14 @@ update transport.
 
 ### MVP Agent update
 
-The Controller configuration key `agent.image` is the sole desired release
-input. It must remain an OCI digest reference. An update request is bodyless:
+The Controller configuration key `agent.image` is the bootstrap desired release
+input. ADR0074's last qualified native manifest overrides it for later enrollment
+and updates without rewriting Controller YAML. Unfinished native recovery blocks
+new image selection; a failed later trial preserves the last successful release.
+The selected image must remain an OCI digest reference. An update request is bodyless:
 there is no bundle, uploaded archive, tag, URL, version field, release trust
 root, or Agent-side image-update message in the MVP. Distribution and
-authenticity of the configured image are deployment concerns; the Controller
+authenticity of the selected image are deployment concerns; the Controller
 enforces immutable digest identity at its runtime boundary.
 
 The Controller accepts an update only for the local Agent in `ready` phase and
@@ -116,8 +119,8 @@ authority by itself.
 For an accepted update, the Controller:
 
 1. retains the current image digest as the rollback digest;
-2. advances the durable Agent generation and image to configured
-   `agent.image`, creates a fresh channel token, and atomically replaces the
+2. advances the durable Agent generation and image to the selected immutable
+   release, creates a fresh channel token, and atomically replaces the
    Controller-owned runtime config and token materialization;
 3. revokes the previous generation, waits for it to disconnect, and replaces
    the container under the immutable Agent id;

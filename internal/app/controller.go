@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -16,7 +15,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/common/logging"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
-	"github.com/AlanD20/groundplane/internal/common/version"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/backupkey"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
@@ -26,14 +24,11 @@ import (
 	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
 	hierarchycontroller "github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
-	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
 	releaseoperation "github.com/AlanD20/groundplane/internal/controller/releaseoperation"
 	runnercapability "github.com/AlanD20/groundplane/internal/controller/runner"
 	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
-	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
 	controllerconfigstore "github.com/AlanD20/groundplane/internal/infra/controllerconfig"
-	"github.com/AlanD20/groundplane/internal/infra/docker/agentcontainer"
 	"github.com/AlanD20/groundplane/internal/infra/docker/etcdcontainer"
 	"github.com/AlanD20/groundplane/internal/infra/environmentroot"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -42,7 +37,6 @@ import (
 	networketcd "github.com/AlanD20/groundplane/internal/infra/etcd/network"
 	etcdreleasegroup "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroup"
 	"github.com/AlanD20/groundplane/internal/infra/hostresolution"
-	"github.com/AlanD20/groundplane/internal/infra/hoststats"
 	"github.com/AlanD20/groundplane/internal/volume"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -793,26 +787,6 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Script deletion service: %w", err)
 	}
 	scriptMutations.deletions = scriptDeletions
-	agentConfigIdempotency, err := newDurableLocalAgentConfigIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Agent config idempotency: %w", err)
-	}
-	repositoryAdapter, err := newLocalAgentRepositoryAdapter(agents, agentConfigIdempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize local Agent repository adapter: %w", err)
-	}
-	sessionsAdapter, err := newLocalAgentSessionsAdapter(agentRuntime.registry)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize local Agent session adapter: %w", err)
-	}
-	tasksAdapter, err := newLocalAgentTasksAdapter(tasks, agentRuntime.registry)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize local Agent Task adapter: %w", err)
-	}
 	entryGeneration, err := NewEntryGenerationService(secretRecords, attachFactValues, intentProtector)
 	if err != nil {
 		_ = store.Close()
@@ -1159,177 +1133,55 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment creation service: %w", err)
 	}
-	agentEnrollmentIdempotency, err := newDurableAgentEnrollmentIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Agent enrollment idempotency: %w", err)
-	}
-	agentEnrollments, err := newAgentEnrollmentService(
-		cfg.Agent.Image,
-		localagent.Config{
-			PullIntervalSeconds: cfg.Agent.Runtime.PullIntervalSeconds,
-			MaxConcurrentTasks:  cfg.Agent.Runtime.MaxConcurrentTasks,
-			Labels:              cfg.Agent.Runtime.Labels,
-		},
-		tasks,
-		agentEnrollmentIdempotency,
-	)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Agent enrollment service: %w", err)
-	}
-	agentRemovalIdempotency, err := newDurableAgentRemovalIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Agent removal idempotency: %w", err)
-	}
-	agentUpdateIdempotency, err := newDurableAgentUpdateIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Agent update idempotency: %w", err)
-	}
-	credentialCipher, err := newCredentialCipher(controllerKey)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Agent credential cipher: %w", err)
-	}
-	credentialManager, err := agentcredential.New(rand.Reader, credentialCipher, credentialCipher)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Agent credential runtime: %w", err)
-	}
-	runtimeAdapter, err := newLocalAgentRuntimeAdapter(credentialManager, cfg.Log, cfg.Storage.VolumeRoot)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize local Agent runtime adapter: %w", err)
-	}
-	containerManager, err := agentcontainer.New(ctx)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize local Agent Docker lifecycle: %w", err)
-	}
-	containerAdapter, err := newLocalAgentContainerAdapter(containerManager)
-	if err != nil {
-		_ = containerManager.Close()
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize local Agent container adapter: %w", err)
-	}
-	localAgentManager, err := localagent.New(localagent.Dependencies{
-		Repository: repositoryAdapter,
-		Runtime:    runtimeAdapter,
-		Container:  containerAdapter,
-		Sessions:   sessionsAdapter,
-		Tasks:      tasksAdapter,
-		Clock:      localagent.SystemClock{},
+	platform, err := newControllerPlatform(ctx, controllerPlatformDependencies{
+		Config: cfg, Key: controllerKey, Store: store, Agents: agents, Tasks: tasks,
+		Intents: intentCoordinator, Idempotency: idempotency, Channel: agentRuntime,
+		EtcdEndpoints: etcdEndpoints, Tick: tick, Logger: logger,
 	})
 	if err != nil {
-		_ = containerManager.Close()
 		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize local Agent lifecycle: %w", err)
-	}
-	agentRemovals, err := newAgentRemovalService(localAgentManager, tasks, agentRemovalIdempotency)
-	if err != nil {
-		_ = containerManager.Close()
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Agent removal service: %w", err)
-	}
-	agentUpdates, err := newAgentUpdateService(
-		cfg.Agent.Image,
-		localAgentManager,
-		tasks,
-		agentUpdateIdempotency,
-	)
-	if err != nil {
-		_ = containerManager.Close()
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Agent update service: %w", err)
-	}
-	agentMutations, err := newAgentMutationService(agentEnrollments, agentUpdates, agentRemovals)
-	if err != nil {
-		_ = containerManager.Close()
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Agent mutations: %w", err)
-	}
-	localAgentReconciliation, err := newLocalAgentReconciliation(localAgentManager, tick, logger)
-	if err != nil {
-		_ = containerManager.Close()
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize local Agent reconciliation: %w", err)
+		return nil, fmt.Errorf("controller: initialize platform runtime: %w", err)
 	}
 	runnerLifecycle, err := newRunnerLifecycleExecutor(logger, runnerRecords, runnerTokens, cfg, runnerPools)
 	if err != nil {
-		_ = containerManager.Close()
+		_ = platform.Close()
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Runner lifecycle: %w", err)
 	}
 	controllerTaskHandler, err := newControllerTaskHandler(
-		localAgentManager,
+		platform.agents,
 		backingZoneCascades,
 		runnerRecords,
 		runnerLifecycle,
 	)
 	if err != nil {
-		_ = containerManager.Close()
+		_ = platform.Close()
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Controller Task handler: %w", err)
 	}
 	controllerTaskRunner, err := newControllerTaskRuntime(
 		ctx, tasks, controllerTaskHandler, backupKeys, hierarchyDeletions,
-		localAgentManager, agentRuntime.registry, tick, logger,
+		platform.agents, agentRuntime.registry, platform.native, tick, logger,
 	)
 	if err != nil {
-		_ = containerManager.Close()
+		_ = platform.Close()
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Controller Task runner: %w", err)
 	}
 	taskAborts, err := newTaskAbortService(tasks, agentRuntime.registry, controllerTaskRunner)
 	if err != nil {
-		_ = containerManager.Close()
+		_ = platform.Close()
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Task abort service: %w", err)
 	}
-	hostname, err := os.Hostname()
-	if err != nil {
-		_ = containerManager.Close()
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: resolve local hostname: %w", err)
-	}
-	agentReads, err := newLocalAgentReadService(localAgentManager, tasks, hostname)
-	if err != nil {
-		_ = containerManager.Close()
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize local Agent reads: %w", err)
-	}
-	hostReads, err := controller.NewHostService(controller.HostDependencies{
-		System: &hostSystemSnapshotSource{system: hoststats.New(), docker: containerManager},
-		Etcd: &hostEtcdSnapshotSource{
-			endpoints: append([]string(nil), etcdEndpoints...),
-			probe:     etcd.ProbeEndpoints,
-		},
-		Agent: &hostAgentSnapshotSource{
-			health: localAgentManager,
-			fallback: localagent.Config{
-				PullIntervalSeconds: cfg.Agent.Runtime.PullIntervalSeconds,
-				MaxConcurrentTasks:  cfg.Agent.Runtime.MaxConcurrentTasks,
-				Labels:              cfg.Agent.Runtime.Labels,
-			},
-		},
-		ControllerService: hostControllerUnit,
-		ControllerVersion: version.Value,
-	})
-	if err != nil {
-		_ = containerManager.Close()
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Host reads: %w", err)
-	}
-
 	environmentReads := environmentcapability.NewEtcdReader(
 		environmentetcd.NewRepository(hierarchyRecords, zoneRecords),
 	)
 	logService := controller.NewLogService(environmentReads, serviceReads, releaseLedger, agentRuntime.registry)
 	srv := controller.New(store, logger, controller.Options{
-		Host: hostReads, ControllerConfig: controllerConfig,
-		Agents: agentReads, AgentMutations: agentMutations, Tenants: hierarchyService,
+		Host: platform.host, ControllerConfig: controllerConfig,
+		OnHTTPReady: platform.readiness.MarkHTTPReady,
+		Agents:      platform.reads, AgentMutations: platform.mutations, Tenants: hierarchyService,
 		Projects:                hierarchyService,
 		ProjectMutations:        projectMutations,
 		ProjectChanges:          projectChanges,
@@ -1392,9 +1244,9 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		agent:           agentRuntime,
 		scheduler:       controller.NewScheduler(srv, tick, tasks, idempotency, staleTasks, backupSchedules),
 		controllerTasks: controllerTaskRunner,
-		localAgent:      localAgentReconciliation,
+		localAgent:      platform.reconciliation,
 		attachMutations: attachMutations,
-		container:       containerManager,
+		container:       platform,
 		etcdContainer:   etcdLifecycle,
 		store:           store,
 	}
@@ -1485,7 +1337,7 @@ func (c *Controller) Run(ctx context.Context) error {
 		wrapControllerRunError("serve HTTP", runtimeErrors["serve HTTP"]),
 		wrapControllerRunError("serve Agent channel", runtimeErrors["serve Agent channel"]),
 		wrapControllerRunError("reconcile etcd container", runtimeErrors["reconcile etcd container"]),
-		wrapControllerRunError("close local Agent Docker lifecycle", containerCloseErr),
+		wrapControllerRunError("close platform runtime", containerCloseErr),
 		wrapControllerRunError("close etcd", closeErr),
 		wrapControllerRunError("close etcd container lifecycle", etcdContainerCloseErr),
 	)

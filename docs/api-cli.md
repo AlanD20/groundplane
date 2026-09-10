@@ -255,7 +255,8 @@ through Docker. No token, CA, certificate, or bootstrap artifact is returned
 through the human API or printed by the CLI. There is no public join-token or
 REST pair endpoint, pending approval state, or `approve` command. The Agent
 never updates or recreates itself; `agent update` asks the native Controller to
-replace the selected idle Agent at configured `agent.image` and, if necessary,
+replace the selected idle Agent at the last qualified native release's Agent
+image (otherwise bootstrap `agent.image`) and, if necessary,
 roll back the previous digest. Exactly one id or explicit `--all` is required;
 `--all` resolves the singleton and calls the same per-id endpoint.
 This topology is accepted in ADR 0016; exact local token mechanics remain
@@ -643,7 +644,7 @@ attachment on every authorized request.
 | task | `GET /tasks` (zero or one of `?environment=<env-id>`, `?project=<prj-id>`, or `?workspace=platform\|<tenant-id>`), `GET /tasks/{id}`, and `GET /tasks/{id}/events` (SSE) → `200`; the activity journal IS this record set; `POST /tasks/{id}/retry\|abort` → `202 {task_id}` |
 | activity | `GET /activity` accepts the exact Task-list query and returns the exact same fixed-revision page; Task and Activity cursors are interchangeable |
 | host | `GET /host` → `200` (includes etcd status; etcd is host-level, not a component) |
-| agent | `POST /agents` → `202 {task_id}` creates the local Agent and Controller-managed container without returning credentials and requires authenticated `Ready` within 120 seconds · `GET /agents`, `GET /agents/{id}`, and `GET /agents/{id}/config` → `200` · `PUT /agents/{id}/config` → `200` · bodyless `POST /agents/{id}/update` → `202 {task_id}` uses configured `agent.image`, requires an idle Agent, rotates generation/token, waits 120 seconds for Ready, and rolls back the prior digest inside a 300-second Task · `DELETE /agents/{id}` → `202 {task_id}` has a 120-second Controller Task deadline, stops assignments, aborts active tasks with `agent_removed`, revokes the token, waits for offline, then removes the container and record; Agent is not a Component and has no Component projection |
+| agent | `POST /agents` → `202 {task_id}` creates the local Agent and Controller-managed container without returning credentials and requires authenticated `Ready` within 120 seconds · `GET /agents`, `GET /agents/{id}`, and `GET /agents/{id}/config` → `200` · `PUT /agents/{id}/config` → `200` · bodyless `POST /agents/{id}/update` → `202 {task_id}` uses the last qualified native release's Agent image, otherwise bootstrap `agent.image`, requires an idle Agent, rotates generation/token, waits 120 seconds for Ready, and rolls back the prior digest inside a 300-second Task · `DELETE /agents/{id}` → `202 {task_id}` has a 120-second Controller Task deadline, stops assignments, aborts active tasks with `agent_removed`, revokes the token, waits for offline, then removes the container and record; Agent is not a Component and has no Component projection |
 
 Agent update preparation is a reversible dispatch pause. Busy or failed
 preparation leaves active work untouched and resumes ordinary dispatch; an
@@ -933,6 +934,9 @@ contract change, not a convenient way to bypass the Console.
 `POST /controller/update` accepts `{release:"sha256:<64 lowercase hex>"}` and
 returns `202 {task_id}` with protected idempotency. Controller Update in the
 Console and `controller update --release` invoke exactly this endpoint.
+Equal-key acceptance replays the same Task while active as well as after it
+settles. A changed release mismatches; generic Task Retry is unavailable for a
+native update. After recovery, retry uses a fresh explicit Controller Update.
 Existing `GET /host`/`host show` reports installed Controller digest, staged
 candidate and last update summary. Deployment tooling stages release bytes;
 this API never uploads them. The native Task freezes manifest and predecessor
@@ -941,6 +945,10 @@ without aborting it, and survives Controller restart. Failed candidates restore
 their predecessor and fail the Task. Pre-activation Abort retains current
 runtime; Abort after committed activation returns `resource.in_use`. ADR0074
 defines compatibility and recovery.
+Later Agent enrollment/update requests use the last qualified native manifest's
+image, falling back to bootstrap `agent.image` only before any qualified native
+release. Unfinished native recovery blocks new image selection. Failed subsequent
+trials retain the last successful selection without rewriting Controller YAML.
 
 ### Agent read representation
 

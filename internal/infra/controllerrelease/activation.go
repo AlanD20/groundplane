@@ -82,6 +82,11 @@ func (store *Store) Prepare(ctx context.Context, journal upgrade.Journal) error 
 	if err := store.copyExecutable(ctx, store.binaries, "controller", store.binaries, "controller-recovery", journal.PreviousController); err != nil {
 		return err
 	}
+	if found {
+		if err := store.retainSelection(ctx, current); err != nil {
+			return err
+		}
+	}
 	return store.writeJournal(ctx, journal)
 }
 

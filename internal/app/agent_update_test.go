@@ -30,7 +30,7 @@ func TestAgentUpdateServiceCreatesPinnedControllerTask(t *testing.T) {
 	idempotency := &fakeAgentUpdateIdempotency{
 		resolution: idempotentintent.Resolution{Kind: idempotentintent.ResolutionApplied},
 	}
-	service, err := newAgentUpdateService(testAgentUpdateDesiredImage, targets, tasks, idempotency)
+	service, err := newAgentUpdateService(fixedAgentImage(testAgentUpdateDesiredImage), targets, tasks, idempotency)
 	if err != nil {
 		t.Fatalf("newAgentUpdateService() error = %v", err)
 	}
@@ -67,7 +67,7 @@ func TestAgentUpdateServiceReplaysBeforeTargetLookup(t *testing.T) {
 	}
 	targets := &fakeAgentUpdateTargets{}
 	service, err := newAgentUpdateService(
-		testAgentUpdateDesiredImage,
+		fixedAgentImage(testAgentUpdateDesiredImage),
 		targets,
 		&fakeAgentUpdateTasks{},
 		&fakeAgentUpdateIdempotency{

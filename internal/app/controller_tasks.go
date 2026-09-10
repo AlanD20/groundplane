@@ -22,10 +22,15 @@ func newControllerTaskRuntime(
 	hierarchy hierarchyDeletionTaskExecutor,
 	agents *localagent.Manager,
 	sessions *agentchannel.Registry,
+	native controllertask.UpdateExecutor,
 	interval time.Duration,
 	logger *slog.Logger,
 ) (*controllertask.Runner, error) {
 	updates, err := localagent.NewTaskUpdates(agents, sessions, logger)
+	if err != nil {
+		return nil, err
+	}
+	platformUpdates, err := controllertask.NewUpdateDispatcher(updates, native)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +42,7 @@ func newControllerTaskRuntime(
 	if err != nil {
 		return nil, err
 	}
-	runtime, err := controllertask.New(tasks, deletions, updates, interval, logger)
+	runtime, err := controllertask.New(tasks, deletions, platformUpdates, interval, logger)
 	if err != nil {
 		return nil, err
 	}

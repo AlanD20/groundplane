@@ -262,11 +262,19 @@ named shared leaf; filesystem mechanics and systemd activation stay in infra.
 A predecessor-owned startup guard plus transient manager-owned recovery mode
 protects a failed candidate without an Agent assignment, Component projection,
 generic host executor or second persistent Groundplane service.
+The capability's release catalog supplies desired Agent images to both bodyless
+enrollment and update publishers at request time. Only a qualified manifest may
+override bootstrap config; active native recovery refuses new selection, and a
+failed later trial retains the last successful manifest. The private selected
+release is persisted before replacing its Healthy journal. Native publication
+replays the same protected accepted Task even while pending and cannot enter
+the generic retry clone path.
 
 Controller/Agent updates use the native runner's closed recovery executor, not
 ordinary timeout-and-ack handling. Startup restores their Task-owned admission
-before Agent listeners start. Unresolved host/storage recovery retains the claim
-after deadline expiry; each further pass remains bounded. Only a proven settled
+before Agent listeners start. An unfinished native journal without its matching
+claim fails startup. Unresolved host/storage recovery retains the claim after
+deadline expiry; each further pass remains bounded. Only a proven settled
 runtime authorizes terminal acknowledgement and release of that operation's
 hold. The ordinary Controller Task handler cannot bypass this path.
 

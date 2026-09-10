@@ -123,7 +123,7 @@ func (service *durableAgentUpdateIdempotency) ResolveUnknown(
 }
 
 type agentUpdateService struct {
-	image       string
+	images      agentImageSource
 	targets     agentUpdateTargets
 	tasks       agentEnrollmentTaskRepository
 	idempotency agentUpdateIdempotency
@@ -131,16 +131,16 @@ type agentUpdateService struct {
 }
 
 func newAgentUpdateService(
-	image string,
+	images agentImageSource,
 	targets agentUpdateTargets,
 	tasks agentEnrollmentTaskRepository,
 	idempotency agentUpdateIdempotency,
 ) (*agentUpdateService, error) {
-	if !imageref.IsDigestPinned(image) || targets == nil || tasks == nil || idempotency == nil {
+	if images == nil || targets == nil || tasks == nil || idempotency == nil {
 		return nil, errs.New(errs.KindInternal, "Agent update service dependencies are invalid")
 	}
 	return &agentUpdateService{
-		image: image, targets: targets, tasks: tasks, idempotency: idempotency, now: time.Now,
+		images: images, targets: targets, tasks: tasks, idempotency: idempotency, now: time.Now,
 	}, nil
 }
 
@@ -174,6 +174,16 @@ func (service *agentUpdateService) UpdateAgent(
 		}
 		return cloneIdempotencyResponse(existing.Response), nil
 	}
+	image, err := service.images.DesiredAgentImage(ctx)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if !imageref.IsDigestPinned(image) {
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"Agent update requires a selected digest-pinned image",
+		)
+	}
 	health, err := service.targets.Health(ctx, agentID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -187,8 +197,8 @@ func (service *agentUpdateService) UpdateAgent(
 	if health.Agent.Phase != localagent.PhaseReady {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindResourceInUse, "Agent is not ready for update")
 	}
-	if health.Agent.Image == service.image {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Agent already runs configured agent.image")
+	if health.Agent.Image == image {
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Agent already runs the selected image")
 	}
 
 	now := service.now().UTC()
@@ -196,7 +206,7 @@ func (service *agentUpdateService) UpdateAgent(
 		now,
 		agentID,
 		health.Agent.Image,
-		service.image,
+		image,
 		health.Agent.Generation,
 		idempotencyKey,
 	)

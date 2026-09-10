@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/imageref"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -37,6 +38,11 @@ type agentEnrollmentEvidence struct {
 
 type agentEnrollmentIdempotency interface {
 	Prepare(context.Context) (agentEnrollmentEvidence, error)
+	ResolveExisting(
+		context.Context,
+		etcd.IdempotencyLocator,
+		agentEnrollmentEvidence,
+	) (idempotentintent.Resolution, bool, error)
 	ResolveKnown(
 		context.Context,
 		agentEnrollmentEvidence,
@@ -98,6 +104,12 @@ func (service *durableAgentEnrollmentIdempotency) ResolveKnown(
 	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
 }
 
+func (service *durableAgentEnrollmentIdempotency) ResolveExisting(
+	ctx context.Context, locator etcd.IdempotencyLocator, evidence agentEnrollmentEvidence,
+) (idempotentintent.Resolution, bool, error) {
+	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
+}
+
 func (service *durableAgentEnrollmentIdempotency) ResolveUnknown(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
@@ -113,8 +125,12 @@ func (service *durableAgentEnrollmentIdempotency) ResolveUnknown(
 	)
 }
 
+type agentImageSource interface {
+	DesiredAgentImage(context.Context) (string, error)
+}
+
 type agentEnrollmentService struct {
-	image       string
+	images      agentImageSource
 	config      localagent.Config
 	tasks       agentEnrollmentTaskRepository
 	idempotency agentEnrollmentIdempotency
@@ -122,17 +138,17 @@ type agentEnrollmentService struct {
 }
 
 func newAgentEnrollmentService(
-	image string,
+	images agentImageSource,
 	config localagent.Config,
 	tasks agentEnrollmentTaskRepository,
 	idempotency agentEnrollmentIdempotency,
 ) (*agentEnrollmentService, error) {
-	if tasks == nil || idempotency == nil || config.PullIntervalSeconds <= 0 ||
+	if images == nil || tasks == nil || idempotency == nil || config.PullIntervalSeconds <= 0 ||
 		config.MaxConcurrentTasks <= 0 {
 		return nil, errs.New(errs.KindInternal, "Agent enrollment service dependencies are invalid")
 	}
 	return &agentEnrollmentService{
-		image: image,
+		images: images,
 		config: localagent.Config{
 			PullIntervalSeconds: config.PullIntervalSeconds,
 			MaxConcurrentTasks:  config.MaxConcurrentTasks,
@@ -149,19 +165,40 @@ func (service *agentEnrollmentService) EnrollAgent(
 	if ctx == nil {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent enrollment context is required")
 	}
-	if service.image == "" {
-		return etcd.IdempotencyResponse{}, errs.New(
-			errs.KindValidationFailed,
-			"controller agent.image must be configured before Agent enrollment",
-		)
-	}
 	evidence, err := service.idempotency.Prepare(ctx)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
+	locator := etcd.IdempotencyLocator{
+		ScopeKind: etcd.IdempotencyScopePlatform, ScopeID: "-",
+		Method: http.MethodPost, Route: agentEnrollmentRoute, Key: idempotencyKey,
+	}
+	existing, found, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if found {
+		if existing.Kind != idempotentintent.ResolutionReplay {
+			return etcd.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Agent enrollment replay resolution is invalid",
+			)
+		}
+		return cloneIdempotencyResponse(existing.Response), nil
+	}
+	image, err := service.images.DesiredAgentImage(ctx)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	if !imageref.IsDigestPinned(image) {
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"Agent enrollment requires a selected digest-pinned image",
+		)
+	}
 	now := service.now().UTC()
-	task, err := service.newTask(now, idempotencyKey)
+	task, err := service.newTask(now, idempotencyKey, image)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -173,10 +210,6 @@ func (service *agentEnrollmentService) EnrollAgent(
 	response := etcd.IdempotencyResponse{
 		Status: http.StatusAccepted, ContentKind: "application/json",
 		Body: append([]byte(nil), responseBody...),
-	}
-	locator := etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopePlatform, ScopeID: "-",
-		Method: http.MethodPost, Route: agentEnrollmentRoute, Key: idempotencyKey,
 	}
 	result, createErr := service.tasks.CreateTask(ctx, task, etcd.IdempotencyMarker{
 		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
@@ -207,10 +240,11 @@ func (service *agentEnrollmentService) EnrollAgent(
 func (service *agentEnrollmentService) newTask(
 	createdAt time.Time,
 	idempotencyKey string,
+	image string,
 ) (etcd.TaskRecord, error) {
 	agentID := ids.New(ids.KindAgent)
 	taskID := ids.New(ids.KindTask)
-	params := agentEnrollmentTaskParams(taskID, service.image, service.config)
+	params := agentEnrollmentTaskParams(taskID, image, service.config)
 	planHash, err := agentEnrollmentPlanHash(agentID, params)
 	if err != nil {
 		return etcd.TaskRecord{}, err

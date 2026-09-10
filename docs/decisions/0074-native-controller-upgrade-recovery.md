@@ -28,9 +28,21 @@ update --release sha256:<digest>`, and `POST /controller/update` with
 `{release:"sha256:<digest>"}` → `202 {task_id}`. Existing Host reads expose
 installed Controller digest, staged candidate and latest update summary. The
 request freezes release/predecessor identities and Agent image/generation in
-its protected idempotent Task. Repeating a key returns that Task. Only one native
+its protected idempotent Task. Repeating an equal key returns that Task even
+while active; a changed release mismatches. Lost publication responses resolve
+against the same protected durable marker, never a second activation. Only one native
 activation may be active. Retry is a fresh explicit update after recovery, not
 blind host-effect replay.
+
+The last qualified manifest supplies desired Agent image selection for subsequent
+bodyless enrollment/update actions, overriding bootstrap `agent.image` without
+editing YAML. New selections fail with `resource.in_use` during unfinished native
+recovery. Before replacing a Healthy journal, the store fsyncs its validated
+release into private `selected.json`; a crash on either side retains the same
+successful selection. Healthy journal content is authoritative until replacement.
+Failed/cancelled later trials never promote their manifest or fall back past the
+last successful release. Deployment's private canonical `candidate.json` selects
+one staged release digest for display; reads verify its manifest and binary.
 
 ### Handoff and recovery
 
@@ -45,6 +57,7 @@ blind host-effect replay.
    successful drain and before activation. A restarting Controller restores admission holds before
    opening its Agent channel. This is host handoff evidence, not a second Task
    journal or an operator resource.
+   Startup rejects an unfinished journal without its matching durable Task claim.
 4. A transient systemd service runs the retained predecessor's fixed private
    recovery mode. It survives Controller stop and performs only the closed
    swap/start/readiness/restore procedure. It atomically replaces the executable,
