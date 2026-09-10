@@ -211,7 +211,7 @@ func blueprintCandidateReleaseBound(
 	for _, service := range artifact.GetServices() {
 		if service.GetServiceId() == run.GetServiceId() &&
 			expectedReleaseLabel(service) == run.GetReleaseId() &&
-			service.GetImageReference() == snapshot.GetLocalImageId() {
+			service.GetImageReference() == scriptReleaseLocalImageID(snapshot) {
 			matches++
 		}
 	}

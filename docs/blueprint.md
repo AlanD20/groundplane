@@ -673,7 +673,8 @@ Entry file targets. Reserved targets include`/proc`,`/sys`,`/dev`,`/run`,
 Ancestors and descendants of these paths are excluded too; component-prefix
 siblings are not. Application subtrees such as`/etc/tls`are allowed. Targets
 must be valid UTF-8 without control characters. Each Volume's`read_only`boolean
-is explicit. Host paths,
+is explicit. Explicit mounts disable automatic copying of image files into an
+empty Volume; initialization belongs to the authored Script. Host paths,
 Docker sockets, networking and all unknown execution fields are forbidden.
 An explicit runner has no network or inherited Service runtime/environment;
 its working directory is`/`. Image defaults and only selected Entry values are

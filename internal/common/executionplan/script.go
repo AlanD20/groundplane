@@ -105,7 +105,7 @@ func scriptSnapshotImageMatchesProjection(
 	snapshot *agentpb.ResolvedRunnerSnapshot,
 	projection *agentpb.ScriptRunnerProjection,
 ) bool {
-	return snapshot.GetLocalImageId() == projection.GetImage()
+	return snapshot.GetLocalImageId() == projection.GetImage() && explicitScriptProjectionMatches(snapshot, projection)
 }
 
 func validateScriptOwnershipLabels(
@@ -196,7 +196,7 @@ func validateScriptImageAuthority(snapshot *agentpb.ResolvedRunnerSnapshot) erro
 	if !workloadimage.LocalIDValid(snapshot.GetLocalImageId()) {
 		return errs.New(errs.KindValidationFailed, "resolved Script runner local image identity is invalid")
 	}
-	return nil
+	return validateExplicitScriptAuthority(snapshot)
 }
 
 func validateScriptRunnerProjection(projection *agentpb.ScriptRunnerProjection) error {

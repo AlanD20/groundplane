@@ -37,6 +37,8 @@ not once per replica. This is not a second Jobs or workflow system.
   interpreter, runtime/kernel and Docker-managed files without excluding
   application subtrees such as`/etc/tls`. Grant limits are32Volumes and64Entries
   per explicit context.
+  Explicit managed mounts disable Docker's automatic image-to-empty-Volume
+  copy; initialization writes belong to the authored Script, not container create.
 - The Agent resolves the explicit digest reference before publication to an
   immutable host-local Docker image id. Missing images fail before effects;
   no pull, build or late re-resolution occurs. The runner snapshot seals this

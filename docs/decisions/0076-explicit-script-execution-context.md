@@ -31,6 +31,8 @@ bounded by the associated Service's exposure. It cannot grant another Service's
 credentials. No grant is inferred from an omitted list. Grant references resolve
 from the same fixed desired projection as their materialization/source evidence;
 Blueprint names are immutable Volume/Entry authored keys, API references are ids.
+Explicit managed mounts set Docker's`volume-nocopy`: creating the runner must
+not populate an empty Volume from image contents before the Script begins.
 
 Before publication, the authenticated Agent's existing bounded read-only image
 lookup resolves an explicit repository digest to its local Docker config id.

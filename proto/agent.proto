@@ -943,6 +943,31 @@ message ResolvedRunnerSnapshot {
   ScriptSourceAuthority service_source = 27;
   ScriptSourceAuthority network_topology_source = 28;
   ScriptSourceAuthority applied_environment_source = 29;
+  ScriptExplicitExecutionAuthority explicit_execution = 30;
+}
+
+// Absent on inherited runners. The setup image never replaces the authority of
+// the real consumer Release; publication also fences the selected Script primary.
+message ScriptExplicitExecutionAuthority {
+  ScriptExplicitExecutionContext context = 1;
+  bytes context_sha256 = 2;
+  uint64 script_mod_revision = 3;
+  string release_local_image_id = 4;
+}
+
+// Canonical grant order is stable Volume/Entry id ascending. This is immutable
+// captured input, not a second source of live permission or plaintext values.
+message ScriptExplicitExecutionContext {
+  string image_reference = 1;
+  string user = 2;
+  repeated ScriptExplicitVolumeGrant volumes = 3;
+  repeated string entry_ids = 4;
+}
+
+message ScriptExplicitVolumeGrant {
+  string volume_id = 1;
+  string target = 2;
+  bool read_only = 3;
 }
 
 message ScriptRunnerNetwork {
