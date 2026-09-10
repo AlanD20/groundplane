@@ -618,7 +618,7 @@ def build_artifacts(deployment: Deployment, invocation_id: str, *, include_runne
     run(
         ["make", "controller", "cli", f"VERSION={deployment.version}"],
         cwd=REPOSITORY_ROOT,
-        environment=build_environment(),
+        environment=build_environment() | {"GOMAXPROCS": "2"},
     )
     for kind in (("agent", "runner") if include_runner else ("agent",)):
         cache = f"groundplane-{kind}:cache-{image_input_digest(kind, deployment.version)}"

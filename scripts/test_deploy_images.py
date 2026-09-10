@@ -15,6 +15,24 @@ def target():
 
 
 class DeploymentImagesTest(unittest.TestCase):
+    def test_native_compilation_has_bounded_parallelism_without_changing_parent_environment(self):
+        parent = {"GOMAXPROCS": "64", "PRESERVED": "yes"}
+        with patch.object(deploy, "run") as run, \
+                patch.object(deploy, "build_environment", return_value=parent), \
+                patch.object(deploy, "local_image_id", return_value="sha256:" + "b" * 64), \
+                patch.object(deploy, "image_input_digest", return_value="c" * 64):
+            deploy.build_artifacts(target(), "a" * 32, include_runner=False)
+        environment = run.call_args_list[0].kwargs["environment"]
+        self.assertEqual(environment["GOMAXPROCS"], "2")
+        self.assertEqual(environment["PRESERVED"], "yes")
+        self.assertEqual(parent["GOMAXPROCS"], "64")
+
+    def test_agent_compilation_is_bounded_only_in_the_build_stage(self):
+        dockerfile = (deploy.REPOSITORY_ROOT / "Dockerfile.agent").read_text()
+        build, runtime = dockerfile.split("FROM docker/compose-bin:", 1)
+        self.assertIn("GOMAXPROCS=2 go build -p=2", build)
+        self.assertNotIn("GOMAXPROCS", runtime)
+
     def test_transport_input_and_timeout_errors_are_reported_without_a_traceback(self):
         for error in (ValueError("invalid content identity"), subprocess.TimeoutExpired("image inspection", 30)):
             with self.subTest(error=type(error).__name__), patch.object(deploy, "parse_arguments", return_value=target()), \

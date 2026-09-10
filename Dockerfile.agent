@@ -5,7 +5,7 @@ ARG AGENT_VERSION
 WORKDIR /src
 COPY . .
 RUN printf '%s\n' "${AGENT_VERSION}" | grep -Eq '^(dev|[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?)$' \
-    && CGO_ENABLED=0 GOOS=linux go build -trimpath -buildvcs=false \
+    && CGO_ENABLED=0 GOOS=linux GOMAXPROCS=2 go build -p=2 -trimpath -buildvcs=false \
         -ldflags="-s -w -buildid= -X github.com/AlanD20/groundplane/internal/common/version.Value=${AGENT_VERSION}" \
         -o /out/groundplane-agent ./cmd/agent
 

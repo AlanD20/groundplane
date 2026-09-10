@@ -210,12 +210,57 @@ Controller version is `0.0.0-qa.native20260910.4`, SHA256
 `sha256:f34915444677db2d85046b86f6725ce7fa7d04f2242682db33c6eab004bf34fb`.
 Agent `2f6af43b5a25` runs
 `localhost:5000/groundplane-agent@sha256:1f9242006e8920260d3bfd0b2962c2b6fd3f83fa38b0d5da3461f8e60d64b0f9`.
-Held traffic remains successful; the full probe continues. Docker reused the
+The held WebSocket probe completed3000deliveries without failure. The longer
+HTTP probe overlapped the subsequent E build and recorded16failures in that
+later window; it is not a zero-failure full D HTTP proof. Docker reused the
 isolated build's compile layer, so this is not an uncached-build proof. Exact
 image inspection found no reusable target Runner content; this trial still sent
 the full archive. The new bootstrap-only Runner correction follows this trial.
 Evidence: `qa-native-update-d-deploy.log`, `native-d-current.txt`,
 `reuse-websocket-continuity.log` and `reuse-http-continuity.jsonl`.
+
+## Release E — Agent-only uncached distribution
+
+Normal D→E Task `task_01M24VNKBECZ36ZERESC05Q6FP`, created05:11:56.014UTC,
+completed. Controller version `0.0.0-qa.native20260910.5` ran SHA256
+`775ecac42e5db4d9d11f96d01b9544c26836e5432437deb1d53dcc4068ff5317`, release
+`sha256:5edfc685242b68f481a0cfe75cb6d3de50c7dc12dc567c3ebe906e073ab10f40`;
+Agent digest was`f9ea92fccc4833bd899cad31764a92f5fc8e0a198fee27f9f6966235aa3f95c0`.
+Only the276611072-byte Agent archive was transferred. Despite the smaller
+archive, the public WebSocket failed before activation after107markers and the
+full1200-request HTTP probe recorded24failures. All four Tunnel QUIC connections
+timed out at05:10:45UTC. The Task result does not erase the traffic failure.
+
+Evidence: `qa-native-update-e-deploy.log`, `agent-only-*-continuity` logs and
+`native-e-current-and-tunnel.txt`.
+
+## Release F — resource-bounded build diagnostic
+
+The QA VM and local builder share a physical workstation. A task-owned Docker
+wrapper limited only this build's containers to2CPUs/2GiB with no swap; native
+Go compilation used`GOMAXPROCS=2`. Read-only Docker inspection confirmed the
+limits. This changed no workload, host policy or Tunnel configuration.
+
+An uncached Agent compile ran05:17:43–05:19:54UTC, followed by paced Agent-only
+distribution and normal E→F Task`task_01M24W6DBC0VECK1C62YKH7NMY`, created
+05:21:06.923UTC. It completed with unchanged application identities. Controller
+`0.0.0-qa.native20260910.6` runs SHA256
+`93f193157b9b3a0fd2e5f9389951cff067aa1aff464e816e74aca5ee06472f65`, release
+`sha256:b2d2854b9068c877ee88ee2913a56c5c679a64b431cf9a0c9d078cb156dc134e`;
+Agent`2487f1b154b8` runs digest
+`aa84f5fcebea97d3e07a96a44dece75c616b4c357e354556d4990a5e3852d7d7`.
+Traffic remained successful across the build, transfer and activation; the full
+probes continue. The bounded Tunnel log window is empty. Shared-builder pressure
+remains a hypothesis, not a confirmed root cause from this one passing sample.
+
+The next candidate limits Go compilation directly, without the diagnostic Docker
+wrapper or deployed runtime limits. Two failing-first regressions cover build
+environment isolation and build-stage-only Agent limits. Uncached whole-path
+qualification remains required before claiming this correction fixes continuity.
+
+Evidence: `qa-native-update-f-deploy.log`, `bounded-build-limits.txt`,
+`bounded-local-vmstat.txt`, `bounded-tunnel-mid.txt`, `bounded-*-continuity` logs,
+`native-f-current.txt` and `build-parallelism-red.log`/`build-parallelism-green.log`.
 
 ## Remaining proof
 

@@ -64,6 +64,15 @@ partial or changed layouts before lifecycle effects. This
 transport optimization does not authorize a local image id as runtime identity:
 the remote publisher still resolves the registry-reported Agent RepoDigest.
 
+Compilation is deliberately modest on a shared builder: native deployment sets
+build-process `GOMAXPROCS=2`, and the Agent Docker build uses `GOMAXPROCS=2` and
+`go build -p=2`. These are build-only settings, not deployed runtime limits.
+[Go's build documentation](https://pkg.go.dev/cmd/go) defines `-p` as parallel
+build programs; [the runtime documentation](https://pkg.go.dev/runtime#GOMAXPROCS)
+defines the per-process execution limit. Neither is a hard memory or whole-host
+resource guarantee. Provision separate build capacity when application traffic
+cannot tolerate shared CPU, storage or network pressure.
+
 Only a `completed` Task is success. A recovered failed update remains failed.
 The Controller owns drain, activation, Agent replacement and recovery. Deployment
 does not overwrite executables, YAML, keys or systemd units, abort work, or
