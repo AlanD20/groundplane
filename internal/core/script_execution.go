@@ -41,24 +41,12 @@ type ScriptVolumeGrant struct {
 // Validate checks format and bounds. Fixed-source preparation separately proves
 // Environment ownership, Entry exposure, availability and file-target isolation.
 func (execution ScriptExecution) Validate() error {
-	switch execution.Mode {
-	case ScriptExecutionInherited:
-		if execution.Image != "" || execution.User != "" || execution.Volumes != nil || execution.EntryIDs != nil {
-			return errs.New(errs.KindValidationFailed, "inherited script execution accepts no explicit fields")
-		}
-		return nil
-	case ScriptExecutionExplicit:
-		if !imageref.IsDigestPinned(execution.Image) {
-			return errs.New(
-				errs.KindValidationFailed,
-				"script execution image must be a repository SHA-256 digest reference",
-			)
-		}
-	default:
-		return errs.New(errs.KindValidationFailed, "script execution mode is invalid")
-	}
-	if _, _, err := scriptpolicy.NumericUser(execution.User); err != nil {
+	if err := validateScriptExecutionIdentity(execution.Mode, execution.Image, execution.User,
+		execution.Volumes != nil, execution.EntryIDs != nil); err != nil {
 		return err
+	}
+	if execution.Mode == ScriptExecutionInherited {
+		return nil
 	}
 	if len(execution.Volumes) > MaximumScriptExecutionVolumes ||
 		len(execution.EntryIDs) > MaximumScriptExecutionEntries {
@@ -93,4 +81,25 @@ func (execution ScriptExecution) Validate() error {
 		entries[entryID] = struct{}{}
 	}
 	return nil
+}
+
+func validateScriptExecutionIdentity(mode ScriptExecutionMode, image, user string, volumes, entries bool) error {
+	switch mode {
+	case ScriptExecutionInherited:
+		if image != "" || user != "" || volumes || entries {
+			return errs.New(errs.KindValidationFailed, "inherited script execution accepts no explicit fields")
+		}
+		return nil
+	case ScriptExecutionExplicit:
+		if !imageref.IsDigestPinned(image) {
+			return errs.New(
+				errs.KindValidationFailed,
+				"script execution image must be a repository SHA-256 digest reference",
+			)
+		}
+	default:
+		return errs.New(errs.KindValidationFailed, "script execution mode is invalid")
+	}
+	_, _, err := scriptpolicy.NumericUser(user)
+	return err
 }

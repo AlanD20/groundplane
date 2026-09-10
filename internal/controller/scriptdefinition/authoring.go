@@ -9,6 +9,8 @@ import (
 // Authoring projects Blueprint-owned Scripts using their immutable authored keys.
 func Authoring(
 	records []etcd.Versioned[etcd.ScriptRecord],
+	volumes []etcd.EnvironmentVolumeIdentity,
+	entries []etcd.EntryRecord,
 ) (map[string]core.ScriptSpec, error) {
 	result := make(map[string]core.ScriptSpec)
 	for _, versioned := range records {
@@ -19,12 +21,17 @@ func Authoring(
 		if _, duplicate := result[record.ReconciliationKey]; duplicate {
 			return nil, errs.New(errs.KindInternal, "Environment Blueprint Script key is duplicated")
 		}
+		execution, err := authoringExecution(record, volumes, entries)
+		if err != nil {
+			return nil, err
+		}
 		result[record.ReconciliationKey] = core.ScriptSpec{
-			Slug:    record.Desired.Slug,
-			Service: record.Desired.ServiceName,
-			When:    record.Desired.When,
-			Order:   record.Desired.Order,
-			Script:  record.Desired.Body,
+			Slug:      record.Desired.Slug,
+			Service:   record.Desired.ServiceName,
+			When:      record.Desired.When,
+			Order:     record.Desired.Order,
+			Script:    record.Desired.Body,
+			Execution: execution,
 		}
 	}
 	return result, nil

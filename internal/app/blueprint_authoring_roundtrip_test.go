@@ -110,6 +110,7 @@ func TestGetBlueprintNormalizedProjectParsesAgain(t *testing.T) {
 type authoringRoundtripRepository struct {
 	*blueprintPreflightRepository
 	projection etcd.EnvironmentComposeProjection
+	scripts    []etcd.ScriptRecord
 }
 
 func (r *authoringRoundtripRepository) GetEnvironmentBlueprintHead(
@@ -127,12 +128,16 @@ func (r *authoringRoundtripRepository) GetEnvironmentComposeProjection(
 	return etcd.Versioned[etcd.EnvironmentComposeProjection]{Record: r.projection, Revision: 1}, true, nil
 }
 
-func (*authoringRoundtripRepository) ListScripts(
+func (r *authoringRoundtripRepository) ListScripts(
 	context.Context,
 	string,
 	etcd.PageRequest,
 ) (etcd.Page[etcd.ScriptRecord], error) {
-	return etcd.Page[etcd.ScriptRecord]{Revision: 1}, nil
+	items := make([]etcd.Versioned[etcd.ScriptRecord], len(r.scripts))
+	for index, record := range r.scripts {
+		items[index] = etcd.Versioned[etcd.ScriptRecord]{Record: record, Revision: 1, ReadRevision: 1}
+	}
+	return etcd.Page[etcd.ScriptRecord]{Revision: 1, Items: items}, nil
 }
 
 func (*authoringRoundtripRepository) ListAttaches(

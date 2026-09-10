@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
+	"github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -217,7 +218,7 @@ func (service *environmentBlueprintService) environmentBlueprintAuthoringDocumen
 		if err != nil {
 			return blueprintparser.AuthoringDocument{}, err
 		}
-		input.Entries, err = environmentBlueprintAuthoringEntries(snapshot.projection.Record.Entries)
+		input.Entries, err = entry.BlueprintAuthoring(snapshot.projection.Record.Entries)
 		if err != nil {
 			return blueprintparser.AuthoringDocument{}, err
 		}
@@ -230,7 +231,11 @@ func (service *environmentBlueprintService) environmentBlueprintAuthoringDocumen
 	if err != nil {
 		return blueprintparser.AuthoringDocument{}, err
 	}
-	input.Scripts, err = scriptdefinition.Authoring(scripts)
+	input.Scripts, err = scriptdefinition.Authoring(
+		scripts,
+		snapshot.projection.Record.Volumes,
+		snapshot.projection.Record.Entries,
+	)
 	if err != nil {
 		return blueprintparser.AuthoringDocument{}, err
 	}
@@ -279,31 +284,6 @@ func environmentBlueprintAuthoringRoutes(
 			Target:     name,
 			TargetPort: projected.Desired.TargetPort,
 			Exposure:   projected.Desired.Exposure,
-		}
-	}
-	return result, nil
-}
-
-func environmentBlueprintAuthoringEntries(
-	records []etcd.EntryRecord,
-) (map[string]core.EntrySpec, error) {
-	result := make(map[string]core.EntrySpec)
-	for _, record := range records {
-		if record.BlueprintKey == "" {
-			continue
-		}
-		if _, duplicate := result[record.BlueprintKey]; duplicate {
-			return nil, errs.New(errs.KindInternal, "Environment Blueprint Entry key is duplicated")
-		}
-		entry := record.Entry
-		source := core.EntrySourceSpec{
-			Literal:   entry.Source.Literal,
-			SecretRef: entry.Source.SecretRef,
-			Fact:      entry.Source.Fact,
-		}
-		result[record.BlueprintKey] = core.EntrySpec{
-			Kind: entry.Kind, Path: entry.Path, UID: entry.UID, GID: entry.GID,
-			Source: source, Exposure: append([]string(nil), entry.Exposure...), Secret: entry.Secret,
 		}
 	}
 	return result, nil

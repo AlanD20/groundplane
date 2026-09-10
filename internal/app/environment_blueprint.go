@@ -21,6 +21,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
+	"github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -702,6 +703,20 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	currentEntries, err := service.listBlueprintEntries(ctx, environmentID)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	pinnedEntries, err := entry.BlueprintProjection(currentEntries)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
+	reconciledEntries, err := controller.ReconcileBlueprintEntries(
+		environmentID, parsed.Extensions.Entries, pinnedEntries, allocator.Named,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	scriptRepository := service.repository
 	currentScripts, scriptsReadRevision, err := service.listBlueprintScripts(ctx, environmentID, scriptRepository)
 	if err != nil {
@@ -720,6 +735,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		parsed.Extensions.Scripts,
 		scriptServices,
 		previousScripts,
+		desiredrevision.BlueprintScriptResources{Volumes: changes.Current.Volumes, Entries: reconciledEntries.Current},
 		allocator.Named,
 	)
 	if err != nil {
@@ -810,10 +826,6 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	currentEntries, err := service.listBlueprintEntries(ctx, environmentID)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
 	componentPreparation, pinnedComponents, effectiveComponents, err := service.prepareBlueprintComponents(
 		ctx,
 		environmentID,
@@ -835,16 +847,6 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	defer preparedAttaches.clear()
-	pinnedEntries, err := environmentEntryProjection(currentEntries)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	reconciledEntries, err := controller.ReconcileBlueprintEntries(
-		environmentID, parsed.Extensions.Entries, pinnedEntries, allocator.Named,
-	)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
 	componentEnvironment := blueprintComponentEnvironment(
 		desiredEnvironment.Record,
 		desiredZones,
@@ -1546,28 +1548,6 @@ func (service *environmentBlueprintService) prepareBlueprintComponents(
 		}
 	}
 	return preparation, records, effective, nil
-}
-
-func environmentEntryProjection(
-	current []etcd.Versioned[etcd.EntryRecord],
-) ([]etcd.EntryRecord, error) {
-	records := make([]etcd.EntryRecord, len(current))
-	for index, versioned := range current {
-		var err error
-		records[index], err = etcd.NewEntryRecord(
-			versioned.Record.EnvironmentID,
-			versioned.Record.Entry,
-			versioned.Record.CurrentValueGenerationID,
-		)
-		if err != nil {
-			return nil, err
-		}
-		records[index].BlueprintKey = versioned.Record.BlueprintKey
-	}
-	sort.Slice(records, func(left int, right int) bool {
-		return records[left].Entry.ID < records[right].Entry.ID
-	})
-	return records, nil
 }
 
 func blueprintComponentEnvironment(

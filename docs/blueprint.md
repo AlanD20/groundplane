@@ -151,6 +151,13 @@ comments, aliases, anchors, and multi-file boundaries are not reproduced.
 Import still accepts the closed multi-file bundle. Multiline Script bodies are
 emitted as YAML literal block scalars under `x-gp-scripts`.
 
+Explicit Script contexts export Volume and Entry grants through their immutable
+Blueprint keys, preserving targets and each read-only decision. Export never
+substitutes a mutable Volume slug, emits a generated resource id as a key, drops
+a grant, or adopts an API-owned Entry. A missing or non-Blueprint Entry key makes
+that context unrepresentable and returns `validation.failed`; repair the Script's
+grants through its normal edit action before exporting that Blueprint.
+
 The response carries the selected desired revision and an equivalent `ETag`.
 Validation and apply require that revision through `If-Match`. Revision `0` is
 the explicit initial authoring revision before the first desired publication.

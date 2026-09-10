@@ -20,7 +20,7 @@ func TestAuthoringRetainsScriptOrder(t *testing.T) {
 				When:        core.ScriptPreDeploy,
 				Order:       order,
 			},
-		}}})
+		}}}, nil, nil)
 		if err != nil || result["migration-hook"].Order != order {
 			t.Fatalf("authoring order %d: %#v, %v", order, result, err)
 		}

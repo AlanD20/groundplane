@@ -32,6 +32,7 @@ func ReconcileBlueprintScripts(
 	authored map[string]core.ScriptSpec,
 	services []etcd.ServiceRecord,
 	previous []etcd.ScriptRecord,
+	resources BlueprintScriptResources,
 	allocate func(ids.Kind, string) string,
 ) (BlueprintScriptReconciliation, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil || allocate == nil {
@@ -112,6 +113,10 @@ func ReconcileBlueprintScripts(
 			)
 		}
 
+		execution, err := resources.resolveExecution(environmentID, spec)
+		if err != nil {
+			return BlueprintScriptReconciliation{}, err
+		}
 		current, exists := blueprintByKey[key]
 		if !exists {
 			if len(result) >= maximumBlueprintScripts {
@@ -133,7 +138,7 @@ func ReconcileBlueprintScripts(
 					"Blueprint Script allocator reused an id",
 				)
 			}
-			current, err = newBlueprintScriptRecord(environmentID, service, key, scriptID, spec)
+			current, err = newBlueprintScriptRecord(environmentID, service, key, scriptID, spec, execution)
 			if err != nil {
 				return BlueprintScriptReconciliation{}, err
 			}
@@ -148,7 +153,7 @@ func ReconcileBlueprintScripts(
 			}
 			desired := core.Script{
 				ID: current.Desired.ID, Slug: spec.Slug, ServiceName: service.Desired.Name,
-				Body: spec.Script, When: spec.When, Order: spec.Order,
+				Body: spec.Script, When: spec.When, Order: spec.Order, Execution: execution,
 			}
 			bodyChanged := desired.Body != current.Desired.Body
 			updated, replaceErr := etcd.ReplaceScriptDesired(current, desired)
@@ -235,10 +240,11 @@ func newBlueprintScriptRecord(
 	key string,
 	scriptID string,
 	spec core.ScriptSpec,
+	execution *core.ScriptExecution,
 ) (etcd.ScriptRecord, error) {
 	record, err := etcd.NewScriptRecord(environmentID, service.Desired.ID, core.Script{
 		ID: scriptID, Slug: spec.Slug, ServiceName: service.Desired.Name,
-		Body: spec.Script, When: spec.When, Order: spec.Order,
+		Body: spec.Script, When: spec.When, Order: spec.Order, Execution: execution,
 	})
 	if err != nil {
 		return etcd.ScriptRecord{}, errs.Wrap(errs.KindValidationFailed, err)

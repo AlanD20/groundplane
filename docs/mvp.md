@@ -1878,11 +1878,11 @@ An environment document and its mapping to Compose:
 | `x-gp-components.edge-tunnel` | environment-owned outbound tunnel connector, off by default; selects `cloudflare-tunnel` and stores ordered `settings.zone_ids` plus `settings.secret_id`; the selected Project or platform env-var Secret is materialized only as cloudflared's `TUNNEL_TOKEN`; Groundplane starts/stops the connector and reports health but does not configure DNS, public hostnames, ingress rules, origin targets, or protocol |
 | secrets.env_file | generated secret files the Agent materializes on the host (0600), referenced explicitly through service `env_file:` |
 | volumes.<key> / `x-gp-slug` | the immutable Compose key plus an optional mutable Groundplane slug; the Controller renders a managed local Docker Volume backed by the Environment-owned path |
-| x-gp-scripts.<reconciliation-key> | per-environment Scripts: `{ slug, service, script, when }`; the map key is immutable reconciliation identity, `slug` is renamable, `script` is the full body, and `when` is `manual`, `pre-deploy`, `post-deploy`, `pre-rollback`, `post-rollback`, or `on-failure` |
+| x-gp-scripts.<reconciliation-key> | per-environment Scripts: `{ slug, service, script, when, order?, execution? }`; the map key is immutable reconciliation identity, `slug` is renamable, `script` is the full body, and `when` is `manual`, `pre-deploy`, `post-deploy`, `pre-rollback`, `post-rollback`, or `on-failure`; order and the complete execution context follow the closed Script contract |
 | backups / retention | Controller scheduling |
 
 **Scripts.** Scripts are a first-class per-environment concept (like volumes,
-secrets, and the router): `{ slug, service, script, when }` under one immutable
+secrets, and the router): `{ slug, service, script, when, order?, execution? }` under one immutable
 `x-gp-scripts` reconciliation key. The `script` field holds the **full script
   body** - one line or many, entered in a multi-line editor - executed against a
   logical Service in a task-scoped one-off container. Scripts double as

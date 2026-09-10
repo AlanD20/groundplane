@@ -26,6 +26,7 @@ func TestReconcileBlueprintScriptsSelectsOnceForReplicatedLogicalService(t *test
 		},
 		[]etcd.ServiceRecord{service},
 		nil,
+		BlueprintScriptResources{},
 		func(kind ids.Kind, purpose string) string {
 			return ids.DeriveAt(kind, at, ids.NewAt(ids.KindTask, at, 3), purpose)
 		},
@@ -44,6 +45,7 @@ func TestReconcileBlueprintScriptsSelectsOnceForReplicatedLogicalService(t *test
 		},
 		[]etcd.ServiceRecord{service},
 		result.Current,
+		BlueprintScriptResources{},
 		func(ids.Kind, string) string {
 			t.Fatal("reapplying a replicated Script target allocated a new id")
 			return ""
@@ -81,6 +83,7 @@ func TestReconcileBlueprintScriptsRejectsIneligibleLogicalServices(t *testing.T)
 				},
 				[]etcd.ServiceRecord{service},
 				nil,
+				BlueprintScriptResources{},
 				func(kind ids.Kind, purpose string) string {
 					return ids.DeriveAt(kind, at, ids.NewAt(ids.KindTask, at, 12), purpose)
 				},

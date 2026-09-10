@@ -66,7 +66,7 @@ type EnvelopeMetadata struct {
 // ConnectorDocument is a `kind: connector` Blueprint document — see
 // blueprint.md's envelope example. It compiles to model.go's Connector.
 type ConnectorDocument struct {
-	Envelope  `yaml:",inline"`
+	Envelope  `              yaml:",inline"`
 	Connector ConnectorBody `yaml:"connector"`
 }
 
@@ -104,7 +104,7 @@ func (r CredentialRef) Validate() error {
 // "x-gp-requires".
 type Requirement struct {
 	Target    RequirementTarget    `yaml:"target"`
-	Condition RequirementCondition `yaml:"condition" json:"condition"`
+	Condition RequirementCondition `yaml:"condition"        json:"condition"`
 	Phases    []RequirementPhase   `yaml:"phases,omitempty" json:"phases"`
 }
 
@@ -177,15 +177,6 @@ type RouteSpec struct {
 	Target     string `yaml:"target"`
 	TargetPort uint16 `yaml:"target_port"`
 	Exposure   string `yaml:"exposure"` // "public" | "internal"
-}
-
-// ScriptSpec is one x-gp-scripts entry keyed by immutable reconciliation key.
-type ScriptSpec struct {
-	Slug    string     `yaml:"slug"`
-	Service string     `yaml:"service"`
-	When    ScriptHook `yaml:"when"`
-	Script  string     `yaml:"script"`
-	Order   uint16     `yaml:"order,omitempty"`
 }
 
 // ComponentSpec is one x-gp-components entry keyed by Component Capability.

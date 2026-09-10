@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -187,7 +186,7 @@ func Parse(ctx context.Context, scope EnvironmentScope, bundle core.BlueprintBun
 	if err := validateReleaseGroupReferences(extensions.ReleaseGroups, project); err != nil {
 		return Result{}, err
 	}
-	if err := validateScriptReferences(extensions.Scripts, project); err != nil {
+	if err := validateScriptReferences(extensions.Scripts, project, extensions.Entries); err != nil {
 		return Result{}, err
 	}
 	normalizeProjectPaths(project, workspace)
@@ -226,7 +225,7 @@ func parseRoot(content []byte) (core.Envelope, Extensions, []byte, error) {
 	}
 
 	var authored rootDocument
-	if err := validateScriptOrderNodes(typed); err != nil {
+	if err := validateScriptNodes(typed); err != nil {
 		return core.Envelope{}, Extensions{}, nil, err
 	}
 	if err := decodeKnownFields(typed, &authored); err != nil {
@@ -284,53 +283,6 @@ func parseRoot(content []byte) (core.Envelope, Extensions, []byte, error) {
 		ReleaseGroups: authored.ReleaseGroups,
 	}
 	return authored.Envelope, extensions, compose, nil
-}
-
-func normalizeScripts(values map[string]core.ScriptSpec) (map[string]core.ScriptSpec, error) {
-	if len(values) > 64 {
-		return nil, validationError("x-gp-scripts exceeds the 64 Script limit")
-	}
-	seenSlugs := make(map[string]struct{}, len(values))
-	for key, value := range values {
-		if core.ValidateScriptLabel("script reconciliation key", key) != nil {
-			return nil, validationError("x-gp-scripts reconciliation key is invalid")
-		}
-		if core.ValidateScriptLabel("script slug", value.Slug) != nil {
-			return nil, validationError("x-gp-scripts slug is invalid")
-		}
-		if _, duplicate := seenSlugs[value.Slug]; duplicate {
-			return nil, validationError("x-gp-scripts slugs must be unique")
-		}
-		seenSlugs[value.Slug] = struct{}{}
-		if value.Service == "" {
-			return nil, validationError("x-gp-scripts service is required")
-		}
-		if strings.TrimSpace(value.Script) == "" || !utf8.ValidString(value.Script) ||
-			strings.ContainsRune(value.Script, '\x00') || len(value.Script) > core.MaximumScriptBodyBytes {
-			return nil, validationError("x-gp-scripts body is invalid")
-		}
-		candidate := core.Script{
-			ID: "script-validation", Slug: value.Slug, ServiceName: value.Service,
-			Body: value.Script, When: value.When, Order: value.Order,
-		}
-		if err := candidate.Validate(); err != nil {
-			return nil, validationError("x-gp-scripts entry is invalid")
-		}
-	}
-	return values, nil
-}
-
-func validateScriptReferences(values map[string]core.ScriptSpec, project *types.Project) error {
-	for _, value := range values {
-		service, exists := project.Services[value.Service]
-		if !exists {
-			return validationError("x-gp-scripts target must be an enabled Service in the same Environment")
-		}
-		if service.GetScale() < 1 {
-			return validationError("x-gp-scripts target Service must have positive effective replicas")
-		}
-	}
-	return nil
 }
 
 func normalizeEntries(entries map[string]core.EntrySpec) (map[string]core.EntrySpec, error) {

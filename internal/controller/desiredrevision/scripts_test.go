@@ -30,7 +30,14 @@ func TestReconcileBlueprintScriptsDerivesAndPreservesIdentityByReconciliationKey
 		},
 	}
 
-	first, err := ReconcileBlueprintScripts(environmentID, authored, []etcd.ServiceRecord{service}, nil, allocate)
+	first, err := ReconcileBlueprintScripts(
+		environmentID,
+		authored,
+		[]etcd.ServiceRecord{service},
+		nil,
+		BlueprintScriptResources{},
+		allocate,
+	)
 	if err != nil {
 		t.Fatalf("ReconcileBlueprintScripts(first) error = %v", err)
 	}
@@ -48,6 +55,7 @@ func TestReconcileBlueprintScriptsDerivesAndPreservesIdentityByReconciliationKey
 		authored,
 		[]etcd.ServiceRecord{service},
 		first.Current,
+		BlueprintScriptResources{},
 		func(ids.Kind, string) string {
 			t.Fatal("reapply allocated a new Script id")
 			return ""
@@ -69,6 +77,7 @@ func TestReconcileBlueprintScriptsDerivesAndPreservesIdentityByReconciliationKey
 		authored,
 		[]etcd.ServiceRecord{service},
 		first.Current,
+		BlueprintScriptResources{},
 		allocate,
 	)
 	if err != nil || len(changed.Current) != 1 || changed.Current[0].Desired.Order != 0 ||
@@ -96,6 +105,7 @@ func TestReconcileBlueprintScriptsBodyChangeAppendsExactGeneration(t *testing.T)
 		},
 		[]etcd.ServiceRecord{service},
 		[]etcd.ScriptRecord{previous},
+		BlueprintScriptResources{},
 		func(ids.Kind, string) string {
 			t.Fatal("existing reconciliation key allocated a new Script id")
 			return ""
@@ -139,6 +149,7 @@ func TestReconcileBlueprintScriptsCarriesOmittedBlueprintAndAPIRecordsForward(t 
 		map[string]core.ScriptSpec{},
 		[]etcd.ServiceRecord{service},
 		[]etcd.ScriptRecord{api, blueprint},
+		BlueprintScriptResources{},
 		func(ids.Kind, string) string {
 			t.Fatal("omission allocated a Script id")
 			return ""
@@ -177,6 +188,7 @@ func TestReconcileBlueprintScriptsRejectsSlugCollisionAndTargetChange(t *testing
 			},
 			[]etcd.ServiceRecord{apiService, workerService},
 			[]etcd.ScriptRecord{api},
+			BlueprintScriptResources{},
 			func(kind ids.Kind, purpose string) string {
 				return ids.DeriveAt(kind, at, ids.NewAt(ids.KindTask, at, 34), purpose)
 			},
@@ -200,6 +212,7 @@ func TestReconcileBlueprintScriptsRejectsSlugCollisionAndTargetChange(t *testing
 			},
 			[]etcd.ServiceRecord{apiService, workerService},
 			[]etcd.ScriptRecord{blueprint},
+			BlueprintScriptResources{},
 			func(ids.Kind, string) string {
 				t.Fatal("target change allocated a Script id")
 				return ""
@@ -227,6 +240,7 @@ func TestReconcileBlueprintScriptsIgnoresReplicaCountOfUntargetedServices(t *tes
 		},
 		[]etcd.ServiceRecord{target, unrelated},
 		nil,
+		BlueprintScriptResources{},
 		func(kind ids.Kind, purpose string) string {
 			return ids.DeriveAt(kind, at, ids.NewAt(ids.KindTask, at, 43), purpose)
 		},
