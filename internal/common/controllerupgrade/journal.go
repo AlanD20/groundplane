@@ -78,6 +78,12 @@ type Journal struct {
 	TrialBootID        string            `json:"trial_boot_id"`
 }
 
+// CandidateDeadline leaves time for native restart and authenticated Agent
+// rollback within the ordinary operation deadline.
+func (journal Journal) CandidateDeadline() time.Time {
+	return journal.Deadline.Add(-RecoveryReserveSeconds * time.Second)
+}
+
 func (journal Journal) Validate() error {
 	_, startOffset := journal.StartedAt.Zone()
 	_, deadlineOffset := journal.Deadline.Zone()
@@ -106,7 +112,8 @@ func (journal Journal) Validate() error {
 
 func (journal Journal) SameOperation(other Journal) bool {
 	if journal.Schema != other.Schema || journal.TaskID != other.TaskID || journal.Release != other.Release ||
-		journal.Manifest != other.Manifest || journal.PreviousController != other.PreviousController ||
+		journal.Manifest != other.Manifest ||
+		journal.PreviousController != other.PreviousController ||
 		!journal.StartedAt.Equal(other.StartedAt) ||
 		!journal.Deadline.Equal(other.Deadline) {
 		return false

@@ -3,6 +3,7 @@ package controllerrelease
 import (
 	"context"
 	"errors"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -15,11 +16,10 @@ import (
 // Rationale: a separate recovery process must observe the same fsynced journal;
 // preparing another Task or rewriting a frozen input cannot steal its authority.
 func TestJournalPersistsAndFencesOperation(t *testing.T) {
-	store, id, _ := testReleaseStore(t)
+	store, journal, _, _ := activationStore(t)
 	defer store.Close()
 	ctx := context.Background()
-	journal := testJournal(t, store, id)
-	if err := store.recordPrepared(ctx, journal); err != nil {
+	if err := store.Prepare(ctx, journal); err != nil {
 		t.Fatal(err)
 	}
 	reopened, err := openStore(ctx, store.root.Name(), store.uid)
@@ -27,18 +27,25 @@ func TestJournalPersistsAndFencesOperation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
+	reopened.binaries, err = os.OpenRoot(store.binaries.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reopened.Prepare(ctx, journal); err != nil {
+		t.Fatalf("exact preparation replay: %v", err)
+	}
 	got, found, err := reopened.Current(ctx)
 	if err != nil || !found || !got.SameOperation(journal) {
 		t.Fatalf("reopened journal = %#v, %t, %v", got, found, err)
 	}
 	changed := journal
 	changed.Manifest.ControllerVersion = "different"
-	if err := reopened.recordPrepared(ctx, changed); err == nil {
+	if err := reopened.Prepare(ctx, changed); err == nil {
 		t.Fatal("frozen input was rewritten")
 	}
 	changed = journal
 	changed.TaskID = ids.NewAt(ids.KindTask, journal.StartedAt, 2)
-	if err := reopened.recordPrepared(ctx, changed); err == nil {
+	if err := reopened.Prepare(ctx, changed); err == nil {
 		t.Fatal("active operation was replaced")
 	}
 	if _, err := reopened.Advance(ctx, changed.TaskID, upgrade.PhasePrepared, upgrade.PhaseActivating); err == nil {
@@ -49,11 +56,10 @@ func TestJournalPersistsAndFencesOperation(t *testing.T) {
 // Rationale: cancellation racing handoff must have one winner across file
 // descriptors/process owners; a committed activation is never cancelled later.
 func TestJournalCancellationActivationRace(t *testing.T) {
-	store, id, _ := testReleaseStore(t)
+	store, journal, _, _ := activationStore(t)
 	defer store.Close()
 	ctx := context.Background()
-	journal := testJournal(t, store, id)
-	if err := store.recordPrepared(ctx, journal); err != nil {
+	if err := store.Prepare(ctx, journal); err != nil {
 		t.Fatal(err)
 	}
 	other, err := openStore(ctx, store.root.Name(), store.uid)

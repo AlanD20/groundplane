@@ -23,8 +23,6 @@ import (
 )
 
 const (
-	Directory                = "/var/lib/groundplane/controller-updates"
-	BinaryDirectory          = "/usr/local/libexec/groundplane"
 	MaximumBinaryBytes int64 = 256 << 20
 )
 
@@ -38,11 +36,11 @@ type Store struct {
 // Open requires bootstrap to have installed the private root-owned directory.
 // Absence is not repaired silently by an operator update request.
 func Open(ctx context.Context) (*Store, error) {
-	store, err := openStore(ctx, Directory, 0)
+	store, err := openStore(ctx, upgrade.ReleaseDirectory, 0)
 	if err != nil {
 		return nil, err
 	}
-	binaries, err := openAbsoluteRoot(ctx, BinaryDirectory)
+	binaries, err := openAbsoluteRoot(ctx, upgrade.BinaryDirectory)
 	if err == nil {
 		info, statErr := binaries.Stat(".")
 		err = statErr

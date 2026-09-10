@@ -155,7 +155,8 @@ func (store *Store) Guard(ctx context.Context, now time.Time) error {
 		}
 		return nil
 	case upgrade.PhaseTrial:
-		if installed == journal.Manifest.ControllerSHA256 && now.Before(journal.Deadline) &&
+		if installed == journal.Manifest.ControllerSHA256 &&
+			now.Before(journal.CandidateDeadline()) &&
 			journal.TrialBootID == store.bootID {
 			journal.Phase = upgrade.PhaseStarting
 			return store.writeJournal(ctx, journal)

@@ -38,38 +38,6 @@ func (store *Store) Current(ctx context.Context) (upgrade.Journal, bool, error) 
 	return journal, true, nil
 }
 
-func (store *Store) recordPrepared(ctx context.Context, journal upgrade.Journal) error {
-	unlock, err := store.lock(ctx)
-	if err != nil {
-		return err
-	}
-	defer unlock()
-	return store.recordPreparedLocked(ctx, journal)
-}
-
-func (store *Store) recordPreparedLocked(ctx context.Context, journal upgrade.Journal) error {
-	if err := journal.Validate(); err != nil {
-		return err
-	}
-	if journal.Phase != upgrade.PhasePrepared {
-		return phaseConflict()
-	}
-	current, found, err := store.Current(ctx)
-	if err != nil {
-		return err
-	}
-	if found && current.TaskID == journal.TaskID {
-		if !current.SameOperation(journal) {
-			return phaseConflict()
-		}
-		return nil
-	}
-	if found && !current.Phase.Settled() {
-		return errs.New(errs.KindResourceInUse, "a controller activation is already active")
-	}
-	return store.writeJournal(ctx, journal)
-}
-
 // Advance is a compare-and-swap over the closed recovery state graph. An exact
 // replay is accepted; a stale task, incompatible transition or race is rejected.
 func (store *Store) Advance(

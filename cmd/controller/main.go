@@ -14,7 +14,7 @@ func main() {
 	ctx, stop := app.RootContext()
 	defer stop()
 
-	if err := app.RunController(ctx); err != nil {
+	if err := app.RunControllerProcess(ctx, os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "controller:", err)
 		os.Exit(1)
 	}

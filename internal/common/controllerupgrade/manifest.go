@@ -14,11 +14,12 @@ import (
 )
 
 const (
-	ManifestSchema      = 1
-	StorageEpoch        = 1
-	MaxManifestBytes    = 4096
-	TaskTimeoutSeconds  = 600
-	DrainTimeoutSeconds = 120
+	ManifestSchema         = 1
+	StorageEpoch           = 1
+	MaxManifestBytes       = 4096
+	TaskTimeoutSeconds     = 600
+	DrainTimeoutSeconds    = 120
+	RecoveryReserveSeconds = 150
 )
 
 // Digest is a canonical SHA256 identity, never an operator-supplied path.
