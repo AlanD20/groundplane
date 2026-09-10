@@ -99,8 +99,9 @@ func TestUpdatePublicationFailureRetainsUncertainGenerationPause(t *testing.T) {
 			repository := seededRepository(trace, PhaseReady)
 			harness := newTestManager(t, repository, trace)
 			harness.manager.repository = &uncertainReplacementRepository{
-				fakeRepository: repository,
-				committed:      committed,
+				fakeRepository:        repository,
+				committed:             committed,
+				resolutionUnavailable: true,
 			}
 			registry := agentchannel.NewRegistry()
 			harness.manager.sessions = &registryLifecycleSessions{Registry: registry}
@@ -140,7 +141,8 @@ func (runtime *failedPreparationRuntime) GenerateCredential(ctx context.Context,
 
 type uncertainReplacementRepository struct {
 	*fakeRepository
-	committed bool
+	committed             bool
+	resolutionUnavailable bool
 }
 
 func (repository *uncertainReplacementRepository) BeginReplacement(

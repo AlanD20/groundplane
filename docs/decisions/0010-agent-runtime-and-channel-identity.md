@@ -103,6 +103,16 @@ publication is attempted, an uncertain response retains the pause until durable
 recovery fences the predecessor; it is never treated as proof of no mutation.
 Valid assignments delayed by a pause remain dispatchable, not quarantined.
 
+Unknown replacement publication is resolved with a storage barrier, never an
+unchanged read alone. A same-value CAS advances the prior primary revision so a
+delayed old transaction cannot subsequently commit. A proven uncommitted attempt
+releases its pause; an already committed generation is irreversibly fenced and
+resumed without rotating twice. If storage cannot resolve it immediately, the
+lifecycle owner retains the operation and retries resolution before subsequent
+reconciliation/mutations. Controller restart admission restoration uses the
+durable native Task's pinned identity; the current-process hold is not durable
+authority by itself.
+
 For an accepted update, the Controller:
 
 1. retains the current image digest as the rollback digest;

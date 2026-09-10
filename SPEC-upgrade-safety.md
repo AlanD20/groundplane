@@ -25,6 +25,11 @@ intact. A committed or uncertain durable replacement does not authorize reopenin
 the original generation. Reconnect cannot bypass a pause. Destructive lifecycle
 fences remain monotonic.
 
+Resolve unknown replacement publication with a same-value primary-revision CAS
+barrier. An unchanged read cannot prove non-commit. Retain unresolved holds for
+automatic lifecycle reconciliation; restore restart holds from durable Task
+identity before opening the Agent channel.
+
 ## Coordinated update acceptance
 
 - Immutable current/candidate identities and compatibility are known before

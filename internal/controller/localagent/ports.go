@@ -96,6 +96,15 @@ type Repository interface {
 		credential Credential,
 		updatedAt time.Time,
 	) (StoredRecord, error)
+	// FenceReplacementAttempt either advances the unchanged primary revision
+	// with a same-value CAS or returns an already advanced record. A successful
+	// result proves that a delayed replacement using revision can no longer win.
+	FenceReplacementAttempt(
+		ctx context.Context,
+		id string,
+		generation uint64,
+		revision int64,
+	) (StoredRecord, error)
 	MarkReplacementReady(
 		ctx context.Context,
 		id string,

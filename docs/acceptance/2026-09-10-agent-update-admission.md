@@ -50,3 +50,33 @@ separately. The revocation race and full affected packages pass after correction
 No QA binary/image was installed by this increment. No production, application,
 provider or host-network state changed. Full CI and runtime qualification remain
 initiative gates, not implied by this local evidence.
+
+## Unknown-publication resolution increment
+
+The lifecycle now uses a same-value primary-revision CAS to resolve unknown
+replacement publication. A delayed old transaction cannot commit after this
+barrier. An already committed generation resumes without another rotation.
+Storage outages retain one operation-owned recovery record in the Manager;
+reconciliation resolves it before admitting later lifecycle mutations. Recovery
+retains the pinned previous image through an uncertain rollback response.
+
+New regression proof (Go1.26.7, same repo-local caches):
+
+- `go test -race -count=1 ./internal/infra/etcd -run
+  TestLocalAgentReplacementResolutionFencesLateCommit -timeout 90s`: pass,
+  covering both an already committed and a deliberately delayed transaction.
+- `go test -race -count=1 ./internal/controller/localagent
+  ./internal/controller/agentchannel -timeout 90s`: pass.
+- `go test -race -count=1 ./internal/app -run
+  '^(TestLocalAgent|TestAgentUpdate|TestControllerTaskUpdate)' -timeout 90s`: pass.
+- Additional cancellation and deferred committed/failed-candidate rollback
+  regressions pass. The original real-Registry unknown test still proves no
+  dispatch while the storage barrier is unavailable.
+- `go vet ./internal/controller/localagent ./internal/app`: pass.
+
+Package-wide etcd vet additionally reports existing protobuf copy-lock warnings
+at `script_source_reference_codec.go:153`, `:218` and `:237`. That file is
+unchanged in this increment; correction belongs to Script/CI qualification and
+is not waived. Cold Controller restart still needs admission restoration and
+replacement-attempt fencing from the durable native Task before this initiative
+can claim complete upgrade safety. No new QA deployment is implied.

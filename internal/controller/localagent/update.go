@@ -3,6 +3,7 @@ package localagent
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -15,6 +16,16 @@ func (manager *Manager) Update(ctx context.Context, request UpdateRequest) error
 		return err
 	}
 	defer manager.leave()
+	err := manager.update(ctx, request)
+	if manager.pending != nil && manager.pending.published {
+		if err == nil || manager.pendingSettled(ctx) {
+			manager.pending = nil
+		}
+	}
+	return err
+}
+
+func (manager *Manager) update(ctx context.Context, request UpdateRequest) error {
 	if err := validateUpdateRequest(request); err != nil {
 		return err
 	}
@@ -103,14 +114,33 @@ func (manager *Manager) Update(ctx context.Context, request UpdateRequest) error
 		updatedAt,
 	)
 	if err != nil {
-		return safePortError(ctx, err, "local agent durable replacement failed")
+		originalErr := err
+		manager.pending = &pendingReplacement{
+			request:  request,
+			revision: stored.Revision,
+			digest:   credential.Digest,
+			resume:   resume,
+		}
+		resolutionContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		resolved, published, resolveErr := manager.resolvePending(resolutionContext)
+		cancel()
+		if resolveErr != nil || !published {
+			return safePortError(ctx, originalErr, "local agent durable replacement failed")
+		}
+		replacement = resolved
 	}
 	if err := validateStored(replacement); err != nil {
 		return err
 	}
 	if replacement.Record.Generation != stored.Record.Generation+1 ||
-		replacement.Record.Image != request.DesiredImage || replacement.Record.Phase != PhaseUpdating {
+		replacement.Record.Image != request.DesiredImage {
 		return errs.New(errs.KindInternal, "local agent repository returned an invalid replacement")
+	}
+	if replacement.Record.Phase == PhaseReady {
+		return nil
+	}
+	if replacement.Record.Phase != PhaseUpdating {
+		return errs.New(errs.KindInternal, "local agent replacement phase is invalid")
 	}
 	if err := manager.sessions.Revoke(ctx, stored.Record.ID, stored.Record.Generation); err != nil {
 		return safePortError(ctx, err, "local agent previous session revocation failed")

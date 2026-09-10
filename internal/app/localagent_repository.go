@@ -27,6 +27,12 @@ type localAgentRecords interface {
 		string,
 		time.Time,
 	) (etcd.Versioned[etcd.LocalAgentRecord], error)
+	FenceReplacementAttempt(
+		context.Context,
+		string,
+		uint64,
+		int64,
+	) (etcd.Versioned[etcd.LocalAgentRecord], error)
 	MarkReplacementReady(
 		context.Context,
 		string,
@@ -116,6 +122,16 @@ func (adapter *localAgentRepositoryAdapter) BeginReplacement(
 		credential.Digest,
 		updatedAt,
 	)
+	if err != nil {
+		return localagent.StoredRecord{}, err
+	}
+	return localAgentRecordFromDurable(stored)
+}
+
+func (adapter *localAgentRepositoryAdapter) FenceReplacementAttempt(
+	ctx context.Context, id string, generation uint64, revision int64,
+) (localagent.StoredRecord, error) {
+	stored, err := adapter.repository.FenceReplacementAttempt(ctx, id, generation, revision)
 	if err != nil {
 		return localagent.StoredRecord{}, err
 	}

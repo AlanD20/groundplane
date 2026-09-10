@@ -221,6 +221,12 @@ func (repository *fakeLocalAgentRecords) ReplaceGeneration(
 	return etcd.Versioned[etcd.LocalAgentRecord]{Record: record, Revision: 12}, nil
 }
 
+func (repository *fakeLocalAgentRecords) FenceReplacementAttempt(
+	context.Context, string, uint64, int64,
+) (etcd.Versioned[etcd.LocalAgentRecord], error) {
+	return repository.get, nil
+}
+
 func (repository *fakeLocalAgentRecords) MarkReplacementReady(
 	_ context.Context,
 	_ string,

@@ -37,6 +37,7 @@ type Manager struct {
 	tasks      Tasks
 	clock      Clock
 	gate       chan struct{}
+	pending    *pendingReplacement
 }
 
 // EnrollRequest contains only decisions made by the calling task. The caller owns
@@ -158,39 +159,6 @@ func (manager *Manager) Enroll(ctx context.Context, request EnrollRequest) (Agen
 		return Agent{}, err
 	}
 	return projectAgent(ready.Record), nil
-}
-
-// Reconcile resumes the durable phase after Controller or Docker restart.
-func (manager *Manager) Reconcile(ctx context.Context) error {
-	if err := manager.enter(ctx); err != nil {
-		return err
-	}
-	defer manager.leave()
-
-	stored, err := manager.repository.GetSingleton(ctx)
-	if isAgentNotFound(err) {
-		return nil
-	}
-	if err != nil {
-		return safePortError(ctx, err, "local agent durable record lookup failed")
-	}
-	if err := validateStored(stored); err != nil {
-		return err
-	}
-
-	switch stored.Record.Phase {
-	case PhaseProvisioning:
-		_, err = manager.provision(ctx, stored)
-		return err
-	case PhaseReady:
-		return manager.convergeRuntime(ctx, stored.Record)
-	case PhaseUpdating:
-		return manager.resumeReplacement(ctx, stored)
-	case PhaseDeleting:
-		return manager.resumeDelete(ctx, stored)
-	default:
-		return errs.New(errs.KindInternal, "local agent record has an invalid lifecycle phase")
-	}
 }
 
 // UpdateConfig replaces the complete Controller-owned runtime config. The
@@ -511,6 +479,10 @@ func (manager *Manager) enter(ctx context.Context) error {
 	}
 	select {
 	case manager.gate <- struct{}{}:
+		if err := manager.recoverPending(ctx); err != nil {
+			manager.leave()
+			return err
+		}
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
