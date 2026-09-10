@@ -249,8 +249,10 @@ distribution and normal E→F Task`task_01M24W6DBC0VECK1C62YKH7NMY`, created
 `sha256:b2d2854b9068c877ee88ee2913a56c5c679a64b431cf9a0c9d078cb156dc134e`;
 Agent`2487f1b154b8` runs digest
 `aa84f5fcebea97d3e07a96a44dece75c616b4c357e354556d4990a5e3852d7d7`.
-Traffic remained successful across the build, transfer and activation; the full
-probes continue. The bounded Tunnel log window is empty. Shared-builder pressure
+Traffic passed3000held WebSocket deliveries and1200verified-TLS HTTP requests
+with zero failures across the build, transfer and activation. The HTTP tail
+also covered the following G build's start. The bounded Tunnel log window is
+empty. Shared-builder pressure
 remains a hypothesis, not a confirmed root cause from this one passing sample.
 
 The next candidate limits Go compilation directly, without the diagnostic Docker
@@ -262,11 +264,40 @@ Evidence: `qa-native-update-f-deploy.log`, `bounded-build-limits.txt`,
 `bounded-local-vmstat.txt`, `bounded-tunnel-mid.txt`, `bounded-*-continuity` logs,
 `native-f-current.txt` and `build-parallelism-red.log`/`build-parallelism-green.log`.
 
+## Release G — checked-in compilation limits
+
+Source`45c3d5d7f` used the normal deployment command without the diagnostic
+Docker wrapper or external`GOMAXPROCS` setting. The checked-in native build
+environment uses2Go execution threads; the uncached Agent build uses2parallel
+build programs and2Go execution threads per process. This is not a hard host
+resource cap. All55deployment regressions passed before this release.
+
+F→G Task`task_01M24WQY66ZACTHF2896D72M0K`, created05:30:41.222UTC, completed.
+Controller`0.0.0-qa.native20260910.7` runs SHA256
+`8d370a6ec97e75672dde9c0f5a80534bc0aa0f60715828a288fa1e0b3d89b1ee`, release
+`sha256:43f699bd8fdf01eced5998ac46c3ac03b784a3812b34e32c09790a0fd57bceab`.
+Agent`b7a7349d1f38` runs
+`localhost:5000/groundplane-agent@sha256:a056ee3d3ffc5947c9854dbe0b23c5c967dab22c8a936d7199ced17892ec5893`.
+Application containers and the router/Tunnel identities remained unchanged.
+
+The whole uncached build, Agent-only paced transfer, activation and following
+runtime passed3000held WebSocket deliveries and1200verified-TLS HTTP requests
+with zero failures. The complete bounded Tunnel log window is empty. This
+qualifies the corrected normal deployment path in this QA topology; it does
+not retroactively make the four uncapped samples pass or prove arbitrary
+shared-builder capacity. The specific underlying QUIC/resource mechanism was
+not established. No host/provider settings or workload limits were changed.
+
+Evidence: `deployment-55-tests.log`, `qa-native-update-g-deploy.log`,
+`native-g-current.txt`, `compiler-local-vmstat.txt`, `compiler-tunnel-final.txt`,
+`compiler-websocket-continuity.log` and `compiler-http-continuity.jsonl`.
+
 ## Remaining proof
 
-Whole-build public traffic continuity remains under diagnosis. A→B→C, cached
-distribution, native busy preparation, Abort, failed/interrupted Controller
-recovery, coordinated Agent rollback and compatibility refusal pass in their
-named live windows. Watchdog/changed-boot recovery and standalone Agent busy
-drain retain local automated proof only.
-No whole upgrade-safety, full-CI or production-readiness claim is made.
+The upgrade checkpoint now has live normal activation, corrected whole-build
+distribution, busy preparation, Abort, failed/interrupted Controller recovery,
+coordinated Agent rollback and compatibility-refusal proof in the named windows.
+Watchdog/changed-boot recovery and standalone Agent busy drain retain local
+automated proof only and remain explicit qualification checks. Required full CI,
+subsequent application features and recovery qualification are not complete;
+this is not a production-readiness claim.
