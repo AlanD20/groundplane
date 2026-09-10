@@ -1120,16 +1120,27 @@ template through the generic Component config vertical; its SDK-only registered
 renderer validates the template and substitutes the single `{groundplane}`
 marker with Controller-owned directives. This does not add an
 implementation-named persistence route or Agent procedure.
+Caddy carries one full Caddyfile through the same typed configuration seam.
+Its SDK-only planner substitutes only `{gp.routes}` and
+`{gp.route:HOST:PATH:FIELD}` from existing immutable Route capability inputs;
+native Caddy syntax is not interpreted by a second template engine. ADR0075
+defines closed reference fields and complete-Route coverage. Stable upstreams
+never expose serving-slot addresses. Generic managed-config validation and
+activation preserve the prior serving file when a candidate is invalid.
 
 The existing generic Component read service owns a consumer-defined
 managed-config projector port. `GET /components/{id}/config` returns a typed,
 non-null managed-file array through that port; it contains the durable template
-and live rendered output but no planner or persistence record. The CoreDNS
+and current rendered output but no planner or persistence record. The CoreDNS
 projector consumes only durable Component config, the already-persisted
 read-only host resolver baseline, the current host-resolution projection, and
 the registered renderer. It has no baseline capture/write capability, so GET
-cannot mutate state. Other implementations project an empty array. PUT remains
-the single configuration mutation and the Agent/protobuf contract is unchanged.
+cannot mutate state. Environment managed-file preview uses the same registered
+planner against one coherent durable Environment/Component/Route view; it may
+not allocate or publish anything. Unsupported/disabled implementations project
+an empty array. Preview represents current desired rendering, not observed
+live bytes or an unsaved draft. PUT remains the single configuration mutation
+and the Agent/protobuf contract is unchanged.
 
 Groundplane constructs a fixed-revision capability-scoped planning session.
 The planner returns immutable intents for existing Service, Route, Volume,

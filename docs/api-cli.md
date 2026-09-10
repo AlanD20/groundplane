@@ -6,6 +6,20 @@ request/response contains optional `alias`. Console Router setup exposes the
 same field; Blueprint mirrors it as `http-router.settings.alias`. This is a
 single primary-Zone DNS label, not a name change or port setting.
 
+Caddy Configure/Enable's existing `--file PATH` (or `--file -`) accepts the
+complete Caddyfile as `caddyfile_template`, not a per-Route snippet. Empty uses
+`{gp.routes}`. Full custom files resolve `{gp.route:HOST:PATH:host|path|upstream}`
+only from the Environment's declared Routes; every Route needs its upstream
+reference or the aggregate marker. Unknown GP references and the superseded
+`{routes}` marker reject; native Caddy placeholders remain untouched. Console
+Router editing, `component config set` and `PUT /components/{id}/config` share
+the same mutation. Config GET, `component config show` and Console's rendered
+file view expose the current desired template/output through `managed_files`.
+That read neither validates unsaved drafts nor proves live Caddy state. Invalid
+staged files cannot replace the prior serving config. Configure retains unedited
+fields from Component metadata; a failing saved preview must not prevent an
+operator from replacing that file. See ADR0075.
+
 Companion to `mvp.md` (the authoritative contract). Defines the shape
 of the human-facing surfaces: the **CLI** and the **API**. One resource
 model, three surfaces — Console, CLI, API — all speaking the same nouns and

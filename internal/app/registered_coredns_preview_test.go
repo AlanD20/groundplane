@@ -46,7 +46,7 @@ func TestRegisteredCoreDNSManagedConfigProjectorUsesCompiledRenderer(t *testing.
 			CorefileTemplate: ". {\n    {groundplane}\n}\n", UpstreamAuto: true,
 			UpstreamResolvers: []core.DNSResolverEndpoint{}, Forwarders: []core.DNSForwarder{},
 		}},
-	})
+	}, 42)
 	if err != nil {
 		t.Fatalf("ProjectManagedConfigFiles() error = %v", err)
 	}

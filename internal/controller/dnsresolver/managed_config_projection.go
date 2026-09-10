@@ -44,6 +44,7 @@ func NewManagedConfigProjector(
 func (projector *ManagedConfigProjector) ProjectManagedConfigFiles(
 	ctx context.Context,
 	component core.Component,
+	_ int64,
 ) ([]apiTypes.ManagedConfigFile, error) {
 	files := []apiTypes.ManagedConfigFile{}
 	if !component.Enabled || component.Config.CoreDNS == nil {

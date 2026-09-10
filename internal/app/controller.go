@@ -333,16 +333,6 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: bootstrap platform Components: %w", err)
 	}
-	managedConfigProjector, err := newRegisteredCoreDNSManagedConfigProjector(componentRecords, componentRecords)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize managed Component config projection: %w", err)
-	}
-	componentReads, err := componentcapability.NewReadService(componentRecords, managedConfigProjector)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Component reads: %w", err)
-	}
 	serviceReadRepository, err := newDurableServiceReadRepository(hierarchyRecords, serviceRecords)
 	if err != nil {
 		_ = store.Close()
@@ -730,6 +720,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err := networkRecords.EnableDesiredRevisions(serviceDesiredRevisionRecords); err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Network desired revision persistence: %w", err)
+	}
+	componentReads, err := newComponentReadService(componentRecords, networkRecords, componentCatalog)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Component reads: %w", err)
 	}
 	networkCapability, err := networkcontroller.NewEtcdService(
 		networkRecords,

@@ -257,7 +257,7 @@ func TestPrepareEnvironmentComponentTaskAllowsInitialProjectionAbsence(t *testin
 		ID: current.Record.Desired.ID, Owner: core.ComponentOwnerEnvironment,
 		OwnerID: environment.Record.ID, Kind: core.ComponentKindIngressCaddy, Enabled: true,
 		Config: core.ComponentConfig{Caddy: &core.CaddyComponentConfig{
-			ZoneIDs: []string{zone.Desired.ID}, CaddyfileTemplate: "{routes}\n",
+			ZoneIDs: []string{zone.Desired.ID}, CaddyfileTemplate: "{gp.routes}\n",
 		}},
 		GeneratedServices: []string{ids.NewAt(ids.KindService, now, 1503)},
 	}

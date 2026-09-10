@@ -37,7 +37,7 @@ test('CoreDNS presentation does not manufacture fields or forwarder identities',
   assert.doesNotMatch(store, /secret_id[^\n]*\? config\.secret_id : ''/)
   assert.match(hydration, /Controller returned invalid CoreDNS Component configuration/)
   assert.doesNotMatch(hydration, /value\.resolvers \?\? \[\]/)
-  assert.match(environmentPage, /caddyTemplateMarkerCount !== 1/)
+  assert.match(environmentPage, /CaddyTemplateEditor/)
   assert.doesNotMatch(surfaces[0], /127\.0\.0\.1:53/)
   for (const surface of surfaces) assert.doesNotMatch(surface, /\/platform\/(?:tenants|projects)/)
 })

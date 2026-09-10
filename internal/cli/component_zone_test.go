@@ -26,7 +26,7 @@ const (
 )
 
 func TestComponentEnableResolvesAndCreatesOrderedZones(t *testing.T) {
-	template := "{\n\t{routes}\n}\n"
+	template := "{\n\t{gp.routes}\n}\n"
 	path := t.TempDir() + "/Caddyfile"
 	if err := os.WriteFile(path, []byte(template), 0o600); err != nil {
 		t.Fatal(err)
@@ -69,7 +69,7 @@ func TestComponentEnableResolvesAndCreatesOrderedZones(t *testing.T) {
 				`{"id":"`+createdInnerZoneID+`","environment_id":"`+environmentTestID+`","name":"private","subnet":"10.40.40.0/24","internal":true,"owner_kind":"environment","owner_id":"`+environmentTestID+`"}`,
 			)
 		case 5:
-			want := `{"config":{"zone_ids":["` + frontendZoneID + `","` + identityZoneID + `","` + createdEdgeZoneID + `","` + createdInnerZoneID + `"],"caddyfile_template":"{\n\t{routes}\n}\n"}}`
+			want := `{"config":{"zone_ids":["` + frontendZoneID + `","` + identityZoneID + `","` + createdEdgeZoneID + `","` + createdInnerZoneID + `"],"caddyfile_template":"{\n\t{gp.routes}\n}\n"}}`
 			assertComponentRequest(t, request, http.MethodPost, "/api/v1/components/"+componentTestID+"/enable", want)
 			writer.WriteHeader(http.StatusAccepted)
 			_, _ = io.WriteString(writer, `{"task_id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`)

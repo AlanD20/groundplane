@@ -15,7 +15,7 @@ func (repository managedConfigReadRepository) GetComponent(
 	context.Context,
 	string,
 ) (etcd.Versioned[etcd.ComponentRecord], error) {
-	return etcd.Versioned[etcd.ComponentRecord]{Record: repository.record}, nil
+	return etcd.Versioned[etcd.ComponentRecord]{Record: repository.record, ReadRevision: 42}, nil
 }
 
 func (managedConfigReadRepository) ListEnvironmentComponents(
@@ -35,14 +35,17 @@ func (managedConfigReadRepository) ListPlatformComponents(
 
 type managedConfigProjector struct {
 	componentID string
+	revision    int64
 	files       []apiTypes.ManagedConfigFile
 }
 
 func (projector *managedConfigProjector) ProjectManagedConfigFiles(
 	_ context.Context,
 	component core.Component,
+	revision int64,
 ) ([]apiTypes.ManagedConfigFile, error) {
 	projector.componentID = component.ID
+	projector.revision = revision
 	return projector.files, nil
 }
 
@@ -94,7 +97,7 @@ func TestGetComponentConfigDelegatesManagedFileProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetComponentConfig() error = %v", err)
 	}
-	if projector.componentID != component.ID || len(response.ManagedFiles) != 1 ||
+	if projector.componentID != component.ID || projector.revision != 42 || len(response.ManagedFiles) != 1 ||
 		response.ManagedFiles[0].Rendered != projector.files[0].Rendered {
 		t.Fatalf("GetComponentConfig() = %#v, projector component = %q", response, projector.componentID)
 	}

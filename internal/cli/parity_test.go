@@ -378,10 +378,14 @@ func TestComponentActionsAndConfigUseStableID(t *testing.T) {
 	}
 }
 
+// Rationale: complete native policy and reserved Route references are opaque
+// transport bytes; importing them must not erase existing Zone placement or
+// depend on successfully rendering the template that the operator is replacing.
 func TestComponentConfigSetImportsCaddyTemplateWithoutErasingZone(t *testing.T) {
 	t.Parallel()
 	const zoneID = "net_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	template := "{\n\t{routes}\n}\n"
+	template := "http://{gp.route:app.example.com:/:host} {\n\trespond /internal/* 404\n" +
+		"\treverse_proxy {gp.route:app.example.com:/:upstream}\n}\n"
 	path := t.TempDir() + "/Caddyfile"
 	if err := os.WriteFile(path, []byte(template), 0o600); err != nil {
 		t.Fatal(err)
@@ -396,13 +400,16 @@ func TestComponentConfigSetImportsCaddyTemplateWithoutErasingZone(t *testing.T) 
 			if request.Method != http.MethodGet || request.URL.Path != "/api/v1/components/cmp_1" {
 				t.Fatalf("show request = %s %s", request.Method, request.URL.Path)
 			}
-			_, _ = io.WriteString(writer, `{"kind":"caddy"}`)
+			_, _ = io.WriteString(writer,
+				`{"kind":"caddy","config":{"zone_ids":["`+zoneID+`"],"caddyfile_template":"retired {routes}"}}`)
 		case 2:
-			if request.Method != http.MethodGet || request.URL.Path != "/api/v1/components/cmp_1/config" {
-				t.Fatalf("config request = %s %s", request.Method, request.URL.Path)
+			if request.Method == http.MethodGet {
+				writer.Header().Set("Content-Type", "application/problem+json")
+				writer.WriteHeader(http.StatusUnprocessableEntity)
+				_, _ = io.WriteString(writer,
+					`{"status":422,"code":"validation.failed","detail":"saved template cannot be rendered"}`)
+				return
 			}
-			_, _ = io.WriteString(writer, `{"config":{"zone_ids":["`+zoneID+`"],"caddyfile_template":"old {routes}"}}`)
-		case 3:
 			if request.Method != http.MethodPut || request.URL.Path != "/api/v1/components/cmp_1/config" {
 				t.Fatalf("set request = %s %s", request.Method, request.URL.Path)
 			}
@@ -410,13 +417,14 @@ func TestComponentConfigSetImportsCaddyTemplateWithoutErasingZone(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			want := `{"config":{"zone_ids":["` + zoneID + `"],"caddyfile_template":"{\n\t{routes}\n}\n"}}`
+			want := `{"config":{"zone_ids":["` + zoneID +
+				`"],"caddyfile_template":"http://{gp.route:app.example.com:/:host} {\n\trespond /internal/* 404\n\treverse_proxy {gp.route:app.example.com:/:upstream}\n}\n"}}`
 			if string(body) != want {
 				t.Fatalf("body = %s, want %s", body, want)
 			}
 			_, _ = io.WriteString(
 				writer,
-				`{"resource":{"zone_ids":["`+zoneID+`"],"caddyfile_template":"{\n\t{routes}\n}\n"},"reconcile_task_id":null}`,
+				`{"resource":{"zone_ids":["`+zoneID+`"],"caddyfile_template":"http://{gp.route:app.example.com:/:host} {\n\trespond /internal/* 404\n\treverse_proxy {gp.route:app.example.com:/:upstream}\n}\n"},"reconcile_task_id":null}`,
 			)
 		default:
 			t.Fatalf("unexpected request %d", requests)
@@ -425,8 +433,8 @@ func TestComponentConfigSetImportsCaddyTemplateWithoutErasingZone(t *testing.T) 
 	defer server.Close()
 
 	executeNoun(t, newComponentCmd(), server.URL, Scope{}, "config", "set", "cmp_1", "--file", path)
-	if requests != 3 {
-		t.Fatalf("requests = %d, want 3", requests)
+	if requests != 2 {
+		t.Fatalf("requests = %d, want 2", requests)
 	}
 }
 

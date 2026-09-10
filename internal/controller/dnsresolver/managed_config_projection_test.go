@@ -71,7 +71,7 @@ func TestManagedConfigProjectorUsesOnlyDurableReadInputs(t *testing.T) {
 			CorefileTemplate: template, UpstreamAuto: true,
 			UpstreamResolvers: []core.DNSResolverEndpoint{}, Forwarders: []core.DNSForwarder{},
 		}},
-	})
+	}, 42)
 	if err != nil {
 		t.Fatalf("ProjectManagedConfigFiles() error = %v", err)
 	}
@@ -106,7 +106,7 @@ func TestManagedConfigProjectorDoesNotCreateMissingBaseline(t *testing.T) {
 			CorefileTemplate: ". {\n    {groundplane}\n}\n", UpstreamAuto: true,
 			UpstreamResolvers: []core.DNSResolverEndpoint{}, Forwarders: []core.DNSForwarder{},
 		}},
-	})
+	}, 42)
 	if err == nil || baselines.reads != 1 {
 		t.Fatalf("ProjectManagedConfigFiles() error = %v, baseline reads = %d", err, baselines.reads)
 	}

@@ -1168,7 +1168,7 @@ x-gp-components:
       zone_ids: [net_01J..., net_01K...]
     implementation_config:
       caddyfile_template: |
-        {routes}
+        {gp.routes}
 ```
 
 Each registered Component has a stable id, implementation key, provided
@@ -1219,10 +1219,40 @@ Tunnel joins exactly its independently selected Zones, requires at least one
 non-internal Zone, and selects the first non-internal Zone as outbound gateway.
 There is no implicit router-following attachment or default bridge fallback.
 Removing any selected Zone while its Component remains enabled rejects.
-The
-optional `caddyfile_template` defaults to `{routes}` and, when set, contains
-that marker exactly once. The Controller replaces it with complete grouped
-site blocks. `{host}` and `{slot}` are not template variables.
+The optional `caddyfile_template` is a complete Caddyfile, at most32KiB of
+valid UTF-8 without NUL. Empty defaults to `{gp.routes}`; that aggregate marker
+may occur once and expands to complete grouped site blocks. The old `{routes}`
+marker is invalid. Full custom files use `{gp.route:HOST:PATH:FIELD}`, where
+HOST/PATH select a declared Route by its immutable unique match and FIELD is
+exactly `host`, `path` or `upstream`. An internal catch-all has an empty HOST.
+The first and last separator colons delimit HOST and FIELD; colons in a valid
+PATH remain part of the path. The root matcher `/` renders `/*`; upstream
+renders the stable Service name and explicit target port. No runtime addresses,
+serving slots or generated Route ids belong in this portable template input.
+
+Every Route must be accounted for by its upstream reference or the aggregate
+marker. Unknown/malformed GP references reject. Native Caddy placeholders such
+as `{host}` and `{uri}` are untouched. A full custom policy can intentionally
+deny request paths; it does not create Routes or change their target grants.
+When editing Routes separately, the aggregate default provides an intermediate
+valid template if a custom file needs corresponding reference changes.
+
+For example, with a declared root Route targeting `api` at8080:
+
+```caddyfile
+http://{gp.route:api.example.com:/:host} {
+  route {
+    respond /internal/* 404
+    reverse_proxy {gp.route:api.example.com:/:path} {gp.route:api.example.com:/:upstream}
+  }
+}
+```
+
+The existing Component config read returns the current template and rendered
+managed-file preview without mutation. It is not draft validation or a live
+observation. Complete staged output must pass Caddy validation before reload;
+invalid output retains the previous serving config. Primary-Zone IPAM and
+operator-owned LAN/provider configuration are unchanged.
 
 `x-gp-backup` is environment policy, not Compose topology:
 

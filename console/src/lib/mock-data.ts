@@ -727,7 +727,7 @@ function storefrontEnv(env: 'staging' | 'production'): Environment {
           enabled: true,
           zoneIds: [fixtureId('net', `storefront-${env}-frontend`)],
           pinnedIPv4: prod ? '10.200.10.2' : '10.200.11.2',
-          caddyfile_template: '{routes}',
+          caddyfile_template: '{gp.routes}',
         },
         tunnel: {
           enabled: true,
@@ -908,7 +908,7 @@ function sampleSiteEnv(env: 'staging' | 'production'): Environment {
               enabled: true,
               zoneIds: [fixtureId('net', `sample-site-${env}-sample-site`)],
               pinnedIPv4: '10.201.11.2',
-              caddyfile_template: '{routes}',
+              caddyfile_template: '{gp.routes}',
             },
             tunnel: {
               enabled: true,

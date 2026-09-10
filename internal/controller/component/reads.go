@@ -20,7 +20,7 @@ type readRepository interface {
 // ManagedConfigProjector is the consumer-owned port for deriving generic
 // managed-file previews without teaching Component reads about implementations.
 type ManagedConfigProjector interface {
-	ProjectManagedConfigFiles(context.Context, core.Component) ([]apiTypes.ManagedConfigFile, error)
+	ProjectManagedConfigFiles(context.Context, core.Component, int64) ([]apiTypes.ManagedConfigFile, error)
 }
 
 type ReadService struct {
@@ -91,7 +91,7 @@ func (service *ReadService) GetComponentConfig(
 	if err != nil {
 		return apiTypes.ComponentConfigResponse{}, err
 	}
-	managedFiles, err := service.managedConfigProjector.ProjectManagedConfigFiles(ctx, component)
+	managedFiles, err := service.managedConfigProjector.ProjectManagedConfigFiles(ctx, component, record.ReadRevision)
 	if err != nil {
 		return apiTypes.ComponentConfigResponse{}, err
 	}

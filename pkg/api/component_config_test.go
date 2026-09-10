@@ -53,7 +53,7 @@ func TestComponentConfigIsAClosedExactlyOneWireUnion(t *testing.T) {
 	}
 	for _, value := range []string{
 		`{}`,
-		`{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"caddyfile_template":"{routes}","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`,
+		`{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"caddyfile_template":"{gp.routes}","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`,
 		`{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`,
 		`{"unknown":true}`,
 	} {
@@ -80,7 +80,7 @@ func TestComponentConfigMutationInputRejectsEmptyAndMixedVariants(t *testing.T) 
 	}
 	for _, value := range []string{
 		`{}`,
-		`{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"caddyfile_template":"{routes}","credential":{"mode":"existing","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}}`,
+		`{"zone_ids":["net_01ARZ3NDEKTSV4RRFFQ69G5FAX"],"caddyfile_template":"{gp.routes}","credential":{"mode":"existing","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}}`,
 		`{"upstream_auto":true,"upstream_resolvers":[],"forwarders":[]}`,
 		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[null],"forwarders":[],"tailnet_delegation":false}`,
 		`{"corefile_template":". {\n    {groundplane}\n}\n","upstream_auto":true,"upstream_resolvers":[],"forwarders":[{}],"tailnet_delegation":false}`,

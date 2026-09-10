@@ -65,6 +65,7 @@ import { ServiceStateBadges } from '@/features/service/service-runtime-actions'
 import { ServiceDetailsDrawer, DetailRow } from './service-details-drawer'
 import { ServicesList } from './services-list'
 import { ComponentZonePicker } from './component-zone-picker'
+import { CaddyTemplateEditor } from './caddy-template-editor'
 import { cn, newId } from '@/lib/utils'
 import { valkeyAuthenticationDetails } from '@/lib/valkey-authentication'
 import type { ActivityEntry, Attach, BackupPolicyReplacement, BackupPolicySourceInput, BackupPolicySourceRecord, Environment, EnvironmentEntry, Route, Service, TaskJournalScope, TaskStep, Zone } from '@/lib/types'
@@ -1157,8 +1158,6 @@ function BlueprintState({ env }: { env: Environment }) {
 
 // C07 may summarize Route desired state, but live Router component state and
 // controls belong to the C12/C14 capability surfaces.
-const maxCaddyfileTemplateBytes = 32 * 1024
-
 function RouterCard({ env }: { env: Environment }) {
   const store = useStore()
   const params = useRequiredParams('tenant')
@@ -1178,8 +1177,7 @@ function RouterCard({ env }: { env: Environment }) {
   const [creatingComponentZone, setCreatingComponentZone] = useState(false)
   const [routerAlias, setRouterAlias] = useState(caddy?.config?.alias ?? '')
   const [caddyTemplate, setCaddyTemplate] = useState(caddy?.config?.caddyfile_template ?? '')
-  const [caddyTemplateFileReading, setCaddyTemplateFileReading] = useState(false)
-  const [caddyTemplateFileError, setCaddyTemplateFileError] = useState<string | null>(null)
+  const [caddyTemplateBlocked, setCaddyTemplateBlocked] = useState(false)
   const [tunnelCredentialMode, setTunnelCredentialMode] = useState<'existing' | 'new'>('existing')
   const [tunnelSecret, setTunnelSecret] = useState(tunnel?.config?.secret_id ?? '')
   const [tunnelSecretName, setTunnelSecretName] = useState('CLOUDFLARE_TUNNEL_TOKEN')
@@ -1192,8 +1190,7 @@ function RouterCard({ env }: { env: Environment }) {
     if (component.kind === 'caddy') {
       setRouterAlias(component.config?.alias ?? '')
       setCaddyTemplate(component.config?.caddyfile_template ?? '')
-      setCaddyTemplateFileReading(false)
-      setCaddyTemplateFileError(null)
+      setCaddyTemplateBlocked(false)
     } else {
       setTunnelCredentialMode('existing')
       setTunnelSecret(component.config?.secret_id ?? '')
@@ -1202,14 +1199,12 @@ function RouterCard({ env }: { env: Environment }) {
     setOperation({ component, action })
   }
 
-  const caddyTemplateMarkerCount = caddyTemplate.match(/\{routes\}/g)?.length ?? 0
   const configuring = operation?.action === 'config' || operation?.action === 'enable'
   const availableComponentZones = [...env.zones, ...createdComponentZones.filter((zone) => !env.zones.some((current) => current.id === zone.id))]
   const tunnelHasEgress = selectedZoneIds.some((id) => availableComponentZones.some((zone) => zone.id === id && !zone.internal))
   const operationDisabled = configuring && (creatingComponentZone || selectedZoneIds.length === 0 || (
     operation.component.kind === 'caddy'
-      ? (routerAlias !== '' && !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(routerAlias)) || caddyTemplateFileReading || caddyTemplateFileError !== null ||
-        (caddyTemplate.length > 0 && caddyTemplateMarkerCount !== 1)
+      ? (routerAlias !== '' && !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(routerAlias)) || caddyTemplateBlocked
       : !tunnelHasEgress || (tunnelCredentialMode === 'existing'
         ? !tunnelSecret
         : !tunnelSecretName || !tunnelToken)
@@ -1323,57 +1318,9 @@ function RouterCard({ env }: { env: Environment }) {
                   <Label htmlFor="router-alias">Router alias (optional)</Label>
                   <Input id="router-alias" value={routerAlias} maxLength={63} placeholder="kobwnewe-router" onChange={(event) => setRouterAlias(event.target.value)} aria-describedby="router-alias-help" />
                   <p id="router-alias-help" className="text-xs text-muted-foreground">One lowercase DNS label on the primary network. HTTP uses port 80. Leave empty to clear.</p>
-                  <Label htmlFor="caddy-template">Caddyfile template</Label>
-                  <textarea
-                    id="caddy-template"
-                    className="min-h-32 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
-                    value={caddyTemplate}
-                    onChange={(event) => {
-                      setCaddyTemplate(event.target.value)
-                      setCaddyTemplateFileError(null)
-                    }}
-                  />
-                  <Input
-                    type="file"
-                    accept=".caddy,Caddyfile,text/plain"
-                    disabled={caddyTemplateFileReading}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0]
-                      if (!file) return
-                      if (file.size > maxCaddyfileTemplateBytes) {
-                        setCaddyTemplateFileError('Caddyfile template must not exceed 32 KiB.')
-                        return
-                      }
-                      setCaddyTemplateFileReading(true)
-                      setCaddyTemplateFileError(null)
-                      void file.arrayBuffer()
-                        .then((buffer) => {
-                          if (buffer.byteLength > maxCaddyfileTemplateBytes) {
-                            throw new Error('Caddyfile template must not exceed 32 KiB.')
-                          }
-                          let template: string
-                          try {
-                            template = new TextDecoder('utf-8', { fatal: true }).decode(buffer)
-                          } catch {
-                            throw new Error('Caddyfile template must be valid UTF-8.')
-                          }
-                          setCaddyTemplate(template)
-                        })
-                        .catch((error: unknown) => {
-                          setCaddyTemplateFileError(
-                            error instanceof Error ? error.message : 'Caddyfile template could not be read.',
-                          )
-                        })
-                        .finally(() => setCaddyTemplateFileReading(false))
-                    }}
-                  />
-                  {caddyTemplateFileReading && (
-                    <p className="text-xs text-muted-foreground">Reading Caddyfile template...</p>
-                  )}
-                  {caddyTemplateFileError && (
-                    <p role="alert" className="text-xs text-warning">{caddyTemplateFileError}</p>
-                  )}
-                  <p className="text-xs text-muted-foreground">Optional; when set, it must contain the exact <code>{'{routes}'}</code> marker.</p>
+                  <CaddyTemplateEditor key={operation.component.id} componentId={operation.component.id}
+                    enabled={operation.component.enabled} value={caddyTemplate} onChange={setCaddyTemplate}
+                    onBlockedChange={setCaddyTemplateBlocked} />
                 </div>
               </div>
             ) : (

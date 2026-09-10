@@ -1098,11 +1098,23 @@ tenants and one database.
   Caddy removes the entry point and releases its address but preserves every
   Route. Re-enabling Caddy allocates an address and reconciles those same
   Routes.
-  Caddy's optional template contains
-  exactly one `{routes}` marker, where the Controller inserts deterministic
-  longest-path-first blocks using stable Service aliases and explicit target
-  ports. The complete Caddyfile is validated before reload. There are no
-  per-Route snippets or `{host}`/`{slot}` substitutions. Exact internal Route
+  Caddy's optional template is the complete Caddyfile, including native policy,
+  matchers and directive ordering. Empty uses `{gp.routes}`, which inserts
+  deterministic longest-path-first blocks using stable Service aliases and
+  explicit target ports. A full custom file may instead reference existing
+  Routes with `{gp.route:HOST:PATH:FIELD}`; HOST/PATH are the immutable
+  Environment-unique Route match, and FIELD is `host`, `path` (`/` renders `/*`)
+  or `upstream` (stable Service name plus target port). Every Route must be
+  accounted for by its upstream reference or the single aggregate marker.
+  Unknown or malformed GP references fail closed; the old `{routes}` marker
+  is invalid. Native Caddy placeholders such as `{host}` and `{uri}` are left
+  intact. The template never derives Routes, slot containers or observed IPs.
+  Custom policy may deliberately deny requests; a `served` Route means its
+  provider generation was applied, not that every request must be allowed.
+  The config read exposes the current template and rendered-file preview;
+  preview is not live observation or unsaved-draft syntax validation. The
+  complete candidate Caddyfile is validated before reload, retaining the
+  previous serving config on invalid output. Exact internal Route
   hostnames use Caddy's internal CA; the enable/reconcile Task installs that
   Environment root into the host trust store. LAN clients may install the
   exported public root manually.
@@ -1836,7 +1848,7 @@ An environment document and its mapping to Compose:
 | `x-gp-attachments` | attach to a Backing Service per **Service**, keyed by the Attach's **name** (`api-db`, an operator decision unique per Environment): `service` is singular; `credential.mode` is `new` or `existing`; existing names one credential-owning Attach in the same Environment and Backing Service; the backing network join is a consequence; only a new credential provisions `<service-name>_<first-6-of-attach-id>` and may declare `grants` |
 | routes[].exposure: public | remains valid desired state without an enabled router and reports `unserved`; Caddy serves it when the `http-router` capability is enabled |
 | `x-gp-components.http-router` | environment-owned HTTP entry point, off by default; selects the registered `caddy` implementation for MVP and uses ordered portable `settings.zone_ids`, first Zone primary |
-| `x-gp-components.http-router.implementation_config.caddyfile_template` | optional editable Caddy implementation template with exactly one `{routes}` marker; validated as a complete file before reload |
+| `x-gp-components.http-router.implementation_config.caddyfile_template` | optional full Caddyfile; default `{gp.routes}`, or reserved `{gp.route:HOST:PATH:host\|path\|upstream}` references to declared Routes; validated before reload with old-config retention |
 | `x-gp-components.edge-tunnel` | environment-owned outbound tunnel connector, off by default; selects `cloudflare-tunnel` and stores ordered `settings.zone_ids` plus `settings.secret_id`; the selected Project or platform env-var Secret is materialized only as cloudflared's `TUNNEL_TOKEN`; Groundplane starts/stops the connector and reports health but does not configure DNS, public hostnames, ingress rules, origin targets, or protocol |
 | secrets.env_file | generated secret files the Agent materializes on the host (0600), referenced explicitly through service `env_file:` |
 | volumes.<key> / `x-gp-slug` | the immutable Compose key plus an optional mutable Groundplane slug; the Controller renders a managed local Docker Volume backed by the Environment-owned path |

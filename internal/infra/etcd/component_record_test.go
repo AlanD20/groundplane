@@ -18,7 +18,7 @@ func TestComponentRecordSeparatesDesiredAndRuntimeReplacement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProjectComponentRecord() error = %v", err)
 	}
-	component.Config.Caddy.CaddyfileTemplate = "{routes}\n"
+	component.Config.Caddy.CaddyfileTemplate = "{gp.routes}\n"
 	replacement, err := ReplaceComponentDesired(record, component)
 	if err != nil {
 		t.Fatalf("ReplaceComponentDesired() error = %v", err)

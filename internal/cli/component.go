@@ -173,15 +173,11 @@ func newComponentCmd() *cobra.Command {
 					if flagConfig {
 						return fmt.Errorf("Caddy config accepts only --file and --zone")
 					}
-					current, err := app.Client.ShowComponentConfig(cmd.Context(), target(app, args[0]))
-					if err != nil {
-						return err
-					}
 					caddy := apiTypes.CaddyComponentConfigMutationInput{}
-					if current.Config != nil && current.Config.Caddy != nil {
-						caddy.ZoneIDs = append([]string(nil), current.Config.Caddy.ZoneIDs...)
-						caddy.CaddyfileTemplate = current.Config.Caddy.CaddyfileTemplate
-						caddy.Alias = current.Config.Caddy.Alias
+					if component.Config != nil && component.Config.Caddy != nil {
+						caddy.ZoneIDs = append([]string(nil), component.Config.Caddy.ZoneIDs...)
+						caddy.CaddyfileTemplate = component.Config.Caddy.CaddyfileTemplate
+						caddy.Alias = component.Config.Caddy.Alias
 					}
 					if componentZone {
 						caddy.ZoneIDs = append([]string(nil), zoneIDs...)
