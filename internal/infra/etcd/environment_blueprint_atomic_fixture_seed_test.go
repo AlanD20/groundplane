@@ -394,13 +394,12 @@ func prepareEnvironmentBlueprintReleaseShape(
 	store *memoryHierarchyStore,
 	task *TaskRecord,
 	environmentID string,
-	releaseCount int,
-	hookCount int,
-	realHookSources bool,
+	shape environmentBlueprintAtomicShape,
 	sourceMembers []ScriptSourcePreparationMember,
 ) (BlueprintReleasePublication, string) {
 	t.Helper()
 	ctx := context.Background()
+	releaseCount, hookCount := shape.releases, shape.hooks
 	publicationID := scriptSourceReferenceExecutionID(task.CreatedAt, 240)
 	task.Params[TaskReleasePublicationParam] = publicationID
 	manifest := ReleaseStagedManifest{
@@ -491,7 +490,8 @@ func prepareEnvironmentBlueprintReleaseShape(
 		record.ReleaseID = manifest.Members[index%len(manifest.Members)].ReleaseID
 		record.ServiceID = manifest.Members[index%len(manifest.Members)].ServiceID
 		record.StepID = ids.NewAt(ids.KindStep, task.CreatedAt, int64(7700+index))
-		if realHookSources {
+		record.ScriptSetGeneration = task.ID
+		if shape.realHookSources {
 			script := blueprintTerminalFixtureScript(t, *task)
 			generation := scriptBlueprintGeneration(script)
 			record.ScriptSetGeneration, record.BodySHA256 = task.ID, generation.BodySHA256
@@ -515,7 +515,7 @@ func prepareEnvironmentBlueprintReleaseShape(
 		}
 		task.Params[ReleaseHookStepExecutionParam(record.StepID)] = record.ID
 		task.Steps = append(task.Steps, TaskStepRecord{Kind: TaskStepOperation, ID: record.StepID})
-		hooks[index] = ReleaseHookExecutionPublication{Execution: withScriptContextSnapshot(t, record)}
+		hooks[index] = scriptContextBlueprintPrimaryFixture(t, store, record, shape.explicitHooks)
 	}
 	ledger := &ReleaseLedger{store: &releasePlanningTestStore{memoryHierarchyStore: store}}
 	hookPrepared, err := ledger.PrepareBlueprintReleaseHooks(ctx, *task, hooks)

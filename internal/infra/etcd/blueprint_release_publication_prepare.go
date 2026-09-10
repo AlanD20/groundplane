@@ -45,6 +45,11 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 		return BlueprintReleasePublication{}, err
 	}
 	conditions = append(conditions, nativeConditions...)
+	primaryConditions, err := ledger.blueprintScriptPrimaryConditions(ctx, evidence.Hooks)
+	if err != nil {
+		return BlueprintReleasePublication{}, err
+	}
+	conditions = append(conditions, primaryConditions...)
 	nativeReferences, err := blueprintNativePredecessorReferences(evidence.NativePredecessors)
 	if err != nil {
 		return BlueprintReleasePublication{}, err

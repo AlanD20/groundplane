@@ -99,7 +99,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	}
 	defer fragment.Clear()
 	execution.SourceMembershipCount, execution.SourceMembershipSHA256 = prepared.membershipCount, prepared.membershipSHA256
-	primary, err := repository.manualScriptPreparedPrimary(ctx, sources)
+	primary, err := preparedScriptPrimary(ctx, repository.store, sources)
 	if err != nil {
 		return result, err
 	}
@@ -109,7 +109,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
-		{Key: primary.Key, ModRevision: primary.ModRevision},
+		primary,
 		{Key: scriptSetBodyGenerationKey(execution.EnvironmentID, execution.ScriptSetGeneration,
 			execution.ScriptID, execution.ScriptGeneration), ModRevision: sources.BodyGeneration.Revision},
 		{Key: scriptSetActiveKey(execution.EnvironmentID), ModRevision: sources.ScriptSet.Revision},
@@ -188,39 +188,6 @@ func (repository *ScriptRepository) prepareManualScriptSnapshot(
 		return 0, errs.New(errs.KindStateConflict, "manual Script snapshot identity is occupied")
 	}
 	return result.FailureReads[0].ModRevision, nil
-}
-
-func (repository *ScriptRepository) manualScriptPreparedPrimary(
-	ctx context.Context,
-	sources ScriptExecutionSources,
-) (*KeyValue, error) {
-	key := scriptSetScriptKey(
-		sources.Script.Record.EnvironmentID,
-		sources.Script.Record.ScriptSetGeneration,
-		sources.Script.Record.Desired.ID,
-	)
-	read, err := repository.store.Get(ctx, key)
-	if err != nil {
-		return nil, err
-	}
-	if read == nil || read.Entry == nil {
-		return nil, errs.New(errs.KindStateConflict, "manual Script disappeared during source preparation")
-	}
-	current, err := decodeScriptRecord(read.Entry.Value)
-	if err != nil {
-		return nil, err
-	}
-	expected := sources.Script.Record
-	expected.ActiveReferences = current.ActiveReferences
-	value, err := encodeScriptRecord(expected)
-	if err != nil {
-		return nil, err
-	}
-	defer clear(value)
-	if current.ActiveReferences == 0 || !bytes.Equal(value, read.Entry.Value) {
-		return nil, errs.New(errs.KindStateConflict, "manual Script changed during source preparation")
-	}
-	return read.Entry, nil
 }
 
 // manualScriptSourceConditions fences the desired sources captured for a manual

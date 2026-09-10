@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/netip"
 	"testing"
+	"time"
 
 	"filippo.io/age"
 
@@ -296,12 +297,25 @@ func publishEnvironmentBlueprintAtomicShape(
 			fixture.store,
 			&task,
 			fixture.environment.Record.ID,
-			shape.releases,
-			shape.hooks,
-			shape.realHookSources,
+			shape,
 			releaseSourceMembers,
 		)
 		defer releasePublication.Clear()
+	}
+	if shape.scriptEditAfterPreparation {
+		first := scriptCheckpointTestRecord(task.CreatedAt.Add(time.Millisecond))
+		key := scriptSetScriptKey(fixture.environment.Record.ID, task.ID, first.ScriptID)
+		read, err := fixture.store.Get(ctx, key)
+		if err != nil || read.Entry == nil {
+			t.Fatalf("read selected Script primary: %v", err)
+		}
+		script, err := decodeScriptRecord(read.Entry.Value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		script.Desired.Body = "exit 0"
+		script.Desired.Order++
+		writeScriptContextPrimaryFixture(t, fixture.store, script)
 	}
 
 	marker := environmentBlueprintTestMarker(task, fixture.environment.Record.ID)
