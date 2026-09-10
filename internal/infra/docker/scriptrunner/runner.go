@@ -516,7 +516,7 @@ func connectSecondaryNetworks(
 	networks []*agentpb.ScriptRunnerNetwork,
 	connected map[string]*network.EndpointSettings,
 ) error {
-	for _, item := range networks[1:] {
+	for _, item := range networks[min(1, len(networks)):] {
 		name := item.RenderedAttachment.DockerNetworkName
 		if _, exists := connected[name]; exists {
 			continue
