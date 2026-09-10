@@ -56,6 +56,8 @@ blind host-effect replay.
 6. A predecessor-owned `ExecStartPre` guard permits one journaled candidate
    startup attempt. Repeated startup or an interrupted unfinished trial restores
    the predecessor before `ExecStart`, even if the candidate cannot execute.
+   The attempt is fenced to its kernel boot id; a new boot restores the
+   predecessor because the transient watchdog did not survive reboot.
    A watchdog bounds a live but unready candidate. Journal transitions, binary
    swaps and rollback are replay-safe. Neither route needs a healthy candidate.
 
@@ -91,3 +93,5 @@ not merely fork. `ExecStartPre` precedes the main executable. These support the
 handoff; Groundplane readiness still needs its own checks, not systemctl success.
 See upstream [systemd-run v255](https://raw.githubusercontent.com/systemd/systemd/v255/man/systemd-run.xml)
 and [systemd.service v255](https://raw.githubusercontent.com/systemd/systemd/v255/man/systemd.service.xml).
+The kernel's [boot identity](https://www.kernel.org/doc/html/v6.9/admin-guide/sysctl/kernel.html#random)
+is stable within one boot and distinguishes recovery after host restart.

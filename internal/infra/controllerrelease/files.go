@@ -29,17 +29,59 @@ const (
 )
 
 type Store struct {
-	root *os.Root
-	uid  uint32
+	root     *os.Root
+	binaries *os.Root
+	bootID   string
+	uid      uint32
 }
 
 // Open requires bootstrap to have installed the private root-owned directory.
 // Absence is not repaired silently by an operator update request.
 func Open(ctx context.Context) (*Store, error) {
-	return openStore(ctx, Directory, 0)
+	store, err := openStore(ctx, Directory, 0)
+	if err != nil {
+		return nil, err
+	}
+	binaries, err := openAbsoluteRoot(ctx, BinaryDirectory)
+	if err == nil {
+		info, statErr := binaries.Stat(".")
+		err = statErr
+		if err == nil {
+			stat, ok := info.Sys().(*syscall.Stat_t)
+			if !ok || stat.Uid != 0 || info.Mode().Perm()&0o022 != 0 {
+				err = unsafeFile()
+			}
+		}
+	}
+	if err != nil {
+		_ = store.Close() // Cleanup only after the installed binary root was rejected.
+		if binaries != nil {
+			_ = binaries.Close()
+		} // Close a successfully opened but unsafe root.
+		return nil, fileError(err)
+	}
+	store.binaries = binaries
+	return store, nil
 }
 
 func openStore(ctx context.Context, path string, uid uint32) (*Store, error) {
+	root, err := openAbsoluteRoot(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	if err := privateDirectory(ctx, root, uid); err != nil {
+		_ = root.Close() // Cleanup only; retain the validation error.
+		return nil, err
+	}
+	bootID, err := readBootID(ctx)
+	if err != nil {
+		_ = root.Close()
+		return nil, err
+	} // Close the private root after failed kernel identity validation.
+	return &Store{root: root, uid: uid, bootID: bootID}, nil
+}
+
+func openAbsoluteRoot(ctx context.Context, path string) (*os.Root, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -65,14 +107,13 @@ func openStore(ctx context.Context, path string, uid uint32) (*Store, error) {
 		}
 		root = next
 	}
-	if err := privateDirectory(ctx, root, uid); err != nil {
-		_ = root.Close() // Cleanup only; retain the validation error.
-		return nil, err
-	}
-	return &Store{root: root, uid: uid}, nil
+	return root, nil
 }
 
 func (store *Store) Close() error {
+	if store.binaries != nil {
+		return errors.Join(store.root.Close(), store.binaries.Close())
+	}
 	return store.root.Close()
 }
 
@@ -149,23 +190,12 @@ func (store *Store) openRegular(
 	if name == "" || name == "." || name == ".." || strings.ContainsRune(name, '/') {
 		return nil, unsafeFile()
 	}
-	directory, err := root.Open(".")
-	if err != nil {
-		return nil, fileError(err)
-	}
-	defer directory.Close()
 	// os.Root may resolve in-root symlinks itself. Open the single leaf relative
 	// to its pinned directory descriptor so O_NOFOLLOW is a kernel boundary.
-	fd, err := unix.Openat(
-		int(directory.Fd()),
-		name,
-		unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC,
-		0,
-	)
+	file, err := openLeaf(ctx, root, name, unix.O_RDONLY, 0)
 	if err != nil {
 		return nil, fileError(err)
 	}
-	file := os.NewFile(uintptr(fd), name)
 	info, err := file.Stat()
 	if err == nil {
 		stat, ok := info.Sys().(*syscall.Stat_t)
@@ -240,32 +270,11 @@ func verifyCopy(
 	if !expected.Valid() {
 		return errs.New(errs.KindValidationFailed, "controller executable digest is invalid")
 	}
-	hash := sha256.New()
-	destination := io.MultiWriter(output, hash)
-	buffer := make([]byte, 32<<10)
-	var total int64
-	for {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		count, readErr := input.Read(buffer)
-		total += int64(count)
-		if total > MaximumBinaryBytes {
-			return unsafeFile()
-		}
-		if count > 0 {
-			if _, err := destination.Write(buffer[:count]); err != nil {
-				return fileError(err)
-			}
-		}
-		if errors.Is(readErr, io.EOF) {
-			break
-		}
-		if readErr != nil {
-			return fileError(readErr)
-		}
+	actual, err := copyDigest(ctx, output, input)
+	if err != nil {
+		return err
 	}
-	if total == 0 || upgrade.Digest(fmt.Sprintf("sha256:%x", hash.Sum(nil))) != expected {
+	if actual != expected {
 		return errs.New(
 			errs.KindValidationFailed,
 			"controller executable does not match the pinned digest",
@@ -274,10 +283,44 @@ func verifyCopy(
 	return nil
 }
 
+func copyDigest(ctx context.Context, output io.Writer, input io.Reader) (upgrade.Digest, error) {
+	hash := sha256.New()
+	destination := io.MultiWriter(output, hash)
+	buffer := make([]byte, 32<<10)
+	var total int64
+	for {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		count, readErr := input.Read(buffer)
+		total += int64(count)
+		if total > MaximumBinaryBytes {
+			return "", unsafeFile()
+		}
+		if count > 0 {
+			if _, err := destination.Write(buffer[:count]); err != nil {
+				return "", fileError(err)
+			}
+		}
+		if errors.Is(readErr, io.EOF) {
+			break
+		}
+		if readErr != nil {
+			return "", fileError(readErr)
+		}
+	}
+	if total == 0 {
+		return "", unsafeFile()
+	}
+	return upgrade.Digest(fmt.Sprintf("sha256:%x", hash.Sum(nil))), nil
+}
+
 func (store *Store) copyExecutable(
 	ctx context.Context,
 	source *os.Root,
-	from, to string,
+	from string,
+	destination *os.Root,
+	to string,
 	expected upgrade.Digest,
 ) error {
 	file, err := store.openRegular(ctx, source, from, MaximumBinaryBytes)
@@ -285,7 +328,7 @@ func (store *Store) copyExecutable(
 		return err
 	}
 	defer file.Close()
-	return store.atomicWrite(ctx, store.root, to, 0o500, func(output io.Writer) error {
+	return store.atomicWrite(ctx, destination, to, 0o500, func(output io.Writer) error {
 		return verifyCopy(ctx, output, file, expected)
 	})
 }

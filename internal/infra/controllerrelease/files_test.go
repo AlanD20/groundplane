@@ -67,14 +67,14 @@ func TestVerifiedAtomicExecutableCopy(t *testing.T) {
 	store, _, binary := testReleaseStore(t)
 	defer store.Close()
 	ctx := context.Background()
-	if err := store.copyExecutable(ctx, store.root, "current", "previous", upgrade.Hash(binary)); err != nil {
+	if err := store.copyExecutable(ctx, store.root, "current", store.root, "previous", upgrade.Hash(binary)); err != nil {
 		t.Fatal(err)
 	}
 	got, err := store.root.ReadFile("previous")
 	if err != nil || string(got) != string(binary) {
 		t.Fatalf("predecessor = %q, %v", got, err)
 	}
-	if err := store.copyExecutable(ctx, store.root, "current", "previous", upgrade.Hash([]byte("wrong"))); err == nil {
+	if err := store.copyExecutable(ctx, store.root, "current", store.root, "previous", upgrade.Hash([]byte("wrong"))); err == nil {
 		t.Fatal("wrong digest accepted")
 	}
 	got, err = store.root.ReadFile("previous")
