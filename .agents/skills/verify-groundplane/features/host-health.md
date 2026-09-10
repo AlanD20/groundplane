@@ -51,6 +51,11 @@ percentages and CPU load, the accepted etcd and Agent status vocabularies,
 `etcd.node == "single-node"`, and the healthy native Controller identity. Agent
 labels must be a sorted array of strings, including an empty array when no labels
 are configured.
+Controller update metadata follows `docs/api-cli.md`: actual binary digest,
+availability/error and explicitly nullable candidate/history. Validate a present
+candidate's pinned identities and compatibility integers, and retained history's
+Task identity/status. Missing fields and empty synthetic objects fail the check.
+This validates observation, not activation or recovery success.
 
 The API may include a string-valued top-level `$schema` hint; the CLI must omit
 it. After removing exactly that API field, the responses must have the same

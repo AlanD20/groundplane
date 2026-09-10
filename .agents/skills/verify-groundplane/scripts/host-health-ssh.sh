@@ -179,7 +179,7 @@ trap cleanup EXIT
 trap handle_signal HUP INT TERM
 
 chmod 700 "$evidence_dir"
-runtime_root="${TMPDIR:-/tmp}"
+runtime_root="${TMPDIR:-$repo_root/.tmp}"
 [[ -d "$runtime_root" && ! -L "$runtime_root" ]] || {
 	printf 'runtime parent must be a non-symlink directory: %s\n' "$runtime_root" >&2
 	exit 2
@@ -200,14 +200,10 @@ if [[ -n "${GROUNDPLANE_LOCAL_HTTP_PORT:-}" ]]; then
 		exit 2
 	}
 else
-	local_port="$(python3 - <<'PY'
-import socket
-
+	local_port="$(python3 -c 'import socket
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
     sock.bind(("127.0.0.1", 0))
-    print(sock.getsockname()[1])
-PY
-)"
+    print(sock.getsockname()[1])')"
 	valid_port "$local_port" || {
 		printf 'could not allocate a valid local TCP port\n' >&2
 		exit 2
@@ -351,6 +347,29 @@ def etcd_status:
   . == "healthy" or . == "degraded" or . == "failed";
 def agent_status:
   . == "healthy" or . == "degraded" or . == "stopped" or . == "pending";
+def release_digest:
+  type == "string" and test("^sha256:[0-9a-f]{64}$");
+def native_candidate:
+  if . == null then true else
+    exact_keys(["agent_image", "channel_schema", "controller_sha256", "controller_version", "release", "storage_epoch"]) and
+    (.release | release_digest) and (.controller_sha256 | release_digest) and
+    (.controller_version | type == "string") and
+    (.agent_image | type == "string" and test("@sha256:[0-9a-f]{64}$")) and
+    (.storage_epoch | integer and . > 0) and (.channel_schema | integer and . > 0)
+  end;
+def native_history:
+  if . == null then true else
+    exact_keys(["created_at", "phase", "release", "status", "task_id"]) and
+    (.task_id | type == "string" and test("^task_[0-7][0-9A-HJKMNP-TV-Z]{25}$")) and
+    (.release | release_digest) and (.phase | type == "string") and
+    (.created_at | type == "string") and
+    (.status | . == "pending" or . == "running" or . == "completed" or . == "failed" or . == "aborted" or . == "timed_out")
+  end;
+def native_update:
+  exact_keys(["available", "candidate", "error", "last_update", "running_sha256"]) and
+  (.available | type == "boolean") and (.error | type == "string") and
+  (.running_sha256 | release_digest) and
+  (.candidate | native_candidate) and (.last_update | native_history);
 def canonical_host:
   exact_keys([
     "agent", "arch", "controller", "cpu", "disk", "docker", "etcd",
@@ -375,10 +394,10 @@ def canonical_host:
     (.status | type == "string" and etcd_status) and
     (.db_size | type == "string")) and
   (.controller |
-    exact_keys(["service", "status", "version"]) and
+    exact_keys(["service", "status", "update", "version"]) and
     .service == "groundplane-controller.service" and
     .status == "healthy" and
-    (.version | type == "string")) and
+    (.version | type == "string") and (.update | native_update)) and
   (.agent |
     exact_keys(["labels", "max_concurrent", "pull_interval", "status"]) and
     (.status | type == "string" and agent_status) and
