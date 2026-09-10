@@ -1,6 +1,7 @@
-.PHONY: build cli controller controller-dev agent agent-image agent-image-smoke runner-image runner-image-smoke proto api generate console console-toolchain console-verify console-release-smoke backupstage-host-acceptance backupstage-host-acceptance-compile c15-connector-acceptance s3compatible-minio-acceptance s3compatible-minio-acceptance-compile architecture-check component-modules-verify clean test tidy ci
+.PHONY: build cli controller controller-binary controller-dev agent agent-image agent-image-smoke runner-image runner-image-smoke proto api generate console console-toolchain console-verify console-release-smoke backupstage-host-acceptance backupstage-host-acceptance-compile c15-connector-acceptance s3compatible-minio-acceptance s3compatible-minio-acceptance-compile architecture-check component-modules-verify deployment-check clean test tidy ci
 
 BIN_DIR := bin
+VERSION ?= dev
 NODE_VERSION := 24.19.0
 NPM_VERSION := 11.17.0
 AGENT_IMAGE ?= groundplane-agent:dev
@@ -15,10 +16,14 @@ $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
 
 cli: | $(BIN_DIR)
-	go build -o $(BIN_DIR)/groundplane ./cmd/groundplane
+	go build -ldflags="-X github.com/AlanD20/groundplane/internal/common/version.Value=$(VERSION)" -o $(BIN_DIR)/groundplane ./cmd/groundplane
 
-controller: console | $(BIN_DIR)
-	go build -tags groundplane_console -o $(BIN_DIR)/controller ./cmd/controller
+controller: console
+	$(MAKE) controller-binary
+
+controller-binary: | $(BIN_DIR)
+	go build -tags groundplane_console -ldflags="-X github.com/AlanD20/groundplane/internal/common/version.Value=$(VERSION)" -o $(BIN_DIR)/controller ./cmd/controller
+	go run ./internal/releasemeta -controller $(BIN_DIR)/controller -version "$(VERSION)" -output $(BIN_DIR)/controller-release.json
 
 controller-dev: | $(BIN_DIR)
 	go build -o $(BIN_DIR)/controller-dev ./cmd/controller
@@ -170,7 +175,11 @@ architecture-check:
 	go test ./internal/architecturecheck -count=1
 	go run ./cmd/architecture-check -root . -baseline architecture-baseline.json
 
+deployment-check:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts -p 'test_*.py'
+
 ci: console | $(BIN_DIR)
+	$(MAKE) deployment-check
 	$(MAKE) generate
 	git diff --exit-code openapi.json internal/cli/apiclient/generated/client.gen.go console/src/lib/api.generated.ts proto/agentpb
 	$(MAKE) tidy
@@ -183,7 +192,7 @@ ci: console | $(BIN_DIR)
 	go vet -tags groundplane_console ./...
 	go test -tags groundplane_console ./... -count=1 -race -coverprofile=coverage.out -covermode=atomic
 	$(MAKE) backupstage-host-acceptance
-	go build -tags groundplane_console -o $(BIN_DIR)/controller ./cmd/controller
+	$(MAKE) controller-binary
 	$(MAKE) console-release-smoke
 	$(MAKE) agent-image-smoke
 

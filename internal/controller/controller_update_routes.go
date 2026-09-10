@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"net/http"
-	"reflect"
 
 	"github.com/AlanD20/groundplane/internal/common/jcs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -28,7 +27,7 @@ type controllerUpdateOutput struct {
 }
 
 func (s *Server) registerControllerUpdate() {
-	schema := s.API.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[apiTypes.TaskAccepted](), true, "TaskAccepted")
+	schema := openAPISchema[apiTypes.TaskAccepted](s.API.OpenAPI().Components.Schemas, "TaskAccepted")
 	huma.Register(s.API, huma.Operation{
 		OperationID: "controller.update", Method: http.MethodPost, Path: "/controller/update",
 		Summary: "Update the native Controller from a staged immutable release", Tags: []string{"Controller"},

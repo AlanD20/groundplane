@@ -130,7 +130,8 @@ Run from the repository root unless a command says otherwise:
 make ci
 ```
 
-`make ci` is the local mirror of GitHub Actions. It verifies exact Node
+`make ci` is the local mirror of GitHub Actions. It includes `make deployment-check`
+for the private bootstrap/staging/protected-update client and verifies exact Node
 `24.19.0` and npm `11.17.0`, runs `npm ci`, builds and verifies the Vite output,
 then runs tidy, formatting through module-pinned `golines`,
 `make architecture-check`, module-pinned Staticcheck 2026.1, tagged vet and
@@ -149,7 +150,8 @@ development build; release automation uses `make controller` only.
 
 `make agent-image` builds `groundplane-agent:dev` by default. Release
 automation supplies both `AGENT_VERSION` and `AGENT_IMAGE`, pushes that build,
-and writes only the registry-reported RepoDigest into `controller.yaml`.
+and uses only the registry-reported RepoDigest. Initial bootstrap records it in
+`controller.yaml`; routine native deployment pins it in the release manifest.
 Neither a mutable tag nor the local image id is a valid runtime identity.
 
 The Console lockfile must report no known vulnerabilities at delivery time.

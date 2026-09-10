@@ -50,6 +50,8 @@ class DeployConnectionArgumentsTest(unittest.TestCase):
             setup=False,
             expose_port=None,
             known_hosts=Path("/etc/groundplane/known_hosts"),
+            stage_only=False,
+            bootstrap=False,
         )
 
         commands = (
@@ -112,6 +114,8 @@ class DeployStagingPathTest(unittest.TestCase):
                 "agent",
                 "runner",
                 "127.0.0.1",
+                "0",
+                "0",
             ],
             input=bundle,
             capture_output=True,
@@ -329,11 +333,11 @@ class DeployRollbackTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertTrue(deploy_dir.exists())
-        self.assertIn("rollback incomplete; recovery files retained", result.stderr)
+        self.assertIn("Controller stop failed; retaining installation and recovery files", result.stderr)
         self.assertEqual(systemctl_log.read_text(encoding="utf-8").splitlines()[0],
                          "stop groundplane-controller.service")
         for name, destination in destinations.items():
-            self.assertEqual(destination.read_text(encoding="utf-8"), f"old-{name}\n")
+            self.assertEqual(destination.read_text(encoding="utf-8"), f"new-{name}\n")
 
     def test_finish_restores_prior_absent_disabled_inactive_unit(self) -> None:
         result, deploy_dir, systemctl_log, destinations = self.run_finish_fixture(
@@ -431,6 +435,7 @@ class DeployRollbackTest(unittest.TestCase):
         systemctl.chmod(0o755)
 
         path_names = {
+            "/usr/local/libexec/groundplane/controller-recovery": "controller-recovery",
             "/usr/local/libexec/groundplane/controller": "controller",
             "/usr/local/bin/groundplane": "cli",
             "/etc/systemd/system/groundplane-controller.service": "controller-unit",
@@ -457,6 +462,7 @@ class DeployRollbackTest(unittest.TestCase):
             "deploy_dir=$1\n"
             "deploy_id=0123456789abcdef0123456789abcdef\n"
             "rollback=1\n"
+            "native_initialized=0\n"
             f"service_was_active={1 if service_was_active else 0}\n"
             f"service_was_enabled={1 if service_was_enabled else 0}\n"
             "retain_recovery=0\n"

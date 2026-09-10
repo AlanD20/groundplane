@@ -107,6 +107,30 @@ dispatch, not public CLI actions. Release staging/guard installation belong to
 the explicit deployment/bootstrap exception. An older binary cannot retroactively
 supply this guarantee; the first upgrade-capable QA baseline needs bootstrap.
 
+`scripts/deploy.py` installs that first guard before service startup. A legacy
+installation requires explicit `--bootstrap` maintenance and an idle-Task check;
+the operator must prevent new work during this one-time transition. An incomplete
+native root/guard/unit combination fails closed. Bootstrap rollback stops the
+service before restoring files and removes only its newly created empty native
+layout; any activation/release evidence instead retains the installation and
+backups. The first candidate is published only after bootstrap rollback ends.
+
+Thereafter deployment stages immutable bytes and invokes the normal protected
+update endpoint. `--stage-only` publishes a candidate without activating it.
+Routine deployment never rewrites the Controller executable, recovery executable,
+unit, YAML, age identity, CLI or Runner configuration and never independently
+updates the Agent. Source-derived build metadata supplies compatibility values;
+deployment verifies the Controller hash and resolves the Agent registry digest
+without running candidate code. The full canonical manifest is the release id.
+
+A private fsynced deployment receipt retains the release/key before POST and the
+accepted Task id afterward. Lost acceptance reuses the same key; known Tasks are
+only reread. A different release cannot replace an unresolved receipt. A bounded
+client timeout retains it and its private helper bundle for explicit resume;
+neither timeout nor Task failure triggers shell rollback or Abort. This receipt
+is client recovery state, not an alternative Task or activation journal.
+See [deployment runbook](../deployment.md).
+
 Shared pure values: `internal/common/controllerupgrade`; orchestration:
 `internal/controller/controllerupgrade`; journal/binary filesystem mechanics:
 `internal/infra/controllerrelease`; unit control: `internal/infra/systemd`.

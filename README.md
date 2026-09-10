@@ -76,3 +76,7 @@ make ci                         # full local gate: tidy, gofmt, golines, vet, ra
 A successful focused test does not establish MVP acceptance. Follow the
 verification ladder in [`docs/delivery.md`](docs/delivery.md) and the active
 closure order in [`docs/capabilities.md`](docs/capabilities.md).
+
+For first installation and guarded Controller/Agent updates, use the
+[`deployment runbook`](docs/deployment.md). Routine deployment follows the
+Controller update Task; `--bootstrap` is only the explicit legacy transition.
