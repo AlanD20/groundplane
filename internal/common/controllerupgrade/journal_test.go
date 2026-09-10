@@ -16,11 +16,12 @@ func TestJournalTransitions(t *testing.T) {
 		PhaseActivating:  {PhaseTrial, PhaseRollingBack},
 		PhaseTrial:       {PhaseStarting, PhaseRollingBack},
 		PhaseStarting:    {PhaseHealthy, PhaseRollingBack},
-		PhaseRollingBack: {PhaseRolledBack},
+		PhaseRollingBack: {PhaseStopping, PhaseRolledBack},
+		PhaseStopping:    {PhaseRolledBack},
 		PhaseRolledBack:  {PhaseRecovered},
 	}
 	phases := []Phase{PhasePrepared, PhaseActivating, PhaseTrial, PhaseStarting, PhaseHealthy,
-		PhaseRollingBack, PhaseRolledBack, PhaseRecovered, PhaseCancelled, "invalid"}
+		PhaseRollingBack, PhaseStopping, PhaseRolledBack, PhaseRecovered, PhaseCancelled, "invalid"}
 	for _, from := range phases {
 		for _, to := range phases {
 			want := false

@@ -34,21 +34,23 @@ blind host-effect replay.
 
 ### Handoff and recovery
 
-1. Validate manifest, binary, compatibility and installed recovery guard. Retain
-   the exact predecessor executable. No candidate code runs yet.
+1. Validate manifest, binary, compatibility and installed recovery guard.
+   No candidate code runs yet.
 2. Pause Agent admission, drain admitted preparations/sends and wait up to 120
    seconds for active work. Never abort it. Native work is already serialized by
    the Controller executor. Busy deadline/pre-activation cancellation releases
    the hold and retains the current runtime.
-3. Persist a private, bounded, fsynced activation journal tied to the Task and
-   frozen identities. A restarting Controller restores admission holds before
+3. Retain the exact predecessor executable and persist a private, bounded,
+   fsynced activation journal tied to the Task and frozen identities, after
+   successful drain and before activation. A restarting Controller restores admission holds before
    opening its Agent channel. This is host handoff evidence, not a second Task
    journal or an operator resource.
 4. A transient systemd service runs the retained predecessor's fixed private
    recovery mode. It survives Controller stop and performs only the closed
    swap/start/readiness/restore procedure. It atomically replaces the executable,
    starts the candidate and waits for the same Task to resume and prove
-   Controller/etcd/authenticated Agent readiness.
+   its actual running executable digest, every HTTP listener, the Agent listener,
+   a fresh etcd health read and authenticated Agent readiness.
 5. The candidate resumes the same Task and uses ADR0010 to update the Agent to
    the release-pinned digest. Failure restores the prior Controller and, if
    changed, Agent image using fresh generation/token authority. Successful
@@ -60,6 +62,14 @@ blind host-effect replay.
    predecessor because the transient watchdog did not survive reboot.
    A watchdog bounds a live but unready candidate. Journal transitions, binary
    swaps and rollback are replay-safe. Neither route needs a healthy candidate.
+
+Before stopping for rollback, the watchdog CAS-claims `stopping`. A racing
+startup guard may restore predecessor bytes in that phase but leaves the phase
+unchanged; no Controller may qualify recovery until the pending stop completes.
+If guard recovery won first, the watchdog cannot claim the stop. This prevents
+a stale rollback read from stopping an already recovered Controller. A watchdog
+whose settled operation has been replaced by a newer journal exits successfully
+so systemd collects it instead of retrying obsolete recovery indefinitely.
 
 The Task deadline is 600 seconds, including drain, startup, Agent update and
 recovery. Recovery retains evidence and safety holds on its own failure and
@@ -95,3 +105,6 @@ See upstream [systemd-run v255](https://raw.githubusercontent.com/systemd/system
 and [systemd.service v255](https://raw.githubusercontent.com/systemd/systemd/v255/man/systemd.service.xml).
 The kernel's [boot identity](https://www.kernel.org/doc/html/v6.9/admin-guide/sysctl/kernel.html#random)
 is stable within one boot and distinguishes recovery after host restart.
+The Linux man-pages [`/proc/pid/exe` contract](https://man7.org/linux/man-pages/man5/proc_pid_exe.5.html)
+provides the executing binary even after its installation pathname is replaced;
+qualification hashes `/proc/self/exe`, not the potentially newer installed path.

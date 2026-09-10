@@ -124,6 +124,30 @@ func TestQualifiedCandidateSurvivesGuard(t *testing.T) {
 	}
 }
 
+// Rationale: a startup guard may run while a watchdog already owns a pending
+// stop. Restoring bytes must not qualify a process that this stop can still kill.
+func TestGuardPreservesPendingWatchdogStopOwnership(t *testing.T) {
+	store, journal, previous, _ := activationStore(t)
+	defer store.Close()
+	ctx := context.Background()
+	if err := store.Prepare(ctx, journal); err != nil {
+		t.Fatal(err)
+	}
+	journal.Phase = upgrade.PhaseStopping
+	if err := store.writeJournal(ctx, journal); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Guard(ctx, journal.StartedAt.Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	assertInstalled(t, store, previous)
+	assertPhase(t, store, upgrade.PhaseStopping)
+	if err := store.Rollback(ctx, journal.TaskID); err != nil {
+		t.Fatal(err)
+	}
+	assertPhase(t, store, upgrade.PhaseRolledBack)
+}
+
 func activationStore(t *testing.T) (*Store, upgrade.Journal, []byte, []byte) {
 	t.Helper()
 	store, id, candidate := testReleaseStore(t)

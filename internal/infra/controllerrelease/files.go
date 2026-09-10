@@ -40,7 +40,7 @@ func Open(ctx context.Context) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	binaries, err := openAbsoluteRoot(ctx, upgrade.BinaryDirectory)
+	binaries, err := openAbsoluteRoot(ctx, upgrade.BinaryDirectory, 0)
 	if err == nil {
 		info, statErr := binaries.Stat(".")
 		err = statErr
@@ -63,7 +63,7 @@ func Open(ctx context.Context) (*Store, error) {
 }
 
 func openStore(ctx context.Context, path string, uid uint32) (*Store, error) {
-	root, err := openAbsoluteRoot(ctx, path)
+	root, err := openAbsoluteRoot(ctx, path, uid)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func openStore(ctx context.Context, path string, uid uint32) (*Store, error) {
 	return &Store{root: root, uid: uid, bootID: bootID}, nil
 }
 
-func openAbsoluteRoot(ctx context.Context, path string) (*os.Root, error) {
+func openAbsoluteRoot(ctx context.Context, path string, uid uint32) (*os.Root, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -93,6 +93,10 @@ func openAbsoluteRoot(ctx context.Context, path string) (*os.Root, error) {
 	if err != nil {
 		return nil, fileError(err)
 	}
+	if err := trustedAncestor(ctx, root, uid); err != nil {
+		_ = root.Close() // Reject an unsafe filesystem root before traversal.
+		return nil, err
+	}
 	for _, part := range strings.Split(strings.TrimPrefix(path, "/"), "/") {
 		next, openErr := openDirectory(ctx, root, part)
 		closeErr := root.Close()
@@ -104,8 +108,27 @@ func openAbsoluteRoot(ctx context.Context, path string) (*os.Root, error) {
 			return nil, fileError(closeErr)
 		}
 		root = next
+		if err := trustedAncestor(ctx, root, uid); err != nil {
+			_ = root.Close() // Reject an ancestor which can replace the private leaf.
+			return nil, err
+		}
 	}
 	return root, nil
+}
+
+func trustedAncestor(ctx context.Context, root *os.Root, uid uint32) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	info, err := root.Stat(".")
+	if err != nil {
+		return fileError(err)
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || !info.IsDir() || (stat.Uid != 0 && stat.Uid != uid) || info.Mode().Perm()&0o022 != 0 {
+		return unsafeFile()
+	}
+	return nil
 }
 
 func (store *Store) Close() error {

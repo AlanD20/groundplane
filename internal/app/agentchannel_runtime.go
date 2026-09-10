@@ -24,6 +24,7 @@ type agentChannelRuntime struct {
 	listen            func(context.Context) (net.Listener, error)
 	newServer         func(*agentchannel.Registry) agentChannelGRPCServer
 	volumeCheckpoints agentchannel.VolumeRemovalCheckpointer
+	onReady           func()
 }
 
 type agentChannelGRPCServer interface {
@@ -100,7 +101,7 @@ func (runtime *agentChannelRuntime) Run(ctx context.Context) (resultErr error) {
 	if err != nil {
 		return agentChannelRuntimeError(ctx, "listen", err)
 	}
-	owned := &ownedAgentListener{Listener: listener}
+	owned := &ownedAgentListener{Listener: listener, onReady: runtime.onReady}
 	defer func() {
 		if closeErr := owned.Close(); closeErr != nil {
 			resultErr = preferAgentChannelCleanup(resultErr, closeErr)
@@ -165,8 +166,17 @@ func preferAgentChannelCleanup(operationErr, cleanupErr error) error {
 
 type ownedAgentListener struct {
 	net.Listener
-	once sync.Once
-	err  error
+	once      sync.Once
+	err       error
+	readyOnce sync.Once
+	onReady   func()
+}
+
+func (listener *ownedAgentListener) Accept() (net.Conn, error) {
+	if listener.onReady != nil {
+		listener.readyOnce.Do(listener.onReady)
+	}
+	return listener.Listener.Accept()
 }
 
 func (listener *ownedAgentListener) Close() error {

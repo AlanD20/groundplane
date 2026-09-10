@@ -11,6 +11,21 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// ExecutingDigest identifies this process's running inode even after an
+// installation-path rename. The fixed kernel self reference is deliberate;
+// untrusted release inputs still go through the no-symlink staging boundary.
+func ExecutingDigest(ctx context.Context) (upgrade.Digest, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	file, err := os.Open("/proc/self/exe")
+	if err != nil {
+		return "", fileError(err)
+	}
+	defer file.Close()
+	return copyDigest(ctx, io.Discard, file)
+}
+
 // Installed returns the current executable's actual digest, never a version label.
 func (store *Store) Installed(ctx context.Context) (upgrade.Digest, error) {
 	if store.binaries == nil {
@@ -141,6 +156,18 @@ func (store *Store) Guard(ctx context.Context, now time.Time) error {
 		return err
 	}
 	switch journal.Phase {
+	case upgrade.PhaseStopping:
+		// The watchdog has acquired a pending stop. Restore executable bytes
+		// if needed, but do not let the starting predecessor qualify until
+		// that stop has completed and the watchdog publishes RolledBack.
+		return store.copyExecutable(
+			ctx,
+			store.root,
+			"previous",
+			store.binaries,
+			"controller",
+			journal.PreviousController,
+		)
 	case upgrade.PhaseHealthy:
 		if installed != journal.Manifest.ControllerSHA256 {
 			return phaseConflict()
@@ -207,7 +234,8 @@ func (store *Store) rollbackLocked(ctx context.Context, journal upgrade.Journal)
 	if journal.Phase.Settled() {
 		return phaseConflict()
 	}
-	if journal.Phase != upgrade.PhaseRollingBack && journal.Phase != upgrade.PhaseRolledBack {
+	if journal.Phase != upgrade.PhaseRollingBack && journal.Phase != upgrade.PhaseStopping &&
+		journal.Phase != upgrade.PhaseRolledBack {
 		if !journal.Phase.CanAdvance(upgrade.PhaseRollingBack) {
 			return phaseConflict()
 		}

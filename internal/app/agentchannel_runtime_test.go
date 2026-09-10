@@ -266,7 +266,14 @@ func startAgentChannelTransportRuntime(
 
 func shortUnixSocketPath(t *testing.T) string {
 	t.Helper()
-	directory, err := os.MkdirTemp("/tmp", "gp-uds-")
+	root, err := filepath.Abs(filepath.Join("..", "..", ".tmp"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	directory, err := os.MkdirTemp(root, "gp-uds-")
 	if err != nil {
 		t.Fatalf("create short Unix socket directory: %v", err)
 	}

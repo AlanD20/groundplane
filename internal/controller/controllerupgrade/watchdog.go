@@ -42,8 +42,8 @@ func (watchdog *Watchdog) Run(ctx context.Context, taskID string) error {
 	if ids.Validate(ids.KindTask, taskID) != nil {
 		return errs.New(errs.KindValidationFailed, "controller recovery Task is invalid")
 	}
-	initial, err := watchdog.current(ctx, taskID)
-	if err != nil {
+	initial, current, err := watchdog.current(ctx, taskID)
+	if err != nil || !current {
 		return err
 	}
 	// A replay after a long outage still gets one bounded recovery attempt;
@@ -61,8 +61,8 @@ func (watchdog *Watchdog) Run(ctx context.Context, taskID string) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		journal, err := watchdog.current(ctx, taskID)
-		if err != nil {
+		journal, current, err := watchdog.current(ctx, taskID)
+		if err != nil || !current {
 			return err
 		}
 		if journal.Phase.Settled() {
@@ -93,6 +93,16 @@ func (watchdog *Watchdog) Run(ctx context.Context, taskID string) error {
 				continue
 			}
 		case upgrade.PhaseRollingBack:
+			// The startup guard may independently restore a crashed candidate.
+			// Claim the stop before issuing it; while Stopping, the guard may
+			// restore bytes but cannot publish recovered qualification.
+			if _, err := watchdog.journal.Advance(
+				ctx, taskID, upgrade.PhaseRollingBack, upgrade.PhaseStopping,
+			); err != nil && !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+				return err
+			}
+			continue
+		case upgrade.PhaseStopping:
 			if err := watchdog.unit.Stop(ctx); err != nil {
 				return err
 			}
@@ -139,12 +149,12 @@ func (watchdog *Watchdog) activate(ctx context.Context, journal upgrade.Journal)
 }
 
 func (watchdog *Watchdog) requestRollback(ctx context.Context, taskID string) error {
-	journal, err := watchdog.current(ctx, taskID)
-	if err != nil {
+	journal, current, err := watchdog.current(ctx, taskID)
+	if err != nil || !current {
 		return err
 	}
 	if journal.Phase.Settled() || journal.Phase == upgrade.PhaseRollingBack ||
-		journal.Phase == upgrade.PhaseRolledBack {
+		journal.Phase == upgrade.PhaseStopping || journal.Phase == upgrade.PhaseRolledBack {
 		return nil
 	}
 	// Acquire rollback authority before Stop: qualification can win this CAS,
@@ -156,19 +166,21 @@ func (watchdog *Watchdog) requestRollback(ctx context.Context, taskID string) er
 	return err
 }
 
-func (watchdog *Watchdog) current(ctx context.Context, taskID string) (upgrade.Journal, error) {
+func (watchdog *Watchdog) current(ctx context.Context, taskID string) (upgrade.Journal, bool, error) {
 	journal, found, err := watchdog.journal.Current(ctx)
 	if err != nil {
-		return upgrade.Journal{}, err
+		return upgrade.Journal{}, false, err
 	}
-	if !found || journal.TaskID != taskID {
-		return upgrade.Journal{}, errs.New(
+	if !found {
+		return upgrade.Journal{}, false, errs.New(
 			errs.KindStateConflict,
 			"controller recovery operation changed",
 		)
 	}
 	if err := journal.Validate(); err != nil {
-		return upgrade.Journal{}, err
+		return upgrade.Journal{}, false, err
 	}
-	return journal, nil
+	// Prepare can replace the journal only after the predecessor operation
+	// settled. Returning success lets systemd collect its obsolete service.
+	return journal, journal.TaskID == taskID, nil
 }

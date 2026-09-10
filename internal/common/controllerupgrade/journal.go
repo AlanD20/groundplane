@@ -18,6 +18,7 @@ const (
 	PhaseStarting    Phase = "starting"
 	PhaseHealthy     Phase = "healthy"
 	PhaseRollingBack Phase = "rolling_back"
+	PhaseStopping    Phase = "stopping"
 	PhaseRolledBack  Phase = "rolled_back"
 	PhaseRecovered   Phase = "recovered"
 	PhaseCancelled   Phase = "cancelled"
@@ -34,6 +35,8 @@ func (phase Phase) CanAdvance(next Phase) bool {
 	case PhaseStarting:
 		return next == PhaseHealthy || next == PhaseRollingBack
 	case PhaseRollingBack:
+		return next == PhaseStopping || next == PhaseRolledBack
+	case PhaseStopping:
 		return next == PhaseRolledBack
 	case PhaseRolledBack:
 		return next == PhaseRecovered
@@ -50,7 +53,7 @@ func (phase Phase) Settled() bool {
 func (phase Phase) Valid() bool {
 	switch phase {
 	case PhasePrepared, PhaseActivating, PhaseTrial, PhaseStarting, PhaseHealthy,
-		PhaseRollingBack, PhaseRolledBack, PhaseRecovered, PhaseCancelled:
+		PhaseRollingBack, PhaseStopping, PhaseRolledBack, PhaseRecovered, PhaseCancelled:
 		return true
 	default:
 		return false

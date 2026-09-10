@@ -72,14 +72,62 @@ func TestWatchdogDoesNotStopQualificationWinner(t *testing.T) {
 	}
 }
 
+// Rationale: after a completed update, the next Task may replace the journal
+// before the prior transient service exits. An obsolete watchdog must retire
+// cleanly, not restart forever against another operation's journal.
+func TestWatchdogRetiresAfterNewerOperationOwnsJournal(t *testing.T) {
+	journal := watchdogJournal()
+	previousTask := journal.TaskID
+	journal.TaskID = ids.New(ids.KindTask)
+	store := &watchdogStore{journal: journal}
+	unit := &watchdogUnit{store: store}
+	watchdog, err := NewWatchdog(store, unit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := watchdog.Run(context.Background(), previousTask); err != nil {
+		t.Fatalf("obsolete watchdog = %v", err)
+	}
+	if unit.starts != 0 || unit.stops != 0 || store.rollbacks != 0 {
+		t.Fatal("obsolete watchdog changed the newer operation")
+	}
+}
+
+// Rationale: the startup guard can restore a crashed candidate while a
+// watchdog is about to stop it. A stale rollback read must not stop the newly
+// recovered Controller after it has already qualified and released admission.
+func TestWatchdogDoesNotStopStartupGuardRecoveryWinner(t *testing.T) {
+	journal := watchdogJournal()
+	journal.Phase = upgrade.PhaseRollingBack
+	store := &watchdogStore{journal: journal, mode: "guard-recovery-race"}
+	unit := &watchdogUnit{store: store}
+	watchdog, err := NewWatchdog(store, unit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	watchdog.now = func() time.Time { return journal.StartedAt }
+	if err := watchdog.Run(context.Background(), journal.TaskID); err != nil {
+		t.Fatal(err)
+	}
+	if unit.stops != 0 || store.rollbacks != 0 {
+		t.Fatal("stale rollback stopped the recovered Controller")
+	}
+}
+
 type watchdogStore struct {
 	journal   upgrade.Journal
 	mode      string
 	rollbacks int
+	reads     int
 }
 
 func (store *watchdogStore) Current(context.Context) (upgrade.Journal, bool, error) {
-	return store.journal, true, nil
+	store.reads++
+	observed := store.journal
+	if store.mode == "guard-recovery-race" && store.reads == 2 {
+		store.journal.Phase = upgrade.PhaseRecovered
+	}
+	return observed, true, nil
 }
 func (store *watchdogStore) Activate(context.Context, string) error {
 	if store.mode == "bad-copy" {
