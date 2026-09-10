@@ -56,6 +56,9 @@ func scriptContextBlueprintPrimaryFixture(
 		BodyGeneration: Versioned[ScriptBodyGenerationRecord]{Record: body},
 	}
 	sources.Script.Record.Desired.Body = ""
+	sources.Environment.Record.ID = execution.EnvironmentID
+	sources.Service.Record.EnvironmentID, sources.Service.Record.Desired.ID = execution.EnvironmentID, execution.ServiceID
+	sources.DesiredProjection.Record.EnvironmentID, sources.DesiredProjection.ReadRevision = execution.EnvironmentID, revision
 	if explicit {
 		sources.Release.Intent.CandidateWorkload.LocalImageID = "sha256:" + strings.Repeat("a", 64)
 		var snapshot agentpb.ResolvedRunnerSnapshot

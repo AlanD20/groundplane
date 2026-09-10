@@ -113,13 +113,13 @@ func scriptContextSourcesForTest(t *testing.T) (ScriptExecutionSources, *agentpb
 	if err != nil {
 		t.Fatal(err)
 	}
-	return sources, &agentpb.ResolvedRunnerSnapshot{
+	return withScriptContextResourceSources(sources, &agentpb.ResolvedRunnerSnapshot{
 		LocalImageId: "sha256:" + strings.Repeat("b", 64),
 		ExplicitExecution: &agentpb.ScriptExplicitExecutionAuthority{
 			Context: context, ContextSha256: digest, ScriptModRevision: 42,
 			ReleaseLocalImageId: sources.Release.Intent.CandidateWorkload.LocalImageID,
 		},
-	}
+	})
 }
 
 // Source-publication tests need a real wire snapshot, not the checkpoint-only

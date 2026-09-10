@@ -57,11 +57,12 @@ func (service *ScriptArtifactService) BuildScriptEntryBindings(
 	if ctx == nil || service == nil || service.values == nil {
 		return nil, errs.New(errs.KindInternal, "Script Entry binding service is not configured")
 	}
-	bindings := make([]*agentpb.ScriptRunnerEntryBinding, 0, len(sources.DesiredProjection.Record.Entries))
-	for _, record := range sources.DesiredProjection.Record.Entries {
-		if !scriptEntryExposesService(record.Entry, sources.Service.Record.Desired.Name) {
-			continue
-		}
+	entries, err := selectedScriptEntries(sources)
+	if err != nil {
+		return nil, err
+	}
+	bindings := make([]*agentpb.ScriptRunnerEntryBinding, 0, len(entries))
+	for _, record := range entries {
 		value, err := service.resolveScriptEntryValue(ctx, sources.Environment.Record.ID, record)
 		if err != nil {
 			clear(value)

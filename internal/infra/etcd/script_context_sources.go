@@ -48,7 +48,7 @@ func validateScriptContextSources(sources ScriptExecutionSources, snapshot *agen
 	if !bytes.Equal(digest, authority.ContextSha256) {
 		return errs.New(errs.KindValidationFailed, "captured Script context digest differs from its fixed source")
 	}
-	return nil
+	return validateScriptContextResources(sources, snapshot)
 }
 
 // The storage boundary converts its typed desired record explicitly. Sorting is

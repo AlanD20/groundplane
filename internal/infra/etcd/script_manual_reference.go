@@ -103,9 +103,25 @@ func (repository *ScriptRepository) manualScriptEntrySourceMembers(
 	base ScriptSourceReference,
 	bindings []*agentpb.ScriptRunnerEntryBinding,
 ) ([]ScriptSourcePreparationMember, error) {
+	execution := sources.Script.Record.Desired.Execution
+	if execution != nil {
+		if err := execution.Validate(); err != nil {
+			return nil, err
+		}
+	}
+	explicit := execution != nil && execution.Mode == core.ScriptExecutionExplicit
 	selected := make(map[string]EntryRecord)
 	for _, record := range sources.DesiredProjection.Record.Entries {
+		if explicit && !slices.Contains(execution.EntryIDs, record.Entry.ID) {
+			continue
+		}
 		if !record.Entry.ExposesAll() && !slices.Contains(record.Entry.Exposure, sources.Service.Record.Desired.Name) {
+			if explicit {
+				return nil, errs.New(
+					errs.KindValidationFailed,
+					"explicit Script Entry source is not exposed to its Service",
+				)
+			}
 			continue
 		}
 		if _, duplicate := selected[record.Entry.ID]; duplicate || record.EnvironmentID != base.SourceOwnerID {
@@ -113,7 +129,7 @@ func (repository *ScriptRepository) manualScriptEntrySourceMembers(
 		}
 		selected[record.Entry.ID] = record
 	}
-	if len(bindings) != len(selected) {
+	if len(bindings) != len(selected) || explicit && len(selected) != len(execution.EntryIDs) {
 		return nil, errs.New(errs.KindValidationFailed, "manual Script Entry binding coverage is incomplete")
 	}
 	members := make([]ScriptSourcePreparationMember, 0, len(bindings))
