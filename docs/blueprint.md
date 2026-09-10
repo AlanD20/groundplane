@@ -667,7 +667,13 @@ grants and64Entry grants. Optional omitted lists grant nothing; duplicates fail.
 names immutable`x-gp-entry`map keys, each exposed to the associated real Service.
 Volume targets are canonical absolute container paths, excluding root, traversal,
 reserved kernel/system paths, the Script-body target, overlapping mounts and
-Entry file targets. Each Volume's`read_only`boolean is explicit. Host paths,
+Entry file targets. Reserved targets include`/proc`,`/sys`,`/dev`,`/run`,
+`/var/run`,`/bin`,`/sbin`,`/usr`,`/lib`,`/lib64`, the Docker-managed files
+`/etc/hosts`,`/etc/hostname`,`/etc/resolv.conf`and`/groundplane-script-body`.
+Ancestors and descendants of these paths are excluded too; component-prefix
+siblings are not. Application subtrees such as`/etc/tls`are allowed. Targets
+must be valid UTF-8 without control characters. Each Volume's`read_only`boolean
+is explicit. Host paths,
 Docker sockets, networking and all unknown execution fields are forbidden.
 An explicit runner has no network or inherited Service runtime/environment;
 its working directory is`/`. Image defaults and only selected Entry values are

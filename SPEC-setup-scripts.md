@@ -33,7 +33,10 @@ not once per replica. This is not a second Jobs or workflow system.
 - Each Volume grant has a canonical absolute target and explicit read-only
   decision. Targets may not overlap one another, the body mount or Entry file
   targets; root, traversal, reserved kernel/system paths and host binds fail.
-  Grant limits are32Volumes and64Entries per explicit context.
+  The exact reserved path list is in`docs/blueprint.md`; it protects the body,
+  interpreter, runtime/kernel and Docker-managed files without excluding
+  application subtrees such as`/etc/tls`. Grant limits are32Volumes and64Entries
+  per explicit context.
 - The Agent resolves the explicit digest reference before publication to an
   immutable host-local Docker image id. Missing images fail before effects;
   no pull, build or late re-resolution occurs. The runner snapshot seals this
