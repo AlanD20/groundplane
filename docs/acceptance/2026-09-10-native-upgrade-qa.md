@@ -155,10 +155,15 @@ log events. This proves that named cached-distribution window, not whole-build
 continuity or a root cause for the failed samples.
 
 The transport now verifies local/target Docker content ids and reuses matching
-images, removing the unchanged roughly1GBRunner from repeated archives. Missing
+images. Missing
 images retain paced transport; runtime identity still comes from the registry.
-Five failing-first reuse tests and all49deployment tests pass. The new-release
-whole-build retry of this narrower transport remains pending.
+Five failing-first reuse tests and all49deployment tests passed. The next trial
+showed the target no longer retained that newer Runner image, so reuse alone did
+not omit it. Native preparation now omits Runner build/transfer entirely, matching
+its unchanged-runtime contract. Bootstrap still includes Runner and the remote
+complete-layout preflight remains authoritative. New failing-first regressions
+prove artifact selection and bounded CLI error handling; all53deployment tests
+pass. Fresh uncached-build qualification of this narrower path remains pending.
 
 Evidence: `qa-native-update-c-deploy.log`, `native-c-current.txt`,
 `paced-websocket-continuity.log`, `paced-http-continuity.jsonl`,
@@ -195,6 +200,22 @@ Evidence: `bad-agent-build.log`, `bad-agent-publish.log`, `bad-agent-release.txt
 `incompatible-native-qa-02.log`, `agent-busy-rejection.txt`,
 `agent-busy-probe-removed.txt`. Private failed releases remain retained as QA
 evidence, not selected production inputs.
+
+## Release D — cached Docker build
+
+Normal C→D Task `task_01M24V9SG35EDX2S4BQJKNQRV8`, created05:05:29.091UTC,
+completed with healthy Controller/Agent and unchanged application identities.
+Controller version is `0.0.0-qa.native20260910.4`, SHA256
+`455592f11c09634b07bce2430f911ea7d610984c5a44966c489b6fae4e8d38bc`, release
+`sha256:f34915444677db2d85046b86f6725ce7fa7d04f2242682db33c6eab004bf34fb`.
+Agent `2f6af43b5a25` runs
+`localhost:5000/groundplane-agent@sha256:1f9242006e8920260d3bfd0b2962c2b6fd3f83fa38b0d5da3461f8e60d64b0f9`.
+Held traffic remains successful; the full probe continues. Docker reused the
+isolated build's compile layer, so this is not an uncached-build proof. Exact
+image inspection found no reusable target Runner content; this trial still sent
+the full archive. The new bootstrap-only Runner correction follows this trial.
+Evidence: `qa-native-update-d-deploy.log`, `native-d-current.txt`,
+`reuse-websocket-continuity.log` and `reuse-http-continuity.jsonl`.
 
 ## Remaining proof
 

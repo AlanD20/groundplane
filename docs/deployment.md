@@ -57,7 +57,10 @@ Run the same command without `--bootstrap`. On a guarded host it:
 
 Distribution reuses an image only after the local and target Docker content ids
 match exactly, then creates its invocation-owned transport tag. Missing images
-use a4MiB/s paced archive; unchanged Runner bytes are not retransferred. This
+use a4MiB/s paced archive. Runner build/transfer is bootstrap-only: an initial
+read-only recovery-guard presence hint selects artifacts, while the remote
+installer still performs authoritative complete-layout validation and rejects
+partial or changed layouts before lifecycle effects. This
 transport optimization does not authorize a local image id as runtime identity:
 the remote publisher still resolves the registry-reported Agent RepoDigest.
 

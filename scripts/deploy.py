@@ -479,6 +479,18 @@ def verify_architecture(deployment: Deployment) -> None:
         )
 
 
+def runner_required(deployment: Deployment) -> bool:
+    # Distribution hint only. The remote installer still validates the complete
+    # native layout before any activation, and rejects partial/racing layouts.
+    probe = "if test -f /usr/local/libexec/groundplane/controller-recovery; " \
+            "then printf 'native\\n'; else printf 'bootstrap\\n'; fi"
+    result = run([*deployment.ssh_base, probe], capture=True)
+    mode = result.stdout.strip()
+    if mode not in ("native", "bootstrap"):
+        raise ValueError("target recovery-guard probe is invalid")
+    return mode == "bootstrap"
+
+
 def build_environment() -> dict[str, str]:
     node_version = (REPOSITORY_ROOT / ".node-version").read_text(encoding="utf-8").strip()
     package = json.loads((REPOSITORY_ROOT / "console" / "package.json").read_text(encoding="utf-8"))
@@ -600,41 +612,24 @@ def local_image_id(image: str) -> str | None:
     return image_id or None
 
 
-def build_artifacts(deployment: Deployment, invocation_id: str) -> tuple[str, str]:
+def build_artifacts(deployment: Deployment, invocation_id: str, *, include_runner: bool = True) -> tuple[str, str]:
     source_agent_image = f"groundplane-agent:deploy-{invocation_id}"
     source_runner_image = f"groundplane-runner:deploy-{invocation_id}"
-    agent_cache_image = f"groundplane-agent:cache-{image_input_digest('agent', deployment.version)}"
-    runner_cache_image = f"groundplane-runner:cache-{image_input_digest('runner', deployment.version)}"
     run(
         ["make", "controller", "cli", f"VERSION={deployment.version}"],
         cwd=REPOSITORY_ROOT,
         environment=build_environment(),
     )
-    if local_image_id(agent_cache_image) is None:
-        run(
-            [
-                "make",
-                "agent-image",
-                f"AGENT_VERSION={deployment.version}",
-                f"AGENT_IMAGE={agent_cache_image}",
-            ],
-            cwd=REPOSITORY_ROOT,
-        )
-    else:
-        print(f"Reusing cached Agent image: {agent_cache_image}", flush=True)
-    if local_image_id(runner_cache_image) is None:
-        run(
-            [
-                "make",
-                "runner-image",
-                f"RUNNER_IMAGE={runner_cache_image}",
-            ],
-            cwd=REPOSITORY_ROOT,
-        )
-    else:
-        print(f"Reusing cached Runner image: {runner_cache_image}", flush=True)
-    run(["docker", "tag", agent_cache_image, source_agent_image])
-    run(["docker", "tag", runner_cache_image, source_runner_image])
+    for kind in (("agent", "runner") if include_runner else ("agent",)):
+        cache = f"groundplane-{kind}:cache-{image_input_digest(kind, deployment.version)}"
+        if local_image_id(cache) is None:
+            command = ["make", f"{kind}-image", f"{kind.upper()}_IMAGE={cache}"]
+            if kind == "agent":
+                command.append(f"AGENT_VERSION={deployment.version}")
+            run(command, cwd=REPOSITORY_ROOT)
+        else:
+            print(f"Reusing cached {kind} image: {cache}", flush=True)
+        run(["docker", "tag", cache, f"groundplane-{kind}:deploy-{invocation_id}"])
     return source_agent_image, source_runner_image
 
 
@@ -724,6 +719,7 @@ def deploy(deployment: Deployment) -> None:
     require_local_tools()
     verify_architecture(deployment)
     prepare_target(deployment)
+    include_runner = runner_required(deployment)
 
     invocation_id = secrets.token_hex(16)
     remote_directory = f"{REMOTE_DEPLOY_PREFIX_PATH}{invocation_id}"
@@ -741,8 +737,10 @@ def deploy(deployment: Deployment) -> None:
             source_agent_image, source_runner_image = build_artifacts(
                 deployment,
                 invocation_id,
+                include_runner=include_runner,
             )
-            missing_images = prepare_images(deployment.ssh_base, (source_agent_image, source_runner_image))
+            selected_images = (source_agent_image, source_runner_image) if include_runner else (source_agent_image,)
+            missing_images = prepare_images(deployment.ssh_base, selected_images)
             transfer_images(deployment.ssh_base, missing_images)
             create_transfer_archive(transfer_archive)
             transfer_and_deploy(
@@ -791,7 +789,7 @@ def main() -> int:
     except KeyboardInterrupt:
         print("\ndeployment interrupted", file=sys.stderr)
         return 130
-    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         if isinstance(error, subprocess.CalledProcessError):
             if error.stdout:
                 print(error.stdout, file=sys.stderr, end="")
