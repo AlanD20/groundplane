@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"reflect"
@@ -135,6 +136,14 @@ func testEnvironmentComponentTaskPublication(t *testing.T, combined bool) {
 		len(preparation.addresses) != 1 || !preparation.addresses[0].Mutates ||
 		preparation.addresses[0].Next.Reservations[current.Record.Desired.ID] != "10.40.10.6" {
 		t.Fatalf("Component preparation = %#v", preparation)
+	}
+	retained := preparation.AppliedComponentRuntime()
+	if !bytes.Equal(retained, selectedProjection.ComposeArtifact) {
+		t.Fatal("Component runtime did not capture the applied witness")
+	}
+	retained[0] ^= 1
+	if !bytes.Equal(preparation.AppliedComponentRuntime(), selectedProjection.ComposeArtifact) {
+		t.Fatal("Component runtime capture leaked mutable authority")
 	}
 	if !reflect.DeepEqual(preparation.Intent.Candidates[0].Current, current.Record) ||
 		preparation.Intent.Candidates[0].CurrentRevision != current.Revision {

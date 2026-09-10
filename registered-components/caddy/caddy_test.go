@@ -20,6 +20,11 @@ func TestPlanRendersDeterministicHTTPRoutes(t *testing.T) {
 		plan.Services[0].Name != routerInput().Origin.ServiceName || len(plan.Files) != 3 {
 		t.Fatalf("Plan() = %#v", plan)
 	}
+	mount := plan.Services[0].Mounts[0]
+	if mount.Source != "components/caddy" || mount.Target != "/etc/caddy" ||
+		mount.Kind != component.ManagedMountKindDirectory || !mount.ReadOnly {
+		t.Fatal("Caddy must observe atomic configuration replacements through a read-only directory bind")
+	}
 	if len(plan.Services[0].Networks) != 2 || plan.Services[0].Networks[0].Name != "frontend" ||
 		plan.Services[0].Networks[0].StaticIPv4 != "10.40.0.2" ||
 		plan.Services[0].Networks[1].Name != "services" || plan.Services[0].Networks[1].StaticIPv4 != "" {

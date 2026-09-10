@@ -14,8 +14,8 @@ func catalogDigest(
 	containerActions []registeredContainerConfigAction,
 	observations []registeredDNSResolverObservation,
 ) [sha256.Size]byte {
-	encoded := appendLength(nil, len("groundplane-component-catalog-v11"))
-	encoded = append(encoded, "groundplane-component-catalog-v11"...)
+	encoded := appendLength(nil, len("groundplane-component-catalog-v12"))
+	encoded = append(encoded, "groundplane-component-catalog-v12"...)
 	encoded = appendLength(encoded, len(definitions))
 	for _, definition := range definitions {
 		implementation := string(definition.Implementation())

@@ -12,6 +12,9 @@ import (
 func validRetainedOwnership(
 	plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArtifact, serviceID string, labels map[string]string,
 ) (bool, retainedOwnershipReason) {
+	if validEnvironmentComponentOwnership(plan, artifact, serviceID, labels) {
+		return true, ""
+	}
 	if plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY {
 		return validBlueprintRetainedOwnership(plan, artifact, serviceID, labels)
 	}

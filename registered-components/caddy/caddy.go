@@ -142,9 +142,9 @@ func Plan(input component.HTTPRouterInput, config Config) (component.Environment
 			},
 			Mounts: []component.ManagedMount{
 				{
-					Source:   caddyfileName,
-					Target:   "/etc/caddy/Caddyfile",
-					Kind:     component.ManagedMountKindFile,
+					Source:   "components/caddy",
+					Target:   "/etc/caddy",
+					Kind:     component.ManagedMountKindDirectory,
 					ReadOnly: true,
 				},
 				{Source: "components/caddy/data", Target: "/data", Kind: component.ManagedMountKindDirectory},

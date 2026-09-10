@@ -138,5 +138,6 @@ func renderBlueprintCandidateArtifact(
 		TenantID: input.TenantID, ProjectID: input.ProjectID, EnvironmentID: input.EnvironmentID,
 		PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
 		AuthorizedVolumeDir: input.AuthorizedVolumeDir, Identities: identities, ExternalNetworks: external, Releases: releases,
+		RetainedComponentRuntime: projection.ComposeArtifact,
 	})
 }

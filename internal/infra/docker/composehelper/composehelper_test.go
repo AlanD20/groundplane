@@ -594,7 +594,7 @@ func componentConfigRunner(t *testing.T, configPath string, validationExit int) 
 		t.Fatalf("Marshal(labels) error = %v", err)
 	}
 	mounts, err := json.Marshal([]componentConfigMount{{
-		Type: "bind", Source: configPath, Destination: componentConfigContainerPath, RW: false,
+		Type: "bind", Source: filepath.Dir(configPath), Destination: filepath.Dir(componentConfigContainerPath), RW: false,
 	}})
 	if err != nil {
 		t.Fatalf("Marshal(mounts) error = %v", err)

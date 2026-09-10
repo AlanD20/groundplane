@@ -63,11 +63,32 @@ exit, changed bytes or missing recipe prevents the file writer from running.
 Native validation is not merely Caddyfile-to-JSON adaptation; the documented
 `caddy validate --config - --adapter caddyfile` provisions the modules too.
 
-Current Environment Configure still reconciles the complete Component runtime
-and changes its plan/generation ownership labels, which may recreate Caddy and
-Tunnel containers. No interruption-free Configure claim is made. This is
-separate from a native Controller/Agent upgrade, which must preserve application
-and ingress containers. Invalid native files must not reach that Compose step.
+File-only Configure and Route mutation/removal retain native reload semantics.
+The Controller compares complete effective Component service definitions,
+image/replica metadata and resource definitions against the captured applied
+artifact. Only plan/generation labels are excluded from comparison. Equal
+runtime retains that exact ownership; real image, mount, user, environment or
+network edits reconcile normally. An unchanged Tunnel is retained as well.
+Component preparation already fences its applied-source key at publication;
+native-runtime/predecessor preparation supplies the same barrier for ordinary
+Blueprint paths. The frozen candidate carries the result through replay, without
+consulting a later desired head or Docker observation.
+
+The Agent validates historical Component labels separately from native Release
+authority: one Component owner, one pinned-image service, canonical nonfuture
+generation, and only a targeted no-dependencies non-forced Compose up. Native
+retention rules remain separate. File/action generation may exceed retained
+container generation but cannot precede it. Route reconciliation uses the exact
+materialize/up/activate chain; it no longer requests force-recreate.
+
+Caddy binds its managed parent directory read-only, so atomic replacement of
+the Caddyfile is visible without recreating its container. Activation rejects
+the former single-file bind, writable/foreign parent binds and shadowing mounts.
+Replacing the old bind requires one actual mount-change reconciliation; later
+file-only edits use reload. Native Caddy policy still controls WebSocket reload
+behavior (for example `stream_close_delay`). This is distinct from GP native
+upgrades, which preserve all ingress and application containers. Invalid native
+files must not reach the serving write or Compose step.
 
 Primary-Zone allocation and ADR0069 aliases are unchanged. This grants no host,
 firewall, Tunnel/provider, PKI or operator-supplied execution authority. Registered

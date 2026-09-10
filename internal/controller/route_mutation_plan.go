@@ -301,7 +301,6 @@ func (resolver *TaskPlanResolver) buildRouteMutationPlan(
 						ComposeApply: &agentpb.ComposeApply{
 							ArtifactId:     artifactID,
 							ServiceIds:     []string{pin.ServiceID},
-							ForceRecreate:  true,
 							NoDependencies: true,
 						},
 					},

@@ -1252,7 +1252,9 @@ The existing Component config read returns the current template and rendered
 managed-file preview without mutation. It is not draft validation or a live
 observation. Complete staged output must pass Caddy validation before serving-file
 replacement or candidate-router start, and again before reload;
-invalid output retains the previous serving config. Primary-Zone IPAM and
+invalid output retains the previous serving config. File-only edits reload the
+existing router without recreating unchanged Component runtimes. Actual image,
+mount, user and network changes still reconcile the affected runtime. Primary-Zone IPAM and
 operator-owned LAN/provider configuration are unchanged.
 
 `x-gp-backup` is environment policy, not Compose topology:

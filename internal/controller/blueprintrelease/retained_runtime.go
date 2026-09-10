@@ -101,6 +101,26 @@ func (service *Service) PrepareRuntimeArtifact(
 	artifact *agentpb.ComposeArtifact,
 	changes []etcd.EnvironmentBlueprintServiceChange,
 ) (*agentpb.ComposeArtifact, error) {
+	artifact, err := service.prepareNativeRuntimeArtifact(workloads, artifact, changes)
+	if err != nil {
+		return nil, err
+	}
+	if workloads.retained != nil {
+		return controller.RetainEnvironmentComponentRuntime(artifact, workloads.retained.applied.Record.ComposeArtifact)
+	}
+	for _, predecessor := range workloads.predecessors {
+		// All captures share one planning revision; each is checked again by
+		// preparePredecessor and its applied-key CAS before final publication.
+		return controller.RetainEnvironmentComponentRuntime(artifact, predecessor.applied.Record.ComposeArtifact)
+	}
+	return artifact, nil
+}
+
+func (service *Service) prepareNativeRuntimeArtifact(
+	workloads WorkloadPreparation,
+	artifact *agentpb.ComposeArtifact,
+	changes []etcd.EnvironmentBlueprintServiceChange,
+) (*agentpb.ComposeArtifact, error) {
 	if workloads.retained == nil || len(workloads.retained.services) == 0 {
 		return artifact, nil
 	}

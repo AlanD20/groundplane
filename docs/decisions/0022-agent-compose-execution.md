@@ -310,6 +310,13 @@ set for each managed service, network, and volume. The Agent requires
 `managed=true`, the correct kind and owner ids, and the plan/generation labels
 before treating a resource as owned by the current plan.
 
+An unchanged Environment Component may retain the exact applied runtime's
+plan/generation labels under ADR0075. The Controller proves effective-runtime
+equality and fences that source before publishing the frozen result. The Agent
+requires unique Component ownership, pinned image and canonical nonfuture
+generation; selecting it permits only targeted, non-forced, no-dependencies up.
+This is not native Service/Release predecessor authority.
+
 Compose's reserved `com.docker.compose.*` labels may be checked for consistency
 but are not Groundplane ownership authority. The old `groundplane.*` keys are
 removed from workload and Controller-owned Agent-container code in the same

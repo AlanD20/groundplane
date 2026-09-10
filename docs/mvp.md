@@ -1115,7 +1115,10 @@ tenants and one database.
   preview is not live observation or unsaved-draft syntax validation. The
   complete candidate Caddyfile is validated before replacing its serving file
   or starting a candidate router, and again before reload, retaining the
-  previous serving config on invalid output. Exact internal Route
+  previous serving config on invalid output. File-only template/Route edits
+  reload the existing router; unchanged Component runtime keeps its captured
+  ownership labels, including an unaffected Tunnel. Effective image, mount,
+  user or network changes still reconcile the affected runtime. Exact internal Route
   hostnames use Caddy's internal CA; the enable/reconcile Task installs that
   Environment root into the host trust store. LAN clients may install the
   exported public root manually.

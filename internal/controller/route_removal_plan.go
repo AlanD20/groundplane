@@ -278,7 +278,6 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 						ComposeApply: &agentpb.ComposeApply{
 							ArtifactId:     artifactID,
 							ServiceIds:     []string{pin.ServiceID},
-							ForceRecreate:  true,
 							NoDependencies: true,
 						},
 					},

@@ -196,7 +196,7 @@ func TestTaskPlanResolverRebuildsRouteRemovalProviderProcedure(t *testing.T) {
 		first.Operation != agentpb.PlanOperation_PLAN_OPERATION_REMOVE || first.TargetId != task.Target ||
 		len(first.Artifacts) != 1 || len(first.Steps) != 3 || first.Steps[0].GetMaterializeFile() == nil ||
 		composeApply == nil || len(composeApply.GetServiceIds()) != 1 ||
-		!composeApply.GetForceRecreate() || !composeApply.GetNoDependencies() ||
+		composeApply.GetForceRecreate() || !composeApply.GetNoDependencies() ||
 		composeApply.GetServiceIds()[0] != intent.CandidateProjection.Components[0].Runtime.GeneratedServices[0] ||
 		first.Steps[1].GetPrerequisiteStepId() != first.Steps[0].GetStepId() ||
 		first.Steps[2].GetPrerequisiteStepId() != first.Steps[1].GetStepId() ||
@@ -334,17 +334,24 @@ func routeRemovalPlanTestState(
 	if err != nil {
 		t.Fatalf("project Route removal fixture services: %v", err)
 	}
-	projection.DesiredServices = make([]etcd.EnvironmentServiceProjection, len(services))
-	for index, service := range services {
-		projection.DesiredServices[index] = etcd.EnvironmentServiceProjection{
+	projection.DesiredServices = nil
+	for _, service := range services {
+		generated := false
+		for _, managed := range componentProjection.Services {
+			generated = generated || managed.ID == service.ID
+		}
+		if generated {
+			continue
+		}
+		projection.DesiredServices = append(projection.DesiredServices, etcd.EnvironmentServiceProjection{
 			EnvironmentID: projection.EnvironmentID,
 			Desired:       service,
-		}
+		})
 	}
 	sort.Slice(projection.DesiredServices, func(left, right int) bool {
 		return projection.DesiredServices[left].Desired.ID < projection.DesiredServices[right].Desired.ID
 	})
-	normalized, err := MarshalNormalizedEnvironmentProject(componentProjection.Project)
+	normalized, err := MarshalNormalizedEnvironmentProject(project)
 	if err != nil {
 		t.Fatalf("marshal Route removal fixture normalized Compose: %v", err)
 	}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	component "github.com/AlanD20/groundplane-component-sdk/component"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
@@ -25,20 +26,29 @@ import (
 // A Tunnel-only Blueprint must run and observe its managed Service, even when
 // no native Service Release or owned Zone exists. Restart uses persisted input.
 func TestPrepareTunnelOnlyStartsManagedServiceAndReplaysPersistedPlan(t *testing.T) {
-	testPrepareManagedService(t, false, false)
+	testPrepareManagedService(t, false, false, false)
 }
 
 func TestPrepareManagedOnlyAcceptsReadOnlyRetainedNativeLabels(t *testing.T) {
-	testPrepareManagedService(t, true, false)
+	testPrepareManagedService(t, true, false, false)
 }
 
 func TestPrepareManagedOnlyFirstEnableDoesNotTeardownCandidate(t *testing.T) {
-	testPrepareManagedService(t, false, true)
+	testPrepareManagedService(t, false, true, false)
+}
+
+func TestPrepareManagedOnlyRetainsExactComponentOwnership(t *testing.T) {
+	testPrepareManagedService(t, false, false, true)
 }
 
 // Full preflight-to-publication coverage lives in the real Release publisher
 // fixture; this focused test receives the artifact already merged before Stage.
-func testPrepareManagedService(t *testing.T, retainedNative bool, firstEnableProjectionSource bool) {
+func testPrepareManagedService(
+	t *testing.T,
+	retainedNative bool,
+	firstEnableProjectionSource bool,
+	retainedComponent bool,
+) {
 	t.Helper()
 	at := time.Date(2026, 9, 5, 13, 0, 0, 0, time.UTC)
 	tenantID, projectID, environmentID := ids.New(
@@ -139,6 +149,21 @@ func testPrepareManagedService(t *testing.T, retainedNative bool, firstEnablePro
 	artifact, err := controller.RenderCompose(render)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if retainedComponent {
+		previousRuntime = proto.CloneOf(artifact)
+		render.RetainedComponentRuntime, err = proto.Marshal(artifact)
+		if err != nil {
+			t.Fatal(err)
+		}
+		render.PlanID, render.RenderGeneration = ids.New(ids.KindPlan), 2
+		artifact, err = controller.RenderCompose(render)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !proto.Equal(artifact.Services[0], previousRuntime.Services[0]) {
+			t.Fatal("file-only Component render changed ownership")
+		}
 	}
 	if retainedNative {
 		artifact, err = controller.RetainBlueprintNativeRuntime(
@@ -282,6 +307,31 @@ func testPrepareManagedService(t *testing.T, retainedNative bool, firstEnablePro
 	}
 	if !proto.Equal(prepared.Plan, replayed) {
 		t.Fatal("persisted managed lifecycle replay changed sealed plan")
+	}
+	if retainedComponent {
+		for _, mutation := range []string{"force", "dependencies", "broad", "native", "future-generation"} {
+			invalid := proto.CloneOf(prepared.Plan)
+			switch mutation {
+			case "force":
+				invalid.Steps[1].GetComposeApply().ForceRecreate = true
+			case "dependencies":
+				invalid.Steps[1].GetComposeApply().NoDependencies = false
+			case "broad":
+				invalid.Steps[1].GetComposeApply().FullReconcile = true
+				invalid.Steps[1].GetComposeApply().ServiceIds = nil
+			case "native":
+				invalid.Artifacts[0].Services[0].OwnerComponentId = ""
+			case "future-generation":
+				for _, label := range invalid.Artifacts[0].Services[0].ExpectedLabels {
+					if label.Key == "com.groundplane.render-generation" {
+						label.Value = "3"
+					}
+				}
+			}
+			if _, err := executionplan.Seal(invalid); err == nil {
+				t.Fatalf("retained Component accepted %s", mutation)
+			}
+		}
 	}
 	persisted.Steps[1].ID = ids.New(ids.KindStep)
 	if _, err := resolver.ResolveExecutionPlan(context.Background(), persisted); err == nil {

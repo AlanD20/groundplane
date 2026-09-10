@@ -64,7 +64,6 @@ func validateComponentContainerActionTarget(
 	if matches != 1 {
 		return errs.New(errs.KindValidationFailed, "Component container action target is not uniquely owned")
 	}
-	expectedGeneration := strconv.FormatUint(action.GetGeneration(), 10)
 	sealedGeneration := ""
 	for _, label := range selectedService.GetExpectedLabels() {
 		if label.GetKey() == labelRenderGen {
@@ -72,7 +71,13 @@ func validateComponentContainerActionTarget(
 			break
 		}
 	}
-	if sealedGeneration != expectedGeneration {
+	// File generations advance independently of an unchanged serving container.
+	// validateLabels authenticates any retained Component runtime ownership.
+	runtimeGeneration, generationErr := strconv.ParseUint(sealedGeneration, 10, 64)
+	if generationErr != nil || runtimeGeneration == 0 || runtimeGeneration > action.GetGeneration() ||
+		strconv.FormatUint(runtimeGeneration, 10) != sealedGeneration ||
+		runtimeGeneration < action.GetGeneration() &&
+			!retainedComponentReloadTarget(selectedArtifact, selectedService, step, steps) {
 		return errs.New(
 			errs.KindValidationFailed,
 			"Component action generation does not match its selected Service",
@@ -124,7 +129,7 @@ func validateComponentContainerActionTarget(
 				apply.GetArtifactId() == selectedArtifact.GetArtifactId() {
 				for _, serviceID := range apply.GetServiceIds() {
 					if serviceID == selectedService.GetServiceId() &&
-						(apply.GetFullReconcile() || !apply.GetForceRecreate() ||
+						(apply.GetFullReconcile() ||
 							!apply.GetNoDependencies() || len(apply.GetServiceIds()) != 1) {
 						return errs.New(
 							errs.KindValidationFailed,
@@ -159,7 +164,7 @@ func validateComponentContainerActionTarget(
 	if materialization == nil && prerequisite != nil {
 		apply := prerequisite.GetComposeApply()
 		if apply == nil || apply.GetArtifactId() != selectedArtifact.GetArtifactId() ||
-			apply.GetFullReconcile() || !apply.GetForceRecreate() || !apply.GetNoDependencies() ||
+			apply.GetFullReconcile() || !apply.GetNoDependencies() ||
 			len(apply.GetServiceIds()) != 1 ||
 			apply.GetServiceIds()[0] != selectedService.GetServiceId() {
 			return errs.New(

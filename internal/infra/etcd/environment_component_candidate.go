@@ -26,6 +26,7 @@ type EnvironmentComponentCandidateInput struct {
 type ComponentTaskPreparation struct {
 	Intent                    ComponentTaskIntent
 	managedRuntimeSources     []ManagedComponentRuntimeSource
+	appliedComponentRuntime   []byte
 	appliedProjectionPresent  bool
 	appliedProjectionRevision int64
 	desiredProjectionRevision int64
@@ -352,6 +353,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 	preparation := ComponentTaskPreparation{
 		Intent:                    intent,
 		managedRuntimeSources:     managedRuntimeSources,
+		appliedComponentRuntime:   append([]byte(nil), selected.Record.ComposeArtifact...),
 		appliedProjectionPresent:  found,
 		appliedProjectionRevision: keyValueRevision(appliedValue),
 		desiredProjectionRevision: desired.Revision,
@@ -488,6 +490,7 @@ func cloneComponentTaskPreparation(preparation ComponentTaskPreparation) Compone
 	clone := ComponentTaskPreparation{
 		Intent:                    cloneComponentTaskIntent(preparation.Intent),
 		managedRuntimeSources:     append([]ManagedComponentRuntimeSource(nil), preparation.managedRuntimeSources...),
+		appliedComponentRuntime:   append([]byte(nil), preparation.appliedComponentRuntime...),
 		appliedProjectionPresent:  preparation.appliedProjectionPresent,
 		appliedProjectionRevision: preparation.appliedProjectionRevision,
 		desiredProjectionRevision: preparation.desiredProjectionRevision,

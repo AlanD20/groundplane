@@ -928,10 +928,11 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactForPhaseWithRel
 		ProjectOwnerKind: ComposeProjectOwnerTenant,
 		TenantID:         identity.TenantID, ProjectID: identity.ProjectID, EnvironmentID: identity.EnvironmentID,
 		PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
-		AuthorizedVolumeDir: identity.AuthorizedVolumeDir,
-		Identities:          identities,
-		ExternalNetworks:    externalNetworks,
-		Releases:            releases,
+		AuthorizedVolumeDir:      identity.AuthorizedVolumeDir,
+		Identities:               identities,
+		ExternalNetworks:         externalNetworks,
+		Releases:                 releases,
+		RetainedComponentRuntime: projection.ComposeArtifact,
 	})
 }
 

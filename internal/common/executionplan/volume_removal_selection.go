@@ -15,7 +15,8 @@ import (
 func dependencyFreeServiceSelection(
 	plan *agentpb.ExecutionPlan, step *agentpb.ExecutionStep, artifacts map[string]*agentpb.ComposeArtifact,
 ) bool {
-	if blueprintManagedServiceSelection(plan.Operation, step.GetComposeApply(), artifacts) {
+	if blueprintManagedServiceSelection(plan.Operation, step.GetComposeApply(), artifacts) ||
+		routeManagedServiceSelection(plan, step, artifacts) {
 		return true
 	}
 	if plan.GetEntryMutationProcedure() != nil {

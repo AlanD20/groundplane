@@ -39,8 +39,35 @@ exact latest output is `caddy-preflight-architecture.log`. Evidence uses
 `caddy-preflight-*` and `caddy-qa-preflight-*` under
 `.tmp/production-mvp-20260910/`. Required full CI remains task6.
 
-Next: guarded deployment, managed full policy, direct/public HTTP and deny
-matrix, replicated held WebSockets, then a normal invalid Configure while
-proving the prior serving bytes and runtime survive. Restore the saved valid
-desired file normally after that failure. Valid Environment Configure can still
-recreate ingress Component containers; no zero-downtime Configure claim is made.
+## Live normal Configure rejection
+
+Guarded I from85a472476 completed as`task_01M252Z2VPKGZJ04QGFSFDM4W9`,
+running`0.0.0-qa.native20260910.9`. Host reports Controller SHA256
+`44be776461eeb499d2dc9a9179f5aa5802b931b6540597b970bcd004ff1c7c53`,
+Agent image digest`68adb0af63b85d04e16e9e932debc32b02390dceaf97a45399388dc4e2b91316`
+and qualified release`712f73626abdb60c67ee108a2fc03ec1278d83dd629accff24c35a7de35db2ea`.
+The fresh activation sample completed3000held WebSocket deliveries. The longer
+whole-build HTTP sample completed1200requests with two502failures, both before
+activation during the reproduced public Tunnel timeout. These are not zero-failure
+whole-path results; mandatory task6 retains the exact build/Tunnel failure.
+
+Normal CLI Configure submitted an otherwise valid aggregate template containing
+one invalid native global directive. Task`task_01M253SD6A7THATCAN842SR3KG`
+failed at its first step at07:33:52UTC; all later steps remained unexecuted.
+Caddy retained digest`86af0b07deb16cc9b5bff2af79825665038692973c2c642692b15369aee373e8`,
+container2f69cbba8619and Tunnelb8827c3b7c94. Public/login and/up both returned200
+with TLS verification0. This proves the previously missing normal native-rejection
+boundary. The failed desired candidate remains repairable through normal Configure;
+no file, container or durable record was patched out of band.
+
+Evidence: `qa-native-update-i-deploy.log`, `caddy-preflight-qa-installed.txt`,
+`caddy-preflight-upgrade-first-failure.txt`, both continuity logs,
+`caddy-invalid-native-configure.json` and `caddy-invalid-native-retention.txt`
+under the same ignored evidence directory. The installed-version evidence uses
+Host's executing-binary SHA; a separate attempted filesystem hash used an absent
+path and is not claimed as independent proof.
+
+Next: deploy the separate retained-runtime reload correction, replace the failed
+desired file through normal Configure with managed full policy, then prove the
+direct/public HTTP/deny matrix and held WebSocket continuity across a file-only
+reload. Migrating the old single-file mount is an actual runtime change.

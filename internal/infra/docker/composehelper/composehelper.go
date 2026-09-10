@@ -435,12 +435,17 @@ func hasAllExpectedLabels(actual map[string]string, expected []*agentpb.LabelPai
 }
 
 func hasExactComponentConfigMount(mounts []componentConfigMount, source string, destination string) bool {
+	sourceDirectory, destinationDirectory := filepath.Dir(source), filepath.Dir(destination)
 	matches := 0
 	for _, mount := range mounts {
-		if mount.Destination != destination {
+		if mount.Destination != destinationDirectory {
+			if mount.Destination == destination || strings.HasPrefix(destination, mount.Destination+"/") &&
+				strings.HasPrefix(mount.Destination, destinationDirectory+"/") {
+				return false
+			}
 			continue
 		}
-		if mount.Type != "bind" || filepath.Clean(mount.Source) != filepath.Clean(source) || mount.RW {
+		if mount.Type != "bind" || filepath.Clean(mount.Source) != sourceDirectory || mount.RW {
 			return false
 		}
 		matches++

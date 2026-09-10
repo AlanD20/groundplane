@@ -534,8 +534,13 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		// Component-only edits preserve the selected native workload, including
 		// its companion files. The revision guard above binds these bytes to
 		// the authoring document; external Blueprint inputs remain closed.
-		bundle.Files = append(append([]core.BlueprintFile(nil), bundle.Files...), previousProjection.Record.RuntimeFiles...)
-		sort.Slice(bundle.Files, func(left, right int) bool { return bundle.Files[left].Path < bundle.Files[right].Path })
+		bundle.Files = append(
+			append([]core.BlueprintFile(nil), bundle.Files...),
+			previousProjection.Record.RuntimeFiles...)
+		sort.Slice(
+			bundle.Files,
+			func(left, right int) bool { return bundle.Files[left].Path < bundle.Files[right].Path },
+		)
 	}
 	parsed, err := blueprintparser.Parse(ctx, blueprintparser.EnvironmentScope{
 		EnvironmentID: environmentID,
@@ -905,6 +910,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		TenantID:         tenant.Record.ID, ProjectID: project.Record.ID, EnvironmentID: environmentID,
 		PlanID: planID, RenderGeneration: generation, AuthorizedVolumeDir: environment.Record.VolumeDir,
 		Identities: renderIdentities, ExternalNetworks: externalNetworks,
+		RetainedComponentRuntime: componentPreparation.AppliedComponentRuntime(),
 	})
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err

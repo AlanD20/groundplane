@@ -39,6 +39,12 @@ upstream, port, Route name or template-binding resource is introduced.
   candidate router. The existing in-container validation still precedes reload.
   Invalid output retains the previous serving config; failed
   restoration cannot be reported as successful application.
+- File-only template and Route edits use reload, retaining the exact ownership
+  labels of unchanged Component runtime from the fenced applied artifact.
+  Unchanged Tunnel runtime is retained too. The read-only config-directory bind
+  exposes atomic file replacements; actual image/mount/user/network changes
+  still reconcile the affected container. Migrating the former file bind is one
+  such runtime change, not a no-interruption reload claim.
 - Primary-Zone IPAM, router alias,80/443 on the pinned router interface and
   independently configured Tunnel membership/ingress remain unchanged. Host
   routing, firewall, provider DNS and certificate automation are outside scope.

@@ -37,18 +37,19 @@ const (
 
 // ComposeRenderInput is the complete Controller-owned input to one environment artifact render.
 type ComposeRenderInput struct {
-	Project             *composetypes.Project
-	ArtifactID          string
-	ProjectOwnerKind    ComposeProjectOwnerKind
-	TenantID            string
-	ProjectID           string
-	EnvironmentID       string
-	PlanID              string
-	RenderGeneration    uint64
-	AuthorizedVolumeDir string
-	Identities          ComposeIdentitySnapshot
-	ExternalNetworks    []ComposeResourceIdentity
-	Releases            map[string]ComposeReleaseIdentity
+	Project                  *composetypes.Project
+	ArtifactID               string
+	ProjectOwnerKind         ComposeProjectOwnerKind
+	TenantID                 string
+	ProjectID                string
+	EnvironmentID            string
+	PlanID                   string
+	RenderGeneration         uint64
+	AuthorizedVolumeDir      string
+	Identities               ComposeIdentitySnapshot
+	ExternalNetworks         []ComposeResourceIdentity
+	Releases                 map[string]ComposeReleaseIdentity
+	RetainedComponentRuntime []byte
 }
 
 type ComposeProjectOwnerKind string
@@ -195,7 +196,7 @@ func RenderCompose(input ComposeRenderInput) (*agentpb.ComposeArtifact, error) {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
 	digest := sha256.Sum256(canonicalYAML)
-	return &agentpb.ComposeArtifact{
+	artifact := &agentpb.ComposeArtifact{
 		ArtifactId:          input.ArtifactID,
 		OwnerKind:           agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
 		OwnerId:             input.EnvironmentID,
@@ -206,7 +207,8 @@ func RenderCompose(input ComposeRenderInput) (*agentpb.ComposeArtifact, error) {
 		Services:            services,
 		Networks:            networks,
 		Volumes:             volumes,
-	}, nil
+	}
+	return RetainEnvironmentComponentRuntime(artifact, input.RetainedComponentRuntime)
 }
 
 func validateComposeRenderInput(input ComposeRenderInput) error {
