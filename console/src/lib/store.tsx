@@ -7,6 +7,7 @@ import { watchTransientLogs, type LogTarget, type TransientLogEvent } from './tr
 type BackingServiceCreateRequest = operations['backing-service.create']['requestBody']['content']['application/json']
 type BackingServiceCreatedResponse = operations['backing-service.create']['responses'][201]['content']['application/json']
 import { hydratePlatformComponents } from './platform-component-hydration'
+import { useControllerPlatform } from '@/features/platform-controller/use-controller-platform'
 import type { ConnectorMutationIntent } from './connector-intent'
 import type {
   HealthState,
@@ -47,7 +48,6 @@ import type {
   Zone,
   PlatformInfra,
   ManagedConfigFile,
-  HostInfo,
 } from './types'
 import { createBlueprintMultipartBody, type BlueprintApplyRequest } from './blueprint-bundle'
 import {
@@ -176,7 +176,6 @@ export type BlueprintDocumentResponse =
 export type BlueprintValidationResponse =
   operations['blueprint.validate']['responses'][200]['content']['application/json']
 type BlueprintTaskAccepted = operations['blueprint.apply']['responses'][202]['content']['application/json']
-type HostResponse = operations['host.show']['responses'][200]['content']['application/json']
 type TaskPageResponse = operations['task.list']['responses'][200]['content']['application/json']
 type TaskPageItem = NonNullable<TaskPageResponse['items']>[number]
 type TaskEventResponse = operations['task.events']['responses'][200]['content']['text/event-stream'][number]['data']
@@ -185,8 +184,6 @@ type AgentResponse = operations['agent.show']['responses'][200]['content']['appl
 type AgentTaskAccepted = operations['agent.join']['responses'][202]['content']['application/json']
 type AgentConfigResponse = operations['agent.config.show']['responses'][200]['content']['application/json']
 type AgentConfigRequest = operations['agent.config.set']['requestBody']['content']['application/json']
-type ControllerConfigResponse = operations['controller.config.show']['responses'][200]['content']['application/json']
-type ControllerConfigRequest = operations['controller.config.set']['requestBody']['content']['application/json']
 type HierarchyTaskAccepted = { task_id: string }
 type ComponentPageResponse = operations['component.list']['responses'][200]['content']['application/json']
 type ComponentResponse = NonNullable<ComponentPageResponse['items']>[number]
@@ -479,6 +476,10 @@ class ControllerTransportError extends Error {
 
 export function isNoResponseTransportUncertainty(error: unknown): boolean {
   return error instanceof ControllerTransportError && !error.responseReceived
+}
+
+function controllerUpdateRejected(error: unknown): boolean {
+  return error instanceof ControllerRequestError && [400, 404, 405, 409, 422].includes(error.status)
 }
 
 function isTaskNotFoundError(error: unknown): boolean {
@@ -1420,32 +1421,6 @@ function mutableBackupPolicyState(state: State, environmentId: string): BackupPo
   return state.backupPolicies[environmentId]
 }
 
-function hostFromAPI(host: HostResponse): HostInfo {
-  return {
-    hostname: host.hostname,
-    arch: host.arch,
-    os: host.os,
-    uptime: host.uptime,
-    cpu: { model: host.cpu.model, cores: host.cpu.cores, load: host.cpu.load },
-    memory: { total: host.memory.total, used: host.memory.used, usedPct: host.memory.used_pct },
-    disk: { total: host.disk.total, used: host.disk.used, usedPct: host.disk.used_pct },
-    swap: { total: host.swap.total, used: host.swap.used, usedPct: host.swap.used_pct },
-    docker: host.docker,
-    etcd: { node: host.etcd.node, status: host.etcd.status as HealthState, dbSize: host.etcd.db_size },
-    controller: {
-      service: host.controller.service,
-      status: host.controller.status as HealthState,
-      version: host.controller.version,
-    },
-    agent: {
-      status: host.agent.status as HealthState,
-      pullInterval: host.agent.pull_interval,
-      maxConcurrent: host.agent.max_concurrent,
-      labels: [...(host.agent.labels ?? [])],
-    },
-  }
-}
-
 function refreshReleaseGroupTags(environment: Environment) {
   for (const group of environment.releaseGroups) {
     const activeTags = group.order.map(
@@ -1494,12 +1469,6 @@ type State = {
   agentConfig: AgentConfigResponse | null
   agentConfigLoading: boolean
   agentConfigError: string | null
-  controllerConfig: ControllerConfigResponse | null
-  controllerConfigLoading: boolean
-  controllerConfigError: string | null
-  host: HostInfo | null
-  hostLoading: boolean
-  hostError: string | null
 }
 
 function seed(): State {
@@ -1544,18 +1513,11 @@ function seed(): State {
     agentConfig: null,
     agentConfigLoading: true,
     agentConfigError: null,
-    controllerConfig: null,
-    controllerConfigLoading: false,
-    controllerConfigError: null,
-    host: null,
-    hostLoading: true,
-    hostError: null,
   })
 }
 
-type StoreContext = State & {
+type StoreContext = State & ReturnType<typeof useControllerPlatform> & {
   adapters: typeof seedAdapters
-  host: HostInfo | null
   platform: typeof seedPlatform
   watchLogs: (target: LogTarget, options: { tail: number; follow: boolean; signal: AbortSignal }, onEvent: (event: TransientLogEvent) => void) => Promise<void>
   setRequireRevealConfirm: (v: boolean) => void
@@ -1565,8 +1527,6 @@ type StoreContext = State & {
   refreshEnvironmentReleases: (environmentId: string, signal?: AbortSignal) => Promise<void>
   refreshAgents: (signal?: AbortSignal) => Promise<PlatformInfra['agents']>
   setAgentConfig: (agentId: string, config: AgentConfigRequest) => Promise<AgentConfigResponse>
-  refreshControllerConfig: (signal?: AbortSignal) => Promise<ControllerConfigResponse>
-  setControllerConfig: (config: ControllerConfigRequest) => Promise<ControllerConfigResponse>
   joinAgent: () => Promise<AgentTaskAccepted>
   updateAgent: (agentId: string) => Promise<AgentTaskAccepted>
   removeAgent: (agentId: string) => Promise<AgentTaskAccepted>
@@ -1692,6 +1652,7 @@ type StoreContext = State & {
 const Ctx = createContext<StoreContext | null>(null)
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
+	const controllerPlatform = useControllerPlatform(tenantRequest, controllerUpdateRejected)
 	const providerActive = useRef(true)
 	const environmentTaskControllers = useRef(new Set<AbortController>())
 	const [state, setState] = useState<State>(seed)
@@ -2111,28 +2072,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return agents
   }, [update])
 
-  const refreshControllerConfig = useCallback(async (signal?: AbortSignal) => {
-    update((draft) => {
-      draft.controllerConfigLoading = true
-      draft.controllerConfigError = null
-    })
-    try {
-      const config = await tenantRequest<ControllerConfigResponse>('/controller/config', 200, { signal })
-      update((draft) => {
-        draft.controllerConfig = config
-        draft.controllerConfigLoading = false
-      })
-      return config
-    } catch (error) {
-      if (signal?.aborted) throw error
-      update((draft) => {
-        draft.controllerConfigLoading = false
-        draft.controllerConfigError = error instanceof Error ? error.message : 'Unable to load Controller config'
-      })
-      throw error
-    }
-  }, [update])
-
   const reusableSecretProjectIds = useMemo(
     () => state.tenantProjects.map((project) => project.id).sort().join(','),
     [state.tenantProjects],
@@ -2188,26 +2127,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     })
     return () => controller.abort()
   }, [refreshPlatformComponents, update])
-
-  useEffect(() => {
-    const controller = new AbortController()
-    void tenantRequest<HostResponse>('/host', 200, { signal: controller.signal }).then(
-      (host) => update((draft) => {
-        draft.host = hostFromAPI(host)
-        draft.hostLoading = false
-        draft.hostError = null
-      }),
-      (error: unknown) => {
-        if (controller.signal.aborted) return
-        update((draft) => {
-          draft.host = null
-          draft.hostLoading = false
-          draft.hostError = error instanceof Error ? error.message : 'Unable to load Host health'
-        })
-      },
-    )
-    return () => controller.abort()
-  }, [update])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -2720,8 +2639,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<StoreContext>(() => {
     return {
       ...state,
+      ...controllerPlatform,
       adapters: seedAdapters,
-      host: state.host,
       platform: state.platform,
       watchLogs: watchTransientLogs,
       setRequireRevealConfirm: (v) => {
@@ -2739,19 +2658,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       refreshEnvironmentComponents,
       refreshEnvironmentReleases,
       refreshAgents,
-      refreshControllerConfig,
-      setControllerConfig: async (config) => {
-        const updated = await tenantRequest<ControllerConfigResponse>(
-          '/controller/config',
-          200,
-          { method: 'PUT', body: config },
-        )
-        update((draft) => {
-          draft.controllerConfig = updated
-          draft.controllerConfigError = null
-        })
-        return updated
-      },
       setAgentConfig: async (agentId, config) => {
         const path = `/agents/${encodeURIComponent(agentId)}/config`
         const updated = await tenantRequest<AgentConfigResponse>(path, 200, { method: 'PUT', body: config })
@@ -3786,7 +3692,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return result.reconcile_task_id
       },
     }
-	}, [state, update, loadTaskJournal, loadBackupPolicy, replaceBackupPolicy, runBackup, rotateBackupKey, exportBackupKey, refreshPlatformComponents, refreshComponentConfig, refreshEnvironmentComponents, refreshEnvironmentReleases, refreshAgents, refreshControllerConfig, dispatchResourceRemoval, monitorResourceRemoval, reconcileResourceRemoval, requestResourceRemovalTask, nextEnvironmentGeneration, settleEnvironmentMutation, shouldPreserveEnvironmentOnLoad, getEnvironmentDeletionFailure, refreshEnvironmentDeletion, isEnvironmentDeletionPending, waitForResourceRemoval, retryResourceRemoval, observeEnvironmentDeletionTasks, environmentGenerations, assertEnvironmentMutable])
+	}, [state, controllerPlatform, update, loadTaskJournal, loadBackupPolicy, replaceBackupPolicy, runBackup, rotateBackupKey, exportBackupKey, refreshPlatformComponents, refreshComponentConfig, refreshEnvironmentComponents, refreshEnvironmentReleases, refreshAgents, dispatchResourceRemoval, monitorResourceRemoval, reconcileResourceRemoval, requestResourceRemovalTask, nextEnvironmentGeneration, settleEnvironmentMutation, shouldPreserveEnvironmentOnLoad, getEnvironmentDeletionFailure, refreshEnvironmentDeletion, isEnvironmentDeletionPending, waitForResourceRemoval, retryResourceRemoval, observeEnvironmentDeletionTasks, environmentGenerations, assertEnvironmentMutable])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

@@ -30,8 +30,9 @@ type BootstrapUnit interface{ VerifyBootstrap(context.Context) error }
 type AgentInventory interface {
 	ListHealth(context.Context) ([]localagent.Health, error)
 }
-type TaskPublisher interface {
+type UpdateTaskStore interface {
 	CreateTask(context.Context, etcd.TaskRecord, etcd.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
+	LatestControllerUpdate(context.Context) (etcd.Versioned[etcd.TaskRecord], bool, error)
 }
 
 type ServiceDependencies struct {
@@ -40,7 +41,7 @@ type ServiceDependencies struct {
 	Catalog             ReleaseCatalog
 	Unit                BootstrapUnit
 	Agents              AgentInventory
-	Tasks               TaskPublisher
+	Tasks               UpdateTaskStore
 	Evidence            idempotentintent.EvidenceRepository
 	Intents             *idempotentintent.Coordinator
 	ProcessDigest       upgrade.Digest
@@ -53,7 +54,7 @@ type Service struct {
 	catalog        ReleaseCatalog
 	unit           BootstrapUnit
 	agents         AgentInventory
-	tasks          TaskPublisher
+	tasks          UpdateTaskStore
 	evidence       idempotentintent.EvidenceRepository
 	intents        *idempotentintent.Coordinator
 	process        upgrade.Digest

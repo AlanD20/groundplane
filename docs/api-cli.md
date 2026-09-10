@@ -937,8 +937,16 @@ Console and `controller update --release` invoke exactly this endpoint.
 Equal-key acceptance replays the same Task while active as well as after it
 settles. A changed release mismatches; generic Task Retry is unavailable for a
 native update. After recovery, retry uses a fresh explicit Controller Update.
-Existing `GET /host`/`host show` reports installed Controller digest, staged
-candidate and last update summary. Deployment tooling stages release bytes;
+Existing `GET /host`/`host show` reports `controller.update`: actual
+`running_sha256`, guarded update `available`/`error`, nullable verified
+`candidate` (`release`, `controller_sha256`, `controller_version`, `agent_image`,
+`storage_epoch`, `channel_schema`) and nullable `last_update` (`task_id`, `release`,
+`status`, `phase`, `created_at`). The summary is the latest retained native Task,
+including queued/pre-activation-failed work; phase is empty before activation
+journaling. Metadata failures disable updates but preserve independent Host
+health and valid Task history. Console review freezes the displayed release;
+it retains the protected key through uncertain acceptance and the accepted Task
+through disconnect/reload. Deployment tooling stages release bytes;
 this API never uploads them. The native Task freezes manifest and predecessor
 identities, has a 600-second deadline, drains active work for up to 120 seconds
 without aborting it, and survives Controller restart. Failed candidates restore

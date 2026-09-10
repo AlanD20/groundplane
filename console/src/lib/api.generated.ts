@@ -404,6 +404,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/controller/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Update the native Controller from a staged immutable release */
+        post: operations["controller.update"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/entries": {
         parameters: {
             query?: never;
@@ -1882,6 +1899,40 @@ export interface components {
             content: string;
             expected_revision: string;
         };
+        ControllerRelease: {
+            agent_image: string;
+            /** Format: int64 */
+            channel_schema: number;
+            controller_sha256: string;
+            controller_version: string;
+            release: string;
+            /** Format: int64 */
+            storage_epoch: number;
+        };
+        ControllerUpdateRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/ControllerUpdateRequest.json
+             */
+            readonly $schema?: string;
+            release: string;
+        };
+        ControllerUpdateState: {
+            available: boolean;
+            candidate: components["schemas"]["ControllerRelease"] | null;
+            error: string;
+            last_update: components["schemas"]["ControllerUpdateSummary"] | null;
+            running_sha256: string;
+        };
+        ControllerUpdateSummary: {
+            /** Format: date-time */
+            created_at: string;
+            phase: string;
+            release: string;
+            status: string;
+            task_id: string;
+        };
         DeployRequest: {
             /**
              * Format: uri
@@ -2131,6 +2182,7 @@ export interface components {
         HostController: {
             service: string;
             status: string;
+            update: components["schemas"]["ControllerUpdateState"];
             version: string;
         };
         HostEtcd: {
@@ -4309,6 +4361,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ControllerConfigDocument"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "controller.update": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ControllerUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAccepted"];
                 };
             };
             /** @description Error */

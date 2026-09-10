@@ -2,6 +2,15 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { taskDetailActions } from './task-detail-actions.ts'
 
+// Rationale: native updates must recover before a fresh explicit update; generic
+// Task Retry cannot repeat host activation from a frozen historical request.
+test('native Controller updates never expose generic Task Retry', () => {
+  for (const status of ['pending', 'running', 'completed', 'failed', 'timed_out', 'aborted']) {
+    assert.equal(taskDetailActions({ type: 'update', target: 'controller', status }).retry, false)
+  }
+  assert.equal(taskDetailActions({ type: 'update', target: 'agt_1', status: 'failed' }).retry, true)
+})
+
 // Rationale: internal retention cleanup remains observable but cannot expose
 // any generic operator mutation regardless of its journal state.
 test('backup_prune exposes no operator control in any lifecycle state', () => {

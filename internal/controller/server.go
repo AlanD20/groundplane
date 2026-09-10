@@ -34,6 +34,7 @@ type Server struct {
 
 	host                    HostReader
 	controllerConfig        ControllerConfigStore
+	controllerUpdates       ControllerUpdater
 	agents                  AgentReader
 	agentMutations          AgentMutator
 	tenants                 TenantReader
@@ -100,6 +101,7 @@ type Options struct {
 	OnHTTPReady             func()
 	Host                    HostReader
 	ControllerConfig        ControllerConfigStore
+	ControllerUpdates       ControllerUpdater
 	Agents                  AgentReader
 	AgentMutations          AgentMutator
 	Tenants                 TenantReader
@@ -179,6 +181,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		onHTTPReady:             options.OnHTTPReady,
 		host:                    options.Host,
 		controllerConfig:        options.ControllerConfig,
+		controllerUpdates:       options.ControllerUpdates,
 		agents:                  options.Agents,
 		agentMutations:          options.AgentMutations,
 		tenants:                 options.Tenants,
@@ -248,6 +251,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 	s.registerProjects()
 	s.registerBackingServices()
 	s.registerControllerConfig()
+	s.registerControllerUpdate()
 	s.registerComponents()
 	s.registerEnvironments()
 	registerHierarchyDeletionRoutes(s.API, s.hierarchyDeletions, s.Logger)

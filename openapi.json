@@ -1466,6 +1466,135 @@
         ],
         "type": "object"
       },
+      "ControllerRelease": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_image": {
+            "type": "string"
+          },
+          "channel_schema": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "controller_sha256": {
+            "type": "string"
+          },
+          "controller_version": {
+            "type": "string"
+          },
+          "release": {
+            "type": "string"
+          },
+          "storage_epoch": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "release",
+          "controller_sha256",
+          "controller_version",
+          "agent_image",
+          "storage_epoch",
+          "channel_schema"
+        ],
+        "type": "object"
+      },
+      "ControllerUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ControllerUpdateRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "release": {
+            "maxLength": 71,
+            "minLength": 71,
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "release"
+        ],
+        "type": "object"
+      },
+      "ControllerUpdateState": {
+        "additionalProperties": false,
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "candidate": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ControllerRelease"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "type": "string"
+          },
+          "last_update": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ControllerUpdateSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "running_sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "running_sha256",
+          "available",
+          "error",
+          "candidate",
+          "last_update"
+        ],
+        "type": "object"
+      },
+      "ControllerUpdateSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "release": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "release",
+          "status",
+          "phase",
+          "created_at"
+        ],
+        "type": "object"
+      },
       "DeployRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2225,6 +2354,9 @@
           "status": {
             "type": "string"
           },
+          "update": {
+            "$ref": "#/components/schemas/ControllerUpdateState"
+          },
           "version": {
             "type": "string"
           }
@@ -2232,7 +2364,8 @@
         "required": [
           "service",
           "status",
-          "version"
+          "version",
+          "update"
         ],
         "type": "object"
       },
@@ -7510,6 +7643,67 @@
           }
         },
         "summary": "Validate and replace the Controller startup configuration",
+        "tags": [
+          "Controller"
+        ]
+      }
+    },
+    "/controller/update": {
+      "post": {
+        "operationId": "controller.update",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControllerUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Update the native Controller from a staged immutable release",
         "tags": [
           "Controller"
         ]

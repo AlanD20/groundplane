@@ -17,6 +17,7 @@ type publicationStore struct {
 	revision     int64
 	transactions int
 	loseResponse bool
+	rangeError   error
 }
 
 func (store *publicationStore) entry(key string) *etcd.KeyValue {
@@ -47,6 +48,9 @@ func (store *publicationStore) GetMany(ctx context.Context, request etcd.GetMany
 	return &etcd.GetManyResult{Values: values, ReadRevision: store.revision, ResponseRevision: store.revision}, nil
 }
 func (store *publicationStore) Range(ctx context.Context, request etcd.RangeRequest) (*etcd.RangeResult, error) {
+	if store.rangeError != nil {
+		return nil, store.rangeError
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

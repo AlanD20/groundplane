@@ -562,21 +562,6 @@ export type ActivityEntry = {
   steps?: TaskStep[]
 }
 
-export type HostInfo = {
-  hostname: string
-  arch: string
-  os: string
-  uptime: string
-  cpu: { model: string; cores: number; load: number }
-  memory: { total: string; used: string; usedPct: number }
-  disk: { total: string; used: string; usedPct: number }
-  swap: { total: string; used: string; usedPct: number }
-  docker: string
-  etcd: { node: string; status: HealthState; dbSize: string }
-  controller: { service: string; status: HealthState; version: string }
-  agent: { status: HealthState; pullInterval: string; maxConcurrent: number; labels: string[] }
-}
-
 // Platform runtime state rendered by the Controller. The Controller owns the
 // local Agent container lifecycle; the Agent only executes assigned work.
 export type PlatformComponent = {

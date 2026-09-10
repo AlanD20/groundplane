@@ -1148,6 +1148,43 @@ type ControllerConfigReplacement struct {
 	ExpectedRevision string  `json:"expected_revision"`
 }
 
+// ControllerRelease defines model for ControllerRelease.
+type ControllerRelease struct {
+	AgentImage        string `json:"agent_image"`
+	ChannelSchema     int64  `json:"channel_schema"`
+	ControllerSha256  string `json:"controller_sha256"`
+	ControllerVersion string `json:"controller_version"`
+	Release           string `json:"release"`
+	StorageEpoch      int64  `json:"storage_epoch"`
+}
+
+// ControllerUpdateRequest defines model for ControllerUpdateRequest.
+type ControllerUpdateRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ControllerUpdateRequest.json
+	Schema  *string `json:"$schema,omitempty"`
+	Release string  `json:"release"`
+}
+
+// ControllerUpdateState defines model for ControllerUpdateState.
+type ControllerUpdateState struct {
+	Available     bool                     `json:"available"`
+	Candidate     *ControllerRelease       `json:"candidate"`
+	Error         string                   `json:"error"`
+	LastUpdate    *ControllerUpdateSummary `json:"last_update"`
+	RunningSha256 string                   `json:"running_sha256"`
+}
+
+// ControllerUpdateSummary defines model for ControllerUpdateSummary.
+type ControllerUpdateSummary struct {
+	CreatedAt time.Time `json:"created_at"`
+	Phase     string    `json:"phase"`
+	Release   string    `json:"release"`
+	Status    string    `json:"status"`
+	TaskId    string    `json:"task_id"`
+}
+
 // DeployRequest defines model for DeployRequest.
 type DeployRequest struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -1400,9 +1437,10 @@ type HostCPU struct {
 
 // HostController defines model for HostController.
 type HostController struct {
-	Service string `json:"service"`
-	Status  string `json:"status"`
-	Version string `json:"version"`
+	Service string                `json:"service"`
+	Status  string                `json:"status"`
+	Update  ControllerUpdateState `json:"update"`
+	Version string                `json:"version"`
 }
 
 // HostEtcd defines model for HostEtcd.
@@ -2670,6 +2708,11 @@ type ControllerConfigSetParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
+// ControllerUpdateParams defines parameters for ControllerUpdate.
+type ControllerUpdateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // EntryListParams defines parameters for EntryList.
 type EntryListParams struct {
 	Environment string  `form:"environment" json:"environment"`
@@ -3110,6 +3153,9 @@ type ConnectorCreateJSONRequestBody = ConnectorCreateRequest
 
 // ControllerConfigSetJSONRequestBody defines body for ControllerConfigSet for application/json ContentType.
 type ControllerConfigSetJSONRequestBody = ControllerConfigReplacement
+
+// ControllerUpdateJSONRequestBody defines body for ControllerUpdate for application/json ContentType.
+type ControllerUpdateJSONRequestBody = ControllerUpdateRequest
 
 // EntryCreateJSONRequestBody defines body for EntryCreate for application/json ContentType.
 type EntryCreateJSONRequestBody = EntryCreateRequest
@@ -4137,6 +4183,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with PUT /controller/config (the `ControllerConfigSet` operationId).
 	ControllerConfigSet(ctx context.Context, params *ControllerConfigSetParams, body ControllerConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ControllerUpdateWithBody Update the native Controller from a staged immutable release
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /controller/update (the `ControllerUpdate` operationId).
+	ControllerUpdateWithBody(ctx context.Context, params *ControllerUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ControllerUpdate Update the native Controller from a staged immutable release
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /controller/update (the `ControllerUpdate` operationId).
+	ControllerUpdate(ctx context.Context, params *ControllerUpdateParams, body ControllerUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// EntryList List environment entries
 	//
@@ -5535,6 +5595,40 @@ func (c *Client) ControllerConfigSetWithBody(ctx context.Context, params *Contro
 // Corresponds with PUT /controller/config (the `ControllerConfigSet` operationId).
 func (c *Client) ControllerConfigSet(ctx context.Context, params *ControllerConfigSetParams, body ControllerConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewControllerConfigSetRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ControllerUpdateWithBody Update the native Controller from a staged immutable release
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /controller/update (the `ControllerUpdate` operationId).
+func (c *Client) ControllerUpdateWithBody(ctx context.Context, params *ControllerUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewControllerUpdateRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ControllerUpdate Update the native Controller from a staged immutable release
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /controller/update (the `ControllerUpdate` operationId).
+func (c *Client) ControllerUpdate(ctx context.Context, params *ControllerUpdateParams, body ControllerUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewControllerUpdateRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -9298,6 +9392,59 @@ func NewControllerConfigSetRequestWithBody(server string, params *ControllerConf
 	}
 
 	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewControllerUpdateRequest calls the generic ControllerUpdate builder with application/json body
+func NewControllerUpdateRequest(server string, params *ControllerUpdateParams, body ControllerUpdateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewControllerUpdateRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewControllerUpdateRequestWithBody constructs an http.Request for the ControllerUpdate method, with any body, and a specified content type
+func NewControllerUpdateRequestWithBody(server string, params *ControllerUpdateParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/controller/update")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -14825,6 +14972,20 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /controller/config (the `ControllerConfigSet` operationId).
 	ControllerConfigSetWithResponse(ctx context.Context, params *ControllerConfigSetParams, body ControllerConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*ControllerConfigSetResponse, error)
 
+	// ControllerUpdateWithBodyWithResponse Update the native Controller from a staged immutable release
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /controller/update (the `ControllerUpdate` operationId).
+	ControllerUpdateWithBodyWithResponse(ctx context.Context, params *ControllerUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ControllerUpdateResponse, error)
+
+	// ControllerUpdateWithResponse Update the native Controller from a staged immutable release
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /controller/update (the `ControllerUpdate` operationId).
+	ControllerUpdateWithResponse(ctx context.Context, params *ControllerUpdateParams, body ControllerUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*ControllerUpdateResponse, error)
+
 	// EntryListWithResponse List environment entries
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -17373,6 +17534,61 @@ func (r ControllerConfigSetResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ControllerConfigSetResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ControllerUpdateResponse202Headers the declared response headers of an HTTP 202 response for ControllerUpdate
+type ControllerUpdateResponse202Headers struct {
+	ContentType *string
+}
+
+type ControllerUpdateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ControllerUpdateResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ControllerUpdateResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ControllerUpdateResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ControllerUpdateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ControllerUpdateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ControllerUpdateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ControllerUpdateResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -22854,6 +23070,32 @@ func (c *ClientWithResponses) ControllerConfigSetWithResponse(ctx context.Contex
 	return ParseControllerConfigSetResponse(rsp)
 }
 
+// ControllerUpdateWithBodyWithResponse Update the native Controller from a staged immutable release
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /controller/update (the `ControllerUpdate` operationId).
+func (c *ClientWithResponses) ControllerUpdateWithBodyWithResponse(ctx context.Context, params *ControllerUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ControllerUpdateResponse, error) {
+	rsp, err := c.ControllerUpdateWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseControllerUpdateResponse(rsp)
+}
+
+// ControllerUpdateWithResponse Update the native Controller from a staged immutable release
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /controller/update (the `ControllerUpdate` operationId).
+func (c *ClientWithResponses) ControllerUpdateWithResponse(ctx context.Context, params *ControllerUpdateParams, body ControllerUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*ControllerUpdateResponse, error) {
+	rsp, err := c.ControllerUpdate(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseControllerUpdateResponse(rsp)
+}
+
 // EntryListWithResponse List environment entries
 //
 // Returns a wrapper object for the known response body format(s).
@@ -25792,6 +26034,52 @@ func ParseControllerConfigSetResponse(rsp *http.Response) (*ControllerConfigSetR
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseControllerUpdateResponse parses an HTTP response from a ControllerUpdateWithResponse call
+func ParseControllerUpdateResponse(rsp *http.Response) (*ControllerUpdateResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ControllerUpdateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ControllerUpdateResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil

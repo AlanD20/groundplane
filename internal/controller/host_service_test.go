@@ -34,6 +34,14 @@ func (function agentSnapshotFunc) AgentSnapshot(ctx context.Context) (AgentSnaps
 	return function(ctx)
 }
 
+type controllerUpdateSnapshotFunc func(context.Context) (api.ControllerUpdateState, error)
+
+func (function controllerUpdateSnapshotFunc) ControllerUpdateSnapshot(
+	ctx context.Context,
+) (api.ControllerUpdateState, error) {
+	return function(ctx)
+}
+
 func TestHostServiceProjectsAcceptedHealthyShape(t *testing.T) {
 	// Rationale: the Console store is the Host API contract, so the Controller
 	// must project every accepted field without retaining the obsolete endpoint list.
@@ -104,6 +112,9 @@ func TestHostServiceStopsOnCancellation(t *testing.T) {
 
 	var systemCalls, etcdCalls, agentCalls int
 	service, err := NewHostService(HostDependencies{
+		Updates: controllerUpdateSnapshotFunc(
+			func(context.Context) (api.ControllerUpdateState, error) { return api.ControllerUpdateState{}, nil },
+		),
 		System: systemSnapshotFunc(func(ctx context.Context) (SystemSnapshot, error) {
 			systemCalls++
 			return SystemSnapshot{}, nil
@@ -246,6 +257,9 @@ func hostServiceFor(
 ) *HostService {
 	t.Helper()
 	service, err := NewHostService(HostDependencies{
+		Updates: controllerUpdateSnapshotFunc(
+			func(context.Context) (api.ControllerUpdateState, error) { return host.Controller.Update, nil },
+		),
 		System: systemSnapshotFunc(func(context.Context) (SystemSnapshot, error) {
 			return SystemSnapshot{
 				Hostname: host.Hostname,

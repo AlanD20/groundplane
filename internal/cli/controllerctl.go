@@ -147,7 +147,7 @@ func newControllerCmd(deps Dependencies) *cobra.Command {
 	setConfig.Flags().StringVar(&configFile, "file", "", "YAML file to publish")
 	_ = setConfig.MarkFlagRequired("file")
 	configCmd.AddCommand(setConfig)
-	cmd.AddCommand(withExecutionClass(configCmd, executionAPI))
+	cmd.AddCommand(withExecutionClass(configCmd, executionAPI), newControllerUpdateCmd())
 
 	return cmd
 }

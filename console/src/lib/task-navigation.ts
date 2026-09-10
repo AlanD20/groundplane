@@ -1,4 +1,5 @@
-import type { ActivityEntry, HostInfo, PlatformInfra, Project, Runner, ReusableSecret, Tenant } from '@/lib/types'
+import type { ActivityEntry, PlatformInfra, Project, Runner, ReusableSecret, Tenant } from '@/lib/types'
+import type { HostInfo } from '@/features/platform-host/host-model'
 
 export type TaskNavigationContext = {
   tenants: Tenant[]
@@ -24,6 +25,10 @@ export function resolveTaskOperationSurface(
     ? context.tenants.find((candidate) => candidate.id === task.tenantId)
     : undefined
   const target = task.target
+
+  if (task.workspaceType === 'platform' && task.type === 'update' && target === 'controller') {
+    return exact('/platform/controller', 'Open Controller')
+  }
 
   // Immutable Environment ownership always selects the Environment Tasks tab.
   // The typed target only identifies the resource operated on inside it.

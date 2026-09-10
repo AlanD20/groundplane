@@ -210,6 +210,7 @@ func newControllerPlatform(
 			probe:     etcd.ProbeEndpoints,
 		},
 		Agent:             &hostAgentSnapshotSource{health: platform.agents, fallback: defaults},
+		Updates:           platform.upgrades,
 		ControllerService: hostControllerUnit, ControllerVersion: version.Value,
 	})
 	if err != nil {

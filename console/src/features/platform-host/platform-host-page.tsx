@@ -44,6 +44,8 @@ export default function PlatformHostPage() {
         }
       />
 
+      {hostError ? <p role="status" className="text-sm text-warning">Host health may be stale: {hostError}</p> : null}
+
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="flex flex-col gap-6 lg:col-span-2">
           <div className="grid grid-cols-2 gap-4">

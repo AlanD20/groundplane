@@ -156,6 +156,12 @@ rewriting Controller YAML. An unfinished native update blocks new image
 selection. A failed later trial retains the last successful selection. Native
 update acceptance replays the same Task for an equal idempotency key, including
 while active; ordinary Task Retry is unavailable for this host operation.
+The Controller page shows the actual running executable digest, verified staged
+candidate and latest retained native update Task, including queued or
+pre-activation-failed attempts. Missing candidate/history is explicitly absent;
+unavailable release metadata disables updates without falsifying Host health.
+The Console retains one protected request across reloads and follows its accepted
+Task through disconnects; resolving uncertain acceptance reuses the same key.
 The Controller orchestrates and validates; the Agent performs workload host
 mutations, while the Controller alone mutates the Agent container lifecycle.
 The Console shows this on the **Platform page**: an overview
@@ -173,7 +179,10 @@ journal: it requests the same `workspace=platform` records as Platform
 Activity, with the same order, page boundaries, and cursor. Component work such
 as DNS saves → Corefile reloads, Agent config changes, and Component updates
 appears there because it is Platform-owned, not because the section filters by
-Component or `target`. The MVP has no target or Component Task index.
+Component or `target`. The MVP has no general target or Component Task index.
+A closed native Controller-update history index supports the existing Host
+summary only and is published/pruned atomically with its Task; it adds no Task
+filter or separate operator resource.
 
 **etcd is host-level, not a component (locked).** etcd is the bootstrap state
 store, so it never lives inside Agent-applied `groundplane-infra` and never

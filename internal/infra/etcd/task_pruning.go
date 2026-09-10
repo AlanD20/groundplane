@@ -209,7 +209,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		companionKeys = append(companionKeys, environmentDeletionFenceKeys...)
 	}
 	ownerIndexStart := len(companionKeys)
-	ownerIndexKeys, err := taskOwnerIndexKeys(task.Owner, task.ID)
+	ownerIndexKeys, err := taskJournalIndexKeys(task)
 	if err != nil {
 		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
@@ -607,7 +607,7 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 	if err != nil || task.ID != current.Record.TaskID || !isTerminalTaskStatus(task.Status) {
 		return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
 	}
-	ownerKeys, err := taskOwnerIndexKeys(task.Owner, task.ID)
+	ownerKeys, err := taskJournalIndexKeys(task)
 	if err != nil {
 		return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
 	}

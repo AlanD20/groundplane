@@ -56,7 +56,7 @@ export function PlatformAgentActions({
           if (!open) void refreshAgents()
         }}
         title={`Update Agent · ${agent.host}`}
-        description="Replaces this idle Agent with the digest-pinned agent.image configured on the Controller. The Controller restores the previous digest if the replacement does not become Ready."
+        description="Replaces this idle Agent with the last qualified Controller release's pinned Agent image, or bootstrap agent.image before any qualified release. The Controller restores the previous digest if the replacement does not become Ready."
         type="update"
         target={agent.id}
         workspace="platform"

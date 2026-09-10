@@ -160,7 +160,7 @@ func (repository *TaskRepository) GetTask(
 	if record.ID != taskID || result.Entry.Key != taskKey(taskID) {
 		return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task primary does not match its key")
 	}
-	indexKeys, err := taskOwnerIndexKeys(record.Owner, taskID)
+	indexKeys, err := taskJournalIndexKeys(record)
 	if err != nil {
 		return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task owner indexes are corrupt")
 	}
@@ -368,7 +368,7 @@ func (repository *TaskRepository) verifyTaskOwnerPage(
 	keys := make([]string, 0, len(page.Items)*2)
 	expectedTaskIDs := make([]string, 0, len(page.Items)*2)
 	for _, item := range page.Items {
-		ownerKeys, err := taskOwnerIndexKeys(item.Record.Owner, item.Record.ID)
+		ownerKeys, err := taskJournalIndexKeys(item.Record)
 		if err != nil {
 			return Page[TaskRecord]{}, errs.New(errs.KindInternal, "task owner indexes are corrupt")
 		}

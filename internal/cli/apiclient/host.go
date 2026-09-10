@@ -58,6 +58,7 @@ func hostFromGenerated(host generated.Host) apiTypes.Host {
 			Service: host.Controller.Service,
 			Status:  apiTypes.HealthState(host.Controller.Status),
 			Version: host.Controller.Version,
+			Update:  controllerUpdateFromGenerated(host.Controller.Update),
 		},
 		Agent: apiTypes.HostAgent{
 			Status:        apiTypes.HealthState(host.Agent.Status),
@@ -66,4 +67,23 @@ func hostFromGenerated(host generated.Host) apiTypes.Host {
 			Labels:        labels,
 		},
 	}
+}
+
+func controllerUpdateFromGenerated(update generated.ControllerUpdateState) apiTypes.ControllerUpdateState {
+	result := apiTypes.ControllerUpdateState{
+		RunningSHA256: update.RunningSha256, Available: update.Available, Error: update.Error,
+	}
+	if candidate := update.Candidate; candidate != nil {
+		result.Candidate = &apiTypes.ControllerRelease{
+			Release: candidate.Release, ControllerSHA256: candidate.ControllerSha256,
+			ControllerVersion: candidate.ControllerVersion, AgentImage: candidate.AgentImage,
+			StorageEpoch: int(candidate.StorageEpoch), ChannelSchema: int(candidate.ChannelSchema),
+		}
+	}
+	if last := update.LastUpdate; last != nil {
+		result.LastUpdate = &apiTypes.ControllerUpdateSummary{
+			TaskID: last.TaskId, Release: last.Release, Status: last.Status, Phase: last.Phase, CreatedAt: last.CreatedAt,
+		}
+	}
+	return result
 }

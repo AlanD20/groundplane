@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useStore } from '@/lib/store'
+import { ControllerUpdateCard } from './controller-update-card'
 
 export default function PlatformControllerPage() {
   const {
@@ -63,10 +64,12 @@ export default function PlatformControllerPage() {
         }
       />
 
+      <ControllerUpdateCard />
+
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileCode2 className="size-4 text-muted-foreground" /> Startup configuration
+          <CardTitle>
+            <h2 className="flex items-center gap-2"><FileCode2 className="size-4 text-muted-foreground" /> Startup configuration</h2>
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -117,7 +120,7 @@ export default function PlatformControllerPage() {
                   size="sm"
                   variant="outline"
                   disabled={controllerConfigLoading || saving}
-                  onClick={() => void refreshControllerConfig()}
+                  onClick={() => void refreshControllerConfig().catch(() => undefined)}
                 >
                   <RefreshCw className="size-4" /> Reload file
                 </Button>

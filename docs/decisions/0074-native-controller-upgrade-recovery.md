@@ -84,6 +84,14 @@ a stale rollback read from stopping an already recovered Controller. A watchdog
 whose settled operation has been replaced by a newer journal exits successfully
 so systemd collects it instead of retrying obsolete recovery indefinitely.
 
+Host summary reads the newest retained native Task through a closed,
+descending one-record index. Publication and retention update this index in
+the same existing Task transactions, and reads verify primary and index at one
+revision. Activation files supplement phase only; they do not omit a queued or
+pre-activation-failed Task or create an independent success record. Null means
+no retained candidate/history, not an empty synthetic object. Metadata failures
+disable updates without converting otherwise known Host health to unknown.
+
 The Task deadline is 600 seconds, including drain, startup, Agent update and
 recovery. Recovery retains evidence and safety holds on its own failure and
 continues at normal startup. After committed activation, Abort returns

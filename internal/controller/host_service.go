@@ -51,6 +51,10 @@ type AgentSnapshotSource interface {
 	AgentSnapshot(ctx context.Context) (AgentSnapshot, error)
 }
 
+type ControllerUpdateSource interface {
+	ControllerUpdateSnapshot(context.Context) (api.ControllerUpdateState, error)
+}
+
 // HostReader is the narrow handler dependency. HostService is its sole
 // production implementation; the interface keeps HTTP independent from the
 // future live collectors.
@@ -62,6 +66,7 @@ type HostDependencies struct {
 	System            SystemSnapshotSource
 	Etcd              EtcdSnapshotSource
 	Agent             AgentSnapshotSource
+	Updates           ControllerUpdateSource
 	ControllerService string
 	ControllerVersion string
 }
@@ -73,6 +78,7 @@ type HostService struct {
 	system            SystemSnapshotSource
 	etcd              EtcdSnapshotSource
 	agent             AgentSnapshotSource
+	updates           ControllerUpdateSource
 	controllerService string
 	controllerVersion string
 }
@@ -87,6 +93,9 @@ func NewHostService(dependencies HostDependencies) (*HostService, error) {
 	if dependencies.Agent == nil {
 		return nil, errs.New(errs.KindInternal, "host agent snapshot source is required")
 	}
+	if dependencies.Updates == nil {
+		return nil, errs.New(errs.KindInternal, "host Controller update source is required")
+	}
 	if dependencies.ControllerService == "" {
 		return nil, errs.New(errs.KindInternal, "host controller service is required")
 	}
@@ -97,6 +106,7 @@ func NewHostService(dependencies HostDependencies) (*HostService, error) {
 		system:            dependencies.System,
 		etcd:              dependencies.Etcd,
 		agent:             dependencies.Agent,
+		updates:           dependencies.Updates,
 		controllerService: dependencies.ControllerService,
 		controllerVersion: dependencies.ControllerVersion,
 	}, nil
@@ -125,6 +135,10 @@ func (service *HostService) Show(ctx context.Context) (api.Host, error) {
 	if !validHealthState(etcd.Status) || !validHealthState(agent.Status) {
 		return api.Host{}, errs.New(errs.KindInternal, "host source returned an invalid health state")
 	}
+	updates, err := service.updates.ControllerUpdateSnapshot(ctx)
+	if err != nil {
+		return api.Host{}, hostSourceError(ctx, err)
+	}
 
 	return api.Host{
 		Hostname: system.Hostname,
@@ -145,6 +159,7 @@ func (service *HostService) Show(ctx context.Context) (api.Host, error) {
 			Service: service.controllerService,
 			Status:  api.HealthHealthy,
 			Version: service.controllerVersion,
+			Update:  updates,
 		},
 		Agent: api.HostAgent{
 			Status:        agent.Status,
