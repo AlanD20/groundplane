@@ -32,7 +32,9 @@ by this check. A host already using native recovery refuses `--bootstrap`.
 
 The first installation backs up existing files, creates the private release root,
 installs the Controller and predecessor recovery executable, then installs the
-unit's `ExecStartPre` guard before enabling the service. It installs the CLI,
+unit's `ExecStartPre` guard before enabling the service. Controller/recovery
+executables are root-owned0500, matching native immutable input validation.
+It installs the CLI,
 bootstrap Agent/Runner image configuration and age identity only on this path.
 Agent enrollment/update must settle before the first candidate is made selectable.
 On failure, restoration requires a successful Controller stop. Unresolved Agent

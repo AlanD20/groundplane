@@ -71,8 +71,9 @@ class Layout:
         parent = directory(self.guard.parent, self.uid)
         try:
             with regular(parent, self.guard.name, self.uid, MAX_BINARY) as guard:
-                if not os.fstat(guard.fileno()).st_mode & stat.S_IXUSR:
-                    raise ValueError("native recovery guard is not executable")
+                mode = os.fstat(guard.fileno()).st_mode
+                if not mode & stat.S_IXUSR or mode & 0o222:
+                    raise ValueError("native recovery guard must be immutable and executable")
         finally:
             os.close(parent)
         return "native"

@@ -5,9 +5,21 @@ import (
 	"encoding/json"
 	"testing"
 
+	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+// Rationale: a safe staged candidate does not prove the installed predecessor
+// is immutable and is the actual running binary required for recovery.
+func TestControllerUpdateSnapshotRefusesChangedInstalledPredecessor(t *testing.T) {
+	h := newServiceHarness(t)
+	h.catalog.installed = upgrade.Hash([]byte("changed installed predecessor"))
+	snapshot, err := h.service.ControllerUpdateSnapshot(context.Background())
+	if err != nil || snapshot.Available || snapshot.Error != "Installed Controller recovery identity is unavailable." {
+		t.Fatalf("unsafe predecessor snapshot = %#v, %v", snapshot, err)
+	}
+}
 
 // Rationale: queued Tasks are visible before any activation file exists. Failed
 // metadata reads must not destroy the independent Host health response or turn

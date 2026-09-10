@@ -294,9 +294,9 @@ fi
 
 install -d -m 0755 /usr/local/libexec/groundplane
 install -d -m 0700 /etc/groundplane /var/log/groundplane
-install -Dm755 "$deploy_dir/controller" /usr/local/libexec/groundplane/controller.new
+install -Dm500 "$deploy_dir/controller" /usr/local/libexec/groundplane/controller.new
 mv -f /usr/local/libexec/groundplane/controller.new /usr/local/libexec/groundplane/controller
-install -Dm755 "$deploy_dir/controller" /usr/local/libexec/groundplane/controller-recovery.new
+install -Dm500 "$deploy_dir/controller" /usr/local/libexec/groundplane/controller-recovery.new
 mv -f /usr/local/libexec/groundplane/controller-recovery.new /usr/local/libexec/groundplane/controller-recovery
 install -Dm755 "$deploy_dir/groundplane" /usr/local/bin/groundplane.new
 mv -f /usr/local/bin/groundplane.new /usr/local/bin/groundplane

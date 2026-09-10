@@ -54,8 +54,43 @@ Raw evidence under `.tmp/production-mvp-20260910/`: `qa-native-preflight.txt`,
 `bootstrap-startup-journal.txt`, `bootstrap-public-failure-diagnostic.txt`,
 `bootstrap-websocket-continuity.log`, `bootstrap-http-continuity.jsonl`.
 
+## Bootstrap permission correction and A→B
+
+The first normal deployment staged B but returned422before creating a Task.
+Its immutable-file check exposed a bootstrap defect: installed Controller/guard
+were0755rather than0500. A failing shell-install regression reproduced the exact
+mode mismatch. Bootstrap now installs0500; its guard check rejects writable
+executables, and Host availability also checks the installed predecessor identity.
+Focused deployment and snapshot race tests pass. QA repair changed only those
+two hash-verified file modes, without replacing bytes or restarting Controller.
+
+The first distribution attempt also reproduced the public-path loss while A
+remained running: the native request was rejected before activation, and
+Cloudflared reported QUIC timeouts04:02:22UTC. HTTP samples included502s. This
+remains a distribution qualification failure, separate from native activation.
+Raw evidence: `qa-native-update-b-deploy.log`, `qa-native-422-paths.txt`,
+`qa-image-transfer-network-events.txt` and `native-http-curl-continuity.jsonl`.
+
+The already staged B was then accepted with the same protected key, without
+retransferring images. Native Task `task_01M24R3HJHA1NAFVQXEPNDH9TG`, created
+04:09:38.640UTC, completed with Host phase `healthy`. Controller now runs
+`0.0.0-qa.native20260910.2`, SHA256
+`6106db1660ba3c8a57ab850541850dc931aa97c720be34638753a54343b8552e`.
+Its qualified release is
+`sha256:aab1bc55201f56bd8d61394f561be16c4699f401dce3bc4555d72d278ff668c3`,
+Agent image
+`localhost:5000/groundplane-agent@sha256:22d02c3cd0129c02269e1119d916ec23fb3a8b0007c1a2ba4d34fac1e9b9f251`.
+No transient recovery unit remained after completion. Application container
+identities remained unchanged. Five held WebSocket paths and verified-TLS HTTP
+sampling remained successful across this isolated native activation window;
+their longer qualification run continues.
+Evidence: `native-activation-b-retry.log`, `native-b-completed-proof.txt`,
+`qa-native-b-current.txt`, `activation-websocket-continuity.log` and
+`activation-http-continuity.jsonl`, under the same evidence parent.
+
 ## Remaining proof
 
-Normal A→B, failed candidate recovery, busy drain/pre-activation cancellation,
-interruption, same-Task resume and HTTP/WebSocket continuity remain unproven.
+Failed candidate recovery, busy drain/pre-activation cancellation, interruption
+and safe image distribution remain unproven. A→B and its same-Task restart now
+pass; that does not erase the earlier failed distribution samples.
 No whole upgrade-safety, full-CI or production-readiness claim is made.

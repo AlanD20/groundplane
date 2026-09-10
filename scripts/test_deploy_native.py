@@ -9,6 +9,25 @@ import deploy
 
 
 class NativeDeployBranchTest(unittest.TestCase):
+    def test_bootstrap_installs_immutable_controller_and_guard_bytes(self):
+        parent = Path(__file__).resolve().parents[1] / ".tmp" / "test-deploy-native"
+        parent.mkdir(mode=0o700, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=parent) as temporary:
+            root = Path(temporary)
+            bundle, binaries = root / "bundle", root / "binaries"
+            bundle.mkdir(mode=0o700)
+            binaries.mkdir(mode=0o755)
+            (bundle / "controller").write_bytes(b"immutable predecessor")
+            start = re.search(r'install -Dm[0-7]+ "\$deploy_dir/controller"', deploy.REMOTE_INSTALL).start()
+            end = deploy.REMOTE_INSTALL.index('install -Dm755 "$deploy_dir/groundplane"', start)
+            script = deploy.REMOTE_INSTALL[start:end].replace("/usr/local/libexec/groundplane/", str(binaries) + "/")
+            result = subprocess.run(["sh", "-c", 'set -eu\ndeploy_dir=$1\n' + script, "--", str(bundle)],
+                                    text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            for name in ("controller", "controller-recovery"):
+                self.assertEqual((binaries / name).read_bytes(), b"immutable predecessor")
+                self.assertEqual((binaries / name).stat().st_mode & 0o777, 0o500)
+
     def run_branch(self, *, stage_only=False, update_status=0, bootstrap=False):
         parent = Path(__file__).resolve().parents[1] / ".tmp" / "test-deploy-native"
         parent.mkdir(mode=0o700, exist_ok=True)

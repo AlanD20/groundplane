@@ -57,9 +57,12 @@ func (service *Service) releaseSnapshot(ctx context.Context) (apiTypes.Controlle
 		state.Candidate = releaseResponse(candidate)
 	}
 	if state.Error == "" {
+		installed, installedErr := service.catalog.Installed(ctx)
 		switch {
 		case hasJournal && !journal.Phase.Settled():
 			state.Error = "Native Controller update recovery is active."
+		case installedErr != nil || installed != service.process:
+			state.Error = "Installed Controller recovery identity is unavailable."
 		case service.unit.VerifyBootstrap(ctx) != nil:
 			state.Error = "Guarded Controller bootstrap is unavailable."
 		default:
