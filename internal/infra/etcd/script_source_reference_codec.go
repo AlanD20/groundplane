@@ -201,7 +201,7 @@ func decodeScriptRunnerSnapshotSource(
 	key string,
 	value []byte,
 	reference ScriptSourceReference,
-) (agentpb.ResolvedRunnerSnapshot, string, error) {
+) (*agentpb.ResolvedRunnerSnapshot, string, error) {
 	snapshot, err := decodeEnvelope[storedScriptRunnerSnapshot](value, "script-runner-snapshot")
 	digest := sha256.Sum256(snapshot.Payload)
 	var payload agentpb.ResolvedRunnerSnapshot
@@ -210,12 +210,12 @@ func decodeScriptRunnerSnapshotSource(
 		hex.EncodeToString(digest[:]) != reference.SourceDigest || proto.Unmarshal(snapshot.Payload, &payload) != nil ||
 		payload.SnapshotId != snapshot.SnapshotID || payload.ScriptExecutionId != snapshot.ExecutionID ||
 		!scriptRunnerSnapshotSourceOwnerMatches(&payload, reference) {
-		return agentpb.ResolvedRunnerSnapshot{}, "", errs.New(
+		return nil, "", errs.New(
 			errs.KindValidationFailed,
 			"Script runner snapshot source evidence is invalid",
 		)
 	}
-	return payload, snapshot.SnapshotID, nil
+	return &payload, snapshot.SnapshotID, nil
 }
 
 func scriptRunnerSnapshotSourceOwnerMatches(
@@ -234,7 +234,7 @@ func scriptRunnerSnapshotSourceOwnerMatches(
 }
 
 func runnerSnapshotContainsScriptSource(
-	snapshot agentpb.ResolvedRunnerSnapshot,
+	snapshot *agentpb.ResolvedRunnerSnapshot,
 	source ScriptSourceIdentity,
 ) bool {
 	if source.Kind == ScriptSourceNetwork {

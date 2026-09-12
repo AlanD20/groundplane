@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 func serviceLifecycleArtifactValidationPlan(
@@ -24,10 +25,10 @@ func serviceLifecycleArtifactValidationPlan(
 		if ids.Validate(ids.KindPlan, source.GetSourcePlanId()) != nil || source.GetSourceRenderGeneration() == 0 {
 			return nil, true, errs.New(errs.KindValidationFailed, "service lifecycle source ownership is invalid")
 		}
-		validation := *plan
+		validation := proto.CloneOf(plan)
 		validation.PlanId = source.GetSourcePlanId()
 		validation.RenderGeneration = source.GetSourceRenderGeneration()
-		return &validation, true, nil
+		return validation, true, nil
 	}
 	return nil, true, errs.New(errs.KindValidationFailed, "service lifecycle artifact source is absent")
 }

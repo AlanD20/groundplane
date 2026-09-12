@@ -76,7 +76,6 @@ func (runtime *DockerScriptRuntime) ExecuteScript(
 			if err := checkpointBody(checkpoint, request, durable, prepared); err != nil {
 				return 0, err
 			}
-			body = prepared
 		}
 		if prepareErr != nil {
 			reason := scriptFailureReason(ctx, durable.State, prepareErr)

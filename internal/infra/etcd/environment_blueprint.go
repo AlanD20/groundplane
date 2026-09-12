@@ -369,7 +369,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintZonePoolAtRevi
 	}
 	next := zonePoolRegistry{Reservations: make(map[string]string, len(desired))}
 	for _, projection := range desired {
-		zone := ZoneRecord{EnvironmentID: projection.EnvironmentID, Desired: projection.Desired}
+		zone := ZoneRecord(projection)
 		if projection.EnvironmentID != environment.ID {
 			return preparedEnvironmentBlueprintZonePool{}, errs.New(
 				errs.KindValidationFailed, "Blueprint Zone does not belong to its Environment",

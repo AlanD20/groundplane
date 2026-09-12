@@ -555,7 +555,7 @@ func validateEnvironmentZoneProjections(
 	seenIDs := make(map[string]struct{}, len(values))
 	for _, value := range values {
 		if value.EnvironmentID != environmentID || value.Desired.Name <= previousName ||
-			validateZoneRecord(ZoneRecord{EnvironmentID: value.EnvironmentID, Desired: value.Desired}) != nil {
+			validateZoneRecord(ZoneRecord(value)) != nil {
 			return errs.New(errs.KindValidationFailed, "Environment desired Zone projection is invalid or unsorted")
 		}
 		if _, duplicate := seenIDs[value.Desired.ID]; duplicate {

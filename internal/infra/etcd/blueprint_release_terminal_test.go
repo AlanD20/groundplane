@@ -228,7 +228,6 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesSealedWorkloadAndPreservesDe
 	serviceID := ids.NewAt(ids.KindService, now, 7)
 	releaseID := ids.NewAt(ids.KindDeployment, now, 8)
 	artifactID := ids.NewAt(ids.KindConfig, now, 9)
-	priorArtifactID := ids.NewAt(ids.KindConfig, now, 14)
 	stepID := ids.NewAt(ids.KindStep, now, 10)
 	probeStepID := ids.NewAt(ids.KindStep, now, 17)
 	compensateStepID := ids.NewAt(ids.KindStep, now, 18)

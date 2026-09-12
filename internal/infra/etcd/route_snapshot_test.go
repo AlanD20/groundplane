@@ -22,7 +22,7 @@ func TestRouteProviderPageRequestPinsInitialAndContinuedRevision(t *testing.T) {
 		t.Fatal(err)
 	}
 	request.Cursor = cursor
-	_, revision, _, _, err = normalizePageRequest(
+	_, _, _, _, err = normalizePageRequest(
 		request, "routes", "environment", ids.New(ids.KindEnvironment), routePrefix, ids.KindRoute,
 	)
 	if err == nil {

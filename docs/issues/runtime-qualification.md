@@ -56,23 +56,29 @@ summary without claiming more than its evidence.
 
 ## Verification debt
 
-Run the final relevant gates after correction, not as a documentation check.
-Retained findings include `script_runtime.go:79` SA4006, protobuf copy-lock
-warnings, Script/Blueprint and CLI failure groups, the CoreDNS config-read fixture,
-and sealed-hash fixtures in `TestObservedRecreateProbeAcceptsSealedBlueGreenPrior`
-and `TestObservedRecreateProbeUsesEachSealedArtifact`. Keep hash validation and
-repair fixtures at their owning seam; do not bypass assertions.
+The 2026-09-12 maintenance slice cleared five protobuf copy-lock findings and
+seven Staticcheck findings across Agent, execution-plan, Agent-channel and etcd
+packages. Plan validation now clones protobuf messages; runner snapshots remain
+pointers. Unused assignments are removed, Zone conversions are explicit, and
+late log-subscription cancellation uses the existing bounded cleanup context.
+Scoped vet, Staticcheck, formatting and affected race tests passed. Evidence:
+`.tmp/ci-cleanup-7arYNpkD/{vet-after,staticcheck-after,analyzer-focused,analyzer-etcd-focused,analyzer-zone-focused}.log`.
 
-The 2026-09-12 Service source checks retain the three copy-lock warnings in
-`internal/infra/etcd/script_source_reference_codec.go` at lines 153, 218 and 237.
-Scoped etcd Staticcheck also reports unchanged SA4006 in
-`blueprint_release_terminal_test.go:231` and `route_snapshot_test.go:25`, and
-S1016 in `environment_blueprint.go:372` and
-`environment_compose_projection.go:558`. Evidence is in
-`.tmp/service-source-ak14iK/`; these are not failures introduced by the Service
-observation module. The storage and Script maintenance owners should correct
-the value-copy and unused-value sites and evaluate the explicit conversion
-findings, then pass the affected analyzer and tests without changing behavior.
+This is not a full-package or full-CI pass. The broader selection in
+`analyzer-focused.log` reproduced `TestBlueprintHookRecoveryTerminalReport`:
+Agent admission rejects incomplete native predecessor authority. This failure
+was already recorded in [Script acceptance](../acceptance/script-execution.md#explicit-context-qualification).
+The exact affected terminal-publication, source-reference and Zone selections
+passed separately.
+
+Retained fixture work includes the CoreDNS config-read flow and
+`TestObservedRecreateProbeAcceptsSealedBlueGreenPrior` /
+`TestObservedRecreateProbeUsesEachSealedArtifact`. The latter both still fail
+with a missing 32-byte plan hash (`probe-before.log` in the same evidence
+directory). Their fixtures must supply a valid sealed plan and selected recovery
+authority, not just hash-shaped bytes. Keep validation and repair fixtures at
+their owning seam; do not bypass assertions. Broader Script/Blueprint failures
+remain open with their recorded acceptance evidence.
 
 Go 1.27 crashed the pinned analyzer in the recorded run; Go 1.26.7 ran it and
 reported SA4006. That tool crash is not a source finding or a green result.

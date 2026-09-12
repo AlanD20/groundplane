@@ -159,7 +159,7 @@ func (registry *Registry) OpenLogs(
 	}
 	delivery := make(chan error)
 	abandoned := make(chan struct{})
-	go registry.observeLogSubscribe(subscription, command.result, delivery, abandoned)
+	go registry.observeLogSubscribe(ctx, subscription, command.result, delivery, abandoned)
 	select {
 	case <-ctx.Done():
 		close(abandoned)
@@ -184,6 +184,7 @@ func (registry *Registry) OpenLogs(
 }
 
 func (registry *Registry) observeLogSubscribe(
+	ctx context.Context,
 	subscription *LogSubscription,
 	result <-chan error,
 	delivery chan<- error,
@@ -191,7 +192,7 @@ func (registry *Registry) observeLogSubscribe(
 ) {
 	select {
 	case err := <-result:
-		registry.finishObservedLogSubscribe(subscription, err, delivery, abandoned)
+		registry.finishObservedLogSubscribe(ctx, subscription, err, delivery, abandoned)
 	case <-subscription.state.done:
 		select {
 		case delivery <- errs.New(errs.KindStorageUnavailable, "Agent log session ended during delivery"):
@@ -201,7 +202,7 @@ func (registry *Registry) observeLogSubscribe(
 		select {
 		case err := <-result:
 			if err == nil {
-				registry.CancelLogs(nil, subscription.ID)
+				registry.cancelDeliveredLog(ctx, subscription.ID)
 			}
 		case <-subscription.state.done:
 		}
@@ -209,6 +210,7 @@ func (registry *Registry) observeLogSubscribe(
 }
 
 func (registry *Registry) finishObservedLogSubscribe(
+	ctx context.Context,
 	subscription *LogSubscription,
 	err error,
 	delivery chan<- error,
@@ -218,7 +220,7 @@ func (registry *Registry) finishObservedLogSubscribe(
 	case delivery <- err:
 	case <-abandoned:
 		if err == nil {
-			registry.CancelLogs(nil, subscription.ID)
+			registry.cancelDeliveredLog(ctx, subscription.ID)
 		}
 	}
 }

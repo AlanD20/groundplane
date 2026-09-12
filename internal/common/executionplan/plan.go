@@ -319,10 +319,10 @@ func componentArtifactValidationPlan(
 	if validateID(ids.KindPlan, rollbackPlanID) != nil || rollbackGeneration == 0 {
 		return nil, errs.New(errs.KindValidationFailed, "Component rollback artifact ownership is invalid")
 	}
-	validationPlan := *plan
+	validationPlan := proto.CloneOf(plan)
 	validationPlan.PlanId = rollbackPlanID
 	validationPlan.RenderGeneration = rollbackGeneration
-	return &validationPlan, nil
+	return validationPlan, nil
 }
 
 func validateBackupPlan(plan *agentpb.ExecutionPlan) error {
