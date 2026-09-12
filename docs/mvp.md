@@ -327,17 +327,17 @@ without a managed-file preview return `[]`. `PUT /components/{id}/config`
 remains the sole configuration mutation.
 
 **One backend, many frontends (locked).** The Controller is the single
-backend: it holds **all** logic — schema validation, action sequencing,
+backend: it owns **all product and runtime decisions** — schema validation, action sequencing,
 config rendering (desired state → Corefile / Caddyfile / compose), task
 dispatch, scheduling. The Console is a frontend, never the product. There
 are exactly three frontends over the one Controller API:
 
-- **Console** — the production user interface. Everything implemented here is what the API
-  must do: every drawer, dialog, action, and view is a first-class feature
-  of the backend, not UI sugar. The production Console is **React 19 +
+- **Console** — the production user interface for this document's product
+  contract. Operator-facing capabilities remain first-class Controller behavior
+  with Console/CLI/API parity. The production Console is **React 19 +
   Vite + shadcn/ui + Tailwind** as a static SPA, `go:embed`'d into the
-  Controller binary. Its components and store are the maintained product
-  surface (see docs/architecture.md).
+  Controller binary. Its feature modules implement the Console surface under
+  the ownership rules in `docs/architecture.md` and ADR0056.
 - **CLI** — `groundplane <resource> <action>` (e.g. `groundplane env deploy
   storefront production app-api --tag sha-…`). Mirrors every operator-facing
   Controller capability 1:1. Only the closed local process/tooling commands
@@ -352,10 +352,12 @@ are exactly three frontends over the one Controller API:
   command. Machine bootstrap endpoints are explicitly outside this parity
   set.
 
-The Console store (`console/src/lib/store.tsx`) is the stand-in for the Controller
-API: **anything the UI does today is the API contract** — if it isn't in
-the store, it doesn't exist in the product. Frontends carry zero logic:
-they render Controller responses and send Controller-validated requests.
+This document defines required product behavior; Console code and fixtures are
+implementation evidence, not product or wire authority. Missing Console coverage
+is an implementation gap, not permission to remove a requirement. Frontends own
+interaction and presentation state; the Controller owns product validation and
+runtime decisions. They render Controller responses and send Controller-validated
+requests without inventing lifecycle authority, permissions, health or Task success.
 The acceptance test (the selected workload completes Gate A and Gate B through
 Groundplane, including replica-aware release/Tunnel traffic and source
 restore/recovery proof, with zero hand-written shell scripts) applies equally to all three

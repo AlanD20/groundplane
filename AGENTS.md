@@ -5,14 +5,13 @@ Self-hosted control plane: run many projects on one machine. One backend
 the MVP.
 
 The repository contains the product definition (`docs/`), the production
-Console (`console/`), and the Go implementation scaffold.
+Console (`console/`), and the Go Controller, Agent and CLI.
 
 ## Context docs — read the one that matches your task
 
 - **docs/mvp.md** — the authoritative product contract. Reach for it on
   any product, model, or locked-decision question, and BEFORE changing
-  product or Console behavior. "If it isn't in the Console store, it
-  doesn't exist in the product."
+  product or Console behavior. Missing implementation does not narrow this contract.
 - **docs/api-cli.md** — the CLI command tree and the REST API. Reach for
   it on any command or endpoint work. The 1:1 rule: every operator-facing
   Controller capability has exactly one Console action, CLI command, and API
@@ -63,12 +62,13 @@ override workflow defaults and skill guidelines, subject to higher-priority
 instructions and permission boundaries. Use sufficient task context, not arbitrary
 context cuts; apply the policy's progress limits to primary and delegated work.
 
-## The Console store is the API contract
+## Console and API ownership
 
-`console/` is a React 19 + Vite static SPA on fixture data. Its store
-(`console/src/lib/store.tsx`) is the stand-in for the Controller API, and
-the UI mirrors the product exactly. Changing Console behavior changes the
-API contract. UI questions are answered here; product questions in mvp.md.
+`console/` is the production React 19 + Vite SPA consuming the Controller API.
+Product authority stays in `docs/mvp.md`; wire sources and client generation
+follow `docs/architecture.md`'s API contracts. For Console feature placement,
+follow `docs/agents.md`'s Console module seams. The root store is implementation,
+not product or wire authority.
 
 ## Non-negotiables
 

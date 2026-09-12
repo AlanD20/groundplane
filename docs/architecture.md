@@ -340,11 +340,12 @@ Two machine contracts, two tools — never one for both:
    single source of truth for the Controller↔Agent machine surface; a
    contract change is a build error. Unchanged, by lock.
 2. **Human API — REST/JSON, one OpenAPI document.** The Console, CLI,
-   and scripts all speak it. The OpenAPI document is the single source
-   of truth for the REST surface, generated **code-first**: handlers are
-   typed Go structs (Huma or oapi-codegen), the spec is emitted from
-   them at build time and served at `/openapi.json` — never
-   hand-maintained, so it cannot rot. From that one spec:
+   and scripts all speak it. Typed Controller handlers and schema definitions
+   are the editable wire sources, implementing `mvp.md` and `api-cli.md`.
+   They generate the OpenAPI document **code-first**, served at `/openapi.json`.
+   That document is the shared REST transport contract; it and its generated
+   clients are derived artifacts, never independently hand-maintained.
+   From that one spec:
    - TypeScript client types for the Console (openapi-typescript);
    - a Go client for the CLI;
    - the RFC 7807 error codes, SSE streams (logs, task events,
@@ -359,18 +360,15 @@ require an explicit scoped API/token contract and is not an MVP feature.
 This is how the 1:1 rule becomes mechanical: every operator-facing Controller
 capability's Console action ↔ CLI command ↔ API endpoint derives from the same
 document — drift is a build error, not a review finding. Local process/tooling
-commands are the closed exceptions defined in
-`api-cli.md`. The Console's store surface
-(`lib/store.tsx` + `types.ts`) is the seed of the spec: the Controller's
-handlers are generated to match it, and the Console's types come back
-from the spec.
+commands are the closed exceptions defined in `api-cli.md`. Console stores and
+handwritten frontend types do not generate handlers or define the wire schema.
+Change the authoritative contract and typed sources together, then regenerate
+OpenAPI and both clients; generation-drift checks detect stale derived artifacts.
 
 ## Console (frontend) — locked: React + Vite, static SPA, embedded
 
-- **React 19 + Vite + shadcn/ui (Base UI) + Tailwind v4** — the SAME
-  stack used by the original design, so the contract UI migrated directly. The
-  Console components, styling, and store pattern
-  are not.
+- **React 19 + Vite + shadcn/ui (Base UI) + Tailwind v4** — the production SPA
+  implements the product contract; its current UI does not redefine that contract.
 - **No meta-framework, no Next.js**: SSR/SSG/RSC exist for
   internet-facing apps; a localhost console served from the Go binary
   needs none of it. Vite emits a flat `dist/` embedded via `go:embed`
@@ -386,15 +384,18 @@ from the spec.
   Controller, and serves only GET/HEAD regular files from the injected `fs.FS`.
   SPA fallback requires positive exact `text/html` negotiation; cache and MIME
   behavior are closed by ADR 0017.
-- **The store pattern stays** (the lock: the store is the API contract).
-  In prod the store calls the generated OpenAPI client instead of
-  fixtures, and SSE (EventSource) feeds live task states — the same
-  journal shape the Console already renders. No cache layer
+- **Feature-owned request state and actions** follow ADR0056. Features consume
+  the Controller API using generated OpenAPI transport types, and SSE
+  (EventSource) feeds live Task states. The root store is limited to workspace
+  selection, navigation identity and feature-provider composition. Existing
+  feature logic there is migration debt, not the placement rule for new work.
+  No cache layer
   (TanStack Query and friends) for a single-operator localhost tool:
   machinery without payoff.
-- **Frontends carry zero logic (locked)** — the Console renders
-  Controller responses and sends Controller-validated requests; the
-  bundle is static files, the API is the only logic.
+- **Controller-owned product and runtime decisions (locked)** — frontends own
+  interaction and presentation state, render Controller responses and send
+  Controller-validated requests. They never invent lifecycle authority,
+  permissions, health, Task completion, subnet allocation or Controller defaults.
 
 ## Unified paths that scale
 
@@ -1371,9 +1372,10 @@ create-only `sec_` id is also its sole MVP value-generation id.
   author-published bundle exists in the declared Volume, and no selected
   application workload starts before that proof. This contract is not a
   production claim until that end-to-end test passes.
-- The Console store is the API contract: the fixture store mirrors what the
-  Controller holds in etcd, and the acceptance test stays — every
-  operational step must work from the CLI with no Console session.
+- Console tests exercise feature behavior against the generated API contract;
+  fixtures are test inputs, not authority for product behavior or runtime state.
+  Acceptance still requires every operator-facing capability to work through
+  Console, CLI and API, with no Console session required for CLI/API use.
 - `make architecture-check` enforces imports, module placement, concrete-first
   interfaces, conversion rules, generated provenance, and the non-growing
   oversized-file baseline defined by ADR 0056.

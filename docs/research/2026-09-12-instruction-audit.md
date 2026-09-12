@@ -1,7 +1,7 @@
 # Groundplane instruction audit
 
 Date: 2026-09-12. Baseline: `ed25190e0` on `main`.
-Status: baseline findings and proposals, with the dated resolution below.
+Status: baseline findings and proposals, with the dated resolutions below.
 Evidence line numbers and original proposals refer to the baseline, not current
 policy. This report is not replacement instructions.
 
@@ -12,9 +12,18 @@ with optional bounded Sol/xhigh implementation, replacing both the mandatory
 delegation pipeline and the blanket no-subagent rule in finding 1. The alignment
 also clarifies [scoped verification](../delivery.md#verification-ladder), effort
 and no-progress limits, and sufficient task context with targeted retrieval.
-Applicable standards and qualification gates remain required. Remaining findings
-are proposals; discuss Console/API authority next. Paused feature WIP remains
-separate and uncommitted.
+Applicable standards and qualification gates remain required. Paused feature WIP
+remains separate and uncommitted.
+
+## Alignment 2 — 2026-09-12
+
+The owner approved resolving finding 2 in documentation only. `mvp.md` owns
+required behavior; [typed Controller sources generate the wire contract](../architecture.md#api-contracts-locked)
+and derived clients. [Console feature ownership](../agents.md#console-module-seams)
+follows ADR0056; remaining root-store feature logic is migration debt, not authority
+or the pattern for new work. Console/CLI/API parity and Controller-owned product/
+runtime decisions remain required. No code extraction or runtime change is included.
+The remaining findings are proposals; discuss recovery-checkpoint context next.
 
 ## Summary
 

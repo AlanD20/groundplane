@@ -26,8 +26,7 @@ versions are Go 1.26 tool dependencies in `go.mod`, and `make proto` resolves
 those repository tools explicitly instead of selecting generators from
 `PATH`. The `protoc` compiler itself is not repository-pinned yet.
 
-The fixture-backed Console and the current Go scaffold require no local
-secrets or `.env` file. Never place deployment credentials in the repository.
+Never place deployment credentials in the repository.
 
 ### Chrome DevTools MCP for Codex
 
@@ -69,7 +68,7 @@ authenticated state to local processes.
 ## Start from the contract
 
 1. Read the task-specific document named in `AGENTS.md`.
-2. Locate the existing Console store action, CLI command, and REST endpoint.
+2. Locate the owning Console feature/action, CLI command, and REST endpoint.
 3. State the contract change before editing implementation files.
 4. Change the authoritative document and every mirror in the same slice.
 5. Name the earliest executable proof for the changed behavior.
@@ -213,10 +212,12 @@ active work, blockers or next actions change.
 3. `docs/api-cli.md` owns the human API and CLI mapping.
 4. `docs/architecture.md` owns module seams and runtime placement.
 5. `docs/standards.md` owns enforceable Go rules.
-6. `console/src/lib/store.tsx` owns the current frontend/API interaction surface.
 
 Resolve conflicts upward in that order. Never preserve a lower-level shape
 with a compatibility adapter when its source contract has changed.
+Implementation gaps do not narrow these requirements. Wire sources and derived
+OpenAPI/client generation follow [architecture.md](architecture.md#api-contracts-locked);
+neither the root store nor a handwritten frontend type defines the API.
 
 ## Clean replacement rule
 
@@ -237,10 +238,18 @@ explicitly requires them.
 - `components/ui/`: reusable interaction primitives; no domain knowledge.
 - `components/common/`: shared Groundplane presentation modules.
 - `components/shell/`: responsive navigation and workspace chrome.
-- `features/`: product-area implementations behind route-level interfaces.
+- `features/<capability>/`: feature request state, actions, projections and
+  presentation behind route-level interfaces.
 - `routes/`: shallow route composition and parameter resolution only.
-- `lib/store.tsx`: the Controller-interface stand-in; behavior lives here.
-- `lib/types.ts`: contract types until generated OpenAPI types replace them.
+- `lib/store.tsx`: cross-feature workspace selection, shared navigation identity
+  and feature-provider composition only.
+- `lib/api.generated.ts`: derived OpenAPI transport types; regenerate, never edit.
+- Feature-owned types describe presentation state, not parallel wire contracts.
+
+These boundaries follow [ADR0056](decisions/0056-mvp-modular-monolith-and-code-quality-architecture.md).
+Remaining feature logic in the root store and handwritten wire models are
+migration debt, not a template for new work. This authority alignment does not
+authorize a broad extraction; keep any later migration scoped to its approved task.
 
 Route modules compose; they do not recreate primitives, contain product-area
 implementations, or own cross-route state. Feature modules may contain local
