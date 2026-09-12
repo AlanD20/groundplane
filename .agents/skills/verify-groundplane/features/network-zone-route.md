@@ -10,6 +10,8 @@ does not require or mutate a deployed Controller service.
 - `GROUNDPLANE_C07_ETCD_PREFIX`: a unique prefix matching
   `/groundplane-c07-acceptance/run-*/`.
 - Local commands: `go`, `mktemp`, `date`, `mkdir`, `head`, and `rm`.
+- Set `TMPDIR` to a validated ignored repo-local directory. The helper's system
+  fallback remains a [known tooling gap](../../../../docs/issues/documentation-tooling.md).
 
 ## Journey
 

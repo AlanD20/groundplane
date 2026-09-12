@@ -143,7 +143,7 @@ changed to `superseded`; supersession is a derived relationship to the Service
 projection, not a mutation of the Release ledger entry.
 
 The old use of `active` and `superseded` as stored Release statuses is replaced.
-On acceptance, mirrors must remove that status contract in the same change.
+Mirrors must not retain that superseded stored-status contract.
 
 When an operation reaches `completed`, `failed`, `timed_out`, or `aborted`, the
 Controller writes one immutable terminal Release execution summary. It contains

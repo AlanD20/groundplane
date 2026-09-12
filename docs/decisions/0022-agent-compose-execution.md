@@ -749,9 +749,9 @@ The generated protobuf output must be clean, `make ci` must pass, and no
 untracked Compose artifact, helper container, or plaintext materialization may
 remain after the verification suite.
 
-## Owner approval required
+## Accepted decision scope
 
-Implementation remains blocked until the owner explicitly approves all of:
+The accepted Compose decision covers:
 
 1. the version-1 typed `ExecutionPlan`, deterministic protobuf SHA-256 plan
    hash, bounded canonical `ComposeArtifact`, service-id mapping, and strict

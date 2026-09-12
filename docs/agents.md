@@ -19,6 +19,10 @@ The Makefile and package scripts own setup and verification commands. Follow
 tool installation or passing checks whose inputs have not changed.
 Never place deployment credentials in the repository.
 
+Some verifier and Makefile defaults still violate the repository-local temporary
+state rule. Consult [the tooling gap](issues/documentation-tooling.md) before
+using those paths; documenting the mismatch does not make the defaults safe.
+
 ## Start from the contract
 
 1. Read the task-specific document named in `AGENTS.md`.
@@ -173,6 +177,13 @@ Implementation gaps do not narrow these requirements. Wire sources and derived
 OpenAPI/client generation follow [architecture.md](architecture.md#api-contracts-locked);
 neither the root store nor a handwritten frontend type defines the API.
 
+Within those shared boundaries, [feature documents](README.md#features) own
+feature-specific requirements, design and acceptance. Their linked technical
+contracts own exact protocols and schemas not yet implemented in source.
+Accepted ADRs record decisions, not a competing product hierarchy. A Proposed
+or Deferred section does not authorize implementation; later accepted decisions
+may adopt a clearly named subset. Resolve remaining product choices with the user.
+
 ## Clean replacement rule
 
 Groundplane has no backward-compatibility requirement before its first public
@@ -220,3 +231,10 @@ Follow [the documentation rules](README.md) when creating, changing or retiring
 documents. Keep feature requirements and design together, link to shared rules,
 and use plain language. Preserve valid constraints and useful rationale before
 removing superseded material; Git retains its history.
+
+The instruction realignment favors task-relevant context, explicit authority and
+observable completion over accumulated workflow rules. Background reading used
+in the September 2026 audit: [OpenAI's skills and prompts article](https://developers.openai.com/blog/rethinking-skills-and-prompts-for-gpt-6-astra),
+[model guidance](https://developers.openai.com/api/docs/guides/latest-model#instruction-following)
+and [instruction discovery](https://learn.chatgpt.com/docs/agent-configuration/agents-md).
+These sources explain the rationale; they do not replace this repository's rules.

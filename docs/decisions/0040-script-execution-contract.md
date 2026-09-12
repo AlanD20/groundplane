@@ -52,7 +52,8 @@ match:
 Reconciliation keys are unique within the owning Environment and are stored
 without normalization. Duplicate YAML keys are invalid. Slugs are also unique
 within the owning Environment, are renamable labels, are stored without
-normalization, and their raw ASCII bytes define deterministic ordering.
+normalization. Numeric `order` then scoped slug bytes define intra-Service
+ordering under ADR0076.
 
 Each map value has these required fields:
 
@@ -935,15 +936,15 @@ failure remains primary. Once the candidate is the proven serving release, it
 is the eligible definition even if no prior serving Release exists. This is
 not a fallback to desired image text or an observed container.
 
-`on-failure` follows the same slug ordering, ownership, checkpoint, timeout,
+`on-failure` follows the same numeric-order/slug ordering, ownership, checkpoint, timeout,
 output, and cleanup rules. Its failure is secondary: it never recursively runs
 `on-failure`, starts another compensation, or replaces the operation's primary
 failure.
 
 ### Clean replacement of earlier wording
 
-This ADR is the sole Proposed C09 execution contract. On acceptance it
-supersedes every Script-specific statement in ADR 0022 and the Blueprint that
+This accepted contract, as amended by ADR0062 and ADR0076, replaces earlier
+Script-specific statements in ADR 0022 and the Blueprint that
 describes `scripts.<name>`, authored `x-gp-task` Scripts, Docker exec, stdin
 Script bodies, random-id ordering, execution in a serving/candidate container,
 or output chunks in public Task events. Those behaviors are removed, not
@@ -962,8 +963,9 @@ older execution path as a compatibility fallback.
   and failure execution; no Script enters a serving container.
 - Container ownership and Controller-acknowledged checkpoints make recovery,
   termination, and cleanup evidence exact across reconnects.
-- Parameters, alternate interpreters, and per-Script runtime overrides remain
-  post-MVP contract changes. Replica count does not multiply Script selection:
+- Parameters and alternate interpreters remain post-MVP contract changes.
+  Explicit per-Script runtime resources are accepted only through ADR0076's
+  closed `execution` shape. Replica count does not multiply Script selection:
   one execution is selected per Script per logical Release.
 - Script output is drained and discarded; the MVP exposes only typed terminal
   metadata and never creates a partially replayable human-output channel.

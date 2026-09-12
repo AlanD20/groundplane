@@ -71,11 +71,15 @@ A known safety or correctness failure still blocks dependent work.
 
 ## Required gates
 
-For integrated-journey and release qualification, run from the repository root:
+For integrated-journey and release qualification, the required root target is:
 
 ```sh
 make ci
 ```
+
+Before the next run, resolve the [temporary-output defaults](issues/documentation-tooling.md)
+so this target follows the repository-local path policy. A documentation change
+does not fix those executable defaults or waive the required gate.
 
 `make ci` is the local mirror of GitHub Actions. It includes `make deployment-check`
 for the private bootstrap/staging/protected-update client and verifies exact Node
@@ -115,7 +119,8 @@ Use supported dependency versions; do not resolve conflicts with `--force` or
 - Stable ids remain references; slugs remain renamable labels.
 - Desired state contains decisions only.
 - Console modules follow the seams in `agents.md` and remain responsive.
-- Public or expensive architectural choices have an ADR.
+- Significant shared or expensive-to-reverse choices have an ADR; ordinary
+  feature design is kept in its living feature document.
 - Interfaces are consumer-owned and justified by actual variation, a
   side-effect seam, a process port, or a standard-library contract.
 - Implementations return concrete types; no local interface is followed by a

@@ -12,24 +12,23 @@ reference uses ids. A parent rename therefore must not rewrite descendants,
 desired resources, submitted Blueprint bundles, generations, physical paths,
 Compose identities, backup keys, or other durable references.
 
-The earlier Proposed form of this ADR contradicted accepted ADR 0013 by making
+The earlier Proposed form contradicted ADR 0013's approved stable-id choices by making
 normalized document paths and generation records part of the rename
 transaction. That would denormalize ancestor slugs into descendant state,
 create an unbounded aggregate, and make a label update contend with unrelated
 reconciliation data.
 
-Accepted ADR 0013 also fixes deletion exclusion. A destructive operation first
+ADR 0013's approved deletion subset also fixes exclusion. A destructive operation first
 creates `/v1/runtime/deletions/<target-kind>/<stable-id>`; while that tombstone
 exists every mutation of the target returns `resource.in_use` (`409`). A rename
 transaction that compares only the primary and slug indexes could otherwise
 commit after deletion begins.
 
-This decision fixes the complete internal rename contract. The implementation
-slice covered by this acceptance is Tenant and ordinary Tenant-owned Project
-rename at the Controller use-case/durable-repository seam. Environment creation
-and rename remain outside this slice until the volume-directory lifecycle in
-Proposed ADR 0025 is accepted and implemented. HTTP handlers, CLI lookup, and
-Console wiring also remain separate delivery work.
+This decision fixes the internal rename contract. Environment storage lifecycle
+is separately accepted in ADR 0025; renaming its label does not change that
+storage identity. Current cross-surface implementation and qualification are
+tracked through [Hierarchy](../features/hierarchy.md), not the original
+Tenant/Project implementation slice that introduced this decision.
 
 ## Decision
 
@@ -184,5 +183,5 @@ Controller owns bounded retries and semantic error mapping.
   preparation and commit.
 - Cancellation tests cover cancellation before work and before a retry.
 - Concurrent rename tests run under the race detector.
-- Contract scans reject descendant slug-path fields, descendant rewrite loops,
-  Environment rename in this slice, and compatibility aliases.
+- Contract scans reject descendant slug-path fields, descendant rewrite loops
+  and compatibility aliases. Environment rename preserves its storage identity.

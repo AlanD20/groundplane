@@ -19,6 +19,10 @@ in the same evidence document rather than creating a report for each commit.
 No record establishes full CI, Gate A, Gate B or production readiness beyond the
 scope it explicitly proves. Failed and unavailable checks remain visible.
 
+These tracked working records retain existing private verification context.
+They are not approved public artifacts; sanitize that context before any public
+publication. Consolidation does not authorize publishing private topology.
+
 ## Private data
 
 Groundplane is exercised against a private representative workload, but its

@@ -1469,10 +1469,13 @@ The public contract uses existing RFC 7807 problem vocabulary:
 Errors never expose Secret values, host paths, Connector credentials, private
 object locators, child Task params, or raw helper diagnostics.
 
-### 13. Required future mirrors before implementation
+### 13. Cross-layer implementation requirements
 
-Acceptance of this ADR requires one synchronized contract slice. This Proposed
-ADR deliberately does not edit or claim any of these mirrors yet:
+The generic accepted deletion engine requires synchronized product and
+implementation surfaces. Current progress is recorded in
+[capabilities](../capabilities.md), not inferred from this checklist. The backing
+permanent-delete items remain blocked by the authority limit at the top of this
+document; they are not instructions to change the current public Destroy action.
 
 - `docs/mvp.md`: make the deletion behavior, containment, visibility,
   six-hour retry semantics, GitHub-registration preservation, backing survival,

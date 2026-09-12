@@ -40,9 +40,8 @@ The decision must preserve these accepted rules:
   starts at `R + 1`;
 - a terminal step event does not make the Task terminal; only the separate
   Task status is authoritative;
-- Task operation-index and active-operation-index value schemas remain
-  unresolved and must not gate an event stream over already accepted Task and
-  event keys;
+- Task operation-index and active-operation-index schemas are owned by the
+  mutation and Task contracts, not by this stream over Task and event keys;
 - caller cancellation is control flow, live-context storage failure is
   `storage.unavailable`, corrupt durable state is internal, and a missing Task
   is `task.not_found`; and
@@ -126,7 +125,7 @@ Starting both watches is part of the handoff, not an invitation to infer an
 aggregate from flattened etcd events. Event values are decoded and validated.
 Task-primary changes are decoded and used only to observe authoritative Task
 status. The stream never watches Task secondary indexes and therefore remains
-independent of their unresolved value schemas.
+independent of their value schemas.
 
 The implementation tracks the last emitted Task-event sequence. A watched
 event with a sequence less than or equal to that value is a replay and is
@@ -386,8 +385,8 @@ sequence resume point.
 
 ## Consequences
 
-- Task-event replay and resume become independent of etcd revisions and the
-  unresolved Task index value schemas.
+- Task-event replay and resume are independent of etcd revisions and Task
+  secondary-index value schemas.
 - The repository needs one composed stream seam that owns a Task-primary watch,
   an event-prefix watch, fixed-revision snapshots, compaction resnapshot, and
   context-bound shutdown.

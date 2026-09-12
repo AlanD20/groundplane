@@ -53,12 +53,17 @@ the Makefile toolchain checks, and [`docs/standards.md`](docs/standards.md) are
 the executable references; do not substitute an older compatible-looking
 Node/npm or Go version.
 
+Build and test processes must use ignored repository-local temporary and cache
+directories. The [known tooling gap](docs/issues/documentation-tooling.md) records
+helper defaults and coverage output that still need executable alignment; the
+commands below describe the targets, not an exception to that policy.
+
 ```sh
 go mod download                 # download the dependencies listed in go.mod
 make proto                      # regenerate proto/*.pb.go with repository-pinned Go tools
 make build                      # builds bin/groundplane, bin/controller, bin/agent
 make console                    # npm ci && npm run build in console/, embedded via go:embed
-make ci                         # full local gate: tidy, gofmt, golines, vet, race tests; mirrors CI exactly
+make ci                         # full integration/release gate; see docs/delivery.md
 ```
 
 A successful focused test does not establish MVP acceptance. Follow the

@@ -10,6 +10,8 @@ tracked in [Deferred architecture cleanup](deferred-architecture-cleanup.md).
 Current storage, Script, Blueprint, visibility and verification gaps are grouped
 in [Runtime qualification](runtime-qualification.md). Resolved and superseded
 per-fix journals have been removed; their relevant evidence is feature-routed.
+The remaining executable temporary-path mismatch is tracked in
+[Tooling alignment](documentation-tooling.md).
 
 Use this form:
 

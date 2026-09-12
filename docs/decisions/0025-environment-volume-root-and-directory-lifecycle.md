@@ -11,19 +11,19 @@ the product contract: the API and Console expose `environment.volume_dir`,
 volume mounts resolve below it, backups address selected volumes below it, and
 tenant, project, or environment label renames must not move it.
 
-The current contracts do not select one root or one complete lifecycle:
+Before this decision, conflicting contracts and scaffolds left the root and
+lifecycle unclear:
 
-- `mvp.md` and the current Go and Console scaffolds use `/infra/vol`;
-- `blueprint.md` calls `/var/lib/groundplane/vol` the physical root;
-- tenant paths are documented as stable-id paths, while Console creation and
-  fixtures use mutable tenant and project slugs;
-- backing projects have no tenant id, but current materializer validation
-  accepts only `/infra/vol/<tenant-id>/<project-id>/<environment-id>`;
-- `ControllerConfig` has no volume-root setting;
-- the hierarchy repository persists a caller-supplied `volume_dir` without
-  proving its exact derivation; and
-- the materializer runner bind-mounts an exact environment directory with
-  mountpoint creation disabled, so it cannot create the directory it requires.
+- product scaffolds used `/infra/vol` while Blueprint documentation named
+  `/var/lib/groundplane/vol`;
+- some fixtures used mutable tenant and project slugs in physical paths;
+- materializer validation could not represent a backing Project without a Tenant;
+- no configuration setting owned the root or proved a supplied `volume_dir`; and
+- a materializer with mountpoint creation disabled could not create its own
+  prerequisite directory.
+
+Those were design inputs, not current path authority. The decision below owns
+the root and lifecycle.
 
 Accepted ADR 0016 gives the persistent Agent no host root, generic host-runtime
 mount, or workload-materialization root. It may use the Docker socket only for
@@ -40,10 +40,9 @@ entry, parent operation, tombstone, lock, immutable plan, receipts, retry, and
 parent-last finalization. This ADR supplies only the Environment path and
 directory effects consumed by that shared engine.
 
-Proposed ADR 0020 describes Entry materialization below one already-existing
+Accepted ADR 0020 describes Entry materialization below one already-existing
 environment directory. It does not select the host root, create an environment
-directory, or define its deletion. ADR 0020 remains Proposed and depends on
-this ADR if both are accepted; this ADR does not accept it by reference.
+directory, or define its deletion. It consumes the directory lifecycle here.
 
 Without one decision, Environment creation would have to guess a public path,
 privileged directory owner, failure state, backing-project namespace, and the
@@ -495,8 +494,7 @@ the orphan for explicit operator handling.
   ADR 0053's shared tombstone rather than an unsafe plain recursive delete.
 - Existing `/infra/vol` development data and slug-derived fixtures require a
   clean offline cutover.
-- ADR 0020 gains an exact prerequisite environment root but remains Proposed
-  until separately accepted.
+- Accepted ADR 0020 consumes this exact prerequisite environment root.
 
 ## Verification required before implementation is complete
 

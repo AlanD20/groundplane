@@ -29,6 +29,8 @@ revision and confirmation token used by the CLI removal.
 - `GROUNDPLANE_VOLUME_SLUG`: unused, generic test slug for the created Volume.
 - `GROUNDPLANE_VOLUME_RENAMED_SLUG`: unused replacement slug, different from
   `GROUNDPLANE_VOLUME_SLUG`.
+- Set `TMPDIR` to a validated ignored repo-local directory. The helper's system
+  fallback remains a [known tooling gap](../../../../docs/issues/documentation-tooling.md).
 
 Optional variables:
 

@@ -44,8 +44,10 @@ implementation nor an old test result changes a requirement.
 | Ordered setup hooks with explicit resources | [Script execution](features/setup-scripts.md) |
 | Portable application bundle and runtime visibility | [Kobwnewe hosting](features/kobwnewe-hosting.md) |
 
-Other features still use the shared contracts and accepted ADRs until their
-requirements and design are migrated together.
+Feature entrypoints route detailed runtime, persistence and wire contracts when
+those details would obscure the feature overview. The retained
+[technical decisions](decisions/README.md) are current design references, not a
+chronological reading list. Read only the sections needed for the task.
 
 ## Feature document
 
@@ -103,20 +105,14 @@ Clarity and complete meaning matter more than an arbitrary word limit.
 - A missing implementation is not a stale requirement. Preserve uncommitted
   work and failed evidence. Ask the owner when a conflict needs a product decision.
 
-## Migration
+## Moving an existing contract
 
 Migrate one feature or related document group at a time. Record the source and
 destination, preserve requirement meaning and qualification limits, check
 references, and land the slice before starting another independent migration.
 A readability change does not authorize new behavior or code restructuring.
 
-During migration, `mvp.md`, `api-cli.md`, `blueprint.md`, `architecture.md`
-and relevant accepted ADRs retain their existing requirements. Feature documents
-link to details not yet moved; moving a requirement requires updating its old
-home and readers in the same slice, not creating competing copies.
-
-The four production-initiative specs are now listed under Features above.
-The historical status ledger has been retired; capabilities and tasks now list
-current gaps rather than completed increments. Remaining work includes reviewing superseded ADRs and
-consolidating acceptance reports whose evidence is still needed. Their presence
-is not proof that their old next actions or runtime observations are current.
+`mvp.md`, `api-cli.md`, `blueprint.md` and `architecture.md` retain their shared
+authority. A feature document owns its feature-specific detail and routes exact
+technical contracts. Moving a requirement means updating its old home and readers
+in the same slice, not creating competing copies or changing its approval status.

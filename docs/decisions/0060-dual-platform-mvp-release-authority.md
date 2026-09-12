@@ -133,7 +133,8 @@ accepted from evidence for only one architecture.
 
 ## Adoption
 
-[rejected adapter registry](../features/backing-services.md) is rejected for the MVP. Its ARM64-only release model, compiled
+The [adapter registry proposal](../features/backing-services.md#technical-design)
+was rejected for the MVP. Its ARM64-only release model, compiled
 history and revocation registry, and reverse-reference audit do not govern the
 accepted C10 implementation.
 

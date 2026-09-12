@@ -76,8 +76,8 @@ The task channel changes so that:
 - retries always use a new `task_id`, retain `operation_id`, and set
   `retry_of`, matching the durable Controller model.
 
-Local MVP channel authentication is token-based and remains Proposed in ADR
-0011. mTLS, CAs, and Agent certificates are post-MVP and are not part of this
+Local MVP channel authentication is token-based under accepted ADR 0011.
+mTLS, CAs, and Agent certificates are post-MVP and are not part of this
 update transport.
 
 ### MVP Agent update

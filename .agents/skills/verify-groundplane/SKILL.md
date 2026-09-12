@@ -1,6 +1,6 @@
 ---
 name: verify-groundplane
-description: Prove a Groundplane operator journey against an already provisioned remote host while preserving bounded evidence and pre-existing service state.
+description: Verify an implemented Groundplane capability through a requested operator journey or its named local acceptance gate, preserving bounded evidence and pre-existing state.
 ---
 
 # Verify Groundplane
@@ -9,27 +9,40 @@ Use this project-local skill after a capability is implemented and operator-leve
 verification is requested. Start with the smallest journey crossing Controller API
 and CLI behavior. Feature-specific instructions live under `features/`.
 
-This skill verifies an existing deployment. It does not bootstrap a machine,
-rewrite systemd configuration, expose a public listener, or provision product
-state. Repository tests and `make ci` remain separate required gates.
+Remote journeys use an existing deployment; named hermetic or real-etcd gates
+use their own test prerequisites. This skill does not bootstrap machines,
+rewrite systemd configuration or expose public listeners. A mutation journey
+may create or remove only its explicitly authorized test resources. Repository
+tests and `make ci` remain separate, scope-dependent gates in
+[delivery.md](../../../docs/delivery.md#verification-ladder).
 
 ## Workflow
 
-1. Read `features/README.md` and select the narrowest relevant journey.
-2. Confirm its prerequisites and required environment variables.
-3. Run only the script named by the feature document.
-4. Preserve its evidence directory on success or execution failure. A preflight
+1. Read [the feature map](features/README.md) and select the narrowest relevant journey.
+2. Check [head.md](../../../docs/head.md) for the current target, authority and
+   pauses. A recorded command or mutation flag is not user permission.
+3. Confirm the selected guide's prerequisites, resource ownership and required
+   environment variables. Validate ignored repository-local runtime/evidence
+   paths; the [known tooling gap](../../../docs/issues/documentation-tooling.md)
+   still requires explicit paths or an executable fix before affected commands.
+4. Run only the selected script/action. Stop on missing authority, a failed
+   preflight or an assertion failure; retain evidence instead of broadening repair.
+5. Preserve its evidence directory on success or execution failure. A preflight
    failure before evidence initialization must be reported directly.
-5. Report the target, assertions, evidence path, cleanup, and anything not proven.
+6. Report the target, assertions, evidence path, cleanup, and anything not proven.
    Never describe an unexecuted journey as passing.
 
 ## Safety
 
 - Never hardcode a host, SSH identity, API token, or project-specific name.
-- Require a pre-provisioned host-key file and use strict host-key verification.
+- Remote journeys require a trusted host-key file and strict host-key verification.
+  The foundation `trust` action is explicit enrollment, not permission to replace
+  an existing trust file or treat matching network scans as independent trust.
 - Tunnel to the Controller's remote loopback listener; do not change its bind
   address for verification.
-- Require the Controller service to be active; never start, stop, or restart it.
+- Remote observation and Volume journeys require the Controller service to stay
+  active. Foundation lifecycle probes are the only named service-mutation path;
+  use one only when that action and target are authorized and no pause applies.
 - The dedicated Python tunnel supervisor owns the SSH child; shell cleanup may
   only write its unique stop file and boundedly poll its supervisor job,
   waiting only after readable procfs proves the job exited or is a zombie.

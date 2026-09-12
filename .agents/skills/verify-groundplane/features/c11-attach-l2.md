@@ -21,6 +21,10 @@ Optional variables:
 | `GROUNDPLANE_EVIDENCE_DIR` | `.tmp/verify-groundplane/` |
 | `GROUNDPLANE_VERIFY_RUNTIME_DIR` | `$TMPDIR`, or `/tmp` when unset |
 
+That executable fallback is a [known policy mismatch](../../../../docs/issues/documentation-tooling.md),
+not an allowed repository path. Supply an explicit validated repo-local runtime
+directory until the helper default is corrected.
+
 ## Journey
 
 ```sh

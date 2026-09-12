@@ -3,6 +3,13 @@
 - Status: Proposed
 - Date: 2026-08-20
 
+Read the task-specific accepted resource contract alongside this general layout.
+Later decisions close mutation/replay (ADR0021), Task ownership (ADR0039),
+retention (ADR0035), desired revisions (ADR0051) and aggregate deletion (ADR0053).
+Their named scopes supersede earlier sketches here without accepting unrelated
+unresolved recommendations. The [feature index](../README.md#features) routes
+the current resource contracts.
+
 ## Context
 
 Groundplane's single-host MVP keeps desired state, durable Controller records,
