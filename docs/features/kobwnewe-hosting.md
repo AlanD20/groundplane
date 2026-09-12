@@ -58,7 +58,8 @@ Feature behavior belongs in capability modules under the shared
 [architecture](../architecture.md). Pure Route summaries belong in focused Console
 modules, not the root store or oversized Environment page.
 
-The planned Service observation design separates a named cross-binary value
+The [Service observation design](../decisions/0077-serving-workload-observation.md)
+separates a named cross-binary value
 contract, Docker reads in infrastructure, exchange handling in Agent/channel and
 source checks/public projection in the Controller's Service module. The current
 implementation is incomplete; see the status below. Generated contracts remain
@@ -87,9 +88,11 @@ qualification tasks are in [tasks/todo.md](../../tasks/todo.md).
 ## Current status
 
 The Route-summary correction has [local test and browser evidence](../acceptance/router-and-visibility.md)
-and is committed, but is not deployed. Service observation has unfinished local
-contract/validator work and Docker observer tests without their implementation.
-The portable bundle and its qualification remain incomplete.
+and is committed, but is not deployed. Service observation's protocol, pure
+aggregation and read-only Docker observer have local proof. Agent/channel,
+Controller and operator-surface integration remain incomplete; see
+[Service status](services-and-releases.md#current-status). The portable bundle
+and its qualification remain incomplete.
 
-[head.md](../head.md) records the preserved work and the
+[head.md](../head.md) records the next work and the
 [storage-integrity pause](../acceptance/storage-integrity-incident.md).

@@ -906,6 +906,21 @@ tenants and one database.
   revision and deletes desired plus runtime state. Volumes and immutable
   release history are retained. ADR 0058 fixes the complete revision and retry
   contract.
+- **Service runtime observation** — existing Service list/show distinguish
+  desired `runtime_intent` from a bounded current-serving-workload snapshot.
+  Only the serving Release's singleton/slot replicas count; retained inactive
+  slots and stable proxies do not. Expected replicas come from that immutable
+  Release, not an undeployed desired edit. State is `unavailable`, or observed
+  `absent`, `failed`, `stopped`, `starting`, `healthy`, `running` or `degraded`
+  with timestamp, expiry, serving Release id and replica counts. `healthy`
+  requires every expected replica running with a healthy healthcheck; `running`
+  does not assert a missing healthcheck passed. This is workload evidence, not
+  route/application reachability. Missing, disconnected, invalid, changed or
+  expired evidence is unavailable; historical Task success never supplies health.
+  Observations expire 15 seconds after the Controller's request-start time, and
+  Console summaries expire them locally. Environment provisioning and runtime
+  summaries remain separate; unavailable/stopped/absent/starting Services cannot
+  produce a Healthy aggregate. ADR0077 fixes the bounded read-only exchange.
 - **Network Zone** - a named internal network that groups Services for
   communication (frontend, backend, egress, identity-private). Its public
   record is `{id, environment_id, name, subnet, internal, owner_kind,

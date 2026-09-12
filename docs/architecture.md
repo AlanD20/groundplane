@@ -618,6 +618,18 @@ no-op Task. The per-Service active index is released in every terminal
 acknowledgement transaction. ADR 0042 fixes the timeout and Compose-operation
 details.
 
+ADR0077 adds bounded on-demand serving-workload observation to the existing
+Service list/show reads. A named cross-binary `serviceobservation` leaf owns the
+closed machine values; Docker list/inspect lives in `infra/docker/serviceobserver`,
+exchange lifetime in Agent/channel, and source/freshness/public projection in
+the Controller's Service observation module. No renderer, secret resolution,
+Task or mutation path participates. The Controller captures serving Release
+authority at one revision and rechecks source revisions after the authenticated
+read. The sealed workload count is compared only with that Release's selected
+singleton/slot replicas, excluding proxies and retained releases. Five-second
+exchange and 15-second snapshot bounds prevent stale evidence becoming health.
+Missing or invalid evidence is unavailable; no durable health cache is added.
+
 The renderer delegates runtime primitives to Compose whenever possible:
 `deploy.replicas`, service `secrets`/`configs`, service `labels` and
 `annotations`, networks, aliases, healthchecks, and same-project

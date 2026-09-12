@@ -323,6 +323,18 @@ Conventions:
   same fixed-revision service-filtered ledger used by `GET /releases`, including
   its continuation cursor. `service show` and the clickable Console Service
   card display both; `release list` continues beyond the embedded page.
+  ADR0077 requires list/show to return `observation`, separate from `runtime_intent`: either
+  `state: unavailable`, or a snapshot containing `state`, `observed_at`,
+  `expires_at`, `serving_release_id`, `expected_replicas` and `replicas` counts.
+  Available states are `absent`, `failed`, `stopped`, `starting`, `healthy`,
+  `running` and `degraded` as defined in ADR0077. Counts describe only the current
+  serving workload, excluding stable proxies and retained releases; expectations
+  use its sealed replica count. Missing live evidence does not fail desired
+  reads. Create/edit responses omit fresh observation. Console/CLI expose the
+  same snapshot, never infer health from desired intent, and expired evidence is
+  unavailable. These remain the existing Service list/show actions. This public
+  projection is not implemented yet; [Service status](features/services-and-releases.md#current-status)
+  distinguishes the local observation foundation from the remaining integration.
   Create and edit publish a new immutable normalized Environment desired
   revision but do not deploy it. `DELETE /services/{id}` publishes a targeted
   Remove Task and keeps the current head and Service visible until successful

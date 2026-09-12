@@ -52,6 +52,7 @@ message AgentMessage {
     ScriptCheckpointRequest script_checkpoint_request = 10;
     WorkloadImageResolutionResult workload_image_resolution_result = 11;
     VolumeRemovalCheckpointRequest volume_removal_checkpoint_request = 12;
+    ServiceObservationResult service_observation_result = 13;
   }
 }
 
@@ -103,6 +104,49 @@ message WorkloadImageResolutionResult {
     WorkloadImageResolutions success = 2;
     WorkloadImageResolutionFailure failure = 3;
   }
+}
+
+// Ephemeral workload-only read. Targets are frozen by the Controller from the
+// current serving Release; this message conveys no mutation or secret authority.
+message ServiceObservationTarget {
+  string environment_id = 1;
+  string service_id = 2;
+  string release_id = 3;
+  string plan_id = 4;
+  uint64 render_generation = 5;
+  string compose_name = 6;
+  string runtime_role = 7; // exactly singleton or slot
+  string slot = 8; // empty for singleton; blue or green for slot
+}
+
+message ObserveServices {
+  string request_id = 1; // raw ULID; correlated with the exact authenticated session
+  repeated ServiceObservationTarget targets = 2;
+}
+
+// Disjoint bins; neither desired state nor healthcheck output is returned.
+message ServiceReplicaCounts {
+  uint32 running = 1; // running without a healthcheck
+  uint32 healthy = 2;
+  uint32 starting = 3; // running with a starting healthcheck
+  uint32 unhealthy = 4;
+  uint32 transitional = 5; // created, paused, restarting or removing
+  uint32 stopped = 6; // exited zero
+  uint32 failed = 7; // dead or exited nonzero
+}
+
+message ServiceObservationRow {
+  string service_id = 1;
+  string release_id = 2;
+  oneof outcome {
+    ServiceReplicaCounts replicas = 3;
+    bool unavailable = 4; // must be true; no partial counts or diagnostic text
+  }
+}
+
+message ServiceObservationResult {
+  string request_id = 1;
+  repeated ServiceObservationRow observations = 2;
 }
 
 message TaskEvent {
@@ -337,6 +381,7 @@ message ControllerMessage {
     ScriptCheckpointAck script_checkpoint_ack = 11;
     ResolveWorkloadImages resolve_workload_images = 12;
     VolumeRemovalCheckpointAck volume_removal_checkpoint_ack = 13;
+    ObserveServices observe_services = 14;
     TaskEventAck task_event_ack = 22;
   }
 }

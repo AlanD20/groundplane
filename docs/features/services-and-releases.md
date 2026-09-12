@@ -45,6 +45,7 @@ external effects were absent.
 | Immutable ledger, tags, replicated rollout and Release Groups | [Release execution](../decisions/0052-release-ledger-and-deploy-execution.md) |
 | Typed Compose execution | [Agent Compose procedures](../decisions/0022-agent-compose-execution.md) |
 | Forward barriers, recovery-only mode, epochs and terminal proof | [Candidate recovery](../decisions/0064-candidate-release-restoration-authority.md) |
+| Read-only serving replica counts, freshness and public states | [Serving-workload observation](../decisions/0077-serving-workload-observation.md) |
 
 ### Per-Service restoration
 
@@ -125,5 +126,16 @@ Mixed candidate and predecessor tests cover storage/worker seams, including fake
 read-only Engine observation; that alone is not live Docker recovery or full CI.
 Uncaptured inactive-slot history remains fail-closed, not generally recoverable.
 Exact-count recreate, replicated rollout/recovery and grouped hook qualification
-remain open in [capabilities.md](../capabilities.md). Service observation WIP is
-preserved separately; [Kobwnewe hosting](kobwnewe-hosting.md) records its gap.
+remain open in [capabilities.md](../capabilities.md).
+
+Service observation has a local protocol and Docker foundation: closed
+request/result validation, pure state aggregation and a bounded list/inspect-only
+observer. Focused race tests, vet and Staticcheck pass with Go 1.26.7. The tests
+include the real Docker client over a private HTTP transport and a protobuf
+round trip; they do not contact Docker or prove live workload visibility.
+
+Agent/channel worker and session handling, Controller source/freshness checks,
+public API projection, generated clients, Console/CLI rendering and expiry, and
+Environment aggregation remain unimplemented. No new operator surface is
+available or deployed. [Kobwnewe hosting](kobwnewe-hosting.md) retains the live
+qualification requirements; [head.md](../head.md) routes local proof and next work.
