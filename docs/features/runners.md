@@ -257,9 +257,3 @@ but the isolated host runtime, exact release/runtime artifacts, approved token
 transport implementation, full operator parity and acceptance evidence remain
 incomplete. The existing stdin scaffold does not prove the bounded transport
 or runtime isolation contract; missing implementation does not narrow it.
-
-Under the current working assumption that an external builder supplies the
-hosting images, Runner completion is not a Gate A or Gate B prerequisite.
-Owner confirmation of that assumption remains pending in
-[delivery.md](../delivery.md#delivery-state). The broader Runner capability
-remains required and unfinished.

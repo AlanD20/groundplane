@@ -1516,7 +1516,7 @@ cross-source snapshot is claimed. Retry preserves that captured run, validates
 its pinned dependencies, allocates fresh point ids for failed/unstarted
 sources, and never reloads the current policy. PostgreSQL Attach, config, and
 Volume are the current bounded runtime sources. Valkey data backup/restore is
-required by the hosting floor, but the namespace-safe per-consumer source versus
+required, but the namespace-safe per-consumer source versus
 an explicit shared-instance RDB source remains unclosed; current runtime
 rejects `strategy.not_implemented` until that contract and proof land. Live
 data-directory archival is not authorized.

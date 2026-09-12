@@ -25,8 +25,7 @@ what matters, and it exists to enforce three principles:
 
 - **Go** — one language for the Controller, the Agent, and the CLI.
   Rationale: etcd (go.etcd.io/etcd), gRPC, Cobra, and slog are all
-  first-class; the deliverable is small static binaries for amd64 and arm64 (the
-  qa-workload host).
+  first-class; the deliverable is small static binaries for amd64 and arm64.
 - One repository, three binaries — no microservices:
   `cmd/groundplane` (CLI), `cmd/controller` (server), `cmd/agent`
   (agent).
@@ -797,22 +796,20 @@ A pre-hook failure leaves serving and current-successful projections unchanged
 and cleans its runner before `on-failure`; earlier materialization, Volume,
 Attach, or Network changes remain accounted effects. Retry never crosses a
 Script `start_authorized` or unknown-state barrier and never automatically
-starts a replacement. TLS-first setup is an ordinary project-authored
-pre-deploy Script using `/bin/sh` and externally supplied `openssl`, either from
-its inherited Service context or an explicit ADR0076 setup context. Explicit
-mode uses a separately pinned image, numeric user and declared same-Environment
+starts a replacement. An explicit ADR0076 setup context uses a separately pinned
+image, numeric user and declared same-Environment
 Volume/eligible Entry grants, without network or inherited Service environment.
 Its immutable snapshot/source fences capture this context separately from the
 real consumer Release. A declared read-write Volume grant can coexist with
 read-only consumer mounts. Entries cannot own its output subtree;
 the author owns idempotent stage, validation, ownership/mode, and atomic publish
-logic. No generic PKI capability, tool guarantee, arbitrary-output atomicity,
-or live automatic certificate rotation is introduced.
+logic. The runtime does not supply undeclared tools or guarantee atomicity for
+arbitrary Script output.
 
 Recreate deploy, rollback, restart, and exact reapply preserve the authored
 replica count. The addressable renderer and health model support exact `N`, but
-lifting remaining singleton execution guards and proving DNS, WebSocket/Valkey
-fan-out, and replicated Script targeting are pending runtime alignment.
+lifting remaining singleton execution guards and proving DNS, routed traffic
+and replicated Script targeting are pending runtime alignment.
 
 The applied Blueprint projection embeds one owned
 `core.ServiceDependencyPlans` value for deploy and rollback. Release render

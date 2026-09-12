@@ -253,8 +253,8 @@ in the same commit that adds it, never a guessed abbreviation.)
   etcd store — the Agent's step executor and the Controller's task
   sequencing run against doubles; no host side effects.
 - **L2 — real-host system tests**: CLI against a real Controller+Agent on
-  a host; the qa-workload acceptance scenario (deploy, roll back, back up with
-  zero hand-written scripts) is the L2 gate.
+  a host; capability acceptance journeys exercise deploy, rollback, Backup and
+  recovery through the supported operator surfaces.
 - Every test carries a `// Rationale:` header comment explaining *why* the
   case exists (from the mvmctl practice) — the rationale is the
   documentation, not the assertion.

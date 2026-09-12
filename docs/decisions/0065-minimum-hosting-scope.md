@@ -2,7 +2,7 @@
 
 - Status: Accepted for the documentation contract; runtime alignment pending
 - Date: 2026-09-04
-- Capability: MVP hosting floor
+- Capability: Hosting and recovery acceptance
 
 ## Context
 
@@ -15,10 +15,8 @@ present.
 
 ## Decision
 
-The MVP remains generic for many Tenants, Projects, and Environments. The first
-hosting acceptance selects one trusted operator organization and one
-Tenant/Project/Environment; this is an acceptance boundary, not a product limit.
-Existing resource and credential-owning Attach scoping is retained. Shared
+The MVP supports many Tenants, Projects and Environments. Existing resource
+and credential-owning Attach scoping is retained. Shared
 backing bridges may permit peer reachability; the MVP makes no tenant-network
 security guarantee. Strict peer-firewall isolation is post-MVP.
 
@@ -37,8 +35,7 @@ implementations are source registrations, not runtime plugins.
 
 MVP backup and restore covers PostgreSQL Attach, config, and Volume sources,
 each restored to its original surviving existing Environment target. There is no
-cross-source atomic snapshot. Valkey data backup/restore is required by the
-hosting floor, but the namespace-safe per-consumer source versus an explicit
+cross-source atomic snapshot. Valkey data backup/restore is required, but the namespace-safe per-consumer source versus an explicit
 shared-instance RDB source, its safe format, and proof are unclosed; the current
 runtime rejects `strategy.not_implemented` until that bounded work lands. No
 whole-instance RDB is claimed as a per-consumer format, and live data-directory
@@ -51,10 +48,7 @@ Runner networking uses a dedicated `runner.network_pool`, disjoint from both
 `environment_pool` and `system_pool`, provisioned at `/24`, `/25`, or `/26` and
 subdivided into per-Runner `/29`s. [Runner contract](../features/runners.md) remains the Controller executor
 authority and its broader Runner lifecycle contract is retained; this does not
-claim Runner implementation. Under the explicit assumption that an existing
-external build process supplies host-local workload images, GP-managed Runner
-provisioning is not a Gate A or Gate B dependency. This is a first-hosting
-sequencing assumption, not an owner approval of a changed Runner scope.
+claim Runner implementation or qualify its accepted requirements.
 
 An `x-gp-release-groups` map is the sole release-group grammar. The singular
 extension is rejected, with no alias or compatibility parser. A group is one
@@ -77,44 +71,20 @@ Script hooks remain supported and ordered by ADR 0040; a migration binds once to
 the designated logical member, while each selected hook executes once per
 logical Service Release, never per replica. No group-level hook resource exists.
 
-The minimum hosting floor has two gates. Gate A is disposable first-hosting
-acceptance on an
-already provisioned supported Linux/Docker host with a Groundplane release,
-preloaded workload images, explicit pools, one selected Tenant/Project/Environment and
-Blueprint, backing PostgreSQL/Valkey facts, explicit uid/gid-aware resources,
-identity dependencies and generated CA/leaf material before identity start,
-exact HTTP/WebSocket/internal-callback and deny-default policy, Caddy plus
-Cloudflare Tunnel public path, and one ordered group action with one migration.
-Native `deploy.replicas` is persisted and reconciled at an operator-authored
-N>=1: Gate A proves more than one WebSocket replica with Valkey fan-out and
-stable logical routing; API, scheduler, and queue remain singleton defaults.
-Replicated Services use recreate and preserve their count through deploy,
-rollback, restart, and reapply. Blue-green N>1 is rejected in the MVP; exact
-replica rendering/health mechanisms remain implementation proof work. Gate A
-also proves health, logs, Tasks, rollback, restart, exact reapply, TLS first
-provision, and Caddy policy rendering.
-
-Gate B is Gate A plus production MVP operations acceptance with backup, proven
-restore, and retention for all actual persistent sources under existing
-per-source safety and original-target rules. Restore tests may use a disposable
-Environment and need no new scratch-target API. Passing Gate A is not production
-cutover authorization and
-does not permit abandoning current backups; Gate A is not all-MVP acceptance.
-The current no-host-port
-rule remains locked. A proposed bounded floor seam for a topology-specific
-break-glass need—explicit loopback-only native Compose mappings on operator-owned
-recreate Services—requires owner resolution before implementation and is not
-current behavior.
+[MVP acceptance](../mvp.md#acceptance-gates) owns the hosting and recovery gates.
+The current replica contract remains: operator-authored counts are persisted
+and reconciled; recreate preserves the count through deploy, rollback, restart
+and reapply; blue-green with more than one replica is rejected before mutation.
+The no-host-port rule and original-target Restore restriction remain locked.
+Acceptance results do not authorize production operations.
 
 ## Consequences
 
 These are clean pre-release contract corrections: no aliases, dual schemas,
 fallback old behavior, runtime claim, or acceptance claim is added. Existing
 implementation and status evidence remain unchanged until separately aligned and
-proven. The exclusions apply to both gates: optional replica scaling beyond the
-Gate A WebSocket proof, extra router providers, runtime plugins, registry
-integration, peer-firewall isolation, automated empty-host DR, advanced
-monitoring, and unrelated refactors do not block either gate. Full existing
+proven. Runtime plugins, registry integration, peer-firewall isolation and automated
+empty-host DR remain outside the MVP. Full existing
 CI, parity, security, generated-artifact, and exercised destructive-path checks
 remain mandatory.
 

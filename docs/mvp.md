@@ -364,11 +364,9 @@ is an implementation gap, not permission to remove a requirement. Frontends own
 interaction and presentation state; the Controller owns product validation and
 runtime decisions. They render Controller responses and send Controller-validated
 requests without inventing lifecycle authority, permissions, health or Task success.
-The acceptance test (the selected workload completes Gate A and Gate B through
-Groundplane, including replica-aware release/Tunnel traffic and source
-restore/recovery proof, with zero hand-written shell scripts) applies equally to all three
-frontends — the same operations must work from the CLI with no Console
-session involved.
+Acceptance applies equally to all three frontends: the same operations must
+work from the CLI with no Console session involved and without out-of-band
+commands to supply missing product behavior.
 
 **Implementation (locked).** One Go repository with three binaries —
 Controller, Agent, CLI. The CLI is built on **Cobra** (nouns as command
@@ -413,83 +411,53 @@ The product goal is narrow: navigate Tenant -> Project -> Environment -> Service
 then deploy, roll back, and back up without pain. This document is the contract
 the Console follows and must stay authoritative.
 
-### Minimum hosting floor
+### Acceptance gates
 
-The first hosting milestone has two sequential gates. This is a documentation
-contract correction; runtime alignment, clean frontend/API/CLI cutover,
-capability-ledger acceptance, and acceptance proof remain pending.
+Acceptance proves the product's resource and operation contracts through the
+Console, CLI and API. Local implementation and focused tests are not live
+qualification.
 
-**Gate A — disposable first-hosting acceptance.** Groundplane bootstraps on an
-already provisioned supported Linux/Docker host with a Groundplane release,
-explicit non-overlapping
-environment, system, and dedicated Runner network pools, and all operator
-workload images already present in the host Docker daemon. One trusted operator
-acceptance exercises one selected Tenant, Project, Environment, and Blueprint;
-the MVP product remains generic for many tenants, projects, and environments.
-The floor
-requires PostgreSQL and Valkey backing with fact mappings, explicit
-uid/gid-aware Volumes, Entries, and files, identity dependencies, generated CA
-and leaf TLS material before identity starts, and the exact existing
-HTTP/WebSocket/internal-callback and deny-by-default policy. Caddy plus
-Cloudflare Tunnel is the public path; provider DNS and ingress configuration are
-external prerequisites. The selected acceptance workload must persist and
-reconcile operator-authored native `deploy.replicas` counts (N is at least one).
-The Gate A proof exercises more than one WebSocket replica with Valkey fan-out
-and a stable logical target. API blue-green, scheduler, and queue remain
-singleton in this floor unless an application explicitly opts in; a replicated
-Service uses recreate, preserves its count through deploy, rollback, restart,
-and exact reapply, and may be a Release Group member. Blue-green with N greater
-than one is rejected before mutation and is post-MVP; N==1 remains supported.
-There is no advertised zero-downtime replicated recreate. A single ordered
-Release Group action covers migration once and the selected service releases.
-Health, logs, Tasks, rollback, restart, and exact reapply are included.
-TLS first-provision workflow and exact Caddy policy rendering are named proof
-gates. The generic initial-Blueprint pre-hook contract below is pending runtime
-alignment and must first prove TLS material is validly published before any
-selected application candidate starts; this document makes no production
-claim. Gate A is disposable acceptance only; production cutover requires Gate
-B and its backup/restore/retention proof.
+**Gate A — hosting operations.** On an owner-authorized disposable supported
+Linux/Docker host, prove bootstrap, non-overlapping network pools, Tenant,
+Project and Environment ownership, and Blueprint validation, first Apply and
+exact reapply. Workload images must already be present in the host Docker daemon.
 
-**Gate B — production MVP operations acceptance.** Every actual persistent source has a
-proven backup, restore, and retention path with existing per-source safety and
-original-target rules. Restore tests may use a disposable environment; there is
-no new scratch-target API. PostgreSQL Attach/config/Volume sources are the
-  current bounded restore scope. Valkey data backup/restore is required by this
-  floor, but the namespace-safe per-consumer source versus an explicit
-  shared-instance RDB source still needs a closed contract and proof;
-the current runtime rejects `strategy.not_implemented` until implemented, and
-live data-directory archival is not authorized. Gate B is Gate A plus these
-required source backup, verified original-target restore, and retention proofs.
+Prove PostgreSQL and Valkey Attach facts, uid/gid-aware Volumes and Entries,
+resource isolation, and ordered Script hooks. Every selected initial pre-deploy
+hook must finish and clean up before any candidate consumer starts. Prove
+failure, Abort, reconnect and unknown-outcome handling without duplicate effects.
 
-The floor exclusions apply to both gates: no replica scaling beyond the
-WebSocket proof and operator-authored counts above, a second private acceptance
-workload, or GP-managed CI Runner provisioning is required. Under the explicit
-assumption that the existing external build process supplies host-local
-workload images, GP-managed CI Runner provisioning is not a Gate A or Gate B
-dependency; its detailed Runner design remains subsequent work without changing
-that contract. Extra
-router providers or runtime plugins, registry integration or hosting, tenant
-peer-firewall isolation, automated empty-host DR, advanced monitoring/alerting,
-or unrelated repository refactors. The current no-host-port rule remains locked.
-A proposed bounded seam
-for a topology-specific break-glass need—explicit loopback-only native Compose
-mapping on operator-owned recreate Services—requires owner resolution before any
-implementation and is not current behavior.
-These exclusions do not waive the existing full CI, API/CLI/Console parity,
-security, generated-artifact, or exercised destructive-path requirements.
+Routing acceptance covers declared Routes, native Caddy validation, denied
+paths, HTTP and WebSocket traffic, retained configuration after rejection, and
+the enabled edge-tunnel path. Service acceptance covers desired replica counts,
+serving observations, deploy, rollback, restart recovery, logs and Tasks.
+Recreate preserves the declared count, including replicated Release Group
+members. Blue-green remains limited to one replica; replicated blue-green is
+rejected before mutation. Recreate does not promise zero downtime. Release
+Groups preserve their declared order and associated Script execution semantics.
+
+**Gate B — recovery operations.** In addition to Gate A, prove Backup, verified
+Restore to each original surviving target, retention and failure recovery for
+every supported persistent source. PostgreSQL Attach, Environment config and
+Volume are the accepted executable source kinds. Valkey recovery remains
+required, but its safe source and artifact contract must be closed before
+implementation or qualification. Until then, reject it with
+`strategy.not_implemented` before Task publication. A live data directory is
+never an authorized backup source.
+
+Both gates require applicable full CI, generated-artifact checks, security and
+operator-surface parity. Each capability retains its own acceptance requirements;
+passing these two gates does not mark unfinished capabilities complete. Product
+exclusions such as runtime plugins, registry hosting and automated empty-host
+disaster recovery remain unchanged. The no-host-port rule remains locked.
 
 ## Mission: replace the operational shell scripts
 
-Groundplane is not a general orchestrator. It is built to express and run a
-representative multi-service workload that was previously operated with Docker
-Compose files, shell scripts, timers, and state files. The **acceptance test for
-the MVP** is that this private workload completes the Gate A hosting journey
-(including replica-aware release and Cloudflare Tunnel traffic) and Gate B
-backup/restore/retention and recovery proof through Groundplane with **zero
-hand-written operational shell scripts**. Every required
-step becomes declarative desired state, an operator-authored Script resource, or
-a **baked-in action** provided by the Controller. The private workload, its
-credentials, topology, and deployment driver remain outside Git.
+Groundplane expresses desired state and exposes typed lifecycle, routing,
+storage and recovery operations. Operators use Console actions, CLI commands or
+API endpoints to perform those operations. Automation that needs a free-form
+body belongs in an explicit Script resource with declared authority and durable
+execution, not an out-of-band command required to complete a product operation.
 
 ### Baked-in actions
 
@@ -1184,8 +1152,7 @@ tenants and one database.
   Groundplane does not configure Tunnel DNS, public hostnames, ingress rules,
   origin targets, or protocol; those remain in the provider-managed Tunnel.
   Caddy's normal proxying preserves
-  WebSocket upgrades, including the private workload's WebSocket upgrade paths and signed
-  `/apps/*` endpoints; there is no separate WebSocket Route mode.
+  WebSocket upgrades on declared Routes; there is no separate WebSocket Route mode.
   Component-managed Services, Volumes, Entries, Networks, and other resources
   do not appear in ordinary management collections. The owning Component page
   groups them by capability. Topology views may show them with a managed marker,
@@ -1467,7 +1434,7 @@ tenants and one database.
   enabled policy but not by a disabled retained configuration.
 
   Runtime supports PostgreSQL Attach, Environment config, and Volume sources.
-  Valkey backup is required by the hosting floor, but its source procedure and
+  Valkey backup remains required, but its source procedure and
   safe format remain unclosed; current runtime rejects
   `strategy.not_implemented` before Task creation. A run is bodyless and always
   captures every configured source at one policy revision. One visible Task

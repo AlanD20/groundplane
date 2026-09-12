@@ -142,27 +142,15 @@ Use supported dependency versions; do not resolve conflicts with `--force` or
 
 ## Delivery state
 
-Gate A is disposable-host acceptance of the minimum hosting floor in `mvp.md`.
-It proves the named generic resource, networking, TLS, routing, replicated
-WebSocket/Valkey, group migration, lifecycle, logs, and Task paths with
-host-local workload images. It is not first production cutover, does not claim
-all MVP capabilities, and does not require every capability-ledger row to be
-Accepted. Under the working assumption that an existing external builder
-supplies the host-local images, GP-managed Runner provisioning is not a Gate A
-or Gate B prerequisite. Owner confirmation remains pending, and the detailed
-Runner contract remains subsequent work rather than being silently narrowed.
+[mvp.md](mvp.md#acceptance-gates) owns Gate A hosting acceptance and Gate B recovery
+acceptance. The [capability index](capabilities.md) records implementation and
+qualification separately for each feature.
 
-Gate B is Gate A plus production MVP operations: complete backup, verified
-restore to each original surviving target, and retention for every actual persistent
-source, including Valkey once its safe source contract exists. The full
-relevant CI, Console/CLI/API parity, generated-artifact, security, build, and
-operator-surface gates remain mandatory. Full empty-host DR and a second
-selected private-workload acceptance are post-MVP, not Gate B prerequisites.
-Passing Gate A or unit checks alone does not imply production readiness.
-Triage issues marked `MVP-required: yes` for floor relevance before Gate B;
-resolve every floor safety, data, parity, security, and exercised destructive-
-path issue. Unrelated roadmap issues and unexercised capabilities do not become
-floor prerequisites. Early slice landing does not weaken this final audit.
+A landed slice, a passed gate and complete MVP qualification are different
+outcomes. Report only the scope actually proved. Required CI, Console/CLI/API
+parity, generated-artifact, security and failure-recovery checks remain mandatory.
+Missing capabilities retain their own accepted requirements; early slice landing
+does not waive them or authorize deployment.
 
 ## Disposable QA hosts
 

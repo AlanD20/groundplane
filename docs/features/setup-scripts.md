@@ -214,7 +214,7 @@ qualification remains deferred.
 | Runtime and composition | The zero-network panic correction and mixed-context two-Service plans have local runner, Agent and Controller proof for exact grants, the global cleanup barrier, failure, Abort and no duplicate start after lost acknowledgement. [Networkless runner](../acceptance/script-execution.md), [composition](../acceptance/script-execution.md) |
 | Mutation admission | Journal-backed admission has local race and vet proof. Its guarded live trial remains deferred. [Evidence](../acceptance/safe-updates.md) |
 
-Remaining qualification is a real first Apply and exact reapply, certificate setup,
+Remaining qualification is a real first Apply and exact reapply, resource preparation,
 migration failure, Abort, reconnect, unknown-outcome and guarded native trial/write
 proof. Live mutations are paused until the recorded
 [storage incident](../acceptance/storage-integrity-incident.md) is qualified.
