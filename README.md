@@ -32,24 +32,12 @@ Controller and Agent are processes and product resources, not registered
 Components. See [`docs/architecture.md`](docs/architecture.md) for the enforced
 module boundaries and [`docs/mvp.md`](docs/mvp.md) for the product model.
 
-## What changed from the product's earlier drafts
+## Product and feature documentation
 
-Two structural shifts are worth knowing about before reading the code:
-
-- **Desired state is Compose, not a parallel grammar.** Earlier drafts
-  described a bespoke `tenants.yaml`/`projects.yaml`/`environments/…`
-  document tree. The current contract ([`docs/blueprint.md`](docs/blueprint.md)) is a real
-  Compose document (parsed by a real Compose library, never
-  reimplemented) plus
-  `x-gp-*` extensions for everything Compose has no opinion on
-  (releases, attachments, entries, requires, routes, components, backups).
-  The Controller's typed internal representation and the authored document
-  are deliberately different shapes.
-- **The Router is a projection, not a resource.** Caddy and Cloudflare
-  Tunnel used to be bespoke on/off toggles. They're now component *kinds*
-  under the registered Component catalog, managed by `component
-  enable|disable|config`; `GET /environments/{id}/router` is a read-only
-  view grouping whichever ingress components happen to be enabled.
+The [feature index](docs/README.md#features) explains each feature's purpose,
+requirements, implementation and acceptance. The shared contracts define product
+scope, Compose/Blueprint grammar, API surfaces and module boundaries.
+Read current requirements there; Git retains earlier designs and work logs.
 
 ## The import matrix (locked)
 
@@ -66,7 +54,7 @@ the executable references; do not substitute an older compatible-looking
 Node/npm or Go version.
 
 ```sh
-go mod tidy                     # resolve the dependencies listed in go.mod
+go mod download                 # download the dependencies listed in go.mod
 make proto                      # regenerate proto/*.pb.go with repository-pinned Go tools
 make build                      # builds bin/groundplane, bin/controller, bin/agent
 make console                    # npm ci && npm run build in console/, embedded via go:embed

@@ -1,69 +1,23 @@
 # Agent workflow
 
-## Workstation and agent setup
+## Workstation tools
 
-Install these prerequisites before changing the repository:
+Use only the tools needed for the change. Documentation-only work needs no Go,
+Node, Docker or browser setup.
 
-- Go at the version declared by `go.mod` (currently Go 1.26);
-- Node.js with npm for the Console toolchain;
-- `protoc` for Agent protocol changes;
-- Docker Engine with Docker Compose v2 for runtime and Agent work;
-- current stable Chrome for Console interaction and browser verification.
+- Go changes use the version and tool dependencies in `go.mod`.
+- Console changes use the Node/npm versions checked by the repository manifests.
+- Protobuf changes also need `protoc`; `make proto` selects the Go generators
+  pinned by `go.mod`. Do not install separate global generator versions.
+- Runtime and Agent checks need Docker and Compose.
+- Changes to rendered Console behavior need an isolated browser check when that
+  behavior can run. Use an available browser tool; configure one only if needed.
+  Keep personal browser profiles and unrelated authenticated sessions out of tests.
 
-Bootstrap a checkout from the repository root:
-
-```sh
-go mod download
-cd console && npm ci
-```
-
-Go-backed repository tools are pinned by the root `go.mod` tool directives and
-run through `go tool`, including `golines` v0.12.2. Do not install global
-copies or rely on `PATH`; GitHub Actions uses the same main-module graph.
-
-Do not install `protoc-gen-go` or `protoc-gen-go-grpc` globally. Their exact
-versions are Go 1.26 tool dependencies in `go.mod`, and `make proto` resolves
-those repository tools explicitly instead of selecting generators from
-`PATH`. The `protoc` compiler itself is not repository-pinned yet.
-
+The Makefile and package scripts own setup and verification commands. Follow
+[delivery.md](delivery.md#verification-ladder) for the scope of proof. Do not repeat
+tool installation or passing checks whose inputs have not changed.
 Never place deployment credentials in the repository.
-
-### Chrome DevTools MCP for Codex
-
-Console work requires browser evidence, not source inspection alone. Register
-Chrome DevTools MCP in Codex with an isolated headless browser so it works in
-agent environments without an X server and never reuses a collaborator's
-normal browser profile:
-
-```sh
-codex mcp add chrome-devtools -- \
-  npx -y chrome-devtools-mcp@latest --headless --isolated
-```
-
-If `chrome-devtools` already exists with different arguments, replace it
-cleanly rather than keeping a second server definition:
-
-```sh
-codex mcp remove chrome-devtools
-codex mcp add chrome-devtools -- \
-  npx -y chrome-devtools-mcp@latest --headless --isolated
-```
-
-Start a new Codex session after changing MCP configuration; MCP tools are
-negotiated when a session starts. Check registration with:
-
-```sh
-codex mcp get chrome-devtools
-```
-
-Registration alone is not a functional check. In the new session, have the
-agent call the Chrome DevTools `list_pages` tool. Setup is complete only when
-that call returns an open page. `Missing X server` means `--headless` is
-absent; an interactive `npx` prompt means `-y` is absent.
-
-Do not use `--browser-url` against a personal Chrome profile for routine
-project work. A remotely debuggable browser can expose every open page and its
-authenticated state to local processes.
 
 ## Start from the contract
 

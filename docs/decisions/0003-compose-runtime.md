@@ -25,3 +25,15 @@ pretend local Compose implements Swarm update policy.
   fake in tests through the shared Runner.
 - A future runtime is a separate capability adapter, not compatibility logic
   inside the Compose implementation.
+
+## Runtime constraints
+
+Pin and test the Compose/Engine versions used by the packaged Agent. Local Compose
+is an execution primitive, not a continuously running Groundplane release controller.
+The Controller owns desired state and release policy; the Agent executes bounded
+validated procedures. Groundplane also owns secret storage, materialization
+permissions and cleanup; Compose file mounts are not encrypted secret storage.
+Preserve Compose semantics through the real parser and generated-runtime tests.
+The current grammar is in [blueprint.md](../blueprint.md), not the retired runtime
+research report. Re-evaluate platform behavior from primary sources if the runtime
+choice or pinned implementation changes.
