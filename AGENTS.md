@@ -103,5 +103,6 @@ and preserve the existing safety boundaries around destructive actions.
 
 ## Commands
 
-- Install Console dependencies: `npm ci` (from `console/`).
-- Typecheck and build the Console: `npm run build` (from `console/`).
+- Install Console dependencies: `bash scripts/repo-env.sh npm --prefix console ci`.
+- Typecheck and build the Console: `bash scripts/repo-env.sh npm --prefix console run build`.
+- Commands above run from the repository root with validated local temporary paths.

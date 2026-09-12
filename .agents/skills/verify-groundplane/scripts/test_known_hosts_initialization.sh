@@ -2,6 +2,8 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$script_dir/../../../../scripts/repo-env.sh"
+repo_env_init
 temp_root="$(mktemp -d)"
 trap 'rm -rf -- "$temp_root"' EXIT
 

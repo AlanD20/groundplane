@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$script_dir/../../../../scripts/repo-env.sh"
+repo_env_init
+
 action=${1:-}
 
 usage() {

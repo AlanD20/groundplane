@@ -1,4 +1,8 @@
-.PHONY: build cli controller controller-binary controller-dev agent agent-image agent-image-smoke runner-image runner-image-smoke proto api generate console console-toolchain console-verify console-release-smoke backupstage-host-acceptance backupstage-host-acceptance-compile c15-connector-acceptance s3compatible-minio-acceptance s3compatible-minio-acceptance-compile architecture-check component-modules-verify deployment-check clean test tidy ci
+.PHONY: build cli controller controller-binary controller-dev agent agent-image agent-image-smoke runner-image runner-image-smoke proto api generate console console-toolchain console-verify console-release-smoke backupstage-host-acceptance backupstage-host-acceptance-compile c15-connector-acceptance s3compatible-minio-acceptance s3compatible-minio-acceptance-compile architecture-check component-modules-verify deployment-check tooling-check verifier-helper-check clean test tidy ci
+
+# Initialize validated repo-local paths before each recipe and recursive make.
+SHELL := /bin/bash
+.SHELLFLAGS := $(CURDIR)/scripts/repo-env.sh /bin/sh -c
 
 BIN_DIR := bin
 VERSION ?= dev
@@ -101,7 +105,9 @@ console-verify:
 console-release-smoke: | $(BIN_DIR)
 	@set -eu; \
 		controller="$(CURDIR)/$(BIN_DIR)/controller"; \
-		smoke="$(CURDIR)/$(BIN_DIR)/console-release-smoke.test"; \
+		smoke_dir="$$(mktemp -d "$$TMPDIR/console-release-smoke.XXXXXX")"; \
+		smoke="$$smoke_dir/release.test"; \
+		trap 'rm -f "$$smoke"; rmdir "$$smoke_dir"' EXIT HUP INT TERM; \
 		test -x "$$controller"; \
 		go version -m "$$controller" | grep -F -- '-tags=groundplane_console' >/dev/null; \
 		test -f console/dist/index.html; \
@@ -110,7 +116,6 @@ console-release-smoke: | $(BIN_DIR)
 		index_hash="$$(sha256sum console/dist/index.html | cut -d' ' -f1)"; \
 		asset_hash="$$(sha256sum "$$asset_file" | cut -d' ' -f1)"; \
 		asset_path="/$${asset_file#console/dist/}"; \
-		trap 'rm -f "$$smoke"' EXIT HUP INT TERM; \
 		go test -c -tags groundplane_console -o "$$smoke" ./internal/app; \
 		rm -rf console/dist; \
 		GROUNDPLANE_CONSOLE_INDEX_SHA256="$$index_hash" \
@@ -119,7 +124,7 @@ console-release-smoke: | $(BIN_DIR)
 		"$$smoke" -test.run '^TestProductionConsoleReleaseSmoke$$'
 
 test:
-	go test ./... -count=1 -race -coverprofile=coverage.out -covermode=atomic
+	go test ./... -count=1 -race -coverprofile="$$GROUNDPLANE_COVERAGE_FILE" -covermode=atomic
 	$(MAKE) component-modules-verify
 
 c15-connector-acceptance: console-toolchain
@@ -149,7 +154,9 @@ backupstage-host-acceptance:
 		if test "$$(id -u)" = 0; then \
 			go test -tags backupstage_mount_acceptance -count=1 -race ./internal/infra/backupstage; \
 		else \
-			sudo -n env "PATH=$$PATH" go test -tags backupstage_mount_acceptance -count=1 -race \
+			sudo -n env "PATH=$$PATH" "TMPDIR=$$TMPDIR" "GOTMPDIR=$$GOTMPDIR" \
+				"GOCACHE=$(CURDIR)/.tmp/go-cache-root" bash scripts/repo-env.sh \
+				go test -tags backupstage_mount_acceptance -count=1 -race \
 				./internal/infra/backupstage; \
 	fi
 
@@ -167,10 +174,7 @@ s3compatible-minio-acceptance:
 		go test -race -count=1 -tags s3compatible_minio_acceptance \
 			-run '^TestMinIOLiveBackupObjectLifecycle$$' ./internal/infra/s3compatible
 
-# ci mirrors docs/standards.md, section 14, exactly — a task is
-# not complete until this passes locally, same as the CI pipeline. The
-# `go generate` line is commented out until proto/agentpb and an
-# OpenAPI-generated client actually exist to regenerate.
+# Full integration/release qualification follows docs/delivery.md.
 architecture-check:
 	go test ./internal/architecturecheck -count=1
 	go run ./cmd/architecture-check -root . -baseline architecture-baseline.json
@@ -178,8 +182,18 @@ architecture-check:
 deployment-check:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts -p 'test_*.py'
 
+tooling-check:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts -p 'test_repo_env.py'
+	$(MAKE) verifier-helper-check
+
+verifier-helper-check:
+	bash .agents/skills/verify-groundplane/scripts/test_known_hosts_initialization.sh
+	bash .agents/skills/verify-groundplane/scripts/test_supervisor_wait.sh
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s .agents/skills/verify-groundplane/scripts -p 'test_ssh_tunnel_supervisor.py'
+
 ci: console | $(BIN_DIR)
 	$(MAKE) deployment-check
+	$(MAKE) verifier-helper-check
 	$(MAKE) generate
 	git diff --exit-code openapi.json internal/cli/apiclient/generated/client.gen.go console/src/lib/api.generated.ts proto/agentpb
 	$(MAKE) tidy
@@ -190,7 +204,7 @@ ci: console | $(BIN_DIR)
 	$(MAKE) component-modules-verify
 	GOTOOLCHAIN=go1.26.0 go tool staticcheck -tags groundplane_console ./...
 	go vet -tags groundplane_console ./...
-	go test -tags groundplane_console ./... -count=1 -race -coverprofile=coverage.out -covermode=atomic
+	go test -tags groundplane_console ./... -count=1 -race -coverprofile="$$GROUNDPLANE_COVERAGE_FILE" -covermode=atomic
 	$(MAKE) backupstage-host-acceptance
 	$(MAKE) controller-binary
 	$(MAKE) console-release-smoke

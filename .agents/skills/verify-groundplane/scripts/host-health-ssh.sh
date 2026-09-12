@@ -56,6 +56,8 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$script_dir/supervisor_wait.sh"
 repo_root="$(cd "$script_dir/../../../.." && pwd)"
 cd "$repo_root"
+source "$repo_root/scripts/repo-env.sh"
+repo_env_init
 
 [[ -d /proc && -r /proc && -x /proc && -r "/proc/$$/stat" ]] || {
 	printf 'readable Linux procfs is required for supervisor ownership polling\n' >&2
@@ -63,8 +65,7 @@ cd "$repo_root"
 }
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-evidence_root="${GROUNDPLANE_EVIDENCE_DIR:-$repo_root/.tmp/verify-groundplane}"
-mkdir -p "$evidence_root"
+evidence_root=$(repo_temp_dir "${GROUNDPLANE_EVIDENCE_DIR:-$repo_root/.tmp/verify-groundplane}")
 [[ -d "$evidence_root" && ! -L "$evidence_root" ]] || {
 	printf 'evidence parent must be a non-symlink directory: %s\n' "$evidence_root" >&2
 	exit 2
@@ -179,7 +180,7 @@ trap cleanup EXIT
 trap handle_signal HUP INT TERM
 
 chmod 700 "$evidence_dir"
-runtime_root="${TMPDIR:-$repo_root/.tmp}"
+runtime_root=$(repo_temp_dir "${GROUNDPLANE_VERIFY_RUNTIME_DIR:-$TMPDIR}")
 [[ -d "$runtime_root" && ! -L "$runtime_root" ]] || {
 	printf 'runtime parent must be a non-symlink directory: %s\n' "$runtime_root" >&2
 	exit 2

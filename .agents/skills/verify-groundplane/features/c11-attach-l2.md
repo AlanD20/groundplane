@@ -19,11 +19,10 @@ Optional variables:
 | Variable | Default |
 | --- | --- |
 | `GROUNDPLANE_EVIDENCE_DIR` | `.tmp/verify-groundplane/` |
-| `GROUNDPLANE_VERIFY_RUNTIME_DIR` | `$TMPDIR`, or `/tmp` when unset |
+| `GROUNDPLANE_VERIFY_RUNTIME_DIR` | initialized `$TMPDIR` (repo-local `.tmp/tmp` by default) |
 
-That executable fallback is a [known policy mismatch](../../../../docs/issues/documentation-tooling.md),
-not an allowed repository path. Supply an explicit validated repo-local runtime
-directory until the helper default is corrected.
+The [shared path rules](../../../../docs/agents.md#supported-tooling-invocation)
+validate defaults and overrides before the verifier creates evidence or runtime state.
 
 ## Journey
 

@@ -22,9 +22,9 @@ tests and `make ci` remain separate, scope-dependent gates in
 2. Check [head.md](../../../docs/head.md) for the current target, authority and
    pauses. A recorded command or mutation flag is not user permission.
 3. Confirm the selected guide's prerequisites, resource ownership and required
-   environment variables. Validate ignored repository-local runtime/evidence
-   paths; the [known tooling gap](../../../docs/issues/documentation-tooling.md)
-   still requires explicit paths or an executable fix before affected commands.
+   environment variables. Shell entrypoints initialize the
+   [repository environment](../../../docs/agents.md#supported-tooling-invocation);
+   runtime/evidence overrides must stay in validated ignored repo-local paths.
 4. Run only the selected script/action. Stop on missing authority, a failed
    preflight or an assertion failure; retain evidence instead of broadening repair.
 5. Preserve its evidence directory on success or execution failure. A preflight

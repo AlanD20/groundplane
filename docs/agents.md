@@ -19,10 +19,6 @@ The Makefile and package scripts own setup and verification commands. Follow
 tool installation or passing checks whose inputs have not changed.
 Never place deployment credentials in the repository.
 
-Some verifier and Makefile defaults still violate the repository-local temporary
-state rule. Consult [the tooling gap](issues/documentation-tooling.md) before
-using those paths; documenting the mismatch does not make the defaults safe.
-
 ## Start from the contract
 
 1. Read the task-specific document named in `AGENTS.md`.
@@ -49,6 +45,26 @@ workflow, and do not use shell heredocs when the shell or runtime spills them
 to `/tmp`. External tool-internal sandbox mounts outside repository control are
 not repository paths and cannot be depended on. Resolve exact cleanup targets
 and preserve the existing safety boundaries around destructive actions.
+
+### Supported tooling invocation
+
+Make recipes and verification shell entrypoints initialize paths through
+[`scripts/repo-env.sh`](../scripts/repo-env.sh). For other local commands, use
+`bash scripts/repo-env.sh COMMAND [ARG...]` from the repository root.
+
+Unset `TMPDIR`, `GOTMPDIR` and `GOCACHE` default to `.tmp/tmp`, `.tmp/go-tmp`
+and `.tmp/go-cache`. Existing caches are reused, not erased. The privileged
+host-test subprocess uses `.tmp/go-cache-root` so it cannot populate the normal
+cache with root-owned files. Make coverage goes to `.tmp/coverage.out`; release
+smoke binaries use a unique temporary directory.
+
+Overrides must be canonical paths below this checkout's `.tmp/` or `.tmp-*`.
+Relative paths are resolved from the repository root. Outside paths, dot segments,
+symlink components and non-directory ancestors are rejected before the command
+runs; unset a conflicting ambient override to use the defaults. Verifier evidence
+and `GROUNDPLANE_VERIFY_RUNTIME_DIR` overrides follow the same rule. Verifiers
+retain evidence and remove only their own disposable runtime when cleanup is safe.
+`make tooling-check` proves path setup and helper safety without live host actions.
 
 ## Execution policy
 

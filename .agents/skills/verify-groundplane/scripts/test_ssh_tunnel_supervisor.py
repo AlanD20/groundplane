@@ -210,12 +210,14 @@ class SupervisorTests(unittest.TestCase):
 
     def test_deadline_writes_failure_and_stops_child(self) -> None:
         result = subprocess.run(
-            self.command(deadline=0.1, ready_timeout=0.05),
+            # Allow Python control-proof startup before testing the later lifetime deadline.
+            self.command(deadline=1.0, ready_timeout=0.75, check_timeout=0.5),
             capture_output=True,
             text=True,
             timeout=3,
         )
         self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(self.ready.exists())
         self.assertIn("reason=deadline", self.failure.read_text())
         self.assertIn("reason=deadline", self.stopped.read_text())
         self.assert_receipts_bounded()

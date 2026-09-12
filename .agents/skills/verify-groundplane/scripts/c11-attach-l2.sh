@@ -12,10 +12,11 @@ done
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../../../.." && pwd)"
 cd "$repo_root"
+source "$repo_root/scripts/repo-env.sh"
+repo_env_init
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-evidence_root="${GROUNDPLANE_EVIDENCE_DIR:-$repo_root/.tmp/verify-groundplane}"
-mkdir -p "$evidence_root"
+evidence_root=$(repo_temp_dir "${GROUNDPLANE_EVIDENCE_DIR:-$repo_root/.tmp/verify-groundplane}")
 [[ -d "$evidence_root" && ! -L "$evidence_root" ]] || {
 	printf 'evidence parent must be a non-symlink directory: %s\n' "$evidence_root" >&2
 	exit 2
@@ -47,7 +48,7 @@ finish() {
 trap finish EXIT
 
 chmod 700 "$evidence_dir"
-runtime_root="${GROUNDPLANE_VERIFY_RUNTIME_DIR:-${TMPDIR:-/tmp}}"
+runtime_root=$(repo_temp_dir "${GROUNDPLANE_VERIFY_RUNTIME_DIR:-$TMPDIR}")
 [[ -d "$runtime_root" && ! -L "$runtime_root" ]] || {
 	printf 'runtime parent must be a non-symlink directory: %s\n' "$runtime_root" >&2
 	exit 2

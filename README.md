@@ -53,13 +53,11 @@ the Makefile toolchain checks, and [`docs/standards.md`](docs/standards.md) are
 the executable references; do not substitute an older compatible-looking
 Node/npm or Go version.
 
-Build and test processes must use ignored repository-local temporary and cache
-directories. The [known tooling gap](docs/issues/documentation-tooling.md) records
-helper defaults and coverage output that still need executable alignment; the
-commands below describe the targets, not an exception to that policy.
+Make initializes validated repository-local temporary and cache paths. For direct
+commands, use the [repository environment wrapper](docs/agents.md#supported-tooling-invocation).
 
 ```sh
-go mod download                 # download the dependencies listed in go.mod
+bash scripts/repo-env.sh go mod download  # download dependencies with repo-local temporary paths
 make proto                      # regenerate proto/*.pb.go with repository-pinned Go tools
 make build                      # builds bin/groundplane, bin/controller, bin/agent
 make console                    # npm ci && npm run build in console/, embedded via go:embed

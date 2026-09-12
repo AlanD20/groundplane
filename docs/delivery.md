@@ -77,9 +77,10 @@ For integrated-journey and release qualification, the required root target is:
 make ci
 ```
 
-Before the next run, resolve the [temporary-output defaults](issues/documentation-tooling.md)
-so this target follows the repository-local path policy. A documentation change
-does not fix those executable defaults or waive the required gate.
+Make applies the [repository environment](agents.md#supported-tooling-invocation)
+to every recipe and recursive invocation. The CI Go-cache path matches it.
+`make tooling-check` is the focused, host-free path and helper-safety gate;
+full CI runs those checks once through deployment and verifier-helper targets.
 
 `make ci` is the local mirror of GitHub Actions. It includes `make deployment-check`
 for the private bootstrap/staging/protected-update client and verifies exact Node

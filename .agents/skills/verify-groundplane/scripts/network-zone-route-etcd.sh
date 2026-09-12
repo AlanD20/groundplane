@@ -19,20 +19,24 @@ done
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../../../.." && pwd)"
 cd "$repo_root"
+source "$repo_root/scripts/repo-env.sh"
+repo_env_init
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-evidence_root="${GROUNDPLANE_EVIDENCE_DIR:-$repo_root/.tmp/verify-groundplane}"
-mkdir -p "$evidence_root"
+evidence_root=$(repo_temp_dir "${GROUNDPLANE_EVIDENCE_DIR:-$repo_root/.tmp/verify-groundplane}")
 evidence_dir="$(mktemp -d "$evidence_root/network-c07-$timestamp.XXXXXX")"
-runtime_dir="$(mktemp -d "${TMPDIR:-/tmp}/groundplane-c07-runtime.XXXXXX")"
+runtime_root=$(repo_temp_dir "${GROUNDPLANE_VERIFY_RUNTIME_DIR:-$TMPDIR}")
+runtime_dir="$(mktemp -d "$runtime_root/groundplane-c07-runtime.XXXXXX")"
 
 cleanup() {
 	status=$?
 	runtime_cleanup=failed
-	if [[ "$runtime_dir" == "${TMPDIR:-/tmp}"/groundplane-c07-runtime.* && -d "$runtime_dir" ]]; then
-		rm -rf -- "$runtime_dir"
-		[[ ! -e "$runtime_dir" ]] && runtime_cleanup=passed
+	if [[ "$runtime_dir" == "$runtime_root"/groundplane-c07-runtime.* && -d "$runtime_dir" && ! -L "$runtime_dir" ]]; then
+		if rm -rf -- "$runtime_dir" && [[ ! -e "$runtime_dir" ]]; then
+			runtime_cleanup=passed
+		fi
 	fi
+	[[ "$runtime_cleanup" == passed ]] || status=1
 	printf 'exit_status=%s\nevidence_dir=%s\netcd_endpoint=%s\netcd_prefix=%s\nruntime_cleanup=%s\nassertions=real-etcd-concurrent-replay,subnet-isolation,restart-durability\nunproven=deployed-api-cli-console,agent-host-effects,c12-c14-component-controls\n' \
 		"$status" "$evidence_dir" "$GROUNDPLANE_ETCD_ENDPOINT" "$GROUNDPLANE_C07_ETCD_PREFIX" \
 		"$runtime_cleanup" >"$evidence_dir/result.txt"

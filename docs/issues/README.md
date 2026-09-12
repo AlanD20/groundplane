@@ -10,8 +10,12 @@ tracked in [Deferred architecture cleanup](deferred-architecture-cleanup.md).
 Current storage, Script, Blueprint, visibility and verification gaps are grouped
 in [Runtime qualification](runtime-qualification.md). Resolved and superseded
 per-fix journals have been removed; their relevant evidence is feature-routed.
-The remaining executable temporary-path mismatch is tracked in
-[Tooling alignment](documentation-tooling.md).
+
+The September instruction audit also found unconditional delegation in the
+external `/home/www/.agents/skills/research/SKILL.md`. The repository's execution
+policy honors current user instructions over that default. Editing the global
+skill remains a separately requested task outside repository cleanup; do not
+create a competing local copy to hide it.
 
 Use this form:
 
