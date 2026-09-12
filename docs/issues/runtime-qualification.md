@@ -71,13 +71,30 @@ was already recorded in [Script acceptance](../acceptance/script-execution.md#ex
 The exact affected terminal-publication, source-reference and Zone selections
 passed separately.
 
-Retained fixture work includes the CoreDNS config-read flow and
+The CoreDNS CLI fixture now exercises Component read, config read and full
+Corefile replacement. The Blueprint fixture uses `environment blueprint apply`,
+reads the current revision and asserts the exact `If-Match` fence on the PUT.
+The complete CLI subtree passed race tests with coverage, and vet passed.
+Evidence: `cli-subtree-corrected-loopback.log`, its matching coverage file and
+`cli-vet.log` in the same evidence directory. The first local run was blocked
+by sandbox socket permissions; the passing run used isolated loopback servers,
+not a live Controller.
+
+The CLI Staticcheck run found 13 unchanged ST1005 error-capitalization warnings
+in `internal/cli/component.go`, `component_config_file.go` and
+`component_enable.go` (`cli-staticcheck.log`). Owner: CLI maintenance. Acceptance:
+align error text with the Go standard, preserve behavior and pass scoped checks.
+These files are outside the fixture correction; no broad analyzer pass is claimed.
+
+Retained Agent fixture work includes
 `TestObservedRecreateProbeAcceptsSealedBlueGreenPrior` /
 `TestObservedRecreateProbeUsesEachSealedArtifact`. The latter both still fail
 with a missing 32-byte plan hash (`probe-before.log` in the same evidence
 directory). Their fixtures must supply a valid sealed plan and selected recovery
 authority, not just hash-shaped bytes. Keep validation and repair fixtures at
-their owning seam; do not bypass assertions. Broader Script/Blueprint failures
+their owning seam; do not bypass assertions. Owner: Agent recovery maintenance.
+Acceptance: both tests prove their original recovery invariants through valid
+sealed authority, with race tests passing. Broader Script/Blueprint failures
 remain open with their recorded acceptance evidence.
 
 Go 1.27 crashed the pinned analyzer in the recorded run; Go 1.26.7 ran it and

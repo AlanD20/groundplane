@@ -346,36 +346,74 @@ func TestComponentActionsAndConfigUseStableID(t *testing.T) {
 			response: `{"config":null}`,
 			args:     []string{"config", "show", "cmp_1"},
 		},
-		{
-			name:     "config set",
-			method:   http.MethodPut,
-			path:     "/api/v1/components/cmp_1/config",
-			status:   http.StatusOK,
-			response: `{"resource":{"upstream_auto":true,"upstream_resolvers":["1.1.1.1"],"forwarders":[{"domain":"example.com","resolvers":["9.9.9.9"]}],"tailnet_delegation":true},"reconcile_task_id":null}`,
-			args: []string{
-				"config",
-				"set",
-				"cmp_1",
-				"--upstream-auto",
-				"--upstream",
-				"1.1.1.1",
-				"--forward",
-				"example.com=9.9.9.9",
-				"--tailnet-delegation",
-			},
-		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			body := ""
-			if test.name == "config set" {
-				body = `{"config":{"upstream_auto":true,"upstream_resolvers":["1.1.1.1"],"forwarders":[{"domain":"example.com","resolvers":["9.9.9.9"]}],"tailnet_delegation":true}}`
-			}
-			server := exactRequestServer(t, test.method, test.path, body, test.status, test.response)
+			server := exactRequestServer(t, test.method, test.path, "", test.status, test.response)
 			defer server.Close()
 			executeNoun(t, newComponentCmd(), server.URL, Scope{}, test.args...)
 		})
 	}
+
+	t.Run("config set", func(t *testing.T) {
+		const template = ". {\n    {groundplane}\n}\n"
+		const currentConfig = `{"corefile_template":". {\n    {groundplane}\n    log\n}\n",` +
+			`"upstream_auto":false,"upstream_resolvers":[],"forwarders":[],"tailnet_delegation":false}`
+		const componentResponse = `{"id":"cmp_1","owner":"platform","owner_id":"platform",` +
+			`"environment_id":"","kind":"coredns","enabled":true,"config":` + currentConfig +
+			`,"healthy":true,"status":"healthy"}`
+		const configResponse = `{"config":` + currentConfig + `,"managed_files":[]}`
+		const body = `{"config":{"corefile_template":". {\n    {groundplane}\n}\n",` +
+			`"upstream_auto":true,"upstream_resolvers":["1.1.1.1"],` +
+			`"forwarders":[{"domain":"example.com","resolvers":["9.9.9.9"]}],` +
+			`"tailnet_delegation":true}}`
+		const response = `{"resource":{"corefile_template":". {\n    {groundplane}\n}\n",` +
+			`"upstream_auto":true,"upstream_resolvers":["1.1.1.1"],` +
+			`"forwarders":[{"domain":"example.com","resolvers":["9.9.9.9"]}],` +
+			`"tailnet_delegation":true},"reconcile_task_id":null}`
+		path := t.TempDir() + "/Corefile"
+		if err := os.WriteFile(path, []byte(template), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		requests := 0
+		server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			requests++
+			writer.Header().Set("Content-Type", "application/json")
+			keys := request.Header.Values("Idempotency-Key")
+			if requests < 3 && len(keys) != 0 {
+				t.Errorf("safe request Idempotency-Key values = %q, want none", keys)
+			}
+			switch requests {
+			case 1:
+				assertComponentRequest(t, request, http.MethodGet, "/api/v1/components/cmp_1", "")
+				_, _ = io.WriteString(writer, componentResponse)
+			case 2:
+				assertComponentRequest(t, request, http.MethodGet, "/api/v1/components/cmp_1/config", "")
+				_, _ = io.WriteString(writer, configResponse)
+			case 3:
+				assertComponentRequest(t, request, http.MethodPut, "/api/v1/components/cmp_1/config", body)
+				if len(keys) != 1 {
+					t.Errorf("mutation Idempotency-Key values = %q, want exactly one", keys)
+				} else if _, err := ulid.ParseStrict(keys[0]); err != nil {
+					t.Errorf("mutation Idempotency-Key = %q, want raw ULID: %v", keys[0], err)
+				}
+				_, _ = io.WriteString(writer, response)
+			default:
+				t.Fatalf("unexpected request %d", requests)
+			}
+		}))
+		defer server.Close()
+
+		executeNoun(t, newComponentCmd(), server.URL, Scope{},
+			"config", "set", "cmp_1", "--template-file", path,
+			"--upstream-auto", "--upstream", "1.1.1.1",
+			"--forward", "example.com=9.9.9.9", "--tailnet-delegation",
+		)
+		if requests != 3 {
+			t.Fatalf("requests = %d, want component show, config show, config set", requests)
+		}
+	})
 }
 
 // Rationale: complete native policy and reserved Route references are opaque

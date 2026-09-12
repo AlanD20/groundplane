@@ -77,9 +77,11 @@ race suites passed. Evidence includes:
 - `script-context-generated.log` plus
   `script-context-proto-repro.log`.
 
-The complete shared-plan vet was not green: protobuf copy-lock assignments at
-`plan.go:322` and `service_lifecycle.go:27` remained. Generation reproduced
-identical protobuf and unchanged public clients.
+The complete shared-plan vet was not green in this historical run: protobuf
+copy-lock assignments at `plan.go:322` and `service_lifecycle.go:27` remained.
+The 2026-09-12 maintenance slice cleared them; see
+[current verification debt](../issues/runtime-qualification.md#verification-debt).
+Generation reproduced identical protobuf and unchanged public clients.
 
 ## Metadata, source and final-publication fences
 
@@ -308,6 +310,6 @@ Still required after storage integrity is qualified:
 - failure, Abort, reconnect, lost acknowledgement, unknown outcome and Retry;
 - real Docker resource isolation and cleanup before consumer start;
 - guarded native trial/write qualification;
-- the broad CLI, Script/Blueprint, architecture, Staticcheck and copy-lock
-  corrections; and
+- remaining Script/Blueprint recovery, architecture and CLI analyzer
+  corrections tracked in [verification debt](../issues/runtime-qualification.md#verification-debt); and
 - final CI and production qualification.

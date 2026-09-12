@@ -89,15 +89,42 @@ func TestBuildBlueprintMultipartRejectsSymlinks(t *testing.T) {
 
 func TestEnvironmentApplySendsMultipartSingletonReplacement(t *testing.T) {
 	// Rationale: the CLI command is the required 1:1 mirror of the Blueprint
-	// API endpoint, including PUT, idempotency, multipart media, and Task result.
+	// API endpoint, including the revision read, fenced PUT, idempotency,
+	// multipart media, and Task result.
 	const environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	directory := t.TempDir()
 	if err := os.WriteFile(filepath.Join(directory, "blueprint.yaml"), []byte("services: {}\n"), 0o600); err != nil {
 		t.Fatalf("write root: %v", err)
 	}
+	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.Method != http.MethodPut || request.URL.Path != "/api/v1/environments/"+environmentID+"/blueprint" {
+		requests++
+		writer.Header().Set("Content-Type", "application/json")
+		if request.URL.Path != "/api/v1/environments/"+environmentID+"/blueprint" {
 			t.Errorf("request = %s %s", request.Method, request.URL.Path)
+		}
+		if requests == 1 {
+			if request.Method != http.MethodGet || len(request.Header.Values("Idempotency-Key")) != 0 {
+				t.Errorf(
+					"revision read = %s with idempotency values %q",
+					request.Method,
+					request.Header.Values("Idempotency-Key"),
+				)
+			}
+			writer.Header().Set("ETag", `"7"`)
+			_, _ = io.WriteString(
+				writer,
+				`{"environment_id":"`+environmentID+`","revision":"7","document":"services: {}\n"}`,
+			)
+			return
+		}
+		if requests != 2 || request.Method != http.MethodPut {
+			t.Errorf("request %d = %s, want second request PUT", requests, request.Method)
+			writer.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if got := request.Header.Values("If-Match"); len(got) != 1 || got[0] != `"7"` {
+			t.Errorf("If-Match = %q, want the read revision", got)
 		}
 		if len(request.Header.Values("Idempotency-Key")) != 1 {
 			t.Errorf("Idempotency-Key values = %q", request.Header.Values("Idempotency-Key"))
@@ -114,6 +141,10 @@ func TestEnvironmentApplySendsMultipartSingletonReplacement(t *testing.T) {
 
 	executeNoun(
 		t, newEnvironmentCmd(), server.URL, Scope{AsID: true},
-		"apply", environmentID, "--bundle-dir", directory, "--root", "blueprint.yaml", "--var", "TAG=v1",
+		"blueprint", "apply", environmentID,
+		"--bundle-dir", directory, "--root", "blueprint.yaml", "--var", "TAG=v1",
 	)
+	if requests != 2 {
+		t.Fatalf("requests = %d, want revision read then apply", requests)
+	}
 }
