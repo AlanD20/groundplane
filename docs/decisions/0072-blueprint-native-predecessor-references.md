@@ -56,7 +56,7 @@ upgrading that installation. Ordinary immutable historical inputs stay readable.
 
 ## Evidence and remaining proof
 
-`docs/acceptance/2026-09-09-blueprint-bounded-publication.md` records publication,
+`docs/acceptance/hosting-floor.md` records publication,
 assignment, terminal/replay, native recovery, source fencing, and maximum-member
 proofs. A relevant full-bundle QA update remains required for live acceptance;
 the hermetic Agent admission check is not gRPC or Docker execution evidence.

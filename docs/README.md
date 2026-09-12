@@ -31,6 +31,7 @@ implementation nor an old test result changes a requirement.
 | Managed Components, DNS, Routes and Zone membership | [Components and routing](features/components.md) |
 | Durable work, Activity, cancellation and transient output | [Tasks and logs](features/tasks-and-logs.md) |
 | Persistent storage and exposed configuration values | [Volumes and Entries](features/storage-and-entries.md) |
+| Policy, artifacts, source recovery and retention | [Backups](features/backups.md) |
 | Controller and Agent updates | [Safe updates](features/upgrade-safety.md) |
 | Complete operator-authored Caddyfile | [Router templates](features/router-template.md) |
 | Ordered setup hooks with explicit resources | [Script execution](features/setup-scripts.md) |

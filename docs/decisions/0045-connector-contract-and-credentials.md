@@ -57,7 +57,7 @@ idempotency. Deletion is a Controller finalizer Task with a 30-second timeout;
 the Connector remains visible but mutation-fenced until finalization. A failed,
 aborted, or timed-out deletion clears the tombstone and retains the Connector.
 Deletion is rejected while an enabled backup policy references the Connector.
-ADR 0024 additionally rejects deletion while a Recovery Point or orphan reverse
+[Backup contract](../features/backups.md) additionally rejects deletion while a Recovery Point or orphan reverse
 reference exists. Those independent references remain until verified remote
 absence and atomic authority removal.
 
@@ -120,7 +120,7 @@ Wire tests and MinIO validate the provider-neutral adapter contract. R2 remains
 the explicit accepted MVP target, and a separate live R2 conformance gate is
 mandatory before C16 can be declared complete or release-accepted.
 
-Accepted ADRs 0047 and 0048 preserve this Connector CRUD, credential, SDK, and
+The [Backup contract](../features/backups.md) preserves this Connector CRUD, credential, SDK, and
 live-R2 contract and bind its canonical endpoint/region bounds and transient
 credential slots into the sole Backup schema-1 authority. Decision acceptance
 does not satisfy the required runtime or live-provider evidence.

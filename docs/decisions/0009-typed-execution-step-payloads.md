@@ -3,7 +3,7 @@
 - Status: Proposed
 - Date: 2026-08-20
 
-The ADR remains Proposed for the general execution catalog. Accepted ADR 0024
+The ADR remains Proposed for the general execution catalog. Accepted [Backup contract](../features/backups.md)
 accepts only its closed Agent protobuf payload requirement for backup and
 restore; it does not accept unrelated process, SQL, file, Compose, or reload
 payload replacements.
@@ -52,11 +52,11 @@ The model must enforce these rules:
   bundle reference. Secret bytes are not embedded in task events or logs.
 - Compose and reload operations identify only generated project/component
   artifacts from the execution bundle.
-- Backup and restore use the closed protobuf payloads accepted by ADR 0024.
+- Backup and restore use the closed protobuf payloads accepted by [Backup contract](../features/backups.md).
   Those payloads carry only stable ids, captured revisions, closed enums,
   bounded control metadata, immutable object evidence, and task-scoped secret
   slots. Artifact and secret bytes never enter generic parameters, and the
-  Controller never performs S3 artifact transfer. ADR 0024 separately permits
+  Controller never performs S3 artifact transfer. [Backup contract](../features/backups.md) separately permits
   bounded typed validated config Entry content from Controller to Agent for
   backup and from Agent to Controller for restore; neither direction is durable
   Task/event/log data. The remaining
@@ -65,7 +65,7 @@ The model must enforce these rules:
   fallback executes unknown input.
 
 Valkey backup and restore are not part of the accepted MVP runtime subset.
-ADR 0024 requires `strategy.not_implemented` before Task creation. A later
+[Backup contract](../features/backups.md) requires `strategy.not_implemented` before Task creation. A later
 Valkey contract cannot be inferred from this proposed ADR.
 
 ## Consequences

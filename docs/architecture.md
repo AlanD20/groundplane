@@ -942,7 +942,8 @@ and applied only. Unknown terminal outcome requires a fixed-revision Task and
 receipt at the same ModRevision with exact digests. Compacted MVCC history,
 locks, and later domain state are never replay authority.
 
-Accepted ADRs 0047 and 0048 define the sole Backup artifact and Agent protocol
+[Backup artifacts](features/backups/artifacts.md) and the
+[Agent protocol](features/backups/agent-protocol.md) define the sole Backup
 contract: schema 1 only; canonical `environment-config-v1`, `volume-tar-v1`,
 and `postgres-custom-v1`; immutable four-part source/stored evidence; exact
 upload, Head, and point-commit checkpoints; two-pass canonical-primary Config
@@ -978,7 +979,8 @@ then drain through 47-record batches within the 96-operation ceiling, with
 prefix-empty verification when a count is zero. A Controller failure resumes
 from the persisted phase and cursor rather than restarting or skipping a
 phase.
-For any Agent-executor Task, pruning start validates its generic terminal
+For any Agent-executor Task, pruning start requires validated clean terminal
+delivery and validates its generic terminal
 receipt at the Task's exact revision, compares it, and records that revision in
 the private intent. The receipt survives subordinate cleanup, Task-primary
 deletion, and event/dedupe draining. Only the final transaction, after every
@@ -987,7 +989,7 @@ the pruning intent; transaction failure leaves both available for resumption.
 Attempt-scoped Component intents expire with their Task. Plan-scoped Attach
 render inputs expire only with the final retained retry attempt. Backup retry
 is currently fail-closed while retained checkpoint state exists; this is an
-implementation gap against ADR 0024's accepted checkpointed-retry behavior,
+implementation gap against [Backup contract](features/backups.md)'s accepted checkpointed-retry behavior,
 not a pending retention decision. See ADR 0035.
 
 The renderer is pure with respect to its inputs: desired state plus durable
@@ -1094,7 +1096,7 @@ Consequences:
   registry (labels, requires, steps) — no switches anywhere.
 - **Execution on the Agent, through the image the adapter resolves.** The
   `postgres:16` adapter resolves only the digest-pinned first-party managed
-  PostgreSQL 16 OCI index fixed by ADR 0047. Its `pg_dump`, `pg_restore`, and
+  PostgreSQL 16 OCI index fixed by [Backup artifact contract](features/backups/artifacts.md). Its `pg_dump`, `pg_restore`, and
   `psql` procedures run through the release-pinned helper and private gate in
   that existing workload container; mutable `postgres:16-alpine`, caller image
   input, and generic exec are not authority. When another backing

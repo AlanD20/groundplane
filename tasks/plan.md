@@ -49,7 +49,7 @@ failure. Production cutover requires evidence and explicit target/cutover approv
 ## Tasks, risks and open operational inputs
 
 See [todo.md](todo.md). The completed Volume-removal work is recorded in the
-[floor handoff](../docs/acceptance/2026-09-09-integrated-floor-qa.md).
+[floor handoff](../docs/acceptance/hosting-floor.md).
 
 The first risk is a rejected update retaining its dispatch fence. Releasing a
 pause must not reopen removal/revocation, a newer generation or an uncertain

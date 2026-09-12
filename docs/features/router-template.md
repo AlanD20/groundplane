@@ -108,10 +108,10 @@ Component code; generation, Console and real-surface checks follow affected beha
 
 ## Current status
 
-Rendering, preview and operator surfaces have [local implementation evidence](../acceptance/2026-09-10-caddy-full-template.md).
-[Native preflight](../acceptance/2026-09-10-caddy-native-preflight.md) has bounded QA
-evidence. The [retained-reload correction](../acceptance/2026-09-10-caddy-retained-reload.md)
+Rendering, preview and operator surfaces have [local implementation evidence](../acceptance/router-and-visibility.md).
+[Native preflight](../acceptance/router-and-visibility.md) has bounded QA
+evidence. The [retained-reload correction](../acceptance/router-and-visibility.md)
 has local proof but is not deployed. Live mutations remain paused for the
-[storage incident](../acceptance/2026-09-10-build-capacity-incident.md).
+[storage incident](../acceptance/storage-integrity-incident.md).
 The failed desired configuration and remaining live checks are recorded in
 [head.md](../head.md) and [the task list](../../tasks/todo.md); this is not full qualification.

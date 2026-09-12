@@ -1392,7 +1392,7 @@ queue/index authority, ADR 0021 marker, every candidate Release and Script
 execution, every required staged physical Script source and candidate Attach or
 Volume identity, and, when present, the Backup Policy, enabled-only Connector
 reference, every missing three-record source tuple, and lazy age key. Direct
-Backup Policy replacement retains ADR 0046's source pre-ensure behavior;
+Backup Policy replacement retains [Backup lifecycle](features/backups/lifecycle.md)'s source pre-ensure behavior;
 Blueprint creates no source record before its final publication transaction.
 The applied Environment Compose projection is not in this envelope: it retains
 its exact predecessor or absence until successful terminal Task acknowledgement.

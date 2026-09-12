@@ -24,7 +24,7 @@ the configured Caddy/Tunnel path is absent. The public path passes live checks.
 2026-09-12 update: the overview summary is corrected locally, with focused/full
 Console tests, build and isolated browser proof. It uses existing Route states
 and never claims public reachability; see
-`../acceptance/2026-09-12-route-summary.md`. Live deployment and Service
+`../acceptance/router-and-visibility.md`. Live deployment and Service
 observation remain pending. The Environment aggregate also needs to stop showing
 Healthy when its Service observations are unavailable.
 

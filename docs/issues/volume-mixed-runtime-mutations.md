@@ -10,7 +10,7 @@ direct mutations retain their sealed baseline and head fence, and still cannot
 publish Blueprint domains. Actual create/edit/DELETE and reconstruction pass,
 alongside Apply tamper/source fences and existing Agent/Entry terminal checks.
 The corrected Controller builds; live rerun remains pending. Evidence:
-`docs/acceptance/2026-09-09-integrated-floor-qa.md`.
+`docs/acceptance/hosting-floor.md`.
 
 The actual DELETE publisher, Script exclusion, durable runtime, assignment-owned
 Agent checkpoints, bounded helper calls, Retry and terminal ownership release
@@ -45,7 +45,7 @@ restarting stable proxies. Entry deletion defers the desired head until its
 materialization-only Agent cleanup (or never-applied Controller finalizer)
 succeeds. Reconstructed plans, real Agent-worker execution with a faked helper,
 terminal acknowledgement, Retry, expiry retention and writer exclusion pass.
-See `docs/acceptance/2026-09-09-entry-retained-mutations.md` and the Volume
+See `docs/acceptance/hosting-floor.md` and the Volume
 selection evidence. These local checks are not live retained-runtime acceptance;
 that remaining proof keeps this issue open as a floor blocker.
 

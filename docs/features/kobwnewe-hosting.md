@@ -86,10 +86,10 @@ qualification tasks are in [tasks/todo.md](../../tasks/todo.md).
 
 ## Current status
 
-The Route-summary correction has [local test and browser evidence](../acceptance/2026-09-12-route-summary.md)
+The Route-summary correction has [local test and browser evidence](../acceptance/router-and-visibility.md)
 and is committed, but is not deployed. Service observation has unfinished local
 contract/validator work and Docker observer tests without their implementation.
 The portable bundle and its qualification remain incomplete.
 
 [head.md](../head.md) records the preserved work and the
-[storage-integrity pause](../acceptance/2026-09-10-build-capacity-incident.md).
+[storage-integrity pause](../acceptance/storage-integrity-incident.md).

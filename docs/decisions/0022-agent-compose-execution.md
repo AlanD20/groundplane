@@ -608,7 +608,7 @@ wired to a task or described as implemented.
 
 ## Consequences
 
-Accepted ADR 0048 preserves this ADR's Controller-owned plan and Console/API
+Accepted [Backup execution contract](../features/backups/agent-protocol.md) preserves this ADR's Controller-owned plan and Console/API
 boundary while making schema 1 the sole Agent channel meaning. Backup uses its
 closed authority, checkpoint, transfer, terminal-delivery, and recovery
 messages; it does not fall back to generic step maps or create a second Compose

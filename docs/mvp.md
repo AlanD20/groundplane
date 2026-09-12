@@ -1463,7 +1463,7 @@ tenants and one database.
   Volume capture stops every mounting Service and restores its prior intent.
 
   Config and Volume use the strict canonical USTAR framing and closed readers
-  fixed by ADR 0047. The decoded source has no outer compression or archive.
+  fixed by [Backup artifact contract](features/backups/artifacts.md). The decoded source has no outer compression or archive.
   `encryption: none` stores those exact source bytes; `encryption: age` stores
   exactly the unarmored binary age v1 encoding for one X25519 recipient.
   PostgreSQL uses the first-party digest-pinned managed PostgreSQL 16 workload

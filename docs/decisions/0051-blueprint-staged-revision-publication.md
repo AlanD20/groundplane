@@ -427,7 +427,7 @@ concurrent detach or replacement and Blueprint publication cannot both win.
 Connector creation is not a Blueprint capability. The selected Connector must
 already exist under the same Environment at the fixed validation revision, and
 the final transaction compares its primary, owner index, and deletion fences.
-Direct Backup Policy replacement retains ADR 0046's idempotent source
+Direct Backup Policy replacement retains [Backup lifecycle](../features/backups/lifecycle.md)'s idempotent source
 pre-ensure behavior. Blueprint does not use it: all missing three-record source
 tuples are created only in the final publication transaction.
 

@@ -545,9 +545,9 @@ from a Blueprint remains desired, or apply fails if the complete normalized
 projection cannot preserve it without ambiguity. Destruction is available
 only through the explicit Volume remove capability and its confirmation.
 
-This clause supersedes ADR 0046 only where ADR 0046 resolves a Blueprint
+This clause supersedes [Backup lifecycle](../features/backups/lifecycle.md) only where [Backup lifecycle](../features/backups/lifecycle.md) resolves a Blueprint
 Volume through a mutable Volume name. Immutable Compose-key resolution and
-stable-id durable references replace that rule. All other ADR 0046 decisions
+stable-id durable references replace that rule. All other [Backup lifecycle](../features/backups/lifecycle.md) decisions
 remain unchanged.
 
 ### REST, CLI, and Console clean replacement

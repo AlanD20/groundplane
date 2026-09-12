@@ -66,7 +66,7 @@ references in the marker. The running marker is 71,808 bytes; complete
 publication and assignment transactions stay within unchanged bounds. Claim,
 terminal acknowledgement/replay, real Agent admission, missing/substituted
 witness rejection, source fences, native recovery/reconnect, and maximum-member
-proofs pass. Evidence: `docs/acceptance/2026-09-09-blueprint-bounded-publication.md`.
+proofs pass. Evidence: `docs/acceptance/hosting-floor.md`.
 
 Read-only QA inspection at revision 3016 finds 16 markers with zero inline
 serving witnesses; their existing absent-serving shape remains readable without

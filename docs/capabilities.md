@@ -75,7 +75,7 @@ its failure, retry and recovery proof.
 ## Current qualification pause
 
 Live mutations on disposable QA `10.25.0.2` are paused by the
-[2026-09-10 storage incident](acceptance/2026-09-10-build-capacity-incident.md).
+[2026-09-10 storage incident](acceptance/storage-integrity-incident.md).
 Recovered free space and healthy processes did not prove persisted integrity.
 Before further mutation, qualify the virtual disk and each affected persistent
 source, including Valkey AOF state, and preserve the incident evidence.

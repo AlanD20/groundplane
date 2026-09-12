@@ -72,7 +72,7 @@ index verifier; there is no compatibility decoder or dual representation.
 
 ## Consequences
 
-Accepted ADR 0047 preserves this canonical Entry primary and immutable value-
+Accepted [Backup artifact contract](../features/backups/artifacts.md) preserves this canonical Entry primary and immutable value-
 generation model for Config restore. Restore upserts present artifact Entry ids
 and deletes omitted Entries through read-hidden bounded primary/index
 roll-forward; it does not add an Environment-wide active-generation read model

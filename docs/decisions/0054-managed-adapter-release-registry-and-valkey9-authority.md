@@ -119,7 +119,7 @@ current/history/revocation state, timestamps, mutable tags, repository aliases,
 host facts, and durable reference counts. Its construction is cycle-free.
 
 For `postgres:16`, `managed_image_release_sha256` is exactly the
-`managed_release_sha256` defined by ADR 0047. This ADR does not define a second
+`managed_release_sha256` defined by [Backup artifact contract](../features/backups/artifacts.md). This ADR does not define a second
 PostgreSQL image-release record. For `valkey:9`, it is the Valkey level-two
 release digest defined below.
 
@@ -372,7 +372,7 @@ secret={S:password} is a 43-byte unpadded-base64url value rendered as literal; i
 marker={M:identity} is ASCII groundplane.postgres16/v1;backing=<backing_service_id>;identity=<identity>;revision=<64-lowercase-adapter-revision-hex>
 owned_role={O:r,marker} expands to r.rolcanlogin AND r.rolinherit AND NOT r.rolsuper AND NOT r.rolcreatedb AND NOT r.rolcreaterole AND NOT r.rolreplication AND NOT r.rolbypassrls AND r.rolconnlimit=-1 AND r.rolvaliduntil IS NULL AND r.rolpassword IS NOT NULL AND r.rolconfig IS NULL AND shobj_description(r.oid,'pg_authid')={L:marker} AND NOT EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member=r.oid OR m.roleid=r.oid)
 exec=/usr/local/bin/psql
-exec_user=exact numeric PostgreSQL server uid:gid attested by the nested ADR0047 managed image release; no name lookup
+exec_user=exact numeric PostgreSQL server uid:gid attested by the nested [Backup artifact contract](../features/backups/artifacts.md) managed image release; no name lookup
 bounds=stdin 8192 bytes|stdout 256 bytes|stderr 0 bytes
 argv=--no-psqlrc|--quiet|--tuples-only|--no-align|--set=ON_ERROR_STOP=1|--host=/var/run/postgresql|--username=postgres|--dbname={database}
 env=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|HOME=/var/lib/postgresql|LC_ALL=C|TZ=UTC|PGAPPNAME=groundplane-postgres16-lifecycle|PGOPTIONS=-cclient_min_messages=error
@@ -473,7 +473,7 @@ environment name-removal construction, direct absolute executable rule, sole
 attached start, concurrent exact input write and `CloseWrite`, TTY-false
 demultiplexing, EOF/ExecInspect proof, no-overlap rule, and unknown-result
 recovery defined below. ExecCreate uses the manifest's exact numeric nested
-ADR 0047 server identity, direct `/usr/local/bin/psql` argv, working directory
+[Backup artifact contract](../features/backups/artifacts.md) server identity, direct `/usr/local/bin/psql` argv, working directory
 `/`, `Privileged=false`, `Tty=false`, `DetachKeys=""`, all three Attach flags
 true, and the six manifest environment entries in their shown order after
 sorted name-only removal of every inherited/configured key. Its attached stdin
@@ -1236,8 +1236,8 @@ before a Valkey connection.
 
 #### Sole secret-bearing managed-adapter Exec
 
-This section cleanly generalizes ADR 0048's Moby Exec authority with one
-`ManagedAdapterExecV1` branch. ADR 0048 continues to own the Moby boundary;
+This section cleanly generalizes [Backup execution contract](../features/backups/agent-protocol.md)'s Moby Exec authority with one
+`ManagedAdapterExecV1` branch. [Backup execution contract](../features/backups/agent-protocol.md) continues to own the Moby boundary;
 this ADR supplies Valkey argv, stdin, result, and recovery policy. Before
 ExecCreate and again immediately before attached start, the Agent reattests the
 exact Service, container id, AdapterRevision, managed index image, release
@@ -2053,7 +2053,7 @@ cannot encode either isolation boundary. The role is confined to DB 0, keys
 matching its one prefix, channels matching its one prefix, and the fixed
 223-command allowlist. It is not a user across the configured database set.
 
-The PostgreSQL catalog contract retains its accepted ADR 0047/0048 semantics
+The PostgreSQL catalog contract retains its accepted [Backup artifact contract](../features/backups/artifacts.md)/0048 semantics
 and uses a fact-key-byte-sorted schema:
 
 ```text
@@ -2115,7 +2115,7 @@ delete-old.
 
 ### 10. Replace Agent authentication inside schema 1
 
-The Agent wire remains schema 1. ADR 0048's dedicated
+The Agent wire remains schema 1. [Backup execution contract](../features/backups/agent-protocol.md)'s dedicated
 `managed_postgres16_release_sha256` authentication field is removed. It is not
 retained alongside a generic field, and no whole-ledger equality field is
 added.
@@ -2149,7 +2149,7 @@ or omission of the Agent's compiled executable entry fail authentication.
 A Controller ignores a well-formed extra revision it does not compile and
 assigns only an exact pair in the intersection.
 
-Authenticate size arithmetic replaces ADR 0048 exactly. Fields 1 through 4
+Authenticate size arithmetic replaces [Backup execution contract](../features/backups/agent-protocol.md) exactly. Fields 1 through 4
 cost 86 bytes. A `postgres:16` capability is 47 inner bytes and 49 with its
 tag-5 wrapper; a `valkey:9` capability is 44 inner and 46 wrapped. At 16 of
 each:
@@ -2271,8 +2271,8 @@ facts. It never substitutes current, another historical entry, a tag-compatible
 image, or a same-major image.
 
 For PostgreSQL Backup, the generic AdapterRevision resolves a release record
-whose nested `managed_image_release_sha256` must equal the ADR 0047
-`managed_release_sha256`. The Agent then applies all ADR 0047/0048 image,
+whose nested `managed_image_release_sha256` must equal the [Backup artifact contract](../features/backups/artifacts.md)
+`managed_release_sha256`. The Agent then applies all [Backup artifact contract](../features/backups/artifacts.md)/0048 image,
 helper, execution, and runtime checks. Generic adapter identity does not weaken
 PostgreSQL's nested managed-image authority.
 
@@ -2395,7 +2395,7 @@ those plus durable data. It does not skip adapter cleanup or select current.
 ### 13. Valkey Backup is explicitly absent
 
 `postgres:16` has `backup_supported=true` only when
-`backup_contract=postgres-custom-v1` and the nested ADR 0047 release authority
+`backup_contract=postgres-custom-v1` and the nested [Backup artifact contract](../features/backups/artifacts.md) release authority
 matches exactly. Backup and Restore plans carry both adapter key and revision.
 A missing or revoked PostgreSQL revision returns `state.conflict`; no current
 or same-major fallback exists.
@@ -2414,10 +2414,10 @@ This ADR uses scoped replacement rather than a second parallel contract:
 | Prior decision | Retained authority | Clean replacement by ADR 0054 |
 | --- | --- | --- |
 | ADR 0037 | Backing Service facade, public network-only `manual` adapter, explicit Network choice, complete operator-owned manual Service decisions, lifecycle, readiness requirement, 1:1 surface | Managed Services no longer author image/build/platform/pull policy/entrypoint/command/user; the catalog is the exact three-item managed/manual union above; release history is compiled and never runtime-collected in MVP; Valkey health is release-owned and not a catalog-edit default |
-| ADR 0047 | PostgreSQL 16 upstream/derived image, helper, artifact, release preimages, Backup/Restore mechanics | Its managed release becomes the nested `postgres:16` image release; the generic AdapterRevision and registry own selection/history/revocation without redefining PostgreSQL mechanics |
-| ADR 0048 | Sole schema-1 channel, task/receipt/checkpoint semantics, PostgreSQL helper execution, single-start hijacked Moby Exec mechanics | Authenticate tag 5 is clean-reused for sorted adapter capabilities; ExecutionPlan tag 9 and AdapterProcedure tags 9-11 carry revision/nonce/deadline; tag 7 becomes the generic Task secret slot; its prior secret-bearing Exec restriction is replaced by `ManagedAdapterExecV1`; all exact caps and queue arithmetic above replace the narrower values; PostgreSQL still verifies ADR 0047 through the resolved generic revision |
+| [Backup artifact contract](../features/backups/artifacts.md) | PostgreSQL 16 upstream/derived image, helper, artifact, release preimages, Backup/Restore mechanics | Its managed release becomes the nested `postgres:16` image release; the generic AdapterRevision and registry own selection/history/revocation without redefining PostgreSQL mechanics |
+| [Backup execution contract](../features/backups/agent-protocol.md) | Sole schema-1 channel, task/receipt/checkpoint semantics, PostgreSQL helper execution, single-start hijacked Moby Exec mechanics | Authenticate tag 5 is clean-reused for sorted adapter capabilities; ExecutionPlan tag 9 and AdapterProcedure tags 9-11 carry revision/nonce/deadline; tag 7 becomes the generic Task secret slot; its prior secret-bearing Exec restriction is replaced by `ManagedAdapterExecV1`; all exact caps and queue arithmetic above replace the narrower values; PostgreSQL still verifies [Backup artifact contract](../features/backups/artifacts.md) through the resolved generic revision |
 | ADR 0032 | Typed AdapterProcedure lifecycle phases and non-secret deterministic plan authority | AdapterProcedure password tag 6 is reserved and never decoded; all managed adapter password delivery moves to fenced transient Task secret slots |
-| ADR 0024 | PostgreSQL Backup and explicit deferral of Valkey Backup | `backup_contract=none` and pre-publication `strategy.not_implemented` make the deferral machine-readable |
+| [Backup contract](../features/backups.md) | PostgreSQL Backup and explicit deferral of Valkey Backup | `backup_contract=none` and pre-publication `strategy.not_implemented` make the deferral machine-readable |
 
 The earlier proposal to send a whole-ledger digest while retaining the
 dedicated PostgreSQL digest is rejected. It would create dual authority and
@@ -2447,7 +2447,7 @@ Acceptance and implementation require one synchronized replacement across:
 - `docs/capabilities.md`: do not claim C10 or Valkey Backup implemented until
   their production verticals and evidence exist;
 - ADR 0037: replace its contradictory authored-image and broad catalog shapes;
-- ADR 0048 and `proto/agent.proto`: clean-remove the dedicated PostgreSQL auth
+- [Backup execution contract](../features/backups/agent-protocol.md) and `proto/agent.proto`: clean-remove the dedicated PostgreSQL auth
   digest and AdapterProcedure password; clean-reuse Authenticate tag 5 and
   ControllerMessage tag 7; add the exact capability, plan-authority,
   revision/nonce/deadline, and Task-secret messages/tags/caps/arithmetic above;
@@ -2458,7 +2458,7 @@ Acceptance and implementation require one synchronized replacement across:
   immutable two-key registry, closed procedures, release binding, and closed
   Backup capability;
 - `internal/adapters/postgres16`: remove `postgres:16-alpine` and key-only
-  mutable-image authority while preserving ADR 0047/0048 semantics;
+  mutable-image authority while preserving [Backup artifact contract](../features/backups/artifacts.md)/0048 semantics;
 - `internal/adapters/valkey9`: remove mutable image, unauthenticated CLI steps,
   no-op grant/revoke success, and false RDB restore authority;
 - Controller persistence: add the immutable Service snapshot, exact reverse
@@ -2629,7 +2629,7 @@ Implementation completion additionally requires:
   summaries, Valkey prefix instructions, managed pinned availability, and
   manual projection/create behavior;
 - Backup tests proving Valkey returns `strategy.not_implemented` before Task
-  publication and PostgreSQL resolves the nested ADR 0047 release; and
+  publication and PostgreSQL resolves the nested [Backup artifact contract](../features/backups/artifacts.md) release; and
 - minimal Ubuntu 24.04 ARM64 acceptance that creates, stops, starts, attaches,
   detaches, destroys, reconstructs, and permanently deletes both managed
   adapters using registry-readback digest images without handwritten runtime
@@ -2646,7 +2646,7 @@ release-time inputs or outputs and must not be guessed in source documentation:
 - the managed index and ARM64 child digests read back after push;
 - the resulting Valkey `managed_release_sha256` and AdapterRevision; and
 - equivalent first-party PostgreSQL repository/readback outputs already left
-  open by ADR 0047.
+  open by [Backup artifact contract](../features/backups/artifacts.md).
 
 Until those values are produced, verified, and compiled, the affected entry
 cannot be marked current and C10 cannot be declared create-ready.

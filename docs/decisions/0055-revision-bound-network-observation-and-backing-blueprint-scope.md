@@ -29,7 +29,7 @@ The current contracts and scaffold also disagree at several seams:
 - ADR 0037 requires revision-bound, fresh Network evidence but does not define
   the request, wire, durable row/head, lease, or final publication CAS that
   produces that authority.
-- ADR 0048 defines the sole final schema-1 Agent channel and batched
+- [Backup execution contract](../features/backups/agent-protocol.md) defines the sole final schema-1 Agent channel and batched
   `ObservedState`, but does not yet bind a steady-state Network snapshot to one
   Controller-issued fixed-revision request.
 - `docs/blueprint.md` still describes authored `x-gp-network`,
@@ -78,13 +78,13 @@ Every successful Agent pull cycle may receive at most one internal
 read at positive revision `authority_revision`. The request is an immutable
 observation authority, not desired state, and cannot mutate a resource.
 
-ADR 0048's final schema-1 `ControllerMessage` adds the next collision-free
+[Backup execution contract](../features/backups/agent-protocol.md)'s final schema-1 `ControllerMessage` adds the next collision-free
 oneof member. `AgentMessage` tags do not change; `ObservedState` remains tag 4.
 
 ```proto
 message ControllerMessage {
   oneof payload {
-    // ADR 0048 fields 1 through 16 remain unchanged.
+    // [Backup execution contract](../features/backups/agent-protocol.md) fields 1 through 16 remain unchanged.
     ObservationRequest observation_request = 17;
   }
 }
@@ -172,7 +172,7 @@ do not prove the same 0..512 inventory at the request revision.
 
 ### 2. `ObservedState` returns one complete response to that authority
 
-ADR 0048's final schema-1 batching fields remain at tags 1 through 4. The
+[Backup execution contract](../features/backups/agent-protocol.md)'s final schema-1 batching fields remain at tags 1 through 4. The
 request binding uses the next tags:
 
 ```proto
@@ -276,7 +276,7 @@ Context validation is closed:
 - inside `TaskAck.ComposeTaskResult`, `network_observations` is empty and the
   existing task-scoped fields retain their meaning; and
 - an unset or unknown enum and every unknown protobuf field are rejected under
-  ADR 0048's schema-1 rule.
+  [Backup execution contract](../features/backups/agent-protocol.md)'s schema-1 rule.
 
 The Controller groups request rows by `(project_id, environment_id)`. The Agent
 returns exactly one `ObservedProject` for each nonempty group, sorted by the
@@ -512,7 +512,7 @@ gateway, or driver value is drift and returns `409 state.conflict`.
 
 ### 5. Wire bounds and scheduling remain closed
 
-Every cap is `proto.Size` of the complete value named and ADR 0048's five-byte
+Every cap is `proto.Size` of the complete value named and [Backup execution contract](../features/backups/agent-protocol.md)'s five-byte
 gRPC-frame exclusion remains in force:
 
 | Value | Maximum serialized bytes |
@@ -532,7 +532,7 @@ project group that cannot fit its cap fails rather than being split. Every
 sender additionally checks actual complete `proto.Size`; the per-row caps do
 not imply that 512 individually maximal rows can bypass the outer cap.
 
-`ObservationRequest` does not fit ADR 0048's 262,144-byte control queue and
+`ObservationRequest` does not fit [Backup execution contract](../features/backups/agent-protocol.md)'s 262,144-byte control queue and
 does not borrow Task-assignment capacity. Each connection has one separate
 outbound observation-authority queue of exactly one record and 4,390,912
 serialized bytes. The sole-writer cyclic class order becomes:
@@ -1256,7 +1256,7 @@ Existing-Network creation maps exact cases as follows:
 | 500 | `internal` | a row, head, staging, sequence, key binding, digest, lease binding, count, or backing Project/main Environment/Service hierarchy is malformed, dangling, contradictory, or corrupt |
 
 Wire size, ordering, enum, digest, context, or unknown-field violations close
-or reject the internal stream under ADR 0048's protocol error rules. They do
+or reject the internal stream under [Backup execution contract](../features/backups/agent-protocol.md)'s protocol error rules. They do
 not become a public observation error. Public projections never expose Docker
 Network ids, row/head keys, request or snapshot ids, process generation,
 expected labels, actual labels, authority revisions, leases, or row digests.
@@ -1272,7 +1272,7 @@ The scoped authority map is:
 | ADR 0037 existing-Network freshness and revision requirement | sections 1 through 7 | This ADR supplies the missing observation and admission mechanism and is a normative prerequisite for C10 existing-Network creation. |
 | ADR 0037 nested `network.zone_id` | section 9 | Cleanly replaced by required top-level `backing_network_id`; no alias remains. |
 | ADR 0037 backing `spec:` wrapper | section 8 | Cleanly replaced by the ordinary direct canonical Compose body used by both envelope kinds. |
-| ADR 0048 final schema-1 channel, authentication, batching, queues, and unknown-field rules | sections 1, 2, and 5 | Extended at Controller tag 17 and `ObservedState` tags 5/6 plus `ObservedProject` tags 7..9; schema 2 and negotiation remain forbidden. |
+| [Backup execution contract](../features/backups/agent-protocol.md) final schema-1 channel, authentication, batching, queues, and unknown-field rules | sections 1, 2, and 5 | Extended at Controller tag 17 and `ObservedState` tags 5/6 plus `ObservedProject` tags 7..9; schema 2 and negotiation remain forbidden. |
 | `docs/blueprint.md` authored external `x-gp-network`, `create_network`, `join_network`, `external: true`, and physical name | section 8 | Cleanly superseded as authored grammar; generated external membership remains renderer-only. |
 | Environment-only root parser assumption | section 8 | Cleanly replaced by the two-value `ScopeKind`; no translation through `kind: environment`. |
 | unconditional Tenant validation and `tenant-id` label emission | section 4 | Cleanly replaced by the Project-kind label matrix; backing ownership requires Tenant absence. |
@@ -1285,7 +1285,7 @@ backing images or data-destructive Destroy conflicts with ADR 0037's proposed
 release-pinned image, runtime-only Destroy, and permanent Delete boundary. That
 is a named C10 contract-alignment dependency, not a choice made silently here.
 
-While ADR 0037, ADR 0048, and ADR 0055 remain Proposed, none independently
+While ADR 0037, [Backup execution contract](../features/backups/agent-protocol.md), and ADR 0055 remain Proposed, none independently
 authorizes implementation or claims acceptance. Acceptance requires one
 synchronized clean replacement across:
 
@@ -1365,7 +1365,7 @@ lease expires.
 
 ### Introduce Agent protocol schema 2
 
-ADR 0048 cleanly defines schema 1 as the sole final MVP protocol. The new
+[Backup execution contract](../features/backups/agent-protocol.md) cleanly defines schema 1 as the sole final MVP protocol. The new
 messages use collision-free fields in that schema and add no negotiation.
 
 ### Expose an observation refresh endpoint and CLI command

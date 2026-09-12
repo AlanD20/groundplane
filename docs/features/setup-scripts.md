@@ -207,17 +207,17 @@ qualification remains deferred.
 
 | Area | Recorded implementation and proof |
 | --- | --- |
-| Hook order | Grammar, persistence, frozen replay and all operator surfaces have focused local race, generated-client and browser-fixture proof. The browser writes were not live QA. [Evidence](../acceptance/2026-09-10-script-hook-order.md) |
-| Explicit model and plan | Pure context validation, mount/user policy, independent consumer image binding and the minimal exact-grant plan passed the recorded package race and vet checks. [Model](../acceptance/2026-09-10-script-context-foundation.md), [plan](../acceptance/2026-09-10-script-context-plan.md) |
-| Immutable sources and grants | Private metadata, primary and resource fences, local image preparation, exact projection, stored-source publication and frozen replay are connected locally. [Storage](../acceptance/2026-09-10-script-context-storage.md), [primary fences](../acceptance/2026-09-10-script-context-primary.md), [resources](../acceptance/2026-09-10-script-context-resources.md), [preparation](../acceptance/2026-09-10-script-context-preparation.md) |
-| Authoring and surfaces | Blueprint grant resolution/export and Script API, CLI and Console controls have recorded local race, vet, generated-client, Console and browser proof. [Authoring](../acceptance/2026-09-10-script-context-authoring.md), [surfaces](../acceptance/2026-09-10-script-context-surfaces.md) |
-| Runtime and composition | The zero-network panic correction and mixed-context two-Service plans have local runner, Agent and Controller proof for exact grants, the global cleanup barrier, failure, Abort and no duplicate start after lost acknowledgement. [Networkless runner](../acceptance/2026-09-10-script-networkless-runner.md), [composition](../acceptance/2026-09-10-script-explicit-composition.md) |
-| Mutation admission | Journal-backed admission has local race and vet proof. Its guarded live trial remains deferred. [Evidence](../acceptance/2026-09-10-native-trial-mutations.md) |
+| Hook order | Grammar, persistence, frozen replay and all operator surfaces have focused local race, generated-client and browser-fixture proof. The browser writes were not live QA. [Evidence](../acceptance/script-execution.md) |
+| Explicit model and plan | Pure context validation, mount/user policy, independent consumer image binding and the minimal exact-grant plan passed the recorded package race and vet checks. [Model](../acceptance/script-execution.md), [plan](../acceptance/script-execution.md) |
+| Immutable sources and grants | Private metadata, primary and resource fences, local image preparation, exact projection, stored-source publication and frozen replay are connected locally. [Storage](../acceptance/script-execution.md), [primary fences](../acceptance/script-execution.md), [resources](../acceptance/script-execution.md), [preparation](../acceptance/script-execution.md) |
+| Authoring and surfaces | Blueprint grant resolution/export and Script API, CLI and Console controls have recorded local race, vet, generated-client, Console and browser proof. [Authoring](../acceptance/script-execution.md), [surfaces](../acceptance/script-execution.md) |
+| Runtime and composition | The zero-network panic correction and mixed-context two-Service plans have local runner, Agent and Controller proof for exact grants, the global cleanup barrier, failure, Abort and no duplicate start after lost acknowledgement. [Networkless runner](../acceptance/script-execution.md), [composition](../acceptance/script-execution.md) |
+| Mutation admission | Journal-backed admission has local race and vet proof. Its guarded live trial remains deferred. [Evidence](../acceptance/safe-updates.md) |
 
 Remaining qualification is a real first Apply and exact reapply, certificate setup,
 migration failure, Abort, reconnect, unknown-outcome and guarded native trial/write
 proof. Live mutations are paused until the recorded
-[storage incident](../acceptance/2026-09-10-build-capacity-incident.md) is qualified.
+[storage incident](../acceptance/storage-integrity-incident.md) is qualified.
 The broader Script and Blueprint suite also retains pre-existing recovery and
 fixture failure groups, and two broader CLI failure groups, for the later
 qualification work tracked in [tasks/todo.md](../../tasks/todo.md). None of those

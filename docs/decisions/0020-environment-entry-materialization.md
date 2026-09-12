@@ -363,7 +363,7 @@ The owner accepted every value below on 2026-08-22:
 
 ## Implementation effects
 
-Accepted ADRs 0047 and 0048 narrow this ADR's Backup plan/transfer boundary and
+The [Backup contract](../features/backups.md) narrows this document's Backup plan/transfer boundary and
 fix Config restore as two-pass validation followed by read-hidden bounded
 roll-forward of the canonical Entry primaries. They do not replace this ADR's
 destination, ownership, materialization, secrecy, or helper confinement

@@ -137,8 +137,8 @@ ADR 0054 is rejected for the MVP. Its ARM64-only release model, compiled
 history and revocation registry, and reverse-reference audit do not govern the
 accepted C10 implementation.
 
-ADRs 0047 and 0048 were accepted on 2026-08-30 after adopting this
-dual-platform authority, removing their ADR 0054 dependency, and retaining one
+The [Backup contract](../features/backups.md) was accepted on 2026-08-30 with this
+dual-platform authority, without a dependency on the rejected registry, and with one
 schema with no compatibility reader.
 
 ## Consequences

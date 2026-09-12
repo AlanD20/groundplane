@@ -119,7 +119,7 @@ VersionId-absent behavior, and conflict reconciliation. Provider-neutral wire
 and MinIO evidence cannot substitute for this test. C16 is incomplete and not
 release-accepted until the live R2 gate passes.
 
-Accepted ADRs 0047 and 0048 preserve this SDK and provider contract and bind
+The [Backup contract](../features/backups.md) preserves this SDK and provider contract and binds
 its 2,048-byte canonical endpoint and exact 1..64-byte `0x21..0x7e` region
 bounds into the sole Backup schema-1 authority. Their acceptance is not the
 live R2 gate required for C16 completion.

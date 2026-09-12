@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-20
-- Narrowed by: ADR 0048 on 2026-08-30 for the sole schema-1 Agent channel,
+- Narrowed by: [Backup execution contract](../features/backups/agent-protocol.md) on 2026-08-30 for the sole schema-1 Agent channel,
   assignment generations, generic terminal receipts, and Backup transfer and
   recovery messages; the runtime-container ownership invariants remain in force
 

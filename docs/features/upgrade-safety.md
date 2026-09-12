@@ -81,12 +81,12 @@ generation checks and final CI; all temporary state stays repository-local.
 ## Current status
 
 Requirements were approved on 2026-09-10. Local implementation and bounded QA
-are recorded in [Agent admission](../acceptance/2026-09-10-agent-update-admission.md),
-[native coordinator](../acceptance/2026-09-10-native-controller-coordinator.md),
-[update surfaces](../acceptance/2026-09-10-native-update-surfaces.md) and
-[upgrade QA](../acceptance/2026-09-10-native-upgrade-qa.md).
+are recorded in [Agent admission](../acceptance/safe-updates.md),
+[native coordinator](../acceptance/safe-updates.md),
+[update surfaces](../acceptance/safe-updates.md) and
+[upgrade QA](../acceptance/safe-updates.md).
 
 Whole-build Tunnel continuity and remaining recovery qualification are unresolved.
-Live mutation checks are paused for the [storage incident](../acceptance/2026-09-10-build-capacity-incident.md).
+Live mutation checks are paused for the [storage incident](../acceptance/storage-integrity-incident.md).
 These records do not establish production readiness. Current operational limits
 and unfinished qualification are in [head.md](../head.md) and [the task list](../../tasks/todo.md).
