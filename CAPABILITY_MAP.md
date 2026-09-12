@@ -19,8 +19,9 @@ does not block independent implementation: record the deferred proof and return
 to it at qualification. Known safety/correctness defects are not QA-resource
 exceptions.
 
-Execution: `tasks/plan.md`, `tasks/todo.md`. Specs are named
-`SPEC-<module-id>.md` and added before the module's first behavior change.
+Execution: `tasks/plan.md`, `tasks/todo.md`. Feature documents live at
+`docs/features/<module-id>.md` and follow the [documentation rules](docs/README.md).
+Update the owning feature document before changing its behavior.
 
 Delivery to main follows [the execution policy](docs/agents.md#execution-policy):
 the primary owns integration and may use bounded Sol/xhigh implementers. The owner

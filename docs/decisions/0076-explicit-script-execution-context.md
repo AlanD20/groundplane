@@ -79,4 +79,5 @@ real Service's networking, while storage/TLS setup is local.
 The implementation must prove separate image authority through frozen candidate
 replay, not merely accept a different image string. Source removal, unknown
 publication and retry tests remain mandatory. The extension cannot be declared
-delivered from grammar/UI proof alone; see`SPEC-setup-scripts.md`and task4.
+delivered from grammar/UI proof alone; see [the Script feature](../features/setup-scripts.md)
+and task 4.

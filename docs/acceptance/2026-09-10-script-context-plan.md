@@ -1,7 +1,8 @@
 # Explicit Script machine-plan foundation — 2026-09-10
 
 This is local task4 foundation proof, not stored/public context support or live
-setup acceptance. ADR0076 and`SPEC-setup-scripts.md`remain authoritative. The
+setup acceptance. ADR0076 and [the Script feature](../features/setup-scripts.md)
+define the requirements. The
 Controller does not yet emit explicit contexts from operator inputs.
 
 ## Implemented boundary

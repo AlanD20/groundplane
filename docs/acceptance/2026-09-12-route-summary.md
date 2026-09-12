@@ -20,7 +20,7 @@ empty cases rendered the expected text after navigation; the error/warning
 console was empty. The inspected21API requests were GETs returning200. The
 task-owned tab and fixture server were closed; the blank browser tab was kept.
 
-`SPEC-kobwnewe-hosting.md` now records the remaining observation/bundle work and
+[The hosting feature](../features/kobwnewe-hosting.md) records the remaining observation/bundle work and
 qualification boundaries. Actual Service observation is not implemented by
 this change. Browser inspection also confirms the existing Environment header
 can say Healthy while its Service state is unavailable; address that aggregate

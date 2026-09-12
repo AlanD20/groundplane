@@ -23,7 +23,18 @@ and derived clients. [Console feature ownership](../agents.md#console-module-sea
 follows ADR0056; remaining root-store feature logic is migration debt, not authority
 or the pattern for new work. Console/CLI/API parity and Controller-owned product/
 runtime decisions remain required. No code extraction or runtime change is included.
-The remaining findings are proposals; discuss recovery-checkpoint context next.
+The remaining findings are proposals except for the cleanup recorded below.
+
+## Documentation migration — 2026-09-12
+
+The owner approved [living feature documents and deletion rules](../README.md),
+with plain language and preservation of valid requirements and evidence.
+The operational checkpoint now contains current work and blockers, not its
+historical journal. Two superseded Volume-removal task snapshots were removed;
+the completed floor handoff remains. Four root specs were migrated to the
+[feature index](../README.md#features). Historical status, duplicated ledgers,
+superseded ADRs and report consolidation still need review. This resolves the
+checkpoint part of finding 3, not every stale-document or setup finding.
 
 ## Summary
 

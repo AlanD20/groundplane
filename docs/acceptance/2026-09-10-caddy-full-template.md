@@ -6,7 +6,7 @@ full CI and production acceptance are not yet qualified.
 
 ## Implemented contract
 
-ADR0075 and `SPEC-router-template.md` replace the single insertion-marker model
+ADR0075 and [the router feature](../features/router-template.md) replace the single insertion-marker model
 with one complete file. The reserved namespace is `{gp.routes}` plus
 `{gp.route:HOST:PATH:FIELD}`; fields are host, path and upstream. Native Caddy
 placeholders survive. Every declared Route is covered by an upstream reference

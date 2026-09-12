@@ -8,7 +8,7 @@ Git preserves previous versions. Start with the document that owns the question.
 | Document | Purpose |
 | --- | --- |
 | [mvp.md](mvp.md) | Product scope, shared behavior, domain terms and acceptance outcomes |
-| Feature documents | One entry point for a feature's requirements, design and acceptance |
+| [Feature documents](#features) | One entry point for a feature's requirements, design and acceptance |
 | [api-cli.md](api-cli.md) | Operator actions, CLI commands and REST surfaces |
 | [blueprint.md](blueprint.md) | Desired-state grammar and validation |
 | [architecture.md](architecture.md) | Shared process, module and dependency boundaries; wire generation |
@@ -22,6 +22,18 @@ Read relevant sections, not every linked document. Read `head.md` in full after
 context recovery. Requirements describe what must be true; implementation and
 qualification status describe what has been built and proved. Neither a missing
 implementation nor an old test result changes a requirement.
+
+## Features
+
+| Feature | Document |
+| --- | --- |
+| Controller and Agent updates | [Safe updates](features/upgrade-safety.md) |
+| Complete operator-authored Caddyfile | [Router templates](features/router-template.md) |
+| Ordered setup hooks with explicit resources | [Script execution](features/setup-scripts.md) |
+| Portable application bundle and runtime visibility | [Kobwnewe hosting](features/kobwnewe-hosting.md) |
+
+Other features still use the shared contracts and accepted ADRs until their
+requirements and design are migrated together.
 
 ## Feature document
 
@@ -91,9 +103,8 @@ and relevant accepted ADRs retain their existing requirements. Feature documents
 link to details not yet moved; moving a requirement requires updating its old
 home and readers in the same slice, not creating competing copies.
 
-The first feature migrations are the existing production-initiative specs:
-`SPEC-upgrade-safety.md`, `SPEC-router-template.md`, `SPEC-setup-scripts.md`
-and `SPEC-kobwnewe-hosting.md`. Remaining work includes reconciling the historical
-`status.md` and duplicated progress ledgers, reviewing superseded ADRs, and
+The four production-initiative specs are now listed under Features above.
+Remaining work includes reconciling the historical `status.md` and duplicated
+progress ledgers, reviewing superseded ADRs, and
 consolidating acceptance reports whose evidence is still needed. Their presence
 is not proof that their old next actions or runtime observations are current.
