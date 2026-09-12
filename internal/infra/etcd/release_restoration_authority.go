@@ -117,8 +117,7 @@ func validateReleaseRestorationAuthority(authority ReleaseRestorationAuthority) 
 		}
 		previous = identity
 		if candidate.Target != ReleaseRestorationServingPredecessor &&
-			candidate.Target != ReleaseRestorationCandidateAbsence ||
-			candidate.Target == ReleaseRestorationServingPredecessor && authority.AppliedPredecessor == nil {
+			candidate.Target != ReleaseRestorationCandidateAbsence {
 			return corruptTaskAssignment()
 		}
 	}
@@ -133,7 +132,7 @@ func validateReleaseRestorationAuthority(authority ReleaseRestorationAuthority) 
 			return corruptTaskAssignment()
 		}
 	}
-	return validateRestorationMemberWitness(authority)
+	return validateNativeRestorationMemberWitness(authority)
 }
 
 func validateReleaseRecoveryRecord(record releaseRecoveryRecord) error {

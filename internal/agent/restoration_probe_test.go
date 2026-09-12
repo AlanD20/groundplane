@@ -157,26 +157,7 @@ func TestServingNegativeProbeRejectsWrongScopeAndContradictions(t *testing.T) {
 
 func servingProbeAssignment(t *testing.T) (Assignment, *agentpb.ExecutionStep) {
 	t.Helper()
-	assignment := configuredRestorationAssignment(t)
-	authority := assignment.RestorationAuthority
-	authority.Candidates[0].Target = agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR
-	artifact := &agentpb.ComposeArtifact{}
-	if err := proto.Unmarshal(authority.AppliedPredecessor.ComposeArtifact, artifact); err != nil {
-		t.Fatal(err)
-	}
-	service := artifact.Services[0]
-	service.Role, service.ComposeName, service.ExpectedReplicas = agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON, "api", 1
-	service.ImageReference = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	service.HasHealthcheck = true
-	service.ExpectedLabels = []*agentpb.LabelPair{
-		{Key: "com.groundplane.runtime-role", Value: "singleton"},
-		{Key: "com.groundplane.release-id", Value: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAW"},
-	}
-	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sealAssignmentWitness(authority, encoded)
+	assignment, _, _ := nativeServingAssignment(t)
 	if err := validateCandidateReleaseAssignmentAuthority(assignment, assignment.Plan); err != nil {
 		t.Fatal(err)
 	}

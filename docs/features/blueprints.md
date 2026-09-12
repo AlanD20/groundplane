@@ -67,6 +67,11 @@ existing `PriorRuntime` field before staging. Complete historical inputs remain
 transient validation evidence, not repeated aggregate-marker payloads. Historical
 Release records are not rewritten.
 
+These captured native records select each Service's restoration target and supply
+the exact artifact used by both recovery and independent observation. The applied
+Environment artifact remains independently fenced metadata, not a fallback
+runtime source; see [per-Service restoration](services-and-releases.md#per-service-restoration).
+
 The marker keeps sorted Service/read/projection identities, compact serving,
 target and retained-Release summaries, and the canonical prior-runtime digest.
 The candidate manifest owns the render input and its lifetime; references never

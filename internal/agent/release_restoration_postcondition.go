@@ -3,7 +3,6 @@ package agent
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/workloadimage"
@@ -213,41 +212,29 @@ func openServingPredecessorAuthority(
 	serviceID string,
 ) (*agentpb.ComposeArtifact, string, string, error) {
 	var encoded []byte
-	var expectedDigest []byte
-	if len(assignment.RestorationAuthority.GetNativePredecessors()) != 0 {
-		for _, witness := range assignment.RestorationAuthority.GetNativePredecessors() {
-			if witness.GetServiceId() != serviceID {
-				continue
-			}
-			if len(encoded) != 0 || len(witness.GetCurrentArtifact()) == 0 {
-				return nil, "", "", errs.New(
-					errs.KindInternal,
-					"agent: native serving predecessor authority is incomplete",
-				)
-			}
-			encoded = witness.GetCurrentArtifact()
+	for _, witness := range assignment.RestorationAuthority.GetNativePredecessors() {
+		if witness.GetServiceId() != serviceID {
+			continue
 		}
-	} else if sealed := assignment.RestorationAuthority.GetAppliedPredecessor(); sealed != nil {
-		if len(sealed.GetComposeArtifact()) != 0 && len(sealed.GetComposeArtifactSha256()) == sha256.Size {
-			encoded = sealed.GetComposeArtifact()
-			expectedDigest = sealed.GetComposeArtifactSha256()
+		if len(encoded) != 0 || len(witness.GetCurrentArtifact()) == 0 {
+			return nil, "", "", errs.New(
+				errs.KindInternal,
+				"agent: native serving predecessor authority is incomplete",
+			)
 		}
+		encoded = witness.GetCurrentArtifact()
 	}
 	if len(encoded) == 0 {
 		return nil, "", "", errs.New(errs.KindInternal, "agent: serving predecessor authority is incomplete")
 	}
-	if len(assignment.RestorationAuthority.GetNativePredecessors()) != 0 {
-		if err := executionplan.ValidateNativePredecessorWitness(
-			assignment.RestorationAuthority.GetEnvironmentId(), serviceID, encoded,
-			nativeServingPredecessorRetainedArtifact(assignment.RestorationAuthority, serviceID),
-		); err != nil {
-			return nil, "", "", errs.New(errs.KindInternal, "agent: native serving predecessor authority is invalid")
-		}
+	if err := executionplan.ValidateNativePredecessorWitness(
+		assignment.RestorationAuthority.GetEnvironmentId(), serviceID, encoded,
+		nativeServingPredecessorRetainedArtifact(assignment.RestorationAuthority, serviceID),
+	); err != nil {
+		return nil, "", "", errs.New(errs.KindInternal, "agent: native serving predecessor authority is invalid")
 	}
-	digest := sha256.Sum256(encoded)
-	artifact := new(agentpb.ComposeArtifact)
-	if len(expectedDigest) != 0 && !bytes.Equal(digest[:], expectedDigest) ||
-		(proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(encoded, artifact) != nil ||
+	artifact := &agentpb.ComposeArtifact{}
+	if (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(encoded, artifact) != nil ||
 		executionplan.RejectUnknown(artifact) != nil {
 		return nil, "", "", errs.New(errs.KindInternal, "agent: serving predecessor artifact is invalid")
 	}

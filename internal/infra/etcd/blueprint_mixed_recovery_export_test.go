@@ -12,7 +12,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
 )
 
 // ProveMixedMemberRecovery starts with the real producer's claimed Task. The
@@ -27,8 +26,8 @@ func (fixture *ExecutedArtifactFixture) ProveMixedMemberRecovery(t *testing.T, a
 	authority := assignment.RestorationAuthority
 	procedure := plan.GetCandidateReleaseProcedure()
 	if authority == nil || len(authority.Candidates) != 2 || len(procedure.GetMembers()) != 2 ||
-		authority.AppliedPredecessor == nil {
-		t.Fatal("real mixed producer did not publish two members and an applied witness")
+		len(authority.NativePredecessors) != 2 || authority.AppliedPredecessor == nil {
+		t.Fatal("real mixed producer did not publish two members, native predecessors, and an applied witness")
 	}
 	for _, member := range authority.Candidates {
 		want := ReleaseRestorationCandidateAbsence
@@ -39,10 +38,10 @@ func (fixture *ExecutedArtifactFixture) ProveMixedMemberRecovery(t *testing.T, a
 			t.Fatalf("member %s target %s, want %s", member.ServiceID, member.Target, want)
 		}
 	}
-	witness := &agentpb.ComposeArtifact{}
-	if err := proto.Unmarshal(authority.AppliedPredecessor.ComposeArtifact, witness); err != nil {
+	if _, err := openRestorationWitness(task.Target, authority.AppliedPredecessor.ComposeArtifact); err != nil {
 		t.Fatal(err)
 	}
+	witness := mixedNativeRestorationWitness(t, authority, servingServiceID)
 	appliedKey := environmentComposeProjectionKey(task.Target)
 	servingKey := releaseProjectionKey(servingServiceID)
 	retained, err := fixture.store.GetMany(ctx, GetManyRequest{Keys: []string{appliedKey, servingKey}})
@@ -226,6 +225,36 @@ func (fixture *ExecutedArtifactFixture) ProveMixedMemberRecovery(t *testing.T, a
 		TaskStatusCompleted, *changed, task.CreatedAt.Add(33*time.Second)); !isKind(err, errs.KindStateConflict) {
 		t.Fatalf("changed mixed terminal replay accepted: %v", err)
 	}
+}
+
+func mixedNativeRestorationWitness(
+	t *testing.T,
+	authority *ReleaseRestorationAuthority,
+	servingServiceID string,
+) *agentpb.ComposeArtifact {
+	t.Helper()
+	found := false
+	var encoded []byte
+	for _, predecessor := range authority.NativePredecessors {
+		if predecessor.ServiceID == servingServiceID {
+			if found {
+				t.Fatal("mixed authority repeated the serving native predecessor")
+			}
+			found = true
+			encoded = predecessor.CurrentArtifact
+		}
+	}
+	if !found || len(encoded) == 0 {
+		t.Fatal("mixed authority omitted the serving native predecessor")
+	}
+	if authority.AppliedPredecessor != nil && bytes.Equal(encoded, authority.AppliedPredecessor.ComposeArtifact) {
+		t.Fatal("mixed fixture did not distinguish native and applied predecessor artifacts")
+	}
+	witness, err := openRestorationWitness(authority.EnvironmentID, encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return witness
 }
 
 func mixedRecoveryResult(t *testing.T, recovery TaskAssignment, procedure *agentpb.CandidateReleaseProcedure,

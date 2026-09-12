@@ -138,36 +138,23 @@ func TestCandidateAbsenceEvidenceUsesExactMember(t *testing.T) {
 	}
 }
 
+// Rationale: serving evidence must match the selected native predecessor's
+// exact recreate or proxy shape without consulting the applied witness.
 func TestCandidateServingPredecessorAcceptsExactTypedRestorationVariant(t *testing.T) {
-	releaseID := "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	artifact := &agentpb.ComposeArtifact{
-		ArtifactId:  "prior-artifact",
-		ProjectName: "gp-release",
-		Services: []*agentpb.ComposeService{{
-			ServiceId: "api", ComposeName: "api", ExpectedReplicas: 2,
-			Role:           agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
-			ExpectedLabels: []*agentpb.LabelPair{{Key: "com.groundplane.release-id", Value: releaseID}},
-		}},
+	assignment, artifact, _ := nativeServingAssignment(t)
+	if err := validateCandidateReleaseAssignmentAuthority(assignment, assignment.Plan); err != nil {
+		t.Fatalf("valid native recreate authority: %v", err)
 	}
-	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
-	if err != nil {
-		t.Fatal(err)
-	}
-	digest := sha256.Sum256(encoded)
-	assignment := Assignment{RestorationAuthority: &agentpb.ReleaseRestorationAuthority{
-		Candidates: []*agentpb.ReleaseRestorationCandidate{
-			{ServiceId: "api", Target: agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR},
-		},
-		AppliedPredecessor: &agentpb.ReleaseAppliedPredecessorAuthority{
-			ComposeArtifact:       encoded,
-			ComposeArtifactSha256: digest[:],
-		},
-	}}
+	member := assignment.Plan.CandidateReleaseProcedure.Members[0]
 	step := &agentpb.ExecutionStep{Payload: &agentpb.ExecutionStep_CandidateRestorationCompensate{
-		CandidateRestorationCompensate: &agentpb.CandidateRestorationCompensate{ServiceId: "api"},
+		CandidateRestorationCompensate: &agentpb.CandidateRestorationCompensate{
+			ServiceId: member.ServiceId, CandidateReleaseId: member.CandidateReleaseId,
+			CandidateArtifactId: member.CandidateArtifactId,
+		},
 	}}
 	exact := composeStepResult{RecreateEvidence: &agentpb.ServiceRecreateEvidence{
-		ServiceId: "api", ArtifactId: "prior-artifact", ReleaseId: releaseID, Target: "singleton", Compensated: true,
+		ServiceId: member.ServiceId, ArtifactId: artifact.ArtifactId,
+		ReleaseId: nativeAssignmentPriorRelease, Target: "blue", Compensated: true,
 	}}
 	if !releaseRestorationEvidenceProven(assignment, step, exact) {
 		t.Fatal("exact serving predecessor recreate evidence was rejected")
@@ -176,24 +163,31 @@ func TestCandidateServingPredecessorAcceptsExactTypedRestorationVariant(t *testi
 	if releaseRestorationEvidenceProven(assignment, step, exact) {
 		t.Fatal("mismatched serving predecessor recreate evidence was accepted")
 	}
-	config := []byte(`{"apps":{"http":{"servers":{"gp_g7_dep_01arz3ndektsv4rrffq69g5fav_p":{}}}}}`)
+	proxyAssignment, proxyArtifact, _ := nativeServingAssignment(t)
+	appliedBefore := proto.CloneOf(proxyAssignment.RestorationAuthority.AppliedPredecessor)
+	config := []byte(`{"apps":{"http":{"servers":{"gp_g7_dep_01arz3ndektsv4rrffq69g5faw_p":{}}}}}`)
 	configDigest := sha256.Sum256(config)
-	artifact.Services = append(artifact.Services, &agentpb.ComposeService{
-		ServiceId: "api", ComposeName: "api-proxy", Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+	proxyArtifact.Services = append(proxyArtifact.Services, &agentpb.ComposeService{
+		ServiceId: member.ServiceId, ComposeName: "api-proxy",
+		Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+		ExpectedLabels: []*agentpb.LabelPair{
+			{Key: "com.groundplane.runtime-role", Value: "proxy"},
+		},
 		ProxyConfigJson: config, ProxyConfigSha256: configDigest[:],
 	})
-	encoded, err = (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
-	if err != nil {
-		t.Fatal(err)
+	proxyAssignment.Plan.Artifacts[0] = proto.CloneOf(proxyArtifact)
+	sealNativeAssignmentArtifact(t, proxyAssignment.RestorationAuthority.NativePredecessors[0], proxyArtifact, nil)
+	if err := validateCandidateReleaseAssignmentAuthority(proxyAssignment, proxyAssignment.Plan); err != nil {
+		t.Fatalf("valid native proxy authority: %v", err)
 	}
-	digest = sha256.Sum256(encoded)
-	assignment.RestorationAuthority.AppliedPredecessor.ComposeArtifact = encoded
-	assignment.RestorationAuthority.AppliedPredecessor.ComposeArtifactSha256 = digest[:]
+	if !proto.Equal(appliedBefore, proxyAssignment.RestorationAuthority.AppliedPredecessor) {
+		t.Fatal("native proxy fixture rewrote the independently sealed applied witness")
+	}
 	proxy := composeStepResult{ProxyEvidence: &agentpb.ServiceProxyEvidence{
-		ServiceId: "api", Target: "singleton", ProxyGeneration: 7, ConfigSha256: configDigest[:],
-		ReleaseId: releaseID, Compensated: true,
+		ServiceId: member.ServiceId, Target: "blue", ProxyGeneration: 7, ConfigSha256: configDigest[:],
+		ReleaseId: nativeAssignmentPriorRelease, Compensated: true,
 	}}
-	if !releaseRestorationEvidenceProven(assignment, step, proxy) {
+	if !releaseRestorationEvidenceProven(proxyAssignment, step, proxy) {
 		t.Fatal("exact serving predecessor proxy evidence was rejected")
 	}
 }

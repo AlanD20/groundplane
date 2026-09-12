@@ -172,11 +172,7 @@ func executeMixedWorkerRecovery(t *testing.T, fixture *etcd.ExecutedArtifactFixt
 			t.Fatalf("actual mixed recovery Script checkpoints: %v", err)
 		}
 	}
-	proveMixedObservationBoundary(t, assignment)
-	witness := &agentpb.ComposeArtifact{}
-	if err := proto.Unmarshal(assignment.RestorationAuthority.AppliedPredecessor.ComposeArtifact, witness); err != nil {
-		t.Fatal(err)
-	}
+	witness := proveMixedObservationBoundary(t, assignment)
 	runtime := &mixedRecoveryRuntime{t: t, witness: witness, expected: expected, restored: make(map[string]bool)}
 	compose, err := agent.NewComposeRuntime(runtime, runtime)
 	if err != nil {
@@ -313,6 +309,13 @@ func mixedWorkerAssignment(t *testing.T, recovery etcd.TaskAssignment, plan *age
 		RenderGeneration:      witness.RenderGeneration,
 		ComposeArtifact:       slices.Clone(witness.ComposeArtifact),
 		ComposeArtifactSha256: decodeTestDigest(t, witness.ComposeArtifactSHA256),
+	}
+	for _, predecessor := range authority.NativePredecessors {
+		wire.NativePredecessors = append(wire.NativePredecessors, &agentpb.ReleaseNativePredecessorAuthority{
+			ServiceId:             predecessor.ServiceID,
+			CurrentArtifact:       slices.Clone(predecessor.CurrentArtifact),
+			RetainedPriorArtifact: slices.Clone(predecessor.RetainedPriorArtifact),
+		})
 	}
 	digest := decodeTestDigest(t, record.ReleaseRecoveryRecordSHA256)
 	return agent.Assignment{

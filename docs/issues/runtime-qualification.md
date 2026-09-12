@@ -41,16 +41,22 @@ Acceptance is the actual current producer, source-retirement and recovery paths,
 then the current full bundle through normal surfaces. Do not replay a stale
 desired revision over a working Environment merely to repeat an old test.
 
-Mixed recovery currently requires an owner decision. The Blueprint contract and
-ADR0064 select restoration from the applied Environment snapshot; the newer native
-predecessor design and Agent admission use each Service's sealed native artifact.
-The mixed-worker fixture omitted those native fields. Forwarding them passes the
-addressable case but exposes conflicting artifact identities in portless recovery
-and hook recovery (`.tmp/blueprint-recovery-ar6iu0wf/mixed.log`). Owner: primary
-integration owner, with the product choice reserved to the user. Acceptance:
-one approved recovery source across contracts, claim, admission and observation;
-the real mixed Worker must prove exact serving restoration and first-candidate
-absence without rewriting historical bytes. This is a blocker, not a waiver.
+The owner confirmed per-Service native recovery authority on 2026-09-12. Contracts,
+claim validation, Agent admission, restoration and independent observation now use
+the same captured native artifact. The applied Environment witness remains
+independently fenced; it is not a recovery fallback. Local mixed Worker proof
+covers serving restoration, first-candidate absence, immutable history and terminal
+replay in `.tmp/native-recovery-dlIg4I6U/mixed.log`. This closes the earlier local
+artifact-identity mismatch, not live recovery qualification. Owner: primary delivery
+owner. Remaining acceptance is the real operator journey and full CI.
+
+The broader local proof passes in `agent-final.log`, `authority-final.log`,
+`executionplan-final.log` and `renderer.log` in the same directory, with race
+checking and coverage. It includes native rollback predecessors, source-revision
+conflicts, reconnect, terminal replay and malformed-authority rejection. Scoped
+vet passes. The architecture gate reports the same 125 outstanding findings;
+the three findings on edited mixed-fixture files concern imports already present
+before this change. No baseline was raised.
 
 ## Service health and Route visibility
 
@@ -75,12 +81,11 @@ late log-subscription cancellation uses the existing bounded cleanup context.
 Scoped vet, Staticcheck, formatting and affected race tests passed. Evidence:
 `.tmp/ci-cleanup-7arYNpkD/{vet-after,staticcheck-after,analyzer-focused,analyzer-etcd-focused,analyzer-zone-focused}.log`.
 
-This is not a full-package or full-CI pass. The broader selection in
-`analyzer-focused.log` reproduced `TestBlueprintHookRecoveryTerminalReport`:
-Agent admission rejects incomplete native predecessor authority. This failure
-was already recorded in [Script acceptance](../acceptance/script-execution.md#explicit-context-qualification).
-The exact affected terminal-publication, source-reference and Zone selections
-passed separately.
+This is not a full-package or full-CI pass. The hook-recovery failure retained in
+`analyzer-focused.log` is superseded by the native recovery proof above. The exact
+affected terminal-publication, source-reference and Zone selections passed
+separately. [Script acceptance](../acceptance/script-execution.md#explicit-context-qualification)
+retains the broader qualification requirements.
 
 The CoreDNS CLI fixture now exercises Component read, config read and full
 Corefile replacement. The Blueprint fixture uses `environment blueprint apply`,
@@ -97,6 +102,13 @@ in `internal/cli/component.go`, `component_config_file.go` and
 align error text with the Go standard, preserve behavior and pass scoped checks.
 These files are outside the fixture correction; no broad analyzer pass is claimed.
 
+The native recovery scan also retains two SA4006 warnings at lines 95 and 105 of
+unchanged `internal/controller/component_action.go`
+(`.tmp/native-recovery-dlIg4I6U/staticcheck-final.log`). Owner: Controller maintenance.
+Acceptance: remove the unused assignments without changing action behavior and
+pass the scoped analyzer and affected tests. No changed recovery file has a
+Staticcheck finding.
+
 The two Agent recreate-probe fixtures were repaired on 2026-09-12. They now use
 sealed plans, explicit native predecessor references and validated assignment
 authority. Historical labels remain unchanged; the blue-green transition uses
@@ -111,8 +123,8 @@ race checking and coverage. Agent vet and Staticcheck pass (`vet-final.log`,
 `staticcheck-final.log`). This unit fixture treats the Controller-owned authority
 digest as opaque; it does not qualify Controller publication or live recovery.
 The prerequisite-gate and hook-terminal fixtures now carry complete staged Release
-authority and the executed resource set. Three retained failure groups are closed;
-the two mixed-recovery groups remain blocked as described above. Focused race tests
+authority and the executed resource set. Their three retained failure groups are
+closed; the two mixed-recovery groups now have the native recovery proof above. Focused race tests
 with coverage, including shared atomic-publication shapes, pass in
 `.tmp/blueprint-recovery-ar6iu0wf/gate-terminal-final.log`. Scoped etcd vet and
 Staticcheck pass in `etcd-vet-final.log` and `etcd-staticcheck-final.log` in that

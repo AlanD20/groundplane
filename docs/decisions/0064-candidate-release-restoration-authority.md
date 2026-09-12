@@ -4,6 +4,7 @@
 - Member selection and ordinary predecessor capture are owned by
   [Services and Releases](../features/services-and-releases.md#per-service-restoration).
 - Date: 2026-09-04
+- Native predecessor authority aligned with the owner decision on 2026-09-12.
 - Capabilities: C06 Releases, C09 Scripts, C21 Environment Blueprint
 
 ## Context
@@ -39,14 +40,14 @@ The plan hash covers, for every candidate mutation:
   `candidate_absence`; and
 - the exact probe and compensation step identities for each alternative.
 
-A Blueprint plan declares both alternatives whenever its applied predecessor
-may lawfully advance before claim. The plan never selects between them. Plan
+A Blueprint plan declares both alternatives and binds the captured native
+predecessor references. Claim validates and records the selected alternative. Plan
 bytes and hash are immutable across claim, reconnect, deadline, recovery, and
 terminal acknowledgement.
 
-For Blueprint, `serving_predecessor` binds the exact writer-fenced applied
-projection, artifact, Release, target, fixed read revision and canonical authority
-digest. Ordinary Releases bind their staged per-Service native witnesses, as
+For Blueprint and ordinary Releases, `serving_predecessor` binds the exact
+per-Service native artifact, Release, target, fixed read revision and canonical
+authority digest. Both paths use staged per-Service native witnesses, as
 defined in [the predecessor contract](../features/services-and-releases.md#ordinary-release-predecessors).
 `candidate_absence` binds the immutable candidate artifact, exact Compose
 project, and complete selected Service/Release set. Host observations are proof
@@ -56,16 +57,23 @@ from a candidate Service's mutable `Current` projection do not exist.
 
 ### Claim selects a restoration target per Service
 
-Blueprint publication retains its independently sealed nullable
-`BlueprintAppliedPredecessor`. Claim reads that authority under the existing
-writer and Environment mutation-epoch fence and selects one already-declared
-target for each member from its runtime metadata:
+Blueprint publication captures native Release authority for every selected
+Service and retains its independently sealed nullable `BlueprintAppliedPredecessor`.
+Claim validates those captured sources under the existing writer and Environment
+mutation-epoch fence and records one already-declared target per member:
 
 - A member with an acknowledged serving runtime selects `serving_predecessor`
-  and requires the exact applied projection, artifact, revision, and digest.
+  and requires the exact native artifact, Release references, revision and digest.
 - A member without a serving runtime selects `candidate_absence`, including
-  configured-only members in a present applied projection. The nullable applied
-  witness remains independently fenced even when every member selects absence.
+  configured-only members in a present applied projection. Absence requires an
+  explicit empty native witness; missing authority fails closed. The nullable
+  applied witness remains independently fenced even when every member selects
+  absence.
+
+The Environment artifact is not a recovery selector or a fallback. It can describe
+the same runtime with a different artifact identity. Restoration and independent
+observation therefore use the same native bytes, while failure preserves the
+separately captured applied Environment state.
 
 The claim transaction atomically stores the sorted member targets and canonical
 restoration-authority digest in every durable assignment copy while installing
@@ -170,9 +178,9 @@ Task and recovery authority; source-root finalization joins this terminal
 transaction rather than preceding it.
 
 Desired Blueprint head and failed staged candidate Releases remain. For
-`serving_predecessor`, the applied projection remains or is restored to the
-exact selected predecessor. For `candidate_absence`, no candidate workload is
-present and no applied predecessor is invented. Exact terminal replay is
+`serving_predecessor`, the exact native runtime is restored and the applied
+Environment projection remains unchanged. For `candidate_absence`, no candidate
+workload is present and no applied predecessor is invented. Exact terminal replay is
 read-only; different evidence or an old epoch conflicts.
 
 ### Private Agent wire

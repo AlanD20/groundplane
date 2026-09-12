@@ -54,12 +54,20 @@ serving predecessor or exact first-candidate absence. Configured-only state is
 not serving; conflicting or incomplete metadata is corruption. Do not use an
 assignment-wide target, a global mixed default or host-side selection.
 
-For Blueprint candidates, claim opens the writer-fenced applied witness and
-selects each declared member alternative. The canonical authority binds the
-sorted candidate set, each target and the exact nullable applied artifact even
+Blueprint and ordinary Release candidates select recovery from each Service's
+captured native Release, under the writer and Environment mutation-epoch fences.
+The plan, assignment, restoration and independent observation bind the same exact
+historical artifact bytes. Explicit empty native authority means first-candidate
+absence; a missing member or witness is invalid. The Environment-wide applied
+artifact never substitutes for a native Release.
+
+The canonical authority also binds the exact nullable applied artifact, including
 when every member selects absence: unrelated serving Services may still be in
-that artifact. Its presence, revision and bytes remain independently fenced.
-Ordinary Releases use the staged per-Service witnesses described below.
+that artifact. Its presence, revision and bytes remain independently fenced. It
+records Environment state, not a disk or database snapshot to restore. The native
+Release source is used because an Environment artifact can have a different
+identity; recovery and verification must not disagree about which record proves
+the prior runtime. This decision was confirmed on 2026-09-12.
 
 The private wire, assignment, Agent validation, recovery dispatch and terminal
 checks use one member map. Reconnect cannot reselect it or rewrite old Tasks.
@@ -77,7 +85,7 @@ Compensation requires complete restoration evidence and an independent workload
 postcondition.
 
 Independent observation opens a concrete read-only descriptor from the validated
-original plan, selected recovery step and canonical witness. It retains exact
+original plan, selected recovery step and canonical native witness. It retains exact
 historical labels and is accepted only by the Moby observer's restoration method,
 not mutation helpers. Appending history to a current plan and resealing it would
 falsify ownership and is forbidden. Failure preserves the exact applied projection,

@@ -2,202 +2,19 @@ package agent
 
 import (
 	"bytes"
-	"crypto/sha256"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
 )
 
-// validateAssignmentRestorationWitness verifies the received selection against
-// its immutable witness. It neither chooses a target nor queries mutable state.
-func validateAssignmentRestorationWitness(authority *agentpb.ReleaseRestorationAuthority) error {
-	if executionplan.RejectUnknown(authority) != nil ||
-		ids.Validate(ids.KindEnvironment, authority.GetEnvironmentId()) != nil {
-		return invalidAssignmentRestorationWitness()
-	}
-	var artifact *agentpb.ComposeArtifact
-	if witness := authority.GetAppliedPredecessor(); witness != nil {
-		encoded := witness.GetComposeArtifact()
-		if witness.GetKeyRevision() <= 0 || ids.Validate(ids.KindTask, witness.GetRevisionId()) != nil ||
-			witness.GetRenderGeneration() == 0 || len(encoded) == 0 || len(encoded) > executionplan.MaximumPlanBytes {
-			return invalidAssignmentRestorationWitness()
-		}
-		digest := sha256.Sum256(encoded)
-		if !bytes.Equal(digest[:], witness.GetComposeArtifactSha256()) {
-			return invalidAssignmentRestorationWitness()
-		}
-		artifact = &agentpb.ComposeArtifact{}
-		if proto.Unmarshal(encoded, artifact) != nil || executionplan.RejectUnknown(artifact) != nil {
-			return invalidAssignmentRestorationWitness()
-		}
-		canonical, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
-		if err != nil || !bytes.Equal(canonical, encoded) ||
-			artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
-			artifact.GetOwnerId() != authority.GetEnvironmentId() {
-			return invalidAssignmentRestorationWitness()
-		}
-	}
-	identities := make([]executionplan.CandidateServiceIdentity, len(authority.GetCandidates()))
-	for index, member := range authority.GetCandidates() {
-		identities[index] = executionplan.CandidateServiceIdentity{
-			ServiceID: member.GetServiceId(), ReleaseID: member.GetReleaseId(),
-		}
-	}
-	var selected []executionplan.CandidateRestorationSelection
-	var err error
-	if len(authority.GetNativePredecessors()) != 0 {
-		if len(authority.GetNativePredecessors()) != len(authority.GetCandidates()) {
-			return invalidAssignmentRestorationWitness()
-		}
-		witnesses := make([]executionplan.NativePredecessorWitness, len(authority.GetNativePredecessors()))
-		for index, witness := range authority.GetNativePredecessors() {
-			if witness == nil {
-				return invalidAssignmentRestorationWitness()
-			}
-			witnesses[index] = executionplan.NativePredecessorWitness{
-				ServiceID: witness.GetServiceId(), CurrentArtifact: witness.GetCurrentArtifact(),
-				RetainedPriorArtifact: witness.GetRetainedPriorArtifact(),
-			}
-		}
-		selected, err = executionplan.SelectNativeRestorationMembers(
-			authority.GetEnvironmentId(),
-			identities,
-			witnesses,
-		)
-	} else {
-		selected, err = executionplan.SelectBlueprintRestorationMembers(identities, artifact)
-	}
-	if err != nil || len(selected) != len(authority.GetCandidates()) {
-		return invalidAssignmentRestorationWitness()
-	}
-	for index, selection := range selected {
-		member := authority.GetCandidates()[index]
-		if member.GetServiceId() != selection.ServiceID || member.GetReleaseId() != selection.ReleaseID ||
-			member.GetTarget() != selection.Target {
-			return invalidAssignmentRestorationWitness()
-		}
-	}
-	return nil
-}
-
-func invalidAssignmentRestorationWitness() error {
-	return errs.New(
-		errs.KindInternal,
-		"agent: applied restoration witness is invalid or diverges from selected members",
-	)
-}
-
-// validateNativePlanReferences closes the Blueprint plan's explicit native
-// artifact references against the separately carried immutable witness. The
-// applied predecessor is intentionally not consulted here.
-func validateNativePlanReferences(plan *agentpb.ExecutionPlan, authority *agentpb.ReleaseRestorationAuthority) error {
-	if plan == nil ||
-		len(authority.GetNativePredecessors()) != len(plan.GetCandidateReleaseProcedure().GetMembers()) {
-		return invalidAssignmentRestorationWitness()
-	}
-	byService := make(map[string]*agentpb.ReleaseNativePredecessorAuthority, len(authority.GetNativePredecessors()))
-	for _, witness := range authority.GetNativePredecessors() {
-		if witness == nil || witness.GetServiceId() == "" || byService[witness.GetServiceId()] != nil {
-			return invalidAssignmentRestorationWitness()
-		}
-		byService[witness.GetServiceId()] = witness
-	}
-	for _, member := range plan.GetCandidateReleaseProcedure().GetMembers() {
-		witness := byService[member.GetServiceId()]
-		if witness == nil {
-			return invalidAssignmentRestorationWitness()
-		}
-		prior := member.GetServingPredecessor()
-		if len(witness.GetCurrentArtifact()) == 0 {
-			if prior.GetPriorArtifactId() != "" || prior.GetPriorReleaseId() != "" || prior.GetPriorTarget() != "" ||
-				prior.GetRetainedPriorArtifactId() != "" {
-				return invalidAssignmentRestorationWitness()
-			}
-			continue
-		}
-		if prior.GetPriorArtifactId() == "" || prior.GetPriorReleaseId() == "" || prior.GetPriorTarget() == "" ||
-			prior.GetPriorArtifactId() == member.GetCandidateArtifactId() {
-			return invalidAssignmentRestorationWitness()
-		}
-		if executionplan.ValidateNativePredecessorWitness(
-			authority.GetEnvironmentId(), member.GetServiceId(),
-			witness.GetCurrentArtifact(), witness.GetRetainedPriorArtifact(),
-		) != nil {
-			return invalidAssignmentRestorationWitness()
-		}
-		for _, encoded := range [][]byte{witness.GetCurrentArtifact(), witness.GetRetainedPriorArtifact()} {
-			if len(encoded) == 0 {
-				continue
-			}
-			matched := false
-			for _, artifact := range plan.GetArtifacts() {
-				candidate, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
-				if err == nil && bytes.Equal(candidate, encoded) {
-					matched = true
-					break
-				}
-			}
-			if !matched {
-				return invalidAssignmentRestorationWitness()
-			}
-		}
-		artifact := new(agentpb.ComposeArtifact)
-		if (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(witness.GetCurrentArtifact(), artifact) != nil {
-			return invalidAssignmentRestorationWitness()
-		}
-		if artifact.GetArtifactId() != prior.GetPriorArtifactId() {
-			return invalidAssignmentRestorationWitness()
-		}
-		found := false
-		for _, service := range artifact.GetServices() {
-			if service.GetServiceId() != member.GetServiceId() ||
-				service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
-				continue
-			}
-			target := service.GetSlot()
-			if target == "" {
-				target = "singleton"
-			}
-			if found || restorationReleaseLabel(service) != prior.GetPriorReleaseId() ||
-				target != prior.GetPriorTarget() {
-				return invalidAssignmentRestorationWitness()
-			}
-			found = true
-		}
-		if !found {
-			return invalidAssignmentRestorationWitness()
-		}
-		if len(witness.GetRetainedPriorArtifact()) == 0 {
-			if prior.GetRetainedPriorArtifactId() != "" {
-				return invalidAssignmentRestorationWitness()
-			}
-		} else {
-			retained := new(agentpb.ComposeArtifact)
-			if (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(witness.GetRetainedPriorArtifact(), retained) != nil ||
-				retained.GetArtifactId() != prior.GetRetainedPriorArtifactId() {
-				return invalidAssignmentRestorationWitness()
-			}
-		}
-	}
-	return nil
-}
-
 func hasServingPredecessorAuthority(authority *agentpb.ReleaseRestorationAuthority, serviceID string) bool {
-	if authority == nil {
-		return false
-	}
-	if len(authority.GetNativePredecessors()) != 0 {
-		for _, witness := range authority.GetNativePredecessors() {
-			if witness.GetServiceId() == serviceID {
-				return len(witness.GetCurrentArtifact()) != 0
-			}
+	for _, witness := range authority.GetNativePredecessors() {
+		if witness.GetServiceId() == serviceID {
+			return len(witness.GetCurrentArtifact()) != 0
 		}
-		return false
 	}
-	return authority.GetAppliedPredecessor() != nil
+	return false
 }
 
 func validateCandidateReleaseAssignmentAuthority(assignment Assignment, plan *agentpb.ExecutionPlan) error {
@@ -221,11 +38,8 @@ func validateCandidateReleaseAssignmentAuthority(assignment Assignment, plan *ag
 	if len(authority.GetNativePredecessors()) != len(procedure.GetMembers()) {
 		return errs.New(errs.KindInternal, "agent: native predecessor authority is incomplete")
 	}
-	if err := validateAssignmentRestorationWitness(authority); err != nil {
-		return err
-	}
-	if err := validateNativePlanReferences(plan, authority); err != nil {
-		return err
+	if err := executionplan.ValidateNativeRestorationAuthority(plan, authority); err != nil {
+		return errs.Wrap(errs.KindInternal, err)
 	}
 	selectedStepIDs := make([]string, 0, len(procedure.GetMembers())*2)
 	compensateStepIDs := make([]string, 0, len(procedure.GetMembers()))

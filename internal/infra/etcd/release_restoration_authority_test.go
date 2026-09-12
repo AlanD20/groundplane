@@ -950,7 +950,7 @@ func TestBlueprintRestorationAuthorityPreservesConfiguredAppliedWitness(t *testi
 			{ServiceID: ids.NewAt(ids.KindService, at, 14), ReleaseID: ids.NewAt(ids.KindDeployment, at, 15)},
 		},
 	}
-	absent, absentDigest, err := buildBlueprintRestorationAuthority(
+	absent, absentDigest, err := buildBlueprintAbsenceAuthorityForTest(
 		task,
 		taskMaterializationAppliedPredecessor{},
 		manifest,
@@ -967,7 +967,7 @@ func TestBlueprintRestorationAuthorityPreservesConfiguredAppliedWitness(t *testi
 	artifact := withTestEnvironmentComposeArtifact(
 		EnvironmentComposeProjection{EnvironmentID: task.Owner.EnvironmentID},
 	).ComposeArtifact
-	present, presentDigest, err := buildBlueprintRestorationAuthority(task, predecessor, manifest, artifact)
+	present, presentDigest, err := buildBlueprintAbsenceAuthorityForTest(task, predecessor, manifest, artifact)
 	if err != nil || present.Candidates[0].Target != ReleaseRestorationCandidateAbsence ||
 		present.AppliedPredecessor == nil ||
 		present.AppliedPredecessor.KeyRevision != predecessor.KeyRevision ||
@@ -975,12 +975,12 @@ func TestBlueprintRestorationAuthorityPreservesConfiguredAppliedWitness(t *testi
 		presentDigest == absentDigest {
 		t.Fatalf("present authority = %#v, %q, %v", present, presentDigest, err)
 	}
-	if _, _, err := buildBlueprintRestorationAuthority(task, predecessor, manifest, nil); err == nil {
+	if _, _, err := buildBlueprintAbsenceAuthorityForTest(task, predecessor, manifest, nil); err == nil {
 		t.Fatal("present predecessor accepted without its exact artifact")
 	}
 	drifted := predecessor
 	drifted.KeyRevision++
-	_, driftedDigest, err := buildBlueprintRestorationAuthority(task, drifted, manifest, artifact)
+	_, driftedDigest, err := buildBlueprintAbsenceAuthorityForTest(task, drifted, manifest, artifact)
 	if err != nil || driftedDigest == presentDigest {
 		t.Fatalf("predecessor drift digest = %q, %v, want changed", driftedDigest, err)
 	}

@@ -3,7 +3,6 @@ package controller
 import (
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -12,7 +11,7 @@ import (
 
 // Rationale: the real blue-green renderer includes an uninstantiated opposite
 // slot. That slot is neither another serving Release nor a corrupt singleton.
-func TestRenderedBlueGreenRestorationSelectsAcknowledgedMember(t *testing.T) {
+func TestRenderedBlueGreenLeavesOppositeSlotUninstantiated(t *testing.T) {
 	serviceID := composeIdentityTestID(ids.KindService, 39)
 	releaseID := composeIdentityTestID(ids.KindDeployment, 40)
 	input := composeRenderTestInput(&composetypes.Project{Services: composetypes.Services{"api": {
@@ -30,11 +29,34 @@ func TestRenderedBlueGreenRestorationSelectsAcknowledgedMember(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	selected, err := executionplan.SelectBlueprintRestorationMembers([]executionplan.CandidateServiceIdentity{{
-		ServiceID: serviceID, ReleaseID: composeIdentityTestID(ids.KindDeployment, 42),
-	}}, artifact)
-	if err != nil || len(selected) != 1 ||
-		selected[0].Target != agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR {
-		t.Fatalf("rendered restoration selection = %v, %v", selected, err)
+	serving, uninstantiated, proxies := 0, 0, 0
+	for _, service := range artifact.Services {
+		if service.ServiceId != serviceID {
+			t.Fatal("renderer added an unrelated Service")
+		}
+		var recordedRelease string
+		for _, label := range service.ExpectedLabels {
+			if label.Key == "com.groundplane.release-id" {
+				recordedRelease = label.Value
+			}
+		}
+		switch service.Role {
+		case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY:
+			proxies++
+		case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT:
+			switch {
+			case service.Slot == "blue" && recordedRelease == releaseID:
+				serving++
+			case service.Slot == "green" && recordedRelease == "":
+				uninstantiated++
+			default:
+				t.Fatal("rendered slot has unexpected Release ownership")
+			}
+		default:
+			t.Fatal("renderer added an unexpected runtime role")
+		}
+	}
+	if serving != 1 || uninstantiated != 1 || proxies != 1 {
+		t.Fatalf("rendered roles = %d serving, %d uninstantiated, %d proxies", serving, uninstantiated, proxies)
 	}
 }

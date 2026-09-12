@@ -1,6 +1,7 @@
 package etcd_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"testing"
@@ -87,16 +88,30 @@ func (*mixedRecoveryEngine) VolumeInspect(
 }
 func (*mixedRecoveryEngine) Close() error { return nil }
 
-func proveMixedObservationBoundary(t *testing.T, assignment agent.Assignment) {
+func proveMixedObservationBoundary(t *testing.T, assignment agent.Assignment) *agentpb.ComposeArtifact {
 	t.Helper()
-	var stepID string
+	var stepID, selectedServiceID string
 	for _, member := range assignment.Plan.CandidateReleaseProcedure.Members {
 		if executionplan.RestorationTargetForService(
 			assignment.RestorationAuthority,
 			member.ServiceId,
 		) == agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR {
 			stepID = member.ServingPredecessor.CompensateStepId
+			selectedServiceID = member.ServiceId
 		}
+	}
+	var nativeIndex = -1
+	var nativeBytes []byte
+	for index, predecessor := range assignment.RestorationAuthority.NativePredecessors {
+		if predecessor.ServiceId == selectedServiceID {
+			if nativeIndex >= 0 {
+				t.Fatal("mixed authority repeated the selected native predecessor")
+			}
+			nativeIndex, nativeBytes = index, predecessor.CurrentArtifact
+		}
+	}
+	if stepID == "" || nativeIndex < 0 || len(nativeBytes) == 0 {
+		t.Fatal("mixed authority omitted the selected serving native predecessor")
 	}
 	beforePlan, beforeAuthority := proto.CloneOf(assignment.Plan), proto.CloneOf(assignment.RestorationAuthority)
 	observation, err := executionplan.NewRestorationObservation(
@@ -108,25 +123,58 @@ func proveMixedObservationBoundary(t *testing.T, assignment agent.Assignment) {
 		t.Fatal(err)
 	}
 	artifact := observation.Artifact()
+	descriptorBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+	if err != nil || !bytes.Equal(descriptorBytes, nativeBytes) {
+		t.Fatal("observation descriptor did not preserve exact selected native bytes")
+	}
+	if applied := assignment.RestorationAuthority.AppliedPredecessor; applied != nil &&
+		bytes.Equal(descriptorBytes, applied.ComposeArtifact) {
+		t.Fatal("mixed fixture observation selected the applied artifact instead of the distinct native predecessor")
+	}
 	artifact.OwnerId = "mutated-copy"
 	if observation.Artifact().OwnerId == artifact.OwnerId || !proto.Equal(beforePlan, assignment.Plan) ||
 		!proto.Equal(beforeAuthority, assignment.RestorationAuthority) {
 		t.Fatal("historical observation changed its input or exposed mutable authority")
 	}
-	for _, mutate := range []func(*agentpb.ReleaseRestorationAuthority){
-		func(a *agentpb.ReleaseRestorationAuthority) { a.PlanHash[0] ^= 1 },
-		func(a *agentpb.ReleaseRestorationAuthority) { a.AppliedPredecessor.ComposeArtifactSha256[0] ^= 1 },
-		func(a *agentpb.ReleaseRestorationAuthority) { a.EnvironmentId = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV" },
-		func(a *agentpb.ReleaseRestorationAuthority) {
+	for _, test := range []struct {
+		name   string
+		mutate func(*agentpb.ReleaseRestorationAuthority)
+	}{
+		{"changed plan hash", func(a *agentpb.ReleaseRestorationAuthority) { a.PlanHash[0] ^= 1 }},
+		{"changed applied hash", func(a *agentpb.ReleaseRestorationAuthority) {
+			a.AppliedPredecessor.ComposeArtifactSha256[0] ^= 1
+		}},
+		{"foreign owner", func(a *agentpb.ReleaseRestorationAuthority) {
+			a.EnvironmentId = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+		}},
+		{"foreign member", func(a *agentpb.ReleaseRestorationAuthority) {
 			a.Candidates[0].ReleaseId = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-		},
-		func(a *agentpb.ReleaseRestorationAuthority) { a.AppliedPredecessor = nil },
+		}},
+		{"missing native authority", func(a *agentpb.ReleaseRestorationAuthority) {
+			a.NativePredecessors = nil
+		}},
+		{"foreign native authority", func(a *agentpb.ReleaseRestorationAuthority) {
+			a.NativePredecessors[nativeIndex].ServiceId = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+		}},
+		{"changed native authority", func(a *agentpb.ReleaseRestorationAuthority) {
+			a.NativePredecessors[nativeIndex].CurrentArtifact[0] ^= 0xff
+		}},
 	} {
 		changed := proto.CloneOf(assignment.RestorationAuthority)
-		mutate(changed)
+		test.mutate(changed)
 		if _, err := executionplan.NewRestorationObservation(assignment.Plan, changed, stepID); err == nil {
-			t.Fatal("observation accepted changed authority")
+			t.Fatalf("observation accepted %s", test.name)
 		}
+	}
+	withoutApplied := proto.CloneOf(assignment.RestorationAuthority)
+	withoutApplied.AppliedPredecessor = nil
+	nullableObservation, err := executionplan.NewRestorationObservation(assignment.Plan, withoutApplied, stepID)
+	if err != nil {
+		t.Fatalf("observation rejected nullable applied witness: %v", err)
+	}
+	nullableBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(nullableObservation.Artifact())
+	if err != nil || !bytes.Equal(nullableBytes, nativeBytes) {
+		t.Fatal("nullable applied witness changed the selected native observation")
 	}
 	if _, err := executionplan.NewRestorationObservation(assignment.Plan, assignment.RestorationAuthority, "undeclared"); err == nil {
 		t.Fatal("observation accepted undeclared step")
@@ -136,4 +184,5 @@ func proveMixedObservationBoundary(t *testing.T, assignment agent.Assignment) {
 	if _, err := executionplan.NewRestorationObservation(changedPlan, assignment.RestorationAuthority, stepID); err == nil {
 		t.Fatal("observation bypassed current plan hash")
 	}
+	return observation.Artifact()
 }

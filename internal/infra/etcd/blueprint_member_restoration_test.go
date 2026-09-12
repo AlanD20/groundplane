@@ -38,7 +38,7 @@ func TestBlueprintConfiguredOnlyProjectionDoesNotInventServingPredecessor(t *tes
 	predecessor := taskMaterializationAppliedPredecessor{
 		Present: true, KeyRevision: 21, RevisionID: ids.NewAt(ids.KindTask, at, 16), RenderGeneration: 1,
 	}
-	authority, _, err := buildBlueprintRestorationAuthority(task, predecessor, manifest, projection.ComposeArtifact)
+	authority, _, err := buildBlueprintAbsenceAuthorityForTest(task, predecessor, manifest, projection.ComposeArtifact)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,5 +50,10 @@ func TestBlueprintConfiguredOnlyProjectionDoesNotInventServingPredecessor(t *tes
 	authority.Candidates[0].Target = ReleaseRestorationServingPredecessor
 	if err := validateReleaseRestorationAuthority(authority); err == nil {
 		t.Fatal("configured-only witness accepted a serving restoration target")
+	}
+	authority.Candidates[0].Target = ReleaseRestorationCandidateAbsence
+	authority.NativePredecessors = nil
+	if err := validateReleaseRestorationAuthority(authority); err == nil {
+		t.Fatal("applied metadata substituted for missing native absence authority")
 	}
 }

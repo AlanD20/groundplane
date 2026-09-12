@@ -73,6 +73,7 @@ func configuredRestorationAssignment(t *testing.T) Assignment {
 		EnvironmentId: environment, CandidateArtifactId: artifactID, AuthoritySha256: bytes.Repeat([]byte{0x61}, 32),
 		Candidates: []*agentpb.ReleaseRestorationCandidate{{ServiceId: service, ReleaseId: candidate,
 			Target: agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE}},
+		NativePredecessors: []*agentpb.ReleaseNativePredecessorAuthority{{ServiceId: service}},
 		AppliedPredecessor: &agentpb.ReleaseAppliedPredecessorAuthority{
 			KeyRevision: 17, RevisionId: "task_01ARZ3NDEKTSV4RRFFQ69G5FAW", RenderGeneration: 1,
 		},
@@ -111,24 +112,15 @@ func TestCandidateAssignmentPreservesMixedSelection(t *testing.T) {
 		ServiceId: servingService, ReleaseId: member.CandidateReleaseId,
 		Target: agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR,
 	})
-	artifact := &agentpb.ComposeArtifact{}
-	if err := proto.Unmarshal(authority.AppliedPredecessor.ComposeArtifact, artifact); err != nil {
-		t.Fatal(err)
-	}
-	artifact.Services = append(artifact.Services, &agentpb.ComposeService{
-		ServiceId: servingService, ComposeName: "worker", ExpectedReplicas: 2,
-		ImageReference: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-		Role:           agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
-		ExpectedLabels: []*agentpb.LabelPair{
-			{Key: "com.groundplane.release-id", Value: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAW"},
-			{Key: "com.groundplane.runtime-role", Value: "singleton"},
-		},
+	current := nativeAssignmentArtifact(authority.EnvironmentId, servingService,
+		nativeAssignmentPriorArtifact, nativeAssignmentPriorRelease, "blue")
+	assignment.Plan.Artifacts = append(assignment.Plan.Artifacts, current)
+	member.ServingPredecessor.PriorArtifactId = current.ArtifactId
+	member.ServingPredecessor.PriorReleaseId = nativeAssignmentPriorRelease
+	member.ServingPredecessor.PriorTarget = "blue"
+	authority.NativePredecessors = append(authority.NativePredecessors, &agentpb.ReleaseNativePredecessorAuthority{
+		ServiceId: servingService, CurrentArtifact: marshalNativeAssignmentArtifact(t, current),
 	})
-	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sealAssignmentWitness(authority, encoded)
 	before := proto.CloneOf(authority)
 	if err := validateCandidateReleaseAssignmentAuthority(assignment, assignment.Plan); err != nil {
 		t.Fatalf("mixed selection rejected: %v", err)
@@ -142,8 +134,12 @@ func TestCandidateAssignmentPreservesMixedSelection(t *testing.T) {
 	}
 	authority.Candidates[1].Target = before.Candidates[1].Target
 	authority.AppliedPredecessor = nil
+	if err := validateCandidateReleaseAssignmentAuthority(assignment, assignment.Plan); err != nil {
+		t.Fatalf("native serving member required an applied artifact: %v", err)
+	}
+	authority.NativePredecessors = nil
 	if err := validateCandidateReleaseAssignmentAuthority(assignment, assignment.Plan); err == nil {
-		t.Fatal("serving member accepted without witness")
+		t.Fatal("serving member accepted without native witness")
 	}
 }
 

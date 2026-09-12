@@ -459,13 +459,16 @@ The plan seals one immutable candidate Release procedure for each selected
 Service. It declares the exact forward mutation anchors and the complete lawful
 restoration alternatives `serving_predecessor` and `candidate_absence`; it
 never fabricates `baseline` or derives restoration from a mutable current
-Service projection. Claim selects exactly one alternative per Service from the
-sealed nullable applied predecessor and stores the complete sorted member map
-plus its canonical digest with the assignment and execution epoch. Configured-
-only Services select absence even when an applied Environment record exists;
-the exact nullable witness stays independently fenced. Mixed recovery restores
-serving members and removes only first candidates, leaving unrelated runtime
-untouched. Host state can prove a selected target but cannot choose it.
+Service projection. Claim selects exactly one alternative per Service from its
+captured native Release authority and stores the complete sorted member map plus
+its canonical digest with the assignment and execution epoch. An explicit native
+absence witness selects absence even when an applied Environment record exists.
+Missing native authority is an error, not permission to use that Environment
+record. The exact nullable applied witness stays independently fenced. Mixed
+recovery restores serving members from their captured native artifacts and removes
+only first candidates, leaving unrelated runtime untouched. Independent observation
+checks those same native artifacts. Host state can prove a selected target but
+cannot choose it.
 
 No mutation-capable candidate step begins until its running event is durably
 accepted for that epoch. A reconnect remains forward only while the Controller

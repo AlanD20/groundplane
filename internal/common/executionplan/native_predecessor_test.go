@@ -16,6 +16,7 @@ const (
 	nativeWitnessPrior       = "dep_01K4A1B2C3D4E5F6G7H8J9K0MS"
 )
 
+// Rationale: only a captured native Release or explicit absence can select recovery.
 func TestSelectNativeRestorationMembersUsesExplicitAbsenceAndServingWitness(t *testing.T) {
 	current := nativeWitnessArtifact(
 		t,
@@ -49,6 +50,32 @@ func TestSelectNativeRestorationMembersUsesExplicitAbsenceAndServingWitness(t *t
 	if err != nil || len(selected) != 1 ||
 		selected[0].Target != agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE {
 		t.Fatalf("explicit absence selection = %v, %v", selected, err)
+	}
+}
+
+// Rationale: native selection must bind a complete, sorted, unambiguous member
+// set; absent or malformed identity cannot authorize first-candidate removal.
+func TestSelectNativeRestorationMembersRejectsIncompleteMemberSet(t *testing.T) {
+	member := CandidateServiceIdentity{ServiceID: nativeWitnessService, ReleaseID: nativeWitnessCandidate}
+	witness := NativePredecessorWitness{ServiceID: nativeWitnessService}
+	for _, test := range []struct {
+		name       string
+		candidates []CandidateServiceIdentity
+		witnesses  []NativePredecessorWitness
+	}{
+		{name: "empty"},
+		{name: "missing witness", candidates: []CandidateServiceIdentity{member}},
+		{name: "duplicate member", candidates: []CandidateServiceIdentity{member, member}, witnesses: []NativePredecessorWitness{witness, witness}},
+		{name: "invalid service", candidates: []CandidateServiceIdentity{{ServiceID: "invalid", ReleaseID: nativeWitnessCandidate}}, witnesses: []NativePredecessorWitness{witness}},
+		{name: "missing release", candidates: []CandidateServiceIdentity{{ServiceID: nativeWitnessService}}, witnesses: []NativePredecessorWitness{witness}},
+		{name: "wrong witness", candidates: []CandidateServiceIdentity{member}, witnesses: []NativePredecessorWitness{{ServiceID: "svc_01K4A1B2C3D4E5F6G7H8J9K0MQ"}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if selected, err := SelectNativeRestorationMembers(nativeWitnessEnvironment, test.candidates, test.witnesses); err == nil ||
+				selected != nil {
+				t.Fatal("incomplete native member set acquired restoration authority")
+			}
+		})
 	}
 }
 

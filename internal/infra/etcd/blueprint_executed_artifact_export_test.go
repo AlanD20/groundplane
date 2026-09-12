@@ -3,16 +3,13 @@ package etcd
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"net/netip"
-	"slices"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -35,73 +32,26 @@ type ExecutedArtifactFixture struct {
 	publicationSize     *BlueprintPublicationSizeAudit
 }
 
-// Historical fixture builder for existing applied-witness unit controls. The
-// production Blueprint claim path exclusively uses marker-owned native inputs.
-func buildBlueprintRestorationAuthority(
+// buildBlueprintAbsenceAuthorityForTest models an explicitly captured absence
+// at one fixed read revision. Applied metadata is an independent fence only.
+func buildBlueprintAbsenceAuthorityForTest(
 	task TaskRecord,
 	predecessor taskMaterializationAppliedPredecessor,
 	manifest ReleaseStagedManifest,
-	predecessorComposeArtifact []byte,
+	applied []byte,
 ) (ReleaseRestorationAuthority, string, error) {
-	if !taskHasBlueprintCandidateAppliedAuthority(task) ||
-		manifest.PublicationID != task.Params[TaskReleasePublicationParam] ||
-		manifest.OperationID != task.OperationID ||
-		len(manifest.Members) == 0 ||
-		predecessor.Present != (len(predecessorComposeArtifact) != 0) {
-		return ReleaseRestorationAuthority{}, "", corruptTaskAssignment()
+	native := make([]BlueprintNativePredecessor, len(manifest.Members))
+	procedure := &agentpb.CandidateReleaseProcedure{
+		Members: make([]*agentpb.CandidateReleaseMember, len(manifest.Members)),
 	}
-	identities := make([]executionplan.CandidateServiceIdentity, len(manifest.Members))
 	for index, member := range manifest.Members {
-		identities[index] = executionplan.CandidateServiceIdentity{
-			ServiceID: member.ServiceID,
-			ReleaseID: member.ReleaseID,
+		native[index] = BlueprintNativePredecessor{ServiceID: member.ServiceID, FixedReadRevision: 21}
+		procedure.Members[index] = &agentpb.CandidateReleaseMember{
+			ServiceId: member.ServiceID, CandidateReleaseId: member.ReleaseID,
+			CandidateArtifactId: task.Params[TaskComposeArtifactParam],
 		}
 	}
-	var applied *agentpb.ComposeArtifact
-	if predecessor.Present {
-		var err error
-		applied, err = openRestorationWitness(task.Owner.EnvironmentID, predecessorComposeArtifact)
-		if err != nil {
-			return ReleaseRestorationAuthority{}, "", corruptTaskAssignment()
-		}
-	}
-	selections, err := executionplan.SelectBlueprintRestorationMembers(identities, applied)
-	if err != nil {
-		return ReleaseRestorationAuthority{}, "", err
-	}
-	candidates := make([]ReleaseRestorationCandidate, len(selections))
-	for index, selected := range selections {
-		target := ReleaseRestorationCandidateAbsence
-		if selected.Target == agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR {
-			target = ReleaseRestorationServingPredecessor
-		}
-		candidates[index] = ReleaseRestorationCandidate{
-			ServiceID: selected.ServiceID,
-			ReleaseID: selected.ReleaseID,
-			Target:    target,
-		}
-	}
-	authority := ReleaseRestorationAuthority{
-		Schema:              1,
-		TaskID:              task.ID,
-		OperationID:         task.OperationID,
-		PlanHash:            task.PlanHash,
-		EnvironmentID:       task.Owner.EnvironmentID,
-		CandidateArtifactID: task.Params[TaskComposeArtifactParam],
-		Candidates:          candidates,
-	}
-	if predecessor.Present {
-		artifactDigest := sha256.Sum256(predecessorComposeArtifact)
-		authority.AppliedPredecessor = &ReleaseAppliedPredecessorAuthority{
-			KeyRevision:           predecessor.KeyRevision,
-			RevisionID:            predecessor.RevisionID,
-			RenderGeneration:      predecessor.RenderGeneration,
-			ComposeArtifactSHA256: hex.EncodeToString(artifactDigest[:]),
-			ComposeArtifact:       slices.Clone(predecessorComposeArtifact),
-		}
-	}
-	digest, err := releaseRestorationAuthoritySHA256(authority)
-	return authority, digest, err
+	return buildBlueprintNativeRestorationAuthority(task, predecessor, native, manifest, procedure, applied)
 }
 
 func (fixture *ExecutedArtifactFixture) ReadRevision() int64 { return fixture.store.revision }

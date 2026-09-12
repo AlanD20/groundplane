@@ -1762,8 +1762,10 @@ transaction promotes the candidate Releases, applied Environment projection,
 Component state, and Routes together, then records the parent Task success.
 Before promotion, a failure must prove exact predecessor restoration for each
 selected Service that previously served, and exact first-candidate absence for
-each selected Service that did not. A configured-only Service in an applied
-Environment projection is not a serving predecessor. Mixed recovery preserves
+each selected Service that did not. Restoration and its independent verification
+use the same per-Service native Release captured before execution, never the
+Environment-wide applied artifact as a substitute. A configured-only Service in
+an applied Environment projection is not a serving predecessor. Mixed recovery preserves
 unrelated runtime and the exact applied projection. The desired head is never
 rolled back, and no failed or unproven candidate may be published as a serving
 Release or Route. If the proof is not available, the Task remains

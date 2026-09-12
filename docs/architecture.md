@@ -1175,26 +1175,30 @@ ADR 0064 adds one shared pure `internal/common/executionplan` candidate
 procedure used by ordinary Release and Blueprint. Its immutable plan projection
 contains exact candidate and forward anchors plus the complete closed lawful
 `serving_predecessor` and `candidate_absence` restoration alternatives. The
-Controller claim selects exactly one per Service from the already-sealed
-nullable applied predecessor ([per-Service restoration](features/services-and-releases.md#per-service-restoration)). It persists the complete sorted member
-map and independently fenced nullable witness plus their canonical digest with
-the assignment, writer, and execution epoch. Configured-only members select
+Controller claim selects exactly one per Service from the captured native Release
+([per-Service restoration](features/services-and-releases.md#per-service-restoration)).
+The assignment records the sorted member map, native artifacts, independently
+fenced nullable applied witness and their canonical digest. Claim persists that
+assignment with the writer and execution epoch. Configured-only members select
 absence, not serving restoration. The Agent receives selections; it never
 derives them from Docker or current Controller projections.
 
 Ordinary Deploy/Rollback use the per-Service immutable native predecessor in
-[ordinary Release predecessors](features/services-and-releases.md#ordinary-release-predecessors). Their staged render records own the exact historical runtime artifacts;
+[ordinary Release predecessors](features/services-and-releases.md#ordinary-release-predecessors).
+Their staged render records own the exact historical runtime artifacts;
 the aggregate publication marker does not duplicate them. The plan, claim,
 Agent, and terminal proof bind the same bytes and explicit prior references.
-The latest Environment artifact remains an independently fenced witness, not
-the serving-history selector for an ordinary Release.
+The captured Environment artifact remains an independently fenced witness, not
+the serving-history selector for either an ordinary Release or a Blueprint.
 
 Each helper call restores or removes only its selected member. A serving probe
 may return the closed proof-free `restoration_required` result, which reaches
 only already-declared compensation. It cannot satisfy terminal proof. After
 helper restoration, independent Moby observation consumes a concrete read-only
 `executionplan.RestorationObservation` bound to the unchanged validated plan,
-selected step and canonical predecessor witness. Historical labels remain
+selected step and exact native predecessor witness. Admission and observation use
+the same pure native-authority validation; neither falls back to an applied
+Environment artifact. Historical labels remain
 exact; no synthetic execution plan or current-plan validation exception is
 created. Only observation accepts this descriptor, never a mutation helper.
 
