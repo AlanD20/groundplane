@@ -86,16 +86,21 @@ in `internal/cli/component.go`, `component_config_file.go` and
 align error text with the Go standard, preserve behavior and pass scoped checks.
 These files are outside the fixture correction; no broad analyzer pass is claimed.
 
-Retained Agent fixture work includes
-`TestObservedRecreateProbeAcceptsSealedBlueGreenPrior` /
-`TestObservedRecreateProbeUsesEachSealedArtifact`. The latter both still fail
-with a missing 32-byte plan hash (`probe-before.log` in the same evidence
-directory). Their fixtures must supply a valid sealed plan and selected recovery
-authority, not just hash-shaped bytes. Keep validation and repair fixtures at
-their owning seam; do not bypass assertions. Owner: Agent recovery maintenance.
-Acceptance: both tests prove their original recovery invariants through valid
-sealed authority, with race tests passing. Broader Script/Blueprint failures
-remain open with their recorded acceptance evidence.
+The two Agent recreate-probe fixtures were repaired on 2026-09-12. They now use
+sealed plans, explicit native predecessor references and validated assignment
+authority. Historical labels remain unchanged; the blue-green transition uses
+one replica on each side. Separate observations prove the historical blue slot
+and the candidate/prior exact-count path, including unrelated collision filtering.
+Four negative cases reject a missing seal, missing authority, changed witness
+or unselected step before observation. Production validation is unchanged.
+
+Evidence is in `.tmp/recreate-fixtures-Rpw7yBic/`: `before.log` reproduces both
+missing-hash failures; `probes.log` and `recovery-evidence-final.log` pass with
+race checking and coverage. Agent vet and Staticcheck pass (`vet-final.log`,
+`staticcheck-final.log`). This unit fixture treats the Controller-owned authority
+digest as opaque; it does not qualify Controller publication or live recovery.
+Broader Script/Blueprint failures remain open with their recorded acceptance
+evidence and are the next recovery-maintenance slice.
 
 Go 1.27 crashed the pinned analyzer in the recorded run; Go 1.26.7 ran it and
 reported SA4006. That tool crash is not a source finding or a green result.

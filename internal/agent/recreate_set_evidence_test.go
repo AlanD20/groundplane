@@ -11,8 +11,10 @@ import (
 )
 
 type recreateArtifactObserver struct {
-	projects map[string]*agentpb.ObservedProject
-	calls    []string
+	projects            map[string]*agentpb.ObservedProject
+	calls               []string
+	restorationProject  *agentpb.ObservedProject
+	restorationArtifact *agentpb.ComposeArtifact
 }
 
 // Rationale: one recreate acknowledgement represents the complete sealed logical set;
@@ -248,39 +250,26 @@ func TestObservedRecreateSetScopesLifecycleCollisions(t *testing.T) {
 // Rationale: blue-green to recreate recovery restores the exact sealed prior slot;
 // it must not reinterpret a blue or green predecessor as a recreate singleton.
 func TestObservedRecreateProbeAcceptsSealedBlueGreenPrior(t *testing.T) {
-	candidate := recreateTestArtifact("candidate-artifact", "candidate-release", 3)
-	prior := recreateTestArtifact("prior-artifact", "prior-release", 1)
-	prior.Services[0].Role = agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT
-	prior.Services[0].Slot = "blue"
-	prior.Services[0].ExpectedLabels[1].Value = "slot"
-	prior.Services[0].ExpectedLabels = append(prior.Services[0].ExpectedLabels,
-		&agentpb.LabelPair{Key: "com.groundplane.slot", Value: "blue"})
-	priorProject := recreateTestProject(prior, "prior-release", 1)
-	priorProject.Containers[0].Labels[1].Value = "slot"
-	priorProject.Containers[0].Labels = append(priorProject.Containers[0].Labels,
-		&agentpb.LabelPair{Key: "com.groundplane.slot", Value: "blue"})
-	observer := &recreateArtifactObserver{projects: map[string]*agentpb.ObservedProject{
-		"candidate-artifact": recreateTestProject(candidate, "candidate-release", 2),
-		"prior-artifact":     priorProject,
-	}}
+	assignment, step := sealedRecreateProbeAssignment(t, 1, "blue")
+	prior := assignment.Plan.Artifacts[1]
+	observer := &recreateArtifactObserver{
+		restorationProject: recreateTestProject(prior, step.GetServiceRecreateProbe().PriorReleaseId, 1),
+	}
 	runtime, err := NewComposeRuntime(completedComposeHelper(), observer)
 	if err != nil {
 		t.Fatal(err)
 	}
-	step := &agentpb.ExecutionStep{Payload: &agentpb.ExecutionStep_ServiceRecreateProbe{
-		ServiceRecreateProbe: &agentpb.ServiceRecreateProbe{
-			CandidateArtifactId: "candidate-artifact", PriorArtifactId: "prior-artifact",
-			ServiceId: "svc_api", CandidateReleaseId: "candidate-release", PriorReleaseId: "prior-release",
-		},
-	}}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	result, err := runtime.executeStep(ctx, Assignment{Plan: &agentpb.ExecutionPlan{
-		Artifacts: []*agentpb.ComposeArtifact{candidate, prior},
-	}}, step)
+	result, err := runtime.executeStep(ctx, assignment, step)
 	if err != nil || result.RecreateEvidence.GetTarget() != "blue" ||
-		result.RecreateEvidence.GetArtifactId() != "prior-artifact" {
+		result.RecreateEvidence.GetArtifactId() != prior.ArtifactId || !result.RecreateEvidence.GetCompensated() {
 		t.Fatalf("blue predecessor evidence = %#v, error = %v", result.RecreateEvidence, err)
+	}
+	if !proto.Equal(observer.restorationArtifact, prior) || len(observer.calls) != 0 {
+		t.Fatal(
+			"historical observation did not preserve the exact prior artifact independently of current-plan observation",
+		)
 	}
 }
 
@@ -309,11 +298,10 @@ func (observer *recreateArtifactObserver) Observe(
 // Rationale: candidate and predecessor restoration are distinct sealed alternatives;
 // a prior replica set can only be proved from an observation made against its own artifact.
 func TestObservedRecreateProbeUsesEachSealedArtifact(t *testing.T) {
-	candidate := recreateTestArtifact("candidate-artifact", "candidate-release", 2)
-	prior := recreateTestArtifact("prior-artifact", "prior-release", 2)
-	prior.Networks = []*agentpb.ComposeNetwork{{ComposeName: "frontend", DockerName: "gp_net_frontend"}}
-	plan := &agentpb.ExecutionPlan{Artifacts: []*agentpb.ComposeArtifact{candidate, prior}}
-	priorObserved := recreateTestProject(prior, "prior-release", 2)
+	assignment, step := sealedRecreateProbeAssignment(t, 2, "singleton")
+	candidate, prior := assignment.Plan.Artifacts[0], assignment.Plan.Artifacts[1]
+	probe := step.GetServiceRecreateProbe()
+	priorObserved := recreateTestProject(prior, probe.PriorReleaseId, 2)
 	priorObserved.Collisions = []*agentpb.ObservedCollision{
 		{Kind: agentpb.ObservedCollisionKind_OBSERVED_COLLISION_KIND_CONTAINER,
 			Name: "caddy-1", ComposeServiceName: "caddy", ServiceId: "cmp_caddy"},
@@ -323,33 +311,64 @@ func TestObservedRecreateProbeUsesEachSealedArtifact(t *testing.T) {
 			Name: "gp_net_sibling"},
 	}
 	observer := &recreateArtifactObserver{projects: map[string]*agentpb.ObservedProject{
-		"candidate-artifact": recreateTestProject(candidate, "candidate-release", 1),
-		"prior-artifact":     priorObserved,
+		candidate.ArtifactId: recreateTestProject(candidate, probe.CandidateReleaseId, 1),
+		prior.ArtifactId:     priorObserved,
 	}}
 	runtime, err := NewComposeRuntime(completedComposeHelper(), observer)
 	if err != nil {
 		t.Fatal(err)
 	}
-	step := &agentpb.ExecutionStep{Payload: &agentpb.ExecutionStep_ServiceRecreateProbe{
-		ServiceRecreateProbe: &agentpb.ServiceRecreateProbe{
-			CandidateArtifactId: "candidate-artifact", PriorArtifactId: "prior-artifact",
-			ServiceId: "svc_api", CandidateReleaseId: "candidate-release", PriorReleaseId: "prior-release",
-		},
-	}}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	result, err := runtime.executeStep(ctx, Assignment{Plan: plan}, step)
+	result, err := runtime.executeStep(ctx, assignment, step)
 	if err != nil {
 		t.Fatalf("executeStep() error = %v", err)
 	}
-	if result.RecreateEvidence.GetArtifactId() != "prior-artifact" ||
+	if result.RecreateEvidence.GetArtifactId() != prior.ArtifactId ||
 		!result.RecreateEvidence.GetCompensated() {
 		t.Fatalf("recreate evidence = %#v, want sealed prior set", result.RecreateEvidence)
 	}
-	if len(observer.calls) != 2 || observer.calls[0] != "candidate-artifact" ||
-		observer.calls[1] != "prior-artifact" {
+	if !proto.Equal(observer.restorationArtifact, prior) {
+		t.Fatal("probe did not first observe the exact historical predecessor")
+	}
+	if len(observer.calls) != 2 || observer.calls[0] != candidate.ArtifactId ||
+		observer.calls[1] != prior.ArtifactId {
 		t.Fatalf("observation artifacts = %v, want candidate then prior", observer.calls)
+	}
+}
+
+// Rationale: repairing success fixtures must not make a missing seal, missing
+// selection, changed witness, or unrelated step sufficient observation authority.
+func TestObservedRecreateProbeRejectsInvalidAuthorityBeforeObservation(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mutate func(*Assignment, *agentpb.ExecutionStep)
+	}{
+		{"missing plan seal", func(a *Assignment, _ *agentpb.ExecutionStep) { a.Plan.PlanHash = nil }},
+		{"missing authority", func(a *Assignment, _ *agentpb.ExecutionStep) { a.RestorationAuthority = nil }},
+		{"changed witness", func(a *Assignment, _ *agentpb.ExecutionStep) {
+			a.RestorationAuthority.AppliedPredecessor.ComposeArtifact[0] ^= 1
+		}},
+		{"unselected step", func(a *Assignment, step *agentpb.ExecutionStep) { step.StepId = a.Plan.Steps[0].StepId }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			assignment, step := sealedRecreateProbeAssignment(t, 2, "singleton")
+			step = proto.CloneOf(step)
+			test.mutate(&assignment, step)
+			observer := &recreateArtifactObserver{}
+			runtime, err := NewComposeRuntime(completedComposeHelper(), observer)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			result, err := runtime.executeStep(ctx, assignment, step)
+			if err == nil || !result.ReconciliationRequired || result.RecreateEvidence != nil ||
+				observer.restorationArtifact != nil || len(observer.calls) != 0 {
+				t.Fatalf("invalid authority reached observation or produced evidence: result=%#v, err=%v", result, err)
+			}
+		})
 	}
 }
 
@@ -375,17 +394,21 @@ func recreateTestProject(
 ) *agentpb.ObservedProject {
 	project := &agentpb.ObservedProject{ProjectName: artifact.GetProjectName()}
 	for index := 0; index < replicas; index++ {
+		labels := make([]*agentpb.LabelPair, len(artifact.Services[0].ExpectedLabels))
+		for index, label := range artifact.Services[0].ExpectedLabels {
+			labels[index] = proto.CloneOf(label)
+			if label.Key == "com.groundplane.release-id" {
+				labels[index].Value = releaseID
+			}
+		}
 		project.Containers = append(project.Containers, &agentpb.ObservedContainer{
 			ContainerId:    fmt.Sprintf("%064x", index+1),
-			ServiceId:      "svc_api",
+			ServiceId:      artifact.Services[0].ServiceId,
 			ImageReference: artifact.GetServices()[0].GetImageReference(),
 			ImageId:        artifact.GetServices()[0].GetImageReference(),
 			State:          agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING,
 			Health:         agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY,
-			Labels: []*agentpb.LabelPair{
-				{Key: "com.groundplane.release-id", Value: releaseID},
-				{Key: "com.groundplane.runtime-role", Value: "singleton"},
-			},
+			Labels:         labels,
 		})
 	}
 	return project

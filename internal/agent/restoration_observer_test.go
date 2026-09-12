@@ -36,13 +36,9 @@ func (observer blueprintPhaseObserver) ObserveRestoration(
 }
 
 func (observer *recreateArtifactObserver) ObserveRestoration(
-	ctx context.Context,
+	_ context.Context,
 	observation *executionplan.RestorationObservation,
 ) (*agentpb.ObservedProject, error) {
-	artifact := observation.Artifact()
-	return observer.Observe(
-		ctx,
-		&agentpb.ExecutionPlan{Artifacts: []*agentpb.ComposeArtifact{artifact}},
-		artifact.GetArtifactId(),
-	)
+	observer.restorationArtifact = observation.Artifact()
+	return observer.restorationProject, nil
 }
