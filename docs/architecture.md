@@ -1021,7 +1021,8 @@ The HTTP router's optional single `alias` is provider configuration, projected
 through the existing typed network-attachment intent on its primary Zone only.
 Groundplane checks same-Zone Service-name and alias collisions before publication;
 the integration receives no Docker or network-management authority. It survives
-ordinary reconstruction and does not change listener ports (ADR 0069).
+ordinary reconstruction and does not change listener ports. See the
+[router alias contract](features/router-template.md#optional-router-network-alias).
 
 The public backing-service resource is a facade over the existing
 `project(kind=backing) -> environment(main) -> service(adapter)` hierarchy. It

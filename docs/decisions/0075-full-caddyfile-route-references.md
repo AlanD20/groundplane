@@ -90,6 +90,7 @@ behavior (for example `stream_close_delay`). This is distinct from GP native
 upgrades, which preserve all ingress and application containers. Invalid native
 files must not reach the serving write or Compose step.
 
-Primary-Zone allocation and ADR0069 aliases are unchanged. This grants no host,
+Primary-Zone allocation and the [router alias contract](../features/router-template.md#optional-router-network-alias)
+are unchanged. This grants no host,
 firewall, Tunnel/provider, PKI or operator-supplied execution authority. Registered
 Components still receive no filesystem, repository, secrets or arbitrary command.

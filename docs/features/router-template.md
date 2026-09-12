@@ -44,6 +44,22 @@ Shared product, API and desired-state rules remain in [mvp.md](../mvp.md),
 
 ## Non-functional requirements
 
+### Optional router network alias
+
+Portable HTTP-router settings may declare one DNS-label `alias`, attached only
+to the primary selected Zone. Disable/re-enable and reconstruction retain it;
+it does not rename the generated Service or change its stable ID or ports.
+Empty removes the alias. Omitted CLI flags preserve the loaded declaration;
+omission from a complete Blueprint declares no custom alias. Configure and
+Enable share the same Console/CLI/API field, and Blueprint uses
+`x-gp-components.http-router.settings.alias`.
+
+Reject invalid labels and same-Zone collisions with native or generated Service
+names and aliases before publication. Caddy emits the existing typed SDK network
+attachment; no host DNS, Cloudflare configuration or execution authority changes.
+
+### Safety and limits
+
 - Reject missing Routes, malformed or unknown Groundplane references, invalid UTF-8,
   NUL bytes and templates over 32 KiB before any runtime effect.
 - Preserve native Caddy text outside substitutions. Do not interpret the template

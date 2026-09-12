@@ -27,6 +27,7 @@ implementation nor an old test result changes a requirement.
 
 | Feature | Document |
 | --- | --- |
+| Managed Components, DNS, Routes and Zone membership | [Components and routing](features/components.md) |
 | Controller and Agent updates | [Safe updates](features/upgrade-safety.md) |
 | Complete operator-authored Caddyfile | [Router templates](features/router-template.md) |
 | Ordered setup hooks with explicit resources | [Script execution](features/setup-scripts.md) |
