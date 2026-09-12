@@ -60,6 +60,12 @@ There is no existing-Zone branch, uploaded backing Blueprint, plugin catalog,
 implicit subnet, or partial facade. Adapter defaults are versioned compiled
 product behavior, and the complete aggregate commits or remains absent.
 
+Backing Start, Stop and Destroy change Service runtime only. Destroy retains
+durable configuration and data; Start recreates runtime from them. Permanent
+Backing deletion is outside the current MVP. Any future permanent Delete needs
+separate Console, CLI and API operations, impact preview, confirmation and
+explicit approval; it must not redefine Destroy.
+
 **Backing-service facts (locked).** Attaching a backing service exposes
 **facts**, never injected env vars: prefixed keys (`pg16_URL`, `pg16_HOST`,
 `pg16_PORT`, `pg16_DATABASE`, `pg16_ROLE`, `pg16_PASSWORD`) whose **values**

@@ -1,37 +1,38 @@
 # ADR 0053: Durable hierarchy and backing-facade deletion
 
-- Status: Accepted
+- Status: Accepted for Tenant, ordinary Project and Environment deletion; Backing Service extension Deferred
 - Date: 2026-08-25
 
 ## Current authority limit
 
-The generic Tenant, ordinary Project and Environment deletion engine remains
-accepted. The backing-specific clauses below are not authority to make the
-current Backing Service Destroy action permanently delete data. They conflict
-with the higher-authority [MVP](../mvp.md), [API](../api-cli.md), and current
-[Backing Service lifecycle](../features/backing-services.md#creation-and-lifecycle):
-Destroy is runtime-only and there is no Backing Service DELETE endpoint.
+The owner decision on 2026-09-12 keeps permanent Backing Service deletion
+outside the current MVP. [Destroy](../features/backing-services.md#creation-and-lifecycle)
+removes runtime only and retains durable configuration and data. It has no
+permanent-delete meaning. A future permanent Delete needs separate Console,
+CLI and API operations, an impact preview, confirmation and explicit approval.
+No such public operation is defined here.
 
-An owner decision and synchronized product/API change are required before
-implementing permanent backing deletion. Its dependency ordering, receipts and
-cleanup safeguards remain here for that decision; no new destructive operation
-is authorized by this documentation migration.
+The Tenant, ordinary Project and Environment deletion engine remains accepted.
+The [deferred Backing extension](#8-deferred-backing-service-permanent-deletion)
+retains its dependency ordering, receipt and cleanup safeguards in this file.
+Backing-specific fields and variants in shared schemas describe that extension
+only; they do not authorize current publication or change the runtime-only
+Destroy contract. This documentation correction does not change runtime code.
 
 Owner approval recorded 2026-08-25 resolves the deletion choices: failed
 aggregate deletion retains its tombstone, Project Secrets and Tenant/Project
 Runners are contained descendants, hierarchy projections expose
-`deletion_task_id`, each parent attempt has a six-hour deadline, and permanent
-Backing Service deletion uses the shared receipt engine with `cursor.expired`
-mapped to HTTP 409. Environment deletion is the fourth aggregate target and
-uses this same engine with `operation_kind=environment.delete`; it is not a
-parallel Agent-task cascade. The decision does not claim implementation,
+`deletion_task_id`, and each parent attempt has a six-hour deadline.
+Environment deletion uses this same engine with
+`operation_kind=environment.delete`; it is not a parallel Agent-task cascade.
+The decision does not claim implementation,
 change another ADR's status, or authorize enterprise scope.
 
 ## Context
 
-This decision began with permanent Tenant, ordinary Project and backing-facade
-deletion, then added Environment deletion. Its backing-surface assumption now
-conflicts with the current product contract, as scoped above.
+This decision began with Tenant, ordinary Project and backing-facade deletion,
+then added Environment deletion. The Backing extension is now deferred; the
+shared hierarchy engine remains current.
 
 ADR 0013 proposes atomic Task and tombstone publication, visible-until-finalized
 resources, stable-id postorder traversal, mutation fences, bounded etcd
@@ -54,9 +55,9 @@ Console fixture actions are not authority for durable deletion.
 The public Task type for permanent deletion is `remove`; `destroy`
 continues to mean runtime absence without durable data removal.
 
-Generic Project DELETE cannot address a backing Project. Any future backing
-permanent-delete surface must preserve the 1:1 rule and the current authority
-limit above. This decision does not accept the whole of Proposed ADR 0013;
+Generic Project DELETE cannot address a backing Project. Deferring facade
+deletion does not permit a generic Project route to bypass that boundary.
+This decision does not accept the whole of Proposed ADR 0013;
 resource-specific persistence choices still require their named approval.
 
 ## Scoped authority and supersession
@@ -66,19 +67,17 @@ authority limit above. It does not grant a conflicting public operation.
 
 | Existing decision | Scope after ADR 0053 acceptance | ADR 0053 authority |
 | --- | --- | --- |
-| ADR 0013 generic hierarchy deletion | Continues to own general record/index limits, key encoding, fixed-revision reads, ordinary resource deletion, and non-specialized tombstones. | Replaces ADR 0013's failed-finalization rule only for Tenant, ordinary Project, and backing-facade permanent deletion. These aggregates retain their tombstone on failure, abort, timeout, corruption, and successful resource finalization until the 90-day deletion-retention pruner completes. |
-| ADR 0037 C10 permanent deletion | Continues to own Backing Service Create, Start, Stop, Destroy, adapter readiness, and facade projection if ADR 0037 is separately Accepted. | Replaces ADR 0037 section 8, its C10 deletion keys, C10 receipt domain separators, parent receipt/replay rules, finalization rules, and its `cursor.expired` HTTP 410 mapping. The generic keys, separators, completion proofs, replay rules, and HTTP 409 mapping below are the sole permanent-delete authority. |
+| ADR 0013 generic hierarchy deletion | Continues to own general record/index limits, key encoding, fixed-revision reads, ordinary resource deletion, and non-specialized tombstones. | Replaces ADR 0013's failed-finalization rule for Tenant, ordinary Project and Environment deletion. These aggregates retain their tombstone on failure, abort, timeout, corruption, and successful resource finalization until the 90-day deletion-retention pruner completes. |
+| ADR 0037 Backing lifecycle | Owns Backing Service Create, Start, Stop, runtime-only Destroy, adapter readiness and facade projection. | Does not replace that lifecycle. The deferred extension would use the shared receipt engine, not revive the former C10 deletion keyspace. |
 | ADR 0049 Volume removal | Remains the Volume identity, physical cleanup, impact, and bounded finalization authority if Accepted. | Seals each ADR 0049 Agent cleanup batch and Controller finalization as explicit parent actions; it does not duplicate Volume deletion. |
 | [Task Abort contract](../features/tasks-and-logs.md#abort) Task abort | Remains the authority for aborting one Task attempt and distinguishing operator abort from Controller shutdown. | Adds aggregate-specific dispatch retirement and tombstone retention; it does not add a second abort Task. |
 | ADR 0035 Task pruning | Remains the 90-day Task/event/idempotency retention authority. | Binds deletion retention to the final parent Task's exact `retain_until` and adds a separate bounded deletion-state pruner after ADR 0035 has removed the parent Task and marker. |
 
-ADR 0037 acceptance is not a prerequisite for the generic deletion engine or
-ordinary Tenant/Project deletion. Backing permanent deletion requires this ADR
-and an Accepted ADR 0049 (or a replacement with the same Volume guarantees),
-but does not require ADR 0037's deletion section to become Accepted first.
-Acceptance of this ADR directly adopts the backing dependency, SCC, runtime
-reconstruction, and facade-finalization clauses stated here. Acceptance still
-requires ADR 0013's needed persistence constraints to be Accepted or replaced.
+The generic deletion engine does not depend on accepting permanent Backing
+deletion. Any future Backing extension needs separate approval and ADR 0049's
+Volume guarantees, or an accepted replacement with the same guarantees.
+The engine still requires ADR 0013's needed persistence constraints to be
+Accepted or replaced.
 
 ## Decision
 
@@ -92,14 +91,10 @@ The three public hierarchy deletion operations are:
 | Tenant | `tenant.delete` | `executor=controller`, `type=remove` | owning Tenant | stable Tenant id |
 | Environment | `environment.delete` | `executor=controller`, `type=remove` | owning Tenant or Platform | stable Environment id |
 
-The earlier backing design assigned `backing-service.destroy` to a private
-`backing.delete` operation and Platform-owned `remove` Task. That assignment
-is blocked by the current runtime-only Destroy contract. The backing-specific
-schemas and surface examples below describe that unresolved design, not the
-current lifecycle implementation or a second public hierarchy DELETE route.
-
-No `delete` Task type is added. The exact private operation kinds are
-`project.delete`, `tenant.delete`, and `backing.delete`. A private operation id
+No `delete` Task type is added. The current private operation kinds are
+`project.delete`, `tenant.delete`, and `environment.delete`. The retained
+`backing.delete` schema variant is deferred and is never selected by the
+current Backing Service Destroy action. A private operation id
 is the stable instance identity shared by all parent attempts; it is not the
 public route operation id or a Task id.
 
@@ -110,14 +105,13 @@ the parent operation, not nested Controller Tasks.
 
 `DELETE /projects/{id}` accepts only `kind=tenant`. A backing Project returns
 `validation.failed` with HTTP 422 and guidance to use the Backing Service
-facade. `POST /backing-services/{project_id}/destroy` accepts only a valid
-backing facade; an ordinary Project returns `backing_service.not_found` with
-HTTP 404. There is no second permanent-delete route for a backing Project.
+facade for its supported lifecycle operations. No current route permanently
+deletes a backing facade.
 
 ### 2. Visibility, ownership, and aggregate fences
 
-A Tenant, ordinary Project, and Backing Service remain listable and showable
-until the successful final transaction. Their public Tenant or Project
+A Tenant, ordinary Project, and Environment remain listable and showable
+until the successful final transaction. Their public resource
 representation adds:
 
 ```text
@@ -140,7 +134,8 @@ removes the primary and slug index. Stable ids are never reused. Descendants
 already finalized remain absent during retry, and the ancestor fence prevents
 recreation.
 
-Bounded publication uses one aggregate mutation authority:
+Bounded publication uses one aggregate mutation authority. The
+`backing-service` schema variant is retained for the deferred extension only:
 
 ```text
 /v1/runtime/hierarchy-coordination/tenant/<tenant-id>
@@ -175,6 +170,11 @@ idempotency evidence and exact published aggregate; it never creates a second
 operation.
 
 ### 3. Shared durable deletion records
+
+In this section, `backing-service`, `backing.delete`, backing-only action and
+procedure variants, and non-null `backing_authority` belong only to the
+[deferred extension](#8-deferred-backing-service-permanent-deletion). Their
+presence in shared record shapes is not current Backing deletion authority.
 
 The typed tombstone keeps ADR 0013's approved key:
 
@@ -266,7 +266,7 @@ both non-null. `receipt_summary_digest` is non-null only after all Agent child
 receipts have been summarized. `completion_summary_digest` and `terminal` are
 non-null only in `retained`. Successful resource finalization retains this
 completed tombstone until the exact 90-day `retain_until`; it does not retain a
-public Tenant, Project, or Backing Service record.
+public Tenant, Project, or Environment record.
 
 The immutable intent is canonical JSON and at most 64 KiB:
 
@@ -297,12 +297,12 @@ DeletionIntentV1 = {
 }
 ```
 
-`timeout` is exactly six hours. Ordinary Project and Tenant deletion set
-`backing_authority=null`. Backing deletion freezes the exact final impact-page
-authority.
+`timeout` is exactly six hours. Current Project, Tenant and Environment deletion
+set `backing_authority=null`. The deferred Backing extension would freeze the
+exact final impact-page authority instead.
 
 Each immutable action is canonical JSON and at most 16 KiB. The enum is closed
-and covers every destructive descendant effect in the MVP:
+and covers the accepted hierarchy effects plus the deferred Backing variants:
 
 ```text
 DeletionActionV1 = {
@@ -399,14 +399,16 @@ DeletionActionV1 = {
 `action_kind` fixes exactly one executor and one same-purpose typed procedure.
 Environment root/Compose cleanup; Attach grant revoke/detach; Service, Entry,
 Route, Component, materialization, Zone, Network, Recovery Point, orphan
-object, and Volume physical cleanup; and backing runtime reconstruction use
+object, and Volume physical cleanup use
 Agent child procedures. Script, Release Group, Release ledger, Backup Policy,
 key material, ADR 0049 Volume record/head finalization, reservation release,
 Connector finalization, Environment finalization, Runner local teardown,
-Project Secret removal, Backing Service facade finalization, Project
+Project Secret removal, Project
 finalization, and Tenant finalization use the closed Controller finalizer
-domain above. The builder rejects any action-kind/executor/procedure tuple not
-in this mapping. `runner.local-remove` invokes the native Runner adapter and
+domain above. The deferred Backing extension assigns runtime reconstruction to
+the Agent and facade finalization to the Controller. The builder rejects any
+action-kind/executor/procedure tuple not in this mapping. `runner.local-remove`
+invokes the native Runner adapter and
 never the workload Agent. A Controller finalizer that needs several bounded
 transactions is represented by one sealed action per bounded batch, each with
 its own ordinal and fixed input.
@@ -425,11 +427,11 @@ An ordinary Environment plan seals its exact Services, Attaches and grant
 edges, Entries, Routes, Components, Scripts, Release Groups, Release records,
 Backup Policy, materializations, Volumes, Zones, Networks, reservations,
 Recovery Points, remote orphan objects, Connectors, key material, and
-Environment finalizer. Backing deletion omits consumer-owned Recovery Point
-and Connector actions because those records are retained external references;
+Environment finalizer. The deferred Backing design omits consumer-owned
+Recovery Point and Connector actions because those records are retained external references;
 ordinary Environment deletion includes its owned Connector finalizer only
-after every retained point/orphan authority permits it. A backing facade plan
-seals the adapter runtime reconstruction and the final
+after every retained point/orphan authority permits it. A future backing facade
+plan seals the adapter runtime reconstruction and the final
 `backing-service.finalize` action. No generic Project action may target a
 backing Project.
 
@@ -763,9 +765,9 @@ child identity, including parent and child operation ids, action ordinal,
 attempt, Task and assignment ids, attempt generation, workspace and owner,
 actor, executor, Task type, target, plan id and hash, deletion authority,
 immutable and retry-input digests, and timeout. Mutable Task state is excluded.
-Tenant and Project children freeze their owning Tenant workspace; backing
-children freeze Platform and the exact backing Project, Environment, and
-Service owner. A private successor candidate is at most 64 KiB and contains
+Tenant and Project children freeze their owning Tenant workspace; the deferred
+Backing design would freeze Platform and the exact backing Project,
+Environment and Service owner. A private successor candidate is at most 64 KiB and contains
 the exact canonical pending Task plus its parent, predecessor, identity, and
 retry bindings; it is not public or dispatchable.
 
@@ -1234,14 +1236,16 @@ resolved from absence of all six final keys plus the still-absent drained
 prefixes; partial absence is corruption. Stable ids remain non-reusable even
 after pruning by the global stable-id allocation rule.
 
-### 8. Backing Service permanent deletion
+### 8. Deferred Backing Service permanent deletion
 
-Permanent backing deletion is reachable only through the Backing Service
-facade. Before dispatch, every human surface exhausts 47-row pages from:
+This extension is outside the current MVP. The following safeguards are
+retained for a future decision, not instructions to implement a new operation.
+There is no accepted route, operation id or CLI command for permanent Backing
+deletion or its impact preview. Destroy remains runtime-only.
 
-```text
-GET /backing-services/{project_id}/deletion-impact?cursor=<opaque>
-```
+Any future permanent Delete must be a separate facade capability with matching
+Console, CLI and API surfaces. The retained preview design exhausts 47-row
+pages before dispatch and requires confirmation of the current Project slug.
 
 The final-page token binds the backing Project, adapter Service, immutable
 dependency-head revision, row count, ordered row-set digest,
@@ -1250,7 +1254,7 @@ the final page. A compacted fixed revision returns `cursor.expired` with HTTP
 409. Malformed or incorrectly bound cursors remain `cursor.invalid` with HTTP
 400. The client restarts the preview after expiry.
 
-DELETE requires exactly:
+The deferred deletion request would carry:
 
 ```json
 {
@@ -1303,6 +1307,13 @@ and reservations remain until the final facade CAS. That CAS removes the
 bounded facade records and reservations, completes the parent Task, and moves
 the tombstone and cleanup fence to `retained`; the separate 90-day pruner
 removes deletion evidence later.
+
+Future acceptance must prove complete impact pagination and confirmation, SCC
+grant ordering, enabled-policy blockers, disabled-source retention, Recovery
+Point and Connector retention, shared/external/owned Zone behavior, and
+facade-only deletion. Implementation must synchronize the product contract,
+API/CLI/Console surfaces, immutable plans, adapters and acceptance evidence;
+the retained schema variants alone do not establish an available capability.
 
 ### 9. Retry, abort, timeout, restart, and corruption
 
@@ -1376,7 +1387,7 @@ pruner removes those retained records.
 | Runner daemon, container, account, subid, and local-state removal | native Controller typed finalizer; never workload Agent |
 | Secret, ciphertext, and index finalization after consumers stop | Controller typed finalizer |
 | Project and Tenant primary/index finalization | Controller parent Task |
-| backing runtime reconstruction and host-absence proof | Agent child Task |
+| deferred Backing extension: runtime reconstruction and host-absence proof | Agent child Task; not current publication authority |
 
 The parent never treats Task completion, Docker-name absence, or a Boolean
 Agent report as cleanup proof. Typed acknowledgements, immutable receipts, and
@@ -1402,33 +1413,23 @@ DELETE /environments/{id}
   operation id: environment.delete
   body: forbidden
   response: 202 {"task_id":"..."}
-
-GET /backing-services/{project_id}/deletion-impact?cursor=...
-  operation id: backing-service.deletion-impact
-
-POST /backing-services/{project_id}/destroy
-  operation id: backing-service.destroy
-  body: exact impact_token and confirmation object
-  response: 202 {"task_id":"..."}
 ```
 
 Every mutation requires `Idempotency-Key`. The current `api-cli.md` command
-tree uses `delete` for Tenant, Project, and Environment aggregate deletion;
-Backing Service retains its separately owned lifecycle verb:
+tree uses `delete` for Tenant, Project, and Environment aggregate deletion:
 
 ```text
 groundplane tenant delete <slug> [--id]
 groundplane project delete <slug> [--id]
 groundplane environment delete <slug> [--id]
-groundplane backing-service destroy <slug> [--id]
 ```
 
 `remove` remains the Task type and the CRUD verb for other nouns; it is not
-substituted for these current aggregate command names. The Backing Service CLI
-exhausts every impact page, displays every effect and blocker, obtains the
-final token, confirms the current Project slug, and dispatches destroy. Tenant,
-Project, and Environment commands state that Backing Services survive. Runner
-warnings state that GitHub registration survives local removal.
+substituted for these current aggregate command names. Backing lifecycle
+commands remain owned by [api-cli.md](../api-cli.md); Destroy accepts no impact
+token or permanent-delete confirmation. Tenant, Project, and Environment
+commands state that Backing Services survive. Runner warnings state that
+GitHub registration survives local removal.
 
 The Console contract is:
 
@@ -1441,9 +1442,8 @@ The Console contract is:
   occurs only after terminal success followed by authoritative not-found.
 - Failed, aborted, and timed-out attempts expose Retry and explain that the
   aggregate remains fenced.
-- Backing detail exposes distinct **Destroy runtime** and **Delete
-  permanently** actions. Permanent deletion loads the complete authoritative
-  impact preview and requires the current Project slug.
+- Backing detail retains runtime-only Destroy. It exposes no permanent Delete
+  or deletion-impact flow in the current MVP.
 - Tenant copy says Backing Services survive. Project and Tenant Runner copy
   says GitHub cleanup remains manual.
 
@@ -1452,12 +1452,7 @@ The Console contract is:
 The public contract uses existing RFC 7807 problem vocabulary:
 
 - `validation.failed`/422 for a generic Project DELETE targeting a backing
-  Project, malformed strict bodies, or invalid confirmation;
-- `backing_service.not_found`/404 when the facade path names an ordinary or
-  absent backing Project;
-- `cursor.invalid`/400 for malformed or incorrectly bound cursors;
-- `cursor.expired`/409 for a valid impact cursor whose fixed revision is no
-  longer readable;
+  Project or malformed strict bodies;
 - `state.conflict`/409 for changed revision-bound evidence or active separately
   owned work;
 - `resource.in_use`/409 for a dependency that the defined cascade cannot own;
@@ -1473,52 +1468,48 @@ object locators, child Task params, or raw helper diagnostics.
 
 The generic accepted deletion engine requires synchronized product and
 implementation surfaces. Current progress is recorded in
-[capabilities](../capabilities.md), not inferred from this checklist. The backing
-permanent-delete items remain blocked by the authority limit at the top of this
-document; they are not instructions to change the current public Destroy action.
+[capabilities](../capabilities.md), not inferred from this checklist. These
+requirements cover current hierarchy deletion, not the deferred Backing extension.
 
-- `docs/mvp.md`: make the deletion behavior, containment, visibility,
-  six-hour retry semantics, GitHub-registration preservation, backing survival,
-  and facade-only backing deletion authoritative product contract.
-- `docs/api-cli.md`: close the duplicate backing Project route, add the backing
-  impact and permanent-delete grammar to the command tree and endpoint table,
-  add `deletion_task_id`, and synchronize exact operation ids, statuses,
-  request bodies, errors, warnings, and idempotency.
+- `docs/mvp.md`: define deletion behavior, containment, visibility, six-hour
+  retry semantics, GitHub-registration preservation and backing survival.
+- `docs/api-cli.md`: retain backing Project rejection, add `deletion_task_id`,
+  and synchronize exact operation ids, statuses, request bodies, errors,
+  warnings and idempotency.
 - `docs/architecture.md`: place the shared aggregate coordinator, hierarchy
   epoch authority, immutable plan, receipt engine, Controller finalizers, and
   singleton-Agent child boundary in the implementation contract.
-- `docs/capabilities.md`: update the C02/C03 hierarchy, C10 Backing Service,
-  C17 Runner, and C19 Task ledger entries and their vertical-delivery evidence
+- `docs/capabilities.md`: update the C02/C03 hierarchy, C17 Runner and C19 Task
+  ledger entries and their vertical-delivery evidence
   without claiming them implemented or accepted prematurely.
 - Console store, public types, fixtures, Tenant and Project danger zones,
-  Backing Service detail/impact flow, generated-client calls, Task polling,
-  Retry state, and tests: remove immediate fixture mutation and manufactured
-  Activity while keeping Destroy distinct from permanent Delete.
+  generated-client calls, Task polling, Retry state and tests: remove immediate
+  fixture mutation and manufactured
+  Activity while preserving runtime-only Backing Destroy.
 - Controller domain/application code: typed intents, tombstones, coordination
   epochs, stable postorder planning, finalizers, retry/abort/recovery, and
-  facade validation.
+  backing Project rejection.
 - Persistence code: canonical schemas and key builders, fixed-revision scans,
   monotonic cleanup fences, contiguous action completion, all exact
   compare-and-mutate budgets, version-zero receipt/completion scan cursors,
   receipt proof/summary, 90-day bounded deletion pruning, replay, cleanup, and
   corruption handling.
 - Public API/OpenAPI and generated Go/TypeScript clients: exact schemas,
-  operation ids, response statuses, idempotency, cursor errors, kind rejection,
+  operation ids, response statuses, idempotency, kind rejection,
   and nullable `deletion_task_id`; generated artifacts must be regenerated,
   never hand-edited.
 - CLI grammar and handlers: exact `delete` commands, slug/`--id` resolution,
-  complete backing impact pagination and confirmation, survival warnings, and
-  authoritative Task output.
-- Agent protocol, typed procedures, and adapters: Environment and backing
-  cleanup, generation-fenced child recovery, typed absence proof, Attach/Zone/
+  survival warnings and authoritative Task output.
+- Agent protocol, typed procedures, and adapters: Environment cleanup,
+  generation-fenced child recovery, typed absence proof, Attach/Zone/
   Volume handling, and no Runner cleanup through the workload Agent.
 - Contract, transaction-boundary, persistence, API, CLI, Console, restart,
   failure-injection, and real-host acceptance tests described below.
 
-No layer-only implementation may claim this proposal complete. The 1:1 rule
+No layer-only implementation may claim this capability complete. The 1:1 rule
 must hold after the synchronized replacement.
 
-## Consequences if accepted
+## Consequences
 
 - Partially deleted aggregates never reopen. Operators retry the same immutable
   operation until parent-last finalization succeeds.
@@ -1527,7 +1518,8 @@ must hold after the synchronized replacement.
   Groundplane ownership.
 - Operators can observe the current deletion attempt without treating Task
   terminal failure as resource availability.
-- Backing Projects have one permanent-delete capability through one facade.
+- Backing Destroy retains configuration and data. Permanent facade deletion
+  remains unavailable in the current MVP.
 - One receipt engine provides bounded, restart-safe child consumption for all
   three aggregate deletions.
 - Tombstones, slugs, action plans, and receipts may remain indefinitely after
@@ -1541,15 +1533,15 @@ must hold after the synchronized replacement.
 
 ## Acceptance evidence
 
-Before this ADR can become implementation authority, the synchronized slice
-must prove:
+Implementation acceptance for the current hierarchy engine requires the
+synchronized slice to prove:
 
 1. OpenAPI golden tests cover exact operation ids, bodies, success statuses,
    idempotency, kind rejection, and RFC 7807 codes.
 2. Generated Go and TypeScript clients and CLI grammar have exact parity.
 3. Console tests prove no fixture deletion, no fabricated Task or Activity,
    `remove` versus `destroy`, authoritative polling, persistent deleting state,
-   Retry, and complete backing impact pagination.
+   Retry, and the absence of permanent Backing deletion surfaces.
 4. Atomic publication includes Task, tombstone, intent, lock, replay locator,
    and protected idempotency evidence under unknown outcomes.
 5. Ancestor-fence races cover every descendant create, mutation, operation
@@ -1562,9 +1554,9 @@ must prove:
    and Tenant parents; Runner tests prove GitHub registration is preserved.
 9. Tenant and ordinary Project deletion preserve every Backing Service and
    Platform Secret.
-10. Backing tests cover SCC grant ordering, enabled-policy blockers,
-    disabled-source retention, Recovery Point and Connector retention,
-    shared/external/owned Zone behavior, and facade-only deletion.
+10. Backing Destroy preserves configuration and durable data and cannot publish
+    a `backing.delete` operation. Generic Project deletion still rejects
+    backing Projects.
 11. Crash and restart injection covers every cleanup-fence generation and
     tombstone phase, action batch, Agent and Controller completion proof, child
     terminal, receipt publication and consumption, both summaries, every
@@ -1626,8 +1618,9 @@ plan.
 
 ### Permit generic Project DELETE for backing Projects
 
-Rejected because it duplicates the facade capability and bypasses the impact
-preview and backing-specific dependency authority.
+Rejected because it bypasses the facade lifecycle boundary. Deferring permanent
+Backing deletion must not expose it through an ordinary Project route; a future
+facade Delete also requires its own preview and dependency authority.
 
 ### Resnapshot children on retry
 
@@ -1647,8 +1640,9 @@ replayable.
 
 ## Out of scope
 
-This proposal covers the single-host MVP only. It adds no multi-Agent
-placement, Agent failover, multi-host scheduling, high availability, tenant
+The accepted hierarchy engine covers the single-host MVP only. Permanent
+Backing Service deletion is deferred as described in section 8. It adds no
+multi-Agent placement, Agent failover, multi-host scheduling, high availability, tenant
 authorization, RBAC, approval workflow, retention policy, migration or
 compatibility layer, bulk-delete API, undo, soft delete, enterprise audit
 export, or GitHub registration management. It makes no implementation or MVP

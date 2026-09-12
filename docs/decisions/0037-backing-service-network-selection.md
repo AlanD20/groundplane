@@ -148,10 +148,10 @@ the existing Service lifecycle deadlines, retry, terminalization, and
 idempotency rules.
 
 There is no Backing-service delete endpoint in the current MVP/API contract.
-Permanent hierarchy removal is not authorized by this lifecycle decision.
-ADR 0053 also assigns `backing-service.destroy` a permanent aggregate-deletion
-meaning, which conflicts with this runtime-only Destroy surface and requires an
-owner decision before implementation. No second route is implied here.
+Permanent Backing deletion is outside the current MVP by owner decision on
+2026-09-12. The [deferred extension in ADR 0053](0053-durable-hierarchy-and-backing-facade-deletion.md#8-deferred-backing-service-permanent-deletion)
+requires separate approval and a distinct Delete capability across Console,
+CLI and API, with impact preview and confirmation. It cannot redefine Destroy.
 
 ### 6. Public parity
 

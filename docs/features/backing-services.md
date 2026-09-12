@@ -46,12 +46,12 @@ the current MVP and API contract. Destroy removes runtime, not the Project,
 Environment, Zone, Volume, Entries, Attach history, credentials, or data. There
 is no Backing Service DELETE endpoint.
 
-[ADR 0053](../decisions/0053-durable-hierarchy-and-backing-facade-deletion.md)
-also assigns `backing-service.destroy` a permanent aggregate-deletion meaning.
-That conflicts with the current runtime-only MVP/API surface and requires an
-owner decision before permanent facade deletion can be implemented. This
-feature does not invent another route or treat the conflicting historical
-protocol as current public behavior.
+Permanent Backing deletion is outside the current MVP, by owner decision on
+2026-09-12. Start recreates runtime using the retained configuration and data.
+A future permanent Delete needs a separate Console action, CLI command and API
+operation with impact preview, confirmation and explicit approval. The
+[deferred safeguards](../decisions/0053-durable-hierarchy-and-backing-facade-deletion.md#8-deferred-backing-service-permanent-deletion)
+do not authorize a route or a change to Destroy.
 
 ### Attach identity and credential reuse
 
@@ -157,8 +157,9 @@ forms remain in [ADR 0068](../decisions/0068-valkey-authentication-modes.md).
 Backing Service creation and runtime lifecycle. [ADR 0031](../decisions/0031-durable-attach-facts-and-grants.md)
 owns durable Attach credential ownership, reverse references, task behavior,
 facts, grants, and Backup-source identity. [ADR 0068](../decisions/0068-valkey-authentication-modes.md)
-owns the accepted Valkey authentication modes. ADR 0053 contains the unresolved
-permanent-deletion conflict described above; it is not duplicated here.
+owns the accepted Valkey authentication modes. ADR 0053 owns the accepted
+hierarchy-deletion engine and retains the separate deferred Backing extension;
+neither changes the current runtime-only Destroy action.
 
 Facts and encrypted values have separate durable records. A dependent fact
 read follows `credential_attach_id` to the direct owner while preserving the
@@ -183,6 +184,8 @@ rules, owner/dependent detach races, grant resolution, masked list output,
 explicit fact reveal, and restart-stable facts. PostgreSQL and each Valkey
 authentication mode need create, attach, reveal, stop/start, detach, retry, and
 failure-path proof against the same durable identities.
+Destroy must preserve durable configuration and data so Start can recreate
+runtime. No permanent Backing deletion or impact-preview surface is exposed.
 
 Production Gate B additionally requires source-specific Backup, verified
 original-target Restore, and retention proof for every persistent source.

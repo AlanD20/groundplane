@@ -21,8 +21,9 @@ Approval and implementation are distinct:
   is Deferred post-MVP. It preserves future constraints, not current wire fields,
   schemas or existing-Zone selection authority.
 - [ADR 0053](0053-durable-hierarchy-and-backing-facade-deletion.md#current-authority-limit)
-  has an unresolved backing-deletion surface conflict. Its generic hierarchy
-  engine remains accepted; current Backing Service Destroy remains runtime-only.
+  is Accepted for Tenant, ordinary Project and Environment deletion. Its
+  Backing extension is Deferred outside the current MVP; Destroy remains
+  runtime-only, and no permanent Backing deletion surface is approved.
 
 For actual progress, use [capabilities](../capabilities.md),
 [current tasks](../../tasks/todo.md) and the [work checkpoint](../head.md).
