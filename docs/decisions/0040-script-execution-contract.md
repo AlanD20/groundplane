@@ -690,7 +690,7 @@ authorized runner as above, and reaches Task `aborted` only after all cleanup
 proofs; any invariant failure instead fails Internal and retains reconciliation
 authority. No later hook starts while an earlier hook lacks cleanup proof.
 
-Script abort uses ADR 0041 without a Script-specific public state or response.
+Script abort uses [Task Abort contract](../features/tasks-and-logs.md#abort) without a Script-specific public state or response.
 The bodyless `POST /tasks/{id}/abort` requires `Idempotency-Key`, rejects any
 request body including `{}`, targets exactly the supplied Task, and never
 creates another Task or operation. A pending Script Task atomically records

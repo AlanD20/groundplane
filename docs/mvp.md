@@ -665,7 +665,7 @@ Semantics bound to the channel:
   The public abort action targets that existing Task and returns its id; it
   never creates a second abort Task. Pending work terminalizes atomically,
   while running Agent or native Controller work returns only after its exact
-  cancellation acknowledgement has durably committed. ADR 0041 fixes the
+  cancellation acknowledgement has durably committed. [Task Abort contract](features/tasks-and-logs.md#abort) fixes the
   response, replay, race, and terminal-state semantics.
 - **Heartbeat — two signals, distinct roles.** (a) **`Ready` liveness is
   authoritative for dead-agent detection**: the agent sends an idle `Ready`

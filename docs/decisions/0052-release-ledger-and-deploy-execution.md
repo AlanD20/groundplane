@@ -848,7 +848,7 @@ allowed only after this gate-clearing transaction succeeds.
 
 #### Abort
 
-Abort preserves Accepted ADR 0041 exactly. It targets the existing Task id and
+Abort preserves Accepted [Task Abort contract](../features/tasks-and-logs.md#abort) exactly. It targets the existing Task id and
 never creates another Task or Release operation. `POST /v1/tasks/{task_id}/abort`
 has no body and returns exactly `202 {"task_id":"<target Task id>"}` only after
 the target Task's durable terminal transaction commits.
@@ -1300,7 +1300,7 @@ normalized order. No manifest digest is required.
 }
 ```
 
-The ADR 0041 abort response is not `TaskAccepted`: it does not identify newly
+The [Task Abort contract](../features/tasks-and-logs.md#abort) abort response is not `TaskAccepted`: it does not identify newly
 accepted asynchronous work. Its identical one-field JSON shape names the
 existing target Task and is returned only after that Task is durably terminal.
 

@@ -62,7 +62,7 @@ Accepted, no second exact authority remains active for the listed scope.
 | ADR 0013 generic hierarchy deletion | Continues to own general record/index limits, key encoding, fixed-revision reads, ordinary resource deletion, and non-specialized tombstones. | Replaces ADR 0013's failed-finalization rule only for Tenant, ordinary Project, and backing-facade permanent deletion. These aggregates retain their tombstone on failure, abort, timeout, corruption, and successful resource finalization until the 90-day deletion-retention pruner completes. |
 | ADR 0037 C10 permanent deletion | Continues to own Backing Service Create, Start, Stop, Destroy, adapter readiness, and facade projection if ADR 0037 is separately Accepted. | Replaces ADR 0037 section 8, its C10 deletion keys, C10 receipt domain separators, parent receipt/replay rules, finalization rules, and its `cursor.expired` HTTP 410 mapping. The generic keys, separators, completion proofs, replay rules, and HTTP 409 mapping below are the sole permanent-delete authority. |
 | ADR 0049 Volume removal | Remains the Volume identity, physical cleanup, impact, and bounded finalization authority if Accepted. | Seals each ADR 0049 Agent cleanup batch and Controller finalization as explicit parent actions; it does not duplicate Volume deletion. |
-| ADR 0041 Task abort | Remains the authority for aborting one Task attempt and distinguishing operator abort from Controller shutdown. | Adds aggregate-specific dispatch retirement and tombstone retention; it does not add a second abort Task. |
+| [Task Abort contract](../features/tasks-and-logs.md#abort) Task abort | Remains the authority for aborting one Task attempt and distinguishing operator abort from Controller shutdown. | Adds aggregate-specific dispatch retirement and tombstone retention; it does not add a second abort Task. |
 | ADR 0035 Task pruning | Remains the 90-day Task/event/idempotency retention authority. | Binds deletion retention to the final parent Task's exact `retain_until` and adds a separate bounded deletion-state pruner after ADR 0035 has removed the parent Task and marker. |
 
 ADR 0037 acceptance is not a prerequisite for the generic deletion engine or
@@ -1347,7 +1347,7 @@ Failure, abort, timeout, Agent loss, Controller restart, and final-CAS
 corruption retain the tombstone, deletion lock, slug indexes, immutable intent,
 action plan, receipts, checkpoints, replay locator, and remaining resources.
 Controller shutdown cancellation leaves a durable running claim recoverable as
-required by ADR 0041. Agent child recovery uses the singleton Agent's durable
+required by [Task Abort contract](../features/tasks-and-logs.md#abort). Agent child recovery uses the singleton Agent's durable
 assignment and generation; there is no placement choice, failover, or
 multi-Agent reassignment.
 

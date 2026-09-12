@@ -464,7 +464,7 @@ Environment lock records `skipped_overlap`.
   are abortable; an already-aborted Task is an idempotent success, while
   completed, failed, or timed-out Tasks fail with `task.not_abortable` (409).
   Running Agent and native Controller work returns only after cancellation
-  durably commits. ADR 0041 fixes the exact race and replay behavior.
+  durably commits. [Task Abort contract](features/tasks-and-logs.md#abort) fixes the exact race and replay behavior.
 - **Internal prune Tasks are excluded from generic Task mutations.**
   `backup_prune` remains visible through Task and Activity list/detail, but
   `POST /tasks/{id}/retry`, `task retry <id>`, `POST /tasks/{id}/abort`, and

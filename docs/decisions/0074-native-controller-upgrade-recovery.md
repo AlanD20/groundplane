@@ -3,7 +3,7 @@
 - Status: Accepted within the owner-approved upgrade-safety initiative
 - Date: 2026-09-10
 - Replaces: the staged-binary Agent/Component update paragraph in `mvp.md`
-- Preserves: ADR0010 Agent replacement, ADR0016 native bootstrap, ADR0041 Tasks
+- Preserves: ADR0010 Agent replacement, ADR0016 native bootstrap, [Task Abort contract](../features/tasks-and-logs.md#abort) Tasks
 
 ## Decision
 
