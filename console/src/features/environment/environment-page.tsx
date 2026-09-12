@@ -65,6 +65,7 @@ import { ReleaseGroupsPanel } from '@/features/release-group/release-group-surfa
 import { ServiceStateBadges } from '@/features/service/service-runtime-actions'
 import { ServiceDetailsDrawer, DetailRow } from './service-details-drawer'
 import { ServicesList } from './services-list'
+import { routeSummaryHint } from './route-summary'
 import { ComponentZonePicker } from './component-zone-picker'
 import { CaddyTemplateEditor } from './caddy-template-editor'
 import { cn, newId } from '@/lib/utils'
@@ -162,12 +163,7 @@ export default function EnvironmentPage() {
           tone={provisioningFailed || unhealthy || unavailable ? 'warning' : 'success'}
         />
         <StatCard icon={<Layers />} label="Zones" value={env.zones.length} hint="network zones" />
-        <StatCard
-          icon={<Plug />}
-          label="Routes"
-          value={env.routes.length}
-          hint={env.routes.some((r) => r.exposure === 'public') ? 'public · needs ingress component' : 'internal only'}
-        />
+        <StatCard icon={<Plug />} label="Routes" value={env.routes.length} hint={routeSummaryHint(env.routes)} />
         <StatCard icon={<History />} label="Last deploy" value={env.release} hint={env.lastDeployAt} />
       </div>
       <fieldset key={deletionInProgress ? 'deletion-fenced' : 'editable'} disabled={deletionInProgress} className="contents" aria-label={deletionInProgress ? 'Environment deletion in progress' : undefined}>

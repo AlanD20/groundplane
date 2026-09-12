@@ -1114,7 +1114,10 @@ tenants and one database.
   `pending` means desired state awaits provider application; `served` means the
   latest successful pinned provider observation matches the desired generation;
   and `degraded` means the latest provider apply failed while desired state is
-  not confirmed. The Task records a desired-only result without an Agent effect when no
+  not confirmed. The Console overview summarizes those same Route states and
+  their exposure; an applied provider generation is not proof of public
+  reachability or a claim that all native policy permits access. The Task records
+  a desired-only result without an Agent effect when no
   router is enabled. Enabling Caddy reconciles every stored Route. Disabling
   Caddy removes the entry point and releases its address but preserves every
   Route. Re-enabling Caddy allocates an address and reconciles those same

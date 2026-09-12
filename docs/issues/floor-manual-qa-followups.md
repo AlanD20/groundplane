@@ -21,6 +21,13 @@ The overview's public Route hint says `needs ingress component` unconditionally
 in `console/src/features/environment/environment-page.tsx`; it does not prove
 the configured Caddy/Tunnel path is absent. The public path passes live checks.
 
+2026-09-12 update: the overview summary is corrected locally, with focused/full
+Console tests, build and isolated browser proof. It uses existing Route states
+and never claims public reachability; see
+`../acceptance/2026-09-12-route-summary.md`. Live deployment and Service
+observation remain pending. The Environment aggregate also needs to stop showing
+Healthy when its Service observations are unavailable.
+
 Acceptance: agree the bounded observation scope with the owner, expose the real
 Controller observation consistently through Console/CLI/API, prove unavailable
 versus unhealthy semantics, and make ingress presentation reflect its actual
