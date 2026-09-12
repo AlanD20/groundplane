@@ -7,6 +7,9 @@ Do not use an issue record to waive a build, security, data-safety or runtime bl
 
 The current deployment-first deferral and complete frozen finding inventory are
 tracked in [Deferred architecture cleanup](deferred-architecture-cleanup.md).
+Current storage, Script, Blueprint, visibility and verification gaps are grouped
+in [Runtime qualification](runtime-qualification.md). Resolved and superseded
+per-fix journals have been removed; their relevant evidence is feature-routed.
 
 Use this form:
 

@@ -232,6 +232,65 @@ not prove real Docker mount/network enforcement or source-to-host behavior.
 
 ## Preserved broad failures and remaining qualification
 
+### Manual immutable-source integration
+
+The earlier manual-source investigation supplied local persistence and projection
+proof below. Its deployed legacy records were handled separately by the exact
+[one-time migration](hosting-floor.md#manual-script-lifecycle-and-one-time-migration);
+the later floor journey does not retroactively qualify every local failure path.
+
+| Local proof | Scope retained |
+| --- | --- |
+| Prepared publication and admission | Root published atomically with Task; assignment, plan and body bind exact membership count/digest at one revision. Changed, releasing, retry-available or absent roots reject; a missing single step rejects safely. |
+| Terminal and Abort | Exact assignment-owned `cleanup_proven` report survives bounded release/reconnect; conflicting reports and new events reject. Pending or assigned-before-start Abort requires Controller-owned absence under execution/Task/assignment fences; a winning start checkpoint prevents false cleanup. |
+| Before-start timeout and Retry | Both timeout collectors terminalize unstarted work at its original deadline, preserving retry authority. Retry transfers the same execution/root without changing plan, snapshot or counts; after-start or retention-deadline retry rejects. |
+| Retention | `expiry_before_start` and `retry_expiry` drain bounded references before pruning. Original deadline/terminal bytes remain; live retry does not starve other expired work. Tests covered 35 memberships, unknown committed batches and restart, with 16-member reads and 96-operation physical bounds. |
+| Unpublished preparation | Startup abandonment completes before handlers, dispatch and scheduling; partial/sealed preparation and unknown phase/batch/final-delete outcomes preserve published shared counts. Corrupt cursors/digests and coexisting roots fail closed. Rootless historical records are not repaired. |
+| Protected replay | Marker lookup precedes preparation. Pending/terminal replay and lost-publication-response recovery are read-only and retain active references. |
+
+`TestManualScriptServingReleaseToTerminalSourceJourney` uses an actually published
+Release, normal Script creation, source resolution/preparation, claim/admission,
+timeout, Retry, cleanup and normal Script removal. It does not hand-seed the
+source aggregate or Release fence; Agent/Docker acknowledgement is still fake.
+Service membership pins the immutable execution snapshot when the optional
+runtime sidecar is absent, while publication retains desired/serving fences.
+Substituted Service identities, owners or snapshot digests reject.
+
+`TestManualScriptServingReleaseEntryJourney` adds a plain ENV Entry and real
+materialization/artifact resolvers. Exact generation removal fences survive Retry
+and disappear only after cleanup. Corrupt admission clears owned body/Entry
+buffers. `TestManualScriptServingReleaseSecretFileJourney` adds an encrypted file
+with a fresh in-memory age key, real Protector and exact owner/mode `0600`;
+metadata is redacted and no plaintext-generation record is created. The reusable
+Secret variant checks distinct Entry/Secret ciphertext digests and exact Secret
+owner/revision retention through assignment and Retry-open timeout.
+
+Secret, Entry and Service retirement regressions cover preparation-before-delete,
+delete-before-preparation, failed-removal Retry and reservations injected before
+final CAS. Count and forward-prefix absence must agree; corrupt or torn evidence
+rejects. Entry checks protect all generations, including an old retained value.
+Parent/direct/Task finalizers use the same absence proofs. Prefix-aware transaction
+fakes are necessary: a fake that ignores prefix comparisons proves nothing here.
+Service removal still requires a fresh DELETE after failure, not ordinary Retry.
+
+Volume tests proved source-reservation exclusion in desired-removal publication,
+including final-CAS reservation races and unchanged stable-ID slug edits. Later
+[Volume integration evidence](hosting-floor.md#volume-publication-and-removal)
+supersedes the old statement that the removal runtime was unconnected; mounted
+consumer destruction and source-family retirement still need their own proof.
+
+The `ManualScript|ScriptSourceReference` selection and named Secret/Entry/Service/
+Volume source selections passed with `-race -count=1`, as did the complete source
+module. These are bounded local proofs, not real Attach, network destruction,
+full-package or live Retry/crash acceptance. Older broader failures included
+`TestTaskRepositoryTimesOutExactAgentGenerationAssignments`,
+`TestTaskRepositoryTerminalReplayDoesNotPermitNewWrites`, and
+`TestBlueprintPublisherTerminalPreservesExecutedArtifact/addressable`; they also
+failed on the unchanged baseline (the last on `403b0275d`, with its portless
+control passing). Preserve those limits when reconciling current full-suite debt.
+
+### Explicit-context qualification
+
 The broader Script/Blueprint race run retained five pre-existing failure groups:
 
 - `TestBlueprintRequirementGateClaimEpochAllowsOnlyExactPrerequisiteAcknowledgements`;

@@ -69,9 +69,12 @@ allowances must not be weakened to hide findings.
 - Public test fixtures and cross-layer placement: migrate the nine etcd test files into app-owned
   integration tests using public fixtures. Supplementary plan:
   `.tmp/mvp-floor-correction-20260908/test-seams/fixture-closure.md`.
-- Service extraction: preserve branch `refactor/mvp-service-mutations-20260908` and worktree
-  `.tmp/mvp-service-mutations-20260908`. Its opaque-receipt/typed-Service extraction is unfinished
-  and unlanded; do not transplant it without fresh authorization.
+- Service extraction: the unfinished opaque-receipt/typed-Service proposal was
+  identified by historical branch `refactor/mvp-service-mutations-20260908` and
+  worktree `.tmp/mvp-service-mutations-20260908`. These are not active-worktree
+  instructions. Consult the [consolidation evidence](../acceptance/repository-consolidation.md)
+  and preserved recovery archive before any authorized reuse; do not transplant
+  the proposal as though it were landed implementation.
 - Environment Blueprint extraction: a proposed extraction spanning seven production files and
   roughly 3,927 lines depends on EntryGeneration and AttachFact prerequisites. It is a deferred
   proposal, not approved implementation. Supplementary report:
