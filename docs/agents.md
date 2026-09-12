@@ -262,6 +262,7 @@ compatibility adapters do not belong in `console/`.
 
 ## Documentation discipline
 
-Document rationale and invariants. Let code and manifests describe mechanics.
-Add an ADR when changing a framework, process boundary, persistence model,
-public interface, or extension seam. Supersede old ADRs; never delete them.
+Follow [the documentation rules](README.md) when creating, changing or retiring
+documents. Keep feature requirements and design together, link to shared rules,
+and use plain language. Preserve valid constraints and useful rationale before
+removing superseded material; Git retains its history.

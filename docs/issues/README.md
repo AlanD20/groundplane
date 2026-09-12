@@ -1,7 +1,9 @@
 # Deferred issues
 
-Create one Markdown file per non-blocking finding. Do not record a build,
-security, data-safety, or runtime blocker here instead of fixing it.
+Group related non-blocking findings by feature. Create a separate file only
+when a finding needs its own evidence and acceptance conditions. Follow the
+[documentation rules](../README.md) when resolving or removing records.
+Do not use an issue record to waive a build, security, data-safety or runtime blocker.
 
 The current deployment-first deferral and complete frozen finding inventory are
 tracked in [Deferred architecture cleanup](deferred-architecture-cleanup.md).

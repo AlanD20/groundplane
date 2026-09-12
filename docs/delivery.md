@@ -162,7 +162,8 @@ floor prerequisites. Early slice landing does not weaken this final audit.
 
 An owner-designated QA host may be reset or wiped without repeated approval
 while executing the accepted Groundplane verification journey. The current
-authorized host must be named in `docs/status.md`. This authority is limited to
+authorized host and any active pause must be named in `docs/head.md`; follow
+those current limits. This authority is limited to
 that disposable host and its Groundplane test state; it never extends to source
 worktrees, non-Groundplane data, or a production host. Prefer a bounded repair
 when it is faster and preserves useful evidence, otherwise reprovision cleanly

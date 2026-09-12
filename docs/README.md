@@ -1,27 +1,99 @@
 # Groundplane documentation
 
-Use this directory as a routed contract, not a collection of overlapping
-summaries. Each decision has one authoritative home.
+Documentation describes the current product, its requirements and its design.
+Git preserves previous versions. Start with the document that owns the question.
 
-| Document | Read when |
+## Document owners
+
+| Document | Purpose |
 | --- | --- |
-| `mvp.md` | Product behavior, domain model, scope, or locked decisions |
-| `api-cli.md` | Console actions, CLI commands, REST endpoints, or the 1:1 rule |
-| `blueprint.md` | Desired state, Compose fields, YAML, ids, or validation |
-| `architecture.md` | Module layout, process boundaries, extension seams, or frontend stack |
-| `standards.md` | Writing or reviewing Go code and CI checks |
-| `agents.md` | Planning repository changes or deciding which contract must move |
-| `delivery.md` | Commits, review, quality gates, or release preparation |
-| `capabilities.md` | MVP implementation status, contract gaps, and vertical delivery order |
-| `head.md` | Context recovery, actual active lanes, blockers, and next actions |
-| `status.md` | Task-scoped historical implementation evidence when `head.md` points to an exact entry |
-| `decisions/` | Changing an architectural choice that has recorded rationale |
+| [mvp.md](mvp.md) | Product scope, shared behavior, domain terms and acceptance outcomes |
+| Feature documents | One entry point for a feature's requirements, design and acceptance |
+| [api-cli.md](api-cli.md) | Operator actions, CLI commands and REST surfaces |
+| [blueprint.md](blueprint.md) | Desired-state grammar and validation |
+| [architecture.md](architecture.md) | Shared process, module and dependency boundaries; wire generation |
+| [standards.md](standards.md) | Enforceable coding rules |
+| [agents.md](agents.md) and [delivery.md](delivery.md) | Repository workflow, verification and delivery |
+| [deployment.md](deployment.md) and [acceptance.md](acceptance.md) | Deployment and qualification procedures |
+| [head.md](head.md) | Current work, authority limits, blockers and next actions |
+| [capabilities.md](capabilities.md) | Product-wide implementation and qualification gaps |
 
-`mvp.md` wins product conflicts. Update every mirror in the same change:
-the Console store, CLI tree, REST resource map, Blueprint grammar, and
-architecture documentation.
+Read relevant sections, not every linked document. Read `head.md` in full after
+context recovery. Requirements describe what must be true; implementation and
+qualification status describe what has been built and proved. Neither a missing
+implementation nor an old test result changes a requirement.
 
-After compaction, restart, or head-agent replacement, read `head.md` in full
-before choosing work. It is the compact operational checkpoint, not product
-authority. Do not use `status.md` as a current lane inventory or remote-health
-report; consult it only for the bounded evidence needed by the active task.
+## Feature document
+
+Use one living `docs/features/<feature>.md` for each coherent feature. A small
+change belongs in its existing feature document, not a new file per task or fix.
+Use these sections when relevant:
+
+1. **Purpose and scope.** Who needs the feature, the outcome, and what it excludes.
+2. **Functional requirements.** Operator behavior, inputs, outputs, state changes
+   and failure behavior. Link to the API and Blueprint definitions.
+3. **Non-functional requirements.** Relevant security, reliability, performance,
+   resource and compatibility constraints. State measurable limits when they are
+   required; do not invent targets to fill a template.
+4. **Technical design.** Owning modules, interfaces, data flow, state transitions
+   and dependencies. Explain important choices and link to the code and schemas.
+5. **Acceptance.** Observable conditions and the tests or operator checks that
+   prove them. Reference evidence; do not paste execution transcripts.
+6. **Current status.** Distinguish agreed requirements, implemented behavior and
+   completed qualification. State remaining gaps and link to their evidence.
+
+A feature document should explain the behavior and why its design meets the
+requirements. Put shared rules in their owning document and link to them.
+Generated schemas, manifests and code remain the sources for mechanical details.
+
+## Plain language
+
+Name the actor, action, object and failure condition. Use one term for one
+concept, and define unfamiliar terms when they first matter. Preserve exact
+code and API names; explain them rather than inventing new labels.
+Use normal spacing, short sentences and headings that describe their content.
+Keep the reason for a non-obvious constraint beside that constraint.
+Remove filler, repeated rules, unexplained abbreviations and claims such as
+“robust” or “production-ready” without a stated condition and evidence.
+Clarity and complete meaning matter more than an arbitrary word limit.
+
+## Maintenance and deletion
+
+- Update the owning document when behavior or design changes. Update only
+  affected references and dependent contracts; do not copy the same rule into
+  several documents.
+- Record a design choice in the feature document. Use a separate ADR when a
+  shared or expensive-to-reverse decision needs its own rationale and alternatives.
+  An ordinary commit does not require a new ADR or acceptance report.
+- Keep one current work checkpoint. Replace completed next actions instead of
+  appending a journal. Group related open issues; remove resolved task lists.
+- Retain evidence needed for unfinished qualification, unresolved incidents or
+  a claim still used by the project. It is dated evidence, not a current command
+  or permission. Keep private logs and credentials out of tracked documentation.
+- Before deleting a document, check its requirements, rationale, unresolved
+  work and incoming references. Move anything still needed to its current owner,
+  then remove the old file and repair references in the same commit.
+- Fully superseded ADRs, plans and reports may be deleted after that check.
+  Record the replacement in the commit; recover history from Git when needed.
+  Do not build another Markdown archive of obsolete instructions.
+- A missing implementation is not a stale requirement. Preserve uncommitted
+  work and failed evidence. Ask the owner when a conflict needs a product decision.
+
+## Migration
+
+Migrate one feature or related document group at a time. Record the source and
+destination, preserve requirement meaning and qualification limits, check
+references, and land the slice before starting another independent migration.
+A readability change does not authorize new behavior or code restructuring.
+
+During migration, `mvp.md`, `api-cli.md`, `blueprint.md`, `architecture.md`
+and relevant accepted ADRs retain their existing requirements. Feature documents
+link to details not yet moved; moving a requirement requires updating its old
+home and readers in the same slice, not creating competing copies.
+
+The first feature migrations are the existing production-initiative specs:
+`SPEC-upgrade-safety.md`, `SPEC-router-template.md`, `SPEC-setup-scripts.md`
+and `SPEC-kobwnewe-hosting.md`. Remaining work includes reconciling the historical
+`status.md` and duplicated progress ledgers, reviewing superseded ADRs, and
+consolidating acceptance reports whose evidence is still needed. Their presence
+is not proof that their old next actions or runtime observations are current.

@@ -9,6 +9,8 @@ Console (`console/`), and the Go Controller, Agent and CLI.
 
 ## Context docs — read the one that matches your task
 
+- **docs/README.md** — documentation owners, feature format and migration rules.
+  Read it before creating, moving or deleting documentation.
 - **docs/mvp.md** — the authoritative product contract. Reach for it on
   any product, model, or locked-decision question, and BEFORE changing
   product or Console behavior. Missing implementation does not narrow this contract.
