@@ -3,7 +3,7 @@
 This document consolidates the 2026-09-10 Caddy template/preflight/reload work
 and the 2026-09-12 Route summary. Requirements live in
 [Router templates](../features/router-template.md) and
-[Kobwnewe hosting](../features/kobwnewe-hosting.md). Local, browser and QA
+[Services and Releases](../features/services-and-releases.md). Local, browser and QA
 results are kept distinct; none is a production-readiness claim.
 
 ## Complete template and preview

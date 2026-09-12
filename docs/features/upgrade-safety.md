@@ -7,7 +7,6 @@ application workloads or relying on a failed candidate to recover. Keep applicat
 containers, data, routing and durable Tasks intact. The Console may briefly
 reconnect, but it must recover the result of the same update operation.
 
-This feature belongs to the [production initiative](../../CAPABILITY_MAP.md).
 [ADR0074](../decisions/0074-native-controller-upgrade-recovery.md) defines native
 Controller activation and recovery; [architecture.md](../architecture.md) defines
 the shared process boundaries. Application Scripts do not perform self-update.

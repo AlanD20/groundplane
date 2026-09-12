@@ -144,9 +144,8 @@ uncertain terminal-commit reconciliation from exact durable authority.
 
 Authoring and substantial publication paths are implemented. Bounded marker and
 terminal-envelope regressions have local proof, including changed-epoch rejection
-and lost-response replay without changing the original timestamp. Dated
-[hosting-floor evidence](../acceptance/hosting-floor.md#blueprint-publication-bounds)
-distinguishes storage/Agent-admission tests from live gRPC/Docker and full-bundle
+and lost-response replay without changing the original timestamp. Local
+storage and Agent-admission tests do not prove live gRPC, Docker or full-bundle
 Apply. [Script evidence](../acceptance/script-execution.md#preserved-broad-failures-and-remaining-qualification)
 retains broader failing fixtures. Full integration, remaining source/recovery
 paths and CI are not claimed complete; see [tasks](../../tasks/todo.md).

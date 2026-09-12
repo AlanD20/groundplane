@@ -46,14 +46,8 @@ function fixtureId(kind: string, seed: string): string {
 }
 
 // Attach ids — record keys only; names are the spec keys.
-const attPgAppStaging = fixtureId('att', 'pg-app-staging')
-const attPgAppProduction = fixtureId('att', 'pg-app-production')
-const attPgIdentityStaging = fixtureId('att', 'pg-identity-staging')
-const attPgIdentityProduction = fixtureId('att', 'pg-identity-production')
 const attSampleSitePgStaging = fixtureId('att', 'sample-site-pg-staging')
 const attSampleSitePgProduction = fixtureId('att', 'sample-site-pg-production')
-const attVkStaging = fixtureId('att', 'vk-staging')
-const attVkProduction = fixtureId('att', 'vk-production')
 
 // The attach NAME is the spec key (operator decision, unique per
 // environment) — nothing more. The provisioned database/role identifiers
@@ -61,10 +55,6 @@ const attVkProduction = fixtureId('att', 'vk-production')
 // only the attach id's random tail (chars 14-20, never the timestamp
 // portion) keeps them instance-unique: <service>_<first-6-of-random-tail>.
 const dbName = (service: string, attId: string) => `${service}_${attId.slice(14, 20)}`
-const apiDbStaging = dbName('api', attPgAppStaging)
-const apiDbProduction = dbName('api', attPgAppProduction)
-const identityDbStaging = dbName('identity', attPgIdentityStaging)
-const identityDbProduction = dbName('identity', attPgIdentityProduction)
 const cmsDbStaging = dbName('cms', attSampleSitePgStaging)
 const cmsDbProduction = dbName('cms', attSampleSitePgProduction)
 
@@ -109,13 +99,6 @@ export const adapters: Adapter[] = [
 
 export const tenants: Tenant[] = [
   {
-    id: 'tnt_01h4x9k2m1a3c5e7g9j',
-    slug: 'acme',
-		name: 'Acme',
-		description: 'Storefront microservice platform — Laravel API, workers, and the private identity stack.',
-		deletionTaskId: null,
-  },
-  {
     id: 'tnt_01h5q8j2p4b6d8f0h2k',
     slug: 'sample-tenant-b',
 		name: 'SampleSite Programs',
@@ -146,26 +129,6 @@ const zBackend: Pick<ZoneSeed, 'name' | 'subnet' | 'internal'> = {
   subnet: '10.200.20.0/24',
   internal: true,
 }
-const zFrontend: Pick<ZoneSeed, 'name' | 'subnet' | 'internal'> = {
-  name: 'frontend',
-  subnet: '10.200.10.0/24',
-  internal: false,
-}
-const zEgress: Pick<ZoneSeed, 'name' | 'subnet' | 'internal'> = {
-  name: 'egress',
-  subnet: '10.200.30.0/24',
-  internal: false,
-}
-const zIdentity: Pick<ZoneSeed, 'name' | 'subnet' | 'internal'> = {
-  name: 'identity-private',
-  subnet: '10.200.50.0/24',
-  internal: true,
-}
-const zOperator: Pick<ZoneSeed, 'name' | 'subnet' | 'internal'> = {
-  name: 'operator',
-  subnet: '10.200.60.0/24',
-  internal: true,
-}
 const zSampleSite: Pick<ZoneSeed, 'name' | 'subnet' | 'internal'> = {
   name: 'sample-site',
   subnet: '10.200.40.0/24',
@@ -190,42 +153,6 @@ export const backingProjects: Project[] = [
     status: 'healthy',
     createdAt: '2026-05-02',
     consumers: [
-      {
-        tenant: 'acme',
-        project: 'storefront',
-        environment: 'staging',
-        service: 'app-api',
-        attachId: attPgAppStaging,
-        database: apiDbStaging,
-        role: apiDbStaging,
-      },
-      {
-        tenant: 'acme',
-        project: 'storefront',
-        environment: 'staging',
-        service: 'identity-intake',
-        attachId: attPgIdentityStaging,
-        database: identityDbStaging,
-        role: identityDbStaging,
-      },
-      {
-        tenant: 'acme',
-        project: 'storefront',
-        environment: 'production',
-        service: 'app-api',
-        attachId: attPgAppProduction,
-        database: apiDbProduction,
-        role: apiDbProduction,
-      },
-      {
-        tenant: 'acme',
-        project: 'storefront',
-        environment: 'production',
-        service: 'identity-intake',
-        attachId: attPgIdentityProduction,
-        database: identityDbProduction,
-        role: identityDbProduction,
-      },
       {
         tenant: 'sample-tenant-b',
         project: 'sample-site',
@@ -319,26 +246,7 @@ export const backingProjects: Project[] = [
 		deletionTaskId: null,
     status: 'healthy',
     createdAt: '2026-05-02',
-    consumers: [
-      {
-        tenant: 'acme',
-        project: 'storefront',
-        environment: 'staging',
-        service: 'app-api',
-        attachId: attVkStaging,
-        database: '—',
-        role: apiDbStaging,
-      },
-      {
-        tenant: 'acme',
-        project: 'storefront',
-        environment: 'production',
-        service: 'app-api',
-        attachId: attVkProduction,
-        database: '—',
-        role: apiDbProduction,
-      },
-    ],
+    consumers: [],
     environments: [
       {
         id: 'env_01h5q8j2p4k5p8r0v2x',
@@ -404,385 +312,15 @@ export const backingProjects: Project[] = [
     ],
   },
 ]
-// ---- helpers to build storefront environments ----
-function svcId(name: string, env: 'staging' | 'production'): string {
+// ---- sample-site environments ----
+function sampleSiteServiceId(name: string, env: 'staging' | 'production'): string {
   return fixtureId('svc', `${name}-${env}`)
 }
 
-const id6 = (attId: string) => attId.slice(14, 20)
-
-function storefrontServices(env: 'staging' | 'production'): Service[] {
-  const tag = env === 'production' ? 'sha-9f3c1ad' : 'sha-4be07d2'
-  const activeSlot = env === 'production' ? 'blue' : 'green'
-  return [
-    {
-      id: svcId('app-api', env),
-      name: 'app-api',
-      image: `storefront-app:${tag}`,
-      role: 'Stateless Laravel API (blue/green slots)',
-      zones: ['frontend', 'backend'],
-      strategy: 'blue-green' as const,
-      healthcheck: { kind: 'http' as const, target: '/up', interval: '10s', timeout: '3s', startPeriod: '20s', retries: 3 },
-      resources: { mem: '768m', cpus: '1.5' },
-      mounts: [{ type: 'volume' as const, volume: 'app-data', mount: '/var/www/html/storage' }],
-      envFiles: [`secrets/.env.storefront.${env}`],
-      environment: [{ id: fixtureId('ev', `api-${env}`), key: 'APP_ENV', value: env }],
-      aliases: [`storefront-${activeSlot}-api`],
-      dependsOn: [],
-      expose: ['app-api:8080'],
-      restart: 'unless-stopped' as const,
-      replicas: 1,
-      activeSlot: activeSlot as 'blue' | 'green',
-      group: 'app' as const,
-    },
-    {
-      id: svcId('app-websocket', env),
-      name: 'app-websocket',
-      image: `storefront-app:${tag}`,
-      role: 'WebSocket server (WebSocket)',
-      zones: ['frontend', 'backend'],
-      strategy: 'recreate' as const,
-      healthcheck: { kind: 'http' as const, target: '/app', interval: '15s', timeout: '3s', startPeriod: '15s', retries: 3 },
-      resources: { mem: '256m', cpus: '0.5' },
-      command: 'php artisan websocket:start',
-      mounts: [],
-      envFiles: [`secrets/.env.storefront.${env}`, `secrets/.env.storefront.${env}.app-websocket`],
-      environment: [],
-      aliases: ['app-websocket', 'storefront-websocket'],
-      dependsOn: ['app-api'],
-      expose: ['websocket:8080'],
-      restart: 'unless-stopped' as const,
-      replicas: env === 'production' ? 2 : 1,
-      group: 'app' as const,
-    },
-    {
-      id: svcId('app-queue', env),
-      name: 'app-queue',
-      image: `storefront-app:${tag}`,
-      role: 'Queue worker (realtime, default)',
-      zones: ['backend', 'egress'],
-      strategy: 'recreate' as const,
-      healthcheck: { kind: 'pgrep' as const, target: 'artisan queue:work', interval: '30s', timeout: '5s', startPeriod: '10s', retries: 3 },
-      resources: { mem: '384m', cpus: '0.75' },
-      command: 'php artisan queue:work --queue=realtime,default',
-      mounts: [{ type: 'volume' as const, volume: 'app-data', mount: '/var/www/html/storage' }],
-      envFiles: [`secrets/.env.storefront.${env}`],
-      environment: [],
-      aliases: [],
-      dependsOn: ['app-api'],
-      expose: [],
-      restart: 'unless-stopped' as const,
-      replicas: 1,
-      group: 'workers' as const,
-    },
-    {
-      id: svcId('app-scheduler', env),
-      name: 'app-scheduler',
-      image: `storefront-app:${tag}`,
-      role: 'Singleton scheduler (schedule:work)',
-      zones: [],
-      strategy: 'recreate' as const,
-      healthcheck: { kind: 'pgrep' as const, target: 'schedule:work', interval: '30s', timeout: '5s', startPeriod: '10s', retries: 3 },
-      resources: { mem: '256m', cpus: '0.5' },
-      command: 'php artisan schedule:work',
-      mounts: [],
-      envFiles: [`secrets/.env.storefront.${env}`],
-      environment: [],
-      aliases: [],
-      dependsOn: ['app-api'],
-      expose: [],
-      restart: 'unless-stopped' as const,
-      replicas: 1,
-      group: 'workers' as const,
-    },
-    {
-      id: svcId('identity-intake', env),
-      name: 'identity-intake',
-      image: 'storefront-identity:sha-2ab77e0',
-      role: 'Identity verification intake',
-      zones: ['identity-private', 'backend'],
-      strategy: 'recreate' as const,
-      healthcheck: { kind: 'http' as const, target: '/health', interval: '15s', timeout: '3s', startPeriod: '15s', retries: 3 },
-      resources: { mem: '384m', cpus: '0.75' },
-      mounts: [
-        { type: 'file' as const, file: 'config/identity-tls/ca.pem', mount: '/etc/identity/ca.pem', ro: true },
-      ],
-      envFiles: [`secrets/.env.storefront.${env}`, `secrets/.env.identity`],
-      environment: [],
-      aliases: [],
-      dependsOn: ['identity-clamav'],
-      expose: ['identity-intake:9000'],
-      restart: 'unless-stopped' as const,
-      replicas: 1,
-      group: 'identity' as const,
-    },
-    {
-      id: svcId('identity-portal', env),
-      name: 'identity-portal',
-      image: 'storefront-identity:sha-2ab77e0',
-      role: 'Reviewer portal (operator only)',
-      zones: ['identity-private', 'operator'],
-      strategy: 'recreate' as const,
-      healthcheck: { kind: 'http' as const, target: '/health', interval: '15s', timeout: '3s', startPeriod: '15s', retries: 3 },
-      resources: { mem: '384m', cpus: '0.75' },
-      mounts: [{ type: 'file' as const, file: 'config/identity-tls/portal.pem', mount: '/etc/identity/portal.pem', ro: true }],
-      envFiles: [`secrets/.env.storefront.${env}`, `secrets/.env.identity`],
-      environment: [],
-      aliases: [],
-      dependsOn: ['identity-clamav'],
-      expose: ['identity-portal:8443'],
-      restart: 'unless-stopped' as const,
-      replicas: 1,
-      group: 'identity' as const,
-    },
-    {
-      id: svcId('identity-worker', env),
-      name: 'identity-worker',
-      image: 'storefront-identity:sha-2ab77e0',
-      role: 'Identity processing worker',
-      zones: ['identity-private', 'egress'],
-      strategy: 'recreate' as const,
-      healthcheck: { kind: 'pgrep' as const, target: 'identity:work', interval: '30s', timeout: '5s', startPeriod: '10s', retries: 3 },
-      resources: { mem: '384m', cpus: '0.75' },
-      mounts: [],
-      envFiles: [`secrets/.env.storefront.${env}`, `secrets/.env.identity`],
-      environment: [],
-      aliases: [],
-      dependsOn: ['identity-intake'],
-      expose: [],
-      restart: 'unless-stopped' as const,
-      replicas: 1,
-      group: 'identity' as const,
-    },
-    {
-      id: svcId('identity-clamav', env),
-      name: 'identity-clamav',
-      image: 'clamav/clamav:1.3',
-      role: 'Malware scanning for evidence uploads',
-      zones: ['identity-private', 'egress'],
-      strategy: 'recreate' as const,
-      healthcheck: { kind: 'pgrep' as const, target: 'clamd', interval: '30s', timeout: '10s', startPeriod: '60s', retries: 5 },
-      resources: { mem: '1g', cpus: '1.0' },
-      mounts: [],
-      envFiles: [],
-      environment: [],
-      aliases: [],
-      dependsOn: [],
-      expose: ['clamav:3310'],
-      restart: 'unless-stopped' as const,
-      replicas: 1,
-      group: 'identity' as const,
-    },
-    {
-      id: svcId('identity-proxy', env),
-      name: 'identity-proxy',
-      image: 'caddy:2-alpine',
-      role: 'Internal TLS terminator for status events',
-      zones: ['identity-private', 'backend'],
-      strategy: 'recreate' as const,
-      healthcheck: { kind: 'tcp' as const, target: '8443', interval: '15s', timeout: '3s', startPeriod: '10s', retries: 3 },
-      resources: { mem: '128m', cpus: '0.25' },
-      mounts: [{ type: 'file' as const, file: 'config/identity-tls/proxy.pem', mount: '/etc/caddy/proxy.pem', ro: true }],
-      envFiles: [],
-      environment: [],
-      aliases: [],
-      dependsOn: ['identity-intake'],
-      expose: ['identity-proxy:8443'],
-      restart: 'unless-stopped' as const,
-      replicas: 1,
-      group: 'identity' as const,
-    },
-  ].map((service) => ({ ...service, runtimeIntent: 'running' as const, observation: { state: 'unavailable' as const } }))
-}
-
-function storefrontEnv(env: 'staging' | 'production'): Environment {
-  const prod = env === 'production'
-  const envId = prod ? 'env_01h4x9k2m1e7g9j1l3n' : 'env_01h4x9k2m1f8h0k2m4p'
-  return {
-    id: envId,
-    projectId: 'prj_01h4x9k2m1b4d6f8h0j',
-    name: env,
-    status: env === 'staging' ? 'degraded' : 'healthy',
-    release: prod ? 'sha-9f3c1ad' : 'sha-4be07d2',
-    previousRelease: prod ? 'sha-71bd0c4' : 'sha-1102fe9',
-    deploys: [
-      { id: fixtureId('dep', 'app-api-1'), service: 'app-api', tag: prod ? 'sha-9f3c1ad' : 'sha-4be07d2', digest: 'sha256:9f3c1ad74e28ba48a0f1c6d2e5b4a1f09c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3', strategy: 'blue-green', when: prod ? '2h ago' : '35m ago', status: 'active' },
-      { id: fixtureId('dep', 'app-api-2'), service: 'app-api', tag: prod ? 'sha-71bd0c4' : 'sha-1102fe9', digest: 'sha256:71bd0c4a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f', strategy: 'blue-green', when: '2d ago', status: 'superseded' },
-      { id: fixtureId('dep', 'app-queue-3'), service: 'app-queue', tag: prod ? 'sha-9f3c1ad' : 'sha-4be07d2', digest: 'sha256:9f3c1ad74e28ba48a0f1c6d2e5b4a1f09c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3', strategy: 'recreate', when: prod ? '2h ago' : '35m ago', status: 'active' },
-      { id: fixtureId('dep', 'app-websocket-4'), service: 'app-websocket', tag: prod ? 'sha-9f3c1ad' : 'sha-4be07d2', digest: 'sha256:9f3c1ad74e28ba48a0f1c6d2e5b4a1f09c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3', strategy: 'recreate', when: prod ? '2h ago' : '35m ago', status: 'active' },
-      { id: fixtureId('dep', 'app-api-5'), service: 'app-api', tag: prod ? 'sha-3e8d5f2' : 'sha-c4a9e07', digest: 'sha256:3e8d5f2c9b8a7f6e5d4c3b2a1908f7e6d5c4b3a291807f6e5d4c3b2a19', strategy: 'blue-green', when: '5d ago', status: 'superseded' },
-      { id: fixtureId('dep', `app-scheduler-active-${env}`), service: 'app-scheduler', tag: prod ? 'sha-9f3c1ad' : 'sha-4be07d2', digest: 'sha256:9f3c1ad74e28ba48a0f1c6d2e5b4a1f09c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3', strategy: 'recreate', when: prod ? '2h ago' : '35m ago', status: 'active' },
-      { id: fixtureId('dep', `app-queue-previous-${env}`), service: 'app-queue', tag: prod ? 'sha-71bd0c4' : 'sha-1102fe9', digest: 'sha256:71bd0c4a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f', strategy: 'recreate', when: '2d ago', status: 'superseded' },
-      { id: fixtureId('dep', `app-websocket-previous-${env}`), service: 'app-websocket', tag: prod ? 'sha-71bd0c4' : 'sha-1102fe9', digest: 'sha256:71bd0c4a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f', strategy: 'recreate', when: '2d ago', status: 'superseded' },
-      { id: fixtureId('dep', `app-scheduler-previous-${env}`), service: 'app-scheduler', tag: prod ? 'sha-71bd0c4' : 'sha-1102fe9', digest: 'sha256:71bd0c4a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f', strategy: 'recreate', when: '2d ago', status: 'superseded' },
-    ],
-    releaseGroups: [
-      {
-        id: fixtureId('rg', `realtime-${env}`),
-        name: 'realtime',
-        services: ['app-api', 'app-queue', 'app-scheduler'],
-        order: ['app-api', 'app-queue', 'app-scheduler'],
-        tag: prod ? 'sha-9f3c1ad' : 'sha-4be07d2',
-        onFailure: 'switch_back',
-      },
-    ],
-    zones: zonesFor(`storefront-${env}`, envId, 'environment', envId, zFrontend, zBackend, zEgress, zIdentity, zOperator),
-    services: storefrontServices(env),
-    attaches: [
-      // App attach: one database + one role, shared by api / worker / scheduler.
-      {
-        id: env === 'production' ? attPgAppProduction : attPgAppStaging,
-        name: 'api-db',
-        backingProjectId: 'prj_01h4x9k2m1d6f8h0j2m',
-        backingServiceId: fixtureId('svc', 'postgres'),
-        backingEnvironmentId: 'env_01h4x9k2m1j3n5p8r0v',
-        backingNetworkId: fixtureId('net', 'postgres-main'),
-        serviceId: svcId('app-api', env),
-        credential: { mode: 'new' },
-        grantAttachIds: [],
-        factSets: [{ facts: [
-          { key: 'pg16_DATABASE', secret: false }, { key: 'pg16_HOST', secret: false },
-          { key: 'pg16_PASSWORD', secret: true }, { key: 'pg16_PORT', secret: false },
-          { key: 'pg16_ROLE', secret: false }, { key: 'pg16_URL', secret: true },
-        ] }],
-        projectId: 'prj_01h4x9k2m1d6f8h0j2m',
-        database: env === 'production' ? apiDbProduction : apiDbStaging,
-        role: env === 'production' ? apiDbProduction : apiDbStaging,
-        service: 'app-api',
-        status: 'healthy',
-      },
-      // Identity attach: its own database, plus a GRANT on the app attach's
-      // database — under identity's single role (facts show both sets).
-      {
-        id: env === 'production' ? attPgIdentityProduction : attPgIdentityStaging,
-        name: 'identity-db',
-        backingProjectId: 'prj_01h4x9k2m1d6f8h0j2m',
-        backingServiceId: fixtureId('svc', 'postgres'),
-        backingEnvironmentId: 'env_01h4x9k2m1j3n5p8r0v',
-        backingNetworkId: fixtureId('net', 'postgres-main'),
-        serviceId: svcId('identity-intake', env),
-        credential: { mode: 'new' },
-        grantAttachIds: [env === 'production' ? attPgAppProduction : attPgAppStaging],
-        factSets: [
-          { facts: [
-            { key: 'pg16_DATABASE', secret: false }, { key: 'pg16_HOST', secret: false },
-            { key: 'pg16_PASSWORD', secret: true }, { key: 'pg16_PORT', secret: false },
-            { key: 'pg16_ROLE', secret: false }, { key: 'pg16_URL', secret: true },
-          ] },
-          { grantAttachId: env === 'production' ? attPgAppProduction : attPgAppStaging, facts: [
-            { key: 'pg16_DATABASE', secret: false }, { key: 'pg16_HOST', secret: false },
-            { key: 'pg16_PASSWORD', secret: true }, { key: 'pg16_PORT', secret: false },
-            { key: 'pg16_ROLE', secret: false }, { key: 'pg16_URL', secret: true },
-          ] },
-        ],
-        projectId: 'prj_01h4x9k2m1d6f8h0j2m',
-        database: env === 'production' ? identityDbProduction : identityDbStaging,
-        role: env === 'production' ? identityDbProduction : identityDbStaging,
-        service: 'identity-intake',
-        grants: [env === 'production' ? apiDbProduction : apiDbStaging],
-        status: 'healthy',
-      },
-      {
-        id: env === 'production' ? attVkProduction : attVkStaging,
-        name: 'valkey-cache',
-        backingProjectId: 'prj_01h5q8j2p4e8g0k2m4',
-        backingServiceId: fixtureId('svc', 'valkey'),
-        backingEnvironmentId: 'env_01h5q8j2p4k5p8r0v2x',
-        backingNetworkId: fixtureId('net', 'valkey-main'),
-        serviceId: svcId('app-api', env),
-        credential: { mode: 'new' },
-        grantAttachIds: [],
-        factSets: [{ facts: [
-          { key: 'vk9_HOST', secret: false }, { key: 'vk9_PASSWORD', secret: true },
-          { key: 'vk9_PORT', secret: false }, { key: 'vk9_ROLE', secret: false },
-          { key: 'vk9_URL', secret: true },
-        ] }],
-        projectId: 'prj_01h5q8j2p4e8g0k2m4',
-        database: '—',
-        role: env === 'production' ? apiDbProduction : apiDbStaging,
-        service: 'app-api',
-        status: 'healthy',
-      },
-    ],
-    routes: [
-      { id: fixtureId('rte', `app-${env}`), environmentId: envId, host: prod ? 'storefront.example.com' : 'staging.storefront.example.com', path: '/app/*', exposure: 'public', targetServiceId: svcId('app-websocket', env), targetPort: 8080, status: 'served' },
-      { id: fixtureId('rte', `api-${env}`), environmentId: envId, host: prod ? 'storefront.example.com' : 'staging.storefront.example.com', path: '/*', exposure: 'public', targetServiceId: svcId('app-api', env), targetPort: 8080, status: 'served' },
-      { id: fixtureId('rte', `apps-${env}`), environmentId: envId, host: '', path: '/apps/*', exposure: 'internal', targetServiceId: svcId('app-websocket', env), targetPort: 8080, status: 'served' },
-    ],
-    components: createEnvironmentComponents(
-      envId,
-      fixtureId('cmp', `storefront-caddy-${env}`),
-      fixtureId('cmp', `storefront-tunnel-${env}`),
-      {
-        caddy: {
-          enabled: true,
-          zoneIds: [fixtureId('net', `storefront-${env}-frontend`)],
-          pinnedIPv4: prod ? '10.200.10.2' : '10.200.11.2',
-          caddyfile_template: '{gp.routes}',
-        },
-        tunnel: {
-          enabled: true,
-          secret_id: '',
-        },
-      },
-    ),
-    volumes: [
-      { id: fixtureId('vol', `app-data-${env}`), environmentId: envId, slug: 'app-data', key: 'app-data', path: `/var/lib/groundplane/vol/tnt_01h4x9k2m1a3c5e7g9j/prj_01h4x9k2m1b4d6f8h0j/${envId}/app-data`, state: 'active' },
-      { id: fixtureId('vol', `identity-data-${env}`), environmentId: envId, slug: 'identity-data', key: 'identity-data', path: `/var/lib/groundplane/vol/tnt_01h4x9k2m1a3c5e7g9j/prj_01h4x9k2m1b4d6f8h0j/${envId}/identity-data`, state: 'active' },
-    ],
-    networkPool: prod ? '10.200.0.0/16' : '10.201.0.0/16',
-    networkCapacity: { totalAddresses: 65536, allocatedAddresses: 512, availableAddresses: 65024, zoneCount: 2 },
-    volumeDir: `/var/lib/groundplane/vol/tnt_01h4x9k2m1a3c5e7g9j/prj_01h4x9k2m1b4d6f8h0j/${envId}`,
-    provisioningState: 'ready',
-    createTaskId: null, deletionTaskId: null,
-    entries: [],
-    envVars: [
-      { id: fixtureId('ev', `app-${env}`), key: 'APP_ENV', value: env },
-      { id: fixtureId('ev', `log-${env}`), key: 'LOG_CHANNEL', value: 'stderr' },
-      { id: fixtureId('ev', `queue-${env}`), key: 'QUEUE_CONNECTION', value: 'redis' },
-    ],
-    files: [
-      { id: fixtureId('file', `php-${env}`), name: 'laravel-php.ini', path: 'config/php/laravel.ini', content: 'memory_limit=512M\nopcache.enable=1\nopcache.validate_timestamps=0' },
-      { id: fixtureId('file', `websocket-${env}`), name: 'websocket.conf', path: 'config/websocket/websocket.conf', content: 'host=0.0.0.0\nport=8080\nallowed_origins=*', exposedTo: 'app-websocket' },
-    ],
-    age: {
-      recipient: prod ? 'age1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq' : 'age1rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr',
-      generatedAt: '2026-06-01',
-      lastRotatedAt: prod ? '2026-07-15' : undefined,
-      keyEra: prod ? 2 : 1,
-    },
-    scripts: [
-      { id: fixtureId('scr', `migrate-${env}`), environmentId: envId, slug: 'migrate', serviceId: svcId('app-api', env), service: 'app-api', when: 'pre-deploy', body: 'php artisan migrate --force --isolated', origin: 'blueprint', reconciliationKey: 'migrate', activeGeneration: 1, order: 0, execution: { mode: 'inherited' } },
-      { id: fixtureId('scr', `preflight-${env}`), environmentId: envId, slug: 'realtime-preflight', serviceId: svcId('app-websocket', env), service: 'app-websocket', when: 'post-deploy', body: 'php artisan realtime:preflight', origin: 'blueprint', reconciliationKey: 'realtime-preflight', activeGeneration: 1, order: 0, execution: { mode: 'inherited' } },
-      { id: fixtureId('scr', `cache-${env}`), environmentId: envId, slug: 'clear-cache', serviceId: svcId('app-api', env), service: 'app-api', when: 'manual', body: 'php artisan optimize:clear\nphp artisan config:cache', origin: 'api', activeGeneration: 1, order: 0, execution: { mode: 'inherited' } },
-      { id: fixtureId('scr', `onfail-${env}`), environmentId: envId, slug: 'notify-failure', serviceId: svcId('app-api', env), service: 'app-api', when: 'on-failure', body: 'php artisan groundplane:notify --channel=ops "deploy failed"', origin: 'blueprint', reconciliationKey: 'notify-failure', activeGeneration: 1, order: 0, execution: { mode: 'inherited' } },
-    ],
-    backup: {
-      enabled: true,
-      frequency: '*-*-* 03:15:00',
-      keep: 7,
-      encryption: 'age',
-      ageRecipientRef: prod ? 'age1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq' : 'age1rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr',
-      connector: 'acme-r2',
-      sources: [
-        { id: fixtureId('spt', `app-${env}`), kind: 'attach', ref: env === 'production' ? attPgAppProduction : attPgAppStaging, name: 'app database', target: env === 'production' ? apiDbProduction : apiDbStaging },
-        { id: fixtureId('spt', `vk-${env}`), kind: 'attach', ref: env === 'production' ? attVkProduction : attVkStaging, name: 'valkey cache', target: 'valkey' },
-        { id: fixtureId('spt', `vol-${env}`), kind: 'volume', ref: 'app-data', name: 'app-data volume', target: 'app-data' },
-        ...(prod ? [{ id: fixtureId('spt', `cfg-${env}`), name: 'environment config', kind: 'config' as const, target: `storefront.${env}` }] : []),
-      ],
-      nextRun: 'Tomorrow 03:15',
-      lastRun: 'Today 03:15',
-      lastStatus: 'healthy',
-    },
-    retention: { inactiveSlotDays: 7, keepImages: 3 },
-    lastDeployAt: prod ? '2h ago' : '35m ago',
-  }
-}
-// ---- sample-site environments ----
 function sampleSiteServices(env: 'staging' | 'production'): Service[] {
   return [
     {
-      id: svcId('cms', env),
+      id: sampleSiteServiceId('cms', env),
       name: 'cms',
       image: 'sample-site-cms:local',
       role: 'Static CMS (admin)',
@@ -801,7 +339,7 @@ function sampleSiteServices(env: 'staging' | 'production'): Service[] {
       group: 'web' as const,
     },
     {
-      id: svcId('web', env),
+      id: sampleSiteServiceId('web', env),
       name: 'web',
       image: 'sample-site-web:local',
       role: 'Marketing site (static)',
@@ -820,7 +358,7 @@ function sampleSiteServices(env: 'staging' | 'production'): Service[] {
       group: 'web' as const,
     },
     {
-      id: svcId('sample-site-router', env),
+      id: sampleSiteServiceId('sample-site-router', env),
       name: 'sample-site-router',
       image: 'caddy:2-alpine',
       role: 'Path router: /admin* → cms, else → web',
@@ -867,7 +405,7 @@ function sampleSiteEnv(env: 'staging' | 'production'): Environment {
         backingServiceId: fixtureId('svc', 'postgres'),
         backingEnvironmentId: 'env_01h4x9k2m1j3n5p8r0v',
         backingNetworkId: fixtureId('net', 'postgres-main'),
-        serviceId: svcId('cms', env),
+        serviceId: sampleSiteServiceId('cms', env),
         credential: { mode: 'new' },
         grantAttachIds: [],
         factSets: [{ facts: [
@@ -883,8 +421,8 @@ function sampleSiteEnv(env: 'staging' | 'production'): Environment {
       },
     ],
     routes: prod
-      ? [{ id: fixtureId('rte', 'sample-site-prod'), environmentId: envId, host: 'sample-site.example.com', path: '/admin*', exposure: 'public', targetServiceId: svcId('cms', env), targetPort: 3000, status: 'unserved' }]
-      : [{ id: fixtureId('rte', 'sample-site-staging'), environmentId: envId, host: 'staging.sample-site.example.com', path: '/', exposure: 'public', targetServiceId: svcId('web', env), targetPort: 8080, status: 'served' }],
+      ? [{ id: fixtureId('rte', 'sample-site-prod'), environmentId: envId, host: 'sample-site.example.com', path: '/admin*', exposure: 'public', targetServiceId: sampleSiteServiceId('cms', env), targetPort: 3000, status: 'unserved' }]
+      : [{ id: fixtureId('rte', 'sample-site-staging'), environmentId: envId, host: 'staging.sample-site.example.com', path: '/', exposure: 'public', targetServiceId: sampleSiteServiceId('web', env), targetPort: 8080, status: 'served' }],
     components: createEnvironmentComponents(
       envId,
       fixtureId('cmp', `sample-site-caddy-${env}`),
@@ -923,8 +461,8 @@ function sampleSiteEnv(env: 'staging' | 'production'): Environment {
       keyEra: 1,
     },
     scripts: [
-      { id: fixtureId('scr', `sample-site-migrate-${env}`), environmentId: envId, slug: 'migrate', serviceId: svcId('cms', env), service: 'cms', when: 'pre-deploy', body: 'node ./bin/migrate.js', origin: 'blueprint', reconciliationKey: 'migrate', activeGeneration: 1, order: 0, execution: { mode: 'inherited' } },
-      { id: fixtureId('scr', `sample-site-seed-${env}`), environmentId: envId, slug: 'seed-content', serviceId: svcId('cms', env), service: 'cms', when: 'manual', body: 'node ./bin/seed.js --content', origin: 'api', activeGeneration: 1, order: 0, execution: { mode: 'inherited' } },
+      { id: fixtureId('scr', `sample-site-migrate-${env}`), environmentId: envId, slug: 'migrate', serviceId: sampleSiteServiceId('cms', env), service: 'cms', when: 'pre-deploy', body: 'node ./bin/migrate.js', origin: 'blueprint', reconciliationKey: 'migrate', activeGeneration: 1, order: 0, execution: { mode: 'inherited' } },
+      { id: fixtureId('scr', `sample-site-seed-${env}`), environmentId: envId, slug: 'seed-content', serviceId: sampleSiteServiceId('cms', env), service: 'cms', when: 'manual', body: 'node ./bin/seed.js --content', origin: 'api', activeGeneration: 1, order: 0, execution: { mode: 'inherited' } },
     ],
     backup: {
       // staging never backs up — demo of the backups-off state
@@ -949,18 +487,6 @@ function sampleSiteEnv(env: 'staging' | 'production'): Environment {
 
 export const tenantProjects: Project[] = [
   {
-    id: 'prj_01h4x9k2m1b4d6f8h0j',
-    slug: 'storefront',
-    name: 'Storefront',
-    kind: 'tenant',
-		tenantId: 'tnt_01h4x9k2m1a3c5e7g9j',
-		description: 'Laravel microservice architecture: blue/green API, workers, WebSocket, and the private identity stack.',
-		deletionTaskId: null,
-    status: 'degraded',
-    createdAt: '2026-05-10',
-    environments: [storefrontEnv('staging'), storefrontEnv('production')],
-  },
-  {
     id: 'prj_01h5q8j2p4c7e9g1k3',
     slug: 'sample-site',
     name: 'SampleSite',
@@ -976,32 +502,6 @@ export const tenantProjects: Project[] = [
 
 
 export const connectors: Connector[] = [
-  {
-    id: fixtureId('con', 'acme-r2-production'),
-    name: 'acme-r2',
-    kind: 's3-compatible',
-    scope: 'environment',
-    scopeRef: 'env_01h4x9k2m1e7g9j1l3n',
-    endpoint: 'https://<account>.r2.cloudflarestorage.com',
-    bucket: 'acme-backups',
-    prefix: 'backups/',
-    region: 'auto',
-    pathStyle: false,
-    credentials: { accessKey: { kind: 'ref', name: 'R2_ACCESS_KEY_ID' }, secretKey: { kind: 'ref', name: 'R2_SECRET_ACCESS_KEY' } },
-  },
-  {
-    id: fixtureId('con', 'acme-r2-staging'),
-    name: 'acme-r2',
-    kind: 's3-compatible',
-    scope: 'environment',
-    scopeRef: 'env_01h4x9k2m1f8h0k2m4p',
-    endpoint: 'https://<account>.r2.cloudflarestorage.com',
-    bucket: 'acme-backups',
-    prefix: 'backups/',
-    region: 'auto',
-    pathStyle: false,
-    credentials: { accessKey: { kind: 'ref', name: 'R2_ACCESS_KEY_ID' }, secretKey: { kind: 'ref', name: 'R2_SECRET_ACCESS_KEY' } },
-  },
   {
     id: fixtureId('con', 'sample-site-r2-production'),
     name: 'r2-backups',
@@ -1032,20 +532,6 @@ export const connectors: Connector[] = [
 
 export const activity: ActivityEntry[] = [
   {
-    id: 'a1', type: 'deploy', title: 'Deploy app-api', target: 'acme/storefront/production', workspace: 'acme', status: 'completed', actor: 'operator', ts: '2h ago',
-    note: 'blue/green release sha-9f3c1ad — healthcheck passed, router reloaded',
-    taskState: 'acked',
-    steps: [
-      { label: 'migrate expand', state: 'done' },
-      { label: 'start inactive slot', state: 'done' },
-      { label: 'wait /up healthcheck', state: 'done' },
-      { label: 'render + validate Caddyfile', state: 'done' },
-      { label: 'reload router', state: 'done' },
-      { label: 'recreate workers', state: 'done' },
-      { label: 'record active slot', state: 'done' },
-    ],
-  },
-  {
     id: 'a2', type: 'backup', title: 'Backup completed', target: 'shared-postgres', workspace: 'platform', status: 'completed', actor: 'scheduler', ts: '9h ago',
     note: 'pg_dump → age-encrypt → upload → HeadObject verified → pruned past retention',
     taskState: 'acked',
@@ -1057,19 +543,7 @@ export const activity: ActivityEntry[] = [
       { label: 'prune past retention', state: 'done' },
     ],
   },
-  {
-    id: fixtureId('task', 'failed-deploy'), operationId: fixtureId('op', 'failed-deploy'), idempotencyKey: 'console:deploy:failed-deploy', planHash: '4c753dbda3e23b76b0a63ee94759e067acbc220c401594150ceafd27c5b811d4', timeout: '120s', params: { tag: 'sha-4be07d2', strategy: 'blue-green' }, type: 'deploy', title: 'Deploy failed — healthcheck', target: 'env_01h4x9k2m1f8h0k2m4p', workspace: 'acme', status: 'failed', actor: 'operator', ts: '11h ago',
-    note: 'inactive slot never reached /up; on-failure hook ran',
-    taskState: 'acked',
-    steps: [
-      { label: 'migrate expand', state: 'done' },
-      { label: 'start inactive slot', state: 'done' },
-      { label: 'wait /up healthcheck', state: 'failed' },
-    ],
-  },
   { id: fixtureId('act', 'a4'), type: 'attach', title: 'Attached shared-postgres', target: 'sample-tenant-b/sample-site/production', workspace: 'sample-tenant-b', status: 'completed', actor: 'operator', ts: '1d ago', note: `provisioned database + role ${cmsDbStaging}`, taskState: 'acked' },
-  { id: 'a5', type: 'rollback', title: 'Rolled back app-api', target: 'acme/storefront/production', workspace: 'acme', status: 'completed', actor: 'operator', ts: '2d ago', note: 'traffic switch to previous image — no migration reversal', taskState: 'acked' },
-  { id: fixtureId('act', 'a5'), type: 'attach', title: 'Attached shared-postgres', target: `storefront → ${apiDbProduction}`, workspace: 'platform', status: 'completed', actor: 'operator', ts: '5d ago', note: 'provisioned database + role', taskState: 'acked' },
   { id: fixtureId('act', 'a7'), type: 'provision', title: 'Provisioned database + role', target: cmsDbStaging, workspace: 'platform', status: 'completed', actor: 'controller', ts: '1d ago', note: 'adapter postgres:16 · create_database → create_role → grants', taskState: 'acked' },
 ]
 
@@ -1077,72 +551,6 @@ export const activity: ActivityEntry[] = [
 // Agent executes assigned work and never recreates itself.
 
 export const taskSamples: ActivityEntry[] = [
-  // ---- storefront / production — the live task queue ----
-  {
-    id: fixtureId('act', 'task-kw-prod-deploy'), type: 'deploy', title: 'Deploy app-api → sha-3e8d5f2', target: 'env_01h4x9k2m1e7g9j1l3n', workspace: 'acme',
-    status: 'running', actor: 'operator', ts: 'just now',
-    note: 'blue/green release — inactive slot starting; rollback point stays sha-9f3c1ad',
-    taskState: 'running',
-    steps: [
-      { label: 'migrate expand (pre-deploy hook)', state: 'done' },
-      { label: 'start inactive slot', state: 'done' },
-      { label: 'wait /up healthcheck', state: 'running' },
-      { label: 'render + validate Caddyfile', state: 'pending' },
-      { label: 'reload router (traffic switch)', state: 'pending' },
-      { label: 'recreate workers once (never two schedulers)', state: 'pending' },
-      { label: 'record active slot', state: 'pending' },
-    ],
-  },
-  {
-    id: fixtureId('act', 'task-kw-prod-backup'), type: 'backup', title: 'Backup run · app database', target: 'env_01h4x9k2m1e7g9j1l3n', workspace: 'acme',
-    status: 'pending', actor: 'controller', ts: '2m ago',
-    note: 'scheduled *-*-* 03:15:00 · one source per attach, shared attaches backed up once',
-    taskState: 'queued',
-    steps: [
-      { label: 'pg_dump --format=custom of api_2d1c3f9', state: 'pending' },
-      { label: 'age-encrypt', state: 'pending' },
-      { label: 'upload to r2://r2-backups + HeadObject verify', state: 'pending' },
-      { label: 'prune past retention (keep 7)', state: 'pending' },
-    ],
-  },
-  {
-    id: fixtureId('act', 'task-kw-prod-script'), type: 'script', title: 'Run realtime-preflight (post-deploy)', target: 'env_01h4x9k2m1e7g9j1l3n', workspace: 'acme',
-    status: 'completed', actor: 'operator', ts: '2h ago',
-    note: 'php artisan realtime:preflight · app-websocket',
-    taskState: 'acked',
-    steps: [
-      { label: 'pull script task', state: 'done' },
-      { label: 'exec php artisan realtime:preflight in app-websocket', state: 'done' },
-      { label: 'stream output to Controller', state: 'done' },
-    ],
-  },
-  {
-    id: fixtureId('act', 'task-kw-prod-attach'), type: 'attach', title: 'Attach shared-postgres → identity-intake', target: 'env_01h4x9k2m1e7g9j1l3n', workspace: 'acme',
-    status: 'completed', actor: 'operator', ts: '3d ago',
-    note: 'provisioned identity_2ab77e + role · grant on api_2d1c3f9',
-    taskState: 'acked',
-    steps: [
-      { label: 'create_database · identity_2ab77e', state: 'done' },
-      { label: 'create_role · identity_2ab77e', state: 'done' },
-      { label: 'grant on identity_2ab77e to identity_2ab77e', state: 'done' },
-      { label: 'grant api_2d1c3f9 to identity_2ab77e', state: 'done' },
-      { label: 'facts available: pg16_URL …', state: 'done' },
-    ],
-  },
-  // ---- storefront / staging ----
-  {
-    id: fixtureId('act', 'task-kw-staging-rollback'), type: 'rollback', title: 'Roll back app-api → sha-4be07d2', target: 'env_01h4x9k2m1f8h0k2m4p', workspace: 'acme',
-    status: 'completed', actor: 'operator', ts: '35m ago',
-    note: 'traffic switch, never a cold start · migrations untouched',
-    taskState: 'acked',
-    steps: [
-      { label: 'run pre-rollback hooks', state: 'done' },
-      { label: 'start previous image in inactive slot', state: 'done' },
-      { label: 'wait for healthcheck', state: 'done' },
-      { label: 'reload router (traffic switch)', state: 'done' },
-      { label: 'run post-rollback hooks', state: 'done' },
-    ],
-  },
   // ---- sample-site / production ----
   {
     id: fixtureId('act', 'task-sample-site-prod-script'), type: 'script', title: 'Run seed-content (manual)', target: 'env_01h5q8j2p4g0k2m4p7r', workspace: 'sample-tenant-b',

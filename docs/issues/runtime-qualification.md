@@ -11,10 +11,7 @@ operational authority. Live writes remain paused by the storage incident.
 
 ## Storage and source retirement
 
-The [September 9 floor](../acceptance/hosting-floor.md) closed bounded Volume,
-Entry, manual-Script and exact-reapply journeys. Earlier statements that these
-paths were wholly unimplemented or still blocked by the same publication error
-are superseded. The normalized desired revision is the sole Volume authority;
+The normalized desired revision is the sole Volume authority;
 the remaining flat `VolumeRecord` is read projection, not a writable primary.
 
 Remaining acceptance includes mounted-Volume consumer detachment, crash/Retry
@@ -35,9 +32,7 @@ Recheck code and relevant evidence before implementing an older suspected gap.
 
 The 692,408-byte historical failed publication and 412,657-byte local reproduction
 were corrected without raising the 262,144-byte marker limit. The local running
-marker measured 71,808 bytes; complete publication/assignment proof and the
-subsequent full Apply/exact-reapply journey are recorded in
-[hosting-floor evidence](../acceptance/hosting-floor.md).
+marker measured 71,808 bytes in the local reproduction.
 That closes the old blanket oversized-publication blocker, not every Blueprint
 recovery case or the newer explicit-context first-Apply/reapply requirements.
 Preserve exact witnesses and all record, assignment and transaction ceilings.
@@ -50,11 +45,12 @@ desired revision over a working Environment merely to repeat an old test.
 
 The old generic ingress hint was corrected locally using existing Route states.
 It still needs deployment. Service observation and its Environment aggregate
-remain unfinished; unavailable evidence must not become Healthy. Desired intent
+are implemented locally but need live qualification; unavailable evidence must
+not become Healthy. Desired intent
 and successful old Tasks do not prove workload or public reachability.
 
-Use [Kobwnewe hosting](../features/kobwnewe-hosting.md) and the preserved draft
-work identified in [head.md](../head.md). Acceptance is consistent Console/CLI/API
+Use [Services and Releases](../features/services-and-releases.md).
+Acceptance is consistent Console/CLI/API
 observation, correct unavailable/unhealthy semantics and the deployed Route
 summary without claiming more than its evidence.
 

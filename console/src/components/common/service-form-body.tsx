@@ -191,18 +191,17 @@ export function ServiceFormBody({
                 setExpose(`${e.target.value.trim().toLowerCase() || 'svc'}:${port}`)
               }
             }}
-            placeholder={isBacking ? 'postgres' : 'app-api'}
             autoFocus
             disabled={editing}
           />
         </div>
         {!isBacking && <div className="flex flex-col gap-1.5">
           <Label htmlFor="sv-image">Image</Label>
-          <Input id="sv-image" value={image} onChange={(e) => setImage(e.target.value)} placeholder="storefront-app:sha-…" />
+          <Input id="sv-image" value={image} onChange={(e) => setImage(e.target.value)} />
         </div>}
         {isBacking && <div className="flex flex-col gap-1.5">
           <Label htmlFor="sv-role">Note</Label>
-          <Input id="sv-role" value={role} onChange={(e) => setRole(e.target.value)} placeholder={isBacking ? 'Shared PostgreSQL 16' : 'Stateless Laravel API'} />
+          <Input id="sv-role" value={role} onChange={(e) => setRole(e.target.value)} />
         </div>}
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="sv-strategy">Strategy (default — chosen per deployment)</Label>
@@ -272,7 +271,6 @@ export function ServiceFormBody({
               id="sv-healthcheck-target"
               value={hcTarget}
               onChange={(e) => setHcTarget(e.target.value)}
-              placeholder={hcKind === 'http' ? '/up' : hcKind === 'tcp' ? '8080' : 'artisan queue:work'}
               disabled={hcKind === 'none'}
             />
           </div>
@@ -308,7 +306,6 @@ export function ServiceFormBody({
               setExpose(event.target.value)
               setExposeEdited(true)
             }}
-            placeholder="app-api:8080, cms:3000"
           />
         </div>
         <div className="grid grid-cols-2 gap-3">

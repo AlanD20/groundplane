@@ -52,7 +52,6 @@ inferred from missing password bytes or current mutable runtime configuration.
 
 ## Consequences
 
-Reverb can use a password-only backing without an application image patch.
 Changing a mode requires a new backing instance, not an implicit downgrade.
 This replaces the old requirepass-only bootstrap, not a compatibility layer or
 repair of existing frozen QA Tasks. All three modes need lifecycle, fact,

@@ -1095,15 +1095,6 @@ x-gp-entry:
         key: pg16_URL
     exposure: [api]
     secret: true
-
-  identity-ca:
-    kind: file
-    path: config/identity-tls/ca.pem
-    uid: 1000
-    gid: 1000
-    source:
-      secret_ref: sec_01J...
-    exposure: [identity]
 ```
 
 One `x-gp-entry` is one destination. Reusing a fact under different env keys,

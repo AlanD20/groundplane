@@ -10,7 +10,6 @@ in the same evidence document rather than creating a report for each commit.
 | Evidence | Scope |
 | --- | --- |
 | [Repository consolidation](acceptance/repository-consolidation.md) | Landed source, baseline failures, removed worktrees and recovery archive |
-| [Hosting floor](acceptance/hosting-floor.md) | Manual management, Volume/Entry/Script journeys and bounded Blueprint publication |
 | [Safe updates](acceptance/safe-updates.md) | Native update implementation, QA candidates, continuity failures and recovery limits |
 | [Router and visibility](acceptance/router-and-visibility.md) | Full Caddyfile, native validation, retained reload and Route summary |
 | [Script execution](acceptance/script-execution.md) | Ordered hooks, explicit contexts, immutable sources and remaining qualification |

@@ -29,7 +29,7 @@ func TestNativeComposeChangesSelectRunningBlueprintCandidates(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			environmentID := ids.New(ids.KindEnvironment)
 			parse := func(fields string) blueprintparser.Result {
-				document := "kind: environment\nschema: 1\nmetadata: {tenant: qa, project: proof, environment: production}\nx-gp-network-pool: 10.95.0.0/16\nservices:\n  worker:\n    image: localhost:5000/groundplane-rpi-app:dev\n    command: [sleep, infinity]\n    deploy: {replicas: 2}\n" + fields + "volumes: {scratch: {}}\n"
+				document := "kind: environment\nschema: 1\nmetadata: {tenant: qa, project: proof, environment: production}\nx-gp-network-pool: 10.95.0.0/16\nservices:\n  worker:\n    image: example.invalid/worker:fixture\n    command: [sleep, infinity]\n    deploy: {replicas: 2}\n" + fields + "volumes: {scratch: {}}\n"
 				parsed, err := blueprintparser.Parse(
 					context.Background(),
 					blueprintparser.EnvironmentScope{

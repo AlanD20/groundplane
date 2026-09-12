@@ -79,7 +79,7 @@ Evidence under `.tmp/production-mvp-20260910/`:
 
 Live mutation QA remains paused. Before any restore/rebuild decision or resumed
 J/Caddy/Script mutation, qualify the virtual disk and every affected persistent
-source: PostgreSQL, Valkey AOF state, application files/Volumes, Identity data
+source: PostgreSQL, Valkey AOF state, application files/Volumes
 and Groundplane state. Preserve the evidence and verify actual current QA state.
 
 Production remains out of scope. This incident does not authorize production,

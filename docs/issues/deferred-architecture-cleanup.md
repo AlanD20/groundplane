@@ -1,6 +1,6 @@
 # Deferred architecture cleanup snapshot
 
-- Status: deferred by user on 2026-09-08 until Groundplane successfully hosts Kobwnewe
+- Status: deferred; fresh user authorization is required
 - Owner: future architecture-cleanup owner, assigned only after fresh user authorization
 - Severity: low for architecture-only structure; reclassify any demonstrated runtime or safety defect
 - MVP-required: no under the current deployment-first authority
@@ -11,9 +11,8 @@
 
 ## Authority and safety boundary
 
-On 2026-09-08 the user directed work to continue on `main`, prioritize deployment and actual
-Kobwnewe hosting, and defer unrelated refactoring and architecture cleanup until hosting succeeds
-and the user authorizes that work. The architecture gate may remain red solely for this deferred
+Unrelated refactoring and architecture cleanup remain deferred until the user
+authorizes that work. The architecture gate may remain red solely for this deferred
 cleanup. This is not permission to ignore compile/build failures, security defects, data-safety
 risks, or runtime-correctness defects; those remain deployment blockers.
 
@@ -128,7 +127,7 @@ Supplementary reports:
 
 ## Re-entry acceptance
 
-After Kobwnewe hosting succeeds and the user authorizes cleanup:
+After the user authorizes cleanup:
 
 1. Re-run the architecture gate and reconcile this historical snapshot with current findings.
 2. Prioritize by cohesive ownership, not raw line-count movement.

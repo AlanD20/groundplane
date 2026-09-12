@@ -1410,7 +1410,7 @@ tenants and one database.
   sources, so a database used by api, worker, and scheduler is backed up
   exactly once. **Sources are fully
   selectable (locked):** attach databases, **any subset of volumes** (a few,
-  not all — e.g. back up `app-data` but not `identity-data`), and the
+  not all), and the
   environment's **config** (env entries: vars, files, secrets — values
   included, age-encrypted; restore replaces the entries from the bundle).
   The config source backs up **THIS environment only** — it **never includes
@@ -1882,13 +1882,13 @@ An environment document and its mapping to Compose:
 | services.<name>.networks | native Compose network membership (a service on two zones is a bridge) |
 | services.<name>.healthcheck | the container healthcheck: `http <path>` (curl), `tcp <host:port>` (socket connect), or `pgrep <cmd>` (process alive), with `interval` / `timeout` / `start_period` / `retries` |
 | services.<name>.resources | `mem` / `cpus` limits (`mem_limit` / `cpus`) |
-| services.<name>.command | entrypoint/command overrides (workers: `artisan queue:work`, WebSocket: `websocket:start`) |
+| services.<name>.command | entrypoint/command overrides |
 | services.<name>.environment | **service-scoped env vars** (created with exposure: this service) — layered over the environment's inherited all-services file; wins on name conflict |
 | services.<name>.x-gp-release.default_strategy | the service's **declared default** deploy strategy; the Deploy action chooses the strategy per deployment (`blue-green` and `recreate` implemented; `rolling` is rejected in the MVP) — the spec default is overridden at deploy time, never rewritten |
 | services.<name>.env_file | generated env files attached to THIS service; the canonical all-services file is explicitly attached to every service |
 | services.<name>.mounts | native Compose volume/file mounts; Groundplane-managed file entries use native `secrets` or `configs` grants when their semantics fit |
-| services.<name>.aliases | per-zone network aliases (blue/green: `storefront-{slot}-api`, WebSocket: `app-websocket` / `storefront-websocket`) |
-| services.<name>.depends_on | ordering, including health conditions (`identity-portal -> identity-clamav: service_healthy`) |
+| services.<name>.aliases | per-zone network aliases |
+| services.<name>.depends_on | ordering, including health conditions |
 | services.<name>.expose | internal ports reachable on the zone (`cms:3000`, `websocket:8080`) |
 | services.<name>.restart | restart policy (`unless-stopped` / `always` / `no`) |
 | services.<name>.logging | json-file log limits (`maxSize` / `maxFile`) |

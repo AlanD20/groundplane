@@ -3,7 +3,6 @@
 This document consolidates the 2026-09-10 local evidence for numeric hook order,
 explicit execution contexts, source authority, operator surfaces and runtime
 composition. Requirements live in [Script execution](../features/setup-scripts.md).
-The earlier manual lifecycle evidence is in [hosting-floor.md](hosting-floor.md).
 No evidence below claims live explicit-context qualification or production
 readiness.
 
@@ -234,10 +233,8 @@ not prove real Docker mount/network enforcement or source-to-host behavior.
 
 ### Manual immutable-source integration
 
-The earlier manual-source investigation supplied local persistence and projection
-proof below. Its deployed legacy records were handled separately by the exact
-[one-time migration](hosting-floor.md#manual-script-lifecycle-and-one-time-migration);
-the later floor journey does not retroactively qualify every local failure path.
+The earlier manual-source investigation supplied the local persistence and
+projection proof below. It does not qualify every live failure path.
 
 | Local proof | Scope retained |
 | --- | --- |
@@ -274,9 +271,7 @@ fakes are necessary: a fake that ignores prefix comparisons proves nothing here.
 Service removal still requires a fresh DELETE after failure, not ordinary Retry.
 
 Volume tests proved source-reservation exclusion in desired-removal publication,
-including final-CAS reservation races and unchanged stable-ID slug edits. Later
-[Volume integration evidence](hosting-floor.md#volume-publication-and-removal)
-supersedes the old statement that the removal runtime was unconnected; mounted
+including final-CAS reservation races and unchanged stable-ID slug edits. Mounted
 consumer destruction and source-family retirement still need their own proof.
 
 The `ManualScript|ScriptSourceReference` selection and named Secret/Entry/Service/

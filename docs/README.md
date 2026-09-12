@@ -42,7 +42,6 @@ implementation nor an old test result changes a requirement.
 | Controller and Agent updates | [Safe updates](features/upgrade-safety.md) |
 | Complete operator-authored Caddyfile | [Router templates](features/router-template.md) |
 | Ordered setup hooks with explicit resources | [Script execution](features/setup-scripts.md) |
-| Portable application bundle and runtime visibility | [Kobwnewe hosting](features/kobwnewe-hosting.md) |
 
 Feature entrypoints route detailed runtime, persistence and wire contracts when
 those details would obscure the feature overview. The retained

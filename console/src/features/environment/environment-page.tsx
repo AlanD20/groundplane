@@ -481,9 +481,8 @@ function RollbackDialog({
   )
 }
 
-// Image name/tag split: "storefront-app:sha-9f3c1ad" -> name "storefront-app",
-// tag "sha-9f3c1ad". The last ':' splits unless the remainder looks like a
-// registry path (ghcr.io/org/image stays untagged -> "latest").
+// The last ':' splits an image name and tag unless the remainder looks like a
+// registry path. Untagged images use "latest".
 function imageName(image: string): string {
   const i = image.lastIndexOf(':')
   return i > -1 && !image.slice(i + 1).includes('/') ? image.slice(0, i) : image
@@ -1230,7 +1229,7 @@ function RouterCard({ env }: { env: Environment }) {
               <div className="flex flex-col gap-3">
                 <div className="flex flex-col gap-1">
                   <Label htmlFor="router-alias">Router alias (optional)</Label>
-                  <Input id="router-alias" value={routerAlias} maxLength={63} placeholder="kobwnewe-router" onChange={(event) => setRouterAlias(event.target.value)} aria-describedby="router-alias-help" />
+                  <Input id="router-alias" value={routerAlias} maxLength={63} onChange={(event) => setRouterAlias(event.target.value)} aria-describedby="router-alias-help" />
                   <p id="router-alias-help" className="text-xs text-muted-foreground">One lowercase DNS label on the primary network. HTTP uses port 80. Leave empty to clear.</p>
                   <CaddyTemplateEditor key={operation.component.id} componentId={operation.component.id}
                     enabled={operation.component.enabled} value={caddyTemplate} onChange={setCaddyTemplate}
