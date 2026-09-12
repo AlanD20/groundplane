@@ -1,7 +1,8 @@
 # ADR 0064: Candidate Release restoration authority
 
 - Status: Accepted
-- Target-selection clause superseded by ADR 0066; the lifecycle fences remain.
+- Member selection and ordinary predecessor capture are owned by
+  [Services and Releases](../features/services-and-releases.md#per-service-restoration).
 - Date: 2026-09-04
 - Capabilities: C06 Releases, C09 Scripts, C21 Environment Blueprint
 
@@ -43,15 +44,17 @@ may lawfully advance before claim. The plan never selects between them. Plan
 bytes and hash are immutable across claim, reconnect, deadline, recovery, and
 terminal acknowledgement.
 
-`serving_predecessor` binds the exact writer-fenced applied projection,
-artifact, Release, target, fixed read revision, and canonical authority digest.
+For Blueprint, `serving_predecessor` binds the exact writer-fenced applied
+projection, artifact, Release, target, fixed read revision and canonical authority
+digest. Ordinary Releases bind their staged per-Service native witnesses, as
+defined in [the predecessor contract](../features/services-and-releases.md#ordinary-release-predecessors).
 `candidate_absence` binds the immutable candidate artifact, exact Compose
 project, and complete selected Service/Release set. Host observations are proof
 for the selected target only; they are never selection or decision authority.
 The string `baseline`, synthetic Release identity, and restoration derivation
 from a candidate Service's mutable `Current` projection do not exist.
 
-### Claim selects a restoration target per Service (ADR 0066)
+### Claim selects a restoration target per Service
 
 Blueprint publication retains its independently sealed nullable
 `BlueprintAppliedPredecessor`. Claim reads that authority under the existing

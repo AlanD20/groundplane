@@ -1236,14 +1236,14 @@ procedure used by ordinary Release and Blueprint. Its immutable plan projection
 contains exact candidate and forward anchors plus the complete closed lawful
 `serving_predecessor` and `candidate_absence` restoration alternatives. The
 Controller claim selects exactly one per Service from the already-sealed
-nullable applied predecessor (ADR 0066). It persists the complete sorted member
+nullable applied predecessor ([per-Service restoration](features/services-and-releases.md#per-service-restoration)). It persists the complete sorted member
 map and independently fenced nullable witness plus their canonical digest with
 the assignment, writer, and execution epoch. Configured-only members select
 absence, not serving restoration. The Agent receives selections; it never
 derives them from Docker or current Controller projections.
 
 Ordinary Deploy/Rollback use the per-Service immutable native predecessor in
-ADR 0070. Their staged render records own the exact historical runtime artifacts;
+[ordinary Release predecessors](features/services-and-releases.md#ordinary-release-predecessors). Their staged render records own the exact historical runtime artifacts;
 the aggregate publication marker does not duplicate them. The plan, claim,
 Agent, and terminal proof bind the same bytes and explicit prior references.
 The latest Environment artifact remains an independently fenced witness, not
