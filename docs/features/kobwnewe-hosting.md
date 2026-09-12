@@ -99,11 +99,14 @@ and its non-secret `.env.app.example`/`.env.identity.example` describe the earli
 deployment inputs. They are navigation sources, not frozen runtime authority;
 recheck them against the selected image revisions before qualification.
 
-The current TLS choice requires the owner: consume externally issued certificates
-or create a dedicated private CA. The QA initializer creates a disposable 30-day
-CA and seven-day leaf certificates, so copying it would silently select an issuer
-and renewal policy. Until that choice is resolved, certificate-dependent bundle
-implementation is paused. No certificate, trust store or host was changed.
+On 2026-09-12 the owner selected externally issued Identity TLS certificates.
+The bundle consumes the issuer trust chain and matching server/portal certificate
+and private-key pairs through Secret references. It does not create a CA or issue
+certificates. Preparation validates the supplied chains, names, validity and key
+matches before publication. An unchanged valid input is an idempotent no-op;
+renewal and trust distribution remain explicit operator responsibilities.
+The disposable QA issuer is not part of the portable bundle. This decision does
+not authorize live certificate, trust-store or host changes.
 
 ## Acceptance
 
