@@ -67,7 +67,7 @@ type agentRuntimeResources struct {
 	hostResolution         *hostresolutionhelpercontainer.Executor
 	logs                   *containerlogs.Reader
 	scripts                *agent.DockerScriptRuntime
-	images                 *mobyclient.Client
+	dockerReads            *mobyclient.Client
 }
 
 type agentComposeResources struct {
@@ -263,7 +263,7 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 	if err := client.SetScriptRuntime(scripts); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
-	if err := configureAgentWorkloadImages(ctx, client, runtimeResources); err != nil {
+	if err := configureAgentDockerReads(ctx, client, runtimeResources); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
 
@@ -284,8 +284,8 @@ func (resources *agentRuntimeResources) Close() error {
 	}
 	var logErr, scriptErr, hostResolutionErr, managedConfigErr, dnsObserverErr, materializerErr, directoryErr, composeErr error
 	var imageErr error
-	if resources.images != nil {
-		imageErr = resources.images.Close()
+	if resources.dockerReads != nil {
+		imageErr = resources.dockerReads.Close()
 	}
 	if resources.logs != nil {
 		logErr = resources.logs.Close()

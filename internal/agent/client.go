@@ -69,6 +69,7 @@ type Client struct {
 	hostResolution         HostResolutionRuntime
 	scriptRuntime          ScriptRuntime
 	images                 WorkloadImageResolver
+	observer               ServiceObserver
 	logs                   *logManager
 }
 

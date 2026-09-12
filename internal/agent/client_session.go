@@ -71,11 +71,20 @@ func (c *Client) runSession(
 	received := make(chan receiveResult, 1)
 	images := newImageSession(streamCtx, c.images)
 	defer images.close()
+	observations := newObservationSession(c.observer)
+	defer observations.Close()
 	receiveNext(streamCtx, stream, received)
 	for {
 		select {
 		case <-ctx.Done():
 			return false, nil
+		case output := <-observations.outputs:
+			if err := observations.Close(); err != nil {
+				return false, err
+			}
+			if err := sendServiceObservation(streamCtx, stream, output); err != nil {
+				return agentChannelTransportResult(ctx, err, "agent: send service observation", false)
+			}
 		case output := <-images.outputs:
 			images.busy = false
 			if output.err != nil {
@@ -94,6 +103,13 @@ func (c *Client) runSession(
 		case result := <-received:
 			if result.err != nil {
 				return agentChannelTransportResult(ctx, result.err, "agent: receive Controller message", true)
+			}
+			if handled, err := observations.handle(streamCtx, stream, result.message); handled {
+				if err != nil {
+					return agentChannelTransportResult(ctx, err, "agent: receive service observation", true)
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
 			}
 			if request := result.message.GetResolveWorkloadImages(); request != nil {
 				if proto.Size(result.message) > workloadimage.MaximumEnvelopeBytes ||

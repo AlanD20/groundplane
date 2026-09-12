@@ -85,10 +85,19 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 		}
 	}()
 
+	observations := &observationExchange{}
 	for {
 		select {
 		case <-session.Done():
 			return nil
+		case <-observations.done():
+			if err := observations.cancel(session.ctx, stream); err != nil {
+				return err
+			}
+		case command := <-session.state.observationCommands:
+			if err := observations.send(session.ctx, stream, session, command); err != nil {
+				return err
+			}
 		case command := <-session.state.imageCommands:
 			if !session.imageCommandCurrent(command) {
 				continue
@@ -150,6 +159,14 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 			}
 			if result.message.GetWorkloadImageResolutionResult() != nil {
 				session.acceptImageResult(result.message)
+				continue
+			}
+			if result.message.GetServiceObservationResult() != nil {
+				session.acceptObservationResult(session.ctx, result.message)
+				if observations.active != nil &&
+					result.message.GetServiceObservationResult().RequestId == observations.active.request.RequestId {
+					observations.active = nil
+				}
 				continue
 			}
 			if ready := result.message.GetLogReady(); ready != nil {

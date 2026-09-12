@@ -94,6 +94,14 @@ func ValidateResult(request *agentpb.ObserveServices, result *agentpb.ServiceObs
 	return nil
 }
 
+func ValidateCancel(request *agentpb.CancelServiceObservation) error {
+	if request == nil || len(request.ProtoReflect().GetUnknown()) != 0 ||
+		ids.Validate(ids.KindOperation, "op_"+request.RequestId) != nil {
+		return invalid()
+	}
+	return nil
+}
+
 func composeNameValid(value string) bool {
 	if len(value) == 0 || len(value) > 255 {
 		return false

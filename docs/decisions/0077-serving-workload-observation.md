@@ -54,6 +54,12 @@ reconnect retry. Correlation uses a raw ULID from the existing id allocator plus
 the exact authenticated session fence. Cancellation and disconnect cancel/join
 the worker; late, malformed or replacement-session results are unusable.
 
+`ControllerMessage.cancel_service_observation` (tag 15) carries only the
+request's raw ULID. The stream sends cancellation before a subsequent observation
+request on that connection. The Agent ignores stale cancellation, joins the
+matching worker and discards its output before reusing the slot. Read failures
+return unavailable rows; they do not terminate otherwise usable Task traffic.
+
 Before returning live evidence, the Controller rechecks the serving projection
 and Service runtime-intent revisions. A changed source yields unavailable, not
 evidence attached to a different Release. The public observation window starts
@@ -95,7 +101,9 @@ The first slice implements protobuf messages, closed request/result validation,
 pure count aggregation and the list/inspect-only Docker observer. The tests cover
 selection, ownership changes, malformed evidence, duplicate replicas, overflow,
 cancellation, per-Service failures and the actual Docker client/protobuf seam.
-It does not connect the exchange to Agent/channel or select Controller serving
-authority. Public observation fields, generated API clients, Console/CLI expiry
-and Environment aggregation remain subsequent integration work. See
+Agent/channel wiring and composition are implemented with focused proof: one
+observation worker, request/session matching, explicit cancellation and join,
+and unavailable responses independent of image lookup and Task capacity.
+Controller serving-authority selection, public observation fields, generated API
+clients, Console/CLI expiry and Environment aggregation remain subsequent work. See
 [Service status](../features/services-and-releases.md#current-status) for proof.

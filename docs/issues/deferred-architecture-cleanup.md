@@ -64,6 +64,25 @@ allowances must not be weakened to hide findings.
 - `fd4435e3` landed the MVCC Blueprint test Store prerequisite. It did not perform the remaining
   public-fixture or nine cross-layer etcd test migrations.
 
+## Service observation channel checks
+
+The 2026-09-12 channel slice ran `make architecture-check` with Go 1.26.7;
+the working-tree gate reports 126 findings. Evidence is in
+`.tmp/service-channel-1qVALR/architecture.log`. No baseline changed. The Registry
+shrinks from 763 to 749 lines but remains above its old allowance. The new Docker
+read composition adds eight direct `internal/app` lines (24,909 to 24,917).
+The owner approved this composition-only increase on 2026-09-12. The historical
+baseline remains 16,804; its exact-equality check still reports drift. This
+approval does not change the baseline or waive other architecture requirements.
+
+Scoped Staticcheck reports unchanged `internal/agent/script_runtime.go:79`
+SA4006 and `internal/controller/agentchannel/logs.go:204,221` SA1012.
+Evidence: `.tmp/service-channel-1qVALR/staticcheck.log`. Owner: the Agent and
+Agent-channel maintenance owners. Acceptance: remove the unused Script value
+and supply the intended cancellation context for log cleanup without changing
+delivery/cancellation behavior, then pass the scoped analyzer and relevant tests.
+These are analyzer findings; this check did not demonstrate a new runtime failure.
+
 ## Deferred work groups
 
 - Public test fixtures and cross-layer placement: migrate the nine etcd test files into app-owned

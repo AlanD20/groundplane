@@ -134,8 +134,10 @@ observer. Focused race tests, vet and Staticcheck pass with Go 1.26.7. The tests
 include the real Docker client over a private HTTP transport and a protobuf
 round trip; they do not contact Docker or prove live workload visibility.
 
-Agent/channel worker and session handling, Controller source/freshness checks,
-public API projection, generated clients, Console/CLI rendering and expiry, and
-Environment aggregation remain unimplemented. No new operator surface is
+Agent/channel worker and session handling are integrated on `main` with focused
+race and transport proof. The owner approved the eight composition-only wiring
+lines; [head.md](../head.md) records the resolved decision and remaining gates. Controller
+source/freshness checks, public API projection, generated clients, Console/CLI
+rendering and expiry, and Environment aggregation remain unimplemented. No new operator surface is
 available or deployed. [Kobwnewe hosting](kobwnewe-hosting.md) retains the live
 qualification requirements; [head.md](../head.md) routes local proof and next work.

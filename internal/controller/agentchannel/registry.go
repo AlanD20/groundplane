@@ -196,27 +196,13 @@ func (r *Registry) Open(parent context.Context, agentID string, generation uint6
 
 		r.nextFence++
 		ctx, cancel := context.WithCancel(parent)
-		sendPermit := make(chan struct{}, 1)
-		sendPermit <- struct{}{}
-		state := &sessionState{
-			generation:         generation,
-			fence:              r.nextFence,
-			online:             true,
-			assignmentsStopped: lifecycle != nil && generation <= lifecycle.quiescedThrough,
-			cancel:             cancel,
-			dispatchWake:       make(chan struct{}, 1),
-			sendPermit:         sendPermit,
-			sendFence:          make(chan struct{}),
-			done:               ctx.Done(),
-			aborts:             make(chan taskAbortCommand),
-			logCommands:        make(chan logCommand),
-			imageCommands:      make(chan *imageCommand),
-			imageCounter:       ids.NewImageCorrelationCounter(),
-			offline:            make(chan struct{}),
-		}
-		if state.assignmentsStopped {
-			state.fenceAssignmentSendsLocked()
-		}
+		state := newSessionState(
+			ctx,
+			cancel,
+			generation,
+			r.nextFence,
+			lifecycle != nil && generation <= lifecycle.quiescedThrough,
+		)
 		r.agents[agentID] = state
 		r.mu.Unlock()
 

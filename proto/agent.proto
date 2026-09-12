@@ -124,6 +124,10 @@ message ObserveServices {
   repeated ServiceObservationTarget targets = 2;
 }
 
+message CancelServiceObservation {
+  string request_id = 1; // cancel only this exchange on this connection
+}
+
 // Disjoint bins; neither desired state nor healthcheck output is returned.
 message ServiceReplicaCounts {
   uint32 running = 1; // running without a healthcheck
@@ -382,6 +386,7 @@ message ControllerMessage {
     ResolveWorkloadImages resolve_workload_images = 12;
     VolumeRemovalCheckpointAck volume_removal_checkpoint_ack = 13;
     ObserveServices observe_services = 14;
+    CancelServiceObservation cancel_service_observation = 15;
     TaskEventAck task_event_ack = 22;
   }
 }
