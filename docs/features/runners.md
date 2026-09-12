@@ -83,6 +83,10 @@ to:
   Task input, idempotency hashes, events, logs, argv, files, helper input, or an
   OCI environment. The pinned configure child may receive it only as the one
   token entry in its explicitly constructed process environment.
+- The sole stdin exception is a one-use bootstrap message from the Controller
+  to the pinned Runner entrypoint over Docker attach. The entrypoint passes the
+  token to configure through that environment entry, not through child stdin,
+  and closes the bootstrap input before Listener or job admission.
 - Publication failure drops the staged token. A Controller exit before
   consumption loses it. If registration cannot be proved, the Task fails
   `registration_token_required`; recovery never guesses or reuses secret
@@ -175,19 +179,24 @@ data-plane effects remain Agent-owned; Runner authority does not generalize.
 The API validates a fresh token, stages it in the ephemeral broker, then
 atomically publishes the attempt. The executor detaches the buffer with a
 one-consume operation for configure. Broker state is not recovery state:
-process loss becomes an explicit failed attempt and fresh Runner Retry.
+if registration cannot be proved after process loss, the attempt fails and
+requires a fresh-token Runner Retry.
 
 This replaces the superseded Agent relay and entrypoint token-pull designs.
 There is no `/internal/runner-registration/*` or
 `/internal/runner-bootstrap/*` token/config protocol in the current design.
 
-The accepted replacement does not yet define the bounded broker-to-configure
-process transport. That seam must be closed before runtime implementation: it
-must deliver the bytes only to the configure child's explicit environment
-without adding a pull endpoint, Agent relay, Task/helper payload, Docker
-`exec`, registration socket, token file/stdin/argv, fifth bind, durable OCI
-environment, or replayable response. This is an unresolved implementation
-decision, not permission to choose an ambient secret channel.
+The owner-approved transport uses the Controller's existing rootful Docker
+connection to send one bounded token message to the pinned entrypoint's stdin.
+The exact [bootstrap transport](runners/runtime.md#one-use-bootstrap-token-transport)
+binds delivery to the attempt and full container identity, closes input, and
+allows the token only in the configure child's explicit environment. Owned
+buffers are cleared after use; uncertain delivery is never resent.
+
+This narrow exception avoids a separate secret-distribution service. It does
+not permit a pull endpoint, Agent relay, Task/helper payload, Docker `exec`,
+registration socket, token file/argv, fifth bind, stored OCI environment, or
+token-bearing response. Configure and Listener stdin never carry the token.
 
 ### Allocation and cleanup
 
@@ -217,7 +226,11 @@ evidence proves all of the following on `linux/amd64` and `linux/arm64`:
 3. Raw registration-token bytes and derivatives are absent from every durable
    store and log. Publication failure and restart-before-consumption erase the
    broker; the latter terminates `registration_token_required`, and retry uses
-   a fresh token with identical allocations.
+   a fresh token with identical allocations. Bootstrap input is bounded, tied
+   to the exact attempt/container, consumed once and closed before jobs. Only
+   configure receives the token environment entry; Listener does not. Partial
+   or uncertain delivery is never resent, and recovery requires exact
+   registration proof or a fresh-token Retry.
 4. Each Runner receives a unique slot, UID/subordinate blocks, `/29`, rootless
    daemon/socket, rootful Runner container, network/nft policy, and immutable
    dual-platform image. Host socket, cross-Runner/private-pool reach,
@@ -238,11 +251,12 @@ evidence proves all of the following on `linux/amd64` and `linux/arm64`:
 
 ## Current status
 
-The product contract and Controller-owned lifecycle decision are accepted.
-Controller persistence and part of the native lifecycle seam exist, but the isolated host runtime, exact
-release/runtime artifacts, broker-to-configure transport decision, full
-operator parity, and acceptance evidence are not complete; missing
-implementation does not narrow this contract.
+The product contract, Controller-owned lifecycle and one-use bootstrap transport
+are accepted. Controller persistence and part of the native lifecycle exist,
+but the isolated host runtime, exact release/runtime artifacts, approved token
+transport implementation, full operator parity and acceptance evidence remain
+incomplete. The existing stdin scaffold does not prove the bounded transport
+or runtime isolation contract; missing implementation does not narrow it.
 
 Under the current working assumption that an external builder supplies the
 hosting images, Runner completion is not a Gate A or Gate B prerequisite.

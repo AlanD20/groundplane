@@ -1205,8 +1205,8 @@ tenants and one database.
   registration step. Loss before registration is proven fails the Task with
   `registration_token_required`; Retry reuses the Runner id, quota, host slot,
   and subnet but requires a fresh token. Generic Task Retry cannot retry Runner
-  creation. After pairing with GitHub, the runner pulls its Groundplane agent
-  config (pull interval, max concurrent tasks, labels) from the Controller.
+  creation. The native Controller owns Runner registration and local lifecycle;
+  the Runner receives no Groundplane Agent configuration or Task channel.
 
   Create atomically publishes the provisioning Runner, quota and allocation
   claims, replay evidence, and Controller Task before host mutation. Removal

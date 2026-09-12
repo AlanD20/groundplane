@@ -954,8 +954,10 @@ pinned tuple:
   proxy readiness before Docker and API readiness after Docker;
 - the rootful Runner Create golden with User U:G, zero capabilities,
   NoNewPrivs, four mounts, eight labels, setuid/setgid/file-capability negative
-  probes, registration-token one-consume behavior, inert nonce replay
-  rejection, and exact eight-entry Listener environment;
+  probes, registration-token one-consume behavior, bounded bootstrap framing
+  and deadline, wrong-container/attempt rejection, no resend after partial or
+  uncertain delivery, closed bootstrap input before jobs, inert nonce replay
+  rejection, and exact eight-entry Listener environment without token bytes;
 - Network/nft materialization and cleanup order, exact B+2 endpoint, three
   chains/twelve rules, inventory drift behavior without unauthorized mutation,
   and global UID proof while nft remains installed;
@@ -1008,11 +1010,12 @@ must publish a new pinned image deliberately.
 
 ### Registration token in Task persistence, argv, durable container environment, or persistent storage
 
-Rejected. The only exception is the explicit entrypoint configure-child
-environment. The native executor consumes the token once from its in-process
-broker and constructs that environment; the token is never
-Task/journal/OCI/file/stdin/helper/Agent-relay state, and an ambiguous attempt
-is never replayed.
+Rejected. The only permitted process handoffs are the
+[one-use entrypoint bootstrap input](#one-use-bootstrap-token-transport) and
+the configure child's explicit environment. Task, journal, OCI configuration,
+file, helper and Agent-relay paths remain forbidden. An ambiguous token
+delivery is never replayed. The stdin exception avoids adding a separate
+secret service or mount; it does not authorize general container input.
 
 ### Giving the Runner the Groundplane Agent channel
 
@@ -1466,9 +1469,9 @@ Materialization is exactly: lock/reserve slot; claim and separately ensure group
 user, home, subuid, subgid, data root and all files; create/bind rootful Network;
 install/attest nft; install exactly two disabled units; enable linger; reload;
 start proxy; prove proxy readiness; start Docker; prove processes and raw/proxy
-sockets and proxy API; immediately reobserve proxy socket; deliver the staged
-token through the still-to-be-closed non-durable configure seam; create/start
-and directly configure the rootful Runner with the proxy-only Docker bind;
+sockets and proxy API; immediately reobserve proxy socket; create the rootful
+Runner with the proxy-only Docker bind; attach its bootstrap stdin before
+Start; deliver the staged token once and close input; directly configure;
 prove registration/listener readiness;
 remove helpers; seal. No Runner-UID process exists before nft.
 
@@ -1982,10 +1985,11 @@ Target-sorted. The proxy socket alias uses false.
 Registration bytes remain canonical `S/control/registration-v1.json`, root0444
 one-link below root0755, <=16KiB, journaled and mounted RO at
 `/run/groundplane/registration-v1.json`. Its exact existing schema and eight
-Runner labels remain. Before the executor creates the container it consumes
-the attempt's registration token once from the in-process Controller broker;
-the controlled entrypoint receives it only in the direct configure child
-environment described below. There is no token-pull endpoint, Agent relay,
+Runner labels remain. The token is not part of this document. The executor
+delivers it from the in-process broker through the
+[one-use bootstrap transport](#one-use-bootstrap-token-transport); the pinned
+entrypoint gives it only to the direct configure child's environment.
+There is no token-pull endpoint, Agent relay,
 registration socket, token file, fifth bind, or durable token environment.
 Before Listener/job admission the Controller records the non-secret
 registration proof and invalidates the registration nonce. The same container
@@ -2005,7 +2009,9 @@ R directory true. It has no raw/rootful socket, bus, Agent/Controller, control
 path, or credential mount. Exactly eight labels exist: contract
 runner-container-v1, contract-sha256, create-request-sha256, ownership-nonce,
 registration-document-sha256, runner-id, runtime-epoch, tenant-id. Create digest
-omits only its own digest label.
+omits only its own digest label. `AttachStdin`, `OpenStdin` and `StdinOnce` are
+true, and `Tty` is false, for the bounded bootstrap input. The create request,
+its digest and stored container environment contain no token or derivative.
 
 Readiness inspects Config.User, Privileged, caps, ordered SecurityOpt, four
 mounts, labels, and live init status: all UIDs U, all GIDs G, NoNewPrivs1, and
@@ -2037,13 +2043,49 @@ persisted `.runner`; it does not claim the Listener locally rejects refresh
 messages. Unexpected version/file/runtime drift conflicts Ready and requires
 Controller cleanup/rematerialization.
 
+### One-use bootstrap token transport
+
+The owner approved this narrow stdin exception on 2026-09-12. It connects the
+in-process Controller broker to the pinned Runner entrypoint without a new
+endpoint, helper credential, socket or mount. It is not configure-child stdin.
+
+1. Use the Controller's existing rootful Docker connection and the exact full
+   container id bound to the active Task attempt and runtime epoch. Verify its
+   pinned image, entrypoint and registration-document ownership before sending
+   secret bytes; a name alone never identifies the recipient. Attach stdin
+   before Start, with `Tty=false`; the existing Runner-start effect must be
+   journaled as issued before any token byte is sent.
+2. Consume the attempt's broker buffer once. Send exactly
+   `uint32be(token_length) || token`, with token length 1..4096 and the byte
+   restrictions below, then CloseWrite. This is a token-only message, not the
+   persisted registration document or a helper request. Never hash, echo or
+   log the message, including on failure.
+3. The entrypoint accepts one complete message and EOF within 15 seconds of
+   entrypoint start. Empty, oversized, malformed, trailing, second or incomplete
+   messages and expiry reject before configure. It closes its bootstrap input;
+   configure and Listener receive disconnected stdin, never that stream.
+4. Configure receives the token only in its explicit environment entry. Clear
+   owned token and environment buffers after configure, including failure,
+   before Listener/job admission. Admission still requires the Controller's
+   non-secret registration proof and nonce invalidation described above.
+5. If writing may have started, never reattach to resend or feed another token
+   into that attempt. Observe exact registration and ownership proof within
+   the existing recovery bounds. If registration cannot be proved, fail with
+   `registration_token_required`; only a fresh-token Runner Retry may proceed.
+   A Controller restart cannot recover the stream or token. Failed attempts
+   retain their allocations and use ownership-proved cleanup, not blind removal.
+
+This grants no general secret stdin channel. Token files, argv, Docker `exec`,
+stored OCI environment, host-control helper input, Agent relay and token-bearing
+responses remain forbidden. The memory-erasure and host-root limits below still
+apply; Docker and kernel copies are not claimed absent or completely erased.
+
 ### Transient token failure and ownership proof
 
 The API stages one fresh registration token in a bounded, zeroing in-process
 Controller broker before publishing an attempt. The native executor consumes
-it exactly once. The broker-to-configure process transport is intentionally
-unresolved; it must satisfy the prohibitions below and may not revive the
-deleted token-pull protocol. Publication failure drops it; Controller exit before
+it exactly once through the [bootstrap transport](#one-use-bootstrap-token-transport).
+Publication failure drops it; Controller exit before
 consumption loses it. The token, its digest, and every reversible derivative
 are absent from Runner and Task state, idempotency evidence, ownership
 journals, events, logs, argv, files, helper input, and the persistent Agent.
