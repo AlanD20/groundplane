@@ -2592,7 +2592,7 @@ workspace. Public fixtures use generic names and documentation-only addresses.
 `GET /host`, `groundplane host show`, and the Platform Host page expose one
 non-persistent live snapshot. Linux identity and resource sources, uptime and
 binary-unit formatting, one-minute normalized CPU load, whole percentages,
-Docker version behavior, and safe etcd state are fixed by ADR 0044. The API
+Docker version behavior, and safe etcd state are fixed by [Host-health contract](features/platform.md#host-health). The API
 never exposes configured etcd endpoints or raw probe errors.
 
 The etcd node label is `single-node`; the managed loopback endpoint is either

@@ -240,7 +240,7 @@ revision. The response includes `path`, exact `content`, `revision`, and
 The key fingerprint is exactly `sha256:` plus 64 lowercase hexadecimal
 characters over SHA-256 of the canonical age recipient's UTF-8 text.
 
-Host values are one live, non-persistent snapshot using ADR 0044's exact Linux
+Host values are one live, non-persistent snapshot using [Host-health contract](features/platform.md#host-health)'s exact Linux
 sources, binary units, rounding, and safe dependency-state projection. The CLI
 uses the generated `host.show` operation; the Console loads the same document
 without fixture fallback. Neither surface adds endpoint details, relative

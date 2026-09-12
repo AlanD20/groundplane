@@ -27,6 +27,7 @@ implementation nor an old test result changes a requirement.
 
 | Feature | Document |
 | --- | --- |
+| Host health, bootstrap, Controller and Agent settings | [Platform runtime](features/platform.md) |
 | Managed Components, DNS, Routes and Zone membership | [Components and routing](features/components.md) |
 | Durable work, Activity, cancellation and transient output | [Tasks and logs](features/tasks-and-logs.md) |
 | Persistent storage and exposed configuration values | [Volumes and Entries](features/storage-and-entries.md) |
