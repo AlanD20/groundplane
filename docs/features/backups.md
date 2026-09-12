@@ -36,8 +36,8 @@ This is the feature entrypoint. Exact contracts are routed by task:
   schema-1 authority, checkpoint, transfer, staging, terminal-delivery, and
   restart rules.
 - [Schema-1 wire contract](backups/wire-contract.md) preserves the exact final
-  message fields, tags, and enums that are not yet in `proto/agent.proto`, and
-  records the unresolved collision with newer checked-in outer-message tags.
+  message fields, tags, and enums not yet implemented in `proto/agent.proto`.
+  Its outer-message allocations are reserved in source pending implementation.
 - [Managed PostgreSQL execution](backups/postgresql.md) owns the immutable
   PostgreSQL 16 image release, root helper and private client gate, exact
   process boundary, and non-replayable restore-apply rule.
@@ -254,9 +254,10 @@ execution have implementation evidence recorded in
 [the capability ledger](../capabilities.md#product-wide-index).
 
 The feature remains **Scaffolded**, not accepted as an operational Backup
-vertical. The checked-in Agent protocol is still the pre-implementation shape;
-its outer-message tags also have the unresolved collision recorded in the
-[wire contract](backups/wire-contract.md#current-source-conflict). Generic
+vertical. The checked-in Agent protocol is still the pre-implementation shape.
+The [wire contract](backups/wire-contract.md#outer-message-allocation) allocates
+the missing outer-message fields; source reservations protect those numbers
+but add no runtime behavior. Generic
 terminal delivery, Config/Volume transfer, staging recovery, managed
 PostgreSQL execution, capture/upload, Restore, production secret resolution,
 remote Environment deletion, failure injection, live S3 proof, and complete

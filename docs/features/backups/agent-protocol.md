@@ -36,8 +36,10 @@ substituted for another.
 
 `AgentConfig.labels` is the sorted unique repeated key/value representation,
 not the incomplete map representation. Legacy schema-2 readiness identifiers
-do not survive. Reserved tags/names remain reserved, including the old relative
+do not survive. Retired tags/names remain reserved, including the old relative
 `timeout_seconds` assignment field and the incomplete Backup checkpoint fields.
+The separate [outer-message allocation holds](wire-contract.md#outer-message-allocation)
+are released only for their named schema-1 fields when those fields are implemented.
 
 ## Assignment authority
 

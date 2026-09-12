@@ -5,7 +5,7 @@ channel. It preserves the exact accepted Backup shapes that are not yet present
 in the checked-in protobuf. The [Agent execution document](agent-protocol.md)
 owns ordering, digest, queue, transaction, and recovery semantics.
 
-## Current source conflict
+## Outer message allocation
 
 The checked-in protobuf is still the incomplete pre-implementation Backup
 shape. It lacks the schema-1 authority, resume, Config/Volume transfer, staging
@@ -13,18 +13,37 @@ recovery, generic terminal-delivery, adoption, and source-specific checkpoint
 messages below. Its old `BackupCheckpointRequest` also uses the replaced
 uint32/kind/control-digest shape.
 
-There is an unresolved tag collision that must be decided before implementation:
+The owner approved these outer-message allocations on 2026-09-12. They replace
+the earlier Backup allocations that overlapped workload image resolution,
+Volume removal and unfinished Service observation. All existing assignments
+keep their numbers, including the pending Service observation fields
+(`AgentMessage` 13 and `ControllerMessage` 14) and `ControllerMessage` 22
+(`TaskEventAck`). Numbers are scoped to each containing message.
 
-| Outer message | Accepted Backup tags | Currently occupying those tags |
+| Message type | `AgentMessage` tag | `ControllerMessage` tag |
 | --- | --- | --- |
-| `AgentMessage` | 11 Config transfer; 12 Config credit; 13 staging inventory; 14 staging ack; 15 Volume transfer; 16 Volume ack/credit; 17 receipt applied; 18 assignment retired | 11 workload image result; 12 Volume-removal checkpoint; 13 Service-observation result |
-| `ControllerMessage` | 12 Config transfer; 13 Config credit; 14 staging plan; 15 Volume transfer; 16 Volume ack/credit; 17 receipt ack; 18 applied ack; 19 staging-ack receipt; 20 retired ack | 12 workload image resolution; 13 Volume-removal ack; 14 Service-observation request |
+| `BackupConfigTransfer` | 32 | 32 |
+| `BackupConfigCredit` | 33 | 33 |
+| `BackupStagingInventory` | 34 | — |
+| `BackupStagingRecoveryAck` | 35 | — |
+| `BackupStagingRecoveryPlan` | — | 34 |
+| `BackupVolumeManifestTransfer` | 36 | 35 |
+| `BackupVolumeManifestAckCredit` | 37 | 36 |
+| `TaskTerminalReceiptApplied` | 38 | — |
+| `TaskTerminalAssignmentRetired` | 39 | — |
+| `TaskTerminalReceiptAck` | — | 37 |
+| `TaskTerminalReceiptAppliedAck` | — | 38 |
+| `BackupStagingRecoveryAckReceipt` | — | 39 |
+| `TaskTerminalAssignmentRetiredAck` | — | 40 |
 
-The accepted Backup fields cannot be implemented at those exact tags while the
-current occupants remain. This migration does not choose new numbers or revive
-the incomplete decoder. The owner must resolve the collision and update the
-wire contract once, cleanly. Until then, Backup schema 1 is unimplemented and
-must not advertise readiness.
+`proto/agent.proto` reserves Agent tags 32–39 and Controller tags 32–40 so other
+work cannot consume them. These are temporary holds for the named fields, not
+retired field numbers. When implementing a field, remove only its number from
+the reservation and add it to the payload oneof at the documented tag. Keep the
+remaining numbers reserved. Permanently retired tags and names stay reserved.
+
+This allocation changes no existing payload or runtime behavior. It does not
+implement schema 1, revive the incomplete decoder, or permit Backup readiness.
 
 The catalogs below are the accepted Backup schema. Field notation is
 `tag: type name`; `optional` and `oneof` are semantically required where shown.
@@ -875,7 +894,6 @@ Implementation replaces the old checkpoint kind enum and its individual
 Backup source/upload DTOs when their authority roles move into the final sealed
 messages. It does not keep both meanings, translate old data, or negotiate.
 
-The current tag collision is the sole newly observed unresolved wire issue from
-this documentation migration. It is not permission to renumber either side
-without an owner decision and a synchronized protobuf, persistence, Controller,
-Agent, client, documentation, and delivery change.
+Implement the allocated fields with the required protobuf, persistence,
+Controller, Agent, client and documentation changes in the same delivery slice.
+The reservations alone are not implementation or acceptance evidence.

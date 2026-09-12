@@ -16363,7 +16363,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x06labels\x18\x03 \x03(\v2-.groundplane.agent.v1.AgentConfig.LabelsEntryR\x06labels\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xf9\a\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xff\a\n" +
 	"\fAgentMessage\x12H\n" +
 	"\fauthenticate\x18\x01 \x01(\v2\".groundplane.agent.v1.AuthenticateH\x00R\fauthenticate\x123\n" +
 	"\x05ready\x18\x02 \x01(\v2\x1b.groundplane.agent.v1.ReadyH\x00R\x05ready\x12@\n" +
@@ -16379,7 +16379,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	" \x01(\v2-.groundplane.agent.v1.ScriptCheckpointRequestH\x00R\x17scriptCheckpointRequest\x12~\n" +
 	" workload_image_resolution_result\x18\v \x01(\v23.groundplane.agent.v1.WorkloadImageResolutionResultH\x00R\x1dworkloadImageResolutionResult\x12\x81\x01\n" +
 	"!volume_removal_checkpoint_request\x18\f \x01(\v24.groundplane.agent.v1.VolumeRemovalCheckpointRequestH\x00R\x1evolumeRemovalCheckpointRequestB\t\n" +
-	"\apayload\"\xbf\x01\n" +
+	"\apayloadJ\x04\b \x10(\"\xbf\x01\n" +
 	"\x05Ready\x12\x1a\n" +
 	"\bcapacity\x18\x01 \x01(\x05R\bcapacity\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12)\n" +
@@ -16560,7 +16560,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"nextCursor\x12%\n" +
 	"\x0emutation_count\x18\x03 \x01(\rR\rmutationCount\x12\x1a\n" +
 	"\bcomplete\x18\x04 \x01(\bR\bcomplete\x12'\n" +
-	"\x0fresponse_sha256\x18\x05 \x01(\fR\x0eresponseSha256\"\xf7\t\n" +
+	"\x0fresponse_sha256\x18\x05 \x01(\fR\x0eresponseSha256\"\xfd\t\n" +
 	"\x11ControllerMessage\x12O\n" +
 	"\x0ftask_assignment\x18\x01 \x01(\v2$.groundplane.agent.v1.TaskAssignmentH\x00R\x0etaskAssignment\x12@\n" +
 	"\n" +
@@ -16579,7 +16579,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x17resolve_workload_images\x18\f \x01(\v2+.groundplane.agent.v1.ResolveWorkloadImagesH\x00R\x15resolveWorkloadImages\x12u\n" +
 	"\x1dvolume_removal_checkpoint_ack\x18\r \x01(\v20.groundplane.agent.v1.VolumeRemovalCheckpointAckH\x00R\x1avolumeRemovalCheckpointAck\x12J\n" +
 	"\x0etask_event_ack\x18\x16 \x01(\v2\".groundplane.agent.v1.TaskEventAckH\x00R\ftaskEventAckB\t\n" +
-	"\apayload\"\x93\x01\n" +
+	"\apayloadJ\x04\b \x10)\"\x93\x01\n" +
 	"\tLogTarget\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x1d\n" +
 	"\n" +

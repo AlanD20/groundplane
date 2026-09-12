@@ -35,6 +35,10 @@ message AgentConfig {
 // ---- Agent -> Controller ----
 
 message AgentMessage {
+  // Hold schema-1 Backup allocations until their named messages are implemented.
+  // Release only the matching tag in docs/features/backups/wire-contract.md.
+  reserved 32 to 39;
+
   oneof payload {
     Authenticate authenticate = 1; // mandatory first message; no config or work is served before it succeeds
     Ready ready = 2;               // idle Ready IS the heartbeat; authoritative for dead-agent detection
@@ -315,6 +319,10 @@ enum TaskTerminal {
 // ---- Controller -> Agent ----
 
 message ControllerMessage {
+  // Hold schema-1 Backup allocations until their named messages are implemented.
+  // Release only the matching tag in docs/features/backups/wire-contract.md.
+  reserved 32 to 40;
+
   oneof payload {
     TaskAssignment task_assignment = 1; // the full procedure: steps, params, timeout
     TaskAbort task_abort = 2;           // cancel in-flight work NOW
