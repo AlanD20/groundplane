@@ -69,6 +69,42 @@ The bundle depends on [full Caddyfile templates](router-template.md) and
 [explicit Script contexts](setup-scripts.md). Its grammar and authoring surfaces
 remain in [blueprint.md](../blueprint.md) and [api-cli.md](../api-cli.md).
 
+### Portable authoring and input ownership
+
+The retained QA export is evidence, not the deployment template. It contains
+installation-bound Component ids, staging/log-only delivery settings, a permanent
+`qa-initialize` Service and a `public-policy` proxy. Author the replacement with
+eleven real Services: the four application processes, Identity intake, portal,
+worker, scheduler and ClamAV, and the two intentional Identity isolation proxies.
+Keep Reverb at two replicas and preserve shared Attach credentials. Only the
+designated application and Identity consumers run their respective migration hooks.
+
+Bind these inputs before submitting the closed bundle:
+
+| Input | Binding rule |
+| --- | --- |
+| Target and networking | Set envelope labels, the Environment pool, Zone subnets, trusted proxy address and existing Component Zone ids explicitly. `--var` does not interpolate the envelope or `x-gp-*` fields. |
+| Images and users | Select externally built workload images and a digest-pinned setup image already on the Agent. Verify numeric workload uid/gid; a `www-data` name does not prove its numeric identity. The setup image must contain the shell, filesystem tools and OpenSSL used by its Script. |
+| Credentials | Use reusable Secret references or declared Attach facts, never secret bundle files or interpolation values. Preserve application/Identity database separation, the intentional cross-database grant and shared Reverb credentials. |
+| Delivery and authentication | Explicitly select production OTP/mail providers, enabled push/realtime delivery and any social providers. Bind their actual required credentials and endpoints; staging test identities, fake social auth and log-only delivery do not qualify. |
+| Identity policy | Bind signing key ids/public-key sets, evidence-key versions, reviewer access, retention and deletion policy. A deletion-backlog age threshold is not an evidence-retention duration. |
+| TLS and operator access | Select the issuing authority, names, trust distribution, certificate lifetime, renewal and consumer restart responsibilities. Do not turn the disposable QA issuer into a production default. |
+
+The 2026-09-12 input audit inspected the backend at `2ae08b7` and infrastructure
+at `7871583`, read-only. Backend `config/services.php` owns OTP, Identity, social
+auth and Firebase keys; `config/mail.php` owns mail transports;
+`config/realtime.php`, `config/broadcasting.php` and `config/reverb.php` own
+the application/realtime bindings. Infrastructure `rpi/identity.compose.yaml`
+and its non-secret `.env.app.example`/`.env.identity.example` describe the earlier
+deployment inputs. They are navigation sources, not frozen runtime authority;
+recheck them against the selected image revisions before qualification.
+
+The current TLS choice requires the owner: consume externally issued certificates
+or create a dedicated private CA. The QA initializer creates a disposable 30-day
+CA and seven-day leaf certificates, so copying it would silently select an issuer
+and renewal policy. Until that choice is resolved, certificate-dependent bundle
+implementation is paused. No certificate, trust store or host was changed.
+
 ## Acceptance
 
 - Observation checks cover empty, unknown, failed and stale results; wrong
