@@ -68,6 +68,11 @@ func TestStoreCreateValidatesMembershipScopeAndReplays(t *testing.T) {
 		"environment-compose-projection", projection,
 	))
 	_, err = store.createDirectFixture(context.Background(), foreign)
+	if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
+		t.Fatalf("disabled-member Create() error = %v, want resource.in_use", err)
+	}
+	foreign.EnvironmentID = environmentID
+	_, err = store.createDirectFixture(context.Background(), foreign)
 	if !errors.Is(err, errs.New(errs.KindServiceNotFound, "")) {
 		t.Fatalf("cross-scope Create() error = %v, want service.not_found", err)
 	}

@@ -77,7 +77,7 @@ func New(ctx context.Context) (*Runner, error) {
 	engine, err := client.New(client.WithHost(dockerHost))
 	if err != nil {
 		_ = bodies.Close()
-		return nil, errs.Wrap(errs.KindInternal, fmt.Errorf("Script runner: create Docker client: %w", err))
+		return nil, errs.Wrap(errs.KindInternal, fmt.Errorf("script runner: create Docker client: %w", err))
 	}
 	return &Runner{client: engine, bodies: bodies}, nil
 }
@@ -94,7 +94,7 @@ func (runner *Runner) Close() error {
 		bodyErr = runner.bodies.Close()
 	}
 	if joined := errors.Join(engineErr, bodyErr); joined != nil {
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("Script runner: close runtime: %w", joined))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("script runner: close runtime: %w", joined))
 	}
 	return nil
 }
@@ -216,7 +216,7 @@ func (runner *Runner) CreateContainer(
 		}
 		return evidence, errs.Wrap(
 			errs.KindStateConflict,
-			fmt.Errorf("Script runner: inspect ambiguous created container: %w", errors.Join(err, inspectErr)),
+			fmt.Errorf("script runner: inspect ambiguous created container: %w", errors.Join(err, inspectErr)),
 		)
 	}
 	if inspected.Container.State.Status != container.StateCreated || inspected.Container.State.Running {
@@ -302,7 +302,7 @@ func (runner *Runner) RunContainer(
 	select {
 	case drainErr := <-drained:
 		if drainErr != nil && !errors.Is(drainErr, io.EOF) {
-			return result, errs.Wrap(errs.KindInternal, fmt.Errorf("Script runner: drain output: %w", drainErr))
+			return result, errs.Wrap(errs.KindInternal, fmt.Errorf("script runner: drain output: %w", drainErr))
 		}
 	case <-ctx.Done():
 		return result, ctx.Err()
@@ -341,7 +341,7 @@ func (runner *Runner) Cleanup(
 		proof.ContainerID = containerID
 	}
 	if err := runner.cleanup(request, containerID, prepared); err != nil {
-		return proof, errs.Wrap(errs.KindInternal, fmt.Errorf("Script runner: cleanup failed: %w", err))
+		return proof, errs.Wrap(errs.KindInternal, fmt.Errorf("script runner: cleanup failed: %w", err))
 	}
 	proof.ContainerAbsent = true
 	proof.BodyAbsent = true
@@ -882,5 +882,5 @@ func operationError(ctx context.Context, operation string, err error) error {
 	if contextErr := ctx.Err(); contextErr != nil {
 		return contextErr
 	}
-	return errs.Wrap(errs.KindInternal, fmt.Errorf("Script runner: %s: %w", operation, err))
+	return errs.Wrap(errs.KindInternal, fmt.Errorf("script runner: %s: %w", operation, err))
 }

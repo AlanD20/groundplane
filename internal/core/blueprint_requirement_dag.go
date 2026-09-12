@@ -236,10 +236,7 @@ func ResolveBlueprintRequirements(
 			)
 		}
 		resolved = append(resolved, ResolvedRequirement{
-			Target: ResolvedRequirementTarget{
-				Kind: target.Kind, Name: target.Name, ID: target.ID, TaskID: target.TaskID,
-				Revision: target.Revision,
-			},
+			Target:    ResolvedRequirementTarget(target),
 			Condition: requirement.Condition,
 			Phases:    append([]RequirementPhase(nil), requirement.Phases...),
 		})

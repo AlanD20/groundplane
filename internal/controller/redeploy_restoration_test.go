@@ -228,7 +228,10 @@ func redeployRestorationInput(
 	priorSource.Strategy, priorSource.Slot = member.Render.PriorStrategy, member.Render.PriorSlot
 	priorSource.CandidateTarget = member.Render.PriorTarget
 	priorSource.ProxyGeneration, priorSource.ProxyConfigDigest = member.Render.PriorProxyGeneration, member.Render.PriorProxyDigest
-	priorArtifacts, err := resolver.RenderRetainedServiceRuntime(t.Context(), etcd.ServiceLifecycleRelease{Current: priorSource})
+	priorArtifacts, err := resolver.RenderRetainedServiceRuntime(
+		t.Context(),
+		etcd.ServiceLifecycleRelease{Current: priorSource},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +239,10 @@ func redeployRestorationInput(
 	if err != nil {
 		t.Fatal(err)
 	}
-	member.Render.PriorRuntime = &etcd.ReleaseNativePredecessorAuthority{ServiceID: serviceID, CurrentArtifact: priorBytes}
+	member.Render.PriorRuntime = &etcd.ReleaseNativePredecessorAuthority{
+		ServiceID:       serviceID,
+		CurrentArtifact: priorBytes,
+	}
 	return resolver, task, etcd.ReleaseTaskRenderInput{PublicationID: publicationID,
 		Operation: etcd.ReleaseOperationHead{OperationID: task.OperationID, PublicationID: publicationID,
 			EnvironmentID: reader.environment.ID, FailurePolicy: domain.OnFailureSwitchBack},

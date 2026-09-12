@@ -273,10 +273,15 @@ func abortScriptExecutionBeforeStart(
 	step releaseHookExecutionStep,
 	terminalAt time.Time,
 ) (ScriptExecutionRecord, error) {
-	if task.Status != TaskStatusPending || (task.Type != TaskScript && !blueprintScriptTaskShape(task)) || !taskOwnsScriptExecution(task, record) ||
+	if task.Status != TaskStatusPending ||
+		(task.Type != TaskScript && !blueprintScriptTaskShape(task)) ||
+		!taskOwnsScriptExecution(task, record) ||
 		record.State != ScriptExecutionNotStarted || record.AssignmentID != "" || record.StartAuthorized ||
-		!record.ActiveReference || record.CurrentTaskID != task.ID || record.OperationID != task.OperationID ||
-		record.ID != step.executionID || record.StepID != step.stepID ||
+		!record.ActiveReference ||
+		record.CurrentTaskID != task.ID ||
+		record.OperationID != task.OperationID ||
+		record.ID != step.executionID ||
+		record.StepID != step.stepID ||
 		!terminalAt.After(record.UpdatedAt) {
 		return ScriptExecutionRecord{}, errs.New(
 			errs.KindStateConflict,

@@ -16,6 +16,7 @@ import (
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
@@ -74,9 +75,9 @@ func TestOpenRejectsInvalidAndDuplicateTargetsBeforeDocker(t *testing.T) {
 		}},
 		{name: "duplicate service target", request: func() *agentpb.LogSubscribe {
 			request := validSubscribe()
-			duplicate := *request.Targets[0]
+			duplicate := proto.CloneOf(request.Targets[0])
 			duplicate.ReleaseId = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAW"
-			request.Targets = append(request.Targets, &duplicate)
+			request.Targets = append(request.Targets, duplicate)
 			return request
 		}},
 	}
@@ -93,6 +94,7 @@ func TestOpenRejectsInvalidAndDuplicateTargetsBeforeDocker(t *testing.T) {
 		})
 	}
 
+	//lint:ignore SA1012 Intentionally verify that nil context is rejected before consulting Docker.
 	if _, err := NewReader(&fakeDocker{}).Open(nil, validSubscribe()); err == nil {
 		t.Fatal("Open(nil context) error = nil, want invalid subscription")
 	}

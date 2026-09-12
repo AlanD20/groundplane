@@ -67,7 +67,11 @@ func TestComponentServiceRendersSelectedZoneGateway(t *testing.T) {
 	}
 	if service.NetworkMode != "" || len(service.Networks) != 1 ||
 		service.Networks["frontend"].GatewayPriority != 1 {
-		t.Fatalf("Component Service networking = %q, %v; want selected Zone gateway", service.NetworkMode, service.Networks)
+		t.Fatalf(
+			"Component Service networking = %q, %v; want selected Zone gateway",
+			service.NetworkMode,
+			service.Networks,
+		)
 	}
 	project.Services[testComponentServiceName] = service
 	input.Identities.Services = []ComposeResourceIdentity{

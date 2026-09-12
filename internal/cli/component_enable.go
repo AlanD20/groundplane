@@ -22,7 +22,8 @@ func newComponentEnableCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
 			id := target(app, args[0])
-			configChanged := cmd.Flags().Changed("alias") || cmd.Flags().Changed("file") || cmd.Flags().Changed("template-file") ||
+			configChanged := cmd.Flags().Changed("alias") || cmd.Flags().Changed("file") ||
+				cmd.Flags().Changed("template-file") ||
 				cmd.Flags().Changed("zone") ||
 				cmd.Flags().Changed("create-zone") ||
 				cmd.Flags().Changed("create-internal-zone")

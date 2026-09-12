@@ -25,8 +25,10 @@ func validateVolumePathRequest(request *agentpb.EnvironmentDirectoryHelperReques
 	if err != nil {
 		return err
 	}
-	if pending.OperationID != request.OperationId || pending.VolumeID != payload.VolumeId || pending.Key != payload.ComposeKey ||
-		!bytes.Equal(pending.IntentSHA256[:], payload.IntentSha256) || len(pending.ComponentStack) != 0 ||
+	if pending.OperationID != request.OperationId || pending.VolumeID != payload.VolumeId ||
+		pending.Key != payload.ComposeKey ||
+		!bytes.Equal(pending.IntentSHA256[:], payload.IntentSha256) ||
+		len(pending.ComponentStack) != 0 ||
 		request.TimeoutSeconds > 30 {
 		return errs.New(errs.KindValidationFailed, "Volume path intent does not match its immutable plan")
 	}

@@ -226,7 +226,7 @@ func (executor *Executor) Execute(
 	if response.ExitCode != 0 && len(output.stderr) != 0 {
 		return nil, errs.Wrap(
 			errs.KindRequestFailed,
-			fmt.Errorf("Environment directory helper failed: %s", strings.TrimSpace(string(output.stderr))),
+			fmt.Errorf("environment directory helper failed: %s", strings.TrimSpace(string(output.stderr))),
 		)
 	}
 	return response, nil

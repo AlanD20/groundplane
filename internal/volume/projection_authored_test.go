@@ -27,9 +27,11 @@ func TestVolumeMutationPreservesAuthoredServicesWithoutExecutionLabels(t *testin
 		ProjectName: "gp-" + strings.ToLower(environmentID), AuthorizedVolumeDir: environment.VolumeDir,
 		CanonicalYaml: []byte("services:\n  app:\n    image: app:1\n    labels:\n" +
 			"      com.groundplane.plan-id: " + planID + "\n      com.groundplane.render-generation: '1'\n"),
-		Services: []*agentpb.ComposeService{{ServiceId: serviceID, ComposeName: "app", ExpectedLabels: []*agentpb.LabelPair{
-			{Key: "com.groundplane.plan-id", Value: planID}, {Key: "com.groundplane.render-generation", Value: "1"},
-		}}},
+		Services: []*agentpb.ComposeService{
+			{ServiceId: serviceID, ComposeName: "app", ExpectedLabels: []*agentpb.LabelPair{
+				{Key: "com.groundplane.plan-id", Value: planID}, {Key: "com.groundplane.render-generation", Value: "1"},
+			}},
+		},
 	}
 	runtimeBytes, err := proto.Marshal(runtime)
 	if err != nil {
@@ -66,7 +68,9 @@ func TestVolumeMutationPreservesAuthoredServicesWithoutExecutionLabels(t *testin
 		}
 		if !strings.Contains(string(candidate.NormalizedCompose), "image: app:1") ||
 			strings.Contains(string(candidate.NormalizedCompose), "com.groundplane.plan-id") ||
-			len(next.Services) != 1 || next.Services[0].ServiceId != serviceID || len(next.Services[0].ExpectedLabels) != 2 {
+			len(
+				next.Services,
+			) != 1 || next.Services[0].ServiceId != serviceID || len(next.Services[0].ExpectedLabels) != 2 {
 			t.Fatalf("%s changed the authored Service or runtime identity", action)
 		}
 		candidate.ComposeArtifact, err = proto.Marshal(next)

@@ -407,5 +407,5 @@ func bodyStoreError(operation string, err error) error {
 	if errors.Is(err, syscall.EXDEV) || errors.Is(err, unix.ELOOP) {
 		return errs.New(errs.KindInternal, "Script body store: path policy rejected")
 	}
-	return errs.Wrap(errs.KindInternal, fmt.Errorf("Script body store: %s: %w", operation, err))
+	return errs.Wrap(errs.KindInternal, fmt.Errorf("script body store: %s: %w", operation, err))
 }

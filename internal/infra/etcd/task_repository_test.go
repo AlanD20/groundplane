@@ -358,7 +358,11 @@ func TestTaskRepositoryTerminalReplayDoesNotPermitNewWrites(t *testing.T) {
 	}
 	transition, err := store.Transact(ctx, []Condition{{
 		Key: taskKey(task.ID), ModRevision: current.Revision,
-	}}, []Mutation{{Type: MutationPut, Key: taskKey(task.ID), Value: encoded}})
+	}}, []Mutation{
+		{Type: MutationPut, Key: taskKey(task.ID), Value: encoded},
+		{Type: MutationDelete, Key: taskAssignmentKey(taskEventTestAgentID, task.ID)},
+		{Type: MutationDelete, Key: taskAssignmentIndexKey(task.ID)},
+	})
 	if err != nil || !transition.Succeeded {
 		t.Fatalf("persist terminal Task = %#v, %v", transition, err)
 	}
@@ -370,6 +374,18 @@ func TestTaskRepositoryTerminalReplayDoesNotPermitNewWrites(t *testing.T) {
 		t.Fatalf("AppendTaskEvent(replay) = %#v", replay)
 	}
 	revisionBefore := store.currentRevision()
+	changedPayload := input
+	changedPayload.Payload = json.RawMessage(`{"message":"changed"}`)
+	changedAssignment := input
+	changedAssignment.Identity.AssignmentID = "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	for _, changed := range []TaskEventInput{changedPayload, changedAssignment} {
+		if _, replayErr := repository.AppendTaskEvent(ctx, changed, taskJournalTime().Add(5*time.Second)); !errors.Is(
+			replayErr,
+			errs.New(errs.KindInternal, ""),
+		) {
+			t.Fatalf("AppendTaskEvent(changed terminal replay) error = %v, want internal", replayErr)
+		}
+	}
 	if _, err := repository.AppendTaskEvent(
 		ctx,
 		taskEventInput(task.ID, 2, TaskEventStateRunning),

@@ -79,11 +79,7 @@ func Replace(current Group, desired Desired) (Group, error) {
 
 // Validate rejects any value that cannot be stored as a durable Release Group.
 func Validate(group Group) error {
-	normalized, err := New(Input{
-		ID: group.ID, EnvironmentID: group.EnvironmentID, Name: group.Name,
-		ServiceIDs: group.ServiceIDs, Order: group.Order, DefaultTag: group.DefaultTag,
-		OnFailure: group.OnFailure,
-	})
+	normalized, err := New(Input(group))
 	if err != nil {
 		return err
 	}

@@ -269,8 +269,7 @@ make console-verify
 make generate
 git diff --exit-code openapi.json internal/cli/apiclient/generated/client.gen.go console/src/lib/api.generated.ts proto/agentpb
 go mod tidy && git diff --exit-code
-test -z "$(gofmt -l .)"
-test -z "$(go tool golines --max-len=120 --no-reformat-tags --list-files ./internal/ ./pkg/ ./cmd/ ./console/)"
+make format-check
 make architecture-check
 go tool staticcheck -tags groundplane_console ./...
 go vet -tags groundplane_console ./...

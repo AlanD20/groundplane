@@ -151,6 +151,29 @@ class RepoEnvironmentTest(unittest.TestCase):
         self.assertTrue((self.root / ".tmp/coverage.out").is_file())
         self.assertFalse((self.root / "coverage.out").exists())
 
+    # Rationale: ignored caches can contain invalid Go fixtures. Formatting must
+    # ignore them while rejecting malformed or unformatted repository source.
+    def test_format_check_uses_source_roots_and_preserves_formatter_failures(self) -> None:
+        for name in ("cmd", "component-sdk", "console", "internal", "pkg", "proto", "registered-components"):
+            (self.root / name).mkdir(exist_ok=True)
+        cache = self.root / ".tmp/dependency-cache"
+        cache.mkdir(parents=True)
+        invalid_fixture = cache / "fixture.go"
+        invalid_fixture.write_text("not valid Go\n")
+        source = self.root / "cmd/main.go"
+        source.write_text("package main\n\nfunc main() {}\n")
+        self.run_command("make", "format-check")
+        source.write_text("package main\nfunc main(){ }\n")
+        result = self.run_command("make", "format-check", ok=False)
+        self.assertIn("cmd/main.go", result.stdout)
+        source.write_text("not valid Go\n")
+        result = self.run_command("make", "format-check", ok=False)
+        self.assertIn("cmd/main.go", result.stderr)
+        self.assertEqual(invalid_fixture.read_text(), "not valid Go\n")
+        source.write_text("package main\n\nfunc main() {}\n")
+        self.env["GP_TEST_FAIL"] = "1"
+        self.run_command("make", "format-check", ok=False)
+
     def test_sudo_recipe_preserves_paths_after_environment_reset(self) -> None:
         self.stub("id", "#!/bin/sh\nprintf '1000\\n'\n")
         self.stub("sudo", '#!/bin/sh\nshift\nexec env -i "PATH=$PATH" "GP_TEST_RECORD=$GP_TEST_RECORD" "$@"\n')

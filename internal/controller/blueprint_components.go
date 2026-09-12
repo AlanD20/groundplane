@@ -179,7 +179,8 @@ func validateBlueprintComponentSpec(
 func blueprintComponentConfig(kind core.ComponentKind, spec core.ComponentSpec) core.ComponentConfig {
 	switch kind {
 	case core.ComponentKindIngressCaddy:
-		if len(spec.Settings.ZoneIDs) == 0 && spec.ImplementationConfig.CaddyfileTemplate == "" && spec.Settings.Alias == "" {
+		if len(spec.Settings.ZoneIDs) == 0 && spec.ImplementationConfig.CaddyfileTemplate == "" &&
+			spec.Settings.Alias == "" {
 			return core.ComponentConfig{}
 		}
 		return core.ComponentConfig{Caddy: &core.CaddyComponentConfig{

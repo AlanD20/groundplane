@@ -40,7 +40,7 @@ func buildZoneCreationProjection(
 	candidate.RevisionID = revisionID
 	candidate.RenderGeneration = generation
 	candidate.DesiredZones = append(append([]etcd.EnvironmentZoneProjection(nil), current.DesiredZones...),
-		etcd.EnvironmentZoneProjection{EnvironmentID: zone.EnvironmentID, Desired: zone.Desired})
+		etcd.EnvironmentZoneProjection(zone))
 	sort.Slice(candidate.DesiredZones, func(left, right int) bool {
 		return candidate.DesiredZones[left].Desired.Name < candidate.DesiredZones[right].Desired.Name
 	})

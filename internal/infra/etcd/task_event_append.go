@@ -69,6 +69,12 @@ func (repository *TaskRepository) AppendTaskEvent(
 		if err != nil {
 			return TaskEventAppend{}, err
 		}
+		if prepared.Duplicate && isTerminalTaskStatus(task.Status) {
+			if err := repository.verifyDuplicateEvent(ctx, result.ReadRevision, task, *existing); err != nil {
+				return TaskEventAppend{}, err
+			}
+			return TaskEventAppend{Sequence: prepared.Sequence, Revision: result.ReadRevision, Duplicate: true}, nil
+		}
 		assignmentValue := result.Values[2]
 		assignmentIndexValue := result.Values[3]
 		if task.Status != TaskStatusRunning || assignmentValue == nil || assignmentIndexValue == nil {

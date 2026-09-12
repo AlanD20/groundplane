@@ -23,7 +23,11 @@ import (
 func TestServiceListTablePresentsObservation(t *testing.T) {
 	t.Parallel()
 	service := observedCLIService(time.Now().UTC().Add(-time.Second))
-	server := serviceReadServer(t, "/api/v1/services", apiTypes.Page[apiTypes.Service]{Items: []apiTypes.Service{service}})
+	server := serviceReadServer(
+		t,
+		"/api/v1/services",
+		apiTypes.Page[apiTypes.Service]{Items: []apiTypes.Service{service}},
+	)
 	defer server.Close()
 
 	output := executeServiceCommand(
@@ -76,7 +80,11 @@ func TestServiceShowTablePresentsObservation(t *testing.T) {
 func TestServiceListJSONExpiresObservationLocally(t *testing.T) {
 	t.Parallel()
 	service := observedCLIService(time.Now().UTC().Add(-time.Minute))
-	server := serviceReadServer(t, "/api/v1/services", apiTypes.Page[apiTypes.Service]{Items: []apiTypes.Service{service}})
+	server := serviceReadServer(
+		t,
+		"/api/v1/services",
+		apiTypes.Page[apiTypes.Service]{Items: []apiTypes.Service{service}},
+	)
 	defer server.Close()
 
 	output := executeServiceCommand(

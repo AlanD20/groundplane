@@ -105,6 +105,21 @@ affected Component/CoreDNS race tests pass, with coverage, in
 `.tmp/qa-fresh-20260912-NRo98B/{analyzer-scoped,component-race}.log`. This closes
 those 15 analyzer findings, not full-CI or live qualification.
 
+The integrated scan corrected a further 13 analyzer findings and a protobuf-copy
+vet finding; the intentional nil-context negative test retains a single explained
+SA1012 suppression. Full tagged Staticcheck and vet pass. The formatter gate now
+excludes ignored caches, selects `gofmt` explicitly and preserves tool failures.
+Its regression tests pass. The full tagged race run exposed four stale fixtures
+and a terminal-event replay defect; focused corrections pass, including rejection
+of changed replay identities and payloads. Exact evidence is in
+`.tmp/qa-fresh-20260912-NRo98B/`.
+
+Privileged Backup staging qualification is unavailable locally because sudo needs
+a password. The approval review rejected the proposed QA-host mount test; it was
+not executed. Owner: QA delivery owner. Acceptance: obtain explicit authority and
+pass the bounded mount test on an approved root-capable target. This remains
+unqualified and does not expand initial hosting into Backup delivery.
+
 The two Agent recreate-probe fixtures were repaired on 2026-09-12. They now use
 sealed plans, explicit native predecessor references and validated assignment
 authority. Historical labels remain unchanged; the blue-green transition uses

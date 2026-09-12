@@ -140,6 +140,9 @@ func seedRecoveryTimeoutAssignment(
 			ServiceID: ids.NewAt(ids.KindService, claim.Task.Record.CreatedAt, 9002),
 			ReleaseID: ids.NewAt(ids.KindDeployment, claim.Task.Record.CreatedAt, 9003),
 		}},
+		NativePredecessors: []ReleaseNativePredecessorAuthority{{
+			ServiceID: ids.NewAt(ids.KindService, claim.Task.Record.CreatedAt, 9002),
+		}},
 	}
 	authorityDigest, err := releaseRestorationAuthoritySHA256(authority)
 	if err != nil {

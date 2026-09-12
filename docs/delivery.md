@@ -85,7 +85,9 @@ full CI runs those checks once through deployment and verifier-helper targets.
 `make ci` is the local mirror of GitHub Actions. It includes `make deployment-check`
 for the private bootstrap/staging/protected-update client and verifies exact Node
 `24.19.0` and npm `11.17.0`, runs `npm ci`, builds and verifies the Vite output,
-then runs tidy, formatting through module-pinned `golines`,
+then runs tidy, `make format-check` across repository Go source roots (excluding
+ignored scratch and caches), using `gofmt` and module-pinned `golines` with an
+explicit `gofmt` base formatter rather than an ambient editor's `goimports`,
 `make architecture-check`, module-pinned Staticcheck 2026.1, tagged vet and
 race tests, and the tagged production
 Controller build. The architecture gate enforces ADR 0056's import direction,

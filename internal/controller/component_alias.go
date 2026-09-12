@@ -20,7 +20,10 @@ func validateManagedNetworkAliases(project *types.Project, candidate types.Servi
 				}
 				for _, alias := range attachment.Aliases {
 					if alias == name || network != nil && slices.Contains(network.Aliases, alias) {
-						return errs.New(errs.KindNameConflict, "router network alias conflicts with another Service on the selected Zone")
+						return errs.New(
+							errs.KindNameConflict,
+							"router network alias conflicts with another Service on the selected Zone",
+						)
 					}
 				}
 			}

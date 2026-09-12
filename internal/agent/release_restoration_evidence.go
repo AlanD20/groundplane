@@ -85,7 +85,8 @@ func releaseProbeEvidenceStatus(
 		)
 		matchesCandidate := candidateOK && exactRecreateEvidenceValue(result.RecreateEvidence, candidate)
 		matchesPrior := priorOK && exactRecreateEvidenceValue(result.RecreateEvidence, prior)
-		if historical, target, releaseID, err := openServingPredecessorAuthority(assignment, probe.GetServiceId()); err == nil && releaseID == probe.GetPriorReleaseId() {
+		if historical, target, releaseID, err := openServingPredecessorAuthority(assignment, probe.GetServiceId()); err == nil &&
+			releaseID == probe.GetPriorReleaseId() {
 			matchesPrior = matchesPrior || exactRecreateEvidence(result.RecreateEvidence,
 				probe.GetServiceId(), historical.GetArtifactId(), releaseID, target, true)
 		}

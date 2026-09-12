@@ -91,9 +91,12 @@ func (config *ComponentConfig) UnmarshalJSON(data []byte) error {
 				return err
 			}
 		}
-		*config = ComponentConfig{Caddy: &CaddyComponentConfig{ZoneIDs: zoneIDs, CaddyfileTemplate: template, Alias: alias}}
+		*config = ComponentConfig{
+			Caddy: &CaddyComponentConfig{ZoneIDs: zoneIDs, CaddyfileTemplate: template, Alias: alias},
+		}
 	case present(wire.SecretID):
-		if (present(wire.CaddyfileTemplate) || present(wire.Alias)) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) ||
+		if (present(wire.CaddyfileTemplate) || present(wire.Alias)) || present(wire.UpstreamAuto) ||
+			present(wire.UpstreamResolvers) ||
 			present(wire.Forwarders) ||
 			present(wire.TailnetDelegation) {
 			return malformedComponentConfig("component config Cloudflare Tunnel variant is mixed")
@@ -110,7 +113,8 @@ func (config *ComponentConfig) UnmarshalJSON(data []byte) error {
 			CloudflareTunnel: &CloudflareTunnelComponentConfig{ZoneIDs: zoneIDs, SecretID: secretID},
 		}
 	default:
-		if present(wire.ZoneIDs) || (present(wire.CaddyfileTemplate) || present(wire.Alias)) || present(wire.SecretID) ||
+		if present(wire.ZoneIDs) || (present(wire.CaddyfileTemplate) || present(wire.Alias)) ||
+			present(wire.SecretID) ||
 			!present(wire.CorefileTemplate) ||
 			!present(wire.UpstreamAuto) ||
 			!present(wire.UpstreamResolvers) ||
@@ -387,7 +391,8 @@ func (input *ComponentConfigMutationInput) UnmarshalJSON(data []byte) error {
 			Caddy: &CaddyComponentConfigMutationInput{ZoneIDs: zoneIDs, CaddyfileTemplate: template, Alias: alias},
 		}
 	case present(wire.Credential):
-		if (present(wire.CaddyfileTemplate) || present(wire.Alias)) || present(wire.UpstreamAuto) || present(wire.UpstreamResolvers) ||
+		if (present(wire.CaddyfileTemplate) || present(wire.Alias)) || present(wire.UpstreamAuto) ||
+			present(wire.UpstreamResolvers) ||
 			present(wire.Forwarders) ||
 			present(wire.TailnetDelegation) {
 			return malformedComponentConfig("component config mutation Cloudflare Tunnel variant is mixed")
@@ -404,7 +409,8 @@ func (input *ComponentConfigMutationInput) UnmarshalJSON(data []byte) error {
 			CloudflareTunnel: &CloudflareTunnelComponentConfigMutationInput{ZoneIDs: zoneIDs, Credential: credential},
 		}
 	default:
-		if present(wire.ZoneIDs) || (present(wire.CaddyfileTemplate) || present(wire.Alias)) || present(wire.Credential) ||
+		if present(wire.ZoneIDs) || (present(wire.CaddyfileTemplate) || present(wire.Alias)) ||
+			present(wire.Credential) ||
 			!present(wire.CorefileTemplate) ||
 			!present(wire.UpstreamAuto) ||
 			!present(wire.UpstreamResolvers) ||

@@ -61,8 +61,10 @@ func (runtime *EnvironmentDirectoryRuntime) executeVolumeRemoval(
 			return result, errs.New(errs.KindRequestFailed, "agent: Volume removal helper failed")
 		}
 		completion, err := removal.DecodeCompletion(response.VolumeRemovalCompletion)
-		if err != nil || completion.OperationID != pending.OperationID || completion.RequestOrdinal != pending.RequestOrdinal ||
-			completion.RequestSHA256 != pending.RequestSHA256 || completion.MutationCount != response.MutationCount ||
+		if err != nil || completion.OperationID != pending.OperationID ||
+			completion.RequestOrdinal != pending.RequestOrdinal ||
+			completion.RequestSHA256 != pending.RequestSHA256 ||
+			completion.MutationCount != response.MutationCount ||
 			completion.DirectoryAbsent != response.Complete ||
 			!bytes.Equal(completion.NextCursor, response.NextCursor) ||
 			response.FailedStepId != "" {

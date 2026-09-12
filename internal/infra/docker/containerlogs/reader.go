@@ -38,7 +38,7 @@ type Reader struct {
 }
 
 func New() (*Reader, error) {
-	docker, err := client.New(client.FromEnv, client.WithAPIVersionNegotiation())
+	docker, err := client.New(client.FromEnv)
 	if err != nil {
 		return nil, errs.Wrap(errs.KindStorageUnavailable, fmt.Errorf("create Docker log client: %w", err))
 	}
@@ -278,7 +278,7 @@ func (writer *lineWriter) emit() error {
 	writer.buffer.Reset()
 	separator := bytes.IndexByte(raw, ' ')
 	if separator <= 0 {
-		return fmt.Errorf("Docker log line has no timestamp")
+		return fmt.Errorf("docker log line has no timestamp")
 	}
 	timestamp, err := time.Parse(time.RFC3339Nano, string(raw[:separator]))
 	if err != nil {

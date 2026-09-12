@@ -36,7 +36,8 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 		validatePublicationID(publicationID) != nil || task.OperationID == "" || task.RenderGeneration <= 0 {
 		return false, corruptReleaseRecord()
 	}
-	if terminalStatus != TaskStatusCompleted && result.FailedStepID == "" && !unassignedReleaseAbort(task, terminalStatus) &&
+	if terminalStatus != TaskStatusCompleted && result.FailedStepID == "" &&
+		!unassignedReleaseAbort(task, terminalStatus) &&
 		result.Diagnostic != TaskResultDiagnosticTimeoutBeforeEffect {
 		return false, errs.New(errs.KindStateConflict, "release failure is missing its failed step identity")
 	}
@@ -257,7 +258,6 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 				projection.ServiceID = member.ServiceID
 			}
 			projection.ServingReleaseID = intent.ID
-			projection.ServingSlot = ""
 			projection.ServingSlot = domain.WorkloadTarget(observedTarget).Slot()
 			if !recovery {
 				projection.CurrentSuccessfulReleaseID = intent.ID
@@ -273,7 +273,6 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 			}
 			projection.ServingReleaseID = intent.PriorServingReleaseID
 			projection.CurrentSuccessfulReleaseID = intent.PriorSuccessfulReleaseID
-			projection.ServingSlot = ""
 			projection.ServingSlot = domain.WorkloadTarget(observedTarget).Slot()
 			projection.ActiveOperationID = ""
 			projection.Revision++
@@ -464,7 +463,8 @@ func releaseFailedMemberOrdinal(task TaskRecord, terminalStatus TaskStatus, resu
 		return 0, nil
 	}
 	ordinal := releaseFailedOrdinalFromResult(task, result)
-	if ordinal == 0 && (result.Diagnostic == TaskResultDiagnosticTimeoutBeforeEffect || unassignedReleaseAbort(task, terminalStatus)) {
+	if ordinal == 0 &&
+		(result.Diagnostic == TaskResultDiagnosticTimeoutBeforeEffect || unassignedReleaseAbort(task, terminalStatus)) {
 		return 1, nil
 	}
 	if ordinal == 0 {

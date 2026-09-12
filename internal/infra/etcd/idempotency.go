@@ -1238,7 +1238,6 @@ func (evidence *IdempotencyEvidence) Marker() (IdempotencyMarker, error) {
 	return marker, nil
 }
 
-
 func corruptIdempotencyMarker() error {
 	return errs.New(errs.KindInternal, "durable idempotency evidence is invalid")
 }

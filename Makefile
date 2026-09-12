@@ -1,4 +1,4 @@
-.PHONY: build cli controller controller-binary controller-dev agent agent-image agent-image-smoke runner-image runner-image-smoke proto api generate console console-toolchain console-verify console-release-smoke backupstage-host-acceptance backupstage-host-acceptance-compile c15-connector-acceptance s3compatible-minio-acceptance s3compatible-minio-acceptance-compile architecture-check component-modules-verify deployment-check tooling-check verifier-helper-check clean test tidy ci
+.PHONY: build cli controller controller-binary controller-dev agent agent-image agent-image-smoke runner-image runner-image-smoke proto api generate console console-toolchain console-verify console-release-smoke backupstage-host-acceptance backupstage-host-acceptance-compile c15-connector-acceptance s3compatible-minio-acceptance s3compatible-minio-acceptance-compile architecture-check component-modules-verify deployment-check tooling-check verifier-helper-check format-check clean test tidy ci
 
 # Initialize validated repo-local paths before each recipe and recursive make.
 SHELL := /bin/bash
@@ -186,6 +186,14 @@ tooling-check:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts -p 'test_repo_env.py'
 	$(MAKE) verifier-helper-check
 
+format-check:
+	@set -eu; \
+		format_output="$$(gofmt -l ./cmd ./component-sdk ./console ./internal ./pkg ./proto ./registered-components)"; \
+		if test -n "$$format_output"; then printf '%s\n' "$$format_output"; exit 1; fi
+	@set -eu; \
+		format_output="$$(go tool golines --base-formatter=gofmt --max-len=120 --no-reformat-tags --list-files ./internal/ ./pkg/ ./cmd/ ./component-sdk/ ./registered-components/ ./console/)"; \
+		if test -n "$$format_output"; then printf '%s\n' "$$format_output"; exit 1; fi
+
 verifier-helper-check:
 	bash .agents/skills/verify-groundplane/scripts/test_known_hosts_initialization.sh
 	bash .agents/skills/verify-groundplane/scripts/test_supervisor_wait.sh
@@ -198,8 +206,7 @@ ci: console | $(BIN_DIR)
 	git diff --exit-code openapi.json internal/cli/apiclient/generated/client.gen.go console/src/lib/api.generated.ts proto/agentpb
 	$(MAKE) tidy
 	git diff --exit-code go.mod go.sum go.work component-sdk/go.mod registered-components/go.mod
-	test -z "$$(gofmt -l .)"
-	test -z "$$(go tool golines --max-len=120 --no-reformat-tags --list-files ./internal/ ./pkg/ ./cmd/ ./component-sdk/ ./registered-components/ ./console/)"
+	$(MAKE) format-check
 	$(MAKE) architecture-check
 	$(MAKE) component-modules-verify
 	GOTOOLCHAIN=go1.26.0 go tool staticcheck -tags groundplane_console ./...

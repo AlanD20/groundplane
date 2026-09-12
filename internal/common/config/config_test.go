@@ -13,7 +13,8 @@ func TestControllerConfigValidateHumanHTTPListener(t *testing.T) {
 		wantErr   bool
 	}{
 		{name: "default loopback address", addresses: []string{"127.0.0.1:8080"}},
-		{name: "explicit private address", addresses: []string{"127.0.0.1:8080", "192.0.2.10:8080"}},
+		{name: "explicit private address", addresses: []string{"127.0.0.1:8080", "192.168.1.10:8080"}},
+		{name: "documentation address", addresses: []string{"127.0.0.1:8080", "192.0.2.10:8080"}, wantErr: true},
 		{name: "lowest valid port", addresses: []string{"127.0.0.1:1"}},
 		{name: "highest valid port", addresses: []string{"127.0.0.1:65535"}},
 		{name: "missing addresses", wantErr: true},

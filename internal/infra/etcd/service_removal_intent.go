@@ -395,8 +395,9 @@ func sameServiceRemovalComponentConfig(left, right core.ComponentConfig) bool {
 		(left.CoreDNS == nil) != (right.CoreDNS == nil) {
 		return false
 	}
-	if left.Caddy != nil && (left.Caddy.CaddyfileTemplate != right.Caddy.CaddyfileTemplate || left.Caddy.Alias != right.Caddy.Alias ||
-		!slices.Equal(left.Caddy.ZoneIDs, right.Caddy.ZoneIDs)) {
+	if left.Caddy != nil &&
+		(left.Caddy.CaddyfileTemplate != right.Caddy.CaddyfileTemplate || left.Caddy.Alias != right.Caddy.Alias ||
+			!slices.Equal(left.Caddy.ZoneIDs, right.Caddy.ZoneIDs)) {
 		return false
 	}
 	if left.CloudflareTunnel != nil && (left.CloudflareTunnel.SecretID != right.CloudflareTunnel.SecretID ||

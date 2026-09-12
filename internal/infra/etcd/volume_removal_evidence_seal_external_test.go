@@ -36,7 +36,8 @@ func TestVolumeEvidenceSealVerifiesStoredSetAndReplays(t *testing.T) {
 			if _, err := repository.Seal(ctx, manifest); err == nil {
 				t.Fatal("seal response was not lost")
 			}
-			if fixture.Revision() != before+1 || audit.Comparisons != 3 || audit.Mutations != 1 || audit.WireBytes != 777 {
+			if fixture.Revision() != before+1 || audit.Comparisons != 3 || audit.Mutations != 1 ||
+				audit.WireBytes != 777 {
 				t.Fatal("seal was not one bounded commit")
 			}
 			t.Logf("seal transaction: %d/%d/%d", audit.Comparisons, audit.Mutations, audit.WireBytes)

@@ -66,7 +66,9 @@ func TestOrdinaryReleaseRetainsInactivePredecessor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	member.Render.PriorRuntime.RetainedPriorArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(retained)
+	member.Render.PriorRuntime.RetainedPriorArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(
+		retained,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

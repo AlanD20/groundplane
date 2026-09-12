@@ -29,7 +29,8 @@ func (repository *TaskRepository) finishUnassignedReleaseAbort(
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
-		if read == nil || read.ReadRevision != current.ReadRevision || len(read.Values) != len(keys) || read.Values[0] != nil {
+		if read == nil || read.ReadRevision != current.ReadRevision || len(read.Values) != len(keys) ||
+			read.Values[0] != nil {
 			return Versioned[TaskRecord]{}, corruptTaskAssignment()
 		}
 		if read.Values[1] == nil {
@@ -43,9 +44,18 @@ func (repository *TaskRepository) finishUnassignedReleaseAbort(
 			// A later operation owns this fence; the old Abort has no authority over it.
 			return current, nil
 		}
-		processed, err := repository.finalizeReleaseTaskBatch(ctx, task, TaskAssignmentRecord{}, TaskStatusAborted,
-			TaskResultRecord{Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone}, "", *task.FinishedAt,
-			current.ReadRevision, Condition{Key: taskKey(task.ID), ModRevision: current.Revision}, Condition{Key: keys[0]})
+		processed, err := repository.finalizeReleaseTaskBatch(
+			ctx,
+			task,
+			TaskAssignmentRecord{},
+			TaskStatusAborted,
+			TaskResultRecord{Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone},
+			"",
+			*task.FinishedAt,
+			current.ReadRevision,
+			Condition{Key: taskKey(task.ID), ModRevision: current.Revision},
+			Condition{Key: keys[0]},
+		)
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
@@ -57,8 +67,14 @@ func (repository *TaskRepository) finishUnassignedReleaseAbort(
 			return Versioned[TaskRecord]{}, err
 		}
 		if !unassignedReleaseAbort(current.Record, current.Record.Status) {
-			return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "unassigned Release abort authority changed")
+			return Versioned[TaskRecord]{}, errs.New(
+				errs.KindStateConflict,
+				"unassigned Release abort authority changed",
+			)
 		}
 	}
-	return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "unassigned Release abort cleanup remains incomplete")
+	return Versioned[TaskRecord]{}, errs.New(
+		errs.KindStateConflict,
+		"unassigned Release abort cleanup remains incomplete",
+	)
 }

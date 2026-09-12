@@ -608,7 +608,7 @@ func TestTaskRepositoryTimesOutExactAgentGenerationAssignments(t *testing.T) {
 		t.Fatalf("ClaimNextTask(second) found/error = %v/%v", found, err)
 	}
 
-	terminalAt := second.CreatedAt.Add(3 * time.Second)
+	terminalAt := second.CreatedAt.Add(time.Duration(second.TimeoutSeconds+3) * time.Second)
 	timedOut, err := repository.TimeoutAgentAssignments(ctx, agentID, 9, 2, terminalAt)
 	if err != nil || timedOut != 2 {
 		t.Fatalf("TimeoutAgentAssignments() count/error = %d/%v", timedOut, err)
