@@ -487,7 +487,7 @@ their final source transaction and the original Task terminalization are
 atomic. A later or unknown Script checkpoint fails closed.
 
 Before Blueprint candidate source release starts, the Controller validates the
-complete terminal envelope against physical transaction limits (ADR 0067).
+complete terminal envelope against physical transaction limits ([Blueprint terminal contract](features/blueprints.md#atomic-terminal-publication)).
 Normal source closure atomically captures the original Agent terminal report,
 including its epoch, recovery digest, exact Task/assignment revisions and
 observation time. Every release batch compares this temporary continuation.
@@ -1442,7 +1442,7 @@ remains unresolved until ADR 0021's durable evidence identifies the one atomic
 result as wholly old or wholly new; marker absence alone never proves the prior
 head won.
 
-**Blueprint candidate terminal envelope.** ADR 0067 preserves one atomic Task completion with all candidate promotion or
+**Blueprint candidate terminal envelope.** [Blueprint terminal contract](features/blueprints.md#atomic-terminal-publication) preserves one atomic Task completion with all candidate promotion or
 failure records, applied projection, materialization cleanup, Environment
 fences, retention/idempotency records and final Script source fragment. It uses
 the same 256-operation per-arm and exact physical 1 MiB request ceilings, through

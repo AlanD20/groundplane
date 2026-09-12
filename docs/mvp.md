@@ -1968,7 +1968,7 @@ transfer the operation only while every selected execution is durably
 `script.retry_unsafe`. ADR 0040 owns execution, cleanup, and retry. ADR 0062
 owns prepared immutable-input reference generations and their bounded release.
 
-Blueprint candidate completion uses one closed terminal transaction (ADR 0067),
+Blueprint candidate completion uses one closed terminal transaction ([Blueprint terminal contract](features/blueprints.md#atomic-terminal-publication)),
 separate from desired-state publication. Its complete physical request must fit
 256 operations per comparison/success/failure arm and 1 MiB before Script
 source release begins; ordinary transactions and release batches retain their

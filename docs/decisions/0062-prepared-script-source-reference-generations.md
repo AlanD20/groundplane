@@ -276,7 +276,7 @@ Required focused proof covers the exact `30/42/30`, `44/98/44`, `85/131/85`,
 and `142/159/142` shapes, 256-arm acceptance, 257-arm rejection, over-1-MiB
 rejection, and the unchanged 96-selected-operation protection for ordinary
 non-Blueprint `Store.Transact`. Preparation, sealing, release, abandonment, and
-other ordinary limits in this ADR remain unchanged. ADR 0067 separately extends
+other ordinary limits in this ADR remain unchanged. [Blueprint terminal contract](../features/blueprints.md#atomic-terminal-publication) separately extends
 Blueprint candidate terminal completion through a closed terminal envelope;
 source preparation and release batches still use their existing ordinary bound.
 

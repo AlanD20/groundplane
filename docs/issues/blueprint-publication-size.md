@@ -60,7 +60,7 @@ claim that removing one field alone proves the full lifecycle fits.
   superseded desired revision over the working gateway.
 
 On September 9, a real two-Service running-update regression reproduced a
-412,657-byte marker. ADR 0072 moves exact native witness bytes into the existing
+412,657-byte marker. [Blueprint predecessor contract](../features/blueprints.md#bounded-native-predecessor-references) moves exact native witness bytes into the existing
 candidate-owned immutable `PriorRuntime` field and keeps compact digest-bound
 references in the marker. The running marker is 71,808 bytes; complete
 publication and assignment transactions stay within unchanged bounds. Claim,

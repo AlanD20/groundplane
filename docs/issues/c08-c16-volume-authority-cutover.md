@@ -34,5 +34,5 @@ cleanup authority.
 
 ## Remaining C08 work
 
-- Blueprint `x-gp-entry` reconciliation remains blocked on proposed ADR 0038.
+- Blueprint `x-gp-entry` reconciliation remains blocked on proposed [Blueprint Entry contract](../features/blueprints.md#entry-identity-and-values).
 - Real-host Volume lifecycle acceptance remains pending.

@@ -1290,7 +1290,7 @@ sealed plan, and active reverse root. Retry keeps that source set unchanged.
 After every execution is `cleanup_proven` and retry is impossible, the source
 root becomes `releasing`; bounded transactions remove exact membership pairs
 and decrement counts before the final Task transaction. Blueprint candidate
-completion uses ADR 0067's closed terminal envelope; other Task paths retain
+completion uses [Blueprint terminal contract](features/blueprints.md#atomic-terminal-publication)'s closed terminal envelope; other Task paths retain
 their ordinary transaction limits.
 
 The Task repository alone constructs `BlueprintTaskTerminalTransaction` after

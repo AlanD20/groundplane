@@ -55,7 +55,7 @@ the source or active Controller path.
 
 ## Blueprint publication bounds
 
-ADR 0072's running-Service correction was tested through two real preparations
+[Blueprint predecessor contract](../features/blueprints.md#bounded-native-predecessor-references)'s running-Service correction was tested through two real preparations
 and publications for two Services, each with eight 3,000-character non-secret
 environment values. The initial Apply installed actual serving Release
 projections. A replicas-one-to-two update had previously produced a 412,657-byte
