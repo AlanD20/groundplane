@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/pkg/api"
 )
 
 type fakeServiceReader struct {
@@ -129,6 +130,7 @@ func TestListServicesProjectsDesiredAndRuntimeState(t *testing.T) {
 		t.Fatalf("listServices() = %#v, %v, listed %t", output, err, reader.listed)
 	}
 	want := serviceResponse(record)
+	want.Observation = &api.ServiceObservation{State: api.ServiceObservationUnavailable}
 	if !reflect.DeepEqual(output.Body.Items[0], want) || output.Body.NextCursor != "next" {
 		t.Fatalf("Service page = %#v, want %#v", output.Body, want)
 	}

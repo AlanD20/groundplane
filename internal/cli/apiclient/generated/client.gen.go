@@ -505,6 +505,42 @@ func (e ScriptExecution1Mode) Valid() bool {
 	}
 }
 
+// Defines values for ServiceObservationState.
+const (
+	ServiceObservationStateAbsent      ServiceObservationState = "absent"
+	ServiceObservationStateDegraded    ServiceObservationState = "degraded"
+	ServiceObservationStateFailed      ServiceObservationState = "failed"
+	ServiceObservationStateHealthy     ServiceObservationState = "healthy"
+	ServiceObservationStateRunning     ServiceObservationState = "running"
+	ServiceObservationStateStarting    ServiceObservationState = "starting"
+	ServiceObservationStateStopped     ServiceObservationState = "stopped"
+	ServiceObservationStateUnavailable ServiceObservationState = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the ServiceObservationState enum.
+func (e ServiceObservationState) Valid() bool {
+	switch e {
+	case ServiceObservationStateAbsent:
+		return true
+	case ServiceObservationStateDegraded:
+		return true
+	case ServiceObservationStateFailed:
+		return true
+	case ServiceObservationStateHealthy:
+		return true
+	case ServiceObservationStateRunning:
+		return true
+	case ServiceObservationStateStarting:
+		return true
+	case ServiceObservationStateStopped:
+		return true
+	case ServiceObservationStateUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TaskActor.
 const (
 	Operator TaskActor = "operator"
@@ -2270,6 +2306,7 @@ type Service struct {
 	Logging                    *ServiceLogging               `json:"logging,omitempty"`
 	Mounts                     *[]ServiceMount               `json:"mounts,omitempty"`
 	Name                       string                        `json:"name"`
+	Observation                *ServiceObservation           `json:"observation,omitempty"`
 	OnFailure                  *string                       `json:"on_failure,omitempty"`
 	Replicas                   *int64                        `json:"replicas,omitempty"`
 	Resources                  *ServiceResources             `json:"resources,omitempty"`
@@ -2328,6 +2365,7 @@ type ServiceDetail struct {
 	Mounts                     *[]ServiceMount               `json:"mounts,omitempty"`
 	Name                       string                        `json:"name"`
 	NativeCompose              *string                       `json:"native_compose,omitempty"`
+	Observation                *ServiceObservation           `json:"observation,omitempty"`
 	OnFailure                  *string                       `json:"on_failure,omitempty"`
 	ReleaseLedger              PageReleaseSummary            `json:"release_ledger"`
 	Replicas                   *int64                        `json:"replicas,omitempty"`
@@ -2379,6 +2417,30 @@ type ServiceMount struct {
 	Mount  string  `json:"mount"`
 	Ro     *bool   `json:"ro,omitempty"`
 	Volume *string `json:"volume,omitempty"`
+}
+
+// ServiceObservation defines model for ServiceObservation.
+type ServiceObservation struct {
+	ExpectedReplicas *int32                  `json:"expected_replicas,omitempty"`
+	ExpiresAt        *time.Time              `json:"expires_at,omitempty"`
+	ObservedAt       *time.Time              `json:"observed_at,omitempty"`
+	Replicas         *ServiceReplicaCounts   `json:"replicas,omitempty"`
+	ServingReleaseId *string                 `json:"serving_release_id,omitempty"`
+	State            ServiceObservationState `json:"state"`
+}
+
+// ServiceObservationState defines model for ServiceObservation.State.
+type ServiceObservationState string
+
+// ServiceReplicaCounts defines model for ServiceReplicaCounts.
+type ServiceReplicaCounts struct {
+	Failed       int32 `json:"failed"`
+	Healthy      int32 `json:"healthy"`
+	Running      int32 `json:"running"`
+	Starting     int32 `json:"starting"`
+	Stopped      int32 `json:"stopped"`
+	Transitional int32 `json:"transitional"`
+	Unhealthy    int32 `json:"unhealthy"`
 }
 
 // ServiceResources defines model for ServiceResources.

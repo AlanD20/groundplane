@@ -33,7 +33,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/environmentroot"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
-	environmentetcd "github.com/AlanD20/groundplane/internal/infra/etcd/environment"
 	networketcd "github.com/AlanD20/groundplane/internal/infra/etcd/network"
 	etcdreleasegroup "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroup"
 	"github.com/AlanD20/groundplane/internal/infra/hostresolution"
@@ -332,16 +331,6 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if _, err := componentRecords.EnsurePlatformComponents(ctx, platformComponents); err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: bootstrap platform Components: %w", err)
-	}
-	serviceReadRepository, err := newDurableServiceReadRepository(hierarchyRecords, serviceRecords)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Service read repositories: %w", err)
-	}
-	serviceReads, err := newServiceReadService(serviceReadRepository)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Service reads: %w", err)
 	}
 	backingServiceRecords, err := etcd.NewBackingServiceRepository(store)
 	if err != nil {
@@ -1178,10 +1167,15 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Task abort service: %w", err)
 	}
-	environmentReads := environmentcapability.NewEtcdReader(
-		environmentetcd.NewRepository(hierarchyRecords, zoneRecords),
+	serviceReads, err := newServiceReadResources(
+		hierarchyRecords, serviceRecords, zoneRecords, releaseLedger, agents, agentRuntime.registry,
 	)
-	logService := controller.NewLogService(environmentReads, serviceReads, releaseLedger, agentRuntime.registry)
+	if err != nil {
+		// Preserve the initialization error; cleanup is best-effort.
+		_ = platform.Close()
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Service reads: %w", err)
+	}
 	srv := controller.New(store, logger, controller.Options{
 		Host: platform.host, ControllerConfig: controllerConfig, ControllerUpdates: platform.upgrades,
 		OnHTTPReady: platform.readiness.MarkHTTPReady, MutationAdmission: platform.upgrades,
@@ -1193,52 +1187,52 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		BackingServiceMutations: backingServiceMutations,
 		Components:              componentReads,
 		ComponentMutations:      componentMutations,
-		Environments:            environmentReads,
-		Services:                serviceReads,
-		ServiceMutations:        serviceMutations,
-		Zones:                   networkCapability,
-		ZoneMutations:           networkCapability,
-		Routes:                  networkCapability,
-		RouteMutations:          networkCapability,
-		ReleaseGroups:           releaseGroups,
-		ReleaseGroupMutations:   releaseGroupMutations,
-		Releases:                releaseLedger,
-		ReleaseOperations:       releaseOperations,
-		Scripts:                 scriptReads,
-		ScriptMutations:         scriptMutations,
-		Entries:                 entryReads,
-		EntryMutations:          entryMutations,
-		Secrets:                 secretReads,
-		SecretMutations:         secretMutations,
-		SecretDeletions:         secretDeletions,
-		Connectors:              connectorReads,
-		ConnectorMutations:      connectorMutations,
-		ConnectorDeletions:      connectorDeletions,
-		Runners:                 runnerRecords,
-		RunnerProvisioning:      runnerProvisioning,
-		RunnerMutations:         runnerMutations,
-		RunnerRemovals:          runnerRemovals,
-		BackupPolicies:          backupPolicies,
-		BackupPolicyMutations:   backupPolicies,
-		RecoveryPoints:          backupPointReads,
-		BackupRuns:              backupRuns,
-		BackupKeyMutations:      backupKeys,
-		BackupKeyExports:        backupKeys,
-		Volumes:                 volumeReads,
-		VolumeMutations:         volumeMutations,
-		EnvironmentMutations:    environmentMutations,
-		EnvironmentChanges:      environmentChanges,
-		EnvironmentBlueprints:   environmentBlueprints,
-		HierarchyDeletions:      hierarchyDeletions,
-		AttachMutations:         attachMutations,
-		AttachFacts:             attachFactReads,
-		TaskMutations:           taskMutations,
-		TaskAborts:              taskAborts,
-		ControllerTaskWake:      controllerTaskRunner.Wake,
-		AgentTaskWake:           agentRuntime.registry.WakeTaskDispatch,
-		TenantMutations:         tenantMutations,
-		TenantChanges:           tenantChanges,
-		Console:                 consoleAssets, Tasks: tasks, Logs: logService,
+		Environments:            serviceReads.environments,
+		Services:                serviceReads.services, ServiceObservations: serviceReads.observations,
+		ServiceMutations:      serviceMutations,
+		Zones:                 networkCapability,
+		ZoneMutations:         networkCapability,
+		Routes:                networkCapability,
+		RouteMutations:        networkCapability,
+		ReleaseGroups:         releaseGroups,
+		ReleaseGroupMutations: releaseGroupMutations,
+		Releases:              releaseLedger,
+		ReleaseOperations:     releaseOperations,
+		Scripts:               scriptReads,
+		ScriptMutations:       scriptMutations,
+		Entries:               entryReads,
+		EntryMutations:        entryMutations,
+		Secrets:               secretReads,
+		SecretMutations:       secretMutations,
+		SecretDeletions:       secretDeletions,
+		Connectors:            connectorReads,
+		ConnectorMutations:    connectorMutations,
+		ConnectorDeletions:    connectorDeletions,
+		Runners:               runnerRecords,
+		RunnerProvisioning:    runnerProvisioning,
+		RunnerMutations:       runnerMutations,
+		RunnerRemovals:        runnerRemovals,
+		BackupPolicies:        backupPolicies,
+		BackupPolicyMutations: backupPolicies,
+		RecoveryPoints:        backupPointReads,
+		BackupRuns:            backupRuns,
+		BackupKeyMutations:    backupKeys,
+		BackupKeyExports:      backupKeys,
+		Volumes:               volumeReads,
+		VolumeMutations:       volumeMutations,
+		EnvironmentMutations:  environmentMutations,
+		EnvironmentChanges:    environmentChanges,
+		EnvironmentBlueprints: environmentBlueprints,
+		HierarchyDeletions:    hierarchyDeletions,
+		AttachMutations:       attachMutations,
+		AttachFacts:           attachFactReads,
+		TaskMutations:         taskMutations,
+		TaskAborts:            taskAborts,
+		ControllerTaskWake:    controllerTaskRunner.Wake,
+		AgentTaskWake:         agentRuntime.registry.WakeTaskDispatch,
+		TenantMutations:       tenantMutations,
+		TenantChanges:         tenantChanges,
+		Console:               consoleAssets, Tasks: tasks, Logs: serviceReads.logs,
 	})
 
 	wired := &Controller{

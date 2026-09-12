@@ -146,7 +146,20 @@ rechecks serving, render, intent and runtime-sidecar revisions at one newer view
 Changed or expired evidence becomes unavailable without failing desired reads.
 The Controller clock supplies the 15-second window; no observation is persisted.
 
-Public API projection, generated clients, Console/CLI rendering and expiry, and
-Environment aggregation remain unimplemented. No new operator surface is
-available or deployed. [Kobwnewe hosting](kobwnewe-hosting.md) retains the live
-qualification requirements; [head.md](../head.md) routes local proof and next work.
+Existing Service list/show now expose the public observation through regenerated
+OpenAPI and clients. The public reader also fences ready-Agent revision and
+generation changes. Unavailable evidence does not fail the desired read;
+create/edit responses omit observation. Service reads live in
+`internal/controller/serviceread`; `internal/app` only composes them.
+
+The CLI presents the same states, timestamps, serving expectations and seven
+counts in table, JSON and YAML. Console feature modules own validation,
+projection and local expiry. Visible Environment reads refresh serially every
+10 seconds, with one cancellable in-flight request. Provisioning stays separate
+from runtime aggregation; desired edits do not replace serving expectations.
+
+Focused Go race/HTTP/CLI checks, Console tests and build pass. An isolated
+GET-only browser fixture proves rendering, manual refresh and expiry during a
+stalled response. [Visibility evidence](../acceptance/router-and-visibility.md#service-observation)
+records the exact scope. Full CI, deployment and live qualification remain open;
+[head.md](../head.md) routes the next work. No new endpoint or mutation was added.

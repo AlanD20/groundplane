@@ -7,15 +7,38 @@ import { Button } from '@/components/ui/button'
 import { useStore } from '@/lib/store'
 import { LogViewer } from '@/features/logs/log-viewer'
 import type { Environment, Service } from '@/lib/types'
+import { currentServiceObservation, replicaTotal, type ServiceObservationState } from './service-observation'
 
 export type ServiceOperation = 'start' | 'stop' | 'destroy' | 'remove'
 
-export function ServiceStateBadges({ service, compact = false }: { service: Service; compact?: boolean }) {
+function observationBadgeVariant(state: ServiceObservationState): 'success' | 'warning' | 'danger' | 'muted' | 'primary' {
+  if (state === 'healthy') return 'success'
+  if (state === 'failed') return 'danger'
+  if (state === 'degraded' || state === 'starting') return 'warning'
+  if (state === 'running') return 'primary'
+  return 'muted'
+}
+
+export function ServiceStateBadges({
+  service,
+  compact = false,
+  now = Date.now(),
+}: {
+  service: Service
+  compact?: boolean
+  now?: number
+}) {
+  const observation = currentServiceObservation(service.observation, now)
   return (
     <span className="flex flex-wrap items-center gap-1">
-      <Badge variant="outline" className={compact ? 'px-1 py-0 font-mono text-[10px]' : 'font-mono'}>
-        observed {service.status}
+      <Badge variant={observationBadgeVariant(observation.state)} className={compact ? 'px-1 py-0 font-mono text-[10px]' : 'font-mono'}>
+        runtime {observation.state}
       </Badge>
+      {observation.state !== 'unavailable' && (
+        <Badge variant="outline" className={compact ? 'px-1 py-0 font-mono text-[10px]' : 'font-mono'}>
+          serving {replicaTotal(observation.replicas)}/{observation.expectedReplicas}
+        </Badge>
+      )}
       <Badge
         variant={service.runtimeIntent === 'running' ? 'success' : service.runtimeIntent === 'stopped' ? 'warning' : 'muted'}
         className={compact ? 'px-1 py-0 font-mono text-[10px]' : 'font-mono'}
@@ -23,6 +46,58 @@ export function ServiceStateBadges({ service, compact = false }: { service: Serv
         intent {service.runtimeIntent}
       </Badge>
     </span>
+  )
+}
+
+export function ServiceObservationDetails({ service, now = Date.now() }: { service: Service; now?: number }) {
+  const observation = currentServiceObservation(service.observation, now)
+  if (observation.state === 'unavailable') {
+    return (
+      <section aria-labelledby="service-observation-heading" className="rounded-lg border border-border bg-surface/50 p-3">
+        <h3 id="service-observation-heading" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Current serving workload
+        </h3>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Runtime evidence is unavailable or expired. Desired state and previous Tasks do not imply health.
+        </p>
+      </section>
+    )
+  }
+  const counts: [string, number][] = [
+    ['Running without healthcheck', observation.replicas.running],
+    ['Healthy', observation.replicas.healthy],
+    ['Healthcheck starting', observation.replicas.starting],
+    ['Unhealthy', observation.replicas.unhealthy],
+    ['Transitional', observation.replicas.transitional],
+    ['Stopped', observation.replicas.stopped],
+    ['Failed', observation.replicas.failed],
+  ]
+  return (
+    <section aria-labelledby="service-observation-heading" className="rounded-lg border border-border bg-surface/50 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 id="service-observation-heading" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Current serving workload
+        </h3>
+        <Badge variant={observationBadgeVariant(observation.state)} className="font-mono">{observation.state}</Badge>
+      </div>
+      <dl className="mt-3 grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
+        <div><dt className="text-muted-foreground">Serving Release</dt><dd className="break-all font-mono">{observation.servingReleaseId}</dd></div>
+        <div><dt className="text-muted-foreground">Observed replicas</dt><dd className="font-mono">{replicaTotal(observation.replicas)} / {observation.expectedReplicas} expected by serving Release</dd></div>
+        <div><dt className="text-muted-foreground">Observed at</dt><dd className="font-mono">{new Date(observation.observedAt).toLocaleString()}</dd></div>
+        <div><dt className="text-muted-foreground">Expires at</dt><dd className="font-mono">{new Date(observation.expiresAt).toLocaleString()}</dd></div>
+      </dl>
+      <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-border pt-3 text-xs sm:grid-cols-4">
+        {counts.map(([label, value]) => (
+          <div key={label}>
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="font-mono text-sm font-medium tabular-nums">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-3 text-xs text-muted-foreground">
+        Process and healthcheck evidence only; this does not assert route or application reachability.
+      </p>
+    </section>
   )
 }
 

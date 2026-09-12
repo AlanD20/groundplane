@@ -22,6 +22,8 @@ import { StatusBadge, StatusDot } from '@/components/common/status-badge'
 import { TaskJournalItem } from '@/components/common/task-journal-item'
 import { Button } from '@/components/ui/button'
 import type { Environment, HealthState, TaskJournalScope } from '@/lib/types'
+import { environmentRuntimeState, serviceObservationState } from '@/features/service/service-observation'
+import { useVisibleServiceObservations } from '@/features/service/use-service-observation-refresh'
 
 const platformTaskScope: TaskJournalScope = { kind: 'workspace', workspace: 'platform' }
 
@@ -50,19 +52,22 @@ export default function PlatformOverviewPage() {
       tenant: tenant.slug,
     }))
   })
+  const visibleEnvironments = [
+    ...allEnvs.map(({ env }) => env),
+    ...backingProjects.flatMap((project) => project.environments?.slice(0, 1) ?? []),
+  ]
+  const observationRefresh = useVisibleServiceObservations({
+    environmentIds: visibleEnvironments.map((environment) => environment.id),
+    observations: visibleEnvironments.flatMap((environment) => environment.services.map((service) => service.observation)),
+    refreshEnvironment: store.refreshEnvironmentServices,
+  })
   const totalServices = allEnvs.reduce((n, e) => n + e.env.services.length, 0)
-  const unhealthyServices = allEnvs.reduce(
-    (n, e) => n + e.env.services.filter((s) => s.status === 'degraded' || s.status === 'failed').length,
-    0,
-  )
-  const unavailableServices = allEnvs.reduce(
-    (n, e) => n + e.env.services.filter((s) => s.status === 'unknown').length,
-    0,
-  )
+  const serviceStates = allEnvs.flatMap(({ env }) => env.services.map((service) => serviceObservationState(service.observation, observationRefresh.now)))
+  const unavailableServices = serviceStates.filter((state) => state === 'unavailable').length
+  const incompleteServices = serviceStates.filter((state) => state !== 'healthy' && state !== 'running' && state !== 'unavailable').length
   const platformHealth = worst([
     ...backingProjects.flatMap((g) => (g.status ? [g.status] : [])),
     ...allEnvs.map((e) => e.env.status),
-    ...allEnvs.flatMap((e) => e.env.services.map((s) => s.status)),
   ])
 
   return (
@@ -75,10 +80,16 @@ export default function PlatformOverviewPage() {
           <span className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm">
             <StatusDot status={platformHealth} />
             <span className="font-medium capitalize">{platformHealth}</span>
-            <span className="text-muted-foreground">platform</span>
+            <span className="text-muted-foreground">provisioning</span>
           </span>
         }
       />
+
+      {observationRefresh.refreshError && (
+        <p role="alert" className="text-sm text-destructive">
+          Runtime refresh failed; evidence will expire locally. {observationRefresh.refreshError}
+        </p>
+      )}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard icon={<Boxes />} label="Tenants" value={tenants.length} hint={`${tenantProjects.length} projects`} />
@@ -87,8 +98,8 @@ export default function PlatformOverviewPage() {
           icon={<Cpu />}
           label="Services"
           value={totalServices}
-          hint={unhealthyServices ? `${unhealthyServices} need attention` : unavailableServices ? `${unavailableServices} state${unavailableServices === 1 ? '' : 's'} unavailable` : 'all healthy'}
-          tone={unhealthyServices || unavailableServices ? 'warning' : 'success'}
+          hint={unavailableServices ? `${unavailableServices} runtime state${unavailableServices === 1 ? '' : 's'} unavailable` : incompleteServices ? `${incompleteServices} incomplete runtime${incompleteServices === 1 ? '' : 's'}` : 'all healthy or running unchecked'}
+          tone={incompleteServices || unavailableServices ? 'warning' : 'success'}
         />
         <StatCard icon={<Database />} label="Backing services" value={backingProjects.length} hint="attachable datastores" />
       </div>
@@ -200,7 +211,7 @@ export default function PlatformOverviewPage() {
                   className="group flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2.5 transition-colors hover:border-ring/50 hover:bg-muted"
                 >
                   <div className="flex items-center gap-3">
-                    {g.status && <StatusDot status={g.status} />}
+                    {g.environments?.[0] && <StatusDot status={environmentRuntimeState(g.environments[0].services, observationRefresh.now)} />}
                     <div className="flex flex-col">
                       <span className="text-sm font-medium">{g.name}</span>
                       <span className="font-mono text-xs text-muted-foreground">{(g.environments?.[0]?.services[0]?.image ?? g.id)}</span>
@@ -234,14 +245,15 @@ export default function PlatformOverviewPage() {
                   className="group flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2.5 transition-colors hover:border-ring/50 hover:bg-muted"
                 >
                   <div className="flex min-w-0 items-center gap-3">
-                    <StatusDot status={env.status} />
+                    <StatusDot status={environmentRuntimeState(env.services, observationRefresh.now)} />
                     <div className="flex min-w-0 flex-col">
                       <span className="truncate text-sm font-medium">
                         {tenant}/{project}
                         <span className="ml-1.5 rounded bg-secondary px-1.5 py-0.5 font-mono text-[11px] font-normal text-secondary-foreground">
                           {env.name}
                         </span>
-                        <StatusBadge status={env.status} className="ml-1.5 align-middle" />
+                        <StatusBadge status={env.status} label={`Provisioning ${env.provisioningState}`} className="ml-1.5 align-middle" />
+                        <StatusBadge status={environmentRuntimeState(env.services, observationRefresh.now)} label={`Runtime ${environmentRuntimeState(env.services, observationRefresh.now)}`} className="ml-1.5 align-middle" />
                       </span>
                       <span className="font-mono text-xs text-muted-foreground">
                         {env.services.length} services · {env.release}

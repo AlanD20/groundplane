@@ -14,10 +14,18 @@ import { Label } from '@/components/ui/label'
 import { DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Drawer, DrawerContent } from '@/components/ui/drawer'
 import { valkeyAuthenticationDetails } from '@/lib/valkey-authentication'
+import { serviceObservationState } from '@/features/service/service-observation'
+import { useVisibleServiceObservations } from '@/features/service/use-service-observation-refresh'
 import type { ValkeyAuthentication } from '@/lib/types'
 
 export default function PlatformBackingServicesPage() {
   const store = useStore()
+  const visibleEnvironments = store.backingProjects.flatMap((project) => project.environments?.slice(0, 1) ?? [])
+  const observationRefresh = useVisibleServiceObservations({
+    environmentIds: visibleEnvironments.map((environment) => environment.id),
+    observations: visibleEnvironments.flatMap((environment) => environment.services.map((service) => service.observation)),
+    refreshEnvironment: store.refreshEnvironmentServices,
+  })
   const [createOpen, setCreateOpen] = useState(false)
   const { name, slug, setName, setSlug, reset: resetBackingIdentity } = useLinkedSlug()
   const [description, setDescription] = useState('')
@@ -44,6 +52,12 @@ export default function PlatformBackingServicesPage() {
           </Button>
         }
       />
+
+      {observationRefresh.refreshError && (
+        <p role="alert" className="text-sm text-destructive">
+          Runtime refresh failed; evidence will expire locally. {observationRefresh.refreshError}
+        </p>
+      )}
 
       {store.backingProjectsLoading ? (
         <EmptyState
@@ -75,6 +89,7 @@ export default function PlatformBackingServicesPage() {
             const svc = env?.services[0]
             const adapter = store.adapters.find((a) => a.key === svc?.adapter)
             const authenticationDetails = valkeyAuthenticationDetails(svc?.authentication)
+            const runtimeState = svc ? serviceObservationState(svc.observation, observationRefresh.now) : 'unavailable'
             const port = adapter?.urlScheme === 'redis' ? 6379 : 5432
             const backupSourceCount = store.tenantProjects.reduce(
               (count, project) => count + (project.environments ?? []).reduce(
@@ -101,7 +116,8 @@ export default function PlatformBackingServicesPage() {
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
                         <span className="text-base font-semibold">{g.name}</span>
-                        {g.status && <StatusBadge status={g.status} />}
+                        {env && <StatusBadge status={env.status} label={`Provisioning ${env.provisioningState}`} />}
+                        <StatusBadge status={runtimeState} label={`Runtime ${runtimeState}`} />
                       </div>
                       <span className="font-mono text-xs text-muted-foreground">
                         {svc?.serviceName}:{port} · {svc?.adapter}

@@ -281,7 +281,7 @@ export const backingProjects: Project[] = [
             restart: 'unless-stopped' as const,
             replicas: 1,
             runtimeIntent: 'running',
-            status: 'healthy' as const,
+            observation: { state: 'unavailable' },
             adapter: 'postgres:16',
             serviceName: 'postgres',
             prefix: 'pg16',
@@ -374,7 +374,7 @@ export const backingProjects: Project[] = [
             restart: 'unless-stopped' as const,
             replicas: 1,
             runtimeIntent: 'running',
-            status: 'healthy' as const,
+            observation: { state: 'unavailable' },
             adapter: 'valkey:9',
             authentication: 'username_password',
             serviceName: 'valkey',
@@ -432,7 +432,6 @@ function storefrontServices(env: 'staging' | 'production'): Service[] {
       expose: ['app-api:8080'],
       restart: 'unless-stopped' as const,
       replicas: 1,
-      status: 'healthy' as const,
       activeSlot: activeSlot as 'blue' | 'green',
       group: 'app' as const,
     },
@@ -454,7 +453,6 @@ function storefrontServices(env: 'staging' | 'production'): Service[] {
       expose: ['websocket:8080'],
       restart: 'unless-stopped' as const,
       replicas: env === 'production' ? 2 : 1,
-      status: 'healthy' as const,
       group: 'app' as const,
     },
     {
@@ -475,7 +473,6 @@ function storefrontServices(env: 'staging' | 'production'): Service[] {
       expose: [],
       restart: 'unless-stopped' as const,
       replicas: 1,
-      status: 'healthy' as const,
       group: 'workers' as const,
     },
     {
@@ -496,7 +493,6 @@ function storefrontServices(env: 'staging' | 'production'): Service[] {
       expose: [],
       restart: 'unless-stopped' as const,
       replicas: 1,
-      status: env === 'staging' ? ('degraded' as const) : ('healthy' as const),
       group: 'workers' as const,
     },
     {
@@ -518,7 +514,6 @@ function storefrontServices(env: 'staging' | 'production'): Service[] {
       expose: ['identity-intake:9000'],
       restart: 'unless-stopped' as const,
       replicas: 1,
-      status: 'healthy' as const,
       group: 'identity' as const,
     },
     {
@@ -538,7 +533,6 @@ function storefrontServices(env: 'staging' | 'production'): Service[] {
       expose: ['identity-portal:8443'],
       restart: 'unless-stopped' as const,
       replicas: 1,
-      status: 'healthy' as const,
       group: 'identity' as const,
     },
     {
@@ -558,7 +552,6 @@ function storefrontServices(env: 'staging' | 'production'): Service[] {
       expose: [],
       restart: 'unless-stopped' as const,
       replicas: 1,
-      status: 'healthy' as const,
       group: 'identity' as const,
     },
     {
@@ -578,7 +571,6 @@ function storefrontServices(env: 'staging' | 'production'): Service[] {
       expose: ['clamav:3310'],
       restart: 'unless-stopped' as const,
       replicas: 1,
-      status: 'healthy' as const,
       group: 'identity' as const,
     },
     {
@@ -598,10 +590,9 @@ function storefrontServices(env: 'staging' | 'production'): Service[] {
       expose: ['identity-proxy:8443'],
       restart: 'unless-stopped' as const,
       replicas: 1,
-      status: 'healthy' as const,
       group: 'identity' as const,
     },
-  ].map((service) => ({ ...service, runtimeIntent: 'running' as const }))
+  ].map((service) => ({ ...service, runtimeIntent: 'running' as const, observation: { state: 'unavailable' as const } }))
 }
 
 function storefrontEnv(env: 'staging' | 'production'): Environment {
@@ -807,7 +798,6 @@ function sampleSiteServices(env: 'staging' | 'production'): Service[] {
       expose: ['cms:3000'],
       restart: 'unless-stopped' as const,
       replicas: 1,
-      status: 'healthy' as const,
       group: 'web' as const,
     },
     {
@@ -827,7 +817,6 @@ function sampleSiteServices(env: 'staging' | 'production'): Service[] {
       expose: ['web:8080'],
       restart: 'unless-stopped' as const,
       replicas: 1,
-      status: 'healthy' as const,
       group: 'web' as const,
     },
     {
@@ -847,10 +836,9 @@ function sampleSiteServices(env: 'staging' | 'production'): Service[] {
       expose: ['sample-site-router:8080'],
       restart: 'unless-stopped' as const,
       replicas: 1,
-      status: 'healthy' as const,
       group: 'web' as const,
     },
-  ].map((service) => ({ ...service, runtimeIntent: 'running' as const }))
+  ].map((service) => ({ ...service, runtimeIntent: 'running' as const, observation: { state: 'unavailable' as const } }))
 }
 
 function sampleSiteEnv(env: 'staging' | 'production'): Environment {

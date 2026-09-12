@@ -332,9 +332,9 @@ Conventions:
   use its sealed replica count. Missing live evidence does not fail desired
   reads. Create/edit responses omit fresh observation. Console/CLI expose the
   same snapshot, never infer health from desired intent, and expired evidence is
-  unavailable. These remain the existing Service list/show actions. This public
-  projection is not implemented yet; [Service status](features/services-and-releases.md#current-status)
-  distinguishes the local observation foundation from the remaining integration.
+  unavailable. These remain the existing Service list/show actions. The public
+  projection and clients are implemented locally; [Service status](features/services-and-releases.md#current-status)
+  distinguishes focused proof from pending deployment and live qualification.
   Create and edit publish a new immutable normalized Environment desired
   revision but do not deploy it. `DELETE /services/{id}` publishes a targeted
   Remove Task and keeps the current head and Service visible until successful

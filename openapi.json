@@ -4695,6 +4695,9 @@
           "name": {
             "type": "string"
           },
+          "observation": {
+            "$ref": "#/components/schemas/ServiceObservation"
+          },
           "on_failure": {
             "type": "string"
           },
@@ -4924,6 +4927,9 @@
           "native_compose": {
             "type": "string"
           },
+          "observation": {
+            "$ref": "#/components/schemas/ServiceObservation"
+          },
           "on_failure": {
             "type": "string"
           },
@@ -5094,6 +5100,97 @@
         },
         "required": [
           "mount"
+        ],
+        "type": "object"
+      },
+      "ServiceObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_replicas": {
+            "format": "int32",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "replicas": {
+            "$ref": "#/components/schemas/ServiceReplicaCounts"
+          },
+          "serving_release_id": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "unavailable",
+              "absent",
+              "failed",
+              "stopped",
+              "starting",
+              "healthy",
+              "running",
+              "degraded"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "type": "object"
+      },
+      "ServiceReplicaCounts": {
+        "additionalProperties": false,
+        "properties": {
+          "failed": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "healthy": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "running": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "starting": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stopped": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "transitional": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unhealthy": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "running",
+          "healthy",
+          "starting",
+          "unhealthy",
+          "transitional",
+          "stopped",
+          "failed"
         ],
         "type": "object"
       },

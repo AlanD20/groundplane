@@ -62,16 +62,16 @@ test("Recovery Point continuation is not nested under the non-empty guard", asyn
 })
 
 
-// Rationale: C16 remains scaffolded overall, but its landed Recovery Point read
+// Rationale: Backup remains scaffolded overall, but its landed Recovery Point read
 // slice must not regress to the stale claim that all point surfaces are pending.
-test("C16 ledger records the landed Recovery Point read slice", async () => {
-  const capabilities = await readFile(
-    new URL("../../../docs/capabilities.md", import.meta.url),
+test("Backup feature records the landed Recovery Point read slice", async () => {
+  const feature = await readFile(
+    new URL("../../../docs/features/backups.md", import.meta.url),
     "utf8",
   )
-  const c16 = capabilities.split("\n").find((line) => line.startsWith("| C16 |"))
-  assert.ok(c16)
-  assert.match(c16, /Verified Recovery Point listing is now production-composed/)
-  assert.doesNotMatch(c16, /Console run, points, restore/)
-  assert.doesNotMatch(c16, /Recovery Point API\/CLI\/Console surfaces/)
+  const status = feature.split('## Current status\n')[1]
+  assert.ok(status)
+  assert.match(status, /Recovery Point list,[\s\S]*have implementation evidence/)
+  assert.match(status, /feature remains \*\*Scaffolded\*\*/)
+  assert.match(status, /keeps Restore\s+visibly unavailable/)
 })

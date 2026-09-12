@@ -19,6 +19,9 @@ import { EmptyState } from '@/components/common/empty-state'
 import { toYAML } from '@/lib/yaml'
 import type { ConsumerLink, Project } from '@/lib/types'
 import { valkeyAuthenticationDetails } from '@/lib/valkey-authentication'
+import { Row, ServiceTab } from './service-tab'
+import { serviceObservationState } from '@/features/service/service-observation'
+import { useVisibleServiceObservations } from '@/features/service/use-service-observation-refresh'
 
 type PlatformTab = 'service' | 'connections' | 'state' | 'backups'
 
@@ -31,6 +34,11 @@ export default function BackingServiceDetailPage() {
 	const [tab, setTab] = useState<PlatformTab>('service')
 	const [pendingAction, setPendingAction] = useState<'start' | 'stop' | 'destroy' | null>(null)
 	const [actionError, setActionError] = useState('')
+  const observationRefresh = useVisibleServiceObservations({
+    environmentIds: env ? [env.id] : [],
+    observations: svc ? [svc.observation] : [],
+    refreshEnvironment: store.refreshEnvironmentServices,
+  })
 
   if (!g || !env || !svc) {
     return (
@@ -49,7 +57,8 @@ export default function BackingServiceDetailPage() {
     )
   }
 
-  const running = g.status !== 'stopped'
+  const running = svc.runtimeIntent === 'running'
+  const runtimeState = serviceObservationState(svc.observation, observationRefresh.now)
   const adapter = store.adapters.find((a) => a.key === svc.adapter)
   const authenticationDetails = valkeyAuthenticationDetails(svc.authentication)
   const port = adapter?.urlScheme === 'redis' ? 6379 : 5432
@@ -65,11 +74,11 @@ export default function BackingServiceDetailPage() {
     0,
   )
   const statusTone: 'success' | 'warning' | 'danger' | 'default' =
-    g.status === 'healthy'
+    runtimeState === 'healthy'
       ? 'success'
-      : g.status === 'degraded' || g.status === 'pending'
+      : runtimeState === 'degraded' || runtimeState === 'starting' || runtimeState === 'running'
         ? 'warning'
-        : g.status === 'failed'
+        : runtimeState === 'failed'
           ? 'danger'
 			: 'default'
 	const runLifecycle = async (action: 'start' | 'stop' | 'destroy') => {
@@ -90,11 +99,12 @@ export default function BackingServiceDetailPage() {
         title={
           <>
             {g.name}
-            {g.status && (
-              <MetaPill icon={<StatusDot status={g.status} />} tone={statusTone} className="ml-2 align-middle capitalize">
-                {g.status}
-              </MetaPill>
-            )}
+            <MetaPill icon={<StatusDot status={env.status} />} tone={env.provisioningState === 'failed' ? 'danger' : env.provisioningState === 'provisioning' ? 'warning' : 'success'} className="ml-2 align-middle capitalize">
+              provisioning {env.provisioningState}
+            </MetaPill>
+            <MetaPill icon={<StatusDot status={runtimeState} />} tone={statusTone} className="ml-2 align-middle capitalize">
+              runtime {runtimeState}
+            </MetaPill>
           </>
         }
         description={g.description}
@@ -129,6 +139,7 @@ export default function BackingServiceDetailPage() {
 			}
 		/>
 		{actionError && <p role="alert" className="text-sm text-destructive">{actionError}</p>}
+		{observationRefresh.refreshError && <p role="alert" className="text-sm text-destructive">Runtime refresh failed; evidence will expire locally. {observationRefresh.refreshError}</p>}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard icon={<Boxes />} label="Consumers" value={g.consumers?.length ?? 0} hint="environments attached" />
@@ -146,7 +157,7 @@ export default function BackingServiceDetailPage() {
         </TabsList>
 
         <TabsPanel value="service" className="mt-6 flex flex-col gap-6">
-          <ServiceTab env={env} svc={svc} />
+          <ServiceTab env={env} svc={svc} now={observationRefresh.now} />
         </TabsPanel>
         <TabsPanel value="connections" className="mt-6 flex flex-col gap-6">
           <ConnectionsTab g={g} env={env} svc={svc} />
@@ -159,63 +170,6 @@ export default function BackingServiceDetailPage() {
         </TabsPanel>
       </Tabs>
     </div>
-  )
-}
-
-// ---- Service (the full spec, like any service) ----
-
-function ServiceTab({ env, svc }: { env: NonNullable<Project['environments']>[number]; svc: NonNullable<Project['environments']>[number]['services'][number] }) {
-  const store = useStore()
-  const adapter = store.adapters.find((a) => a.key === svc.adapter)
-  const port = adapter?.urlScheme === 'redis' ? 6379 : 5432
-  const volume = env.volumes[0]
-  const authenticationDetails = valkeyAuthenticationDetails(svc.authentication)
-  return (
-    <>
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Server className="size-4 text-muted-foreground" /> Service · {svc.name}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-x-8 gap-y-1.5 text-sm sm:grid-cols-2">
-          <Row label="Image" value={svc.image} mono />
-          <Row label="Adapter" value={adapter ? `${adapter.label} · ${adapter.key}${adapter.manual ? ' · manual (no auto-provisioning)' : ''}` : svc.adapter ?? '—'} mono />
-          <Row label="Service name" value={svc.serviceName ?? svc.name} mono />
-          <Row label="Prefix (facts keys)" value={svc.prefix ?? adapter?.prefix ?? '—'} mono />
-          {svc.adapter === 'valkey:9' && (
-            <Row label="Authentication" value={authenticationDetails?.label ?? 'Unavailable'} mono />
-          )}
-          <Row label="Status" value={svc.status} mono />
-          <Row label="Strategy" value={svc.strategy} mono />
-          <Row label="Network" value={env.zones.map((z) => `${z.name} · ${z.subnet}${z.internal ? ' · internal' : ''}`).join(', ') || '—'} mono />
-          <Row label="Healthcheck" value={svc.healthcheck ? `${svc.healthcheck.kind} ${svc.healthcheck.target} · every ${svc.healthcheck.interval} · timeout ${svc.healthcheck.timeout} · start ${svc.healthcheck.startPeriod} · retries ${svc.healthcheck.retries}` : 'none'} mono />
-          <Row label="Resources" value={`${svc.resources.mem} · ${svc.resources.cpus} cpu`} mono />
-          <Row label="Expose" value={svc.expose.length > 0 ? svc.expose.join(', ') : '—'} mono />
-          <Row label="Mounts" value={svc.mounts.map((m) => (m.type === 'volume' ? `${m.volume} → ${m.mount}` : `${m.file} → ${m.mount}${m.ro ? ' (ro)' : ''}`)).join(', ') || '—'} mono />
-          <Row label="Env files" value={svc.envFiles.join(', ') || '—'} mono />
-          <Row label="Env vars" value={svc.environment.map((e) => `${e.key}=${e.value}`).join(', ') || '—'} mono />
-          <Row label="Aliases" value={svc.aliases.join(', ') || '—'} mono />
-          <Row label="Depends on" value={svc.dependsOn.join(', ') || '—'} mono />
-          <Row label="Restart" value={svc.restart} mono />
-          <Row label="Replicas" value={String(svc.replicas)} mono />
-          <Row label="Reachable at" value={`${svc.serviceName ?? svc.name}:${port}`} mono />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Boxes className="size-4 text-muted-foreground" /> Environment · {env.name}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-x-8 gap-y-1.5 text-sm sm:grid-cols-2">
-            <Row label="Volume" value={volume ? `${volume.slug} → ${volume.path ?? 'managed path'}` : '—'} mono />
-          <Row label="Volume dir" value={env.volumeDir} mono />
-          <Row label="Env vars" value={env.envVars.map((e) => `${e.key}=${e.value}`).join(', ') || '—'} mono />
-        </CardContent>
-      </Card>
-    </>
   )
 }
 
@@ -388,16 +342,6 @@ function ConnectionsTab({ g, env, svc }: { g: Project; env: NonNullable<Project[
         </CardContent>
       </Card>
     </>
-  )
-}
-
-function Row({ label, value, mono, masked }: { label: string; value: string; mono?: boolean; masked?: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-3 border-b border-border pb-1.5 text-sm last:border-0">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={mono ? 'max-w-[60%] truncate text-right font-mono text-xs' : 'text-xs'}>{value}</span>
-      {masked && <CopyButton value={value} />}
-    </div>
   )
 }
 

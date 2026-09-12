@@ -1,5 +1,6 @@
 import type { EnvironmentNetworkCapacity } from './environment-types'
 import type { EnvironmentEntry } from './entry-types'
+import type { ServiceObservation } from '@/features/service/service-observation'
 export type { EnvironmentEntry, EnvironmentEntrySource } from './entry-types'
 
 // Groundplane desired-state model (prototype). Mirrors the Blueprint contract.
@@ -57,7 +58,7 @@ export type Service = {
   restart: 'unless-stopped' | 'always' | 'no'
   replicas: number
   runtimeIntent: ServiceRuntimeIntent
-  status: HealthState
+	observation: ServiceObservation
 	 nativeCompose?: string
 	 releaseLedger?: DeployRecord[]
   activeSlot?: Slot // for blue-green services

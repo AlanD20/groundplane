@@ -85,6 +85,19 @@ These are analyzer findings; this check did not demonstrate a new runtime failur
 
 ## Deferred work groups
 
+### Service observation public integration
+
+The 2026-09-12 public/API/CLI/Console integration reran the architecture gate:
+125 existing findings remain in `.tmp/service-source-ak14iK/architecture-final.log`.
+No baseline changed. The new Backing-page size finding was corrected through a
+feature-owned Service section. Service read behavior moved out of `internal/app`,
+reducing its direct production total from 24,917 to 24,799 lines; its Controller
+composition file shrank from 1,359 to 1,353. The root Console store and Environment
+page also shrank. These reductions do not clear the older allowances or make the
+full gate green. Existing owners and acceptance conditions above remain unchanged.
+
+### Previously deferred groups
+
 - Public test fixtures and cross-layer placement: migrate the nine etcd test files into app-owned
   integration tests using public fixtures. Supplementary plan:
   `.tmp/mvp-floor-correction-20260908/test-seams/fixture-closure.md`.

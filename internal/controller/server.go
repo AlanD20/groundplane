@@ -50,6 +50,7 @@ type Server struct {
 	componentMutations      ComponentMutator
 	environments            *environmentcapability.Reader
 	services                ServiceReader
+	serviceObservations     ServiceObserver
 	serviceMutations        ServiceMutator
 	releaseGroups           ReleaseGroupReader
 	releaseGroupMutations   ReleaseGroupMutator
@@ -118,6 +119,7 @@ type Options struct {
 	ComponentMutations      ComponentMutator
 	Environments            *environmentcapability.Reader
 	Services                ServiceReader
+	ServiceObservations     ServiceObserver
 	ServiceMutations        ServiceMutator
 	ReleaseGroups           ReleaseGroupReader
 	ReleaseGroupMutations   ReleaseGroupMutator
@@ -199,6 +201,7 @@ func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
 		componentMutations:      options.ComponentMutations,
 		environments:            options.Environments,
 		services:                options.Services,
+		serviceObservations:     options.ServiceObservations,
 		serviceMutations:        options.ServiceMutations,
 		releaseGroups:           options.ReleaseGroups,
 		releaseGroupMutations:   options.ReleaseGroupMutations,

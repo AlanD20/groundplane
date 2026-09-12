@@ -9,16 +9,19 @@ import { Button } from '@/components/ui/button'
 import { DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Drawer, DrawerContent } from '@/components/ui/drawer'
 import { ServiceFormBody } from '@/components/common/service-form-body'
-import { RemoveDesiredServiceButton, ServiceOperationDialog, ServiceRuntimeActions, ServiceStateBadges, type ServiceOperation } from '@/features/service/service-runtime-actions'
+import { RemoveDesiredServiceButton, ServiceObservationDetails, ServiceOperationDialog, ServiceRuntimeActions, ServiceStateBadges, type ServiceOperation } from '@/features/service/service-runtime-actions'
+import { useVisibleServiceObservations } from '@/features/service/use-service-observation-refresh'
 
 export function ServiceDetailsDrawer({
   env,
   service: summary,
+  now: listNow = Date.now(),
   open,
   onOpenChange,
 }: {
   env: Environment
   service: Service
+  now?: number
   open: boolean
   onOpenChange: (v: boolean) => void
 }) {
@@ -26,6 +29,12 @@ export function ServiceDetailsDrawer({
   const headingRef = useRef<HTMLHeadingElement>(null)
   const store = useStore()
   const [service, setService] = useState(summary)
+  const detailClock = useVisibleServiceObservations({
+    environmentIds: [],
+    observations: open ? [service.observation] : [],
+    refreshEnvironment: store.refreshEnvironmentServices,
+  })
+  const now = Math.max(listNow, detailClock.now)
   const [detailError, setDetailError] = useState<string>()
   const [editing, setEditing] = useState(false)
   const [operation, setOperation] = useState<ServiceOperation | null>(null)
@@ -53,7 +62,7 @@ export function ServiceDetailsDrawer({
           <DialogHeader>
             <DialogTitle ref={headingRef} tabIndex={-1} className="flex flex-wrap items-center gap-2 outline-none">
               <span className="font-mono">{service.name}</span>
-              <ServiceStateBadges service={service} />
+              <ServiceStateBadges service={service} now={now} />
             </DialogTitle>
           </DialogHeader>
 			{detailError ? <p role="alert" className="text-sm text-destructive">{detailError}</p> : null}
@@ -100,15 +109,15 @@ export function ServiceDetailsDrawer({
             )}
             <DetailRow label="Expose" value={service.expose.join(', ') || '—'} mono />
             <DetailRow label="Restart" value={service.restart} mono />
-            <DetailRow label="Replicas" value={String(service.replicas)} mono />
+            <DetailRow label="Desired replicas" value={String(service.replicas)} mono />
             <DetailRow label="Runtime intent" value={service.runtimeIntent} mono />
-            <DetailRow label="Observed health" value={service.status} mono />
             <DetailRow
               label="Labels"
               value={`com.groundplane.managed=true · com.groundplane.service-id=${service.id}`}
               mono
             />
           </div>
+			<ServiceObservationDetails service={service} now={now} />
 			{service.nativeCompose ? (
 				<div className="flex flex-col gap-2">
 					<p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Native Compose desired state</p>

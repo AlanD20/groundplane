@@ -61,8 +61,8 @@ modules, not the root store or oversized Environment page.
 The [Service observation design](../decisions/0077-serving-workload-observation.md)
 separates a named cross-binary value
 contract, Docker reads in infrastructure, exchange handling in Agent/channel and
-source checks/public projection in the Controller's Service module. The current
-implementation is incomplete; see the status below. Generated contracts remain
+source checks/public projection in the Controller's Service module. Its local
+implementation and qualification limits are recorded below. Generated contracts remain
 derived from their sources.
 
 The bundle depends on [full Caddyfile templates](router-template.md) and
@@ -88,11 +88,11 @@ qualification tasks are in [tasks/todo.md](../../tasks/todo.md).
 ## Current status
 
 The Route-summary correction has [local test and browser evidence](../acceptance/router-and-visibility.md)
-and is committed, but is not deployed. Service observation's protocol, pure
-aggregation and read-only Docker observer have local proof. Agent/channel,
-Controller and operator-surface integration remain incomplete; see
+and is committed, but is not deployed. Service observation's protocol, read-only
+Docker observer, Agent/channel, Controller source/freshness and existing
+API/CLI/Console surfaces are implemented with focused local proof; see
 [Service status](services-and-releases.md#current-status). The portable bundle
-and its qualification remain incomplete.
+remains incomplete. Full CI, deployment and live hosting qualification remain open.
 
 [head.md](../head.md) records the next work and the
 [storage-integrity pause](../acceptance/storage-integrity-incident.md).

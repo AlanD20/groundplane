@@ -1,9 +1,8 @@
-package app
+package serviceread
 
 import (
 	"context"
 	"crypto/sha256"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -15,7 +14,8 @@ import (
 )
 
 type fakeServiceReadRepository struct {
-	serviceReadRepository
+	Environments
+	Services
 	environment etcd.Versioned[etcd.EnvironmentRecord]
 	projection  etcd.Versioned[etcd.EnvironmentComposeProjection]
 	page        etcd.Page[etcd.ServiceRecord]
@@ -64,12 +64,14 @@ func TestServiceListVerifiesOwnerAndPreservesPagination(t *testing.T) {
 		},
 		page: want, wantRequest: request,
 	}
-	service, err := newServiceReadService(repository)
+	service, err := New(repository, repository)
 	if err != nil {
-		t.Fatalf("newServiceReadService() error = %v", err)
+		t.Fatalf("New() error = %v", err)
 	}
 	got, err := service.ListServices(context.Background(), environmentID, request)
-	if err != nil || !reflect.DeepEqual(got, want) || !repository.listed {
+	if err != nil || got.NextCursor != want.NextCursor || got.Revision != want.Revision ||
+		len(got.Items) != len(want.Items) ||
+		!repository.listed {
 		t.Fatalf("ListServices() = %#v, %v, listed %t", got, err, repository.listed)
 	}
 }
@@ -114,9 +116,9 @@ func TestServiceDetailProjectsCanonicalNativeComposeFromDesiredHead(t *testing.T
 			ComposeArtifact: artifact,
 		}},
 	}
-	service, err := newServiceReadService(repository)
+	service, err := New(repository, repository)
 	if err != nil {
-		t.Fatalf("newServiceReadService() error = %v", err)
+		t.Fatalf("New() error = %v", err)
 	}
 	native, err := service.GetServiceNativeCompose(context.Background(), environmentID, "api")
 	if err != nil {

@@ -1,4 +1,4 @@
-package app
+package serviceread
 
 import (
 	"context"
@@ -12,21 +12,25 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type serviceReadRepository interface {
+type Environments interface {
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
 	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+}
+
+type Services interface {
 	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
 	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
 }
 
-type serviceReadService struct {
-	repository serviceReadRepository
+type Reader struct {
+	environments Environments
+	services     Services
 }
 
-func (service *serviceReadService) GetService(
+func (service *Reader) GetService(
 	ctx context.Context,
 	serviceID string,
 ) (etcd.Versioned[etcd.ServiceRecord], error) {
@@ -39,17 +43,17 @@ func (service *serviceReadService) GetService(
 			"Service read requires a stable Service id",
 		)
 	}
-	return service.repository.GetService(ctx, serviceID)
+	return service.services.GetService(ctx, serviceID)
 }
 
-func newServiceReadService(repository serviceReadRepository) (*serviceReadService, error) {
-	if repository == nil {
+func New(environments Environments, services Services) (*Reader, error) {
+	if environments == nil || services == nil {
 		return nil, errs.New(errs.KindInternal, "Service read repository is not configured")
 	}
-	return &serviceReadService{repository: repository}, nil
+	return &Reader{environments: environments, services: services}, nil
 }
 
-func (service *serviceReadService) ListServices(
+func (service *Reader) ListServices(
 	ctx context.Context,
 	environmentID string,
 	request etcd.PageRequest,
@@ -69,13 +73,13 @@ func (service *serviceReadService) ListServices(
 			"Service list limit must be a positive integer",
 		)
 	}
-	if _, err := service.repository.GetEnvironment(ctx, environmentID); err != nil {
+	if _, err := service.environments.GetEnvironment(ctx, environmentID); err != nil {
 		return etcd.Page[etcd.ServiceRecord]{}, err
 	}
-	return service.repository.ListServices(ctx, environmentID, request)
+	return service.services.ListServices(ctx, environmentID, request)
 }
 
-func (service *serviceReadService) GetServiceNativeCompose(
+func (service *Reader) GetServiceNativeCompose(
 	ctx context.Context,
 	environmentID string,
 	serviceName string,
@@ -86,11 +90,11 @@ func (service *serviceReadService) GetServiceNativeCompose(
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil || strings.TrimSpace(serviceName) == "" {
 		return "", errs.New(errs.KindValidationFailed, "Service detail identity is invalid")
 	}
-	environment, err := service.repository.GetEnvironment(ctx, environmentID)
+	environment, err := service.environments.GetEnvironment(ctx, environmentID)
 	if err != nil {
 		return "", err
 	}
-	projection, found, err := service.repository.GetEnvironmentComposeProjection(ctx, environmentID)
+	projection, found, err := service.environments.GetEnvironmentComposeProjection(ctx, environmentID)
 	if err != nil {
 		return "", err
 	}
@@ -108,48 +112,4 @@ func (service *serviceReadService) GetServiceNativeCompose(
 		return "", errs.New(errs.KindInternal, "Service desired Compose artifact is corrupt")
 	}
 	return controller.ProjectEnvironmentServiceNativeCompose(artifact, serviceName)
-}
-
-type durableServiceReadRepository struct {
-	hierarchy *etcd.HierarchyRepository
-	services  *etcd.ServiceRepository
-}
-
-func newDurableServiceReadRepository(
-	hierarchy *etcd.HierarchyRepository,
-	services *etcd.ServiceRepository,
-) (*durableServiceReadRepository, error) {
-	if hierarchy == nil || services == nil {
-		return nil, errs.New(errs.KindInternal, "Service read repositories are not configured")
-	}
-	return &durableServiceReadRepository{hierarchy: hierarchy, services: services}, nil
-}
-
-func (repository *durableServiceReadRepository) GetEnvironment(
-	ctx context.Context,
-	id string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
-	return repository.hierarchy.GetEnvironment(ctx, id)
-}
-
-func (repository *durableServiceReadRepository) GetEnvironmentComposeProjection(
-	ctx context.Context,
-	environmentID string,
-) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
-	return repository.hierarchy.GetEnvironmentComposeProjection(ctx, environmentID)
-}
-
-func (repository *durableServiceReadRepository) ListServices(
-	ctx context.Context,
-	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[etcd.ServiceRecord], error) {
-	return repository.services.ListServices(ctx, environmentID, request)
-}
-
-func (repository *durableServiceReadRepository) GetService(
-	ctx context.Context,
-	id string,
-) (etcd.Versioned[etcd.ServiceRecord], error) {
-	return repository.services.GetService(ctx, id)
 }

@@ -3,7 +3,9 @@ package cli
 import (
 	"fmt"
 	"strconv"
+	"time"
 
+	clicommon "github.com/AlanD20/groundplane/internal/cli/common"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/spf13/cobra"
@@ -29,11 +31,8 @@ func newServiceCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			items := make([]map[string]any, len(page.Items))
-			for index, service := range page.Items {
-				items[index] = serviceFields(service)
-			}
-			headers, rows := tabulateVia(fromContext(cmd), items)
+			presented, headers, rows := clicommon.ServiceObservationTable(page.Items, time.Now())
+			page.Items = presented
 			return fromContext(cmd).Out.Render(headers, rows, page)
 		},
 	})
@@ -51,7 +50,10 @@ func newServiceCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			observation := clicommon.PresentServiceObservation(service.Observation, time.Now())
+			service.Observation = observation.Observation
 			fields := serviceFields(service.Service)
+			clicommon.AddServiceObservationFields(fields, observation)
 			fields["native_compose"] = service.NativeCompose
 			fields["release_ledger"] = service.ReleaseLedger
 			fieldNames, values := fieldsOfVia(fields)

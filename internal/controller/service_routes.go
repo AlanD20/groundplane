@@ -20,6 +20,10 @@ type ServiceReader interface {
 	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
 }
 
+type ServiceObserver interface {
+	ObserveServices(context.Context, []etcd.Versioned[etcd.ServiceRecord]) []apiTypes.ServiceObservation
+}
+
 type ServiceMutator interface {
 	CreateService(context.Context, apiTypes.ServiceCreate, string) (etcd.IdempotencyResponse, error)
 	EditService(context.Context, string, apiTypes.ServiceEdit, string) (etcd.IdempotencyResponse, error)
@@ -157,6 +161,10 @@ func (s *Server) listServices(
 	for index, item := range page.Items {
 		response.Items[index] = serviceResponse(item.Record)
 	}
+	observations := s.observeServices(ctx, page.Items)
+	for index := range response.Items {
+		response.Items[index].Observation = &observations[index]
+	}
 	return &servicePageOutput{Body: response}, nil
 }
 
@@ -187,11 +195,27 @@ func (s *Server) showService(ctx context.Context, request *serviceShowInput) (*s
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
+	service := serviceResponse(record.Record)
+	observations := s.observeServices(ctx, []etcd.Versioned[etcd.ServiceRecord]{record})
+	service.Observation = &observations[0]
 	return &serviceDetailOutput{Body: apiTypes.ServiceDetail{
-		Service:       serviceResponse(record.Record),
+		Service:       service,
 		NativeCompose: nativeCompose,
 		ReleaseLedger: releasePageResponse(ledger),
 	}}, nil
+}
+
+func (s *Server) observeServices(
+	ctx context.Context, records []etcd.Versioned[etcd.ServiceRecord],
+) []apiTypes.ServiceObservation {
+	if s.serviceObservations != nil {
+		return s.serviceObservations.ObserveServices(ctx, records)
+	}
+	result := make([]apiTypes.ServiceObservation, len(records))
+	for index := range result {
+		result[index].State = apiTypes.ServiceObservationUnavailable
+	}
+	return result
 }
 
 func (s *Server) createService(ctx context.Context, request *serviceCreateInput) (*serviceMutationOutput, error) {

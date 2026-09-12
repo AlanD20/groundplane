@@ -106,7 +106,9 @@ observation worker, request/session matching, explicit cancellation and join,
 and unavailable responses independent of image lookup and Task capacity.
 Controller source selection and freshness are implemented in
 `internal/controller/serviceobservation`: fixed-revision capture, immutable digest
-binding, sealed expectations and a post-read revision recheck. Public observation
-fields, generated API clients, Console/CLI expiry and Environment aggregation
-remain subsequent work. See
+binding, sealed expectations and a post-read revision recheck. Its public reader
+also checks the ready Agent's durable revision and generation before and after
+the read. Existing Service list/show, generated API clients, Console/CLI expiry
+and Environment aggregation are implemented with focused local proof. Deployment,
+full CI and live qualification remain open. See
 [Service status](../features/services-and-releases.md#current-status) for proof.

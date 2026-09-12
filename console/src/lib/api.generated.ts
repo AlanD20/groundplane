@@ -2938,6 +2938,7 @@ export interface components {
             logging?: components["schemas"]["ServiceLogging"];
             mounts?: components["schemas"]["ServiceMount"][] | null;
             name: string;
+            observation?: components["schemas"]["ServiceObservation"];
             on_failure?: string;
             /** Format: int64 */
             replicas?: number;
@@ -3000,6 +3001,7 @@ export interface components {
             mounts?: components["schemas"]["ServiceMount"][] | null;
             name: string;
             native_compose?: string;
+            observation?: components["schemas"]["ServiceObservation"];
             on_failure?: string;
             release_ledger: components["schemas"]["PageReleaseSummary"];
             /** Format: int64 */
@@ -3049,6 +3051,34 @@ export interface components {
             mount: string;
             ro?: boolean;
             volume?: string;
+        };
+        ServiceObservation: {
+            /** Format: int32 */
+            expected_replicas?: number;
+            /** Format: date-time */
+            expires_at?: string;
+            /** Format: date-time */
+            observed_at?: string;
+            replicas?: components["schemas"]["ServiceReplicaCounts"];
+            serving_release_id?: string;
+            /** @enum {string} */
+            state: "unavailable" | "absent" | "failed" | "stopped" | "starting" | "healthy" | "running" | "degraded";
+        };
+        ServiceReplicaCounts: {
+            /** Format: int32 */
+            failed: number;
+            /** Format: int32 */
+            healthy: number;
+            /** Format: int32 */
+            running: number;
+            /** Format: int32 */
+            starting: number;
+            /** Format: int32 */
+            stopped: number;
+            /** Format: int32 */
+            transitional: number;
+            /** Format: int32 */
+            unhealthy: number;
         };
         ServiceResources: {
             /** Format: double */

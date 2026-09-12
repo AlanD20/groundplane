@@ -4,6 +4,14 @@ import type { ScriptInput, ScriptPatch } from './script-types'
 import { entryFromAPI } from './entry-api'
 import { taskTypeFromAPI } from '@/lib/task-read-model'
 import { assertOptionalBackupPolicyKeep } from '@/lib/backup-policy-contract'
+import { applyServiceObservations } from '@/features/service/service-observation'
+import {
+  releaseFromAPI,
+  releaseForServiceName,
+  serviceFromAPI,
+  serviceMutationBody,
+  type ServiceMutationInput,
+} from '@/features/service/api'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { operations } from './api.generated'
 import { watchTransientLogs, type LogTarget, type TransientLogEvent } from './transient-logs'
@@ -693,58 +701,6 @@ async function listAllScripts(environmentId: string, signal?: AbortSignal): Prom
   return scripts
 }
 
-type ServiceMutationInput = Pick<Service, 'name' | 'image' | 'zones' | 'strategy' | 'onFailure' | 'healthcheck' | 'resources' | 'expose' | 'restart' | 'replicas'>
-
-function serviceFromAPI(service: ServiceCreateResponse | ServiceEditResponse | ServiceShowResponse): Service {
-  if (service.runtime_intent !== 'running' && service.runtime_intent !== 'stopped' && service.runtime_intent !== 'absent') throw new Error(`Controller returned unknown Service runtime intent ${service.runtime_intent}`)
-  const strategy = service.strategy || 'recreate'
-  if (strategy !== 'blue-green' && strategy !== 'recreate' && strategy !== 'rolling') throw new Error(`Controller returned unknown Service strategy ${strategy}`)
-  const onFailure = service.on_failure ?? 'switch_back'
-  if (onFailure !== 'switch_back' && onFailure !== 'leave_active') throw new Error(`Controller returned unknown Service failure policy ${onFailure}`)
-  const healthcheck = service.healthcheck
-    ? service.healthcheck.http
-      ? { kind: 'http' as const, target: service.healthcheck.http, interval: service.healthcheck.interval ?? '', timeout: service.healthcheck.timeout ?? '', startPeriod: service.healthcheck.start_period ?? '', retries: service.healthcheck.retries ?? 0 }
-      : service.healthcheck.tcp
-        ? { kind: 'tcp' as const, target: service.healthcheck.tcp, interval: service.healthcheck.interval ?? '', timeout: service.healthcheck.timeout ?? '', startPeriod: service.healthcheck.start_period ?? '', retries: service.healthcheck.retries ?? 0 }
-        : service.healthcheck.pgrep
-          ? { kind: 'pgrep' as const, target: service.healthcheck.pgrep, interval: service.healthcheck.interval ?? '', timeout: service.healthcheck.timeout ?? '', startPeriod: service.healthcheck.start_period ?? '', retries: service.healthcheck.retries ?? 0 }
-          : null
-    : null
-  const restart = service.restart === 'always' || service.restart === 'unless-stopped' ? service.restart : 'no'
-  return {
-    id: service.id, name: service.name, image: service.image, role: service.label ?? '',
-    zones: [...(service.zones ?? [])], strategy, onFailure, healthcheck,
-    resources: { mem: service.resources?.mem ?? '', cpus: String(service.resources?.cpus ?? 0) },
-    command: service.command?.join(' '),
-    mounts: (service.mounts ?? []).map((mount) => mount.volume ? { type: 'volume' as const, volume: mount.volume, mount: mount.mount } : { type: 'file' as const, file: mount.file ?? '', mount: mount.mount, ro: mount.ro ?? false }),
-    envFiles: [], environment: [], aliases: Object.values(service.aliases ?? {}).flatMap((values) => values ?? []),
-    dependsOn: Object.keys(service.depends_on ?? {}), expose: [...(service.expose ?? [])], restart,
-    replicas: service.replicas ?? 1, runtimeIntent: service.runtime_intent,
-    status: 'unknown',
-    adapter: service.adapter, serviceName: service.name, prefix: service.facts_prefix,
-		nativeCompose: 'native_compose' in service ? service.native_compose : undefined,
-		releaseLedger: 'release_ledger' in service
-			? (service.release_ledger.items ?? []).map((release) => releaseForServiceName(release, service.name))
-			: undefined,
-  }
-}
-
-function serviceMutationBody(input: ServiceMutationInput) {
-  const healthcheck = input.healthcheck ? {
-    http: input.healthcheck.kind === 'http' ? input.healthcheck.target : undefined,
-    tcp: input.healthcheck.kind === 'tcp' ? input.healthcheck.target : undefined,
-    pgrep: input.healthcheck.kind === 'pgrep' ? input.healthcheck.target : undefined,
-    interval: input.healthcheck.interval, timeout: input.healthcheck.timeout,
-    start_period: input.healthcheck.startPeriod, retries: input.healthcheck.retries,
-  } : {}
-  return {
-    image: input.image, zones: input.zones, strategy: input.strategy,
-    on_failure: input.onFailure ?? 'switch_back', healthcheck,
-    resources: { mem: input.resources.mem, cpus: Number(input.resources.cpus) },
-    expose: input.expose, restart: input.restart, replicas: input.replicas,
-  }
-}
-
 async function listAllServices(environmentId: string, signal?: AbortSignal): Promise<Service[]> {
   const services: Service[] = []
   let cursor = ''
@@ -756,32 +712,6 @@ async function listAllServices(environmentId: string, signal?: AbortSignal): Pro
     cursor = page.next_cursor ?? ''
   } while (cursor)
   return services
-}
-
-function releaseFromAPI(
-  release: NonNullable<ReleasePageResponse['items']>[number],
-  services: Service[],
-): DeployRecord {
-	return releaseForServiceName(
-		release,
-		services.find((service) => service.id === release.service_id)?.name ?? release.service_id,
-	)
-}
-
-function releaseForServiceName(
-	release: NonNullable<ReleasePageResponse['items']>[number],
-	serviceName: string,
-): DeployRecord {
-  const strategy = release.strategy === 'blue-green' ? 'blue-green' : 'recreate'
-  return {
-    id: release.id,
-		service: serviceName,
-    tag: release.tag,
-    digest: release.digest ?? '',
-    strategy,
-    when: release.completed_at ?? release.created_at,
-    status: release.serving ? 'active' : 'superseded',
-  }
 }
 
 async function listAllReleases(environmentId: string, services: Service[], signal?: AbortSignal): Promise<DeployRecord[]> {
@@ -1455,6 +1385,7 @@ type StoreContext = State & ReturnType<typeof useControllerPlatform> & {
   refreshComponentConfig: (componentId: string, signal?: AbortSignal) => Promise<ManagedConfigFile[]>
   refreshEnvironmentComponents: (environmentId: string, signal?: AbortSignal) => Promise<EnvironmentComponent[]>
   refreshEnvironmentReleases: (environmentId: string, signal?: AbortSignal) => Promise<void>
+  refreshEnvironmentServices: (environmentId: string, signal?: AbortSignal) => Promise<void>
   refreshAgents: (signal?: AbortSignal) => Promise<PlatformInfra['agents']>
   setAgentConfig: (agentId: string, config: AgentConfigRequest) => Promise<AgentConfigResponse>
   joinAgent: () => Promise<AgentTaskAccepted>
@@ -1617,6 +1548,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return next
     })
 	}, [])
+	const refreshEnvironmentServices = useCallback(async (environmentId: string, signal?: AbortSignal) => {
+		const refreshed = await listAllServices(environmentId, signal)
+		if (signal?.aborted) return
+		update((draft) => {
+			applyServiceObservations([...draft.tenantProjects, ...draft.backingProjects], environmentId, refreshed)
+		})
+	}, [update])
 	const persistEnvironmentMutationIntent = useCallback((intent: EnvironmentMutationIntent) => {
 		environmentMutationIntents.current.set(intent.key, intent)
 		persistEnvironmentMutationIntents(environmentMutationIntents.current)
@@ -2587,6 +2525,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     refreshComponentConfig,
       refreshEnvironmentComponents,
       refreshEnvironmentReleases,
+      refreshEnvironmentServices,
       refreshAgents,
       setAgentConfig: async (agentId, config) => {
         const path = `/agents/${encodeURIComponent(agentId)}/config`
@@ -3613,7 +3552,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return result.reconcile_task_id
       },
     }
-	}, [state, controllerPlatform, update, loadTaskJournal, loadBackupPolicy, replaceBackupPolicy, runBackup, rotateBackupKey, exportBackupKey, refreshPlatformComponents, refreshComponentConfig, refreshEnvironmentComponents, refreshEnvironmentReleases, refreshAgents, dispatchResourceRemoval, monitorResourceRemoval, reconcileResourceRemoval, requestResourceRemovalTask, nextEnvironmentGeneration, settleEnvironmentMutation, shouldPreserveEnvironmentOnLoad, getEnvironmentDeletionFailure, refreshEnvironmentDeletion, isEnvironmentDeletionPending, waitForResourceRemoval, retryResourceRemoval, observeEnvironmentDeletionTasks, environmentGenerations, assertEnvironmentMutable])
+	}, [state, controllerPlatform, update, loadTaskJournal, loadBackupPolicy, replaceBackupPolicy, runBackup, rotateBackupKey, exportBackupKey, refreshPlatformComponents, refreshComponentConfig, refreshEnvironmentComponents, refreshEnvironmentReleases, refreshEnvironmentServices, refreshAgents, dispatchResourceRemoval, monitorResourceRemoval, reconcileResourceRemoval, requestResourceRemovalTask, nextEnvironmentGeneration, settleEnvironmentMutation, shouldPreserveEnvironmentOnLoad, getEnvironmentDeletionFailure, refreshEnvironmentDeletion, isEnvironmentDeletionPending, waitForResourceRemoval, retryResourceRemoval, observeEnvironmentDeletionTasks, environmentGenerations, assertEnvironmentMutable])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

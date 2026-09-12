@@ -156,6 +156,42 @@ console. Screenshots were inspected inline. The change was committed but not
 deployed; Service observation remained absent, so Environment health could still
 appear while Service state was unavailable.
 
+## Service observation
+
+The 2026-09-12 integration connects the bounded Agent/channel and Controller
+source modules to existing Service list/show, generated API clients, CLI output
+and Console rendering. Runtime intent and desired replicas remain separate from
+serving expectations. Ready-Agent revision/generation changes invalidate the
+public snapshot. No endpoint, Task, mutation or persisted observation was added.
+
+Go 1.26.7 focused race checks pass for source/public projection, Service reads,
+HTTP list/show and CLI table/JSON/mutation behavior. The app composition compiles;
+focused vet and Staticcheck pass. OpenAPI and both clients were regenerated.
+Node 24.19.0/npm 11.17.0 passes all 30 Console test-file suites and the production
+build. The lockfile audit reports zero vulnerabilities. The old C16 table-row
+test now checks the current Backup feature status: Recovery Point reads have
+implementation evidence, while the overall vertical remains Scaffolded and
+Restore remains unavailable.
+
+An isolated GET-only local fixture checked the production SPA at 390 and
+1280 pixels. The API Service shows desired replicas 9 and serving replicas 2/2;
+a stopped worker keeps runtime degraded while provisioning remains ready. The
+drawer shows the serving Release, observation/expiry times and all seven counts.
+Manual refresh works. Stalling responses for 30 seconds makes prior evidence
+unavailable locally without changing desired fields. List and detail snapshots
+have independent expiry timers. Screenshots were inspected inline because the
+browser provider could not save them to the repository. The inspected layouts
+had no document-level horizontal overflow; the corrected fixture produced no
+Console warnings or errors. The task-owned listener and browser tab were closed.
+
+Evidence and commands are retained under `.tmp/service-source-ak14iK/`, including
+`api-http-tests.log`, `cli-coverage.log`, `cli-boundaries-tests.log`,
+`console-final-tests.log`, `console-final-build.log` and `architecture-final.log`.
+The architecture gate retains 125 existing findings; the new Backing-page size
+finding was corrected by extracting its Service section, without changing the
+baseline. Full CI, live Docker/host observation and deployment were not run.
+This is local integration proof, not Gate A, Gate B or live hosting acceptance.
+
 ## Remaining qualification and authority
 
 - First qualify the standalone storage incident; live mutations are paused.
@@ -163,7 +199,7 @@ appear while Service state was unavailable.
 - Repair the failed desired Caddyfile through normal Configure.
 - Prove direct/public HTTP, WebSocket, internal-callback and deny policy, saved
   preview, primary Zone/IPAM and file-only reload without runtime replacement.
-- Deploy Route summary and finish honest Service/Environment observation.
+- Deploy and qualify Route summary and Service/Environment observation.
 - Run full CI and production qualification.
 
 Do not change host firewall, provider DNS/ingress, PKI authority, protocol or

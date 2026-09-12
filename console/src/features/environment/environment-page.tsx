@@ -62,9 +62,10 @@ import { ActivityIcon } from '@/components/common/activity-icon'
 import { EnvironmentConnectorManager } from '@/features/connectors/environment-connector-manager'
 import { EnvironmentVolumeManager } from '@/features/volume/environment-volume-manager'
 import { ReleaseGroupsPanel } from '@/features/release-group/release-group-surface'
-import { ServiceStateBadges } from '@/features/service/service-runtime-actions'
-import { ServiceDetailsDrawer, DetailRow } from './service-details-drawer'
-import { ServicesList } from './services-list'
+import { environmentRuntimeHint, environmentRuntimeState } from '@/features/service/service-observation'
+import { useVisibleServiceObservations } from '@/features/service/use-service-observation-refresh'
+import { DetailRow } from './service-details-drawer'
+import { ServiceCard, ServicesPanel } from './services-list'
 import { routeSummaryHint } from './route-summary'
 import { ComponentZonePicker } from './component-zone-picker'
 import { CaddyTemplateEditor } from './caddy-template-editor'
@@ -99,6 +100,15 @@ export default function EnvironmentPage() {
       setTab(t as EnvTab)
     }
   }, [])
+  const visibleBackingEnvironments = store.backingProjects.flatMap((backing) => backing.environments?.slice(0, 1) ?? [])
+  const observationRefresh = useVisibleServiceObservations({
+    environmentIds: [...(env ? [env.id] : []), ...visibleBackingEnvironments.map((environment) => environment.id)],
+    observations: [
+      ...(env?.services.map((service) => service.observation) ?? []),
+      ...visibleBackingEnvironments.flatMap((environment) => environment.services.map((service) => service.observation)),
+    ],
+    refreshEnvironment: store.refreshEnvironmentServices,
+  })
   if (!env || !project) {
     if (store.tenantsLoading || store.projectsLoading) {
       return <EmptyState icon={<Layers />} title="Loading environment" />
@@ -120,8 +130,8 @@ export default function EnvironmentPage() {
   }
   const provisioningFailed = env.provisioningState === 'failed'
   const serviceCount = provisioningFailed ? '—' : env.services.length
-  const unhealthy = env.services.filter((s) => s.status === 'degraded' || s.status === 'failed').length
-  const unavailable = env.services.filter((s) => s.status === 'unknown').length
+  const runtimeState = environmentRuntimeState(env.services, observationRefresh.now)
+  const runtimeHint = environmentRuntimeHint(env.services, observationRefresh.now)
   const deletionFailure = store.getEnvironmentDeletionFailure(env.id)
   const deletionInProgress = env.deletionTaskId !== null || store.isEnvironmentDeletionPending(env.id)
   return (
@@ -130,7 +140,8 @@ export default function EnvironmentPage() {
         title={
           <>
             {env.name}
-            <StatusBadge status={env.status} className="ml-2 align-middle" />
+            <StatusBadge status={env.status} label={`Provisioning ${env.provisioningState}`} className="ml-2 align-middle" />
+            <StatusBadge status={runtimeState} label={`Runtime ${runtimeState}`} className="ml-2 align-middle" />
           </>
         }
         description={env.id}
@@ -154,13 +165,18 @@ export default function EnvironmentPage() {
         onRetry={() => deletionFailure?.kind === 'task' ? store.retryTask(deletionFailure.taskId) : store.refreshEnvironmentDeletion(env.id)}
         retryLabel={deletionFailure?.kind === 'task' ? 'Retry deletion' : 'Retry refresh'}
       />
+      {observationRefresh.refreshError && (
+        <p role="alert" className="text-sm text-destructive">
+          Service observation refresh failed; displayed runtime evidence will expire locally. {observationRefresh.refreshError}
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
           icon={<Boxes />}
           label="Services"
           value={serviceCount}
-          hint={provisioningFailed ? 'provisioning failed' : unhealthy ? `${unhealthy} need attention` : unavailable ? `${unavailable} state${unavailable === 1 ? '' : 's'} unavailable` : 'all healthy'}
-          tone={provisioningFailed || unhealthy || unavailable ? 'warning' : 'success'}
+          hint={provisioningFailed ? `provisioning failed · runtime ${runtimeState}` : `runtime ${runtimeState} · ${runtimeHint}`}
+          tone={runtimeState === 'healthy' && !provisioningFailed ? 'success' : runtimeState === 'failed' ? 'danger' : 'warning'}
         />
         <StatCard icon={<Layers />} label="Zones" value={env.zones.length} hint="network zones" />
         <StatCard icon={<Plug />} label="Routes" value={env.routes.length} hint={routeSummaryHint(env.routes)} />
@@ -188,7 +204,13 @@ export default function EnvironmentPage() {
           <AttachesCard env={env} />
         </TabsPanel>
         <TabsPanel value="services" className="mt-6 flex flex-col gap-4">
-          <ServicesPanel env={env} />
+          <ServicesPanel
+            env={env}
+            now={observationRefresh.now}
+            refreshing={observationRefresh.refreshing}
+            onRefresh={observationRefresh.refreshNow}
+            createAction={<ServiceFormDialog env={env} />}
+          />
         </TabsPanel>
         <TabsPanel value="state" className="mt-6 flex flex-col gap-4">
           <BlueprintState env={env} />
@@ -803,111 +825,6 @@ function ZoneColumn({ zone, env }: { zone: Zone; env: Environment }) {
         }}
       />
     </div>
-  )
-}
-
-function ServiceCard({ service, env }: { service: Service; env: Environment }) {
-  const store = useStore()
-  const attached = env.attaches.filter((a) => a.service === service.name)
-  const [open, setOpen] = useState(false)
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        title={`Edit ${service.name}`}
-        className="flex items-start gap-2 rounded-lg border border-border bg-surface px-2 py-1.5 text-left transition-colors hover:border-ring"
-      >
-        <StatusDot status={service.status} className="mt-1.5" />
-        <div className="flex min-w-0 flex-col">
-          <span className="font-mono text-xs font-medium">{service.name}</span>
-          <ServiceStateBadges service={service} compact />
-          <span className="truncate text-[11px] text-muted-foreground">{service.role}</span>
-          <span className="truncate font-mono text-[10px] text-muted-foreground/60">{service.image}</span>
-          <span className="truncate text-[10px] text-muted-foreground/70">
-            zones: {service.zones.join(', ') || 'none'}
-          </span>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {service.resources && (
-              <span className="rounded-full bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] text-primary">
-                {service.resources.mem} · {service.resources.cpus} cpu
-              </span>
-            )}
-            {service.healthcheck && (
-              <span className="rounded-full bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-secondary-foreground">
-                {service.healthcheck.kind === 'http'
-                  ? `hc ${service.healthcheck.target}`
-                  : service.healthcheck.kind === 'tcp'
-                    ? `tcp ${service.healthcheck.target}`
-                    : `pgrep ${service.healthcheck.target}`}
-              </span>
-            )}
-            {service.strategy !== 'recreate' && (
-              <span className="rounded-full bg-warning/10 px-1.5 py-0.5 font-mono text-[10px] text-warning">{service.strategy}</span>
-            )}
-            {service.replicas > 1 && (
-              <span className="rounded-full bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-secondary-foreground">
-                ×{service.replicas}
-              </span>
-            )}
-            {attached.map((a) => {
-              const g = store.getBackingProject(a.projectId)
-              return (
-                <Link
-                  key={a.id}
-                  to={`/platform/backing-services/${a.projectId}`}
-                  className="flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] text-primary transition-colors hover:bg-primary/20"
-                >
-                  <Plug className="size-2.5" />
-                  {g?.environments?.[0]?.services[0]?.serviceName ?? a.projectId}
-                  {a.database !== '—' ? ` · ${a.database}` : ''}
-                </Link>
-              )
-            })}
-          </div>
-        </div>
-      </button>
-		<ServiceDetailsDrawer
-			env={env}
-			service={service}
-			open={open}
-			onOpenChange={setOpen}
-		/>
-    </>
-  )
-}
-
-function ServicesPanel({ env }: { env: Environment }) {
-  const count = env.services.length
-  return (
-    <section aria-labelledby="environment-services-heading" className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 id="environment-services-heading" className="flex items-center gap-2 text-sm font-semibold">
-            <Boxes className="size-4 text-muted-foreground" /> Services
-          </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Inspect each service's desired configuration, runtime state, health, image, and network zones.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="font-mono">
-            {count} {count === 1 ? 'service' : 'services'}
-          </Badge>
-          <ServiceFormDialog env={env} />
-        </div>
-      </div>
-      {count === 0 ? (
-        <EmptyState
-          icon={<Boxes />}
-          title="No services yet"
-          description="Add a service to start building this environment's workload."
-          action={<ServiceFormDialog env={env} />}
-        />
-      ) : (
-        <ServicesList env={env} />
-      )}
-    </section>
   )
 }
 
@@ -3335,7 +3252,10 @@ function RouteFormDialog({ env, open, onOpenChange }: { env: Environment; open: 
 
 function AttachFormDialog({ env, open, onOpenChange }: { env: Environment; open: boolean; onOpenChange: (v: boolean) => void }) {
   const store = useStore()
-  const available = store.backingProjects.filter((g) => g.status !== 'stopped')
+  const available = store.backingProjects.filter((g) => {
+    const service = g.environments?.[0]?.services[0]
+    return service?.runtimeIntent === 'running'
+  })
   const [gid, setGid] = useState(available[0]?.id ?? '')
   const [service, setService] = useState(env.services[0]?.name ?? '')
   const [credentialMode, setCredentialMode] = useState<'new' | 'existing'>('new')
