@@ -23,7 +23,8 @@ func newComponentEnableCmd() *cobra.Command {
 			app := fromContext(cmd)
 			id := target(app, args[0])
 			configChanged := cmd.Flags().Changed("alias") || cmd.Flags().Changed("file") || cmd.Flags().Changed("template-file") ||
-				cmd.Flags().Changed("zone") || cmd.Flags().Changed("create-zone") ||
+				cmd.Flags().Changed("zone") ||
+				cmd.Flags().Changed("create-zone") ||
 				cmd.Flags().Changed("create-internal-zone")
 			if !configChanged {
 				accepted, err := app.Client.EnableComponent(
@@ -47,14 +48,14 @@ func newComponentEnableCmd() *cobra.Command {
 			zoneOperation := cmd.Flags().Changed("zone") || cmd.Flags().Changed("create-zone") ||
 				cmd.Flags().Changed("create-internal-zone")
 			if zoneOperation && component.EnvironmentID == "" {
-				return fmt.Errorf("Zone placement requires an environment-owned Component")
+				return fmt.Errorf("zone placement requires an environment-owned Component")
 			}
 			creations, err := parseComponentZoneCreations(ordinaryZones, internalZones)
 			if err != nil {
 				return err
 			}
 			if len(creations) > 0 && component.Kind != "caddy" && component.Kind != "cloudflare-tunnel" {
-				return fmt.Errorf("Zone creation during enable is valid only for Caddy and Cloudflare Tunnel")
+				return fmt.Errorf("zone creation during enable is valid only for Caddy and Cloudflare Tunnel")
 			}
 			zoneIDs, err := resolveComponentZoneIDs(cmd, component.EnvironmentID, zones)
 			if err != nil {
@@ -121,7 +122,7 @@ func componentEnableConfig(
 	switch component.Kind {
 	case "caddy":
 		if templateFile != "" {
-			return nil, fmt.Errorf("Caddy config accepts --file, --zone, and Zone creation flags only")
+			return nil, fmt.Errorf("config for Caddy accepts --file, --zone, and Zone creation flags only")
 		}
 		caddy := apiTypes.CaddyComponentConfigMutationInput{}
 		if component.Config != nil && component.Config.Caddy != nil {
@@ -150,7 +151,9 @@ func componentEnableConfig(
 	case "cloudflare-tunnel":
 		input := apiTypes.ComponentConfigMutationInput{}
 		if configFile == "" && !component.Enabled {
-			return nil, fmt.Errorf("Cloudflare Tunnel Zone placement requires --file while disabled or unconfigured")
+			return nil, fmt.Errorf(
+				"zone placement for Cloudflare Tunnel requires --file while disabled or unconfigured",
+			)
 		}
 		if configFile != "" {
 			value, err := readValueFile(configFile, cmd.InOrStdin(), 64<<10, "component config")
@@ -166,7 +169,7 @@ func componentEnableConfig(
 			}
 		} else {
 			if component.Config == nil || component.Config.CloudflareTunnel == nil {
-				return nil, fmt.Errorf("Cloudflare Tunnel Zone placement requires --file while disabled or unconfigured")
+				return nil, fmt.Errorf("zone placement for Cloudflare Tunnel requires --file while disabled or unconfigured")
 			}
 			current := component.Config.CloudflareTunnel
 			input.CloudflareTunnel = &apiTypes.CloudflareTunnelComponentConfigMutationInput{
@@ -223,7 +226,7 @@ func componentEnableConfig(
 			TailnetDelegation: &tailnetDelegation,
 		}}, nil
 	default:
-		return nil, fmt.Errorf("Component kind %q does not support inline enable config", component.Kind)
+		return nil, fmt.Errorf("component kind %q does not support inline enable config", component.Kind)
 	}
 }
 

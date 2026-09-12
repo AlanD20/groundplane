@@ -7,7 +7,9 @@
 
 This file records unresolved proof, not a historical implementation journal.
 The [task list](../../tasks/todo.md) owns scheduling; [head.md](../head.md) owns
-operational authority. Live writes remain paused by the storage incident.
+operational authority. The owner authorized fresh QA with disposable data on
+2026-09-12, without restoring incident-affected state. That state's integrity
+remains unresolved; the fresh run does not qualify it.
 
 ## Storage and source retirement
 
@@ -96,18 +98,12 @@ Evidence: `cli-subtree-corrected-loopback.log`, its matching coverage file and
 by sandbox socket permissions; the passing run used isolated loopback servers,
 not a live Controller.
 
-The CLI Staticcheck run found 13 unchanged ST1005 error-capitalization warnings
-in `internal/cli/component.go`, `component_config_file.go` and
-`component_enable.go` (`cli-staticcheck.log`). Owner: CLI maintenance. Acceptance:
-align error text with the Go standard, preserve behavior and pass scoped checks.
-These files are outside the fixture correction; no broad analyzer pass is claimed.
-
-The native recovery scan also retains two SA4006 warnings at lines 95 and 105 of
-unchanged `internal/controller/component_action.go`
-(`.tmp/native-recovery-dlIg4I6U/staticcheck-final.log`). Owner: Controller maintenance.
-Acceptance: remove the unused assignments without changing action behavior and
-pass the scoped analyzer and affected tests. No changed recovery file has a
-Staticcheck finding.
+The subsequent minimum QA preparation corrected the 13 CLI ST1005 findings and
+removed the two overwritten artifact assignments in
+`internal/controller/component_action.go`. CLI/Controller Staticcheck and the
+affected Component/CoreDNS race tests pass, with coverage, in
+`.tmp/qa-fresh-20260912-NRo98B/{analyzer-scoped,component-race}.log`. This closes
+those 15 analyzer findings, not full-CI or live qualification.
 
 The two Agent recreate-probe fixtures were repaired on 2026-09-12. They now use
 sealed plans, explicit native predecessor references and validated assignment

@@ -130,7 +130,7 @@ func newComponentCmd() *cobra.Command {
 				return fmt.Errorf("--alias is valid only for Caddy")
 			}
 			if componentZone && component.EnvironmentID == "" {
-				return fmt.Errorf("Zone placement requires an environment-owned Component")
+				return fmt.Errorf("zone placement requires an environment-owned Component")
 			}
 			zoneIDs, err := resolveComponentZoneIDs(cmd, component.EnvironmentID, zones)
 			if err != nil {
@@ -171,7 +171,7 @@ func newComponentCmd() *cobra.Command {
 			} else if componentFile || componentZone || componentAlias {
 				if component.Kind == "caddy" {
 					if flagConfig {
-						return fmt.Errorf("Caddy config accepts only --file and --zone")
+						return fmt.Errorf("config for Caddy accepts only --file and --zone")
 					}
 					caddy := apiTypes.CaddyComponentConfigMutationInput{}
 					if component.Config != nil && component.Config.Caddy != nil {
@@ -193,15 +193,15 @@ func newComponentCmd() *cobra.Command {
 						caddy.Alias = alias
 					}
 					if len(caddy.ZoneIDs) == 0 {
-						return fmt.Errorf("Caddy config requires --zone when no current Zone is configured")
+						return fmt.Errorf("config for Caddy requires --zone when no current Zone is configured")
 					}
 					body.Caddy = &caddy
 				} else if component.Kind == "cloudflare-tunnel" {
 					if flagConfig {
-						return fmt.Errorf("Cloudflare Tunnel config accepts only --file and --zone")
+						return fmt.Errorf("config for Cloudflare Tunnel accepts only --file and --zone")
 					}
 					if !componentFile && !component.Enabled {
-						return fmt.Errorf("Cloudflare Tunnel Zone placement requires --file while disabled or unconfigured")
+						return fmt.Errorf("zone placement for Cloudflare Tunnel requires --file while disabled or unconfigured")
 					}
 					if componentFile {
 						value, readErr := readValueFile(configFile, cmd.InOrStdin(), 64<<10, "component config")
@@ -218,7 +218,7 @@ func newComponentCmd() *cobra.Command {
 							return currentErr
 						}
 						if current.Config == nil || current.Config.CloudflareTunnel == nil {
-							return fmt.Errorf("Cloudflare Tunnel Zone placement requires --file while disabled or unconfigured")
+							return fmt.Errorf("zone placement for Cloudflare Tunnel requires --file while disabled or unconfigured")
 						}
 						body.CloudflareTunnel = &apiTypes.CloudflareTunnelComponentConfigMutationInput{
 							ZoneIDs: append([]string(nil), current.Config.CloudflareTunnel.ZoneIDs...),

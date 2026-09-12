@@ -92,7 +92,6 @@ func BuildComponentActionExecutionPlan(input ComponentActionPlanInput) (*Executi
 				},
 			},
 		)
-		artifacts = []*agentpb.ComposeArtifact{input.ComposeArtifact}
 	} else {
 		if input.ComposeArtifact == nil || len(input.ComposeArtifact.GetServices()) != 1 {
 			return nil, errs.New(errs.KindInternal, "Component reload observation artifact is invalid")
@@ -102,7 +101,6 @@ func BuildComponentActionExecutionPlan(input ComponentActionPlanInput) (*Executi
 			PrerequisiteStepId: input.StepIDs[0],
 			Payload:            &agentpb.ExecutionStep_ComponentApply{ComponentApply: observation},
 		})
-		artifacts = []*agentpb.ComposeArtifact{input.ComposeArtifact}
 	}
 	artifacts = []*agentpb.ComposeArtifact{input.ComposeArtifact}
 	if input.RollbackComposeArtifact != nil {

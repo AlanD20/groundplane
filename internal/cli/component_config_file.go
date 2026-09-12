@@ -43,7 +43,7 @@ func decodeCloudflareTunnelConfigFile(
 	}
 	if len(file.ZoneIDs) == 0 && !allowMissingZoneIDs {
 		return apiTypes.ComponentConfigMutationInput{}, fmt.Errorf(
-			"Cloudflare Tunnel config requires zone_ids or explicit --zone/--create-zone placement",
+			"config for Cloudflare Tunnel requires zone_ids or explicit --zone/--create-zone placement",
 		)
 	}
 	return apiTypes.ComponentConfigMutationInput{
