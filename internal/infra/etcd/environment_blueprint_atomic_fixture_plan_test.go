@@ -1,9 +1,11 @@
 package etcd
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -14,11 +16,12 @@ import (
 func environmentBlueprintAtomicFixturePlan(
 	t *testing.T,
 	task TaskRecord,
-	environmentID string,
+	projection EnvironmentComposeProjection,
 	manifest ReleaseStagedManifest,
 	procedure *agentpb.CandidateReleaseProcedure,
 ) *agentpb.ExecutionPlan {
 	t.Helper()
+	environmentID := projection.EnvironmentID
 	canonicalYAML := []byte("services: {}\n")
 	yamlDigest := sha256.Sum256(canonicalYAML)
 	artifact := &agentpb.ComposeArtifact{
@@ -31,10 +34,29 @@ func environmentBlueprintAtomicFixturePlan(
 		AuthorizedVolumeDir: "/var/lib/groundplane/vol/" + task.Owner.TenantID + "/" +
 			task.Owner.ProjectID + "/" + environmentID,
 		Services: make([]*agentpb.ComposeService, len(manifest.Members)),
+		Volumes:  make([]*agentpb.ComposeVolume, len(projection.Volumes)),
 	}
+	for index, volume := range projection.Volumes {
+		artifact.Volumes[index] = &agentpb.ComposeVolume{
+			VolumeId: volume.ID, ComposeName: volume.Key, DockerName: "gp_vol_" + strings.ToLower(volume.ID),
+			ExpectedLabels: []*agentpb.LabelPair{
+				{Key: "com.groundplane.environment-id", Value: environmentID},
+				{Key: "com.groundplane.kind", Value: "volume"},
+				{Key: "com.groundplane.managed", Value: "true"},
+			},
+		}
+	}
+	slices.SortFunc(artifact.Volumes, func(left, right *agentpb.ComposeVolume) int {
+		return cmp.Compare(left.VolumeId, right.VolumeId)
+	})
 	steps := make([]*agentpb.ExecutionStep, 0, len(manifest.Members)*3)
 	for index, member := range procedure.GetMembers() {
 		serviceName := fmt.Sprintf("candidate-%02d", index)
+		for _, service := range projection.DesiredServices {
+			if service.Desired.ID == member.GetServiceId() {
+				serviceName = service.Desired.Name
+			}
+		}
 		imageDigest := sha256.Sum256([]byte(member.GetServiceId()))
 		artifact.Services[index] = &agentpb.ComposeService{
 			ServiceId: member.GetServiceId(), ComposeName: serviceName,

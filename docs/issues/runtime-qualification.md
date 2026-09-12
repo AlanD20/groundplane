@@ -41,6 +41,17 @@ Acceptance is the actual current producer, source-retirement and recovery paths,
 then the current full bundle through normal surfaces. Do not replay a stale
 desired revision over a working Environment merely to repeat an old test.
 
+Mixed recovery currently requires an owner decision. The Blueprint contract and
+ADR0064 select restoration from the applied Environment snapshot; the newer native
+predecessor design and Agent admission use each Service's sealed native artifact.
+The mixed-worker fixture omitted those native fields. Forwarding them passes the
+addressable case but exposes conflicting artifact identities in portless recovery
+and hook recovery (`.tmp/blueprint-recovery-ar6iu0wf/mixed.log`). Owner: primary
+integration owner, with the product choice reserved to the user. Acceptance:
+one approved recovery source across contracts, claim, admission and observation;
+the real mixed Worker must prove exact serving restoration and first-candidate
+absence without rewriting historical bytes. This is a blocker, not a waiver.
+
 ## Service health and Route visibility
 
 The old generic ingress hint was corrected locally using existing Route states.
@@ -99,8 +110,13 @@ missing-hash failures; `probes.log` and `recovery-evidence-final.log` pass with
 race checking and coverage. Agent vet and Staticcheck pass (`vet-final.log`,
 `staticcheck-final.log`). This unit fixture treats the Controller-owned authority
 digest as opaque; it does not qualify Controller publication or live recovery.
-Broader Script/Blueprint failures remain open with their recorded acceptance
-evidence and are the next recovery-maintenance slice.
+The prerequisite-gate and hook-terminal fixtures now carry complete staged Release
+authority and the executed resource set. Three retained failure groups are closed;
+the two mixed-recovery groups remain blocked as described above. Focused race tests
+with coverage, including shared atomic-publication shapes, pass in
+`.tmp/blueprint-recovery-ar6iu0wf/gate-terminal-final.log`. Scoped etcd vet and
+Staticcheck pass in `etcd-vet-final.log` and `etcd-staticcheck-final.log` in that
+directory. This fixture-only repair does not qualify full CI or live recovery.
 
 Go 1.27 crashed the pinned analyzer in the recorded run; Go 1.26.7 ran it and
 reported SA4006. That tool crash is not a source finding or a green result.

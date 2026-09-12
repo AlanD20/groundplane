@@ -97,6 +97,12 @@ func publishEnvironmentBlueprintAtomicShape(
 	task := environmentBlueprintTestTask(t, fixture.project.Record, fixture.environment.Record, 6100)
 	projection := environmentBlueprintTestProjection(fixture.environment.Record.ID, task, 1)
 	projection.DesiredZones[0].Desired.Subnet = "10.240.0.0/27"
+	if shape.realHookSources {
+		// The terminal journey must publish the same Service that its Release executes.
+		serviceID := ids.NewAt(ids.KindService, task.CreatedAt, 7600)
+		projection.DesiredServices[0].Desired.ID = serviceID
+		projection.DesiredRoutes[0].Desired.TargetServiceID = serviceID
+	}
 
 	var attachPreparation BlueprintAttachTaskPreparation
 	var candidateAttachIDs []string
@@ -297,6 +303,7 @@ func publishEnvironmentBlueprintAtomicShape(
 			fixture.store,
 			&task,
 			fixture.environment.Record.ID,
+			projection,
 			shape,
 			releaseSourceMembers,
 		)

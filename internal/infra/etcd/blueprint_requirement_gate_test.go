@@ -60,7 +60,7 @@ func TestBlueprintRequirementGateClaimEpochAllowsOnlyExactPrerequisiteAcknowledg
 			}
 
 			blueprintTask, publicationRevision := publishBlueprintRequirementCandidateForAttach(
-				t, store, scope, provisioning, core.RequirementReady,
+				t, store, tasks, scope, provisioning, core.RequirementReady,
 			)
 			if test.unrelatedEpoch {
 				epochValue, encodeErr := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{
@@ -177,7 +177,7 @@ func TestBlueprintRequirementGateNonSuccessPrerequisiteNeverRefreshesEpoch(t *te
 				}
 			}
 			blueprintTask, publicationRevision := publishBlueprintRequirementCandidateForAttach(
-				t, store, scope, prerequisite, core.RequirementExists,
+				t, store, tasks, scope, prerequisite, core.RequirementExists,
 			)
 
 			var terminal Versioned[TaskRecord]
@@ -234,83 +234,6 @@ func attachTaskStepIDForTest(t *testing.T, tasks *TaskRepository, taskID string)
 		t.Fatalf("get Attach Task step = %#v, %v", task, err)
 	}
 	return task.Record.Steps[0].ID
-}
-
-func publishBlueprintRequirementCandidateForAttach(
-	t *testing.T,
-	store blueprintRequirementGateTestStore,
-	scope AttachCreateScope,
-	attach Versioned[AttachRecord],
-	condition core.RequirementCondition,
-) (TaskRecord, int64) {
-	t.Helper()
-	task := environmentBlueprintTestTask(t, scope.Project.Record, scope.Environment.Record, 930)
-	task.RenderGeneration = int32(scope.ComposeProjection.Record.RenderGeneration + 1)
-	publicationID := ids.NewULID()
-	task.Params[TaskReleasePublicationParam] = publicationID
-	requirements := core.BlueprintRequirements{
-		Authored: []core.Requirement{{
-			Target: core.RequirementTarget{
-				Kind: core.RequirementTargetBackingAttach, Name: attach.Record.Name,
-			},
-			Condition: condition,
-			Phases:    []core.RequirementPhase{core.RequirementPhaseDeploy},
-		}},
-		Resolved: []core.ResolvedRequirement{{
-			Target: core.ResolvedRequirementTarget{
-				Kind: core.RequirementTargetBackingAttach, Name: attach.Record.Name,
-				ID: attach.Record.ID, TaskID: attach.Record.TaskID, Revision: attach.Revision,
-			},
-			Condition: condition,
-			Phases:    []core.RequirementPhase{core.RequirementPhaseDeploy},
-		}},
-		ResolutionRevision: attach.ReadRevision,
-	}
-	dag, err := core.BuildBlueprintRequirementDAG(
-		task.ID, requirements, []string{task.Steps[0].ID}, nil,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	gate, err := NewBlueprintRequirementGate(task, requirements.ResolutionRevision, dag)
-	if err != nil {
-		t.Fatal(err)
-	}
-	task.Params[TaskBlueprintRequirementGateSHA256Param] = gate.DAGDigest
-	seedBlueprintRequirementTask(t, store, task)
-	gateValue, err := encodeBlueprintRequirementGate(gate)
-	if err != nil {
-		t.Fatal(err)
-	}
-	markerValue, err := encodeReleaseRecord("release-publication", ReleasePublicationMarker{
-		PublicationID:  publicationID,
-		OperationID:    task.OperationID,
-		ManifestDigest: gate.DAGDigest,
-		PublishedAt:    task.CreatedAt,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	headValue, err := encodeTaskReference(task.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	epochValue, err := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{
-		EnvironmentID: scope.Environment.Record.ID,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	published, err := store.Transact(context.Background(), nil, []Mutation{
-		{Type: MutationPut, Key: releasePublicationKey(publicationID), Value: markerValue},
-		{Type: MutationPut, Key: environmentBlueprintHeadKey(scope.Environment.Record.ID), Value: headValue},
-		{Type: MutationPut, Key: blueprintRequirementGateKey(task.ID), Value: gateValue},
-		{Type: MutationPut, Key: environmentMutationEpochKey(scope.Environment.Record.ID), Value: epochValue},
-	})
-	if err != nil || !published.Succeeded {
-		t.Fatalf("publish Blueprint candidate = %#v, %v", published, err)
-	}
-	return task, published.Revision
 }
 
 func newBlueprintRequirementGateFixture(

@@ -11,6 +11,8 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// Rationale: terminal completion must validate the executed resource set before
+// releasing hook sources, and an interrupted source release must remain retryable.
 func TestBlueprintCompletedHooksReleaseSourceFenceBeforeNextPublication(t *testing.T) {
 	ctx := context.Background()
 	published, err := publishEnvironmentBlueprintAtomicShape(t, environmentBlueprintAtomicShape{

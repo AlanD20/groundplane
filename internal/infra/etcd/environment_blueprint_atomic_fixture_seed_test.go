@@ -394,6 +394,7 @@ func prepareEnvironmentBlueprintReleaseShape(
 	store *memoryHierarchyStore,
 	task *TaskRecord,
 	environmentID string,
+	projection EnvironmentComposeProjection,
 	shape environmentBlueprintAtomicShape,
 	sourceMembers []ScriptSourcePreparationMember,
 ) (BlueprintReleasePublication, string) {
@@ -473,7 +474,7 @@ func prepareEnvironmentBlueprintReleaseShape(
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan := environmentBlueprintAtomicFixturePlan(t, *task, environmentID, manifest, procedure)
+	plan := environmentBlueprintAtomicFixturePlan(t, *task, projection, manifest, procedure)
 	task.PlanHash = hex.EncodeToString(plan.GetPlanHash())
 	descriptor, err := executionplan.DescribeCandidateRelease(plan)
 	if err != nil {
