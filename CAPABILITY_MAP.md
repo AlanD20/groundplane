@@ -22,8 +22,10 @@ exceptions.
 Execution: `tasks/plan.md`, `tasks/todo.md`. Specs are named
 `SPEC-<module-id>.md` and added before the module's first behavior change.
 
-Work directly on main without subagents, new worktrees, review loops or unrelated
-cleanup. Live repair remains limited to disposable QA `10.25.0.2`. Production
+Delivery to main follows [the execution policy](docs/agents.md#execution-policy):
+the primary owns integration and may use bounded Sol/xhigh implementers. The owner
+separately approved instruction alignment on 2026-09-12; other cleanup remains
+outside this initiative. Live repair remains limited to disposable QA `10.25.0.2`. Production
 target selection, production writes, provider DNS/ingress and host networking
 changes require explicit operational approval. Existing IPAM, native Controller
 topology, Component SDK isolation and external image building are retained.

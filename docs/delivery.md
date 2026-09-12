@@ -17,62 +17,13 @@ ci: enforce Go quality gates
 Commits use the repository owner's configured identity. Do not add AI
 co-author trailers or tool attribution.
 
-### Canonical continuous lane pipeline
+### Integration ownership
 
-`docs/agents.md` defines the only lane state machine and role exit conditions:
-`Ready -> Writing -> Stopped -> Frozen -> Reviewing -> Approved -> Landed`,
-with one optional `Correcting -> Delta-verifying -> Approved` path. Every
-independent feature gets one durable repository-local worktree and branch with
-disjoint owned files; independent writers run in parallel. Repository worktrees
-and all repository-managed temporary state use ignored repo-local `.tmp/` or
-`.tmp-*` paths. This includes scratch, build caches, Go temporary/cache paths
-(`GOTMPDIR` and `GOCACHE`), evidence, generated staging, scripts/tests, and
-shell intermediates. Do not use system `/tmp` for repository workflow, and do
-not use shell heredocs when the shell or runtime spills them to `/tmp`.
-External tool-internal sandbox mounts outside repository control are not
-repository paths and cannot be depended on. No writer, reviewer, or correction
-agent edits a shared worktree or updates `main`.
-
-Freeze only after implementation and the named focused proof. Only the
-dedicated integration-owner agent creates one signed direct-child candidate
-from the latest `main`; the head never performs candidate construction. Each
-lane receives one full blocker-only review, with all findings returned in one
-aggregate report. If blockers exist, the original writer receives one bounded
-batch containing all of them; the correction reruns only exact tests covering
-the correction delta. At most one delta-only verification follows, and it does
-not become a new full review. Non-blockers are documented in `docs/issues/` and
-do not hold the lane.
-
-After approval or a passing delta verification, only the dedicated
-integration-owner agent lands the signed direct child with `git merge --ff-only
-<candidate>` after explicit land authorization from the head; the head never
-performs ff-only landing. The integration owner records the evidence, confirms
-the exact tree on `main`, and then removes the durable worktree and branch. The
-head consumes the exact commit/tree/proof/blocker handoffs and decides approval;
-the integration owner does not reinterpret contracts or decide approval. If a
-writer, reviewer, correction, or delta invocation
-reaches its recorded turn, wall-clock, or token budget, it stops. Same `HEAD`
-plus same blocker twice, or two invocations without new authoritative evidence,
-trips the root-owned circuit breaker. Root diagnoses and chooses a bounded fix,
-a smaller lane, or a product-contract question; no replacement or identical
-review loop is spawned. Broad gates remain integration-owner work at active
-MVP-journey closure and final acceptance.
-
-After compaction or restart, the head agent MUST perform the pipeline-restoration
-sequence in `docs/agents.md` before repository work: read `docs/head.md` in full,
-then read only exact authoritative contract sections needed for the current
-decision, query actual agent status, reconcile durable lanes, advance every
-stopped lane without waiting for unrelated work, and refill all eligible
-contract-closed disjoint writer slots. Delegate prompts name their task-scoped
-docs; no agent rereads broad project docs by default. Only running agents are active capacity.
-Review starts per lane only after that lane's writer stops and its candidate is
-frozen; after head approval and explicit land authorization, integration-owner
-landing and head capacity refill happen immediately per approved lane.
-Restoration is not complete until the occupancy target in `docs/agents.md` is
-met. Every frozen candidate receives a reviewer subagent, ordinary writing and
-correction remain delegated, and the head stays on scheduling, contract
-decisions, adjudication, reviewer assignment, and explicit authorization. The
-integration owner performs signed-candidate construction and ff-only landing.
+Follow [the execution policy](agents.md#execution-policy) for primary-owned
+integration, optional bounded delegation, shared-checkout coordination and
+recovery. The primary lands each verified, coherent slice on `main` before
+starting more delegated work. No separate integration agent, mandatory reviewer
+chain or repeated approval cycle is required.
 
 ### Landing blockers and deferred issues
 
@@ -80,51 +31,47 @@ Block a slice only for one of these findings:
 
 - a compile or build failure intrinsic to the code;
 - a violation of an authoritative product or API contract;
+- an applicable repository-standard violation introduced by the slice;
 - a security failure or secret exposure;
 - data loss or corruption;
 - a destructive lifecycle error;
 - a concurrency race;
 - a broken primary operator journey.
 
-Record every other finding in `docs/issues/` and continue the fast-forward
-landing. This includes non-blocking defects, cleanup, ergonomics, architecture
-polish, additional edge cases, and environment-only toolchain gaps covered by
-equivalent evidence. Each issue records its owner, severity, evidence,
-acceptance criteria, and whether the MVP requires it.
+Applicable repository-standard violations caused by the slice must be corrected
+before landing; optional preferences are not standard violations. Record actionable
+out-of-scope findings in `docs/issues/` with owner, evidence and acceptance criteria,
+then continue delivery. Do not expand the slice for speculative polish or reopen
+unchanged passing evidence. Existing debt and deferred qualification stay explicit.
 
 Do not defer a landing blocker through an issue record. A deferred issue does
 not waive any requirement in `mvp.md`.
 
 ## Verification ladder
 
-Testing is continuous delivery evidence, not the last delivery phase. Use the
-smallest proof that can fail for the current change, then expand the proof as
-dependencies become available:
+Select proof for the changed behavior before implementation. Run the smallest
+meaningful check first, then affected package/integration or operator-surface
+checks as the change becomes executable. Documentation-only changes use consistency,
+link and diff checks unless they alter executable behavior or a required gate.
 
-1. Run a focused unit, component, contract, or package test while implementing
-   the behavior.
-2. Run the focused test again on the stopped writer worktree before constructing
-   the signed candidate.
-3. Run the affected integration tests on the signed candidate after the required
-   judgment reviews approve it.
-4. Exercise the real Console, CLI, API, Agent, or host path as soon as the
-   required vertical slice can run.
-5. Run broad architecture and full-repository gates only on the integration
-   candidate that closes an active MVP journey and on the final MVP candidate;
-   run the relevant operator verifier on the final candidate.
+The primary inspects each completed slice and its proof. Reuse passing results
+when the tested inputs and relevant dependencies are unchanged; a commit id change
+alone does not require a rerun. Pause affected writers for consistent integration
+checks. A relevant code change, failing check, dependency change or unresolved
+concrete concern justifies rerunning the affected proof, not an automatic full
+suite or new review round. Follow the execution policy's progress/effort bounds.
 
-Use failures at the earliest rung to drive correction and bounded refactoring.
-Do not postpone an executable claim until final acceptance. Pre-review checks
-guide implementation and candidate construction. After review, rerun only the
-exact proof and affected integration tests named by the candidate or correction
-delta; do not repeat unrelated suites. Only post-review checks on the approved
-candidate count as delivery evidence. Reviews inspect both the implementation
-and the available evidence; they do not infer runtime correctness from source
-inspection alone.
+A bounded slice is implemented when it is coherent, satisfies its applicable
+contracts and standards, passes its required focused checks and is committed on
+`main`. That is not full qualification or deployment. Run broad architecture and
+full-repository gates at active-journey integration and final release acceptance;
+exercise the relevant real operator paths as soon as safe resources are available.
+Record the exact unavailable-resource or pre-existing blocker and deferred proof.
+A known safety or correctness failure still blocks dependent work.
 
 ## Required gates
 
-Run from the repository root unless a command says otherwise:
+For integrated-journey and release qualification, run from the repository root:
 
 ```sh
 make ci

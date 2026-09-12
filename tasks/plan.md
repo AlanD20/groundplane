@@ -29,7 +29,8 @@ Console/API reconnect is acceptable; routine SSH recovery is not.
 - Keep external image building and intentional Identity isolation proxies.
   No generic Jobs, PKI automation or architecture-cleanup campaign.
 - Relevant contracts, Console, CLI, API and regenerated clients move together.
-- Work directly on main, in small verified commits; preserve unrelated work.
+- Deliver small verified commits to main under `docs/agents.md`'s execution policy.
+  The primary owns integration; bounded delegation is optional. Preserve unrelated work.
 - Autonomous remote work is only on disposable QA `10.25.0.2`. Production,
   upstream RPi, BIP, provider ingress and host firewall changes are not implied.
 

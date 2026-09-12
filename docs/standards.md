@@ -281,9 +281,11 @@ make console-release-smoke
 make agent-image-smoke
 ```
 
-A task is not complete until the complete gate passes locally — same as the
-CI pipeline. The generated contracts (proto Go, OpenAPI clients) are
-checked in and must be regenerated, never hand-edited.
+Integrated-journey and release qualification require this complete local gate,
+matching CI. Bounded changes follow the scoped proof and completion definitions in
+`delivery.md`; an implementation commit alone is not qualification. Generated
+contracts (proto Go, OpenAPI clients) are regenerated when their sources change,
+never hand-edited.
 
 ## 15. Verification checklist (before declaring code complete)
 

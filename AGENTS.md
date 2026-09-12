@@ -26,8 +26,8 @@ Console (`console/`), and the Go implementation scaffold.
 - **docs/standards.md** — the enforceable Go rules (import matrix, one
   error type, the subprocess Runner, banned patterns, CI gate). Reach
   for it when writing Go code.
-- **docs/agents.md** — the repository workflow, source-of-truth map, and
-  multi-agent delegation policy. Reach for it before changing multiple layers,
+- **docs/agents.md** — primary-owned delivery, bounded delegation, task-context
+  requirements and the source-of-truth map. Reach for it before changing multiple layers,
   moving a contract, or delegating repository work to subagents.
 - **docs/delivery.md** — the delivery and commit contract. Reach for it
   before committing, opening a PR, or declaring a change complete.
@@ -47,12 +47,21 @@ Console (`console/`), and the Go implementation scaffold.
 After context compaction, a session restart, or head-agent replacement, every
 agent MUST read `docs/head.md` in full. The head then reads only the exact
 authoritative contract sections needed for the current decision. A delegate
-reads only the task-scoped docs named in its prompt and does not reread broad
-project docs by default. The integration owner MUST update `docs/head.md` in
+starts with the task-scoped docs named in its prompt and retrieves additional
+relevant sources when needed; it does not reread broad project docs by default.
+The primary agent MUST update `docs/head.md` in
 the same landing commit whenever `main`, active lanes, blockers, or next
 actions change. `docs/head.md` is an operational checkpoint only; the named
 authoritative contracts remain the source of truth. `docs/status.md` is
 task-scoped implementation evidence, never a default recovery handoff.
+
+## Execution
+
+Follow `docs/agents.md`'s execution policy. The primary owns verified delivery
+to `main`; delegation is optional and bounded. Current user task instructions
+override workflow defaults and skill guidelines, subject to higher-priority
+instructions and permission boundaries. Use sufficient task context, not arbitrary
+context cuts; apply the policy's progress limits to primary and delegated work.
 
 ## The Console store is the API contract
 
