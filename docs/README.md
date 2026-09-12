@@ -104,7 +104,7 @@ link to details not yet moved; moving a requirement requires updating its old
 home and readers in the same slice, not creating competing copies.
 
 The four production-initiative specs are now listed under Features above.
-Remaining work includes reconciling the historical `status.md` and duplicated
-progress ledgers, reviewing superseded ADRs, and
+The historical status ledger has been retired; capabilities and tasks now list
+current gaps rather than completed increments. Remaining work includes reviewing superseded ADRs and
 consolidating acceptance reports whose evidence is still needed. Their presence
 is not proof that their old next actions or runtime observations are current.

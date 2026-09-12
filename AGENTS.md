@@ -34,11 +34,8 @@ Console (`console/`), and the Go Controller, Agent and CLI.
   moving a contract, or delegating repository work to subagents.
 - **docs/delivery.md** — the delivery and commit contract. Reach for it
   before committing, opening a PR, or declaring a change complete.
-- **docs/capabilities.md** — the implementation ledger and vertical delivery
-  order. Reach for it before selecting or declaring an MVP slice complete.
-- **docs/status.md** — the detailed implementation ledger. Consult it only
-  when a task-scoped decision needs its evidence; it is not a default
-  compaction read.
+- **docs/capabilities.md** — the current implementation and qualification gaps.
+  Reach for it before selecting or declaring an MVP slice complete.
 - **docs/head.md** — the compact operational head checkpoint for live lanes,
   blockers, next actions, and integration handoffs. It is not product
   authority.
@@ -55,8 +52,8 @@ relevant sources when needed; it does not reread broad project docs by default.
 The primary agent MUST update `docs/head.md` in
 the same landing commit whenever `main`, active lanes, blockers, or next
 actions change. `docs/head.md` is an operational checkpoint only; the named
-authoritative contracts remain the source of truth. `docs/status.md` is
-task-scoped implementation evidence, never a default recovery handoff.
+authoritative contracts remain the source of truth. Read dated acceptance
+evidence only when it is relevant to the current task.
 
 ## Execution
 
