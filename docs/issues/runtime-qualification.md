@@ -113,6 +113,9 @@ Its regression tests pass. The full tagged race run exposed four stale fixtures
 and a terminal-event replay defect; focused corrections pass, including rejection
 of changed replay identities and payloads. Exact evidence is in
 `.tmp/qa-fresh-20260912-NRo98B/`.
+The final full affected etcd, etcd/releasegroup and Controller Agent-channel
+packages pass race tests with coverage in `persistence-full.log`. This closes
+the retained package failures, not full CI or live workload qualification.
 
 Privileged Backup staging qualification is unavailable locally because sudo needs
 a password. The approval review rejected the proposed QA-host mount test; it was
