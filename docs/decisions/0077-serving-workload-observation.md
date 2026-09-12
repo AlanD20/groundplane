@@ -104,6 +104,9 @@ cancellation, per-Service failures and the actual Docker client/protobuf seam.
 Agent/channel wiring and composition are implemented with focused proof: one
 observation worker, request/session matching, explicit cancellation and join,
 and unavailable responses independent of image lookup and Task capacity.
-Controller serving-authority selection, public observation fields, generated API
-clients, Console/CLI expiry and Environment aggregation remain subsequent work. See
+Controller source selection and freshness are implemented in
+`internal/controller/serviceobservation`: fixed-revision capture, immutable digest
+binding, sealed expectations and a post-read revision recheck. Public observation
+fields, generated API clients, Console/CLI expiry and Environment aggregation
+remain subsequent work. See
 [Service status](../features/services-and-releases.md#current-status) for proof.

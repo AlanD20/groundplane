@@ -625,7 +625,7 @@ func (repository *BackupRuntimeRepository) manualBackupVolumeConsumers(
 				)
 			}
 			result = append(result, BackupVolumeServiceSnapshot{
-				ServiceID: service.Record.Desired.ID, ServiceRevision: serviceRuntimeRevision(service),
+				ServiceID: service.Record.Desired.ID, ServiceRevision: ServiceRuntimeRevision(service),
 				ComposeKey: composeKey, MountPaths: mountPaths,
 				PriorIntent: BackupServiceRuntimeIntent(service.Record.Runtime.RuntimeIntent),
 			})

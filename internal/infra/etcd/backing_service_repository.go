@@ -166,7 +166,7 @@ func (repository *BackingServiceRepository) composeBackingService(
 			project.Revision,
 			environmentValue.ModRevision,
 			service.Revision,
-			serviceRuntimeRevision(service),
+			ServiceRuntimeRevision(service),
 		),
 		ReadRevision: project.ReadRevision,
 	}, nil

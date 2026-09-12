@@ -67,6 +67,17 @@ and sealed-hash fixtures in `TestObservedRecreateProbeAcceptsSealedBlueGreenPrio
 and `TestObservedRecreateProbeUsesEachSealedArtifact`. Keep hash validation and
 repair fixtures at their owning seam; do not bypass assertions.
 
+The 2026-09-12 Service source checks retain the three copy-lock warnings in
+`internal/infra/etcd/script_source_reference_codec.go` at lines 153, 218 and 237.
+Scoped etcd Staticcheck also reports unchanged SA4006 in
+`blueprint_release_terminal_test.go:231` and `route_snapshot_test.go:25`, and
+S1016 in `environment_blueprint.go:372` and
+`environment_compose_projection.go:558`. Evidence is in
+`.tmp/service-source-ak14iK/`; these are not failures introduced by the Service
+observation module. The storage and Script maintenance owners should correct
+the value-copy and unused-value sites and evaluate the explicit conversion
+findings, then pass the affected analyzer and tests without changing behavior.
+
 Go 1.27 crashed the pinned analyzer in the recorded run; Go 1.26.7 ran it and
 reported SA4006. That tool crash is not a source finding or a green result.
 Exact current tasks and evidence are in [tasks/todo.md](../../tasks/todo.md).

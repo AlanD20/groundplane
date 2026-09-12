@@ -136,8 +136,17 @@ round trip; they do not contact Docker or prove live workload visibility.
 
 Agent/channel worker and session handling are integrated on `main` with focused
 race and transport proof. The owner approved the eight composition-only wiring
-lines; [head.md](../head.md) records the resolved decision and remaining gates. Controller
-source/freshness checks, public API projection, generated clients, Console/CLI
-rendering and expiry, and Environment aggregation remain unimplemented. No new operator surface is
+lines; [head.md](../head.md) records the resolved decision and remaining gates.
+
+`internal/controller/serviceobservation` selects the serving Release and immutable
+render input at one storage revision, verifies their digest and workload identity,
+and uses the sealed replica count. Portless, proxied singleton and blue/green
+workloads retain their exact rendered names. After the bounded Agent read, it
+rechecks serving, render, intent and runtime-sidecar revisions at one newer view.
+Changed or expired evidence becomes unavailable without failing desired reads.
+The Controller clock supplies the 15-second window; no observation is persisted.
+
+Public API projection, generated clients, Console/CLI rendering and expiry, and
+Environment aggregation remain unimplemented. No new operator surface is
 available or deployed. [Kobwnewe hosting](kobwnewe-hosting.md) retains the live
 qualification requirements; [head.md](../head.md) routes local proof and next work.

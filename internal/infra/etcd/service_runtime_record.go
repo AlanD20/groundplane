@@ -76,6 +76,6 @@ func serviceRuntimeCondition(service Versioned[ServiceRecord]) Condition {
 	return Condition{Key: serviceRuntimeKey(service.Record.Desired.ID), ModRevision: service.Record.runtimeRevision}
 }
 
-func serviceRuntimeRevision(service Versioned[ServiceRecord]) int64 {
+func ServiceRuntimeRevision(service Versioned[ServiceRecord]) int64 {
 	return service.Record.runtimeRevision
 }

@@ -44,7 +44,7 @@ func NewServiceRemovalIntent(
 	intent := ServiceRemovalIntent{
 		TaskID: taskID, EnvironmentID: service.Record.EnvironmentID,
 		ServiceID: service.Record.Desired.ID, ServiceName: service.Record.Desired.Name,
-		ServiceRevision: service.Revision, RuntimeRevision: serviceRuntimeRevision(service),
+		ServiceRevision: service.Revision, RuntimeRevision: ServiceRuntimeRevision(service),
 		CurrentProjectionRevision: projection.Revision,
 		ExpectedHeadRevision:      expectedHeadRevision, Claim: claim,
 		CurrentProjection:   cloneEnvironmentComposeProjection(projection.Record),
