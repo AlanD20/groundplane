@@ -113,6 +113,16 @@ qualification still required, and deployment status separately. A genuine blocke
 keeps its affected slice pending, not unrelated verified work. Preserve unrelated
 and unfinished changes; no blanket staging or cleanup.
 
+### User decisions
+
+When progress requires user input, the primary asks a concise question stating
+the decision, relevant facts and a recommendation or tradeoff. This includes
+unresolved requirements or preferences, material scope choices and new authority.
+Resolve factual questions from available sources first; delegates escalate user
+decisions to the primary. Pause dependent work until the user answers, preserve
+pending changes, and continue only independent, already-authorized work. Silence
+is not approval; token limits do not justify guessing a required user decision.
+
 ### Optional parallel implementation
 
 Use delegation only when a bounded independent task will save total effort or
@@ -179,7 +189,7 @@ These limits apply to the primary too. Additional effort is justified only by a
 named requirement or critical correctness, security, data-integrity, concurrency
 or operator-journey blocker and a concrete next hypothesis. State why the extra
 work is necessary and set a new bound; it is not an automatic budget reset.
-Ask the user when more authority or a material scope decision is needed.
+Use the user-decision rule above when further work requires their input.
 
 Enforce the applicable repository standards; cost control does not waive them.
 Separate actual violations from optional polish or speculative edge cases.
