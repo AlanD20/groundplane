@@ -3,6 +3,20 @@
 - Status: Accepted
 - Date: 2026-08-25
 
+## Current authority limit
+
+The generic Tenant, ordinary Project and Environment deletion engine remains
+accepted. The backing-specific clauses below are not authority to make the
+current Backing Service Destroy action permanently delete data. They conflict
+with the higher-authority [MVP](../mvp.md), [API](../api-cli.md), and current
+[Backing Service lifecycle](../features/backing-services.md#creation-and-lifecycle):
+Destroy is runtime-only and there is no Backing Service DELETE endpoint.
+
+An owner decision and synchronized product/API change are required before
+implementing permanent backing deletion. Its dependency ordering, receipts and
+cleanup safeguards remain here for that decision; no new destructive operation
+is authorized by this documentation migration.
+
 Owner approval recorded 2026-08-25 resolves the deletion choices: failed
 aggregate deletion retains its tombstone, Project Secrets and Tenant/Project
 Runners are contained descendants, hierarchy projections expose
@@ -15,9 +29,9 @@ change another ADR's status, or authorize enterprise scope.
 
 ## Context
 
-The MVP exposes permanent deletion for a Tenant, an ordinary Project, and a
-Backing Service facade, but it does not yet have one complete durable contract
-for those operations.
+This decision began with permanent Tenant, ordinary Project and backing-facade
+deletion, then added Environment deletion. Its backing-surface assumption now
+conflicts with the current product contract, as scoped above.
 
 ADR 0013 proposes atomic Task and tombstone publication, visible-until-finalized
 resources, stable-id postorder traversal, mutation fences, bounded etcd
@@ -31,31 +45,24 @@ Existing resource contracts provide narrower precedents. Environment deletion
 retains immutable intent, cleanup state, and ownership across failed attempts.
 Runner removal deletes only Groundplane's local runtime and claims and never
 deregisters the Runner at GitHub. Attach and Zone removal define typed
-deprovisioning and owned-versus-external Network behavior. ADR 0037 proposes a
-detailed Backing Service deletion protocol and parent-owned terminal receipts,
-but it is Backing-Service-specific, uses a C10 keyspace, and maps compacted
-impact cursors differently from ADR 0013. ADR 0049 proposes the bounded Volume
-removal authority needed by a backing cascade.
+deprovisioning and owned-versus-external Network behavior. Earlier backing
+deletion notes used a feature-specific keyspace and cursor mapping; this
+decision consolidated their mechanics. Accepted ADR 0049 owns bounded Volume
+removal authority.
 
-The current Console fixture actions are not authority for durable deletion.
-They use runtime-only `destroy`, remove fixtures immediately, and manufacture
-Activity. The public Task type for permanent deletion is `remove`; `destroy`
+Console fixture actions are not authority for durable deletion.
+The public Task type for permanent deletion is `remove`; `destroy`
 continues to mean runtime absence without durable data removal.
 
-The current API inventory also permits both generic Project DELETE and the
-Backing Service facade DELETE to address a backing Project. One operator
-capability cannot have two REST paths under the 1:1 rule.
-
-This proposal defines one MVP deletion coordinator for exactly these three
-aggregate operations. It does not grant authority to Proposed ADR 0013 or ADR
-0049. Acceptance requires accepting their needed persistence and Volume
-contracts, or replacing them with accepted contracts that provide the same
-observable guarantees.
+Generic Project DELETE cannot address a backing Project. Any future backing
+permanent-delete surface must preserve the 1:1 rule and the current authority
+limit above. This decision does not accept the whole of Proposed ADR 0013;
+resource-specific persistence choices still require their named approval.
 
 ## Scoped authority and supersession
 
-This table is exhaustive for overlapping deletion authority. If this ADR is
-Accepted, no second exact authority remains active for the listed scope.
+This table scopes overlapping deletion mechanics, subject to the backing
+authority limit above. It does not grant a conflicting public operation.
 
 | Existing decision | Scope after ADR 0053 acceptance | ADR 0053 authority |
 | --- | --- | --- |
@@ -85,10 +92,11 @@ The three public hierarchy deletion operations are:
 | Tenant | `tenant.delete` | `executor=controller`, `type=remove` | owning Tenant | stable Tenant id |
 | Environment | `environment.delete` | `executor=controller`, `type=remove` | owning Tenant or Platform | stable Environment id |
 
-The separately owned Backing Service lifecycle exposes
-`backing-service.destroy`. Its implementation reuses this engine with the
-private `backing.delete` operation and a Platform-owned `remove` Task; this ADR
-does not create a second public hierarchy DELETE route for it.
+The earlier backing design assigned `backing-service.destroy` to a private
+`backing.delete` operation and Platform-owned `remove` Task. That assignment
+is blocked by the current runtime-only Destroy contract. The backing-specific
+schemas and surface examples below describe that unresolved design, not the
+current lifecycle implementation or a second public hierarchy DELETE route.
 
 No `delete` Task type is added. The exact private operation kinds are
 `project.delete`, `tenant.delete`, and `backing.delete`. A private operation id

@@ -108,9 +108,9 @@ Attach as the public reference. Dependents provision nothing and store no
 duplicate encrypted values.
 
 These backing facts are Attach-owned data, not Secret-store resources. The
-Secret store separately owns platform credentials such as runner, tunnel, and
-connector tokens; direct credential input creates a Secret resource and the
-consumer persists its reference.
+Secret store separately owns reusable Project and Platform credentials.
+Connector credentials follow ADR 0045: they either retain a reusable Secret
+key reference or store a direct value as encrypted Connector-subordinate state.
 
 Manual-adapter Attaches remain network-only. They own themselves but have no
 facts, grants, provisioning steps, or managed database Backup source.

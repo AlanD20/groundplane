@@ -228,7 +228,7 @@ Controller-owned UID/cgroup egress rules deny Environment, backing, platform,
 and other Runner pools except the authenticated Controller endpoint while
 retaining DNS and outbound internet. Registration and removal are replayable
 Controller Tasks that own the daemon, Runner container, network, and local
-state as one lifecycle boundary. ADR 0057 remains the Controller lifecycle
+state as one lifecycle boundary. [Runner contract](features/runners.md) remains the Controller lifecycle
 authority; the pool correction does not move that ownership.
 
 ## Module, executor, and type architecture (locked: ADR 0056)
@@ -436,95 +436,26 @@ durable reconciliation source. The same revision retains the canonical
 submitted bundle stream for audit and reparse. Canonical Compose and
 materializations stay in the ephemeral render-plan category below.
 
-ADR 0051 defines one clean-start desired-state authority. The Controller first
-validates the complete bundle and derives a lossless normalized projection.
-The encoded projection, including its schema and framing, must fit exactly
-2 MiB. Rejection happens before durable staging or Task publication.
+One immutable normalized desired revision is the reconciliation authority.
+[Blueprint publication](features/blueprints.md) routes the current authoring,
+candidate and terminal contracts. The
+[staging contract](decisions/0051-blueprint-staged-revision-publication.md) owns
+the exact binary records, chunk sizes, encoded bounds and cleanup state machine;
+do not copy those formulas into another architecture section.
 
-Validated audit and projection streams are staged privately in immutable
-60-KiB chunks. All revision records use `GDR1`: a strict 44-byte envelope with
-magic, kind, codec version, flags, payload length, and raw SHA-256 payload
-digest. A chunk payload adds its family, zero-based sequence, logical offset,
-logical length, raw chunk digest, data length, and bytes. Dynamic key segments
-use `~` plus unpadded base64url of the raw segment bytes.
+Validate the complete lossless projection before staging. Privately staged
+immutable chunks are inert until one bounded, sealed publication advances the
+Environment head with its Task and replay authority. Publication never copies
+bulk chunks. Ordinary transactions retain their separate 96-operation limit;
+the closed Blueprint publisher and terminal envelope have their explicitly
+defined budgets, not a caller-selected bypass.
 
-The audit stream is at most 1,049,100 bytes and 18 chunks. The projection is at
-most 2 MiB and 35 chunks, so one revision has at most 53 chunks. A staging
-transaction writes at most 12 chunks, uses at most 26 operations, and measures
-at most 797,580 encoded bytes. Sealing reads every chunk at one fixed MVCC
-revision and creates a compact integrity root. The seal uses at most 57
-operations and 132,800 encoded bytes.
-
-Final Environment Blueprint publication compares the sealed root, descriptor,
-current Environment head, dependency evidence, hierarchy, operation, Task, and
-idempotency fences through ADR 0051's dedicated executor. Its comparison,
-success, and failure arms each allow at most the configured etcd maximum of 256
-operations, and its actual protobuf-encoded request allows at most 1 MiB. The
-derived 512 selected-arm and 768 full logical counts are diagnostics only, not
-rejection limits. Ordinary non-Blueprint `Store.Transact` retains its
-96-selected-operation protection. Staging, sealing, and other
-non-final-publication limits are unchanged. Publication changes the Environment
-desired head, creates the Task and replay records, removes the private locator,
-and marks the descriptor published. It never copies file or projection chunks.
-There is no singleton current projection or flat desired-resource mutation path.
-
-Every desired Add, Edit, Remove, and Blueprint Apply derives and publishes a
-complete new revision through this seam. Tasks pin the final desired schema,
-Environment id, revision id, sealed-root digest, projection digest, and render
-generation. A worker reads only its pinned revision, while current-head claim
-fences prevent stale execution. Private staging expires after five minutes
-without progress, becomes abandoned only when no public marker exists, and is
-deleted in bounded batches of at most 32 records and 143,616 encoded bytes.
-Published chunks belong to revision retention, not staging cleanup. Startup
-accepts one final `desired_schema` marker and fails closed on legacy or mixed
-desired authority. The MVP has no compatibility reader or in-place migration.
-
-ADR 0051 makes an immutable normalized revision the durable reconciliation
-source. The same revision retains the canonical submitted bundle stream for
-audit and reparse. Canonical Compose and materializations remain ephemeral.
-
-The Controller validates the complete bundle and derives a lossless normalized
-projection before staging. The encoded projection, including its schema and
-framing, must fit exactly 2 MiB. Rejection happens before durable staging or
-Task publication.
-
-Validated audit and projection streams are staged privately in immutable
-60-KiB chunks. All revision records use `GDR1`: a strict 44-byte envelope with
-magic, kind, codec version, flags, payload length, and raw SHA-256 payload
-digest. A chunk payload adds its family, zero-based sequence, logical offset,
-logical length, raw chunk digest, data length, and bytes. Dynamic key segments
-use `~` plus unpadded base64url of the raw segment bytes.
-
-The audit stream is at most 1,049,100 bytes and 18 chunks. The projection is at
-most 2 MiB and 35 chunks, so one revision has at most 53 chunks. A staging
-transaction writes at most 12 chunks, uses at most 26 operations, and measures
-at most 797,580 encoded bytes. Sealing reads every chunk at one fixed MVCC
-revision and creates a compact integrity root. The seal uses at most 57
-operations and 132,800 encoded bytes.
-
-Final Environment Blueprint publication compares the sealed root, descriptor,
-current Environment head, dependency evidence, hierarchy, operation, Task, and
-idempotency fences through ADR 0051's dedicated executor. Its comparison,
-success, and failure arms each allow at most the configured etcd maximum of 256
-operations, and its actual protobuf-encoded request allows at most 1 MiB. The
-derived 512 selected-arm and 768 full logical counts are diagnostics only, not
-rejection limits. Ordinary non-Blueprint `Store.Transact` retains its
-96-selected-operation protection. Staging, sealing, and other
-non-final-publication limits are unchanged. Publication changes the Environment
-desired head, creates the Task and replay records, removes the private locator,
-and marks the descriptor published. It never copies file or projection chunks.
-There is no singleton current projection or flat desired-resource mutation path.
-
-Every desired Add, Edit, Remove, and Blueprint Apply derives and publishes a
-complete new revision through this seam. Tasks pin the final desired schema,
-Environment id, revision id, sealed-root digest, projection digest, and render
-generation. A worker reads only its pinned revision, while current-head claim
-fences prevent stale execution. Private staging expires after five minutes
-without progress, becomes abandoned only when no public marker exists, and is
-deleted in bounded batches of at most 32 records and 143,616 encoded bytes.
-Published chunks belong to revision retention, not staging cleanup. Startup
-accepts one final `desired_schema` marker and fails closed on legacy or mixed
-desired authority. The MVP has no compatibility reader or in-place migration.
+Every direct desired mutation and Blueprint Apply uses that same revision seam.
+Workers resolve their pinned revision; current-head and source fences reject
+stale execution. Staging cleanup cannot delete published data. The clean-start
+MVP has one desired schema, no flat writable overlay, legacy reader or mixed
+authority. Audit inputs explain the action but are not reparsed to decide runtime
+execution.
 
 The initial extension families include:
 

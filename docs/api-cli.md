@@ -211,6 +211,7 @@ Command tree:
     ├── secret           list | add | show | remove              (scope = project)
     ├── connector        list | add | show | remove              (scope = environment)
     ├── runner           list | add | show | retry | remove      (scope = tenant|project)
+    │                    edit <slug|--id id> --slug <new-slug>
     │                    add --registration-token-file <path|->
     │                    retry <id> --registration-token-file <path|->
     ├── agent            list | show | join | config show | config set

@@ -49,7 +49,7 @@ before reconcile.
 
 Runner networking uses a dedicated `runner.network_pool`, disjoint from both
 `environment_pool` and `system_pool`, provisioned at `/24`, `/25`, or `/26` and
-subdivided into per-Runner `/29`s. ADR 0057 remains the Controller executor
+subdivided into per-Runner `/29`s. [Runner contract](../features/runners.md) remains the Controller executor
 authority and its broader Runner lifecycle contract is retained; this does not
 claim Runner implementation. Under the explicit assumption that an existing
 external build process supplies host-local workload images, GP-managed Runner

@@ -28,12 +28,17 @@ implementation nor an old test result changes a requirement.
 | Feature | Document |
 | --- | --- |
 | Host health, bootstrap, Controller and Agent settings | [Platform runtime](features/platform.md) |
+| Resource ownership, names and aggregate deletion | [Hierarchy](features/hierarchy.md) |
+| Operator surfaces and production SPA delivery | [Console and API](features/console-and-api.md) |
 | Managed Components, DNS, Routes and Zone membership | [Components and routing](features/components.md) |
 | Durable work, Activity, cancellation and transient output | [Tasks and logs](features/tasks-and-logs.md) |
 | Persistent storage and exposed configuration values | [Volumes and Entries](features/storage-and-entries.md) |
 | Revisioned desired-state editing and reconciliation | [Blueprints](features/blueprints.md) |
 | Workload lifecycle, Deploy, Rollback and recovery | [Services and Releases](features/services-and-releases.md) |
 | Policy, artifacts, source recovery and retention | [Backups](features/backups.md) |
+| Shared PostgreSQL/Valkey instances and consumer credentials | [Backing services and Attaches](features/backing-services.md) |
+| Reusable values and S3 credential configuration | [Secrets and Connectors](features/secrets-and-connectors.md) |
+| Isolated GitHub Actions execution | [Runners](features/runners.md) |
 | Controller and Agent updates | [Safe updates](features/upgrade-safety.md) |
 | Complete operator-authored Caddyfile | [Router templates](features/router-template.md) |
 | Ordered setup hooks with explicit resources | [Script execution](features/setup-scripts.md) |

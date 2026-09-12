@@ -3,7 +3,7 @@
 - Status: Accepted
 - Accepted: 2026-08-28
 - Owners: Controller, Console, CLI, and Agent
-- Related: ADR 0021, ADR 0022, ADR 0025, ADR 0028, ADR 0031, ADR 0049, ADR 0051, ADR 0054
+- Related: ADR 0021, ADR 0022, ADR 0025, ADR 0028, ADR 0031, ADR 0049, ADR 0051, ADR 0053, ADR 0068
 
 ## Context
 
@@ -147,9 +147,11 @@ credentials, Attach history, or data. Recreate uses Start. Lifecycle Tasks use
 the existing Service lifecycle deadlines, retry, terminalization, and
 idempotency rules.
 
-There is no Backing-service delete endpoint in the MVP. Permanent hierarchy
-removal uses the shared Project deletion contract only after its existing
-dependency and impact rules permit it.
+There is no Backing-service delete endpoint in the current MVP/API contract.
+Permanent hierarchy removal is not authorized by this lifecycle decision.
+ADR 0053 also assigns `backing-service.destroy` a permanent aggregate-deletion
+meaning, which conflicts with this runtime-only Destroy surface and requires an
+owner decision before implementation. No second route is implied here.
 
 ### 6. Public parity
 

@@ -1,53 +1,24 @@
-# ADR 0050: Runner identity and runtime contract
+# Runner runtime, ownership, and recovery contract
 
-## Status
-
-Accepted retained product, allocation, and isolation design. ADR 0057
-supersedes the executor and lifecycle placement; ADR 0060 supersedes the
-single-platform release clauses. Implementation remains subsequent to the
-hosting floor under ADR 0065's external-builder assumption.
+This task-routed reference is normative for the exact local-runtime contract
+behind [Runners](../runners.md). It preserves the long invariants that are not
+usefully repeated in the feature entrypoint: durable runtime identity,
+write-before-mutation recovery, release inputs, DNS, host-control, isolation,
+and ownership-proved cleanup.
 
 The native Controller Task executor is the sole owner of Runner create, retry,
 remove, inspection, journal, helper, and host effects. The persistent Agent has
 no Runner execution payload, token path, journal, helper, or inspection role.
-All later Agent-owned execution wording in this historical ADR is superseded
-and is not executable authority. Likewise, ARM64-specific bytes below describe
-one historical platform child only; a release must supply equivalent
-`linux/amd64` and `linux/arm64` variants through ADRs 0057 and 0060.
+A credential-free, release-pinned privileged helper may be a closed detail of
+the Controller procedure, but is not a second executor or product service.
 
-## Context
+The release contract is dual-platform: equivalent `linux/amd64` and
+`linux/arm64` variants and the multi-platform index required by ADR 0060 are
+mandatory.
 
-ADR 0033 accepts the scarce-resource and isolation boundary for GitHub
-self-hosted Runners: one Tenant-or-Project owner, one combined five-Runner
-Tenant quota, one dedicated `/29`, one finite host identity slot, one rootless
-Docker daemon, replayable Controller Tasks, a transient registration token, and
-local-only removal. The durable implementation already records the owner,
-labels, provisioning state, latest creation Task, exact host allocation, and a
-replaceable runtime observation.
+## Durable identity and ownership
 
-That contract does not yet identify the external GitHub organization or
-repository, the mutable Groundplane slug, the GitHub-visible Runner name, or
-the immutable Runner image. It also does not close the public lifecycle
-projection, observed-state freshness, the in-process handoff of a one-use
-registration token to an asynchronous Task, or the production topology that
-keeps untrusted GitHub workflow code away from the host Docker daemon and
-Groundplane credentials.
-
-The current fixture Console fills those gaps unsafely. It accepts an arbitrary
-name and target, creates an immediately online record, displays a command that
-mounts `/var/run/docker.sock`, uses `--restart unless-stopped`, passes the
-registration token through an environment variable, and claims that a GitHub Runner receives reusable Groundplane Agent
-credentials. Those behaviors contradict ADR
-0033 and are not part of the product contract.
-
-The MVP remains one host and persistent Runners only. GitHub deregistration,
-GitHub token generation, Runner autoscaling, ephemeral pools, placement,
-multi-host operation, GitHub Enterprise, and in-place Runner updates remain out
-of scope.
-
-## Decision
-
-### Durable identity and desired input
+### Desired and lifecycle identity
 
 One durable Runner has these desired fields:
 
@@ -62,9 +33,9 @@ One durable Runner has these desired fields:
 | `labels` | Canonical ordered custom GitHub labels. GitHub default labels are not stored here. |
 | `image_ref` | Exact release-selected digest-pinned image embedded in the same Groundplane release manifest as the Controller and frozen for this Runner. It is never configuration or public request input. |
 
-The lifecycle record is separate from the desired primary. It retains the
-accepted ADR 0033 fields `provisioning_state`, `create_task_id`, exact host
-allocation, and `created_at`, plus a positive unsigned `runtime_epoch`. It is
+The lifecycle record is separate from the desired primary. It contains
+`provisioning_state`, `create_task_id`, exact host allocation, `created_at`,
+and a positive unsigned `runtime_epoch`. It is
 the sole authority for the immutable rootful Runner `container_id`, exactly 64
 lowercase hexadecimal characters, after
 container creation; the container id may be absent while provisioning has not
@@ -655,11 +626,11 @@ same object with transfer_digest:null))`. Old ownership plus transfer is the
 sole interim authority and binds every retained inode, old claim, and authorized
 replacement-claim request.
 
-Only then may E+1 materialize. Exact registration plus Controller invalidation
-proof uses a fresh independently one-consume config token and no GitHub
-configure. Missing/mismatched proof terminalizes `registration_token_required`
-and retains old ownership/transfer until an explicit token-bearing plan cleans
-or supersedes it. Controller accepts E+1 seal only if its seven PathIdentity
+Only then may E+1 materialize. Exact preserved registration plus Controller
+invalidation proof permits Listener restart without GitHub configure and
+without any token. Missing or mismatched proof retains old ownership and
+transfer until an explicit token-bearing retry plan cleans or supersedes it.
+Controller accepts E+1 seal only if its seven PathIdentity
 resources are byte-identical to the consumed transfer. In that single Controller
 transaction it consumes ReconcileAuthorization and transfer, accepts E+1
 ownership, and tombstones/deletes old ownership. This is the sole exception to
@@ -736,502 +707,26 @@ order. The GitHub default labels `self-hosted`, `linux`, `x64`, and
 the appropriate defaults. Groundplane does not pass `--no-default-labels`.
 
 ### Immutable Runner image and disabled updates
-The MVP Runner release supports both `linux/amd64` and `linux/arm64` under ADR
-0060. A release publishes one multi-platform OCI image index containing exactly
-one child for each supported platform. The ARM64-specific values below are the
-historical ARM64 child input, not authority to omit the equivalent AMD64 child.
-The OCI repository is a mandatory explicit release
-build input with no default. It is 1 to 255 lowercase ASCII bytes, follows the
-OCI Distribution repository-name grammar, and contains no scheme, tag, digest,
-query, or fragment. The release build freezes that repository and the exact
-child and index digests. There is no `runner.image` startup setting,
-environment override, API field, CLI flag, or Console field.
 
-The upstream Runner input is exactly:
+The release embeds one immutable, digest-pinned Runner image reference; no
+startup setting, API field, CLI flag, or Console control may override it. ADR
+0060 owns the canonical dual-platform release input and manifest: one
+multi-platform OCI index with exactly one equivalent `linux/amd64` and one
+`linux/arm64` child. Mutable tags, per-Runner images, ambient downloads, and
+single-platform publication are forbidden.
 
-| Field | Value |
-|---|---|
-| version | `2.336.0` |
-| source commit | `98aabcd429c4e8402406c56ce2d26387fed3b9ce` |
-| platform | `linux/arm64` |
-| asset id | `483731306` |
-| URL | `https://github.com/actions/runner/releases/download/v2.336.0/actions-runner-linux-arm64-2.336.0.tar.gz` |
-| size | `138824064` bytes |
-| SHA-256 | `58b758e420b87093fbd4bfddd368074960053e2f1388f01848c82624b90f27d1` |
+The image owns the single controlled entrypoint. It invokes the pinned Actions
+Runner listener directly with `--disableupdate`. Creation is not ready until
+local `DisableUpdate=true`, GitHub advertisement and exact server echo, and
+the persisted `.runner` state agree. This does not claim the Listener
+independently rejects refresh messages.
 
-Fetching accepts either an immediate HTTPS `200`, or exactly one HTTPS `302`
-whose `Location` host is `release-assets.githubusercontent.com`, has no user
-information, uses no explicit port other than `443`, and does not downgrade
-scheme. The redirect target must return `200`; another redirect, another host,
-a non-HTTPS URL, a length other than `138824064`, or a digest mismatch fails
-the build. The image owns the single controlled entrypoint and the SPKI-pinned Controller pull protocol. The entrypoint passes `--disableupdate`; acceptance proves local `DisableUpdate=true`, advertisement to GitHub, exact server echo, and persisted `.runner` state. This does not claim the Listener independently rejects refresh messages. Failure of those proofs fails creation.
-
-#### Canonical release contract
-
-The release build generates `release/runner-contract-v1.json`; humans do not
-hand-edit it. `release/runner-contract-v1.schema.json` is a checked-in JSON
-Schema 2020-12 schema that rejects unknown fields and encodes every constant,
-grammar, cardinality, and bound below. The generated file is UTF-8 without a
-BOM, contains no insignificant whitespace, and is the RFC 8785 canonical form
-of this exact top-level object:
-
-```json
-{
-  "oci_repository": "<explicit-release-input>",
-  "runner_contract": {
-    "actions_runner": {
-      "architecture": "arm64",
-      "asset_id": 483731306,
-      "os": "linux",
-      "redirect": {
-        "count": 1,
-        "host": "release-assets.githubusercontent.com",
-        "status": 302
-      },
-      "sha256": "58b758e420b87093fbd4bfddd368074960053e2f1388f01848c82624b90f27d1",
-      "size": 138824064,
-      "source_commit": "98aabcd429c4e8402406c56ce2d26387fed3b9ce",
-      "url": "https://github.com/actions/runner/releases/download/v2.336.0/actions-runner-linux-arm64-2.336.0.tar.gz",
-      "version": "2.336.0"
-    },
-    "apt": {
-      "packages": [],
-      "repositories": [],
-      "roots": [],
-      "trust_roots": []
-    },
-    "base_image": {
-      "child": {
-        "digest": "sha256:95fa486768020359141f1318720f43e7982ef926c792891d984aef9aaf05e7ea",
-        "media_type": "application/vnd.oci.image.manifest.v1+json",
-        "platform": "linux/arm64/v8",
-        "size": 424
-      },
-      "config": {
-        "digest": "sha256:5b8c0c14690ed170da4e663fe0bae0d58efe59661e791296ffab28ed2113b650",
-        "media_type": "application/vnd.oci.image.config.v1+json",
-        "size": 2067
-      },
-      "index": {
-        "digest": "sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517",
-        "media_type": "application/vnd.oci.image.index.v1+json",
-        "size": 6688
-      },
-      "official_images": {
-        "commit": "390134527c15b762ef9efa178cbb065886773659",
-        "release": "noble-20260810",
-        "source_commit": "73ecb123318a4fa4b264fae169d4773bc4c9c9c6"
-      },
-      "repository": "docker.io/library/ubuntu",
-      "tag": "24.04"
-    },
-    "docker": {
-      "api_version": "1.52",
-      "moby_commit": "fbf3ed25f893e6ce21336f1101590e40a13934f4",
-      "moby_signed_tag": "docker-v29.1.3",
-      "moby_tag_object": "3ac9309249510376baefa3b747986b5eeee977f9",
-      "seccomp": {
-        "compact_transport_sha256": "<64-lowercase-hex>",
-        "source_sha256": "01536f1d1df938ae611eba20d6349e0de7a99b6ecdee1549427a0b01b8301e28",
-        "source_size": 13063
-      },
-      "server_version": "29.1.3"
-    },
-    "docker_proxy_policy": {
-      "canonical_base64": "<canonical-rfc4648>",
-      "path": "release/runner-docker-proxy-policy-v1.json",
-      "schema": "groundplane.docker-proxy-policy/v1",
-      "sha256": "<64-lowerhex>",
-      "size": <positive-json-integer>
-    },
-    "executables": [],
-    "helper_create": {
-      "create_dto_schema_sha256": "<64-lowerhex>",
-      "inspect_normalizer_sha256": "<64-lowerhex>",
-      "proto_sha256": "<64-lowerhex>",
-      "vectors_sha256": "<64-lowerhex>"
-    },
-    "helper_security": [
-      {"apparmor":{"features_path":"<checked-in-apparmor-features-snapshot-path>","features_sha256":"<64-lowerhex>","load_name":"groundplane-hc-daemon-cleanup-v1","parser_path":"/usr/sbin/apparmor_parser","parser_sha256":"<64-lowerhex>","source_bytes_base64":"<canonical-rfc4648>","source_path":"release/runner-security-v1/apparmor/groundplane-hc-daemon-cleanup-v1","source_sha256":"<64-lowerhex>","source_size":<positive-json-integer>},"name":"groundplane-hc-daemon-cleanup-v1","seccomp":{"canonical_bytes_base64":"<canonical-rfc4648>","canonical_sha256":"<64-lowerhex>","canonical_size":<positive-json-integer>,"source_bytes_base64":"<canonical-rfc4648>","source_path":"release/runner-security-v1/seccomp/groundplane-hc-daemon-cleanup-v1.json","source_sha256":"<64-lowerhex>","source_size":<positive-json-integer>}},
-      {"apparmor":{"features_path":"<checked-in-apparmor-features-snapshot-path>","features_sha256":"<64-lowerhex>","load_name":"groundplane-hc-etc-write-v1","parser_path":"/usr/sbin/apparmor_parser","parser_sha256":"<64-lowerhex>","source_bytes_base64":"<canonical-rfc4648>","source_path":"release/runner-security-v1/apparmor/groundplane-hc-etc-write-v1","source_sha256":"<64-lowerhex>","source_size":<positive-json-integer>},"name":"groundplane-hc-etc-write-v1","seccomp":{"canonical_bytes_base64":"<canonical-rfc4648>","canonical_sha256":"<64-lowerhex>","canonical_size":<positive-json-integer>,"source_bytes_base64":"<canonical-rfc4648>","source_path":"release/runner-security-v1/seccomp/groundplane-hc-etc-write-v1.json","source_sha256":"<64-lowerhex>","source_size":<positive-json-integer>}},
-      {"apparmor":{"features_path":"<checked-in-apparmor-features-snapshot-path>","features_sha256":"<64-lowerhex>","load_name":"groundplane-hc-login1-v1","parser_path":"/usr/sbin/apparmor_parser","parser_sha256":"<64-lowerhex>","source_bytes_base64":"<canonical-rfc4648>","source_path":"release/runner-security-v1/apparmor/groundplane-hc-login1-v1","source_sha256":"<64-lowerhex>","source_size":<positive-json-integer>},"name":"groundplane-hc-login1-v1","seccomp":{"canonical_bytes_base64":"<canonical-rfc4648>","canonical_sha256":"<64-lowerhex>","canonical_size":<positive-json-integer>,"source_bytes_base64":"<canonical-rfc4648>","source_path":"release/runner-security-v1/seccomp/groundplane-hc-login1-v1.json","source_sha256":"<64-lowerhex>","source_size":<positive-json-integer>}},
-      {"apparmor":{"features_path":"<checked-in-apparmor-features-snapshot-path>","features_sha256":"<64-lowerhex>","load_name":"groundplane-hc-nft-v1","parser_path":"/usr/sbin/apparmor_parser","parser_sha256":"<64-lowerhex>","source_bytes_base64":"<canonical-rfc4648>","source_path":"release/runner-security-v1/apparmor/groundplane-hc-nft-v1","source_sha256":"<64-lowerhex>","source_size":<positive-json-integer>},"name":"groundplane-hc-nft-v1","seccomp":{"canonical_bytes_base64":"<canonical-rfc4648>","canonical_sha256":"<64-lowerhex>","canonical_size":<positive-json-integer>,"source_bytes_base64":"<canonical-rfc4648>","source_path":"release/runner-security-v1/seccomp/groundplane-hc-nft-v1.json","source_sha256":"<64-lowerhex>","source_size":<positive-json-integer>}},
-      {"apparmor":{"features_path":"<checked-in-apparmor-features-snapshot-path>","features_sha256":"<64-lowerhex>","load_name":"groundplane-hc-process-v1","parser_path":"/usr/sbin/apparmor_parser","parser_sha256":"<64-lowerhex>","source_bytes_base64":"<canonical-rfc4648>","source_path":"release/runner-security-v1/apparmor/groundplane-hc-process-v1","source_sha256":"<64-lowerhex>","source_size":<positive-json-integer>},"name":"groundplane-hc-process-v1","seccomp":{"canonical_bytes_base64":"<canonical-rfc4648>","canonical_sha256":"<64-lowerhex>","canonical_size":<positive-json-integer>,"source_bytes_base64":"<canonical-rfc4648>","source_path":"release/runner-security-v1/seccomp/groundplane-hc-process-v1.json","source_sha256":"<64-lowerhex>","source_size":<positive-json-integer>}},
-      {"apparmor":{"features_path":"<checked-in-apparmor-features-snapshot-path>","features_sha256":"<64-lowerhex>","load_name":"groundplane-hc-read-v1","parser_path":"/usr/sbin/apparmor_parser","parser_sha256":"<64-lowerhex>","source_bytes_base64":"<canonical-rfc4648>","source_path":"release/runner-security-v1/apparmor/groundplane-hc-read-v1","source_sha256":"<64-lowerhex>","source_size":<positive-json-integer>},"name":"groundplane-hc-read-v1","seccomp":{"canonical_bytes_base64":"<canonical-rfc4648>","canonical_sha256":"<64-lowerhex>","canonical_size":<positive-json-integer>,"source_bytes_base64":"<canonical-rfc4648>","source_path":"release/runner-security-v1/seccomp/groundplane-hc-read-v1.json","source_sha256":"<64-lowerhex>","source_size":<positive-json-integer>}},
-      {"apparmor":{"features_path":"<checked-in-apparmor-features-snapshot-path>","features_sha256":"<64-lowerhex>","load_name":"groundplane-hc-slot-write-v1","parser_path":"/usr/sbin/apparmor_parser","parser_sha256":"<64-lowerhex>","source_bytes_base64":"<canonical-rfc4648>","source_path":"release/runner-security-v1/apparmor/groundplane-hc-slot-write-v1","source_sha256":"<64-lowerhex>","source_size":<positive-json-integer>},"name":"groundplane-hc-slot-write-v1","seccomp":{"canonical_bytes_base64":"<canonical-rfc4648>","canonical_sha256":"<64-lowerhex>","canonical_size":<positive-json-integer>,"source_bytes_base64":"<canonical-rfc4648>","source_path":"release/runner-security-v1/seccomp/groundplane-hc-slot-write-v1.json","source_sha256":"<64-lowerhex>","source_size":<positive-json-integer>}},
-      {"apparmor":{"features_path":"<checked-in-apparmor-features-snapshot-path>","features_sha256":"<64-lowerhex>","load_name":"groundplane-hc-socket-observe-v1","parser_path":"/usr/sbin/apparmor_parser","parser_sha256":"<64-lowerhex>","source_bytes_base64":"<canonical-rfc4648>","source_path":"release/runner-security-v1/apparmor/groundplane-hc-socket-observe-v1","source_sha256":"<64-lowerhex>","source_size":<positive-json-integer>},"name":"groundplane-hc-socket-observe-v1","seccomp":{"canonical_bytes_base64":"<canonical-rfc4648>","canonical_sha256":"<64-lowerhex>","canonical_size":<positive-json-integer>,"source_bytes_base64":"<canonical-rfc4648>","source_path":"release/runner-security-v1/seccomp/groundplane-hc-socket-observe-v1.json","source_sha256":"<64-lowerhex>","source_size":<positive-json-integer>}},
-      {"apparmor":{"features_path":"<checked-in-apparmor-features-snapshot-path>","features_sha256":"<64-lowerhex>","load_name":"groundplane-hc-user-systemd-v1","parser_path":"/usr/sbin/apparmor_parser","parser_sha256":"<64-lowerhex>","source_bytes_base64":"<canonical-rfc4648>","source_path":"release/runner-security-v1/apparmor/groundplane-hc-user-systemd-v1","source_sha256":"<64-lowerhex>","source_size":<positive-json-integer>},"name":"groundplane-hc-user-systemd-v1","seccomp":{"canonical_bytes_base64":"<canonical-rfc4648>","canonical_sha256":"<64-lowerhex>","canonical_size":<positive-json-integer>,"source_bytes_base64":"<canonical-rfc4648>","source_path":"release/runner-security-v1/seccomp/groundplane-hc-user-systemd-v1.json","source_sha256":"<64-lowerhex>","source_size":<positive-json-integer>}}
-    ],
-    "platform": {
-      "architecture": "arm64",
-      "os": "linux",
-      "ubuntu_suite": "noble"
-    },
-    "probe_environment": {
-      "LANG": "C.UTF-8",
-      "LC_ALL": "C.UTF-8",
-      "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-    },
-    "probes": [],
-    "resolvers": {
-      "embedded": {
-        "bytes_base64": "bmFtZXNlcnZlciAxMjcuMC4wLjExCm9wdGlvbnMgdGltZW91dDoyIGF0dGVtcHRzOjIgcm90YXRlIG5kb3RzOjAK",
-        "sha256": "7b59a25a5f151203d301cc006d86988479e3f2167f0dccaf2e5b79bf6e5cb2cc",
-        "size": 66
-      },
-      "upstream": {
-        "bytes_base64": "bmFtZXNlcnZlciAxLjEuMS4xCm5hbWVzZXJ2ZXIgMS4wLjAuMQpvcHRpb25zIHRpbWVvdXQ6MiBhdHRlbXB0czoyIHJvdGF0ZQo=",
-        "sha256": "d23853fdca3ed710769a32f524a19165b9e1361f05f1762befc8bec1f481677f",
-        "size": 74
-      }
-    },
-    "runtime_artifacts": [
-      {"base64":"<canonical-rfc4648>","path":"<checked-in-daemon-json-template-path>","sha256":"<64-lowerhex>","size":<positive-json-integer>},
-      {"base64":"<canonical-rfc4648>","path":"<checked-in-docker-user-unit-template-path>","sha256":"<64-lowerhex>","size":<positive-json-integer>},
-      {"base64":"<canonical-rfc4648>","path":"<checked-in-helper-create-dto-schema-path>","sha256":"<64-lowerhex>","size":<positive-json-integer>},
-      {"base64":"<canonical-rfc4648>","path":"<checked-in-helper-create-golden-vectors-path>","sha256":"<64-lowerhex>","size":<positive-json-integer>},
-      {"base64":"<canonical-rfc4648>","path":"<checked-in-helper-inspect-normalizer-path>","sha256":"<64-lowerhex>","size":<positive-json-integer>},
-      {"base64":"<canonical-rfc4648>","path":"<checked-in-proxy-config-schema-path>","sha256":"<64-lowerhex>","size":<positive-json-integer>},
-      {"base64":"<canonical-rfc4648>","path":"<checked-in-proxy-user-unit-template-path>","sha256":"<64-lowerhex>","size":<positive-json-integer>},
-      {"base64":"<canonical-rfc4648>","path":"<checked-in-rootless-launcher-contract-path>","sha256":"<64-lowerhex>","size":<positive-json-integer>},
-      {"base64":"<canonical-rfc4648>","path":"<checked-in-runner-container-create-dto-path>","sha256":"<64-lowerhex>","size":<positive-json-integer>},
-      {"base64":"<canonical-rfc4648>","path":"<checked-in-runner-container-create-golden-path>","sha256":"<64-lowerhex>","size":<positive-json-integer>},
-      {"base64":"<canonical-rfc4648>","path":"<checked-in-runner-host-control-proto-path>","sha256":"<64-lowerhex>","size":<positive-json-integer>},
-      {"base64":"<canonical-rfc4648>","path":"<checked-in-runner-host-control-validator-path>","sha256":"<64-lowerhex>","size":<positive-json-integer>},
-      {"base64":"<canonical-rfc4648>","path":"<checked-in-runtime-env-template-path>","sha256":"<64-lowerhex>","size":<positive-json-integer>}
-    ],
-    "schema": "groundplane.runner-contract.v1"
-  },
-  "runner_contract_sha256": "<64-lowercase-hex>",
-  "runner_image": {
-    "child_digest": "sha256:<64-lowercase-hex>",
-    "index_digest": "sha256:<64-lowercase-hex>",
-    "platform": "linux/arm64"
-  },
-  "schema": "groundplane.runner-release.v1"
-}
-```
-
-The Ubuntu source lock is registry-integrity plus official metadata only. It
-makes no image signature, SLSA, or other provenance claim. The release builder
-resolves `docker.io/library/ubuntu:24.04` to the exact index descriptor, proves
-the `linux/arm64/v8` descriptor is the exact child above, verifies its exact
-config descriptor, and uses that child digest directly in the ARM64
-`FROM`; tag resolution and a second index selection during the Runner build
-are forbidden.
-
-The Moby source lock verifies signed annotated tag `docker-v29.1.3` at tag
-object `3ac9309249510376baefa3b747986b5eeee977f9`, peeled commit
-`fbf3ed25f893e6ce21336f1101590e40a13934f4`. The exact 13,063-byte source
-`profiles/seccomp/default.json` has the recorded SHA-256. The builder parses it
-as JSON with duplicate-member rejection, requires RFC 8785-compatible JSON
-types, emits its RFC 8785 canonical compact bytes, and records the resulting
-`compact_transport_sha256`. Runtime sends exactly
-`SecurityOpt=["seccomp=" + <those compact bytes>]`; it never sends a path,
-reformats the profile, or uses Engine `default` as an alias.
-
-Empty arrays above show shape only; a publishable manifest requires every
-array to satisfy the non-empty bounds below. Object member order in the file is
-the RFC 8785 order shown. `runner_contract_sha256` is lowercase hexadecimal
-SHA-256 over this exact byte preimage, with no newline or length prefix:
-
-```text
-groundplane.runner-contract.v1<NUL>C
-```
-
-`<NUL>` is the single byte `0x00`, and `C` is the RFC 8785 canonical UTF-8 byte
-sequence of the `runner_contract` object alone. The digest field, OCI
-repository, Runner image child digest, and Runner image index digest are
-outside `runner_contract`. The image embeds only
-`runner_contract_sha256`; therefore neither that digest nor either image digest
-is in its own preimage. The base image digest, authenticated apt closure,
-installed executable hashes, probes, Runner archive, and resolver facts are
-known before the final image label is written and are inside the preimage.
-
-The exact apt shapes are:
-
-- `trust_roots`: 1 to 8 entries containing exactly `id`, `bytes_base64`,
-  `size`, `sha256`, and `fingerprint`; `bytes_base64` uses RFC 4648 standard
-  base64 alphabet `A-Z a-z 0-9 + /`, requires canonical `=` padding, contains
-  no whitespace, line break, URL-safe character, or ignored byte, and must
-  decode then re-encode byte-identically; decoded bytes are 1 to 65,536 bytes
-  per entry and at most 262,144 bytes in aggregate, ids are bytewise-sorted and
-  unique, `size` is the exact decoded length, SHA-256 is over the decoded bytes,
-  and fingerprint is the exact full uppercase hexadecimal OpenPGP primary-key
-  fingerprint derived from those same bytes;
-- `repositories`: 1 to 4 entries containing exactly `id`, `uri`, `suite`,
-  bytewise-sorted unique `components`, `trust_root_id`, `inrelease` with exact
-  `url`, `size`, and `sha256`, and `indexes` with exact `component`, `url`,
-  `size`, and `sha256`; `trust_root_id` selects exactly one manifest root;
-- `roots`: 1 to 64 bytewise-sorted unique requested package names;
-- `packages`: 1 to 512 entries containing exactly `name`, `version`,
-  `architecture`, `repository_id`, `filename`, `size`, and `sha256`.
-
-Repositories are sorted by `id`, indexes by `(component,url)`, and packages by
-`(name,architecture,version,repository_id,filename)`, all as unsigned UTF-8
-byte order. Each repository URI and artifact URL is canonical HTTPS with no
-userinfo or fragment. The approved trust-root files are checked into release
-source, their exact bytes are compiled into the release builder, and the
-manifest copies those bytes and their derived fingerprint and SHA-256. A
-repository, mirror, redirect, package, `InRelease`, or index may never supply
-or replace a trust root. The build authenticates each selected `InRelease`
-only against the one `trust_root_id` bound by that repository entry, verifies
-every captured Packages index against `InRelease`, verifies every `.deb`
-filename, size, and SHA-256 against its authenticated index, computes the
-complete transitive closure for `linux/arm64` and Ubuntu `noble`, then proves
-an offline install of exactly the listed closure with no additional package or
-network access. Package architecture is exactly `arm64` or `all`; duplicate
-package identities and an unreachable, missing, extra, or unauthenticated
-`.deb` fail the build.
-
-`executables` has 1 to 32 entries sorted by absolute `path`, each containing
-exactly `path`, `size`, and `sha256`. It includes `/usr/bin/rootlesskit`,
-`/usr/libexec/groundplane/runner-rootless-launch`, the exact
-`/usr/bin/dockerd-rootless.sh`, Docker Engine and CLI, slirp4netns, systemd
-control, and nftables executables used by the runtime. `probes` has 1 to 32
-entries sorted by unique `id`, each containing exactly `id`, `argv`,
-`exit_code`, `stdout_sha256`, and `stderr_sha256`; `argv` contains 1 to 64
-strings and begins with an exact executable path from `executables`. Probes run
-in the assembled filesystem with no inherited environment and exactly
-`PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,
-`LANG=C.UTF-8`, and `LC_ALL=C.UTF-8`, as recorded by `probe_environment`. A
-missing executable, mismatched byte hash, non-matching exit code, or stdout or
-stderr digest mismatch fails the build or installation.
-
-The whole generated per-platform file is at most 2 MiB after adding encoded trust roots; the
-decoded trust-root aggregate is independently capped at 262,144 bytes and the
-canonical manifest is rejected before allocation when it exceeds the 2 MiB
-aggregate bound. Identifiers and package fields are
-1 to 255 bytes, URLs and absolute paths are 1 to 4096 bytes, and probe arguments
-are 0 to 4096 bytes. Strings are valid UTF-8 without NUL or ASCII controls;
-fields defined as ASCII reject non-ASCII. Sizes are positive JSON integers and
-all integers are at most `9007199254740991`. Bare SHA-256 values are exactly 64
-lowercase hexadecimal characters and OCI digests are exactly `sha256:` plus
-those 64 characters. Arrays reject duplicate semantic identities. These
-bounds, all exact object members, the stated order, and every constant are
-enforced before hashing; normalization is forbidden.
-
-The repository is a release input, but the exact platform-child and index
-digests are build outputs. After pushing, the builder resolves the index,
-proves that it contains exactly one expected `linux/amd64` child and one
-expected `linux/arm64` child and that every remote digest equals the generated
-value, then seals those outputs in the outer manifest. Publication and
-installation fail closed until the selected platform's base image
-digest, full authenticated `.deb` closure, executable hashes and probes, and
-all Runner image child and index digests are present and verified.
-
-This introduces no Runner-manifest signing key or runtime trust store. The
-release builder produces immutable canonical manifest bytes, and those exact
-bytes are compiled into the trusted Controller artifact. The compiled bytes
-are the only runtime authority. A file installed beside the Controller,
-downloaded later, mounted into it, or otherwise supplied externally is never
-read as authority and cannot override them. Controller startup validates the
-compiled schema, recomputes the domain-separated contract digest, validates
-the repository and both image digests, and rejects a missing, malformed,
-tag-only, inconsistent, or unavailable embedded image reference.
-
-The native Controller never permits the managed container to replace its
-Runner application. A Controller release embeds one exact Runner image digest;
-a failed-create retry uses the Runner's original frozen `image_ref`. There is
-no Runner update endpoint, command, or Console action in the MVP. Updating an
-existing Runner requires remove/create under a Groundplane release that embeds
-the intended image.
-
-
-Within `runner_contract`, exact RFC 8785 key order is `actions_runner`, `apt`,
-`base_image`, `docker`, `docker_proxy_policy`, `executables`, `helper_create`,
-`helper_security`, `platform`, `probe_environment`, `probes`, `resolvers`,
-`runtime_artifacts`, `schema`. The angle-bracket array entries in the display
-above are documentation metavariables expanded by release generation, not
-literal publishable strings.
-
-`helper_security` has exactly nine ASCII-name-sorted entries named
-`groundplane-hc-daemon-cleanup-v1`, `groundplane-hc-etc-write-v1`,
-`groundplane-hc-login1-v1`, `groundplane-hc-nft-v1`,
-`groundplane-hc-process-v1`, `groundplane-hc-read-v1`,
-`groundplane-hc-slot-write-v1`, `groundplane-hc-socket-observe-v1`, and
-`groundplane-hc-user-systemd-v1`. An entry is exactly
-`{apparmor:{features_path,features_sha256,load_name,parser_path,parser_sha256,
-source_bytes_base64,source_path,source_sha256,source_size},name,seccomp:
-{canonical_bytes_base64,canonical_sha256,canonical_size,source_bytes_base64,
-source_path,source_sha256,source_size}}`.
-Each decoded source/canonical blob is 1..262144 bytes and aggregate decoded
-helper security is <=2MiB. Digest is over decoded bytes. AppArmor source has
-one same-name profile with no includes/tunables/abstractions. Source paths are
-`release/runner-security-v1/apparmor/<name>` and
-`release/runner-security-v1/seccomp/<name>.json`; install path is
-`/etc/apparmor.d/<name>`. Seccomp canonical bytes are duplicate-rejecting
-RFC8785 JSON.
-
-`runtime_artifacts` is path-sorted, at most 32 entries, each exactly
-`{base64,path,sha256,size}`, 1..65536 bytes, aggregate <=524288. It includes the
-two unit templates, runtime.env, daemon.json template, proxy config schema,
-rootless launcher contract, Runner Create DTO/golden, HostControl proto/DTO/
-normalizer/goldens. `docker_proxy_policy`
-is <=262144 bytes. The outer manifest is <=2MiB. Release generation fails if a
-checked-in byte, canonical security profile, parser/features digest, policy,
-DTO, normalizer, or golden vector is absent or mismatched; prose is not a
-substitute for these artifacts. All fields enter `runner_contract_sha256`.
-### Entrypoint-initiated one-time token pull
-
-Every registration-token issue, broker-accept, pull, frame, and configure boundary accepts exactly 1..4096 bytes, each byte ASCII `0x21..0x7e`; whitespace, DEL, non-ASCII, NUL, CR and LF reject before broker acceptance. No weaker token grammar exists.
-
-
-The former Agent-to-entrypoint `/proc`/Unix-socket relay does not exist. The
-persistent Agent has no host PID/proc mount and never receives either token.
-Host-control helpers are credential-free. After exact container-id intent bind,
-the release-pinned entrypoint pulls each token directly from the already
-permitted configured Controller IPv4 endpoint.
-
-The phase-scoped master capability is the existing `ownership_nonce`: 32 random
-bytes encoded as exactly 64 lowercase hexadecimal ASCII, generated once per
-materialization plan and never reused. It is present in the immutable
-registration document, plan, journal and exact Runner label. It remains valid
-only for the matching active bootstrap phases and becomes inert after final
-bootstrap completion, cancellation, expiry, removal or terminalization. It does
-not become inert merely because the registration or config-token endpoint was
-consumed. Each raw registration/config token is independently consumed once.
-The capability is never a reusable Controller credential and is redacted from
-HTTP logs/diagnostics. Workflows never receive the registration-document bind.
-
-The entrypoint connects only to
-`https://<canonical-IPv4-literal>:<decimal-port>`, directly, using HTTP/1.1 over
-TLS and the release/bootstrap-supplied Controller SPKI SHA-256. Hostnames, IPv6,
-userinfo, alternate address, proxy, discovery, redirects, path prefix, query,
-fragment, compression and chunked encoding are rejected. Every request has
-`Connection: close`, exact Content-Length, UTF-8 RFC 8785 body without BOM,
-duplicate members or trailing bytes, at most 4,096 aggregate request-header
-bytes, 1,024 body bytes and 512 error-body bytes. Connect, TLS handshake,
-response-header and body deadlines are independently five seconds. A request is
-never retried after the server may have accepted it.
-
-The common pull tuple is exactly:
-
-```json
-{"capability":"<64-lowerhex>","registration_document_sha256":"<64-lowerhex>","runner_id":"run_<ulid>","runtime_epoch":"<uint64-decimal-string>","schema":"<endpoint-schema>"}
-```
-
-The Controller resolves exactly one active registration intent by Runner id,
-epoch, ownership capability and registration-document digest; the intent also
-binds Task id, attempt nonce and already-bound rootful container id.
-
-#### Registration token and completion
-
-Registration pull is:
-
-```text
-POST /internal/runner-registration/v1/token
-Content-Type: application/json
-Accept: application/octet-stream
-```
-
-Schema is `groundplane.runner-token-pull.v1`. Success is HTTP 200,
-`Content-Type: application/octet-stream`, `Cache-Control: no-store`, connection
-close, and exact Content-Length `1..4096`; body is opaque token bytes with no
-wrapper/newline/base64. The Controller accepts only current active Task/intent,
-prospective epoch, document digest and bound container, within the
-pre-registration deadline, before cancellation/terminal/cleanup, and when the
-registration broker is pending.
-
-Broker states are `pending -> consuming -> consumed` or `pending -> terminal`.
-One CAS detaches the owned buffer and makes state irrevocably consumed before
-the first response byte. Writer return then clears the owned token and working
-buffers. Reset/crash/response loss after CAS remains consumed and is never
-retried.
-
-The entrypoint bypasses `config.sh`, `env.sh` and `run.sh`, ignores every
-inherited/image environment entry, and passes an explicit ordered `envp`.
-Before both configure and run it fails closed if `R/.env` exists; Groundplane
-never creates that file. The exact base environment, in byte order with `R` and
-`W` replaced by their canonical absolute slot paths, is:
-
-```text
-DOCKER_API_VERSION=1.52
-DOCKER_BUILDKIT=0
-DOCKER_HOST=unix:///var/run/docker.sock
-HOME=<R>
-LANG=C.UTF-8
-LC_ALL=C.UTF-8
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-TMPDIR=<W>/_temp
-```
-
-Configure directly executes the pinned `./bin/Runner.Listener configure` argv
-in `R` with exactly those eight entries followed by
-`ACTIONS_RUNNER_INPUT_TOKEN=<registration-token>` as entry nine. The long-lived
-`./bin/Runner.Listener run` receives exactly the eight base entries. No
-`DOTNET_*`, other `RUNNER_*`, `USER`, `LOGNAME`, `SHELL`, `HOSTNAME`, `PWD`,
-`TERM`, `CI`, `GITHUB_ACTIONS`, proxy, CA or other inherited variable is
-present. There is no token argv/file/fd/stdin/durable OCI Env. The entrypoint
-reaps the child, proves exact registration files, AgentId and DisableUpdate,
-and clears its owned token/environment arenas before posting:
-
-```text
-POST /internal/runner-registration/v1/complete
-Content-Type: application/json
-Accept: application/json
-```
-
-The at-most-1,024-byte canonical body is exactly:
-
-```json
-{"capability":"<64-lowerhex>","registration_document_sha256":"<64-lowerhex>","registration_files_sha256":"<64-lowerhex>","runner_id":"run_<ulid>","runtime_epoch":"<uint64-decimal-string>","schema":"groundplane.runner-registration-complete.v1"}
-```
-
-Only the same active capability after registration-token consumption is
-accepted. The Controller records the non-secret completion and makes config
-issuance eligible. Success is HTTP 204 connection close and returns no token.
-
-#### Config token and RunnerBootstrapConfigV1
-
-Config-token pull is
-`POST /internal/runner-bootstrap/v1/token`, JSON content type and octet-stream
-accept, with common tuple schema `groundplane.runner-config-token-pull.v1`.
-Success is exactly 43 unpadded base64url ASCII bytes matching
-`[A-Za-z0-9_-]{43}`. Its broker has an independent one-consume CAS. Durable
-record contains only token SHA-256, Runner/Task/epoch, endpoint, config digest,
-issue/expiry times and nullable consumed_at; raw token exists only in bounded
-Controller and entrypoint mutable arenas and expires 60 seconds after issue.
-
-It is used once with:
-
-```text
-GET /internal/runner-bootstrap/v1/config
-Authorization: Bearer <43-byte-token>
-Accept: application/json
-```
-
-Controller atomically consumes before returning at most 16 KiB canonical
-`RunnerBootstrapConfigV1`. That internal object contains exactly schema,
-Runner/Tenant identity, runtime epoch string, exact Controller IPv4 endpoint,
-SPKI SHA-256, integer `pull_interval_seconds=10`, integer
-`max_concurrent_tasks=1`, and canonical sorted unique `github_labels` from
-desired state. It contains no Agent channel/token/credential and none of these
-fields maps to AgentConfig labels map, capacity or polling. Architecture and
-internal Controller/runtime contracts mirror it; there is no public endpoint,
-client, CLI or Console action.
-
-Config response loss after consume is not replayed. Only after exact completed
-GitHub registration proof may recovery issue one fresh config token; it never
-issues a second GitHub token. The entrypoint clears token, Authorization header,
-response and digest owned buffers, submits the existing final non-secret commit
-proof, then and only then executes `./bin/Runner.Listener run`.
-
-Fixed error bodies contain only code: 400 `request.invalid`, 401
-`capability.invalid`, 409 `attempt.state_conflict`, 410 `attempt.gone`, 503
-`controller.unavailable` before CAS, or 500 `controller.internal` before CAS.
-After CAS no result becomes retryable. Ambiguous transport quiesces the exact
-container and inspects registration; exact registration permits config-only
-recovery, otherwise `registration_token_required`. Controller restart empties
-raw brokers and never reconstructs a token from digest.
-
-Owned mutable arenas use the existing bounded mlock/MADV_DONTDUMP and explicit
-clear rules. Claims are limited to those arenas; unavoidable Go/HTTP/TLS,
-`os/exec`, kernel, upstream .NET, same-UID, root and Docker copies are not
-claimed erased, are never deliberately persisted/logged, and remain bounded by
-process lifetime and GitHub's one-hour registration-token expiry. This ADR
-supersedes ADR 0033's environment prohibition only for that bounded one-shot
-upstream child hop.
+The release manifest must continue to bind all bytes that affect the runtime:
+the Actions Runner and rootless Docker tuple, base image and authenticated
+package closure, resolver files, seccomp/AppArmor material, launchers, helper
+protocol and validators, user-unit templates, Runner create DTO and golden
+vectors, and the Docker proxy policy. Release generation fails closed on an
+absent, mismatched, non-canonical, or unproved artifact.
 
 ### Per-Runner topology and stable identities
 
@@ -1248,185 +743,27 @@ and `gp_<T>` for the Groundplane nft table, where `T` is the first 14 lowercase
 unpadded RFC4648-base32 characters of SHA-256 of canonical Runner id. Collision
 with another Runner is ownership corruption; no alternate is selected.
 
-### Public Runner representation
+### Bounded host identity slots
 
-Runner list and detail return exactly:
+Machine-local Controller configuration supplies three finite inclusive ranges:
+`runner.host_uid_range`, `runner.subuid_range`, and `runner.subgid_range`.
+Ranges use canonical unsigned decimal `first-last` syntax. The subordinate
+block size is exactly 65,536 ids. Host-UID cardinality must equal the count of
+complete blocks in each subordinate range; all three inventories have at least
+five slots, and no remainder is accepted. Bootstrap rejects a host UID already
+assigned to an account and a subordinate block overlapping any existing
+`/etc/subuid` or `/etc/subgid` assignment.
 
-```json
-{
-  "id": "run_...",
-  "slug": "storefront-ci",
-  "tenant_id": "tnt_...",
-  "project_id": "prj_...",
-  "github_url": "https://github.com/acme/storefront",
-  "name": "gp-01...",
-  "labels": ["qa-workload"],
-  "lifecycle": "provisioning",
-  "create_task_id": "task_...",
-  "remove_task_id": null,
-  "online": false,
-  "observed_at": null,
-  "created_at": "2026-08-24T12:00:00Z"
-}
-```
-
-`slug` is the mutable Tenant-scoped Groundplane label; `name` remains the
-immutable derived GitHub-visible name. `project_id` is omitted for a
-Tenant-owned Runner. `remove_task_id` is non-null
-only while a deletion tombstone exists. `observed_at` is nullable before the
-first inspection. Timestamps are UTC RFC3339. Relative ages are presentation
-only. The response does not include allocation, image, container, local path,
-credential, or raw inspection details.
-
-### REST API
-
-The Runner operations are:
-
-| Operation | Contract |
-| --- | --- |
-| `GET /runners?tenant={id}&cursor={cursor}` | Fixed-revision page containing every direct and Project-owned Runner charged to the Tenant quota. |
-| `GET /runners?project={id}&cursor={cursor}` | Fixed-revision page containing only Runners directly owned by that Project. |
-| `GET /runners/{id}` | Public Runner detail. |
-| `POST /runners` | Protected create; accepts the request below and returns `202 {task_id}`. |
-| `PATCH /runners/{id}` | Synchronous protected slug replacement; accepts exactly `{slug}` and returns `200` Runner. |
-| `POST /runners/{id}/retry` | Protected failed-create retry; accepts only `{registration_token}` and returns `202 {task_id}`. |
-| `DELETE /runners/{id}` | Bodyless protected local removal and `202 {task_id}`. |
-
-Exactly one list scope is required. Exactly one of `tenant_id` and `project_id`
-is required by create. Create accepts:
-
-```json
-{
-  "slug": "storefront-ci",
-  "tenant_id": "tnt_...",
-  "github_url": "https://github.com/acme",
-  "labels": ["qa-workload"],
-  "registration_token": "<write-only>"
-}
-```
-
-or the same shape with `project_id` and a repository URL. PATCH changes only
-the Runner slug. There is no owner, GitHub URL, label, image, GitHub name,
-online, lifecycle, allocation, runtime update, deregister, scale, or placement
-operation.
-
-`GET /internal/runner-bootstrap/v1/config` is a single-purpose authenticated
-runtime bootstrap exchange, not an operator-facing Controller capability. It
-is unavailable to operator credentials and therefore has no Console action or
-CLI command and does not alter the 1:1 rule.
-
-Task-producing create, failed-create retry, and remove mutations follow the
-shared Task idempotency contract. Same key and same canonical non-secret intent
-returns the original Task; reusing a key with a different non-secret intent is
-rejected. Token bytes never participate in the request hash. A token supplied
-on create/retry transport replay is cleared without creating or feeding another
-attempt.
-
-Slug PATCH does not use original-Task replay. It exclusively follows the
-earlier synchronous contract: same key and canonical body returns the stored
-exact `200` Runner response bytes, same key with a different body is
-`idempotency.conflict`, and PATCH never creates or returns a Task.
-
-### CLI
-
-The exact command surface is:
-
-```text
-groundplane runner list
-groundplane runner add --github-url <url>
-                       --slug <slug>
-                       --registration-token-file <path|->
-                       [--label <label> ...]
-groundplane runner show <slug> [--id]
-groundplane runner edit <slug> --slug <new-slug> [--id]
-groundplane runner retry <slug> --registration-token-file <path|-> [--id]
-groundplane runner remove <slug> [--id]
-```
-
-The existing global Tenant/Project scope resolution selects ownership and list
-filtering. `runner list` with Tenant scope shows the combined Tenant quota;
-Project scope narrows to the exact Project. `runner add` with Project scope
-creates a Project-owned repository Runner; without Project scope it creates a
-Tenant-owned organization Runner.
-
-There is no token flag. `--registration-token-file -` reads stdin. The CLI
-reads at most 4,097 bytes, removes one optional terminal LF byte when present,
-then requires the resulting token be exactly 1..4,096 bytes and every byte ASCII
-0x21..0x7e. Empty, a second LF, CR, DEL, non-ASCII, NUL or any whitespace
-rejects before request construction. It never prints, formats, logs, or
-retains the token. Runner targets use the Tenant-scoped slug by default;
-`--id` selects the stable Runner id. The derived GitHub name is display-only
-and is never a CLI target.
-
-### Console
-
-The Tenant Runners page loads the Tenant-filtered API page, including direct
-and Project-owned records, and displays the combined quota as `N / 5`.
-Provisioning, failed, and deleting records continue to count. Rows open a
-detail drawer containing the public Runner representation, owner, GitHub URL,
-Task links, lifecycle, online state, and observation time.
-
-The add dialog selects organization scope or one Tenant Project, requires a
-Tenant-unique slug and owner-shaped `github_url`, accepts custom labels and a
-masked registration token, and has no GitHub-name or image control. Submission
-displays and polls the authoritative Task. It does not insert a fixture Runner,
-declare immediate success, or manufacture online state. Detail exposes a
-synchronous Edit slug action backed by `PATCH /runners/{id}` and the matching
-CLI command.
-
-A failed creation exposes a Runner-specific Retry action with a fresh masked
-token. Provisioning and deleting disable conflicting actions. Removal requires
-confirmation that states: `This removes local Runner resources only. Delete
-the Runner in GitHub separately.` It dispatches and polls the removal Task.
-
-The Console derives relative observation text from `observed_at`; relative text
-is not stored or sent by the API. The unsafe host-socket Docker command preview,
-`unless-stopped` policy, durable container token environment variable,
-arbitrary name/target
-fields, immediate-online fixture mutation, and claim that a Runner receives a
-reusable Groundplane Agent credential are removed rather than retained as help
-text or compatibility behavior. The one-time internal non-secret bootstrap
-fetch is not an operator-facing Console action.
-
-### Errors
-
-Synchronous API failures use the shared RFC 7807 document and these exact
-public mappings:
-
-| HTTP | `code` | Condition |
-| --- | --- | --- |
-| `422` | `validation.failed` | Malformed owner XOR, slug, URL, label, token, cursor, id, body, or forbidden field. |
-| `404` | `tenant.not_found` | Requested Tenant does not exist. |
-| `404` | `project.not_found` | Requested Project does not exist. |
-| `404` | `runner.not_found` | Requested Runner does not exist in the resolved scope. |
-| `404` | `task.not_found` | Required source creation Task does not exist. |
-| `409` | `runner.slug_conflict` | The Tenant-scoped Runner slug already exists. |
-| `409` | `resource.in_use` | Tenant quota, host slots, or Runner `/29` pool is exhausted. |
-| `409` | `state.conflict` | Invalid retry/removal lifecycle, concurrent operation, revision conflict, or idempotency request still in flight. |
-| `422` | `idempotency.conflict` | One idempotency key is reused with a different canonical non-secret intent. |
-| `500` | `internal` | Corrupt durable state or an unclassified Controller failure; detail remains non-secret. |
-
-Runner Controller Tasks expose exactly one of these stable terminal failure
-codes with bounded redacted detail:
-
-| Task failure code | Meaning |
-| --- | --- |
-| `registration_token_required` | The one-use token was lost before registration could be proved. |
-| `runner.registration_rejected` | GitHub rejected the token, URL scope, name, labels, or disabled-update registration. |
-| `runner.image_unavailable` | The release-embedded digest could not be pulled or verified. |
-| `runner.bootstrap_failed` | Required Ubuntu package, account, subordinate mapping, directory, or cgroup creation failed without an ownership collision. |
-| `runner.network_policy_failed` | Runner pool, bridge, IPv4 enforcement, nftables, IPv6 disablement, or port-driver enforcement failed. |
-| `runner.daemon_failed` | The owned rootless daemon did not start, answer, or retain its exact identity. |
-| `runner.container_failed` | The immutable Runner container could not be created, started, or inspected. |
-| `runner.registration_failed` | The controlled entrypoint pairing phase failed locally without a GitHub rejection and without losing the token. |
-| `runner.readiness_timeout` | Registration completed but exact daemon/container/listener readiness was not reached before the Task deadline. |
-| `runner.cleanup_failed` | Verified owned local resources could not be completely removed. |
-| `runner.ownership_conflict` | A local account, mapping, directory, socket, daemon, cgroup, bridge, network, or container does not match durable ownership evidence. |
-
-Failed creation retains all claims. Failed removal clears the active removal
-fence while retaining the Runner and all claims. Successful removal deletes
-only local Runner resources and durable claims and never invokes GitHub
-deregistration.
+Slot `i` is exactly `host_uid = host_first + i`,
+`subuid = [subuid_first + i*65536, 65536]`, and
+`subgid = [subgid_first + i*65536, 65536]`. Allocation always takes the lowest
+free slot. `/v1/runtime/runner-host-slots/{zero-padded-slot}` stores its exact
+Runner id, and the Runner record stores the slot, UID, both subordinate starts
+and counts, and dedicated subnet. Create compares and updates the slot registry
+and the `runner.network_pool` `/29` registry in the same transaction. Retry
+reuses the tuple. Exhaustion is `resource.in_use`; it never expands a range or
+guesses an allocation. No API, CLI command, or Console action manages these
+machine-local ranges.
 
 ### Required supplied inputs
 
@@ -1440,7 +777,7 @@ Its exact `N = 2^(29-p)` deterministic `/29` children are the machine slot
 inventory. Host UID, same-number GID, subordinate UID, and subordinate GID
 inventories must each contain at least `N` complete collision-free entries or
 bootstrap fails before mutations. Their
-validation, compilation, and runtime-authority rules are fixed by this ADR.
+validation, compilation, and runtime-authority rules are fixed by this contract.
 They are not unresolved product choices, and implementations may not invent,
 discover, download, or normalize replacement values.
 
@@ -1596,8 +933,9 @@ DNS acceptance requires:
 
 ### Acceptance evidence
 
-C17 remains Proposed until release and Ubuntu 24.04 evidence on both supported
-architectures proves all of the following against each exact pinned tuple:
+Runtime acceptance requires release and Ubuntu 24.04 evidence on both
+supported architectures proving all of the following against each exact
+pinned tuple:
 
 - RFC 8785 RuntimeOwnership maximum fixtures, every closed identity variant,
   65,536-byte rejection, resource cardinalities, and byte-identical
@@ -1616,7 +954,7 @@ architectures proves all of the following against each exact pinned tuple:
   proxy readiness before Docker and API readiness after Docker;
 - the rootful Runner Create golden with User U:G, zero capabilities,
   NoNewPrivs, four mounts, eight labels, setuid/setgid/file-capability negative
-  probes, registration/config token one-consume behavior, inert nonce replay
+  probes, registration-token one-consume behavior, inert nonce replay
   rejection, and exact eight-entry Listener environment;
 - Network/nft materialization and cleanup order, exact B+2 endpoint, three
   chains/twelve rules, inventory drift behavior without unauthorized mutation,
@@ -1670,7 +1008,11 @@ must publish a new pinned image deliberately.
 
 ### Registration token in Task persistence, argv, durable container environment, or persistent storage
 
-Rejected. The only exception is the explicit entrypoint child environment for direct configure. The token is never Task/journal/OCI/file/stdin/helper/Agent-relay state; the Runner pulls it once from the SPKI-pinned Controller broker and an ambiguous response is never replayed.
+Rejected. The only exception is the explicit entrypoint configure-child
+environment. The native executor consumes the token once from its in-process
+broker and constructs that environment; the token is never
+Task/journal/OCI/file/stdin/helper/Agent-relay state, and an ambiguous attempt
+is never replayed.
 
 ### Giving the Runner the Groundplane Agent channel
 
@@ -1680,23 +1022,21 @@ boundary and could let workflow code impersonate the Agent.
 
 ### Host Docker socket or privileged Docker-in-Docker
 
-Rejected by ADR 0033 because either permits workflow control over Groundplane
+Rejected because either permits workflow control over Groundplane
 containers and networks. A dedicated rootless daemon supplies Docker-compatible
 jobs without host-daemon authority.
 
 ### GitHub API status and deregistration
 
-Rejected because C17 manages one local runtime, not GitHub account state.
+Rejected because this feature manages one local runtime, not GitHub account state.
 Online remains a fresh local observation, and GitHub deletion remains an
 explicit manual action.
 
 ## Integrated runtime and security contract
 
-This section retains the executable isolation, identity, ordering, and cleanup
-invariants. ADR 0057 relocates their execution wholesale to the native
-Controller Task executor. Historical references in this section to an Agent
-owner, Agent payload, Agent journal, Agent helper image, or Agent proof are
-superseded and must not be implemented as an alternate path.
+The native Controller Task executor applies the executable isolation,
+identity, ordering, and cleanup invariants below. Every journal, helper call,
+inspection, and proof described here belongs to that one executor.
 
 ### Machine bootstrap, slot roots, and release authority
 
@@ -2126,8 +1466,10 @@ Materialization is exactly: lock/reserve slot; claim and separately ensure group
 user, home, subuid, subgid, data root and all files; create/bind rootful Network;
 install/attest nft; install exactly two disabled units; enable linger; reload;
 start proxy; prove proxy readiness; start Docker; prove processes and raw/proxy
-sockets and proxy API; immediately reobserve proxy socket; create/start rootful
-Runner with proxy-only Docker bind; perform token/bootstrap/listener proof;
+sockets and proxy API; immediately reobserve proxy socket; deliver the staged
+token through the still-to-be-closed non-durable configure seam; create/start
+and directly configure the rootful Runner with the proxy-only Docker bind;
+prove registration/listener readiness;
 remove helpers; seal. No Runner-UID process exists before nft.
 
 Cleanup is exactly: stop/remove rootful Runner; run raw-daemon cleanup while raw
@@ -2640,13 +1982,17 @@ Target-sorted. The proxy socket alias uses false.
 Registration bytes remain canonical `S/control/registration-v1.json`, root0444
 one-link below root0755, <=16KiB, journaled and mounted RO at
 `/run/groundplane/registration-v1.json`. Its exact existing schema and eight
-Runner labels remain. The entrypoint is sole reader only before bootstrap
-completion. It verifies bytes/labels, derives exact configure argv, then pulls
-the token. Before Listener/job admission Controller durably consumes and
-invalidates the registration nonce and ownership records the receipt digest.
-The same container remains, so later U:G workflow code can read the inert registration document among the four Runner mounts; nested containers never get
-the registration bind. Replay at every registration/config endpoint rejects.
-Lifetime sole-reader would require a second container and is not MVP.
+Runner labels remain. Before the executor creates the container it consumes
+the attempt's registration token once from the in-process Controller broker;
+the controlled entrypoint receives it only in the direct configure child
+environment described below. There is no token-pull endpoint, Agent relay,
+registration socket, token file, fifth bind, or durable token environment.
+Before Listener/job admission the Controller records the non-secret
+registration proof and invalidates the registration nonce. The same container
+remains, so later U:G workflow code can read the inert registration document
+among the four Runner mounts; nested containers never get the registration
+bind. Replay of the registration attempt rejects. Lifetime sole-reader would
+require a second container and is not MVP.
 
 `RunnerContainerCreateV1` is a checked-in RFC8785 DTO/golden. It forces
 User `U:G`, Privileged false, CapAdd[], CapDrop[ALL], readonly rootfs,
@@ -2691,31 +2037,41 @@ persisted `.runner`; it does not claim the Listener locally rejects refresh
 messages. Unexpected version/file/runtime drift conflicts Ready and requires
 Controller cleanup/rematerialization.
 
-### Secret recovery and ownership proof
+### Transient token failure and ownership proof
 
-Entrypoint makes the one-time SPKI-pinned Controller IPv4 pull bound to Runner,
-epoch, ownership nonce, registration-document digest and current intent.
-Registration and config brokers independently atomically consume one raw token.
-Ownership nonce remains phase-scoped through registration completion and config
-pull and becomes inert only after final bootstrap/config completion, cancel,
-expiry, terminal, or cleanup. Lost token response is never resent: Runner
-quiesces and Controller registration proof decides config-only recovery or
-`registration_token_required`. Helpers remain secret-blind and the Agent has no
-Runner token or host relay. There is no registration socket, tmpfs token file, Docker exec,
-fifth bind, or durable token env.
+The API stages one fresh registration token in a bounded, zeroing in-process
+Controller broker before publishing an attempt. The native executor consumes
+it exactly once. The broker-to-configure process transport is intentionally
+unresolved; it must satisfy the prohibitions below and may not revive the
+deleted token-pull protocol. Publication failure drops it; Controller exit before
+consumption loses it. The token, its digest, and every reversible derivative
+are absent from Runner and Task state, idempotency evidence, ownership
+journals, events, logs, argv, files, helper input, and the persistent Agent.
+Loss before registration is proved terminates the attempt with
+`registration_token_required`; only Runner Retry with a new token may proceed.
+Generic Task Retry rejects the attempt.
 
-On sealed reboot, exact preserved registration files and Controller nonce
-invalidation proof permit only fresh config-token recovery in the E+1
-materialization, without GitHub configure or registration token. Any mismatch
-terminalizes registration_token_required; a separate explicit Task is required
-to obtain a new GitHub registration token. Completion is not lifecycle seal
-until Controller-owned runtime proof and ownership seal succeed.
+The configure child receives the token only as
+`ACTIONS_RUNNER_INPUT_TOKEN` in its ninth, explicitly constructed
+environment entry. Its universal boundary is 1..4096 bytes, every byte ASCII
+`0x21..0x7e`; whitespace, DEL, non-ASCII, NUL, CR, and LF reject before
+broker acceptance. The entrypoint clears its owned token/environment arenas
+after configure. Claims are limited to those arenas: unavoidable Go, HTTP,
+TLS, `os/exec`, kernel, upstream .NET, same-UID, root, and Docker copies are
+not claimed erased, are never deliberately persisted or logged, and remain
+bounded by process lifetime and GitHub's token expiry.
 
-Initial/post-start/recurring proof compares the single RuntimeOwnership schema.
-Drift marks offline/conflict and refuses new operations. Without Controller
-authority it does not mutate externally; authenticated cleanup uses only sealed
-identities. Host-root tampering remains outside threat model.
+Initial, post-start, and recurring proof compare the single canonical
+RuntimeOwnership record. Drift marks the Runner offline/conflicted and refuses
+new operations. Without current authenticated Controller authority the
+executor does not mutate external state; cleanup uses only sealed identities.
+Host-root tampering remains outside the threat model.
 
+On reboot no old rootful process, namespace, socket, container, or token is
+reused. Recovery follows the epoch-transfer rules above: quiesce and clean the
+old owned runtime, allocate one prospective epoch, and recreate from preserved
+non-secret registration files only when exact evidence permits it. Reusing or
+inventing a GitHub registration token is forbidden.
 
 ## Consequences
 
@@ -2728,8 +2084,8 @@ identities. Host-root tampering remains outside threat model.
   name, canonical GitHub URL, absolute observation time, and freshness-derived
   online value while keeping host allocation and runtime internals private.
 - The production Controller needs a zeroing in-process attempt broker, durable
-  registration and one-time-config intents, immutable Controller Task plans,
-  proof comparison, and logical lifecycle transitions. Its native Runner
+  non-secret registration intent, immutable Controller Task plans, proof
+  comparison, and logical lifecycle transitions. Its native Runner
   executor owns process quiescence, exact account and user-unit management, one
   rootless daemon per Runner, live runtime inspection, fail-closed nftables,
   and ownership-verified local cleanup. The persistent Agent owns none of
@@ -2743,12 +2099,8 @@ identities. Host-root tampering remains outside threat model.
 - Existing unsafe Console Runner guidance and fixture mutation must be removed
   cleanly when this contract is implemented; no compatibility path preserves
   host-socket, durable-token-environment, arbitrary-name, or fabricated-online behavior.
-- ADR 0033 remains authoritative only for the combined per-Tenant five quota, no
-  cross-Tenant reach, one `/29` per Runner, retained fences, local-only removal,
-  excluded future features, and isolation/lifecycle clauses not explicitly
-  replaced here. ADR 0050 cleanly supersedes ADR 0033's `/29` allocation source
-  and `system_pool` coupling: machine-supplied `runner.network_pool` is the sole
-  allocation source.
-- C17 cannot become Accepted from this ADR alone. Product, API/CLI, Console,
-  generated contracts, implementation ledger, automated evidence, and Ubuntu
-  24.04 host evidence must land as one coherent vertical contract.
+- The machine-supplied `runner.network_pool` is the sole Runner subnet source;
+  the former `system_pool` coupling is not an alternate allocation path.
+- The Runner feature is accepted only by the feature-level evidence in
+  [Runners](../runners.md), including generated contracts and Ubuntu 24.04 host
+  evidence on both supported architectures.

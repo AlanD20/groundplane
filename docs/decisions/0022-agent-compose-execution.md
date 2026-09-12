@@ -47,10 +47,10 @@ Docker identities, and paths are derived from stable ids and never from
 mutable labels, although the current Blueprint parser still derives its
 Compose project name from the environment label.
 
-ADR 0009 correctly requires typed execution payloads and rejects the generic
-step map. Its Valkey RDB/AOF and cross-database grant questions are unrelated
-to Compose execution and do not block this closed Compose procedure. The owner
-approved the recommendation and its implementation on 2026-08-22.
+This accepted contract requires typed execution payloads and rejects generic
+step maps. Adapter procedures have their own accepted boundary in ADR 0032;
+Backup source formats and recovery are owned by [Backups](../features/backups.md).
+Unaccepted Valkey artifact or grant proposals do not extend this procedure.
 
 ## Existing constraints
 
@@ -664,7 +664,7 @@ task's need into permanent ambient access.
 ### Preserve generic step parameter maps during migration
 
 Rejected because a compatibility decoder would keep the arbitrary-text
-execution boundary ADR 0009 rejects. Unknown operations remain unavailable
+execution boundary this contract rejects. Unknown operations remain unavailable
 until their typed payload exists.
 
 ### Keep both ownership-label namespaces
@@ -780,8 +780,7 @@ Implementation remains blocked until the owner explicitly approves all of:
 10. the security, error, output-secrecy, implementation-order, clean-cutover,
     and verification requirements above.
 
-Approval moves this ADR to Accepted and authorizes synchronized contract and
-implementation work. It does not approve ADR 0009's Valkey RDB/AOF or
-cross-database grant choices, enable generic command payloads, or mark any
-runtime capability Implemented or Accepted before its required checks and L2
-scenario pass.
+The accepted Compose contract does not authorize a Valkey RDB/AOF format,
+new cross-database grant behavior or generic command payloads. Contract
+acceptance is not implementation or runtime qualification; required checks and
+operator journeys still apply.
