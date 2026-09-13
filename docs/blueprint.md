@@ -431,8 +431,10 @@ sealed Service and Release inputs. Within each phase, Services execute in
 sealed dependency-topology order, breaking incomparable ties by current Service
 slug bytes; Scripts for each Service execute by numeric `order` then current Script
 slug bytes.
-Manual Scripts never execute during Blueprint apply. Exact reapply, or an apply
-with no selected changed candidate, executes no hooks. The complete selection
+Manual Scripts never execute during Blueprint apply. An apply with no required
+candidate executes no hooks. Repeating successfully applied inputs is a no-op;
+repeating failed or superseded input may still require candidates and hooks.
+The complete selection
 across pre-deploy, post-deploy, and possible `on-failure` execution is limited
 to 16 hooks and 1,048,576 aggregate UTF-8 body bytes; phases do not receive
 separate budgets, and a violation is rejected before Task publication.

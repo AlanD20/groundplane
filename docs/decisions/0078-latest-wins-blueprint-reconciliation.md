@@ -124,6 +124,15 @@ resource grouping and execution-plan preparation. Capability-owned persistence
 atomically guards acceptance, dispatch, per-resource claims and acknowledgements.
 The Agent executes only the current authorized unit and reports exact effects.
 
+Applied input authority must follow the affected resources across all successful
+writers, including explicit Releases, Entry updates and Attach changes. The
+existing aggregate Environment projection is not that authority: ordinary Release
+completion can leave its native inputs behind, while mixed Blueprint completion
+can advance its desired fields for Services that did not execute. Neither that
+aggregate nor an original Release's historical configuration may stand in for
+the complete per-resource result. Capture sealed input identities when their
+effects are acknowledged; retain separate uncertainty for unaccounted effects.
+
 Keep the current serialization guard until that complete handoff is connected and
 proved. A pure selector or a new cancellation reason alone is not implemented
 latest-wins reconciliation. Do not add a permissive fallback for older records.

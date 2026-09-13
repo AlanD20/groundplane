@@ -1752,8 +1752,10 @@ candidate Service and applicable Release inputs. Within each phase, Services
 follow the sealed dependency topology with current Service slug bytes as the
 tie-break, and Scripts for each Service follow numeric `order` then current Script
 slug bytes.
-Manual Scripts never execute during apply. Exact reapply, or an apply with no
-selected changed candidate, executes no hooks. The complete selection across
+Manual Scripts never execute during apply. An apply with no required candidate
+executes no hooks. Repeating previously successful, still-applied inputs is a
+no-op; repeating input that failed or was superseded may still require candidates
+and their hooks. The complete selection across
 pre-deploy, post-deploy, and possible `on-failure` execution is limited to 16
 hooks and 1,048,576 aggregate UTF-8 body bytes; phases do not receive separate
 budgets, and a violation is rejected before Task publication.
@@ -1947,12 +1949,13 @@ Group members are excluded from implicit candidate Release and hook execution;
 explicit group Deploy/Rollback retains declared serial order and `on_failure`.
 For the remaining selected Services, the apply creates candidate Releases from
 the sealed candidate projection and executes matching `pre-deploy` and
-`post-deploy` Scripts in the same Environment update Task, operation id, and
-Agent assignment. Within each phase Services run in dependency-topological
+`post-deploy` Scripts in that Apply Task's private execution units and original
+operation. Within each phase Services run in dependency-topological
 order with slug-byte ordering as the tie breaker; each Service's Scripts run in
 numeric order then slug-byte order, once per selected logical Service Release
-rather than once per replica. Exact reapply, or an apply with no selected changed candidate, runs no
-hooks. Manual Scripts do not execute during apply. The complete selection
+rather than once per replica. An apply with no required candidate runs no hooks;
+equal input alone does not establish this after failure or supersession.
+Manual Scripts do not execute during apply. The complete selection
 across pre-deploy, post-deploy, and possible `on-failure` execution is limited
 to 16 hooks and 1,048,576 aggregate UTF-8 body bytes, rejected before Task
 publication; phases do not receive separate budgets, and the bounds count
