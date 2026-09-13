@@ -866,7 +866,7 @@ func attachDetachRaceEnvelope(
 		RenderGeneration:         scope.ComposeProjection.Record.RenderGeneration,
 		EnvironmentEpochRevision: attachTestEpochRevision(t, ctx, repository.store, current.Record.EnvironmentID),
 		RuntimeProjection:        scope.ComposeProjection.Record,
-		RunningServiceIDs:        []string{current.Record.ServiceID},
+		RuntimePreparation:       configuredAttachRuntimePreparation(task, current.Record.EnvironmentID),
 		Services:                 attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
 		Networks:                 attachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones),
 		Volumes:                  append([]EnvironmentVolumeIdentity(nil), scope.ComposeProjection.Record.Volumes...),

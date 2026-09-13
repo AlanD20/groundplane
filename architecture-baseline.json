@@ -263,12 +263,6 @@
     "reason": "Pre-Q0 producer-owned side-effect seam pending migration to a consumer-owned contract."
   },
   {
-    "path": "internal/infra/etcd/attach_repository_test.go",
-    "rule": "layer-import",
-    "subject": "pkg/api",
-    "reason": "Pre-Q0 dependency edge pending relocation to its owning layer."
-  },
-  {
     "path": "internal/infra/etcd/component_record.go",
     "rule": "reflect-import",
     "subject": "reflect",

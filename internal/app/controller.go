@@ -16,6 +16,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/logging"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	"github.com/AlanD20/groundplane/internal/controller"
+	"github.com/AlanD20/groundplane/internal/controller/attachplanning"
 	"github.com/AlanD20/groundplane/internal/controller/backupkey"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	componentcapability "github.com/AlanD20/groundplane/internal/controller/component"
@@ -891,9 +892,8 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Attach mutation idempotency: %w", err)
 	}
-	attachMutationPlans, err := newDraftAttachPlanSealer(
-		cfg.Storage.VolumeRoot, attachMutationRecords, attachFactValues, componentCatalog,
-	)
+	attachMutationPlans, err := attachplanning.New(cfg.Storage.VolumeRoot,
+		attachRecords, attachMutationRecords, attachFactValues, componentCatalog)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Attach draft plan sealer: %w", err)

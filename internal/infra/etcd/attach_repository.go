@@ -278,30 +278,8 @@ func (repository *AttachRepository) CreateAttachWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	binding, err := mutationContext.bind(ctx, repository.store, conditions, mutations, true)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer binding.clear()
-	defer clearMutationValues(binding.mutations)
-	classify := func(revision int64, values []*KeyValue) error {
-		return binding.classify(revision, values, classifyAttachTaskCreateConflict)
-	}
-	plan, err := newTaskIdempotencyMutationPlan(
-		task,
-		initiation,
-		binding.conditions,
-		binding.mutations,
-		classify,
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	idempotency, err := newIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return idempotency.Apply(ctx, marker, plan)
+	return repository.publishAttachRuntimeTask(ctx, task, renderInput, initiation, marker,
+		mutationContext, conditions, mutations, classifyAttachTaskCreateConflict)
 }
 
 func (repository *AttachRepository) BeginAttachDetachWithTask(
@@ -570,30 +548,8 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 			)
 		}
 	}
-	binding, err := mutationContext.bind(ctx, repository.store, conditions, mutations, true)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer binding.clear()
-	defer clearMutationValues(binding.mutations)
-	classify := func(revision int64, values []*KeyValue) error {
-		return binding.classify(revision, values, classifyAttachDetachTaskConflict)
-	}
-	plan, err := newTaskIdempotencyMutationPlan(
-		task,
-		initiation,
-		binding.conditions,
-		binding.mutations,
-		classify,
-	)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	idempotency, err := newIdempotencyRepository(repository.store)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	return idempotency.Apply(ctx, marker, plan)
+	return repository.publishAttachRuntimeTask(ctx, task, renderInput, initiation, marker,
+		mutationContext, conditions, mutations, classifyAttachDetachTaskConflict)
 }
 
 func (repository *AttachRepository) GetAttach(ctx context.Context, id string) (Versioned[AttachRecord], error) {

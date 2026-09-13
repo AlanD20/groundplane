@@ -8,6 +8,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -32,33 +33,34 @@ type AttachTaskOwnedNetworkSnapshot struct {
 // needed to reproduce an Attach plan after restart. Retries retain PlanID and
 // therefore consume the exact same input without reading mutable topology.
 type AttachTaskRenderInput struct {
-	PlanID                   string                           `json:"plan_id"`
-	AttachID                 string                           `json:"attach_id"`
-	AttachName               string                           `json:"attach_name"`
-	TenantID                 string                           `json:"tenant_id"`
-	TenantSlug               string                           `json:"tenant_slug"`
-	ProjectID                string                           `json:"project_id"`
-	ProjectSlug              string                           `json:"project_slug"`
-	EnvironmentID            string                           `json:"environment_id"`
-	EnvironmentName          string                           `json:"environment_name"`
-	AuthorizedVolumeDir      string                           `json:"authorized_volume_dir"`
-	BackingServiceID         string                           `json:"backing_service_id"`
-	BackingProjectID         string                           `json:"backing_project_id"`
-	AdapterKey               string                           `json:"adapter_key"`
-	Authentication           core.BackingAuthentication       `json:"authentication,omitempty"`
-	DesiredRevisionID        string                           `json:"desired_revision_id"`
-	ArtifactID               string                           `json:"artifact_id"`
-	RenderGeneration         uint64                           `json:"render_generation"`
-	EnvironmentEpochRevision int64                            `json:"environment_epoch_revision"`
-	RuntimeProjection        EnvironmentComposeProjection     `json:"runtime_projection"`
-	RunningServiceIDs        []string                         `json:"running_service_ids,omitempty"`
-	Services                 []AttachTaskServiceSnapshot      `json:"services"`
-	Networks                 []AttachTaskOwnedNetworkSnapshot `json:"networks,omitempty"`
-	Volumes                  []EnvironmentVolumeIdentity      `json:"volumes,omitempty"`
-	VolumeMounts             []EnvironmentServiceVolumeMount  `json:"volume_mounts,omitempty"`
-	NetworkJoins             []AttachTaskNetworkJoin          `json:"network_joins"`
-	ConsumerServiceIDs       []string                         `json:"consumer_service_ids"`
-	GrantAttachIDs           []string                         `json:"grant_attach_ids,omitempty"`
+	PlanID                   string                                  `json:"plan_id"`
+	AttachID                 string                                  `json:"attach_id"`
+	AttachName               string                                  `json:"attach_name"`
+	TenantID                 string                                  `json:"tenant_id"`
+	TenantSlug               string                                  `json:"tenant_slug"`
+	ProjectID                string                                  `json:"project_id"`
+	ProjectSlug              string                                  `json:"project_slug"`
+	EnvironmentID            string                                  `json:"environment_id"`
+	EnvironmentName          string                                  `json:"environment_name"`
+	AuthorizedVolumeDir      string                                  `json:"authorized_volume_dir"`
+	BackingServiceID         string                                  `json:"backing_service_id"`
+	BackingProjectID         string                                  `json:"backing_project_id"`
+	AdapterKey               string                                  `json:"adapter_key"`
+	Authentication           core.BackingAuthentication              `json:"authentication,omitempty"`
+	DesiredRevisionID        string                                  `json:"desired_revision_id"`
+	ArtifactID               string                                  `json:"artifact_id"`
+	RenderGeneration         uint64                                  `json:"render_generation"`
+	EnvironmentEpochRevision int64                                   `json:"environment_epoch_revision"`
+	RuntimeProjection        EnvironmentComposeProjection            `json:"runtime_projection"`
+	RuntimePreparation       *serviceruntimerecord.AttachPreparation `json:"runtime_preparation,omitempty"`
+	RunningServiceIDs        []string                                `json:"running_service_ids,omitempty"`
+	Services                 []AttachTaskServiceSnapshot             `json:"services"`
+	Networks                 []AttachTaskOwnedNetworkSnapshot        `json:"networks,omitempty"`
+	Volumes                  []EnvironmentVolumeIdentity             `json:"volumes,omitempty"`
+	VolumeMounts             []EnvironmentServiceVolumeMount         `json:"volume_mounts,omitempty"`
+	NetworkJoins             []AttachTaskNetworkJoin                 `json:"network_joins"`
+	ConsumerServiceIDs       []string                                `json:"consumer_service_ids"`
+	GrantAttachIDs           []string                                `json:"grant_attach_ids,omitempty"`
 	core.ServiceDependencyPlans
 }
 
@@ -114,6 +116,11 @@ func decodeAttachTaskRenderInput(value []byte) (AttachTaskRenderInput, error) {
 }
 
 func validateAttachTaskRenderInput(input AttachTaskRenderInput) error {
+	if input.RuntimePreparation != nil {
+		if err := serviceruntimerecord.ValidateAttachPreparation(*input.RuntimePreparation); err != nil {
+			return err
+		}
+	}
 	if validateStableID(ids.KindPlan, input.PlanID) != nil ||
 		validateStableID(ids.KindAttach, input.AttachID) != nil ||
 		validateLabel("Attach name", input.AttachName) != nil ||
@@ -227,6 +234,9 @@ func validateAttachTaskRenderInputScope(
 	task TaskRecord,
 	input AttachTaskRenderInput,
 ) error {
+	if err := validateAttachRuntimePreparation(input, task); err != nil {
+		return err
+	}
 	if scope.Tenant.Revision <= 0 || scope.DesiredHead.Revision <= 0 || scope.ComposeProjection.Revision <= 0 {
 		return errs.New(errs.KindValidationFailed, "Attach render scope records must be versioned")
 	}

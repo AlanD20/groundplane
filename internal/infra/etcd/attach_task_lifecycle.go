@@ -34,6 +34,11 @@ func (repository *TaskRepository) prepareAttachTaskClaim(
 		applies:    true,
 		conditions: []Condition{{Key: attachKey(task.Target), ModRevision: current.Revision}},
 	}
+	runtimeConditions, err := repository.attachRuntimeClaimConditions(ctx, task, revision)
+	if err != nil {
+		return attachTaskChange{}, err
+	}
+	change.conditions = append(change.conditions, runtimeConditions...)
 	if task.Type == TaskDetach {
 		if current.Record.Status != core.AttachDetaching ||
 			current.Record.Operation != AttachOperationDetach ||

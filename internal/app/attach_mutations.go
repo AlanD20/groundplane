@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -17,9 +16,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 const (
@@ -120,7 +119,7 @@ type attachDraftPlanSealer interface {
 		etcd.AttachTaskRenderInput,
 		etcd.TaskRecord,
 		*controllerpkg.AttachPlanIdentity,
-	) (string, error)
+	) (serviceruntimerecord.AttachPreparation, error)
 }
 
 type attachMutationEvidence struct {
@@ -452,12 +451,13 @@ func (service *attachMutationService) createAttachOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	task.PlanHash, err = service.plans.SealDraft(
+	prepared, err := service.plans.SealDraft(
 		ctx, etcd.Versioned[etcd.AttachRecord]{Record: record}, renderInput, task, identity,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	task.PlanHash, renderInput.RuntimePreparation = prepared.PlanHash, &prepared
 	response, marker, err := newAttachMutationResponse(locator, evidence.durable, task, nil)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -607,10 +607,11 @@ func (service *attachMutationService) detachAttachOnce(
 	}
 	draft := current
 	draft.Record = detaching
-	task.PlanHash, err = service.plans.SealDraft(ctx, draft, renderInput, task, nil)
+	prepared, err := service.plans.SealDraft(ctx, draft, renderInput, task, nil)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	task.PlanHash, renderInput.RuntimePreparation = prepared.PlanHash, &prepared
 	response, marker, err := newAttachMutationResponse(locator, evidence.durable, task, &target)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -1157,122 +1158,4 @@ func (repository *durableAttachMutationRepository) BeginAttachDetachWithTaskInit
 	return repository.attaches.BeginAttachDetachWithTaskInitiation(
 		ctx, scope, current, renderInput, task, marker, initiation,
 	)
-}
-
-type draftAttachPlanSealer struct {
-	volumeRoot       string
-	repository       attachMutationRepository
-	facts            attachMutationFacts
-	componentCatalog []controllerpkg.EnvironmentComponentRegistration
-}
-
-func newDraftAttachPlanSealer(
-	volumeRoot string,
-	repository attachMutationRepository,
-	facts attachMutationFacts,
-	componentCatalog []controllerpkg.EnvironmentComponentRegistration,
-) (*draftAttachPlanSealer, error) {
-	if repository == nil || facts == nil {
-		return nil, errs.New(errs.KindInternal, "Attach draft plan dependencies are required")
-	}
-	if _, err := controllerpkg.NewTaskPlanResolver(volumeRoot, componentCatalog); err != nil {
-		return nil, err
-	}
-	return &draftAttachPlanSealer{
-		volumeRoot: volumeRoot, repository: repository, facts: facts,
-		componentCatalog: controllerpkg.CloneEnvironmentComponentCatalog(componentCatalog),
-	}, nil
-}
-
-func (sealer *draftAttachPlanSealer) SealDraft(
-	ctx context.Context,
-	current etcd.Versioned[etcd.AttachRecord],
-	renderInput etcd.AttachTaskRenderInput,
-	task etcd.TaskRecord,
-	identity *controllerpkg.AttachPlanIdentity,
-) (string, error) {
-	state := &draftAttachPlanState{
-		repository: sealer.repository, facts: sealer.facts, current: current,
-		renderInput: renderInput, identity: identity,
-	}
-	resolver, err := controllerpkg.NewTaskPlanResolverWithAttachments(
-		sealer.volumeRoot, sealer.repository, state, sealer.repository, state,
-		sealer.componentCatalog,
-	)
-	if err != nil {
-		return "", err
-	}
-	plan, err := resolver.ResolveExecutionPlan(ctx, task)
-	if err != nil {
-		return "", err
-	}
-	defer clearAttachPlanSecrets(plan)
-	return hex.EncodeToString(plan.PlanHash), nil
-}
-
-type draftAttachPlanState struct {
-	repository  attachMutationRepository
-	facts       attachMutationFacts
-	current     etcd.Versioned[etcd.AttachRecord]
-	renderInput etcd.AttachTaskRenderInput
-	identity    *controllerpkg.AttachPlanIdentity
-}
-
-func (state *draftAttachPlanState) GetAttach(
-	ctx context.Context,
-	id string,
-) (etcd.Versioned[etcd.AttachRecord], error) {
-	if id == state.current.Record.ID {
-		return state.current, nil
-	}
-	return state.repository.GetAttach(ctx, id)
-}
-
-func (state *draftAttachPlanState) GetAttachTaskRenderInput(
-	ctx context.Context,
-	planID string,
-) (etcd.Versioned[etcd.AttachTaskRenderInput], error) {
-	if planID == state.renderInput.PlanID {
-		return etcd.Versioned[etcd.AttachTaskRenderInput]{Record: state.renderInput}, nil
-	}
-	return state.repository.GetAttachTaskRenderInput(ctx, planID)
-}
-
-func (state *draftAttachPlanState) GetBlueprintAttachTaskIntent(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.BlueprintAttachTaskIntent], bool, error) {
-	return etcd.Versioned[etcd.BlueprintAttachTaskIntent]{}, false, nil
-}
-
-func (state *draftAttachPlanState) ResolveTaskIdentity(
-	ctx context.Context,
-	current etcd.Versioned[etcd.AttachRecord],
-	taskID string,
-	consume controllerpkg.AttachPlanIdentityConsumer,
-) error {
-	if current.Record.ID != state.current.Record.ID || state.identity == nil {
-		return state.facts.ResolveTaskIdentity(ctx, current, taskID, consume)
-	}
-	identity := controllerpkg.AttachPlanIdentity{
-		Authentication: state.identity.Authentication, Database: state.identity.Database, Role: state.identity.Role,
-		Password: append([]byte(nil), state.identity.Password...),
-		Grants:   append([]controllerpkg.AttachPlanGrantIdentity(nil), state.identity.Grants...),
-	}
-	defer identity.Clear()
-	return consume(identity)
-}
-
-func clearAttachPlanSecrets(plan *agentpb.ExecutionPlan) {
-	if plan == nil {
-		return
-	}
-	for _, step := range plan.Steps {
-		procedure := step.GetAdapterProcedure()
-		if procedure == nil {
-			continue
-		}
-		clear(procedure.Password)
-		procedure.Password = nil
-	}
 }

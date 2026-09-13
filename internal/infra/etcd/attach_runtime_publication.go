@@ -1,0 +1,47 @@
+package etcd
+
+import (
+	"context"
+
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+// publishAttachRuntimeTask keeps the acknowledged source fences in the same
+// publication as the Task, immutable preparation, Attach and Environment epoch.
+func (repository *AttachRepository) publishAttachRuntimeTask(
+	ctx context.Context, task TaskRecord, input AttachTaskRenderInput, initiation TaskInitiation,
+	marker IdempotencyMarker, mutationContext *ordinaryEnvironmentMutationContext,
+	conditions []Condition, mutations []Mutation, classifyConflict func(int64, []*KeyValue) error,
+) (IdempotencyTransactionResult, error) {
+	conditions = append(conditions, attachRuntimeSourceConditions(input)...)
+	binding, err := mutationContext.bind(ctx, repository.store, conditions, mutations, true)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer binding.clear()
+	defer clearMutationValues(binding.mutations)
+	classify := func(revision int64, values []*KeyValue) error {
+		return binding.classify(revision, values, classifyConflict)
+	}
+	plan, err := newTaskIdempotencyMutationPlan(task, initiation, binding.conditions, binding.mutations, classify)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := plan.enforceTransactionBounds(func(conditions []Condition, mutations []Mutation) error {
+		budget, err := repository.store.MeasureTransaction(ctx, conditions, mutations)
+		if err != nil {
+			return err
+		}
+		if !budget.Fits() {
+			return errs.New(errs.KindValidationFailed, "Attach publication exceeds transaction limits")
+		}
+		return nil
+	}); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	idempotency, err := newIdempotencyRepository(repository.store)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	return idempotency.Apply(ctx, marker, plan)
+}

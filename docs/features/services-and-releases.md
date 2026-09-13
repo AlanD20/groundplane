@@ -146,11 +146,26 @@ caller proof guards and physical storage-key prefix. They stop before the next
 member would exceed 96 aggregate operations or 1 MiB. An individual member that
 cannot fit fails without a partial write; the limits are not increased.
 
-This is the first writer, not an enabled recovery source. Attach/Detach, Entry,
-Blueprint success and recovery-retry publication still need the same authority.
+Standalone Attach/Detach also prepares a selected running consumer's runtime from
+its sealed plan and an existing acknowledged record. It preserves the stable
+proxy, retained inactive workload and their resources; a changed resource shared
+with the preserved proxy fails preparation. Equivalent YAML mapping order is not
+a resource change. Stopped/configured-only consumers prepare no runtime update.
+
+Publication, claim and successful terminal acknowledgement compare the exact
+prior runtime revision and immutable preparation. Completion writes the selected
+runtime, Attach outcome and Task outcome atomically. Failed execution, stale
+authority and replay cannot promote a prepared value or rewrite an existing
+acknowledgement. Missing runtime is rejected, never fabricated from old Release
+input; this is not an online migration for installations lacking those records.
+
+These writers are not an enabled recovery source. Entry, Blueprint success and
+recovery-retry publication still need the same authority.
 Readers must not use a partially maintained record, backfill it from old Release
 input, or infer a missing acknowledgement. Consumer cutover and any clean QA
 rebuild follow only after those writers and source-retention checks are closed.
+Their existence does not authorize further implementation; current work is scoped
+by the owner instruction in [head.md](../head.md).
 
 ### Ordinary Release predecessors
 

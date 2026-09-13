@@ -2052,8 +2052,8 @@ func (repository *TaskRepository) acknowledgeTask(
 			conditions = append(conditions, zoneConditions...)
 			mutations = append(mutations, zoneMutations...)
 		}
-		attachChange, err := repository.prepareAttachTaskAcknowledgement(
-			ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
+		attachChange, err := repository.prepareAcknowledgedAttachTask(
+			ctx, terminal, assignment, primaryAndAssignment.ReadRevision,
 		)
 		if err != nil {
 			clear(terminalValue)
