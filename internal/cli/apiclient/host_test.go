@@ -10,6 +10,7 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
+// QA: HOST-01; HTTP projection only, not real Host observation.
 func TestShowHostUsesGeneratedHumanOperation(t *testing.T) {
 	// Rationale: host show must use the generated host.show operation while
 	// preserving the exact public nested model for JSON and table output.

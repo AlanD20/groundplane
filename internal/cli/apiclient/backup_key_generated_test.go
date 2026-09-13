@@ -13,6 +13,7 @@ import (
 
 // Rationale: backup rotate must call the generated operation with its generated
 // header contract and decode the generated TaskAccepted response.
+// QA: BAK-14; protected rotation request only, not key creation or persistence.
 func TestRotateBackupKeyUsesGeneratedOperation(t *testing.T) {
 	taskID := "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

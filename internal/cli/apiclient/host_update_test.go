@@ -14,6 +14,7 @@ import (
 
 // Rationale: the human client must preserve both absent metadata and exact
 // digest, compatibility and durable Task fields through the generated model.
+// QA: UP-01/05; update metadata projection only, not activation/recovery.
 func TestShowHostPreservesControllerUpdateMetadata(t *testing.T) {
 	t.Parallel()
 	for _, update := range []apiTypes.ControllerUpdateState{

@@ -12,6 +12,7 @@ import (
 
 // Rationale: generated consumers must retain exact operation identities,
 // JSON mutation headers, non-null sources, enums, and Volume scope.
+// QA: BAK-01, VOL-01; generated HTTP model only, not policy or Volume effects.
 func TestGeneratedBackupPolicyAndVolumeOperations(t *testing.T) {
 	doer := backupPolicyGeneratedDoer(func(request *http.Request) (*http.Response, error) {
 		body := ""
@@ -32,6 +33,7 @@ func TestGeneratedBackupPolicyAndVolumeOperations(t *testing.T) {
 			}
 			body = `{"items":[]}`
 		default:
+			t.Errorf("unexpected generated request: %s %s", request.Method, request.URL)
 			body = `{}`
 		}
 		return &http.Response{
@@ -76,7 +78,7 @@ func TestGeneratedBackupPolicyAndVolumeOperations(t *testing.T) {
 	volumes, err := client.VolumeListWithResponse(ctx, &generated.VolumeListParams{
 		Environment: "env_01AAAAAAAAAAAAAAAAAAAAAAAA",
 	})
-	if err != nil || volumes.JSON200 == nil {
+	if err != nil || volumes.JSON200 == nil || volumes.JSON200.Items == nil || len(*volumes.JSON200.Items) != 0 {
 		t.Fatalf("VolumeListWithResponse() = %#v, %v", volumes, err)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -14,6 +15,7 @@ import (
 
 // Rationale: generated transport must preserve exact execution grants in both
 // directions instead of silently losing them during public-model conversion.
+// QA: SCRIPT-01/06; grant transport/decoding only, not runner isolation.
 func TestScriptClientExecutionRoundTrip(t *testing.T) {
 	execution := apiTypes.ScriptExecution{
 		Mode:  "explicit",
@@ -27,14 +29,20 @@ func TestScriptClientExecutionRoundTrip(t *testing.T) {
 	for _, method := range []string{http.MethodPost, http.MethodPatch} {
 		t.Run(method, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				wantPath := "/api/v1/scripts"
+				if method == http.MethodPatch {
+					wantPath += "/scr_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+				}
+				if request.Method != method || request.URL.Path != wantPath {
+					t.Errorf("request = %s %s, want %s %s", request.Method, request.URL.Path, method, wantPath)
+				}
 				var input struct {
 					Execution *apiTypes.ScriptExecution `json:"execution"`
 				}
 				if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
 					t.Error(err)
 				}
-				if input.Execution == nil || input.Execution.Mode != "explicit" || len(input.Execution.Volumes) != 1 ||
-					input.Execution.Volumes[0].ReadOnly || input.Execution.Image != execution.Image {
+				if !reflect.DeepEqual(input.Execution, &execution) {
 					t.Errorf("client lost execution: %#v", input.Execution)
 				}
 				writer.Header().Set("Content-Type", "application/json")
@@ -55,8 +63,7 @@ func TestScriptClientExecutionRoundTrip(t *testing.T) {
 			} else {
 				response, err = client.EditScript(context.Background(), "scr_01ARZ3NDEKTSV4RRFFQ69G5FAV", apiTypes.ScriptEdit{Execution: &execution})
 			}
-			if err != nil || response.Execution.Mode != "explicit" || len(response.Execution.Volumes) != 1 ||
-				response.Execution.Image != execution.Image || len(response.Execution.EntryIDs) != 1 {
+			if err != nil || !reflect.DeepEqual(response.Execution, execution) {
 				t.Fatalf("client response lost execution: %#v, %v", response.Execution, err)
 			}
 		})
@@ -65,6 +72,7 @@ func TestScriptClientExecutionRoundTrip(t *testing.T) {
 
 // Rationale: a malformed Controller response must not turn missing read_only
 // into false or an invalid/missing mode into apparently inherited execution.
+// QA: SCRIPT-01/06; grant transport/decoding only, not runner isolation.
 func TestScriptClientRejectsMalformedExecutionResponse(t *testing.T) {
 	for _, execution := range []string{
 		`null`, `{}`, `{"mode":"inherited","image":""}`,

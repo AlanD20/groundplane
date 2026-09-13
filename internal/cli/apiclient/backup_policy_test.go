@@ -12,7 +12,8 @@ import (
 )
 
 // Rationale: the protected singleton replacement must use the generated JSON
-// operation while preserving exact optional fields and ordered source ids.
+// operation while preserving the supplied policy fields and source identity.
+// QA: BAK-01/02, VOL-01; local request/projection only, not persistence or capture.
 func TestSetBackupPolicySendsExactProtectedJSON(t *testing.T) {
 	t.Parallel()
 
@@ -79,6 +80,7 @@ func TestSetBackupPolicySendsExactProtectedJSON(t *testing.T) {
 
 // Rationale: Volume label resolution depends on the generated collection
 // query carrying the owning stable Environment id and pagination unchanged.
+// QA: BAK-01/02, VOL-01; local request/projection only, not persistence or capture.
 func TestListVolumesSendsEnvironmentQuery(t *testing.T) {
 	t.Parallel()
 

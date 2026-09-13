@@ -9,6 +9,7 @@ import (
 
 // Rationale: CLI deletion must use the generated Environment operation with a
 // protected idempotency key and render the Controller's accepted Task identity.
+// QA: OWN-05/06; deletion request and Task identity only, not descendant removal.
 func TestDeleteEnvironmentUsesGeneratedAcceptedTaskOperation(t *testing.T) {
 	t.Parallel()
 	environmentID := "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"

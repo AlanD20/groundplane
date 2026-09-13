@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -16,6 +17,7 @@ import (
 
 // Rationale: a finite CLI process needs to distinguish authoritative terminal
 // closure from a live disconnect and resume the latter with its last sequence.
+// QA: TASK-06; local reconnect/parser behavior, not durable compaction or live drain.
 func TestStreamTaskEventsReconnectsWithGeneratedResumeHeader(t *testing.T) {
 	t.Parallel()
 	taskID := "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -66,7 +68,9 @@ func TestStreamTaskEventsReconnectsWithGeneratedResumeHeader(t *testing.T) {
 	defer server.Close()
 
 	var sequences []uint64
-	err := New(server.URL).StreamTaskEvents(context.Background(), taskID, func(event apiTypes.TaskEvent) error {
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	err := New(server.URL).StreamTaskEvents(ctx, taskID, func(event apiTypes.TaskEvent) error {
 		sequences = append(sequences, event.Sequence)
 		return nil
 	})
@@ -85,6 +89,7 @@ func TestStreamTaskEventsReconnectsWithGeneratedResumeHeader(t *testing.T) {
 
 // Rationale: at-least-once delivery across reconnects must remain exactly once
 // to one live CLI callback, while a genuine sequence gap fails closed.
+// QA: TASK-06; local reconnect/parser behavior, not durable compaction or live drain.
 func TestConsumeTaskEventStreamDeduplicatesReplayAndRejectsGap(t *testing.T) {
 	t.Parallel()
 	event := func(sequence int) string {
@@ -123,16 +128,20 @@ func TestConsumeTaskEventStreamDeduplicatesReplayAndRejectsGap(t *testing.T) {
 
 // Rationale: a connection ending inside a frame has not delivered that event;
 // the retryable classification is what makes the next request resume safely.
+// QA: TASK-06; local reconnect/parser behavior, not durable compaction or live drain.
 func TestConsumeTaskEventStreamTreatsPartialFrameAsRetryable(t *testing.T) {
 	t.Parallel()
-	_, err := consumeTaskEventStream(
+	last, err := consumeTaskEventStream(
 		context.Background(),
 		"/tasks/task_1/events",
 		strings.NewReader("id: 1\ndata: {\"sequence\":1}"),
 		0,
-		func(apiTypes.TaskEvent) error { return nil },
+		func(apiTypes.TaskEvent) error {
+			t.Error("incomplete frame reached callback")
+			return nil
+		},
 	)
-	if !errs.IsRetryable(err) {
-		t.Fatalf("partial frame error = %v, want retryable", err)
+	if !errs.IsRetryable(err) || last != 0 {
+		t.Fatalf("partial frame = last %d, error %v; want unchanged cursor and retryable", last, err)
 	}
 }

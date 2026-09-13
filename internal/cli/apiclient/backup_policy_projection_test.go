@@ -7,6 +7,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
 )
 
+// QA: BAK-04; nullable timestamp projection only, not scheduler execution.
+// Rationale: Preserve the server's exact next-run time without inventing a schedule for null.
 func TestBackupPolicyFromGeneratedProjectsNullableNextRunAt(t *testing.T) {
 	at := time.Date(2026, 8, 27, 14, 30, 0, 0, time.UTC)
 	projected := backupPolicyFromGenerated(generated.BackupPolicy{

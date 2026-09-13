@@ -12,6 +12,7 @@ import (
 
 // Rationale: the human CLI client must use the generated BackupPointsList
 // operation and preserve its cursor plus exact verified public projection.
+// QA: BAK-07; cursor/metadata transport only, not remote verification.
 func TestListRecoveryPointsUsesGeneratedOperation(t *testing.T) {
 	t.Parallel()
 	const environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"

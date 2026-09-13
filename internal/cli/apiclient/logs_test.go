@@ -17,6 +17,7 @@ import (
 
 // Rationale: the CLI must pass the exact public LogEvent to presentation code
 // without weakening stable ids, closed variants, timestamps, or text fields.
+// QA: LOG-01/02; local stream decoding only, not container log collection.
 func TestStreamLogsAcceptsExactLogEvent(t *testing.T) {
 	t.Parallel()
 
@@ -50,6 +51,7 @@ func TestStreamLogsAcceptsExactLogEvent(t *testing.T) {
 
 // Rationale: a stream frame is one closed JSON document; malformed syntax,
 // unknown fields, or concatenated documents must never reach CLI presentation.
+// QA: LOG-01/02; local stream decoding only, not container log collection.
 func TestStreamLogsRejectsMalformedUnknownAndMultipleJSONDocuments(t *testing.T) {
 	t.Parallel()
 

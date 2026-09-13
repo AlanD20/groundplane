@@ -12,6 +12,7 @@ import (
 
 // Rationale: the CLI wrapper must use the generated PUT signature so the
 // OpenAPI-required key and exact YAML replacement reach the Controller.
+// QA: HOST-08/09; protected config transport only, not file or restart effects.
 func TestControllerConfigGeneratedClientCarriesIdempotencyKey(t *testing.T) {
 	t.Parallel()
 	const initialRevision = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

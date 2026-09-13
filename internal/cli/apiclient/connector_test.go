@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
 // Rationale: every Connector command must retain the generated transport's
-// query, path, idempotency, redaction, and accepted-Task contract.
+// query, path, idempotency, credential metadata, and accepted-Task contract.
+// The server fixture is already redacted; this does not prove server redaction.
+// QA: CON-01/03/04; local request/projection only, not provider access or secret resolution.
 func TestConnectorClientUsesTypedGeneratedOperations(t *testing.T) {
 	t.Parallel()
 	environmentID := "env_01K3D7R40G0000000000000000"
@@ -75,6 +78,11 @@ func TestConnectorClientUsesTypedGeneratedOperations(t *testing.T) {
 	shown, err := client.ShowConnector(context.Background(), connectorID)
 	if err != nil || shown.ID != connectorID {
 		t.Fatalf("ShowConnector() = %#v, %v", shown, err)
+	}
+	for _, got := range []apiTypes.Connector{created, page.Items[0], shown} {
+		if want := testConnectorClientResponse(connectorID, environmentID); !reflect.DeepEqual(got, want) {
+			t.Fatalf("Connector projection = %#v, want %#v", got, want)
+		}
 	}
 	accepted, err := client.RemoveConnector(context.Background(), connectorID)
 	if err != nil || accepted.TaskID != "task_01K3D7R40G0000000000000002" || requests != 4 {

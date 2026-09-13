@@ -12,7 +12,8 @@ import (
 )
 
 // Rationale: the sole raw response boundary must reject an oversized private
-// identity, clear its temporary allocation, and never add an idempotency key.
+// identity, return no partial value, and never add an idempotency key.
+// QA: BAK-14; local export transport/buffer handling, not key lifecycle.
 func TestClientBoundsRawExportAndOmitsIdempotency(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if got := request.Header.Get(idempotencyKeyHeader); got != "" {
@@ -22,7 +23,7 @@ func TestClientBoundsRawExportAndOmitsIdempotency(t *testing.T) {
 			t.Errorf("Accept = %q, want text/plain", got)
 		}
 		writer.WriteHeader(http.StatusOK)
-		_, _ = writer.Write(bytes.Repeat([]byte("x"), maximumRawResponseByteSize+1))
+		_, _ = writer.Write(bytes.Repeat([]byte("x"), 4096+1))
 	}))
 	defer server.Close()
 	client := New(server.URL)
@@ -58,9 +59,10 @@ func (reader *partialPrivateReader) Read(target []byte) (int, error) {
 // Rationale: a transport that returns private identity bytes together with an
 // error must leave no partial secret in the raw-response scratch buffer and
 // must expose only the repository's single errs.Error type.
+// QA: BAK-14; local export transport/buffer handling, not key lifecycle.
 func TestReadBoundedRawResponseClearsPartialPrivateIdentityOnError(t *testing.T) {
 	failure := errors.New("truncated response")
-	scratch := bytes.Repeat([]byte{0x7f}, maximumRawResponseByteSize+1)
+	scratch := bytes.Repeat([]byte{0x7f}, 4096+1)
 	_, err := readBoundedRawResponseInto(
 		&partialPrivateReader{failure: failure},
 		scratch,

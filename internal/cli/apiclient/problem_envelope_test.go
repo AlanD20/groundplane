@@ -8,12 +8,12 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/common/problemresponse"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // Rationale: an API error is trusted only inside a bounded RFC problem
 // envelope containing exactly one JSON document and the closed tuple.
+// QA: UI-05; local malformed error rejection only.
 func TestResponseProblemRejectsInvalidEnvelope(t *testing.T) {
 	problem := errs.New(errs.KindStorageUnavailable, "storage offline").ToProblem()
 	valid, err := json.Marshal(problem)
@@ -39,7 +39,7 @@ func TestResponseProblemRejectsInvalidEnvelope(t *testing.T) {
 		},
 		"oversized body": {
 			mediaType: "application/problem+json",
-			body:      bytes.Repeat([]byte("x"), int(problemresponse.MaximumBytes)+1),
+			body:      bytes.Repeat([]byte("x"), (1<<20)+1),
 		},
 		"missing member": {
 			mediaType: "application/problem+json",

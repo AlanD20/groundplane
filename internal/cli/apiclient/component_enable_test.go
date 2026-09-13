@@ -11,6 +11,8 @@ import (
 	"github.com/oklog/ulid/v2"
 )
 
+// QA: CMP-02; exact enable request only, not workload activation.
+// Rationale: Preserve an absent body versus explicit typed enable config and accepted Task identity.
 func TestEnableComponentSendsOptionalTypedConfig(t *testing.T) {
 	tests := []struct {
 		name    string

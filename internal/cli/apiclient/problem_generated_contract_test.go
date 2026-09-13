@@ -12,6 +12,7 @@ import (
 
 // Rationale: the generated CLI model must remain the closed RFC 7807 tuple;
 // an open or extra field would let the client trust data the Controller never emits.
+// Delivery: generated model/parser structure; not behavioral product qualification.
 func TestGeneratedProblemModelHasExactFields(t *testing.T) {
 	model := reflect.TypeFor[generated.Error]()
 	fields := make([]string, 0, model.NumField())
@@ -34,6 +35,7 @@ func TestGeneratedProblemModelHasExactFields(t *testing.T) {
 
 // Rationale: every generated parser must establish exactly-one response-body
 // ownership before the bounded reader can return through any error branch.
+// Delivery: generated model/parser structure; not behavioral product qualification.
 func TestGeneratedParsersRegisterCloseBeforeRead(t *testing.T) {
 	generatedSource, err := os.ReadFile("generated/client.gen.go")
 	if err != nil {

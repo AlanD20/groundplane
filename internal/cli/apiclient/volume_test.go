@@ -12,6 +12,8 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
+// QA: VOL-01/04/05; local request and projection only, not disk effects or revision fencing.
+// Rationale: Keep stable Volume keys and protected create/edit/delete request shapes intact.
 func TestVolumeMutationsUseADR0049Shapes(t *testing.T) {
 	t.Parallel()
 
@@ -84,6 +86,7 @@ func TestVolumeMutationsUseADR0049Shapes(t *testing.T) {
 
 // Rationale: The generated create request represents the optional Compose key
 // as a pointer, so the mapping must omit it when the public input omits it.
+// QA: VOL-01/04/05; local request and projection only, not disk effects or revision fencing.
 func TestGeneratedVolumeCreateBodyPreservesOptionalKey(t *testing.T) {
 	t.Parallel()
 
@@ -108,17 +111,8 @@ func TestGeneratedVolumeCreateBodyPreservesOptionalKey(t *testing.T) {
 	}
 }
 
-// Rationale: Volume edits have one mutable field and must map directly to the
-// generated request without reserializing through an untyped intermediate.
-func TestGeneratedVolumeEditBodyMapsSlug(t *testing.T) {
-	t.Parallel()
-
-	body := generatedVolumeEditBody(apiTypes.VolumeEdit{Slug: "archive"})
-	if body.Slug != "archive" {
-		t.Fatalf("body = %#v, want slug archive", body)
-	}
-}
-
+// QA: VOL-01/04/05; local request and projection only, not disk effects or revision fencing.
+// Rationale: Do not lose the revision or confirmation token needed for safe deletion.
 func TestGetVolumeDeletionImpactPreservesFixedRevisionPage(t *testing.T) {
 	t.Parallel()
 

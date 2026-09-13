@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -20,6 +21,7 @@ func writeTaskClientTestResponse(t *testing.T, writer io.Writer, response []byte
 
 // Rationale: the human CLI client must consume the generated task.show
 // operation and preserve durable identifiers and fixed-revision step state.
+// QA: TASK-01, UI-03/05; local journal requests/projections, not durable history.
 func TestShowTaskUsesGeneratedOperation(t *testing.T) {
 	t.Parallel()
 	taskID := "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -57,6 +59,7 @@ func TestShowTaskUsesGeneratedOperation(t *testing.T) {
 
 // Rationale: Task and Activity must carry the exact same generated scope,
 // cursor, public ownership, actor, and timestamp projection.
+// QA: TASK-01, UI-03/05; local journal requests/projections, not durable history.
 func TestTaskJournalListsUseGeneratedScopedOperations(t *testing.T) {
 	t.Parallel()
 	const (
@@ -119,8 +122,11 @@ func TestTaskJournalListsUseGeneratedScopedOperations(t *testing.T) {
 			task := page.Items[0]
 			if task.ID != taskID || task.WorkspaceType != apiTypes.TaskWorkspaceTenant ||
 				task.TenantID != tenantID || task.ProjectID != projectID || task.EnvironmentID != environmentID ||
-				task.Actor != apiTypes.TaskActorOperator || task.CreatedAt.IsZero() || task.UpdatedAt.IsZero() ||
-				task.StartedAt == nil || task.FinishedAt == nil {
+				task.Actor != apiTypes.TaskActorOperator ||
+				!task.CreatedAt.Equal(time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)) ||
+				!task.UpdatedAt.Equal(time.Date(2026, 8, 24, 10, 2, 0, 0, time.UTC)) ||
+				task.StartedAt == nil || !task.StartedAt.Equal(time.Date(2026, 8, 24, 10, 1, 0, 0, time.UTC)) ||
+				task.FinishedAt == nil || !task.FinishedAt.Equal(time.Date(2026, 8, 24, 10, 2, 0, 0, time.UTC)) {
 				t.Fatalf("public Task = %#v", task)
 			}
 		})
@@ -129,6 +135,7 @@ func TestTaskJournalListsUseGeneratedScopedOperations(t *testing.T) {
 
 // Rationale: an invalid dual-scope query must fail before any generated HTTP
 // request can escape the CLI boundary.
+// QA: TASK-01, UI-03/05; local journal requests/projections, not durable history.
 func TestTaskJournalListRejectsDualScope(t *testing.T) {
 	t.Parallel()
 	_, err := taskListParams(TaskListOptions{Environment: "env_id", Workspace: "platform"})
@@ -137,6 +144,8 @@ func TestTaskJournalListRejectsDualScope(t *testing.T) {
 	}
 }
 
+// QA: TASK-01, UI-03/05; local journal requests/projections, not durable history.
+// Rationale: Reject unknown or contradictory step identities instead of displaying trusted progress.
 func TestShowTaskRejectsInvalidStepProjection(t *testing.T) {
 	t.Parallel()
 	const taskID = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"

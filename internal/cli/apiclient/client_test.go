@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -16,6 +17,7 @@ import (
 
 // Rationale: ordinary JSON calls must preserve the canonical Accept header and
 // normalized BaseURL behavior while using the typed request boundary.
+// QA: UI-01/04/05; local HTTP/request validation, not durable replay.
 func TestDoNormalizesBaseURLAndRequestsJSON(t *testing.T) {
 	t.Parallel()
 
@@ -47,6 +49,7 @@ func TestDoNormalizesBaseURLAndRequestsJSON(t *testing.T) {
 
 // Rationale: every mutation verb must send exactly one key and preserve that
 // same key when the same human-intent request is retried.
+// QA: UI-01/04/05; local HTTP/request validation, not durable replay.
 func TestMutationRequestsCarryOneReusableRawULID(t *testing.T) {
 	t.Parallel()
 
@@ -101,6 +104,7 @@ func TestMutationRequestsCarryOneReusableRawULID(t *testing.T) {
 
 // Rationale: generated requests must attach keys to all and only the four
 // accepted human mutation methods.
+// QA: UI-01/04/05; local HTTP/request validation, not durable replay.
 func TestRequestIdempotencyKeyContract(t *testing.T) {
 	t.Parallel()
 
@@ -120,8 +124,8 @@ func TestRequestIdempotencyKeyContract(t *testing.T) {
 				method,
 			)
 		}
-		if !idempotencyKeyPattern.MatchString(request.IdempotencyKey) {
-			t.Errorf("%s key = %q, want 16..128 allowed characters", method, request.IdempotencyKey)
+		if _, err := ulid.ParseStrict(request.IdempotencyKey); err != nil {
+			t.Errorf("%s key = %q, want raw ULID: %v", method, request.IdempotencyKey, err)
 		}
 	}
 
@@ -135,6 +139,7 @@ func TestRequestIdempotencyKeyContract(t *testing.T) {
 
 // Rationale: key validation must enforce both ASCII grammar boundaries for
 // every mutation verb and reject any key on safe methods before transport.
+// QA: UI-01/04/05; local HTTP/request validation, not durable replay.
 func TestDoRejectsInvalidIdempotencyKeysAsInternal(t *testing.T) {
 	t.Parallel()
 
@@ -143,7 +148,13 @@ func TestDoRejectsInvalidIdempotencyKeysAsInternal(t *testing.T) {
 		strings.Repeat("Z", 128),
 		"A0._:-A0._:-A0._:-",
 	}
-	client := New("http://127.0.0.1:1")
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	client := New(server.URL)
 	mutationMethods := []string{
 		http.MethodPost,
 		http.MethodPut,
@@ -165,14 +176,18 @@ func TestDoRejectsInvalidIdempotencyKeysAsInternal(t *testing.T) {
 			"invalid key spaces",
 			strings.Repeat("é", 16),
 		} {
-			request := Request{Method: method, Path: "/resource", IdempotencyKey: key}
+			status := http.StatusOK
+			if method == http.MethodDelete {
+				status = http.StatusNoContent
+			}
+			request := Request{Method: method, Path: "/resource", IdempotencyKey: key, ExpectedStatus: status}
 			err := client.Do(context.Background(), request, nil)
 			if !errors.Is(err, errs.New(errs.KindInternal, "")) {
 				t.Errorf("Do(%s, key=%q) error = %v, want %q", method, key, err, errs.CodeInternal)
 			}
 		}
 	}
-	request := Request{Method: "post", Path: "/resource"}
+	request := Request{Method: "post", Path: "/resource", ExpectedStatus: http.StatusOK}
 	if err := client.Do(
 		context.Background(),
 		request,
@@ -188,6 +203,10 @@ func TestDoRejectsInvalidIdempotencyKeysAsInternal(t *testing.T) {
 			Method:         method,
 			Path:           "/resource",
 			IdempotencyKey: strings.Repeat("a", 16),
+			ExpectedStatus: http.StatusOK,
+		}
+		if err := validateIdempotencyKey(request); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+			t.Errorf("validateIdempotencyKey(%s with key) error = %v, want internal", method, err)
 		}
 		if err := client.Do(
 			context.Background(),
@@ -200,10 +219,14 @@ func TestDoRejectsInvalidIdempotencyKeysAsInternal(t *testing.T) {
 			t.Errorf("Do(%s with key) error = %v, want %q", method, err, errs.CodeInternal)
 		}
 	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("invalid keys caused %d HTTP requests, want none", got)
+	}
 }
 
 // Rationale: an output target requires one complete JSON document; transport
 // truncation, ambiguity, or non-JSON success bodies must fail canonically.
+// QA: UI-01/04/05; local HTTP/request validation, not durable replay.
 func TestDoRequiresExactlyOneJSONDocumentForOutput(t *testing.T) {
 	t.Parallel()
 
@@ -245,6 +268,9 @@ func TestDoRequiresExactlyOneJSONDocumentForOutput(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Do() error = %v", err)
 				}
+				if len(output) != 1 || output["ok"] != true {
+					t.Fatalf("decoded output = %#v, want {ok:true}", output)
+				}
 				return
 			}
 			if !errors.Is(err, errs.New(errs.KindInternal, "")) {
@@ -256,6 +282,7 @@ func TestDoRequiresExactlyOneJSONDocumentForOutput(t *testing.T) {
 
 // Rationale: 204 is a valid success only when the caller explicitly expects
 // no representation.
+// QA: UI-01/04/05; local HTTP/request validation, not durable replay.
 func TestDoAcceptsNoContentOnlyWithoutOutput(t *testing.T) {
 	t.Parallel()
 
@@ -273,6 +300,7 @@ func TestDoAcceptsNoContentOnlyWithoutOutput(t *testing.T) {
 	}
 }
 
+// QA: UI-01/04/05; local HTTP/request validation, not durable replay.
 func TestDoRejectsUnexpectedSuccessfulStatus(t *testing.T) {
 	// Rationale: accepting any 2xx would collapse create, update, Task, and
 	// bodyless-delete contracts into transport success and hide API drift.
@@ -303,6 +331,7 @@ func TestDoRejectsUnexpectedSuccessfulStatus(t *testing.T) {
 
 // Rationale: callers must opt into exactly the semantic status allowed by
 // their method; broad "any 2xx" handling would hide surface drift.
+// QA: UI-01/04/05; local HTTP/request validation, not durable replay.
 func TestValidExpectedStatusUsesHumanContractMatrix(t *testing.T) {
 	t.Parallel()
 
@@ -325,6 +354,7 @@ func TestValidExpectedStatusUsesHumanContractMatrix(t *testing.T) {
 
 // Rationale: event consumers require the SSE Accept contract rather than the
 // ordinary JSON transport representation.
+// QA: UI-01/04/05; local HTTP/request validation, not durable replay.
 func TestStreamRequestsEventStream(t *testing.T) {
 	t.Parallel()
 
@@ -356,6 +386,7 @@ func TestStreamRequestsEventStream(t *testing.T) {
 
 // Rationale: accepting a successful non-SSE response would feed arbitrary
 // bytes into the event parser and silently violate the streaming contract.
+// QA: UI-01/04/05; local HTTP/request validation, not durable replay.
 func TestStreamRejectsNonEventStreamResponse(t *testing.T) {
 	t.Parallel()
 

@@ -28,6 +28,7 @@ const validCoreDNSComponentJSON = `{
 
 // Rationale: a top-level nullable union decodes as a zero value in generated
 // Go clients; the response envelope must preserve the null config state.
+// QA: CMP-01/02, DNS-02; local nullable/closed config decoding only.
 func TestGeneratedComponentConfigResponsePreservesNullConfig(t *testing.T) {
 	t.Parallel()
 	response, err := generated.ParseComponentConfigShowResponse(&http.Response{
@@ -52,6 +53,7 @@ func TestGeneratedComponentConfigResponsePreservesNullConfig(t *testing.T) {
 // Rationale: platform CoreDNS is a valid closed Component config variant even
 // though permissive generated oneOf branches overlap; CLI list and show reads
 // must reach the strict public API decoder instead of failing in eager parsing.
+// QA: CMP-01/02, DNS-02; local nullable/closed config decoding only.
 func TestComponentClientDecodesValidPlatformCoreDNSListAndShow(t *testing.T) {
 	t.Parallel()
 	const componentID = "cmp_01K3D7R40G0000000000000000"
@@ -94,6 +96,7 @@ func TestComponentClientDecodesValidPlatformCoreDNSListAndShow(t *testing.T) {
 // Rationale: bypassing the generated eager oneOf parser must not make the CLI
 // accept incomplete Component variants; malformed responses still fail through
 // the strict public API decoder.
+// QA: CMP-01/02, DNS-02; local nullable/closed config decoding only.
 func TestComponentClientRejectsMalformedCoreDNSListResponse(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

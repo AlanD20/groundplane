@@ -13,6 +13,7 @@ import (
 
 // Rationale: CLI retry and exit behavior is derived only after an exact public
 // problem tuple reconstructs one closed internal Kind.
+// QA: UI-03/05; local error trust boundary, not Controller admission.
 func TestResponseProblemReconstructsExactKind(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -41,6 +42,7 @@ func TestResponseProblemReconstructsExactKind(t *testing.T) {
 
 // Rationale: a response status that disagrees with its problem body must remain
 // untrusted and cannot be reconstructed as a domain error.
+// QA: UI-03/05; local error trust boundary, not Controller admission.
 func TestResponseProblemRejectsUntrustedTupleMismatch(t *testing.T) {
 	tests := []struct {
 		name           string

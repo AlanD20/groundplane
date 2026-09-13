@@ -10,6 +10,7 @@ import (
 
 // Rationale: generated Task enums remain a transport detail; the handwritten
 // projection must preserve backup_prune in the public string-valued Task model.
+// QA: TASK-01, BAK-08; local type projection only, not pruning or history persistence.
 func TestTaskFromGeneratedPreservesBackupPruneType(t *testing.T) {
 	t.Parallel()
 	projected, err := taskFromGenerated(generated.Task{Type: generated.TaskTypeBackupPrune})
@@ -21,6 +22,8 @@ func TestTaskFromGeneratedPreservesBackupPruneType(t *testing.T) {
 	}
 }
 
+// QA: TASK-01, BAK-08; local type projection only, not pruning or history persistence.
+// Rationale: Do not present an unknown future Task type as supported work.
 func TestTaskFromGeneratedRejectsUnknownType(t *testing.T) {
 	t.Parallel()
 
@@ -30,6 +33,8 @@ func TestTaskFromGeneratedRejectsUnknownType(t *testing.T) {
 	}
 }
 
+// QA: TASK-01, BAK-08; local type projection only, not pruning or history persistence.
+// Rationale: A bad journal item must fail the page, not disappear or become a zero-value Task.
 func TestTaskPageFromGeneratedPropagatesUnknownType(t *testing.T) {
 	t.Parallel()
 	items := []generated.Task{{Type: generated.TaskType("future_task")}}

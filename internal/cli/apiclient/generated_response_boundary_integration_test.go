@@ -11,19 +11,22 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
-	"github.com/AlanD20/groundplane/internal/common/problemresponse"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+// Independent expectation for the accepted 1 MiB error-response budget.
+const maximumProblemBytesForTest int64 = 1 << 20
 
 // Rationale: a declared oversized non-success response must be rejected
 // without reading attacker-controlled bytes, while the generated parser still
 // closes the response exactly once.
+// QA: UI-05; generated response size/ownership boundary only.
 func TestGeneratedClientRejectsDeclaredOversizedProblemBeforeRead(t *testing.T) {
 	body := &observedResponseBody{Reader: bytes.NewReader(bytes.Repeat([]byte("x"), 32))}
 	_, err := callGeneratedHost(
 		t,
 		generatedResponseDoer(func(request *http.Request) (*http.Response, error) {
-			return problemResponse(request, body, problemresponse.MaximumBytes+1), nil
+			return problemResponse(request, body, maximumProblemBytesForTest+1), nil
 		}),
 	)
 	assertOverflow(t, err)
@@ -35,9 +38,10 @@ func TestGeneratedClientRejectsDeclaredOversizedProblemBeforeRead(t *testing.T) 
 
 // Rationale: an unknown-length non-success response must consume at most one
 // byte beyond the accepted boundary before returning the one internal Error.
+// QA: UI-05; generated response size/ownership boundary only.
 func TestGeneratedClientBoundsUnknownLengthProblem(t *testing.T) {
 	body := &observedResponseBody{
-		Reader: bytes.NewReader(bytes.Repeat([]byte("x"), int(problemresponse.MaximumBytes)+4096)),
+		Reader: bytes.NewReader(bytes.Repeat([]byte("x"), int(maximumProblemBytesForTest)+4096)),
 	}
 	_, err := callGeneratedHost(
 		t,
@@ -46,21 +50,22 @@ func TestGeneratedClientBoundsUnknownLengthProblem(t *testing.T) {
 		}),
 	)
 	assertOverflow(t, err)
-	if body.readBytes != problemresponse.MaximumBytes+1 {
+	if body.readBytes != maximumProblemBytesForTest+1 {
 		t.Fatalf(
 			"body reads = %d, want %d",
 			body.readBytes,
-			problemresponse.MaximumBytes+1,
+			maximumProblemBytesForTest+1,
 		)
 	}
 	assertBodyLifecycle(t, body)
 }
 
-// Rationale: a real chunked HTTP response has no trusted length declaration;
-// the generated client path must still enforce the same exact body ceiling.
-func TestGeneratedClientBoundsChunkedProblem(t *testing.T) {
+// Rationale: fragmented unknown-length reads must not reset the byte budget;
+// this synthetic reader is distinct from the actual HTTP chunking test below.
+// QA: UI-05; generated response size/ownership boundary only.
+func TestGeneratedClientBoundsFragmentedProblem(t *testing.T) {
 	body := &observedResponseBody{
-		Reader: &repeatedChunkReader{remaining: problemresponse.MaximumBytes + 4096},
+		Reader: &repeatedChunkReader{remaining: maximumProblemBytesForTest + 4096},
 	}
 	_, err := callGeneratedHost(
 		t,
@@ -71,14 +76,15 @@ func TestGeneratedClientBoundsChunkedProblem(t *testing.T) {
 		}),
 	)
 	assertOverflow(t, err)
-	if body.readBytes != problemresponse.MaximumBytes+1 {
-		t.Fatalf("chunked body reads = %d, want %d", body.readBytes, problemresponse.MaximumBytes+1)
+	if body.readBytes != maximumProblemBytesForTest+1 {
+		t.Fatalf("chunked body reads = %d, want %d", body.readBytes, maximumProblemBytesForTest+1)
 	}
 	assertBodyLifecycle(t, body)
 }
 
 // Rationale: an actual HTTP/1.1 chunked response must still be bounded after
 // net/http decodes its framing, and the generated parser must close that body.
+// QA: UI-05; generated response size/ownership boundary only.
 func TestGeneratedClientBoundsActualChunkedProblem(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writer.Header().Set("Content-Type", "application/problem+json")
@@ -89,7 +95,7 @@ func TestGeneratedClientBoundsActualChunkedProblem(t *testing.T) {
 			return
 		}
 		flusher.Flush()
-		_, _ = writer.Write(bytes.Repeat([]byte("x"), int(problemresponse.MaximumBytes)+4096))
+		_, _ = writer.Write(bytes.Repeat([]byte("x"), int(maximumProblemBytesForTest)+4096))
 	}))
 	defer server.Close()
 
@@ -122,16 +128,17 @@ func TestGeneratedClientBoundsActualChunkedProblem(t *testing.T) {
 	if contentLength >= 0 || len(transferEncoding) != 1 || transferEncoding[0] != "chunked" {
 		t.Fatalf("response framing = content-length %d, transfer-encoding %v; want chunked", contentLength, transferEncoding)
 	}
-	if body.readBytes != problemresponse.MaximumBytes+1 {
-		t.Fatalf("actual chunked body reads = %d, want %d", body.readBytes, problemresponse.MaximumBytes+1)
+	if body.readBytes != maximumProblemBytesForTest+1 {
+		t.Fatalf("actual chunked body reads = %d, want %d", body.readBytes, maximumProblemBytesForTest+1)
 	}
 	assertBodyLifecycle(t, body)
 }
 
 // Rationale: the size limit is inclusive; an exact-bound valid Problem must
 // reach the generated response model without changing its fields or body.
+// QA: UI-05; generated response size/ownership boundary only.
 func TestGeneratedClientAcceptsExactBoundaryProblem(t *testing.T) {
-	payload := exactProblemBody(t, int(problemresponse.MaximumBytes))
+	payload := exactProblemBody(t, int(maximumProblemBytesForTest))
 	body := &observedResponseBody{Reader: bytes.NewReader(payload)}
 	response, err := callGeneratedHost(
 		t,
@@ -142,21 +149,22 @@ func TestGeneratedClientAcceptsExactBoundaryProblem(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HostShowWithResponse() error = %v", err)
 	}
-	if len(response.Body) != len(payload) || response.ApplicationproblemJSONDefault == nil {
+	if !bytes.Equal(response.Body, payload) || response.ApplicationproblemJSONDefault == nil {
 		t.Fatalf("generated response = %#v, body bytes = %d", response, len(response.Body))
 	}
 	if got := response.ApplicationproblemJSONDefault; got.Code != string(errs.CodeStorageUnavailable) ||
 		got.Status != http.StatusServiceUnavailable || got.Type != errs.ProblemType {
 		t.Fatalf("generated Problem = %#v", got)
 	}
-	if body.readBytes != problemresponse.MaximumBytes {
-		t.Fatalf("body reads = %d, want %d", body.readBytes, problemresponse.MaximumBytes)
+	if body.readBytes != maximumProblemBytesForTest {
+		t.Fatalf("body reads = %d, want %d", body.readBytes, maximumProblemBytesForTest)
 	}
 	assertBodyLifecycle(t, body)
 }
 
 // Rationale: generated error parsing must validate the closed Problem envelope
 // before its permissive generated JSON unmarshal can accept unknown members.
+// QA: UI-05; generated response size/ownership boundary only.
 func TestGeneratedClientStrictlyDecodesNormalProblem(t *testing.T) {
 	valid := []byte(
 		`{"type":"about:blank","title":"storage.unavailable","status":503,` +
@@ -191,6 +199,7 @@ func TestGeneratedClientStrictlyDecodesNormalProblem(t *testing.T) {
 
 // Rationale: malformed media types and mismatched status/code identities are
 // untrusted branches, but each must retain the generated parser's one close.
+// QA: UI-05; generated response size/ownership boundary only.
 func TestGeneratedClientClosesRejectedProblemBranches(t *testing.T) {
 	valid := []byte(
 		`{"type":"about:blank","title":"storage.unavailable","status":503,` +
@@ -252,8 +261,9 @@ func TestGeneratedClientClosesRejectedProblemBranches(t *testing.T) {
 	}
 }
 
-// Rationale: a transport read failure is wrapped without leaking the body;
-// closure remains the parser's responsibility even when no bytes are read.
+// Rationale: a transport read failure must preserve the error cause and close
+// the body exactly once; this no-byte reader does not prove partial-body redaction.
+// QA: UI-05; generated response size/ownership boundary only.
 func TestGeneratedClientClosesUnderlyingReadError(t *testing.T) {
 	readErr := errors.New("private transport read failure")
 	body := &observedResponseBody{Reader: failingResponseReader{err: readErr}}
@@ -271,8 +281,9 @@ func TestGeneratedClientClosesUnderlyingReadError(t *testing.T) {
 
 // Rationale: successful responses remain unrestricted by the Problem ceiling
 // while still closing exactly once after generated JSON parsing completes.
+// QA: UI-05; generated response size/ownership boundary only.
 func TestGeneratedClientPreservesSuccessResponseLifecycle(t *testing.T) {
-	payload := []byte(`{"padding":"` + strings.Repeat("x", int(problemresponse.MaximumBytes)+1) + `"}`)
+	payload := []byte(`{"padding":"` + strings.Repeat("x", int(maximumProblemBytesForTest)+1) + `"}`)
 	body := &observedResponseBody{Reader: bytes.NewReader(payload)}
 	response, err := callGeneratedHost(
 		t,
@@ -294,6 +305,7 @@ func TestGeneratedClientPreservesSuccessResponseLifecycle(t *testing.T) {
 
 // Rationale: response-body ownership remains with the generated parser; a
 // Close failure is ignored exactly as before and closure still occurs once.
+// QA: UI-05; generated response size/ownership boundary only.
 func TestGeneratedClientPreservesCloseErrorSemantics(t *testing.T) {
 	payload := []byte(
 		`{"type":"about:blank","title":"storage.unavailable","status":503,` +
