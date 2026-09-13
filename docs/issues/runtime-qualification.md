@@ -79,8 +79,17 @@ Earlier focused Attach and recovery checks did not cover this combined sequence.
 
 A subsequent normal Deploy completed after removing the owned fault-test hook;
 its functional check returned 401 followed by 500 on authentication refresh.
-The cause of that refresh failure remains unproved. This was an attempted
-mitigation, not a successful recovery or a fix. Do not replay the fault or proceed
+A read-only follow-up proved that the new workload joined both backing networks:
+its new password authenticated only at the new address, while DNS chose the old
+address. The earlier Entry artifact captured both memberships; later Detach
+changed Attach records but not that artifact. New Release publication reused the
+stale union. The publisher now captures current Attach records at its fixed read
+and seals that union into the new candidate, without changing historical sources.
+The complete publication regression reproduces the removed network returning;
+it now proves removal, current membership inclusion and unchanged input bytes.
+This correction is locally verified, not yet deployed; it does not repair
+predecessor capture. The redeploy was an attempted mitigation, not a successful
+recovery or a fix. Do not replay the fault or proceed
 to interrupted-Task/reboot testing while the application remains unqualified.
 Evidence is `failed-rollout-terminal.json`, `after-candidate-recovery-runtime.json`
 and `candidate-operator-repair.log` in

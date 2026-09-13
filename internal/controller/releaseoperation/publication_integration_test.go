@@ -30,6 +30,18 @@ import (
 // selection, render encoding, plan construction, and final ledger transaction.
 // The store implements CAS; it does not substitute a publisher response.
 func TestPublishFirstBlueGreenCommitsTaskAndCandidateAuthority(t *testing.T) {
+	testPublishFirstBlueGreen(t, false)
+}
+
+// Rationale: an Entry edit can seal an Attach network into its projection before
+// a later Detach removes that membership. A new Release must capture the current
+// Attach set, not revive membership from the earlier desired artifact.
+func TestPublishReleaseDropsDetachedNetworkFromEarlierProjection(t *testing.T) {
+	testPublishFirstBlueGreen(t, true)
+}
+
+func testPublishFirstBlueGreen(t *testing.T, detachedNetwork bool) {
+	t.Helper()
 	ctx := context.Background()
 	store := &directPublicationStore{values: make(map[string]*etcd.KeyValue)}
 	hierarchy, err := etcd.NewHierarchyRepository(store)
@@ -83,6 +95,17 @@ func TestPublishFirstBlueGreenCommitsTaskAndCandidateAuthority(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var externalNetworks []controller.ComposeResourceIdentity
+	if detachedNetwork {
+		const oldNetwork = "gp_attach_net_01arz3ndektsv4rrffq69g5fav"
+		api := projectInput.Services["api"]
+		api.Networks[oldNetwork] = &composetypes.ServiceNetworkConfig{}
+		projectInput.Services["api"] = api
+		projectInput.Networks[oldNetwork] = composetypes.NetworkConfig{External: true}
+		externalNetworks = []controller.ComposeResourceIdentity{{
+			ID: "net_01ARZ3NDEKTSV4RRFFQ69G5FAV", Name: oldNetwork,
+		}}
+	}
 	artifact, err := controller.RenderCompose(controller.ComposeRenderInput{
 		Project: projectInput, ArtifactID: ids.New(ids.KindConfig), ProjectOwnerKind: controller.ComposeProjectOwnerTenant,
 		TenantID: tenant.Record.ID, ProjectID: project.Record.ID, EnvironmentID: environmentID, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1, AuthorizedVolumeDir: volumeDir,
@@ -90,6 +113,7 @@ func TestPublishFirstBlueGreenCommitsTaskAndCandidateAuthority(t *testing.T) {
 			Services: []controller.ComposeResourceIdentity{{ID: serviceID, Name: "api"}},
 			Networks: []controller.ComposeResourceIdentity{{ID: networkID, Name: "backend"}},
 		},
+		ExternalNetworks: externalNetworks,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -125,6 +149,9 @@ func TestPublishFirstBlueGreenCommitsTaskAndCandidateAuthority(t *testing.T) {
 				},
 			},
 		},
+	}
+	if detachedNetwork {
+		seedPublicationReadyAttach(t, store, environmentID, serviceID)
 	}
 	head, err := json.Marshal(struct {
 		Schema   int    `json:"schema"`
@@ -309,6 +336,23 @@ func TestPublishFirstBlueGreenCommitsTaskAndCandidateAuthority(t *testing.T) {
 		render.Record.ProxyImage.Platform != selected {
 		t.Fatalf("publication failed to persist exact compiled proxy identity: %v", err)
 	}
+	if detachedNetwork {
+		captured := &agentpb.ComposeArtifact{}
+		if err := proto.Unmarshal(render.Record.Projection.ComposeArtifact, captured); err != nil {
+			t.Fatal(err)
+		}
+		const oldNetwork = "gp_attach_net_01arz3ndektsv4rrffq69g5fav"
+		if strings.Contains(string(captured.CanonicalYaml), oldNetwork) {
+			t.Fatal("new Release revived a detached network from an earlier desired artifact")
+		}
+		if !strings.Contains(string(captured.CanonicalYaml), publicationCurrentAttachNetwork) {
+			t.Fatal("new Release omitted the current Attach network")
+		}
+		if !strings.Contains(string(artifact.CanonicalYaml), oldNetwork) ||
+			!proto.Equal(artifact, mustPublicationArtifact(t, projection.ComposeArtifact)) {
+			t.Fatal("Release capture rewrote its immutable desired source")
+		}
+	}
 	// Rationale: aborting an unassigned Release must retire its publication
 	// fence as well as the Task, otherwise every subsequent deployment locks.
 	store.failAbortCleanup = true
@@ -341,6 +385,15 @@ func TestPublishFirstBlueGreenCommitsTaskAndCandidateAuthority(t *testing.T) {
 	if store.revision != revision {
 		t.Fatal("completed Abort replay mutated durable state")
 	}
+}
+
+func mustPublicationArtifact(t *testing.T, value []byte) *agentpb.ComposeArtifact {
+	t.Helper()
+	artifact := &agentpb.ComposeArtifact{}
+	if err := proto.Unmarshal(value, artifact); err != nil {
+		t.Fatal(err)
+	}
+	return artifact
 }
 
 type directPublicationImages struct{}

@@ -93,6 +93,17 @@ including configured-only state; candidate absence does not imply no Environment
 applied record. No desired rollback, serving promotion, resource deletion or
 deadline renewal follows from an absence proof.
 
+### Candidate runtime bindings
+
+Before publishing an ordinary or grouped Deploy/Rollback, capture the complete
+current Attach membership set at the Release planning revision. The Environment
+mutation epoch fences that capture. Replace the reserved Attach overlay in the
+candidate's private projection, then seal it into the immutable Release input.
+Standalone Attach/Detach changes its own records without advancing the desired
+Compose revision; an older Entry or Blueprint artifact cannot select a new
+candidate's memberships. Desired revision and historical Release bytes stay
+unchanged. Predecessor capture remains separate from candidate configuration.
+
 ### Ordinary Release predecessors
 
 Deploy/Rollback captures the exact per-Service serving Release at publication's

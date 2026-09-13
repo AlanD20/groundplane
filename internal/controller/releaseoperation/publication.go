@@ -35,6 +35,10 @@ func (service *Service) publish(
 	if err := service.sealCandidates(ctx, candidates); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	projection, err := service.captureDesiredProjection(ctx, scope)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	now := service.now().UTC()
 	operationKind := domain.OperationDeploy
 	taskType := etcd.TaskDeploy
@@ -117,7 +121,7 @@ func (service *Service) publish(
 			TenantID:               scope.Tenant.Record.ID, TenantSlug: scope.Tenant.Record.Slug,
 			ProjectID: scope.Project.Record.ID, ProjectSlug: scope.Project.Record.Slug,
 			EnvironmentID: scope.Environment.Record.ID, EnvironmentName: scope.Environment.Record.Name,
-			AuthorizedVolumeDir: scope.Environment.Record.VolumeDir, Projection: scope.Compose.Record,
+			AuthorizedVolumeDir: scope.Environment.Record.VolumeDir, Projection: projection,
 		}
 		var priorRender *etcd.ReleaseRenderInput
 		if candidate.priorReleaseID != "" {
