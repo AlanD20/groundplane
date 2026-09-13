@@ -10,8 +10,11 @@ the three authentication modes explicitly requested by the owner.
 
 ## Decision
 
-Valkey backing creation accepts `authentication`: `username_password` (default),
-`password`, or `none`. This is immutable instance policy, persisted on its
+Valkey backing creation requires an explicit `authentication`: `username_password`,
+`password`, or `none`. No mode is a default. Missing, empty, null and unknown
+values fail validation before any resource or Task publication. The Console
+starts with no selection and cannot submit until the operator chooses a mode.
+This is immutable instance policy, persisted on its
 adapter Service and exposed by backing reads. Other adapters reject this input.
 Every Attach inherits the instance mode; no Attach may weaken instance policy.
 Console creation, CLI `--authentication`, and the existing create API expose
@@ -30,7 +33,7 @@ Its attachments provide HOST, PORT and credential-free URL facts, not ROLE or
 PASSWORD facts, and generate no consumer credential. A self-owned binding still
 anchors fact reuse. Attach/detach only manage membership; they never change the
 instance's authentication policy. Any reachable client can access this instance;
-the Console must explain this before creation. No-auth is never a default.
+the Console must explain this before creation.
 
 All modes share the instance's keyspace and Pub/Sub channels; named identities
 are not data isolation. Consumer ACLs permit data operations but not `@admin`
@@ -53,6 +56,7 @@ inferred from missing password bytes or current mutable runtime configuration.
 ## Consequences
 
 Changing a mode requires a new backing instance, not an implicit downgrade.
+Existing explicit policies are retained; omission cannot select or migrate one.
 This replaces the old requirepass-only bootstrap, not a compatibility layer or
 repair of existing frozen QA Tasks. All three modes need lifecycle, fact,
 restart and cross-surface proof before the source is deployed.

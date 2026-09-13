@@ -13,10 +13,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Drawer, DrawerContent } from '@/components/ui/drawer'
-import { valkeyAuthenticationDetails } from '@/lib/valkey-authentication'
+import {
+  backingAuthenticationCreateFields,
+  valkeyAuthenticationDetails,
+  type ValkeyAuthenticationSelection,
+} from '@/lib/valkey-authentication'
 import { serviceObservationState } from '@/features/service/service-observation'
 import { useVisibleServiceObservations } from '@/features/service/use-service-observation-refresh'
-import type { ValkeyAuthentication } from '@/lib/types'
 
 export default function PlatformBackingServicesPage() {
   const store = useStore()
@@ -30,7 +33,7 @@ export default function PlatformBackingServicesPage() {
   const { name, slug, setName, setSlug, reset: resetBackingIdentity } = useLinkedSlug()
   const [description, setDescription] = useState('')
   const [adapter, setAdapter] = useState<'postgres:16' | 'valkey:9'>('postgres:16')
-  const [authentication, setAuthentication] = useState<ValkeyAuthentication>('username_password')
+  const [authentication, setAuthentication] = useState<ValkeyAuthenticationSelection>('')
   const [networkPool, setNetworkPool] = useState('10.200.0.0/16')
   const [zoneName, setZoneName] = useState('data')
   const [zoneSubnet, setZoneSubnet] = useState('10.200.20.0/24')
@@ -39,6 +42,35 @@ export default function PlatformBackingServicesPage() {
   const [creating, setCreating] = useState(false)
 
   const openCreate = () => setCreateOpen(true)
+  const authenticationFields = backingAuthenticationCreateFields(adapter, authentication)
+
+  const createBackingService = async () => {
+    if (!authenticationFields) {
+      setCreateError('Select an authentication mode for this Valkey backing service.')
+      return
+    }
+
+    setCreating(true)
+    setCreateError(null)
+    try {
+      await store.addBackingProject({
+        slug: slug.trim(),
+        name: name.trim(),
+        description: description.trim() || undefined,
+        ...authenticationFields,
+        network_pool: networkPool.trim(),
+        zone: { name: zoneName.trim(), subnet: zoneSubnet.trim(), internal: zoneInternal },
+      })
+      setCreateOpen(false)
+      resetBackingIdentity()
+      setDescription('')
+      setAuthentication('')
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : 'Unable to create backing service')
+    } finally {
+      setCreating(false)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -164,7 +196,10 @@ export default function PlatformBackingServicesPage() {
                 id="backing-adapter"
                 className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 value={adapter}
-                onChange={(event) => setAdapter(event.target.value as 'postgres:16' | 'valkey:9')}
+                onChange={(event) => {
+                  setAdapter(event.target.value as 'postgres:16' | 'valkey:9')
+                  setAuthentication('')
+                }}
               >
                 <option value="postgres:16">PostgreSQL 16</option>
                 <option value="valkey:9">Valkey 9</option>
@@ -177,9 +212,10 @@ export default function PlatformBackingServicesPage() {
                   id="backing-authentication"
                   className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                   value={authentication}
-                  onChange={(event) => setAuthentication(event.target.value as ValkeyAuthentication)}
+                  onChange={(event) => setAuthentication(event.target.value as ValkeyAuthenticationSelection)}
                 >
-                  <option value="username_password">Username + password (default)</option>
+                  <option value="" disabled>Select authentication</option>
+                  <option value="username_password">Username + password</option>
                   <option value="password">Password only · shared default user</option>
                   <option value="none">None · no authentication</option>
                 </select>
@@ -212,30 +248,8 @@ export default function PlatformBackingServicesPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
             <Button
-              disabled={creating || !slug.trim() || !name.trim() || !networkPool.trim() || !zoneName.trim() || !zoneSubnet.trim()}
-              onClick={() => void (async () => {
-                setCreating(true)
-                setCreateError(null)
-                try {
-                  await store.addBackingProject({
-                    slug: slug.trim(),
-                    name: name.trim(),
-                    description: description.trim() || undefined,
-                    adapter,
-                    ...(adapter === 'valkey:9' ? { authentication } : {}),
-                    network_pool: networkPool.trim(),
-                    zone: { name: zoneName.trim(), subnet: zoneSubnet.trim(), internal: zoneInternal },
-                  })
-                  setCreateOpen(false)
-                  resetBackingIdentity()
-                  setDescription('')
-                  setAuthentication('username_password')
-                } catch (error) {
-                  setCreateError(error instanceof Error ? error.message : 'Unable to create backing service')
-                } finally {
-                  setCreating(false)
-                }
-              })()}
+              disabled={creating || !authenticationFields || !slug.trim() || !name.trim() || !networkPool.trim() || !zoneName.trim() || !zoneSubnet.trim()}
+              onClick={() => void createBackingService()}
             >
               {creating ? 'Creating...' : 'Create backing service'}
             </Button>

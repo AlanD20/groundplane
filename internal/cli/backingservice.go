@@ -58,6 +58,9 @@ func newBackingServiceCmd() *cobra.Command {
 		Short: "Create a backing service",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if adapter == "valkey:9" && authentication == "" {
+				return errs.New(errs.KindValidationFailed, "--authentication is required for valkey:9")
+			}
 			created, err := fromContext(cmd).Client.CreateBackingService(cmd.Context(), apiTypes.BackingServiceCreate{
 				Slug: args[0], Name: name, Description: description, Adapter: adapter,
 				Authentication: authentication,
@@ -83,7 +86,7 @@ func newBackingServiceCmd() *cobra.Command {
 		&authentication,
 		"authentication",
 		"",
-		"immutable Valkey mode: username_password (default), password, or none",
+		"required for Valkey; immutable choice: username_password, password, or none (no default)",
 	)
 	create.Flags().StringVar(&name, "name", "", "display name")
 	create.Flags().StringVar(&description, "description", "", "optional description")

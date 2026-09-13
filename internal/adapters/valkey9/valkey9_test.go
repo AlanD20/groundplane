@@ -12,7 +12,8 @@ import (
 // Rationale: clients need the actual named identity as well as its password.
 func TestNamedAuthenticationExposesRole(t *testing.T) {
 	facts, err := adapters.BuildFacts(&adapter{}, adapters.FactParams{
-		Host: "valkey", Port: "6379", Role: "api_5d3f9a", Password: []byte("URL_safe-1"),
+		Authentication: core.BackingAuthenticationUsernamePassword,
+		Host:           "valkey", Port: "6379", Role: "api_5d3f9a", Password: []byte("URL_safe-1"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -30,7 +31,8 @@ func TestNamedAuthenticationExposesRole(t *testing.T) {
 // compiled binary, never exposed in Docker exec arguments.
 func TestProvisionStepsKeepPasswordOutOfArguments(t *testing.T) {
 	steps := (&adapter{}).ProvisionSteps(adapters.ProvisionParams{
-		Role: "api_5d3f9a", Password: []byte("URL_safe-1"),
+		Authentication: core.BackingAuthenticationUsernamePassword,
+		Role:           "api_5d3f9a", Password: []byte("URL_safe-1"),
 	})
 	if len(steps) != 2 || steps[0].Program != "valkey-cli" ||
 		!slices.Equal(

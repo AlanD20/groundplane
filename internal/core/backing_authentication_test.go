@@ -2,15 +2,16 @@ package core
 
 import "testing"
 
-// Rationale: omission defaults to named credentials, never unauthenticated
-// access, and unsupported adapters cannot acquire an auth policy accidentally.
+// Rationale: every selectable mode is an explicit decision, while adapters
+// without that capability cannot acquire an authentication policy accidentally.
 func TestResolveBackingAuthentication(t *testing.T) {
 	for _, tc := range []struct {
 		supported       bool
 		input, expected BackingAuthentication
 		invalid         bool
 	}{
-		{true, "", BackingAuthenticationUsernamePassword, false},
+		{true, "", "", true},
+		{true, " ", "", true},
 		{true, BackingAuthenticationUsernamePassword, BackingAuthenticationUsernamePassword, false},
 		{true, BackingAuthenticationPassword, BackingAuthenticationPassword, false},
 		{true, BackingAuthenticationNone, BackingAuthenticationNone, false},

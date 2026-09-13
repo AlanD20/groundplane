@@ -3,7 +3,7 @@ package core
 import "github.com/AlanD20/groundplane/pkg/errs"
 
 // BackingAuthentication is immutable backing-instance policy, not an Attach
-// choice. Empty authoring input selects the named-credential Valkey default.
+// choice. Adapters with selectable modes require an explicit authoring input.
 type BackingAuthentication string
 
 const (
@@ -20,10 +20,10 @@ func ResolveBackingAuthentication(supported bool, authentication BackingAuthenti
 		return "", nil
 	}
 	switch authentication {
-	case "", BackingAuthenticationUsernamePassword:
-		return BackingAuthenticationUsernamePassword, nil
-	case BackingAuthenticationPassword, BackingAuthenticationNone:
+	case BackingAuthenticationUsernamePassword, BackingAuthenticationPassword, BackingAuthenticationNone:
 		return authentication, nil
+	case "":
+		return "", errs.New(errs.KindValidationFailed, "backing authentication mode is required")
 	default:
 		return "", errs.New(errs.KindValidationFailed, "unsupported backing authentication mode")
 	}

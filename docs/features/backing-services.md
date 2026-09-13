@@ -33,7 +33,7 @@ Blueprint contract](../blueprint.md).
 Backing creation is one protected atomic operation. The operator supplies the
 Project slug, name and optional description, one compiled managed adapter key,
 the `main` Environment network pool, and one new Zone's name, subnet, and
-`internal` decision. Valkey also accepts one immutable authentication mode.
+`internal` decision. Valkey also requires an explicit immutable authentication mode.
 
 The Controller publishes exactly one backing Project, one `main` Environment,
 one dedicated backing-owned Zone, one adapter Service, one adapter-defined data
@@ -108,16 +108,18 @@ defaults are compiled product behavior and the operator cannot override their
 managed image, mount, bootstrap, health, or procedure decisions through the
 Backing Service create request.
 
-Valkey authentication is immutable instance policy:
+Valkey authentication is required, explicitly selected, immutable instance policy:
 
-- `username_password` is the default and gives each credential owner a named
+- `username_password` gives each credential owner a named
   ACL identity and password;
 - `password` gives each owner an independent password on the shared `default`
   user;
 - `none` explicitly enables access without AUTH and produces HOST, PORT, and a
   credential-free URL, but no ROLE, PASSWORD, or consumer credential.
 
-Every Attach inherits the selected mode. No Attach can weaken it. All modes
+No mode is selected by default. The Console starts unselected; API and CLI
+creation reject omission. Missing, empty, null or unknown values cannot publish
+resources or Tasks. Every Attach inherits the selected mode. No Attach can weaken it. All modes
 share one instance keyspace and Pub/Sub channels; an ACL identity is not tenant
 or data isolation. The Console must explain the reachability risk before a
 no-auth instance is created.
@@ -197,6 +199,8 @@ and proved.
 
 The [capability index](../capabilities.md) records qualification for PostgreSQL
 and Valkey creation plus the core Attach lifecycle, with focused isolated proof
-for Valkey authentication modes. Live Groundplane qualification of the Valkey
+for Valkey authentication modes. Required explicit selection has HTTP, CLI,
+domain and local Console/browser proof; omission no longer chooses a mode.
+Live Groundplane qualification of the Valkey
 authentication extension remains. Valkey Backup and Restore are not
 implemented or qualified, so this feature is not production-accepted.

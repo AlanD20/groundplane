@@ -8,17 +8,22 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// Rationale: unsupported authentication input must fail before even reaching
+// Rationale: missing or unsupported authentication must fail before reaching
 // the durable stage repository; a nil repository makes an accidental claim a
 // test panic instead of a false success.
 func TestBackingServiceAuthenticationRejectedBeforeDurableClaim(t *testing.T) {
 	registerAdapters()
 	service := &backingServiceCreationService{}
-	_, err := service.CreateBackingService(context.Background(), apiTypes.BackingServiceCreate{
-		Adapter: "postgres:16", Authentication: "none",
-	}, "idempotency-key")
-	kind, _ := errs.KindOf(err)
-	if kind != errs.KindValidationFailed {
-		t.Fatalf("CreateBackingService(unsupported authentication) error = %v", err)
+	for _, input := range []apiTypes.BackingServiceCreate{
+		{Adapter: "postgres:16", Authentication: "none"},
+		{Adapter: "valkey:9"},
+		{Adapter: "valkey:9", Authentication: " "},
+		{Adapter: "valkey:9", Authentication: "invalid"},
+	} {
+		_, err := service.CreateBackingService(context.Background(), input, "idempotency-key")
+		kind, _ := errs.KindOf(err)
+		if kind != errs.KindValidationFailed {
+			t.Fatalf("CreateBackingService(%s, %q) error = %v", input.Adapter, input.Authentication, err)
+		}
 	}
 }

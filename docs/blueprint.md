@@ -1003,8 +1003,8 @@ The adapter registry, not the Blueprint, supplies `requires`, provision and
 detach operations, fact templates, and backup/restore strategy. `manual` is a
 registry adapter with network-only attach behavior.
 
-Valkey authentication is immutable backing-instance policy selected by backing
-creation (`username_password`, `password`, or explicit `none`), not a consumer
+Valkey authentication is immutable backing-instance policy explicitly required at
+backing creation (`username_password`, `password`, or `none`, with no default), not a consumer
 Blueprint decision. `x-gp-attachments` inherits it and cannot downgrade it.
 No-auth bindings still own/reuse HOST, PORT and credential-free URL facts and
 network membership, but generate no credential or adapter provisioning step.

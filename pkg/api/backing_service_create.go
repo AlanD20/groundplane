@@ -8,7 +8,7 @@ type BackingServiceCreate struct {
 	Name           string                   `json:"name"`
 	Description    string                   `json:"description,omitempty"`
 	Adapter        string                   `json:"adapter"`
-	Authentication string                   `json:"authentication,omitempty" enum:"username_password,password,none" doc:"Immutable Valkey authentication mode; omitted selects username_password. Unsupported for other adapters."`
+	Authentication string                   `json:"authentication,omitempty" enum:"username_password,password,none" doc:"Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters."`
 	NetworkPool    string                   `json:"network_pool"`
 	Zone           BackingServiceZoneCreate `json:"zone"`
 }

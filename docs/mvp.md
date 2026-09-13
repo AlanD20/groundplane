@@ -957,8 +957,10 @@ tenants and one database.
   the shared instance. The keys stay stable and prefixed; uniqueness
   lives in the values.
 
-  **Valkey authentication.** A Valkey backing instance chooses immutable
-  `authentication`: `username_password` (default), `password`, or `none`.
+  **Valkey authentication.** Creating a Valkey backing instance requires an
+  explicit immutable `authentication`: `username_password`, `password`, or `none`.
+  There is no default or Console preselection. Missing, empty, null or unknown
+  modes fail validation before any resource or Task is published.
   Every Attach inherits it. Named mode issues a named user/password; password
   mode issues an independently revocable password on the shared default user.
   No-auth is an explicit instance-wide choice: any reachable client can access

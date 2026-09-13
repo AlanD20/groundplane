@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import { backingAuthenticationCreateFields } from './valkey-authentication.ts'
 
 const typesSource = await readFile(new URL('./types.ts', import.meta.url), 'utf8')
 const storeSource = await readFile(new URL('./store.tsx', import.meta.url), 'utf8')
@@ -16,11 +17,30 @@ test('Valkey authentication is projected from the backing facade into Console se
   assert.match(fixturesSource, /adapter: 'valkey:9',[\s\S]*?authentication: 'username_password'/)
 })
 
-test('backing creation sends authentication only for Valkey and warns before no-auth creation', () => {
+test('backing creation requires an explicit valid Valkey mode and omits authentication for PostgreSQL', () => {
+  assert.equal(backingAuthenticationCreateFields('valkey:9', ''), undefined)
+  assert.equal(backingAuthenticationCreateFields('valkey:9', 'invalid'), undefined)
+  for (const authentication of ['username_password', 'password', 'none']) {
+    assert.deepEqual(backingAuthenticationCreateFields('valkey:9', authentication), {
+      adapter: 'valkey:9',
+      authentication,
+    })
+  }
+  assert.deepEqual(backingAuthenticationCreateFields('postgres:16', ''), { adapter: 'postgres:16' })
+  assert.deepEqual(backingAuthenticationCreateFields('postgres:16', 'username_password'), { adapter: 'postgres:16' })
+
   assert.match(listSource, /Authentication/)
-  assert.match(listSource, /adapter === 'valkey:9'[\s\S]*?authentication/)
+  assert.match(listSource, /\{adapter === 'valkey:9' && \([\s\S]*?<Label htmlFor="backing-authentication">Authentication<\/Label>/)
+  assert.match(listSource, /useState<ValkeyAuthenticationSelection>\(''\)/)
+  assert.match(listSource, /<option value="" disabled>Select authentication<\/option>/)
+  assert.match(listSource, /const authenticationFields = backingAuthenticationCreateFields\(adapter, authentication\)/)
+  assert.match(listSource, /if \(!authenticationFields\)[\s\S]*?return/)
+  assert.match(listSource, /await store\.addBackingProject\([\s\S]*?\.\.\.authenticationFields/)
+  assert.match(listSource, /disabled=\{creating \|\| !authenticationFields/)
+  assert.match(listSource, /setAdapter\([\s\S]{0,160}setAuthentication\(''\)/)
+  assert.match(listSource, /resetBackingIdentity\(\)[\s\S]{0,160}setAuthentication\(''\)/)
   assert.match(listSource, /Any client that can reach this backing service can access it without authentication\./)
-  assert.doesNotMatch(listSource, /adapter,[\s\S]{0,120}authentication,[\s\S]{0,120}network_pool/)
+  assert.doesNotMatch(listSource, /\(default\)/)
 })
 
 test('backing details and Attach inherit mode-specific facts and provisioning without an auth selector', () => {

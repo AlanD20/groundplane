@@ -1621,7 +1621,7 @@ export interface components {
             readonly $schema?: string;
             adapter: string;
             /**
-             * @description Immutable Valkey authentication mode; omitted selects username_password. Unsupported for other adapters.
+             * @description Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters.
              * @enum {string}
              */
             authentication?: "username_password" | "password" | "none";
@@ -1630,7 +1630,18 @@ export interface components {
             network_pool: string;
             slug: string;
             zone: components["schemas"]["BackingServiceZoneCreate"];
-        };
+        } & ({
+            /** @enum {string} */
+            adapter: "valkey:9";
+            /**
+             * @description Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters.
+             * @enum {string}
+             */
+            authentication: "username_password" | "password" | "none";
+        } | {
+            /** @enum {string} */
+            adapter: "postgres:16";
+        });
         BackingServiceCreated: {
             /**
              * Format: uri

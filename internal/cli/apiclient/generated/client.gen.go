@@ -58,6 +58,57 @@ func (e BackingServiceCreateAuthentication) Valid() bool {
 	}
 }
 
+// Defines values for BackingServiceCreate0Adapter.
+const (
+	Valkey9 BackingServiceCreate0Adapter = "valkey:9"
+)
+
+// Valid indicates whether the value is a known member of the BackingServiceCreate0Adapter enum.
+func (e BackingServiceCreate0Adapter) Valid() bool {
+	switch e {
+	case Valkey9:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BackingServiceCreate0Authentication.
+const (
+	BackingServiceCreate0AuthenticationNone             BackingServiceCreate0Authentication = "none"
+	BackingServiceCreate0AuthenticationPassword         BackingServiceCreate0Authentication = "password"
+	BackingServiceCreate0AuthenticationUsernamePassword BackingServiceCreate0Authentication = "username_password"
+)
+
+// Valid indicates whether the value is a known member of the BackingServiceCreate0Authentication enum.
+func (e BackingServiceCreate0Authentication) Valid() bool {
+	switch e {
+	case BackingServiceCreate0AuthenticationNone:
+		return true
+	case BackingServiceCreate0AuthenticationPassword:
+		return true
+	case BackingServiceCreate0AuthenticationUsernamePassword:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BackingServiceCreate1Adapter.
+const (
+	Postgres16 BackingServiceCreate1Adapter = "postgres:16"
+)
+
+// Valid indicates whether the value is a known member of the BackingServiceCreate1Adapter enum.
+func (e BackingServiceCreate1Adapter) Valid() bool {
+	switch e {
+	case Postgres16:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for BackupPolicyEncryption.
 const (
 	BackupPolicyEncryptionAge  BackupPolicyEncryption = "age"
@@ -855,17 +906,40 @@ type BackingServiceCreate struct {
 	Schema  *string `json:"$schema,omitempty"`
 	Adapter string  `json:"adapter"`
 
-	// Authentication Immutable Valkey authentication mode; omitted selects username_password. Unsupported for other adapters.
+	// Authentication Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters.
 	Authentication *BackingServiceCreateAuthentication `json:"authentication,omitempty"`
 	Description    *string                             `json:"description,omitempty"`
 	Name           string                              `json:"name"`
 	NetworkPool    string                              `json:"network_pool"`
 	Slug           string                              `json:"slug"`
 	Zone           BackingServiceZoneCreate            `json:"zone"`
+	union          json.RawMessage
 }
 
-// BackingServiceCreateAuthentication Immutable Valkey authentication mode; omitted selects username_password. Unsupported for other adapters.
+// BackingServiceCreateAuthentication Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters.
 type BackingServiceCreateAuthentication string
+
+// BackingServiceCreate0 defines model for BackingServiceCreate.0.
+type BackingServiceCreate0 struct {
+	Adapter BackingServiceCreate0Adapter `json:"adapter"`
+
+	// Authentication Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters.
+	Authentication BackingServiceCreate0Authentication `json:"authentication"`
+}
+
+// BackingServiceCreate0Adapter defines model for BackingServiceCreate.0.Adapter.
+type BackingServiceCreate0Adapter string
+
+// BackingServiceCreate0Authentication Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters.
+type BackingServiceCreate0Authentication string
+
+// BackingServiceCreate1 defines model for BackingServiceCreate.1.
+type BackingServiceCreate1 struct {
+	Adapter BackingServiceCreate1Adapter `json:"adapter"`
+}
+
+// BackingServiceCreate1Adapter defines model for BackingServiceCreate.1.Adapter.
+type BackingServiceCreate1Adapter string
 
 // BackingServiceCreated defines model for BackingServiceCreated.
 type BackingServiceCreated struct {
@@ -3415,6 +3489,191 @@ type VolumeEditJSONRequestBody = VolumeEdit
 
 // ZoneCreateJSONRequestBody defines body for ZoneCreate for application/json ContentType.
 type ZoneCreateJSONRequestBody = ZoneCreate
+
+// AsBackingServiceCreate0 returns the union data inside the BackingServiceCreate as a BackingServiceCreate0
+func (t BackingServiceCreate) AsBackingServiceCreate0() (BackingServiceCreate0, error) {
+	var body BackingServiceCreate0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromBackingServiceCreate0 overwrites any union data inside the BackingServiceCreate as the provided BackingServiceCreate0
+func (t *BackingServiceCreate) FromBackingServiceCreate0(v BackingServiceCreate0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeBackingServiceCreate0 performs a merge with any union data inside the BackingServiceCreate, using the provided BackingServiceCreate0
+func (t *BackingServiceCreate) MergeBackingServiceCreate0(v BackingServiceCreate0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsBackingServiceCreate1 returns the union data inside the BackingServiceCreate as a BackingServiceCreate1
+func (t BackingServiceCreate) AsBackingServiceCreate1() (BackingServiceCreate1, error) {
+	var body BackingServiceCreate1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromBackingServiceCreate1 overwrites any union data inside the BackingServiceCreate as the provided BackingServiceCreate1
+func (t *BackingServiceCreate) FromBackingServiceCreate1(v BackingServiceCreate1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeBackingServiceCreate1 performs a merge with any union data inside the BackingServiceCreate, using the provided BackingServiceCreate1
+func (t *BackingServiceCreate) MergeBackingServiceCreate1(v BackingServiceCreate1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t BackingServiceCreate) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if t.Schema != nil {
+		object["$schema"], err = json.Marshal(t.Schema)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '$schema': %w", err)
+		}
+	}
+
+	object["adapter"], err = json.Marshal(t.Adapter)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'adapter': %w", err)
+	}
+
+	if t.Authentication != nil {
+		object["authentication"], err = json.Marshal(t.Authentication)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'authentication': %w", err)
+		}
+	}
+
+	if t.Description != nil {
+		object["description"], err = json.Marshal(t.Description)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'description': %w", err)
+		}
+	}
+
+	object["name"], err = json.Marshal(t.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	object["network_pool"], err = json.Marshal(t.NetworkPool)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'network_pool': %w", err)
+	}
+
+	object["slug"], err = json.Marshal(t.Slug)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'slug': %w", err)
+	}
+
+	object["zone"], err = json.Marshal(t.Zone)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'zone': %w", err)
+	}
+
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *BackingServiceCreate) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["$schema"]; found {
+		err = json.Unmarshal(raw, &t.Schema)
+		if err != nil {
+			return fmt.Errorf("error reading '$schema': %w", err)
+		}
+	}
+
+	if raw, found := object["adapter"]; found {
+		err = json.Unmarshal(raw, &t.Adapter)
+		if err != nil {
+			return fmt.Errorf("error reading 'adapter': %w", err)
+		}
+	}
+
+	if raw, found := object["authentication"]; found {
+		err = json.Unmarshal(raw, &t.Authentication)
+		if err != nil {
+			return fmt.Errorf("error reading 'authentication': %w", err)
+		}
+	}
+
+	if raw, found := object["description"]; found {
+		err = json.Unmarshal(raw, &t.Description)
+		if err != nil {
+			return fmt.Errorf("error reading 'description': %w", err)
+		}
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &t.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+	}
+
+	if raw, found := object["network_pool"]; found {
+		err = json.Unmarshal(raw, &t.NetworkPool)
+		if err != nil {
+			return fmt.Errorf("error reading 'network_pool': %w", err)
+		}
+	}
+
+	if raw, found := object["slug"]; found {
+		err = json.Unmarshal(raw, &t.Slug)
+		if err != nil {
+			return fmt.Errorf("error reading 'slug': %w", err)
+		}
+	}
+
+	if raw, found := object["zone"]; found {
+		err = json.Unmarshal(raw, &t.Zone)
+		if err != nil {
+			return fmt.Errorf("error reading 'zone': %w", err)
+		}
+	}
+
+	return err
+}
 
 // AsComponentConfig0 returns the union data inside the ComponentConfig as a ComponentConfig0
 func (t ComponentConfig) AsComponentConfig0() (ComponentConfig0, error) {

@@ -396,6 +396,55 @@
       },
       "BackingServiceCreate": {
         "additionalProperties": false,
+        "oneOf": [
+          {
+            "properties": {
+              "adapter": {
+                "enum": [
+                  "valkey:9"
+                ],
+                "type": "string"
+              },
+              "authentication": {
+                "description": "Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters.",
+                "enum": [
+                  "username_password",
+                  "password",
+                  "none"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "adapter",
+              "authentication"
+            ],
+            "type": "object"
+          },
+          {
+            "not": {
+              "properties": {
+                "authentication": {}
+              },
+              "required": [
+                "authentication"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "adapter": {
+                "enum": [
+                  "postgres:16"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "adapter"
+            ],
+            "type": "object"
+          }
+        ],
         "properties": {
           "$schema": {
             "description": "A URL to the JSON Schema for this object.",
@@ -410,7 +459,7 @@
             "type": "string"
           },
           "authentication": {
-            "description": "Immutable Valkey authentication mode; omitted selects username_password. Unsupported for other adapters.",
+            "description": "Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters.",
             "enum": [
               "username_password",
               "password",

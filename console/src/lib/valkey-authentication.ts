@@ -1,4 +1,25 @@
-import type { ProvisionOp } from './types'
+import type { ProvisionOp, ValkeyAuthentication } from './types'
+
+export type ValkeyAuthenticationSelection = ValkeyAuthentication | ''
+export type BackingAuthenticationCreateFields =
+  | { adapter: 'postgres:16' }
+  | { adapter: 'valkey:9'; authentication: ValkeyAuthentication }
+
+export function backingAuthenticationCreateFields(
+  adapter: 'postgres:16' | 'valkey:9',
+  authentication: string,
+): BackingAuthenticationCreateFields | undefined {
+  if (adapter === 'postgres:16') return { adapter }
+
+  switch (authentication) {
+    case 'username_password':
+    case 'password':
+    case 'none':
+      return { adapter, authentication }
+    default:
+      return undefined
+  }
+}
 
 export type ValkeyAuthenticationDetails = {
   label: string

@@ -1,11 +1,33 @@
 package cli
 
 import (
+	"context"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// Rationale: omitted and empty authentication flags must fail locally without
+// publishing a request or relying on a server to choose a mode.
+func TestBackingServiceCreateRequiresValkeyAuthentication(t *testing.T) {
+	for _, extra := range [][]string{nil, {"--authentication", ""}} {
+		command := newBackingServiceCmd()
+		command.SetContext(context.WithValue(context.Background(), appKey{}, &App{}))
+		command.SetOut(io.Discard)
+		command.SetErr(io.Discard)
+		command.SetArgs(append([]string{"create", "cache", "--adapter", "valkey:9", "--name", "Cache",
+			"--network-pool", "10.80.0.0/24", "--zone-name", "data", "--zone-subnet", "10.80.0.0/24"}, extra...))
+		err := command.Execute()
+		if kind, _ := errs.KindOf(err); kind != errs.KindValidationFailed {
+			t.Fatalf("missing authentication error = %v", err)
+		}
+	}
+}
+
+// Rationale: an explicitly selected password mode is sent unchanged.
 func TestBackingServiceCreateSendsValkeyAuthentication(t *testing.T) {
 	t.Parallel()
 
