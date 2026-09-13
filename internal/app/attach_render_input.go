@@ -181,7 +181,7 @@ func buildAttachTaskRenderInput(
 		RenderGeneration:         scope.ComposeProjection.Record.RenderGeneration,
 		EnvironmentEpochRevision: runtime.EpochRevision,
 		RuntimeProjection:        runtime.Projection,
-		RunningServiceIDs:        slices.Clone(runtime.RunningServiceIDs),
+		RunningServiceIDs:        slices.Sorted(slices.Values(runtime.RunningServiceIDs)),
 		Services:                 attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
 		Networks:                 attachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones),
 		Volumes:                  slices.Clone(scope.ComposeProjection.Record.Volumes),

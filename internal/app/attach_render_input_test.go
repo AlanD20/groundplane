@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -9,6 +10,26 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
+
+// Rationale: capture follows Service-name order, which is unrelated to stable-id
+// order. Durable Attach selection must sort its copy without changing the capture.
+func TestBuildAttachTaskRenderInputSortsRunningIdentityCopy(t *testing.T) {
+	fixture := newAttachRenderFixture(t)
+	running := []string{fixture.workerID, fixture.apiID}
+	slices.Sort(running)
+	want := slices.Clone(running)
+	slices.Reverse(running)
+	input, err := buildAttachTaskRenderInput(fixture.scope,
+		controllerpkg.EntryMutationRuntime{Projection: fixture.scope.ComposeProjection.Record,
+			EpochRevision: 1, RunningServiceIDs: running},
+		fixture.current, nil, fixture.createTask, fixture.artifactID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(input.RunningServiceIDs, want) || slices.IsSorted(running) {
+		t.Fatal("Attach running identities were not sorted independently of the captured source")
+	}
+}
 
 // Rationale: create publication must pin the complete union, including failed provision intent,
 // while deduplicating Services that consume the same durable backing network.

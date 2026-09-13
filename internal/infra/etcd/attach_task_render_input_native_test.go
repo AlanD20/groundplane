@@ -125,7 +125,7 @@ func capturedAttachRenderInputFixture(t *testing.T) AttachTaskRenderInput {
 }
 
 // AssertAttachRuntimeRoundTrip crosses capture and durable encoding in the
-// real-etcd Controller fixture without adding a production persistence API.
+// Controller renderer fixture without adding a production persistence API.
 func AssertAttachRuntimeRoundTrip(t *testing.T, runtime EnvironmentComposeProjection, epoch int64, running []string) {
 	t.Helper()
 	input := capturedAttachRenderInputFixture(t)
