@@ -60,6 +60,29 @@ vet passes. The architecture gate reports the same 125 outstanding findings;
 the three findings on edited mixed-fixture files concern imports already present
 before this change. No baseline was raised.
 
+## Same-name backing endpoints
+
+Owner: Backing Service delivery owner. Live QA on 2026-09-13 exposed a DNS
+collision when one consumer joined two distinct Valkey backing networks. Both
+Attach URL facts used the bare hostname `valkey`. After Entry rebinding, the new
+password was correctly present in the consumer and authenticated against the new
+instance's address, but Docker DNS resolved that hostname to the old instance.
+Removing the old Attach restored correct resolution and both native realtime
+replicas passed actual authentication and subscription checks.
+
+This blocks qualification of overlapping same-name backing connections, including
+that migration window. It is not an authentication-mode failure. Evidence is
+`cache-cutover-diagnostic.log` and `cutover-finish-after-dns.log` in
+`.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Fact construction currently uses the
+Backing Service name in `internal/app/attach_mutations.go`.
+
+Acceptance: give each backing endpoint a stable, unambiguous runtime identity
+and use it consistently in HOST and URL facts. Attach one consumer to two
+same-kind Backing Services with distinct credentials; prove each fact reaches
+only its own instance before, during and after a credential/Entry cutover.
+Keep isolation and authentication checks intact. Do not qualify this case by
+hardcoding instance IPs, bypassing facts or weakening credentials.
+
 ## Service health and Route visibility
 
 The old generic ingress hint was corrected locally using existing Route states.
