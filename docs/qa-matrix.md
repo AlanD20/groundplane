@@ -797,6 +797,36 @@ local socket permission; the complete successful run used that permission.
 Formatting passes. No production defect was reproduced, and no production code
 or live state changed.
 
+#### Public API models and error taxonomy
+
+Reviewed all 40 existing tests in `pkg/api` and `pkg/errs`. Removed two duplicate
+error checks and split one existing source-limit assertion into a separate
+delivery test. The final 39 tests comprise 37 local behavioral checks and two
+delivery checks. Each behavioral test names its cases, reason and proof limit.
+
+| Reviewed tests | Disposition and reason | Matrix coverage or gap |
+| --- | --- | --- |
+| Five original tests in [backup_policy_test.go](../pkg/api/backup_policy_test.go) | Retained disabled-policy JSON, strict replacement decoding, exact maximum integer fidelity, range boundaries and overflow rejection. The existing 12-source constant check is now a sixth, delivery-only test. Numeric expectations no longer derive from the implementation's maximum. | BAK-01/02, UI-03: DTO/predicate checks, not HTTP admission, persisted policy, source resolution, scheduling or retention effects. |
+| Five in [component_config_test.go](../pkg/api/component_config_test.go) | Retained closed response/mutation unions, explicit-null and invalid-state refusal, empty managed-file arrays and exclusive Tunnel credential modes. Valid credentials now require every decoded field. | CMP-01/02, DNS-02, HTTP-08, UI-01/03: JSON only, not persisted configuration, Secret ownership, rendering, activation or ingress. |
+| Three in [component_zone_config_test.go](../pkg/api/component_zone_config_test.go) | Retained distinct response/mutation roundtrips and invalid-selection rejection. Roundtrips now compare complete JSON instead of only the Zone-list substring. | CMP-01, HTTP-07/08, UI-03: public-model choices, not Zone lookup, network membership or runtime placement. |
+| Five in [release_group_test.go](../pkg/api/release_group_test.go) | Retained canonical failure-policy encoding, ambiguous JSON refusal, omission/null/string tag decoding, duplicate PATCH refusal and presence-aware encoding. | GRP-01, UI-01/03/04: DTO behavior, not durable edits, idempotency or group execution. |
+| Two in [script_execution_json_test.go](../pkg/api/script_execution_json_test.go), two in [script_json_test.go](../pkg/api/script_json_test.go) | Retained complete execution choices, explicit false grants, malformed choices, field/order presence and range checks. Create decoding now proves execution survives and re-encodes exactly, rather than merely succeeding. | SCRIPT-01/03/05/06, UI-03: JSON only, not image sealing, authorization, Task capture, hook order or runner/mount effects. |
+| Five in [types_test.go](../pkg/api/types_test.go) | Retained four behavioral checks for runtime intent, exact redacted Connector metadata and explicit S3 addressing presence. Source-kind vocabulary remains a separate delivery check. Exact Connector JSON subsumes its old partial absence assertions. | SVC-01/02, CON-02/03/04, SEC-05, UI-01/03: model encoding/decoding, not lifecycle, Controller redaction, encryption, provider access or Backup dispatch. |
+| Thirteen original tests in [errs_test.go](../pkg/errs/errs_test.go) | Retained eleven: full closed catalog, unknown/zero normalization, distinct malformed/semantic failures, wrapping/joining/classification, exact problem JSON, untrusted reconstruction, mutable-carrier defense and opaque-error secrecy. Removed `TestAcceptedPersistenceAndIdempotencyStatuses` and `TestPublicCodesUseCanonicalDotNamespaces`; the strengthened full catalog covers both subsets. | UI-03/05, TASK-07, SVC-12: error-package behavior, not HTTP dispatch, Controller logs, clients, actual recovery or live failures. |
+
+The error catalog now uses independent literal code/class/status tuples rather
+than implementation constants. Every tuple is checked through both the internal
+descriptor and public constructor/accessors, preserving the removed status
+test's protection. Reconstruction starts from independently authored public
+problems. The joined-cause assertion now requires both diagnostics to be present
+in order; two missing messages can no longer pass the ordering comparison.
+
+All 39 tests pass with the race detector in
+`.tmp/qa-test-review-public-models.log`. Three final primary assertion corrections
+pass in `.tmp/qa-test-review-public-models-final.log`; unchanged proof is reused.
+Formatting passes. Removed tests are recoverable from Git. No production defect
+was reproduced and no production code or live state changed.
+
 The remaining root-module Go tests outside the reviewed files still require review.
 Helpers and fixtures are not standalone test cases; inventory counts must not
 classify them as behavioral coverage. No automatic blanket deletion based on

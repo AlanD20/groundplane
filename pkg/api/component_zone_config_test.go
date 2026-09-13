@@ -2,10 +2,11 @@ package api
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 )
 
+// QA: CMP-01, HTTP-07, HTTP-08 - L0 response-model JSON only; no Zone ownership,
+// network membership, primary address, Tunnel routing, or runtime effect is proved.
 // Rationale: both integrations accept the same explicit ordered membership
 // decision, while Tunnel credentials remain distinct from router settings.
 func TestComponentConfigRoundTripsMultipleZones(t *testing.T) {
@@ -20,13 +21,15 @@ func TestComponentConfigRoundTripsMultipleZones(t *testing.T) {
 				t.Fatal(err)
 			}
 			encoded, err := json.Marshal(config)
-			if err != nil || !strings.Contains(string(encoded), `"zone_ids":`+zones) {
-				t.Fatalf("ordered membership roundtrip = %s, %v", encoded, err)
+			if err != nil || string(encoded) != body {
+				t.Fatalf("ordered membership roundtrip = %s, %v; want %s", encoded, err, body)
 			}
 		})
 	}
 }
 
+// QA: CMP-01, HTTP-07, HTTP-08 - L0 mutation-model JSON only; no Secret lookup,
+// Zone validation, config publication, or Component reconciliation is exercised.
 // Rationale: the write-only credential union must not confuse shared zone_ids
 // with the Caddy discriminator or discard explicitly selected secondary Zones.
 func TestComponentConfigMutationRoundTripsMultipleZones(t *testing.T) {
@@ -40,12 +43,14 @@ func TestComponentConfigMutationRoundTripsMultipleZones(t *testing.T) {
 			t.Fatal(err)
 		}
 		encoded, err := json.Marshal(input)
-		if err != nil || !strings.Contains(string(encoded), `"zone_ids":`+zones) {
-			t.Fatalf("ordered membership roundtrip = %s, %v", encoded, err)
+		if err != nil || string(encoded) != body {
+			t.Fatalf("ordered membership roundtrip = %s, %v; want %s", encoded, err, body)
 		}
 	}
 }
 
+// QA: CMP-01, UI-03 - L0 response-model rejection only; no same-Environment
+// lookup, durable config preservation, or running Component is exercised.
 // Rationale: explicit placement rejects incomplete, duplicated, malformed and
 // superseded singular inputs instead of silently attaching a default network.
 func TestComponentZoneConfigurationRejectsInvalidSelections(t *testing.T) {

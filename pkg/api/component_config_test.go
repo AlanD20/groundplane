@@ -6,6 +6,8 @@ import (
 	"testing"
 )
 
+// QA: CMP-01, DNS-02, UI-03 - L0 response-model JSON only; no persisted config,
+// registered planner, managed-file render, or Component activation is exercised.
 // Rationale: the wire contract must not silently accept a second variant or
 // turn an absent/invalid configuration into a permissive empty object.
 func TestComponentConfigIsAClosedExactlyOneWireUnion(t *testing.T) {
@@ -64,6 +66,8 @@ func TestComponentConfigIsAClosedExactlyOneWireUnion(t *testing.T) {
 	}
 }
 
+// QA: CMP-01, DNS-02, UI-03 - L0 mutation-model JSON only; no handler validation,
+// desired-state publication, rendering, or runtime reconciliation is exercised.
 // Rationale: mutation requests are the trust boundary, so null and
 // incomplete fields must not be normalized into a different variant.
 func TestComponentConfigMutationInputRejectsEmptyAndMixedVariants(t *testing.T) {
@@ -98,6 +102,8 @@ func TestComponentConfigMutationInputRejectsEmptyAndMixedVariants(t *testing.T) 
 	}
 }
 
+// QA: CMP-01, CMP-02, DNS-02, UI-03 - L0 public-model validation only; no
+// Controller read revision, renderer output, persistence, or serving DNS is proved.
 // Rationale: presence-aware decoding and response validation prevent invalid
 // persisted state from crossing the public API boundary.
 func TestComponentConfigRejectsExplicitNullAndInvalidResponseState(t *testing.T) {
@@ -130,6 +136,8 @@ func TestComponentConfigRejectsExplicitNullAndInvalidResponseState(t *testing.T)
 	}
 }
 
+// QA: CMP-02, UI-01 - L0 response-envelope encoding only; no Component GET,
+// fixed-revision read, managed-file content, or live serving bytes are exercised.
 // Rationale: managed configuration previews are a generic read projection, so
 // every Component config response must preserve an array even when no provider
 // supplies a preview.
@@ -147,18 +155,36 @@ func TestComponentConfigResponseAlwaysIncludesManagedFilesArray(t *testing.T) {
 	}
 }
 
+// QA: CMP-01, HTTP-08, UI-03 - L0 credential decoding only; no Secret ownership,
+// token storage/redaction, Tunnel publication, or provider ingress is exercised.
 // Rationale: existing and new credentials have different secret ownership
 // semantics; accepting unknown or mixed modes could expose write-only data.
 func TestCloudflareTunnelCredentialRequiresKnownExclusiveMode(t *testing.T) {
 	t.Parallel()
-	valid := []string{
-		`{"mode":"existing","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`,
-		`{"mode":"new","secret_name":"TUNNEL_TOKEN","token":"token"}`,
+	valid := []struct {
+		value string
+		want  CloudflareTunnelCredentialInput
+	}{
+		{
+			value: `{"mode":"existing","secret_id":"sec_01ARZ3NDEKTSV4RRFFQ69G5FAX"}`,
+			want: CloudflareTunnelCredentialInput{
+				Mode: "existing", SecretID: "sec_01ARZ3NDEKTSV4RRFFQ69G5FAX",
+			},
+		},
+		{
+			value: `{"mode":"new","secret_name":"TUNNEL_TOKEN","token":"token"}`,
+			want: CloudflareTunnelCredentialInput{
+				Mode: "new", SecretName: "TUNNEL_TOKEN", Token: "token",
+			},
+		},
 	}
-	for _, value := range valid {
+	for _, test := range valid {
 		var credential CloudflareTunnelCredentialInput
-		if err := json.Unmarshal([]byte(value), &credential); err != nil {
-			t.Fatalf("Unmarshal(%s) error = %v", value, err)
+		if err := json.Unmarshal([]byte(test.value), &credential); err != nil {
+			t.Fatalf("Unmarshal(%s) error = %v", test.value, err)
+		}
+		if credential != test.want {
+			t.Fatalf("Unmarshal(%s) = %#v, want %#v", test.value, credential, test.want)
 		}
 	}
 	for _, value := range []string{

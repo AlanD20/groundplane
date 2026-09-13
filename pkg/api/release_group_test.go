@@ -5,9 +5,11 @@ import (
 	"testing"
 )
 
+// QA: GRP-01, UI-01 - L0 response-model encoding only; no Controller read,
+// Console/CLI rendering, persisted default, or group execution is exercised.
+// Rationale: the public response must expose the canonical snake_case field
+// and enum spelling so clients do not lose or misread the compensation policy.
 func TestReleaseGroupOnFailureJSON(t *testing.T) {
-	// Rationale: the public response must expose the canonical snake_case field
-	// and enum spelling consumed identically by Console and CLI.
 	encoded, err := json.Marshal(ReleaseGroup{
 		ID:            "rg_x",
 		EnvironmentID: "env_x",
@@ -26,10 +28,11 @@ func TestReleaseGroupOnFailureJSON(t *testing.T) {
 	}
 }
 
+// QA: GRP-01, UI-03, UI-04 - L0 request decoding only; no HTTP handler,
+// idempotency record, group publication, or Service mutation is exercised.
+// Rationale: duplicate, unknown, or trailing JSON must not admit two wire
+// representations whose last decoded field produces the same mutation digest.
 func TestReleaseGroupRequestsRejectAmbiguousJSON(t *testing.T) {
-	// Rationale: idempotency digests are computed after decoding, so duplicate,
-	// unknown, or trailing JSON must not admit two wire representations whose
-	// last decoded field happens to produce the same mutation.
 	t.Parallel()
 
 	for _, document := range []string{
@@ -44,9 +47,11 @@ func TestReleaseGroupRequestsRejectAmbiguousJSON(t *testing.T) {
 	}
 }
 
+// QA: GRP-01, UI-03 - L0 PATCH-model decoding only; no existing group,
+// Controller edit, fixed-revision publication, or later deploy is exercised.
+// Rationale: PATCH must distinguish omission (preserve), null (clear), and
+// string (replace); collapsing any pair silently changes desired state.
 func TestReleaseGroupEditPreservesTagPresence(t *testing.T) {
-	// Rationale: PATCH must distinguish omission (preserve), null (clear), and
-	// string (replace); collapsing any pair silently changes desired state.
 	t.Parallel()
 
 	tests := []struct {
@@ -73,9 +78,11 @@ func TestReleaseGroupEditPreservesTagPresence(t *testing.T) {
 	}
 }
 
+// QA: GRP-01, UI-03, UI-04 - L0 PATCH-model rejection only; no HTTP response,
+// protected-intent replay, or durable edit is exercised.
+// Rationale: duplicate PATCH fields make field-presence semantics dependent
+// on decoder overwrite order and therefore cannot be idempotently hashed.
 func TestReleaseGroupEditRejectsDuplicatePatchField(t *testing.T) {
-	// Rationale: duplicate PATCH fields make field-presence semantics dependent
-	// on decoder overwrite order and therefore cannot be idempotently hashed.
 	t.Parallel()
 
 	var request ReleaseGroupEditRequest
@@ -84,10 +91,11 @@ func TestReleaseGroupEditRejectsDuplicatePatchField(t *testing.T) {
 	}
 }
 
+// QA: GRP-01, UI-01 - L0 PATCH-model encoding only; no generated-client
+// transport, Controller interpretation, stored group, or deploy is exercised.
+// Rationale: omission and explicit null must serialize distinctly rather than
+// exposing the helper struct or turning a preserved tag into a clear operation.
 func TestReleaseGroupEditMarshalPreservesFieldPresence(t *testing.T) {
-	// Rationale: generated clients bridge through JSON; omission and explicit
-	// null must survive that bridge exactly rather than serializing the helper
-	// struct's private representation.
 	t.Parallel()
 
 	omitted, err := json.Marshal(ReleaseGroupEditRequest{})

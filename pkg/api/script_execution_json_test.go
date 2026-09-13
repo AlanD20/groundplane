@@ -6,6 +6,8 @@ import (
 	"testing"
 )
 
+// QA: SCRIPT-01, SCRIPT-05, UI-03 - L0 JSON-model proof only; no image sealing,
+// grant authorization, Task capture, container isolation, or mount effect is proved.
 // Rationale: a complete context survives decoding and re-encoding, including an
 // authored false grant; omission and an inherited reset remain different patches.
 func TestScriptExecutionJSONRoundTrip(t *testing.T) {
@@ -27,10 +29,23 @@ func TestScriptExecutionJSONRoundTrip(t *testing.T) {
 			if err := json.Unmarshal([]byte(body), &created); err != nil {
 				t.Fatal(err)
 			}
+			if created.Execution == nil {
+				t.Fatal("create discarded execution choice")
+			}
+			createdExecution, err := json.Marshal(created.Execution)
+			if err != nil {
+				t.Fatalf("marshal create execution: %v", err)
+			}
+			wantExecution := body[len(`{"execution":`) : len(body)-1]
+			if string(createdExecution) != wantExecution {
+				t.Fatalf("create execution = %s, want %s", createdExecution, wantExecution)
+			}
 		})
 	}
 }
 
+// QA: SCRIPT-01, SCRIPT-06, UI-03 - L0 decoder rejection only; no Controller
+// semantic validation, source lookup, Task publication, or runner isolation is proved.
 // Rationale: JSON null, missing decisions, unknown members and duplicate keys
 // must not widen access or be treated as an omitted context.
 func TestScriptExecutionJSONRejectsAmbiguousChoices(t *testing.T) {

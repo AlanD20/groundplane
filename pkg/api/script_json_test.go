@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+// QA: SCRIPT-01, SCRIPT-03, UI-03 - L0 request-model decoding only; no Script
+// persistence, future-capture behavior, hook ordering, or execution is exercised.
 // Rationale: custom decoding must retain existing fields and distinguish the
 // creation default, an omitted patch and a deliberate reset to zero.
 func TestScriptJSONPreservesFieldsAndOrderPresence(t *testing.T) {
@@ -37,6 +39,8 @@ func TestScriptJSONPreservesFieldsAndOrderPresence(t *testing.T) {
 	}
 }
 
+// QA: SCRIPT-01, SCRIPT-06, UI-03 - L0 JSON rejection only; no handler admission,
+// idempotency digest, durable mutation, or runner behavior is exercised.
 // Rationale: schema bypasses and direct callers receive the same closed JSON
 // boundary; malformed requests never acquire an accidentally coerced order.
 func TestScriptJSONRejectsAmbiguousAndMalformedRequests(t *testing.T) {
