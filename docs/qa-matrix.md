@@ -827,6 +827,36 @@ pass in `.tmp/qa-test-review-public-models-final.log`; unchanged proof is reused
 Formatting passes. Removed tests are recoverable from Git. No production defect
 was reproduced and no production code or live state changed.
 
+#### Controller Task, Activity and log boundaries
+
+Reviewed all 26 tests in the six root Controller Task/log test files. Retained
+22 local behavioral checks and four delivery checks; none is a confirmed duplicate
+or coverage-only test. Each has a case/proof-limit or delivery annotation and a
+concrete rationale. All 26 pass with the race detector in
+`.tmp/qa-test-review-controller-task-logs.log`, with permitted local HTTP listeners.
+Formatting and diff checks pass. No product defect was reproduced; no production
+code, generated artifact or live state changed.
+
+| Reviewed tests | Retention reason | Matrix coverage or gap |
+| --- | --- | --- |
+| Two in [task_routes_test.go](../internal/controller/task_routes_test.go) | Retry and Abort forward the exact Task id and replay key once, preserving accepted identity and JSON response. | TASK-02/03/05: HTTP dispatch with recording fakes, not durable eligibility, cancellation, replay or execution. |
+| Five in [task_event_routes_test.go](../internal/controller/task_event_routes_test.go) | Canonical resume parsing, exact SSE shape/resume forwarding, pre-header problem mapping and safe post-frame failure. The operation-scoped OpenAPI check is delivery-only. | TASK-06/07, UI-03: local HTTP with an injected journal, not actual journal bounds, durable sequences, compaction, terminal drain or resumed delivery. |
+| Eleven in [task_read_routes_test.go](../internal/controller/task_read_routes_test.go) | Closed actor/type/prune provenance, Controller-step lifecycle, exact Task/event read identity and revision, missing-Task problem, alias page/cursor forwarding and scope admission. Two OpenAPI identity/enum checks are delivery-only. | TASK-01/06, BAK-08, UI-03: projection and HTTP-to-query boundaries, not real fixed-revision storage, historical ownership, cursor binding or isolation. |
+| Four in [log_routes_test.go](../internal/controller/log_routes_test.go) | Canonical query/media parsing, body/resume/Accept refusal and exact bounded Agent-event projection. | LOG-01/02, TASK-06, UI-03: parsers and direct handler/projection checks, not Docker source selection, actual truncation, subscriptions, follow streams or cleanup. |
+| Two in [task_step_contract_test.go](../internal/controller/task_step_contract_test.go) | Invalid Script/operation identity fails as Internal. The paired-field/exclusion schema is a separate delivery check. | TASK-01, SCRIPT-03: pure projection, not durable validation, HTTP schema enforcement or hook execution. |
+| Two in [task_wake_test.go](../internal/controller/task_wake_test.go) | Accepted 202 mutations hint both executor owners once; synchronous 204 does not. | TASK-01: callback invocation only, not actual Task publication, scheduler latency or executor progress. |
+
+The fixed-revision test formerly used a fake that ignored read arguments; it now
+requires the exact Task id and revision 17. Projection rejection starts from
+valid baselines. Task/Activity identities, timestamps and step kinds are explicit;
+conflicting scopes must make no query. Missing Task, rejected resume and invalid
+log requests require exact public error codes, not status alone. The post-frame
+failure must preserve its exact initial frame and emit nothing else. The 32 KiB
+line bound is independent of the implementation constant. OpenAPI assertions are
+scoped to the event operation and the step's actual forbidden fields. Two test
+names now describe fake-page projection and injected resume-rejection mapping,
+without claiming storage behavior. Local HTTP clients have a two-second bound.
+
 The remaining root-module Go tests outside the reviewed files still require review.
 Helpers and fixtures are not standalone test cases; inventory counts must not
 classify them as behavioral coverage. No automatic blanket deletion based on

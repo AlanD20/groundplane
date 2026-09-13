@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -24,6 +25,7 @@ const (
 	logRouteReleaseID     = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 )
 
+// QA: LOG-01, UI-03; pure query parsing only, not source selection or Docker tail behavior.
 // Rationale: query normalization would create multiple public spellings for
 // one frozen log subscription, so only exact decimal and boolean forms are accepted.
 func TestParseLogQueryAcceptsOnlyCanonicalValues(t *testing.T) {
@@ -79,6 +81,7 @@ func TestParseLogQueryAcceptsOnlyCanonicalValues(t *testing.T) {
 	}
 }
 
+// QA: LOG-01/02, UI-03; direct handler admission only, not live subscriptions or cleanup.
 // Rationale: logs are non-resumable bodyless SSE; violations must remain
 // ordinary RFC 7807 responses before any subscription or stream header exists.
 func TestLogRouteRejectsAcceptResumeAndBodyViolationsBeforeHeaders(t *testing.T) {
@@ -90,15 +93,23 @@ func TestLogRouteRejectsAcceptResumeAndBodyViolationsBeforeHeaders(t *testing.T)
 		accept     string
 		lastID     string
 		wantStatus int
+		wantCode   string
 	}{
-		{name: "missing accept", wantStatus: http.StatusNotAcceptable},
-		{name: "wrong accept", accept: "application/json", wantStatus: http.StatusNotAcceptable},
-		{name: "resume header", accept: "text/event-stream", lastID: "1", wantStatus: http.StatusBadRequest},
+		{name: "missing accept", wantStatus: http.StatusNotAcceptable, wantCode: "request.not_acceptable"},
+		{
+			name: "wrong accept", accept: "application/json",
+			wantStatus: http.StatusNotAcceptable, wantCode: "request.not_acceptable",
+		},
+		{
+			name: "resume header", accept: "text/event-stream", lastID: "1",
+			wantStatus: http.StatusBadRequest, wantCode: "validation.failed",
+		},
 		{
 			name:       "request body",
 			accept:     "text/event-stream",
 			body:       strings.NewReader("{}"),
 			wantStatus: http.StatusBadRequest,
+			wantCode:   "validation.failed",
 		},
 	}
 
@@ -123,13 +134,19 @@ func TestLogRouteRejectsAcceptResumeAndBodyViolationsBeforeHeaders(t *testing.T)
 				t.Fatalf("response = %d %q, want %d problem+json",
 					response.Code, response.Header().Get("Content-Type"), test.wantStatus)
 			}
-			if strings.Contains(response.Body.String(), "event: log") {
-				t.Fatalf("response committed SSE frame: %q", response.Body.String())
+			var problem errs.Problem
+			if err := json.Unmarshal(response.Body.Bytes(), &problem); err != nil {
+				t.Fatalf("decode log refusal: %v", err)
+			}
+			if problem.Type != "about:blank" || string(problem.Code) != test.wantCode ||
+				problem.Status != test.wantStatus {
+				t.Fatalf("log refusal = %#v, want %s/%d", problem, test.wantCode, test.wantStatus)
 			}
 		})
 	}
 }
 
+// QA: LOG-01/02; pure event projection only, not source ownership, transport or truncation execution.
 // Rationale: Controller-Agent data is private and untrusted; only the exact
 // bounded public LogEvent variants may cross into the human SSE representation.
 func TestPublicLogEventAcceptsExactShapeAndRejectsInvalidAgentData(t *testing.T) {
@@ -148,8 +165,8 @@ func TestPublicLogEventAcceptsExactShapeAndRejectsInvalidAgentData(t *testing.T)
 	}
 
 	exactLimit := validAgentLogEvent(timestamp)
-	exactLimit.Line = strings.Repeat("x", maximumPublicLogLine)
-	if _, accepted := publicLogEvent(1, exactLimit); !accepted {
+	exactLimit.Line = strings.Repeat("x", 32*1024)
+	if projected, accepted := publicLogEvent(1, exactLimit); !accepted || projected.Line != exactLimit.Line {
 		t.Fatal("publicLogEvent() rejected exact 32 KiB line")
 	}
 
@@ -195,7 +212,7 @@ func TestPublicLogEventAcceptsExactShapeAndRejectsInvalidAgentData(t *testing.T)
 			mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent { event.Line = string([]byte{0xff}); return event },
 		},
 		{name: "oversized line", mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent {
-			event.Line = strings.Repeat("x", maximumPublicLogLine+1)
+			event.Line = strings.Repeat("x", 32*1024+1)
 			return event
 		}},
 		{name: "unknown slot", mutate: func(event *agentpb.LogEvent) *agentpb.LogEvent {
@@ -216,6 +233,7 @@ func TestPublicLogEventAcceptsExactShapeAndRejectsInvalidAgentData(t *testing.T)
 	}
 }
 
+// QA: LOG-01, TASK-06, UI-03; media-type parsing only, not HTTP negotiation or stream dispatch.
 // Rationale: event-stream media parameters and comma-separated Accept values
 // are valid, while lookalike and malformed media types are not.
 func TestAcceptsEventStreamUsesParsedMediaTypes(t *testing.T) {

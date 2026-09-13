@@ -6,8 +6,9 @@ import (
 	"testing"
 )
 
-// Rationale: a public mutation that durably accepts Task work must immediately
-// hint both local and Agent executors without changing the response contract.
+// QA: TASK-01; HTTP acceptance wake hints only, not durable Task publication or executor progress.
+// Rationale: a 202 mutation must notify both executor owners exactly once so
+// newly accepted work does not depend solely on periodic polling.
 func TestAcceptedMutationWakesControllerAndAgentTaskRunners(t *testing.T) {
 	controllerWakes := 0
 	agentWakes := 0
@@ -32,8 +33,8 @@ func TestAcceptedMutationWakesControllerAndAgentTaskRunners(t *testing.T) {
 	}
 }
 
-// Rationale: executor wakeups are reserved for accepted Task publications and
-// must not run for synchronous mutations without queued work.
+// QA: TASK-01; one synchronous 204 response only, not all statuses or scheduling behavior.
+// Rationale: a synchronous no-content mutation must not spuriously wake Task executors.
 func TestNonAcceptedMutationDoesNotWakeTaskRunners(t *testing.T) {
 	controllerWakes := 0
 	agentWakes := 0

@@ -12,11 +12,13 @@ import (
 )
 
 type fakeTaskRetrier struct {
+	calls          int
 	taskID         string
 	idempotencyKey string
 }
 
 type fakeTaskAborter struct {
+	calls          int
 	taskID         string
 	idempotencyKey string
 }
@@ -26,6 +28,7 @@ func (aborter *fakeTaskAborter) AbortTask(
 	taskID string,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
+	aborter.calls++
 	aborter.taskID = taskID
 	aborter.idempotencyKey = idempotencyKey
 	return etcd.IdempotencyResponse{
@@ -38,6 +41,7 @@ func (retrier *fakeTaskRetrier) RetryTask(
 	taskID string,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
+	retrier.calls++
 	retrier.taskID = taskID
 	retrier.idempotencyKey = idempotencyKey
 	return etcd.IdempotencyResponse{
@@ -45,7 +49,9 @@ func (retrier *fakeTaskRetrier) RetryTask(
 	}, nil
 }
 
-// Rationale: the public retry route must dispatch the durable application service with the exact Task id and replay key, never the removed process-local Dispatcher.
+// QA: TASK-02/05; HTTP dispatch only, not durable retry admission, replay or execution.
+// Rationale: Retry must call its owner once with the exact Task id and replay key,
+// then forward the accepted attempt identity without manufacturing another response.
 func TestTaskRetryRouteUsesDurableRetrier(t *testing.T) {
 	const taskID = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	retrier := &fakeTaskRetrier{}
@@ -54,15 +60,17 @@ func TestTaskRetryRouteUsesDurableRetrier(t *testing.T) {
 	request.Header.Set(idempotencyKeyHeader, "task-retry-key-0001")
 	response := httptest.NewRecorder()
 	server.Mux.ServeHTTP(response, request)
-	if response.Code != http.StatusAccepted || retrier.taskID != taskID ||
+	if response.Code != http.StatusAccepted || response.Header().Get("Content-Type") != "application/json" ||
+		retrier.calls != 1 || retrier.taskID != taskID ||
 		retrier.idempotencyKey != "task-retry-key-0001" || response.Body.String() != `{"task_id":"task_retry"}` {
 		t.Fatalf("Task retry response/call = %d %s / %#v", response.Code, response.Body.String(), retrier)
 	}
 }
 
+// QA: TASK-03; HTTP dispatch only, not cancellation, terminal publication or Abort races.
+// Rationale: Abort must forward the addressed Task and replay key once, returning
+// that same id rather than manufacturing a second cancellation Task.
 func TestTaskAbortRouteReturnsTheTargetTaskIdentity(t *testing.T) {
-	// Rationale: abort terminalizes the addressed Task, so every public surface
-	// must receive that same id rather than a manufactured cancellation Task.
 	const taskID = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	aborter := &fakeTaskAborter{}
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{TaskAborts: aborter})
@@ -70,7 +78,8 @@ func TestTaskAbortRouteReturnsTheTargetTaskIdentity(t *testing.T) {
 	request.Header.Set(idempotencyKeyHeader, "task-abort-key-0001")
 	response := httptest.NewRecorder()
 	server.Mux.ServeHTTP(response, request)
-	if response.Code != http.StatusAccepted || aborter.taskID != taskID ||
+	if response.Code != http.StatusAccepted || response.Header().Get("Content-Type") != "application/json" ||
+		aborter.calls != 1 || aborter.taskID != taskID ||
 		aborter.idempotencyKey != "task-abort-key-0001" ||
 		response.Body.String() != `{"task_id":"`+taskID+`"}` {
 		t.Fatalf("Task abort response/call = %d %s / %#v", response.Code, response.Body.String(), aborter)

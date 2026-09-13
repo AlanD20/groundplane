@@ -19,9 +19,9 @@ import (
 
 const taskEventRouteTestTaskID = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
+// QA: TASK-06, UI-03; header parser only, not snapshot validation or resumed event delivery.
+// Rationale: resume input must be one canonical uint64, never an ambiguous or normalized value.
 func TestParseLastTaskEventIDAcceptsOnlyCanonicalSingleValues(t *testing.T) {
-	// Rationale: the public resume point must never become an ambiguous header,
-	// an etcd revision, or a parser-normalized noncanonical integer.
 	tests := []struct {
 		name   string
 		values []string
@@ -61,9 +61,10 @@ func TestParseLastTaskEventIDAcceptsOnlyCanonicalSingleValues(t *testing.T) {
 	}
 }
 
+// QA: TASK-06/07; local HTTP with an injected journal, not persistence, replay filtering or terminal drain.
+// Rationale: the route must forward the exact resume point and emit only the
+// closed public event shape, with sequence as its SSE id.
 func TestTaskEventRouteStreamsTypedSequenceFrames(t *testing.T) {
-	// Rationale: the human stream must expose the accepted compact API shape
-	// with sequence as SSE id and no durable payload or infrastructure metadata.
 	receivedAt := time.Date(2026, time.August, 23, 4, 30, 0, 0, time.UTC)
 	opener := &fakeTaskEventStreamOpener{runner: fakeTaskEventRunner{events: []etcd.TaskEventRecord{{
 		Sequence: 4,
@@ -90,16 +91,12 @@ func TestTaskEventRouteStreamsTypedSequenceFrames(t *testing.T) {
 	if opener.taskID != taskEventRouteTestTaskID || opener.after != 3 {
 		t.Fatalf("OpenTaskEventStream() received task=%q after=%d", opener.taskID, opener.after)
 	}
-	for _, forbidden := range []string{"payload", "sha256", "/v1/", "revision"} {
-		if bytes.Contains(body, []byte(forbidden)) {
-			t.Fatalf("Task event body exposes %q: %s", forbidden, body)
-		}
-	}
 }
 
-func TestTaskEventRouteRejectsResumeAheadBeforeHeaders(t *testing.T) {
-	// Rationale: a sequence beyond the fixed journal is malformed input and
-	// must retain the ordinary RFC 7807 boundary before SSE headers commit.
+// QA: TASK-06, UI-03; injected opener rejection through HTTP, not actual journal-boundary validation.
+// Rationale: a rejected resume point must remain validation.failed/400 before
+// SSE headers commit, preserving an ordinary problem response.
+func TestTaskEventRouteMapsResumeRejectionBeforeSSEHeaders(t *testing.T) {
 	opener := &fakeTaskEventStreamOpener{err: errs.New(
 		errs.KindMalformedRequest,
 		"Last-Event-ID is ahead of the Task journal",
@@ -111,11 +108,20 @@ func TestTaskEventRouteRejectsResumeAheadBeforeHeaders(t *testing.T) {
 		!strings.HasPrefix(response.Header.Get("Content-Type"), "application/problem+json") {
 		t.Fatalf("ahead response = %d %q", response.StatusCode, response.Header.Get("Content-Type"))
 	}
+	var problem errs.Problem
+	if err := json.NewDecoder(response.Body).Decode(&problem); err != nil {
+		t.Fatalf("decode resume rejection: %v", err)
+	}
+	if problem.Type != "about:blank" || problem.Code != "validation.failed" || problem.Status != 400 ||
+		opener.taskID != taskEventRouteTestTaskID || opener.after != 9 {
+		t.Fatalf("resume problem = %#v, opener = %#v", problem, opener)
+	}
 }
 
+// QA: TASK-06/07; injected post-frame failure over local HTTP, not a real corrupt journal or reconnect.
+// Rationale: a failure after output must preserve the emitted frame, close the
+// stream without inventing another event, and log only a safe failure class.
 func TestTaskEventRouteDisconnectsSafelyAfterHeaders(t *testing.T) {
-	// Rationale: once SSE headers commit, corruption must close the connection
-	// without an invented event or private diagnostic while still logging kind.
 	var logs bytes.Buffer
 	opener := &fakeTaskEventStreamOpener{runner: fakeTaskEventRunner{
 		events: []etcd.TaskEventRecord{{
@@ -135,8 +141,10 @@ func TestTaskEventRouteDisconnectsSafelyAfterHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read Task event response: %v", err)
 	}
-	if response.StatusCode != http.StatusOK || bytes.Contains(body, []byte("event: error")) ||
-		bytes.Contains(body, []byte("secret Agent diagnostic")) {
+	want := "id: 1\ndata: {\"sequence\":1,\"step_id\":\"step_01ARZ3NDEKTSV4RRFFQ69G5FAV\"," +
+		"\"state\":\"running\",\"attempt\":1,\"ordinal\":1,\"received_at\":\"2026-08-23T04:30:00Z\"}\n\n"
+	if response.StatusCode != http.StatusOK || response.Header.Get("Content-Type") != "text/event-stream" ||
+		string(body) != want {
 		t.Fatalf("post-header response = %d %q", response.StatusCode, body)
 	}
 	if !strings.Contains(logs.String(), "kind=corruption") ||
@@ -145,24 +153,36 @@ func TestTaskEventRouteDisconnectsSafelyAfterHeaders(t *testing.T) {
 	}
 }
 
+// Delivery: operation-scoped OpenAPI metadata, not a working stream or generated-client behavior.
+// Rationale: task.events must own its resume header, success media type and event
+// schema; finding those strings elsewhere in the document is insufficient.
 func TestTaskEventOpenAPIExpressesTheStreamContract(t *testing.T) {
-	// Rationale: generated clients and parity validation require task.events,
-	// its resume header, and its event-stream media type in the code-first spec.
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
-	document, err := json.Marshal(server.API.OpenAPI())
-	if err != nil {
-		t.Fatalf("marshal OpenAPI: %v", err)
+	path := server.API.OpenAPI().Paths["/tasks/{id}/events"]
+	if path == nil || path.Get == nil || path.Get.OperationID != "task.events" {
+		t.Fatalf("Task events GET operation = %#v", path)
 	}
-	for _, want := range []string{
-		`"/tasks/{id}/events"`,
-		`"operationId":"task.events"`,
-		`"name":"Last-Event-ID"`,
-		`"text/event-stream"`,
-		`"#/components/schemas/TaskEvent"`,
-	} {
-		if !bytes.Contains(document, []byte(want)) {
-			t.Fatalf("OpenAPI does not contain %s", want)
+	resumeHeaders := 0
+	for _, parameter := range path.Get.Parameters {
+		if parameter.Name == "Last-Event-ID" {
+			resumeHeaders++
+			if parameter.In != "header" || parameter.Required || parameter.Schema == nil ||
+				parameter.Schema.Pattern != "^(0|[1-9][0-9]{0,19})$" {
+				t.Fatalf("Task events resume parameter = %#v", parameter)
+			}
 		}
+	}
+	if resumeHeaders != 1 {
+		t.Fatalf("resume header declarations = %d, want 1", resumeHeaders)
+	}
+	success := path.Get.Responses["200"]
+	if success == nil || success.Content["text/event-stream"] == nil {
+		t.Fatalf("Task events success response = %#v", success)
+	}
+	schema := success.Content["text/event-stream"].Schema
+	if schema == nil || schema.Items == nil || schema.Items.Properties["data"] == nil ||
+		schema.Items.Properties["data"].Ref != "#/components/schemas/TaskEvent" {
+		t.Fatalf("Task events success schema = %#v", schema)
 	}
 }
 
@@ -231,7 +251,8 @@ func requestTaskEventStream(t *testing.T, baseURL string, lastEventID string) *h
 	if lastEventID != "" {
 		request.Header.Set("Last-Event-ID", lastEventID)
 	}
-	response, err := http.DefaultClient.Do(request)
+	client := &http.Client{Timeout: 2 * time.Second}
+	response, err := client.Do(request)
 	if err != nil {
 		t.Fatalf("request Task events: %v", err)
 	}
