@@ -35,6 +35,50 @@ one Console action, one CLI command, and one API endpoint, or when all three
 are absent by design. Local tooling and machine bootstrap qualify only when
 they are one of the closed exceptions listed in `api-cli.md`.
 
+## Root-cause repair
+
+Fix the cause and its affected workflows, not just the reported symptom. Before
+changing implementation:
+
+1. Preserve the failure and the smallest useful reproduction or diagnostic
+   evidence. Separate observed facts from hypotheses; name any missing proof.
+2. Trace the failing decision through its producer, stored state, consumer and
+   verifier, where applicable. Identify the broken requirement or assumption and
+   why existing tests did not catch it. Distinguish requested configuration,
+   successfully applied state and live observation; they are not interchangeable.
+3. Check the actual callers and workflows that share that assumption. Include
+   relevant sequences of operations, not only each operation in isolation. Keep
+   this investigation bounded to the affected mechanism. If successive fixes
+   expose related failures in other layers, revisit the shared model before
+   adding another local patch; follow the existing progress limits.
+
+Implement the smallest coherent correction in the module that owns the decision,
+covering every confirmed affected path in scope. Remove superseded logic rather
+than adding caller-specific exceptions. A required contract change must be stated
+and resolved through the user-decision rule; passing existing code or tests is not
+evidence that a conflicting design is correct. Do not weaken validation, discard
+failure evidence or rewrite immutable history to obtain a passing result.
+
+Add a regression that fails on the cause and passes with the correction. Exercise
+the relevant operation sequence through the owning interface, including prior
+successful changes and failure/replay when they affect the result. Then verify
+the original operator-visible outcome at the appropriate verification rung.
+Two checks derived from the same wrong state can agree; include an independent
+expected outcome. A completed Task, healthy process or passing unit test alone
+does not prove application recovery.
+
+An authorized restart, redeploy, reset or configuration workaround may restore
+service or unblock diagnosis. Label it as mitigation, record what it bypasses
+and what remains to fix, and preserve the original failed result. Mitigation
+does not close the defect or qualify product-owned recovery. Resume dependent
+fault tests only after the required recovery outcome is proved.
+
+Record the cause, affected paths, regression evidence and remaining limits in
+the handoff or commit. When a requirement or design assumption was incomplete,
+correct its owning feature document or ADR with the approved change so the next
+implementation uses the lesson. Keep unresolved findings in the existing issue
+record and current checkpoint; do not create a separate document for every fix.
+
 ## Repository-local temporary state
 
 Repository worktrees and all repository-managed temporary state use ignored

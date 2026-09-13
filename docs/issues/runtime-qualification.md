@@ -60,6 +60,48 @@ vet passes. The architecture gate reports the same 125 outstanding findings;
 the three findings on edited mixed-fixture files concern imports already present
 before this change. No baseline was raised.
 
+## Recovery after runtime configuration changes
+
+Owner: Services and Releases delivery owner. Severity: high. This is an active
+recovery blocker, not deferred qualification. The failed-candidate QA sequence on
+2026-09-13 first completed Attach creation, Entry rebinding and old Attach removal,
+then stopped the exact new workload candidate before promotion. The Task reached
+`timed_out` with its recovery steps completed. The Agent remained healthy and
+released its claim, but the restored serving workload rejoined the old backing
+network and lost the new one. The authenticated application endpoint returned 500.
+
+`releaseoperation.captureServingRuntime` calls `servicelifecycle.CaptureRelease`
+and renders the original immutable Release input. That source predates the
+successful Attach/Entry changes. The restoration contract binds exact historical
+bytes, but those bytes no longer describe the last successfully running workload.
+Correct restoration proof against that source does not prove application recovery.
+Earlier focused Attach and recovery checks did not cover this combined sequence.
+
+A subsequent normal Deploy completed after removing the owned fault-test hook;
+its functional check returned 401 followed by 500 on authentication refresh.
+The cause of that refresh failure remains unproved. This was an attempted
+mitigation, not a successful recovery or a fix. Do not replay the fault or proceed
+to interrupted-Task/reboot testing while the application remains unqualified.
+Evidence is `failed-rollout-terminal.json`, `after-candidate-recovery-runtime.json`
+and `candidate-operator-repair.log` in
+`.tmp/qa-recovery-repair-20260913-63vxXPTf/`.
+
+Required outcome: failed deployment restores the runtime that was successfully
+applied immediately before it, including later Attach/Entry changes. Investigate
+every recovery/lifecycle consumer of the historical Release assumption. A proposed
+separate record of acknowledged per-Service runtime needs its exact ownership and
+publication rules resolved in the existing feature/ADR; it is not implemented or
+approved by this issue record. Preserve immutable Release/Task history and exact
+validation. Latest desired configuration and host observation are not substitutes
+for acknowledged state.
+
+Acceptance: reproduce Deploy, successful Attach/Entry change and Detach, then
+failed Deploy through normal surfaces. Prove preservation of the pre-failure
+bindings, actual authenticated application behavior and unrelated workloads.
+Cover failed configuration changes and relevant reconnect/replay so unapplied
+intent cannot become the recovery source. Scope further tests to the confirmed
+shared consumers; the code correction and full live proof remain outstanding.
+
 ## Same-name backing endpoints
 
 Owner: Backing Service delivery owner. Live QA on 2026-09-13 exposed a DNS

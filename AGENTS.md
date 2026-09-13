@@ -30,8 +30,9 @@ Console (`console/`), and the Go Controller, Agent and CLI.
   error type, the subprocess Runner, banned patterns, CI gate). Reach
   for it when writing Go code.
 - **docs/agents.md** — primary-owned delivery, bounded delegation, task-context
-  requirements and the source-of-truth map. Reach for it before changing multiple layers,
-  moving a contract, or delegating repository work to subagents.
+  requirements and the source-of-truth map. Read its root-cause repair policy before
+  diagnosing or fixing a defect, and its execution policy before changing multiple
+  layers, moving a contract, or delegating repository work to subagents.
 - **docs/delivery.md** — the delivery and commit contract. Reach for it
   before committing, opening a PR, or declaring a change complete.
 - **docs/capabilities.md** — the current implementation and qualification gaps.

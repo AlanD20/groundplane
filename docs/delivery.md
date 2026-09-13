@@ -114,6 +114,9 @@ Use supported dependency versions; do not resolve conflicts with `--force` or
 
 ## Review checklist
 
+- Bug fixes satisfy [root-cause repair](agents.md#root-cause-repair): the causal
+  explanation, affected workflows and regression proof agree; mitigation is not
+  reported as resolution.
 - Product vocabulary matches `mvp.md`.
 - The Console/CLI/API 1:1 rule still holds for every operator-facing
   Controller capability; only the closed exceptions in `api-cli.md` are
