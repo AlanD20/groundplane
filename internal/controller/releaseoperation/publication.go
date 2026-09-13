@@ -268,7 +268,7 @@ func (service *Service) publish(
 		Fence: etcd.ReleaseFenceSet{
 			EnvironmentID: scope.Environment.Record.ID, Generation: 1, OperationID: operationID,
 			AttemptTaskID: taskID, Group: groupID != "", Members: fenceMembers,
-		}, Operation: head, CandidateReleaseDescriptor: candidateDescriptor,
+		}, Operation: head, CandidateReleaseDescriptor: candidateDescriptor, Plan: plan,
 		Hooks: hookPublications, PublishedAt: now,
 	})
 	if err != nil {

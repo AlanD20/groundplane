@@ -1,6 +1,7 @@
 package releaseoperation
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -180,6 +181,9 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := plans.EnableReleasePlans(ledger); err != nil {
+		t.Fatal(err)
+	}
 	proxyImage := componentsdk.OCIImage{
 		Repository:  "docker.io/library/caddy",
 		IndexDigest: strings.Repeat("e", 64),
@@ -335,6 +339,39 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork bool) {
 		render.Record.ProxyImage.IndexDigest != proxyImage.IndexDigest ||
 		render.Record.ProxyImage.Platform != selected {
 		t.Fatalf("publication failed to persist exact compiled proxy identity: %v", err)
+	}
+	reconstructed, err := plans.ResolveExecutionPlan(ctx, stored.Record)
+	if err != nil {
+		t.Fatalf("reconstruct published plan: %v", err)
+	}
+	var reconstructedArtifact *agentpb.ComposeArtifact
+	for _, candidateArtifact := range reconstructed.GetArtifacts() {
+		if candidateArtifact.GetArtifactId() == stored.Record.Params[etcd.TaskComposeArtifactParam] {
+			reconstructedArtifact = candidateArtifact
+			break
+		}
+	}
+	if reconstructedArtifact == nil {
+		t.Fatal("reconstructed sealed plan omitted its candidate artifact")
+	}
+	wantArtifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(reconstructedArtifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publication := store.values["/v1/records/release-publications/"+stored.Record.Params[etcd.TaskReleasePublicationParam]]
+	var envelope struct {
+		Data etcd.ReleasePublicationMarker `json:"data"`
+	}
+	if publication == nil || json.Unmarshal(publication.Value, &envelope) != nil ||
+		!bytes.Equal(envelope.Data.ExecutedComposeArtifact, wantArtifact) {
+		t.Fatal("ordinary publication did not retain its reconstructed sealed candidate artifact")
+	}
+	authoredArtifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(envelope.Data.ExecutedComposeArtifact, authoredArtifact) {
+		t.Fatal("ordinary publication retained the authored pre-native projection instead of the prepared candidate")
 	}
 	if detachedNetwork {
 		captured := &agentpb.ComposeArtifact{}

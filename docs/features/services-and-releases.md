@@ -104,6 +104,24 @@ Compose revision; an older Entry or Blueprint artifact cannot select a new
 candidate's memberships. Desired revision and historical Release bytes stay
 unchanged. Predecessor capture remains separate from candidate configuration.
 
+Ordinary Deploy/Rollback publication also retains the exact prepared candidate
+Compose artifact from the sealed execution plan. Publication checks the plan
+against its candidate descriptor and Task identity, steps and generation, then
+stores deterministic bytes in the existing Release publication marker. This is
+not the authored Blueprint artifact: native workload rendering and captured
+Attach bindings can change it. The existing 256 KiB Release-record ceiling and
+transaction limit still apply.
+
+These are prepared execution inputs, not acknowledged runtime. In blue-green
+execution the artifact can contain the proxy configuration from before the
+sealed switch step. A runtime receipt must bind the actual selected member and
+successful activation evidence; copying this artifact alone cannot prove the
+post-switch proxy state. Failed, skipped or merely staged work must not replace
+the last acknowledged inputs. Receipt sources must also remain available after
+their originating Task is pruned. Current Attach Task references alone do not
+provide that retention. These requirements do not permit recovery to restore
+mutable files or substitute current desired state for acknowledged inputs.
+
 ### Ordinary Release predecessors
 
 Deploy/Rollback captures the exact per-Service serving Release at publication's

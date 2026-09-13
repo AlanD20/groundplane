@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 type ReleaseLedger struct {
@@ -54,6 +55,7 @@ type ReleasePublicationEvidence struct {
 	Fence                      ReleaseFenceSet
 	Operation                  ReleaseOperationHead
 	CandidateReleaseDescriptor executionplan.CandidateReleaseDescriptor
+	Plan                       *agentpb.ExecutionPlan
 	Hooks                      []ReleaseHookExecutionPublication
 	PublishedAt                time.Time
 }
@@ -170,6 +172,11 @@ func (ledger *ReleaseLedger) Publish(
 	if err := validateReleasePublicationEvidence(evidence); err != nil {
 		return ReleasePublicationResult{}, err
 	}
+	executedArtifact, err := releasePreparedArtifact(evidence)
+	if err != nil {
+		return ReleasePublicationResult{}, err
+	}
+	defer clear(executedArtifact)
 	fragment, err := ledger.tasks.prepareReleaseTaskPublicationFragment(evidence.Task)
 	if err != nil {
 		return ReleasePublicationResult{}, err
@@ -197,6 +204,7 @@ func (ledger *ReleaseLedger) Publish(
 		PublicationID: evidence.Manifest.Record.PublicationID, OperationID: evidence.Manifest.Record.OperationID,
 		ManifestDigest:             evidence.Manifest.Record.Digest,
 		CandidateReleaseDescriptor: executionplan.CloneCandidateReleaseDescriptor(evidence.CandidateReleaseDescriptor),
+		ExecutedComposeArtifact:    executedArtifact,
 		PublishedAt:                evidence.PublishedAt,
 	})
 	if err != nil {
