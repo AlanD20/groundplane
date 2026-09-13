@@ -35,6 +35,7 @@ func (admission *closedMutationAdmission) CheckMutation(_ context.Context, nativ
 
 // Rationale: listeners are a qualification prerequisite, not write permission.
 // A real Script authoring route must not reach its mutation port during trial.
+// QA: UP-10, SCRIPT-01; real route with fake admission/mutation ports.
 func TestNativeMutationAdmissionBlocksScriptAuthoring(t *testing.T) {
 	mutations, admission := &scriptOrderRouteMutations{}, &closedMutationAdmission{}
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{
@@ -77,6 +78,7 @@ func TestNativeMutationAdmissionBlocksScriptAuthoring(t *testing.T) {
 
 // Rationale: read access, native acceptance replay and exact native Abort remain
 // usable; adjacent paths, other Tasks and other verbs cannot borrow exceptions.
+// QA: UP-10; HTTP guard against a recording handler, not native replay/Abort execution.
 func TestNativeMutationAdmissionHTTPExceptionsAreExact(t *testing.T) {
 	for _, test := range []struct {
 		method, path string
@@ -105,10 +107,12 @@ func TestNativeMutationAdmissionHTTPExceptionsAreExact(t *testing.T) {
 			response := httptest.NewRecorder()
 			server.HTTPHandler().ServeHTTP(response, request)
 			want := http.StatusConflict
+			wantCalls := 0
 			if test.allowed {
 				want = http.StatusNoContent
+				wantCalls = 1
 			}
-			if response.Code != want || (*calls == 1) != test.allowed {
+			if response.Code != want || *calls != wantCalls {
 				t.Fatalf("exception status=%d writes=%d, allowed=%v", response.Code, *calls, test.allowed)
 			}
 		})
@@ -124,6 +128,7 @@ func (schedules *nativeAdmissionBackupSchedules) RunBackupSchedules(context.Cont
 
 // Rationale: a trial must not publish due backups or rewrite/prune ordinary Task
 // and idempotency state while its predecessor still owns possible recovery.
+// QA: UP-10; scheduler calls against fake stores, not durable trial recovery.
 func TestNativeMutationAdmissionPausesScheduler(t *testing.T) {
 	tasks, markers, agents, schedules := &fakeTaskExpiration{}, &fakeIdempotencyPruning{}, &fakeStaleAgentExpiration{}, &nativeAdmissionBackupSchedules{}
 	admission := &closedMutationAdmission{}

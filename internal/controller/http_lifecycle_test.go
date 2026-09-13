@@ -5,11 +5,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -18,6 +20,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// Delivery: pinned transport policy values; live enforcement is tested separately.
 func TestProductionHTTPPolicyIsPinned(t *testing.T) {
 	// Rationale: transport limits are invariants rather than operator tuning;
 	// one accidental default change would alter every API and SSE route.
@@ -60,6 +63,8 @@ func TestProductionHTTPPolicyIsPinned(t *testing.T) {
 	}
 }
 
+// Delivery: registered Backup route policy; no Backup handler or effect is executed.
+// Rationale: A bodyless Backup run must not silently inherit JSON input handling.
 func TestBackupRunRouteIsBodyless(t *testing.T) {
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
 	request := httptest.NewRequest(
@@ -76,6 +81,7 @@ func TestBackupRunRouteIsBodyless(t *testing.T) {
 	}
 }
 
+// QA: TASK-06, LOG-02; local server configuration, not a running stream.
 func TestNewHTTPServerAppliesOnlyNarrowGlobalTimeouts(t *testing.T) {
 	// Rationale: nonzero server-wide read/write deadlines would either conflate
 	// body classes or eventually kill a healthy indefinite SSE stream.
@@ -87,6 +93,7 @@ func TestNewHTTPServerAppliesOnlyNarrowGlobalTimeouts(t *testing.T) {
 	}
 }
 
+// QA: UI-03, REL-04; loopback slow-header refusal with shortened policy only.
 func TestIncompleteHeaderTimesOutBeforeDispatch(t *testing.T) {
 	// Rationale: slow headers must consume a bounded connection without ever
 	// entering application code or promising an RFC 7807 pre-dispatch response.
@@ -106,14 +113,15 @@ func TestIncompleteHeaderTimesOutBeforeDispatch(t *testing.T) {
 	if err := connection.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
 		t.Fatalf("set read deadline: %v", err)
 	}
-	if _, err := bufio.NewReader(connection).ReadByte(); err == nil {
-		t.Fatal("partial request remained readable past ReadHeaderTimeout")
+	if _, err := bufio.NewReader(connection).ReadByte(); !errors.Is(err, io.EOF) {
+		t.Fatalf("incomplete-header read = %v, want server EOF, not the test read deadline", err)
 	}
 	if dispatched.Load() {
 		t.Fatal("handler ran for an incomplete request header")
 	}
 }
 
+// QA: UI-03; loopback header refusal, not an application-formatted error.
 func TestOversizedHeaderIsPlainPreDispatchFailure(t *testing.T) {
 	// Rationale: MaxHeaderBytes is enforced before handlers, so the documented
 	// RFC 7807 exception must be observable and must not dispatch application code.
@@ -136,6 +144,9 @@ func TestOversizedHeaderIsPlainPreDispatchFailure(t *testing.T) {
 		t.Fatalf("read oversized-header response: %v", err)
 	}
 	defer response.Body.Close()
+	if response.StatusCode != http.StatusRequestHeaderFieldsTooLarge {
+		t.Fatalf("oversized-header status = %d, want 431", response.StatusCode)
+	}
 	if dispatched.Load() {
 		t.Fatal("handler ran for an oversized request header")
 	}
@@ -144,6 +155,7 @@ func TestOversizedHeaderIsPlainPreDispatchFailure(t *testing.T) {
 	}
 }
 
+// QA: REL-04; loopback idle-socket release, not sustained resource qualification.
 func TestIdleKeepAliveConnectionCloses(t *testing.T) {
 	// Rationale: an inactive keep-alive socket must not hold a Controller file
 	// descriptor indefinitely while active streams remain exempt.
@@ -171,26 +183,35 @@ func TestIdleKeepAliveConnectionCloses(t *testing.T) {
 	if err := connection.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
 		t.Fatalf("set read deadline: %v", err)
 	}
-	if _, err := reader.ReadByte(); err == nil {
-		t.Fatal("idle keep-alive connection remained open")
+	if _, err := reader.ReadByte(); !errors.Is(err, io.EOF) {
+		t.Fatalf("idle connection read = %v, want server EOF, not the test read deadline", err)
 	}
 }
 
+// QA: UI-05; fake-clock/writer deadline application only.
 func TestOrdinaryResponseDeadlineStartsOnFirstWriteAndClears(t *testing.T) {
 	// Rationale: an ordinary handler may compute most of its response window;
 	// the write budget starts at its first output, not at request dispatch.
 	writer := &recordingResponseWriter{header: make(http.Header)}
 	policy := shortHTTPPolicy()
-	policy.now = func() time.Time { return time.Unix(100, 0) }
+	now := time.Unix(100, 0)
+	policy.now = func() time.Time { return now }
 	lifecycle := newHTTPLifecycle(testControllerServer(), policy)
-	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "ok") })
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		now = time.Unix(107, 0)
+		_, _ = io.WriteString(w, "ok")
+	})
 	lifecycle.serveOrdinary(writer, httptest.NewRequest(http.MethodGet, "/", nil), routePolicy{}, handler)
 	want := []string{"deadline", "write", "clear"}
 	if strings.Join(writer.operations, ",") != strings.Join(want, ",") {
 		t.Fatalf("operations = %v, want %v", writer.operations, want)
 	}
+	if !slices.Equal(writer.deadlines, []time.Time{time.Unix(108, 0), {}}) {
+		t.Fatalf("write deadlines = %v, want first-write time plus one second, then clear", writer.deadlines)
+	}
 }
 
+// QA: UI-05; loopback handler cancellation, not durable mutation cancellation.
 func TestOrdinaryRequestContextExpires(t *testing.T) {
 	// Rationale: non-stream route work must observe its processing deadline
 	// even when no request or response bytes are currently moving.
@@ -217,6 +238,7 @@ func TestOrdinaryRequestContextExpires(t *testing.T) {
 	}
 }
 
+// QA: UI-03; loopback transport ceiling, not semantic JSON validation.
 func TestJSONBodyBoundariesKnownAndChunked(t *testing.T) {
 	// Rationale: Content-Length is only an early optimization; MaxBytesReader
 	// must enforce the same 413 contract for undeclared chunked bodies.
@@ -263,9 +285,10 @@ func TestJSONBodyBoundariesKnownAndChunked(t *testing.T) {
 	}
 }
 
-func TestBlueprintRawBodyBoundariesRemainStreaming(t *testing.T) {
-	// Rationale: the 2 MiB raw ceiling supplements decoded bundle limits but
-	// must not force MultipartReader input into a whole-request buffer.
+// QA: BP-03; raw stream guard at an injected bound, not multipart decoding.
+func TestRawBodyLimitDefersReadAndEnforcesKnownAndUnknownLengths(t *testing.T) {
+	// Rationale: the raw-body guard used by Blueprint must reject declared
+	// overflow before reading and leave accepted/unknown-length bodies streaming.
 	server := testControllerServer()
 	for _, known := range []bool{true, false} {
 		for _, size := range []int{32, 33} {
@@ -274,12 +297,22 @@ func TestBlueprintRawBodyBoundariesRemainStreaming(t *testing.T) {
 				"/",
 				io.NopCloser(bytes.NewReader(bytes.Repeat([]byte("b"), size))),
 			)
+			request.ContentLength = int64(size)
 			if !known {
 				request.ContentLength = -1
 			}
+			body := &countedLifecycleRequestBody{ReadCloser: request.Body}
+			request.Body = body
 			response := httptest.NewRecorder()
-			if server.limitRequestBody(response, request, 32) {
-				_, err := io.Copy(io.Discard, request.Body)
+			allowed := server.limitRequestBody(response, request, 32)
+			if body.reads != 0 || allowed != (!known || size <= 32) {
+				t.Fatalf("known=%t size=%d: allowed=%t reads=%d", known, size, allowed, body.reads)
+			}
+			if allowed {
+				n, err := io.Copy(io.Discard, request.Body)
+				if n != 32 {
+					t.Fatalf("known=%t size=%d: exposed %d bytes, want 32", known, size, n)
+				}
 				if err != nil {
 					server.writeBodyReadProblem(response, err)
 				}
@@ -294,6 +327,7 @@ func TestBlueprintRawBodyBoundariesRemainStreaming(t *testing.T) {
 	}
 }
 
+// QA: TASK-06, LOG-02; loopback heartbeat liveness, not durable event sequencing.
 func TestSSESurvivesOrdinaryDeadlineAndHeartbeats(t *testing.T) {
 	// Rationale: an SSE stream must remain healthy beyond the ordinary request
 	// deadline and make idle liveness visible with the exact accepted comment.
@@ -325,6 +359,7 @@ func TestSSESurvivesOrdinaryDeadlineAndHeartbeats(t *testing.T) {
 	}
 }
 
+// QA: TASK-06, UI-01; local Accept classification, not full content negotiation.
 func TestStreamRouteRequiresEventStreamNegotiation(t *testing.T) {
 	// Rationale: activity serves both the JSON task-list alias and live SSE;
 	// only an explicit event-stream Accept value may bypass ordinary deadlines.
@@ -341,6 +376,7 @@ func TestStreamRouteRequiresEventStreamNegotiation(t *testing.T) {
 	}
 }
 
+// QA: TASK-06, LOG-02; fake-clock/writer flush budget, not remote receipt.
 func TestSSEWriteSetsFlushesAndClearsDeadline(t *testing.T) {
 	// Rationale: every individual flush needs a renewable deadline; a single
 	// absolute server timeout would terminate a healthy long-lived stream.
@@ -356,8 +392,12 @@ func TestSSEWriteSetsFlushesAndClearsDeadline(t *testing.T) {
 	if strings.Join(writer.operations, ",") != strings.Join(want, ",") {
 		t.Fatalf("operations = %v, want %v", writer.operations, want)
 	}
+	if !slices.Equal(writer.deadlines, []time.Time{time.Unix(101, 0), {}, time.Unix(101, 0), {}}) {
+		t.Fatalf("SSE deadlines = %v, want one-second budgets and clears for headers and event", writer.deadlines)
+	}
 }
 
+// QA: TASK-06, LOG-02; local source-close/body-read boundary.
 func TestSSEDoesNotConsumeRequestBodyAndStopsWhenSourceCloses(t *testing.T) {
 	// Rationale: SSE is a bodyless route and a closed event source is a normal
 	// termination signal, not a reason to wait for the next heartbeat.
@@ -370,6 +410,7 @@ func TestSSEDoesNotConsumeRequestBodyAndStopsWhenSourceCloses(t *testing.T) {
 	lifecycle.serveSSE(writer, request, events)
 }
 
+// QA: TASK-06, LOG-02; loopback handler exit, not external subscription cleanup.
 func TestSSEStopsWhenClientDisconnects(t *testing.T) {
 	// Rationale: disconnect cancellation must release the per-stream goroutine
 	// rather than waiting for process shutdown or an event source close.
@@ -396,6 +437,7 @@ func TestSSEStopsWhenClientDisconnects(t *testing.T) {
 	}
 }
 
+// QA: TASK-06, LOG-02; loopback non-reading client, not production load.
 func TestSSEStalledClientHitsPerWriteDeadline(t *testing.T) {
 	// Rationale: a client that stops reading must not block one Controller
 	// response goroutine indefinitely even though global WriteTimeout is zero.
@@ -426,6 +468,7 @@ func TestSSEStalledClientHitsPerWriteDeadline(t *testing.T) {
 	}
 }
 
+// QA: REL-01; loopback request completion during shutdown, not GP runtime restart.
 func TestGracefulShutdownLetsOrdinaryRequestFinish(t *testing.T) {
 	// Rationale: process cancellation starts draining but must not cancel an
 	// ordinary in-flight request that can complete inside the grace interval.
@@ -460,6 +503,7 @@ func TestGracefulShutdownLetsOrdinaryRequestFinish(t *testing.T) {
 	waitLifecycleServer(t, done)
 }
 
+// QA: REL-01, TASK-06, LOG-02; loopback stream drain, not host continuity.
 func TestGracefulShutdownDrainsSSE(t *testing.T) {
 	// Rationale: Shutdown does not close active streams itself, so the explicit
 	// drain signal must release SSE before the grace deadline.
@@ -487,9 +531,10 @@ func TestGracefulShutdownDrainsSSE(t *testing.T) {
 	waitLifecycleServer(t, done)
 }
 
-func TestGraceExpiryCancelsRequestBaseAndForcesClose(t *testing.T) {
+// QA: REL-01; expired grace cancels handler base and stops serving; no runtime restart.
+func TestGraceExpiryCancelsRequestBaseAndStopsServing(t *testing.T) {
 	// Rationale: an ordinary handler that ignores its processing deadline must
-	// still receive base cancellation and lose its connection after grace expires.
+	// still receive base cancellation and allow serving to stop after grace expires.
 	policy := shortHTTPPolicy()
 	policy.requestTimeout = time.Hour
 	policy.shutdownGrace = 25 * time.Millisecond
@@ -518,6 +563,7 @@ func TestGraceExpiryCancelsRequestBaseAndForcesClose(t *testing.T) {
 	waitLifecycleServer(t, done)
 }
 
+// QA: REL-01, UI-05; loopback drain/accept race, not native upgrade recovery.
 func TestDrainRaceReturns503ThenClosesListener(t *testing.T) {
 	// Rationale: a connection accepted between the drain flag and listener
 	// closure must receive a deterministic 503 and must not remain reusable.
@@ -549,13 +595,14 @@ func TestDrainRaceReturns503ThenClosesListener(t *testing.T) {
 	}
 }
 
-func TestHumaMaxBytesErrorMapsToCanonical413(t *testing.T) {
-	// Rationale: a chunked body can cross the cap inside framework decoding;
-	// its MaxBytesError must not be mislabeled as malformed syntax (400).
-	problem := requestProblem(http.StatusBadRequest, "decode failed", []error{&http.MaxBytesError{Limit: 32}})
-	if problem.Status != http.StatusRequestEntityTooLarge || problem.Code != errs.CodeRequestFailed {
-		t.Fatalf("problem = %#v, want 413 request.failed", problem)
-	}
+type countedLifecycleRequestBody struct {
+	io.ReadCloser
+	reads int
+}
+
+func (body *countedLifecycleRequestBody) Read(buffer []byte) (int, error) {
+	body.reads++
+	return body.ReadCloser.Read(buffer)
 }
 
 type panicReadCloser struct{}
@@ -566,6 +613,7 @@ func (panicReadCloser) Close() error             { return nil }
 type recordingResponseWriter struct {
 	header     http.Header
 	operations []string
+	deadlines  []time.Time
 }
 
 func (w *recordingResponseWriter) Header() http.Header { return w.header }
@@ -579,6 +627,7 @@ func (w *recordingResponseWriter) FlushError() error {
 	return nil
 }
 func (w *recordingResponseWriter) SetWriteDeadline(deadline time.Time) error {
+	w.deadlines = append(w.deadlines, deadline)
 	if deadline.IsZero() {
 		w.operations = append(w.operations, "clear")
 	} else {

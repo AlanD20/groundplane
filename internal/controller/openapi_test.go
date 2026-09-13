@@ -16,6 +16,7 @@ import (
 
 // Rationale: one deterministic code-first document must carry the API base
 // path and typed operation identity consumed by both client generators.
+// Delivery: deterministic generation metadata and one operation identity; not runtime coverage.
 func TestOpenAPIDocumentIsDeterministicAndCodeFirst(t *testing.T) {
 	t.Parallel()
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
@@ -53,6 +54,7 @@ func TestOpenAPIDocumentIsDeterministicAndCodeFirst(t *testing.T) {
 
 // Rationale: the operational endpoint must serve exactly the same bytes that
 // generation consumes rather than a checked-in or separately assembled copy.
+// Delivery: operational endpoint serves generation bytes; not product parity.
 func TestOpenAPIEndpointServesCodeFirstDocument(t *testing.T) {
 	t.Parallel()
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
@@ -72,6 +74,7 @@ func TestOpenAPIEndpointServesCodeFirstDocument(t *testing.T) {
 
 // Rationale: the committed document is the input to both client generators,
 // so it must be byte-identical to the deterministic live Huma API object.
+// Delivery: committed generated artifact drift guard; not product coverage.
 func TestCommittedOpenAPIMatchesCodeFirstDocument(t *testing.T) {
 	t.Parallel()
 	want, err := New(nil, nil, Options{}).OpenAPIDocument()
@@ -93,6 +96,7 @@ func TestCommittedOpenAPIMatchesCodeFirstDocument(t *testing.T) {
 
 // Rationale: every human API failure has one closed five-member schema; Huma
 // extensions must not widen generated clients beyond the authoritative tuple.
+// Delivery: closed generated error schema; serialization is tested separately.
 func TestOpenAPIProblemSchemaIsExact(t *testing.T) {
 	t.Parallel()
 	document, err := New(nil, nil, Options{}).OpenAPIDocument()

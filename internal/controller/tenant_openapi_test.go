@@ -7,6 +7,7 @@ import (
 
 // Rationale: a Tenant route is migrated only when the live Huma object, and
 // therefore both generated clients, exposes every synchronous Tenant action.
+// Delivery: operation identity inventory, not Tenant effects.
 func TestTenantOpenAPIContainsServingOperations(t *testing.T) {
 	t.Parallel()
 

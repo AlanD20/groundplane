@@ -13,6 +13,8 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// QA: REL-01; already-cancelled local multi-listener Serve, not live restart.
+// Rationale: Pre-cancelled startup must clean up and return without reporting a false failure.
 func TestServeReturnsNilAfterCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -35,6 +37,8 @@ func TestServeReturnsNilAfterCancellation(t *testing.T) {
 	}
 }
 
+// QA: HOST-02, UI-05; local occupied-port failure, not host bootstrap.
+// Rationale: A listen conflict must surface as the canonical internal failure instead of successful startup.
 func TestServeClassifiesListenFailureAsInternal(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -52,6 +56,8 @@ func TestServeClassifiesListenFailureAsInternal(t *testing.T) {
 	}
 }
 
+// QA: HOST-02, UI-05; local error/cause handling, not actual accept failure.
+// Rationale: Preserve normal close and the causal error of unexpected serving failures.
 func TestClassifyServeError(t *testing.T) {
 	if err := classifyServeError(nil); err != nil {
 		t.Fatalf("classifyServeError(nil) = %v, want nil", err)

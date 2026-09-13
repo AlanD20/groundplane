@@ -7,6 +7,7 @@ import (
 
 // Rationale: a Project route is migrated only when the serving Huma object,
 // and therefore both generated clients, exposes every synchronous action.
+// Delivery: operation identity inventory, not Project effects.
 func TestProjectOpenAPIContainsServingOperations(t *testing.T) {
 	t.Parallel()
 	document, err := New(nil, nil, Options{}).OpenAPIDocument()

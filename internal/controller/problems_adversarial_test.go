@@ -24,6 +24,7 @@ type adversarialRequiredQuery struct {
 
 // Rationale: a domain error returned through the real Huma adapter must retain
 // its canonical tuple while a wrapped storage cause remains private.
+// QA: SEC-05, UI-03; real Huma serialization, not durable logs.
 func TestHumaResponseDoesNotLeakWrappedCause(t *testing.T) {
 	const secret = "etcd-token=private"
 	mux, api := adversarialProblemAPI()
@@ -55,6 +56,7 @@ func TestHumaResponseDoesNotLeakWrappedCause(t *testing.T) {
 
 // Rationale: opaque 500 diagnostics passed directly to New are as private as
 // wrapped causes and must be generic after real Huma serialization.
+// QA: SEC-05, UI-03; real Huma opaque-error serialization, not durable logs.
 func TestHumaResponseDoesNotLeakNewInternalMessage(t *testing.T) {
 	const secret = "controller-signing-key=private"
 	mux, api := adversarialProblemAPI()
@@ -83,6 +85,7 @@ func TestHumaResponseDoesNotLeakNewInternalMessage(t *testing.T) {
 
 // Rationale: framework-created request errors must serialize the HTTP status
 // phrase as title instead of deriving presentation from a public error code.
+// QA: UI-03; real Huma missing-query response only.
 func TestHumaFrameworkErrorUsesHTTPStatusTitle(t *testing.T) {
 	mux, api := adversarialProblemAPI()
 	huma.Register(api, huma.Operation{
@@ -95,11 +98,14 @@ func TestHumaFrameworkErrorUsesHTTPStatusTitle(t *testing.T) {
 
 	response := httptest.NewRecorder()
 	mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/required-query", nil))
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("missing-query status = %d, want 422; body=%s", response.Code, response.Body.String())
+	}
 	var problem errs.Problem
 	if err := json.Unmarshal(response.Body.Bytes(), &problem); err != nil {
 		t.Fatalf("decode response: %v; body = %s", err, response.Body.String())
 	}
-	if problem.Title != http.StatusText(response.Code) {
+	if problem.Title != "Unprocessable Entity" || problem.Status != 422 || problem.Code != "validation.failed" {
 		t.Fatalf("title = %q, want %q; problem = %#v", problem.Title, http.StatusText(response.Code), problem)
 	}
 	assertExactProblemMembers(t, response.Body.Bytes())
@@ -107,6 +113,7 @@ func TestHumaFrameworkErrorUsesHTTPStatusTitle(t *testing.T) {
 
 // Rationale: Huma detail errors can contain parser internals or request data;
 // requestProblem may classify them but must never append their raw text.
+// QA: SEC-05, UI-03; local framework-detail sanitization only.
 func TestRequestProblemDoesNotLeakRawDetailErrors(t *testing.T) {
 	const secret = "authorization=private"
 	domainError := requestProblem(http.StatusUnprocessableEntity, "request validation failed", []error{

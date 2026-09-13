@@ -10,6 +10,7 @@ import (
 
 // Rationale: framework statuses must select one closed Kind, including the
 // deliberate 400/422 and request-failure distinctions.
+// QA: UI-03; local error classification, not all HTTP routes.
 func TestRequestProblemUsesClosedKinds(t *testing.T) {
 	tests := []struct {
 		status     int
@@ -47,19 +48,21 @@ func TestRequestProblemUsesClosedKinds(t *testing.T) {
 
 // Rationale: malformed syntax and semantic validation share a public code but
 // must remain different Kinds so transport behavior cannot collapse them.
+// QA: UI-03; local 400/422 kind distinction only.
 func TestFrameworkValidationKindsRemainDistinct(t *testing.T) {
 	malformed := requestProblem(http.StatusBadRequest, "malformed", nil)
 	semantic := requestProblem(http.StatusUnprocessableEntity, "invalid", nil)
 	if errors.Is(malformed, semantic) {
 		t.Fatal("framework 400 and 422 must not share internal Kind")
 	}
-	if malformed.ToProblem().Type != errs.ProblemType || semantic.ToProblem().Type != errs.ProblemType {
+	if malformed.ToProblem().Type != "about:blank" || semantic.ToProblem().Type != "about:blank" {
 		t.Fatal("framework errors must use about:blank")
 	}
 }
 
 // Rationale: Huma may report body overflow as a nominal bad-request detail;
 // the boundary must promote it to the descriptor-owned 413 Kind.
+// QA: UI-03; local overflow classification, not an actual Huma upload.
 func TestHumaMaxBytesErrorSelectsRequestTooLargeKind(t *testing.T) {
 	domainError := requestProblem(
 		http.StatusBadRequest,

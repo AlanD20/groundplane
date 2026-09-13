@@ -14,6 +14,7 @@ import (
 
 // Rationale: only exact read-only POST operations may bypass mutation-key
 // enforcement, never adjacent paths or other mutation methods.
+// QA: UI-04, BP-01, BAK-14; local exact-path exemption rule.
 func TestReadOnlyEnvironmentPostIdempotencyBoundary(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
@@ -35,6 +36,8 @@ func TestReadOnlyEnvironmentPostIdempotencyBoundary(t *testing.T) {
 	}
 }
 
+// QA: UI-03/04; HTTP header admission only, not durable replay.
+// Rationale: Invalid or repeated intent keys must fail before downstream mutation dispatch.
 func TestMutationIdempotencyKeyBoundaryRejectsMissingAndInvalidHeaders(t *testing.T) {
 	t.Parallel()
 
@@ -91,6 +94,8 @@ func TestMutationIdempotencyKeyBoundaryRejectsMissingAndInvalidHeaders(t *testin
 	}
 }
 
+// QA: UI-04; HTTP admission for mutation verbs only, not durable replay.
+// Rationale: A valid explicit intent key must permit exactly one downstream call for each mutation verb.
 func TestMutationIdempotencyKeyBoundaryAcceptsValidHeader(t *testing.T) {
 	t.Parallel()
 
@@ -115,6 +120,8 @@ func TestMutationIdempotencyKeyBoundaryAcceptsValidHeader(t *testing.T) {
 	}
 }
 
+// QA: UI-01/04; HTTP header policy only, not endpoint effects.
+// Rationale: Read-only methods must not require a mutation intent key.
 func TestIdempotencyKeyBoundaryDoesNotRequireHeaderForSafeMethods(t *testing.T) {
 	t.Parallel()
 
@@ -138,6 +145,8 @@ func TestIdempotencyKeyBoundaryDoesNotRequireHeaderForSafeMethods(t *testing.T) 
 	}
 }
 
+// Delivery: API-only middleware boundary; the fixture does not serve real operational routes.
+// Rationale: Human mutation-key policy must not leak onto unrelated operational paths.
 func TestIdempotencyKeyBoundaryDoesNotApplyOutsideAPIV1(t *testing.T) {
 	t.Parallel()
 

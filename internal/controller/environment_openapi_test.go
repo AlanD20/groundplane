@@ -7,6 +7,7 @@ import (
 
 // Rationale: an Environment route is migrated only when the serving Huma
 // object, and therefore both generated clients, exposes every synchronous action.
+// Delivery: operation/schema inventory, not Environment or Blueprint effects.
 func TestEnvironmentOpenAPIContainsServingOperations(t *testing.T) {
 	t.Parallel()
 	document, err := New(nil, nil, Options{}).OpenAPIDocument()
