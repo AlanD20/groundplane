@@ -129,6 +129,14 @@ func (store *publicationStoreWitness) Range(context.Context, etcd.RangeRequest) 
 	return nil, nil
 }
 
+func (store *publicationStoreWitness) MeasureTransaction(
+	ctx context.Context,
+	conditions []etcd.Condition,
+	mutations []etcd.Mutation,
+) (etcd.TransactionBudget, error) {
+	return etcd.MeasureTransactionBudget(ctx, "/groundplane/", conditions, mutations)
+}
+
 func (store *publicationStoreWitness) Transact(
 	context.Context,
 	[]etcd.Condition,

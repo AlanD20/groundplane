@@ -10,12 +10,31 @@ type preparedStoreTransaction struct {
 	failureReads       []clientv3.Op
 	operations         []clientv3.Op
 	physicalConditions []string
+	requestBytes       int
 }
 
-// prepareTransaction validates the exact physical request without contacting etcd.
-// Both pre-release budget checks and actual commits use this preparation.
+// prepareTransaction validates and encodes the exact physical request without
+// contacting etcd, then applies the Store-wide serialized-request ceiling.
 func (s *store) prepareTransaction(conditions []Condition, mutations []Mutation) (preparedStoreTransaction, error) {
+	prepared, err := s.prepareTransactionWithoutLimit(conditions, mutations)
+	if err != nil {
+		return preparedStoreTransaction{}, err
+	}
+	if prepared.requestBytes > maximumTransactionBytes {
+		return preparedStoreTransaction{}, errs.New(
+			errs.KindValidationFailed,
+			"etcd transaction exceeds the 1 MiB serialized request limit",
+		)
+	}
+	return prepared, nil
+}
 
+// prepareTransactionWithoutLimit is shared by execution and non-executing
+// measurement so both validate and encode one identical physical request.
+func (s *store) prepareTransactionWithoutLimit(
+	conditions []Condition,
+	mutations []Mutation,
+) (preparedStoreTransaction, error) {
 	comparisons := make([]clientv3.Cmp, 0, len(conditions))
 	failureReads := make([]clientv3.Op, 0, len(conditions))
 	physicalConditions := make([]string, 0, len(conditions))
@@ -75,18 +94,16 @@ func (s *store) prepareTransaction(conditions []Condition, mutations []Mutation)
 		}
 		physicalMutations = append(physicalMutations, key)
 	}
-	request := transactionRequest(conditions, mutations, physicalConditions, physicalMutations)
-	if request.Size() > maximumTransactionBytes {
-		return preparedStoreTransaction{}, errs.New(
-			errs.KindValidationFailed,
-			"etcd transaction exceeds the 1 MiB serialized request limit",
-		)
-	}
-
 	return preparedStoreTransaction{
 		comparisons:        comparisons,
 		failureReads:       failureReads,
 		operations:         operations,
 		physicalConditions: physicalConditions,
+		requestBytes: transactionRequest(
+			conditions,
+			mutations,
+			physicalConditions,
+			physicalMutations,
+		).Size(),
 	}, nil
 }

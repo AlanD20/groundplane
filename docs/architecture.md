@@ -309,6 +309,15 @@ the Agent selection authority or permits two writers on conflicting resources.
 The current aggregate execution remains guarded until this replacement is wired
 and verified end to end.
 
+`internal/common/executionplan` derives per-Service post-activation artifacts
+from sealed ordinary Release plans. `internal/infra/serviceruntimerecord` owns
+their self-contained acknowledgement value and proof binding. Existing terminal
+persistence publishes that value with the owning member checkpoint; it never
+promotes it during plan publication. Store measurement uses the same physical
+request encoder as execution, so member batching includes configured key prefixes
+without weakening transaction limits. Other runtime writers and recovery readers
+remain to be connected before this record becomes the shared applied authority.
+
 ### Errors
 
 - One taxonomy in `pkg/errs`: one typed error + stable dot-namespaced `code`

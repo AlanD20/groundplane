@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -44,5 +45,9 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionServiceFi
 	}
 	effects.conditions = append(effects.conditions, Condition{Key: activeKey})
 	effects.conditions = append(effects.conditions, scriptConditions...)
+	effects.mutations = append(
+		effects.mutations,
+		Mutation{Type: MutationDelete, Key: serviceruntimerecord.Key(record.ServiceID)},
+	)
 	return effects, nil
 }

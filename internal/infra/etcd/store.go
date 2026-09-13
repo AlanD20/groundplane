@@ -118,12 +118,6 @@ type TransactionResult struct {
 	FailureReads []*KeyValue
 }
 
-const (
-	maximumTransactionOperations                           = 96
-	maximumEnvironmentBlueprintTransactionOperationsPerArm = 256
-	maximumTransactionBytes                                = 1 << 20
-)
-
 // WatchStream separates ordinary key events from terminal watch failures.
 // Consumers must observe Errors and restart from a durable revision once that
 // resume contract is defined by the repository layer.
@@ -143,6 +137,7 @@ type Store interface {
 	Put(ctx context.Context, key string, value []byte) (int64, error)
 	Delete(ctx context.Context, key string) (int64, error)
 	Range(ctx context.Context, request RangeRequest) (*RangeResult, error)
+	MeasureTransaction(ctx context.Context, conditions []Condition, mutations []Mutation) (TransactionBudget, error)
 	Transact(ctx context.Context, conditions []Condition, mutations []Mutation) (TransactionResult, error)
 	// Watch starts at startRevision when it is positive. A zero revision uses
 	// etcd's current-watch semantics. After Range, pass ReadRevision+1 to close

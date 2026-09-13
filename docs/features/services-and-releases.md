@@ -122,6 +122,36 @@ their originating Task is pruned. Current Attach Task references alone do not
 provide that retention. These requirements do not permit recovery to restore
 mutable files or substitute current desired state for acknowledged inputs.
 
+The ordinary Release writer now derives each prepared post-activation runtime
+from the sealed plan. It selects the candidate workload, replaces proxy metadata
+and YAML with the sealed switch configuration, and retains only referenced
+resources. When both Releases use opposite blue-green slots, it copies the prior
+serving workload without its proxy from the sealed predecessor artifact. The
+publication marker retains these prepared values under its existing 256 KiB
+limit; none is applied authority yet.
+
+A successfully completed ordinary Release member writes its self-contained
+`service-acknowledged-runtime` record with its checkpoint, terminal summary and
+serving projection in one transaction. The source includes Task, plan/hash,
+step, assignment, Agent, execution epoch, render generation, effect digest and
+acknowledgement time. Proxy proof must match the exact activation configuration;
+recreate proof must match the candidate artifact, Release and target. Failed,
+skipped, compensated and recovery-required members preserve the existing record.
+The current record survives Task pruning and is deleted by successful Service
+removal, including the Service finalizer used by ancestor deletion. Original
+Release input and terminal history are unchanged.
+
+Terminal batches measure each whole member, including the runtime compare/put,
+caller proof guards and physical storage-key prefix. They stop before the next
+member would exceed 96 aggregate operations or 1 MiB. An individual member that
+cannot fit fails without a partial write; the limits are not increased.
+
+This is the first writer, not an enabled recovery source. Attach/Detach, Entry,
+Blueprint success and recovery-retry publication still need the same authority.
+Readers must not use a partially maintained record, backfill it from old Release
+input, or infer a missing acknowledgement. Consumer cutover and any clean QA
+rebuild follow only after those writers and source-retention checks are closed.
+
 ### Ordinary Release predecessors
 
 Deploy/Rollback captures the exact per-Service serving Release at publication's

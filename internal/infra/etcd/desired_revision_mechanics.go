@@ -91,6 +91,7 @@ func ValidateDesiredRevisionTransaction(
 		Get(context.Context, string) (*GetResult, error)
 		GetMany(context.Context, GetManyRequest) (*GetManyResult, error)
 		Range(context.Context, RangeRequest) (*RangeResult, error)
+		MeasureTransaction(context.Context, []Condition, []Mutation) (TransactionBudget, error)
 		Transact(context.Context, []Condition, []Mutation) (TransactionResult, error)
 	},
 	conditions []Condition,

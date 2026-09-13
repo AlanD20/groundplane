@@ -2392,6 +2392,15 @@ provenance, not runtime authority. The environment never has one global Release
 state: Release history and serving/current-successful projections are per
 Service.
 
+The Controller retains acknowledged native runtime per Service separately from
+immutable Release input. Only successful execution of that Service's selected
+workload may advance it; preparation, skipped work, failure and compensation do
+not acknowledge candidate input. The record carries its exact Task, plan and
+execution epoch, current workload/proxy bytes and any retained inactive slot.
+Future execution captures this value into its immutable predecessor, without
+depending on the earlier Task's retention. This does not authorize configuration
+file restoration or replacement of acknowledged input with latest desired state.
+
 Attach state is also split. Desired state contains the Backing Service, Attach
 name, one consumer Service, credential mode and source, and owner-only grants.
 Durable records contain the Attach id, Service id, resolved backing network id,

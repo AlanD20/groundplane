@@ -699,6 +699,14 @@ func (store *memoryTaskStore) Transact(
 	return TransactionResult{Succeeded: true, Revision: store.revision}, nil
 }
 
+func (store *memoryTaskStore) MeasureTransaction(
+	ctx context.Context,
+	conditions []Condition,
+	mutations []Mutation,
+) (TransactionBudget, error) {
+	return MeasureTransactionBudget(ctx, "/groundplane/", conditions, mutations)
+}
+
 func (store *memoryTaskStore) conditionValueLocked(condition Condition, revision int64) *KeyValue {
 	if !condition.Prefix {
 		return store.valueAtLocked(condition.Key, revision)

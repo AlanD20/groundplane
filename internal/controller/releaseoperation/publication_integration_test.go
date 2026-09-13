@@ -390,6 +390,7 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork bool) {
 			t.Fatal("Release capture rewrote its immutable desired source")
 		}
 	}
+	provePreparedReleaseRuntime(t, store, envelope.Data, reconstructed, serviceID, detachedNetwork)
 	// Rationale: aborting an unassigned Release must retire its publication
 	// fence as well as the Task, otherwise every subsequent deployment locks.
 	store.failAbortCleanup = true
@@ -469,6 +470,13 @@ func (s *directPublicationStore) Watch(context.Context, string, int64) (*etcd.Wa
 }
 func (s *directPublicationStore) Snapshot(context.Context, io.Writer) error {
 	return fmt.Errorf("unexpected snapshot")
+}
+func (s *directPublicationStore) MeasureTransaction(
+	ctx context.Context,
+	conditions []etcd.Condition,
+	mutations []etcd.Mutation,
+) (etcd.TransactionBudget, error) {
+	return etcd.MeasureTransactionBudget(ctx, "/groundplane/", conditions, mutations)
 }
 func (s *directPublicationStore) Get(_ context.Context, key string) (*etcd.GetResult, error) {
 	return &etcd.GetResult{Entry: s.copyAt(key, s.revision), ReadRevision: s.revision}, nil

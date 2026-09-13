@@ -1,18 +1,32 @@
 package etcd
 
 import (
+	"bytes"
 	"context"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func TestReleaseTerminalizationBatchesMaximumGroupBelowTransactionCeiling(t *testing.T) {
-	t.Parallel()
+type releaseTerminalFixture struct {
+	store      *releaseTerminalAuditStore
+	task       TaskRecord
+	assignment TaskAssignmentRecord
+	result     TaskResultRecord
+	head       ReleaseOperationHead
+	agentID    string
+	now        time.Time
+}
+
+func newReleaseTerminalFixture(t *testing.T, count int) releaseTerminalFixture {
+	t.Helper()
 	ctx := context.Background()
 	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
 	store := newMemoryHierarchyStore()
@@ -27,12 +41,14 @@ func TestReleaseTerminalizationBatchesMaximumGroupBelowTransactionCeiling(t *tes
 	artifactID := ids.New(ids.KindConfig)
 	manifestDigest := strings.Repeat("1", 64)
 	renderDigest := strings.Repeat("2", 64)
+	planHash := strings.Repeat("a", 64)
+	runtimes := make([]executionplan.CandidateRuntime, count)
 
-	members := make([]domain.GroupMember, domain.MaximumGroupMembers)
-	fenceMembers := make([]ReleaseFenceMember, domain.MaximumGroupMembers)
-	steps := make([]TaskStepRecord, domain.MaximumGroupMembers*5)
-	proxyEvidence := make([]TaskProxyEvidence, domain.MaximumGroupMembers)
-	mutations := make([]Mutation, 0, domain.MaximumGroupMembers*2+4)
+	members := make([]domain.GroupMember, count)
+	fenceMembers := make([]ReleaseFenceMember, count)
+	steps := make([]TaskStepRecord, count*5)
+	proxyEvidence := make([]TaskProxyEvidence, count)
+	mutations := make([]Mutation, 0, count*2+4)
 	for index := range members {
 		serviceID := ids.New(ids.KindService)
 		releaseID := ids.New(ids.KindDeployment)
@@ -45,6 +61,8 @@ func TestReleaseTerminalizationBatchesMaximumGroupBelowTransactionCeiling(t *tes
 			ServiceID: serviceID, Target: string(domain.WorkloadBlue), ProxyGeneration: 1,
 			ConfigSHA256: strings.Repeat("3", 64), ReleaseID: releaseID,
 		}
+		runtimes[index] = terminalRuntimeFixture(t, environmentID, serviceID, releaseID, planID, artifactID)
+		proxyEvidence[index].ConfigSHA256 = runtimeFixtureHash(runtimes[index])
 		intent := domain.Intent{
 			ID: releaseID, EnvironmentID: environmentID, ServiceID: serviceID,
 			OperationID: operationID, OperationKind: domain.OperationDeploy,
@@ -107,6 +125,11 @@ func TestReleaseTerminalizationBatchesMaximumGroupBelowTransactionCeiling(t *tes
 	}
 	markerValue, err := encodeReleaseRecord("release-publication", ReleasePublicationMarker{
 		PublicationID: publicationID, OperationID: operationID, ManifestDigest: manifestDigest, PublishedAt: now,
+		PreparedRuntimes: runtimes,
+		CandidateReleaseDescriptor: executionplan.CandidateReleaseDescriptor{
+			PlanID:   planID,
+			PlanHash: bytes.Repeat([]byte{0xaa}, 32),
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -133,10 +156,6 @@ func TestReleaseTerminalizationBatchesMaximumGroupBelowTransactionCeiling(t *tes
 	}
 
 	audited := &releaseTerminalAuditStore{memoryHierarchyStore: store}
-	repository, err := newTaskRepository(audited)
-	if err != nil {
-		t.Fatal(err)
-	}
 	task := TaskRecord{
 		ID: taskID, OperationID: operationID,
 		Owner: TaskOwner{
@@ -145,59 +164,124 @@ func TestReleaseTerminalizationBatchesMaximumGroupBelowTransactionCeiling(t *tes
 			ProjectID:     projectID,
 			EnvironmentID: environmentID,
 		},
-		Executor: TaskExecutorAgent, PlanID: planID, RenderGeneration: 1,
+		Executor: TaskExecutorAgent, PlanID: planID, PlanHash: planHash, RenderGeneration: 1,
 		Type: TaskDeploy, Target: groupID, Params: map[string]string{TaskReleasePublicationParam: publicationID}, Steps: steps,
 	}
-	assignment := TaskAssignmentRecord{AssignmentID: ids.New(ids.KindAssignment)}
+	assignment := TaskAssignmentRecord{AssignmentID: ids.New(ids.KindAssignment), ExecutionEpoch: 1}
 	agentID := ids.New(ids.KindAgent)
+
+	return releaseTerminalFixture{
+		store: audited, task: task, assignment: assignment, head: head, agentID: agentID, now: now,
+		result: TaskResultRecord{
+			Kind:           TaskResultCompose,
+			Diagnostic:     TaskResultDiagnosticNone,
+			ProxyEvidence:  proxyEvidence,
+			ExecutionEpoch: 1,
+		},
+	}
+}
+
+func (f releaseTerminalFixture) finalize(t *testing.T, status TaskStatus, guards ...Condition) (bool, error) {
+	t.Helper()
+	repository, err := newTaskRepository(f.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	read, err := f.store.GetMany(
+		context.Background(),
+		GetManyRequest{Keys: []string{releaseOperationKey(f.head.OperationID)}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return repository.finalizeReleaseTaskBatch(
+		context.Background(),
+		f.task,
+		f.assignment,
+		status,
+		f.result,
+		f.agentID,
+		f.now.Add(time.Minute),
+		read.ReadRevision,
+		guards...)
+}
+
+// Rationale: a 32-member successful Release stores each runtime atomically with
+// its terminal member, resumes after repository restart, and fits both ceilings.
+func TestReleaseTerminalizationBatchesMaximumGroupBelowTransactionCeiling(t *testing.T) {
+	t.Parallel()
+	f := newReleaseTerminalFixture(t, domain.MaximumGroupMembers)
 	for transaction := 0; ; transaction++ {
-		read, readErr := audited.GetMany(ctx, GetManyRequest{Keys: []string{releaseOperationKey(operationID)}})
-		if readErr != nil {
-			t.Fatal(readErr)
-		}
-		processed, finalizeErr := repository.finalizeReleaseTaskBatch(
-			ctx,
-			task,
-			assignment,
-			TaskStatusCompleted,
-			TaskResultRecord{
-				Kind:          TaskResultCompose,
-				Diagnostic:    TaskResultDiagnosticNone,
-				ProxyEvidence: proxyEvidence,
-			},
-			agentID,
-			now.Add(time.Minute),
-			read.ReadRevision,
-		)
-		if finalizeErr != nil {
-			t.Fatalf("finalizeReleaseTaskBatch(%d) error = %v", transaction, finalizeErr)
+		processed, err := f.finalize(t, TaskStatusCompleted)
+		if err != nil {
+			t.Fatal(err)
 		}
 		if !processed {
 			if transaction != 5 {
-				t.Fatalf("terminal transaction count = %d, want 5", transaction)
+				t.Fatalf("terminal transaction count=%d, want 5", transaction)
 			}
 			break
 		}
+		if transaction > 5 {
+			t.Fatal("terminal batching did not finish")
+		}
 	}
-	if audited.maximumAggregate != 94 {
-		t.Fatalf("maximum terminal aggregate operations = %d, want 94", audited.maximumAggregate)
+	if f.store.maximumAggregate != 92 {
+		t.Fatalf("maximum operations=%d, want 92", f.store.maximumAggregate)
 	}
-	closed, err := audited.GetMany(ctx, GetManyRequest{Keys: []string{
-		releaseOperationKey(operationID), releaseFenceSetKey(environmentID),
+	closed, err := f.store.GetMany(context.Background(), GetManyRequest{Keys: []string{
+		releaseOperationKey(f.head.OperationID), releaseFenceSetKey(f.head.EnvironmentID),
 	}})
 	if err != nil || closed.Values[0] == nil || closed.Values[1] != nil {
-		t.Fatalf("closed release operation = %#v, %v", closed, err)
+		t.Fatalf("closed operation=%#v, %v", closed, err)
 	}
-	closedHead, err := decodeReleaseRecord[ReleaseOperationHead](closed.Values[0].Value, "release-operation")
-	if err != nil || closedHead.State != domain.StateCompleted || closedHead.Progress == nil ||
-		len(closedHead.Progress.Results) != domain.MaximumGroupMembers {
-		t.Fatalf("closed Release head = %#v, %v", closedHead, err)
+	head, err := decodeReleaseRecord[ReleaseOperationHead](closed.Values[0].Value, "release-operation")
+	if err != nil || head.State != domain.StateCompleted || head.Progress == nil ||
+		len(head.Progress.Results) != domain.MaximumGroupMembers {
+		t.Fatalf("closed head=%#v, %v", head, err)
+	}
+	for _, member := range head.Members {
+		receipt, err := f.store.Get(context.Background(), serviceruntimerecord.Key(member.ServiceID))
+		terminal, terminalErr := f.store.Get(context.Background(), releaseTerminalKey(member.ReleaseID))
+		projection, projectionErr := f.store.Get(context.Background(), releaseProjectionKey(member.ServiceID))
+		if err != nil || terminalErr != nil || projectionErr != nil || receipt.Entry == nil || terminal.Entry == nil ||
+			projection.Entry == nil {
+			t.Fatal("missing atomic terminal output")
+		}
+		if receipt.Entry.ModRevision != terminal.Entry.ModRevision ||
+			receipt.Entry.ModRevision != projection.Entry.ModRevision {
+			t.Fatal("runtime not atomically published with owning successful member")
+		}
+		record, err := decodeReleaseRecord[serviceruntimerecord.Record](
+			receipt.Entry.Value,
+			"service-acknowledged-runtime",
+		)
+		if err != nil || serviceruntimerecord.Validate(record) != nil || record.Runtime.ReleaseID != member.ReleaseID ||
+			record.Source.TaskID != f.task.ID ||
+			record.Source.ExecutionEpoch != f.assignment.ExecutionEpoch {
+			t.Fatalf("runtime source=%#v, %v", record.Source, err)
+		}
 	}
 }
 
 type releaseTerminalAuditStore struct {
 	*memoryHierarchyStore
 	maximumAggregate int
+	maximumBytes     int
+	keyPrefix        string
+	raceKey          string
+}
+
+func (store *releaseTerminalAuditStore) MeasureTransaction(
+	ctx context.Context,
+	conditions []Condition,
+	mutations []Mutation,
+) (TransactionBudget, error) {
+	prefix := "/proof/"
+	if store.keyPrefix != "" {
+		prefix = store.keyPrefix
+	}
+	return MeasureTransactionBudget(ctx, prefix, conditions, mutations)
 }
 
 func (store *releaseTerminalAuditStore) Transact(
@@ -205,6 +289,26 @@ func (store *releaseTerminalAuditStore) Transact(
 	conditions []Condition,
 	mutations []Mutation,
 ) (TransactionResult, error) {
+	budget, err := store.MeasureTransaction(ctx, conditions, mutations)
+	if err != nil {
+		return TransactionResult{}, err
+	}
+	if !budget.Fits() {
+		return TransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"test terminal transaction exceeds physical budget",
+		)
+	}
+	if budget.Bytes > store.maximumBytes {
+		store.maximumBytes = budget.Bytes
+	}
+	if store.raceKey != "" {
+		key := store.raceKey
+		store.raceKey = ""
+		if _, err := store.memoryHierarchyStore.Transact(ctx, nil, []Mutation{{Type: MutationPut, Key: key, Value: []byte("concurrent runtime")}}); err != nil {
+			return TransactionResult{}, err
+		}
+	}
 	aggregate := len(conditions) + len(mutations)
 	if aggregate > store.maximumAggregate {
 		store.maximumAggregate = aggregate

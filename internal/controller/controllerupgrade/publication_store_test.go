@@ -83,6 +83,14 @@ func (store *publicationStore) Range(ctx context.Context, request etcd.RangeRequ
 	}, nil
 }
 
+func (store *publicationStore) MeasureTransaction(
+	ctx context.Context,
+	conditions []etcd.Condition,
+	mutations []etcd.Mutation,
+) (etcd.TransactionBudget, error) {
+	return etcd.MeasureTransactionBudget(ctx, "/groundplane/", conditions, mutations)
+}
+
 func (store *publicationStore) Transact(
 	ctx context.Context,
 	conditions []etcd.Condition,

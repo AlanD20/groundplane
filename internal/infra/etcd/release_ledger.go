@@ -177,6 +177,10 @@ func (ledger *ReleaseLedger) Publish(
 		return ReleasePublicationResult{}, err
 	}
 	defer clear(executedArtifact)
+	runtimes, err := executionplan.PrepareCandidateRuntimes(evidence.Plan)
+	if err != nil {
+		return ReleasePublicationResult{}, err
+	}
 	fragment, err := ledger.tasks.prepareReleaseTaskPublicationFragment(evidence.Task)
 	if err != nil {
 		return ReleasePublicationResult{}, err
@@ -205,6 +209,7 @@ func (ledger *ReleaseLedger) Publish(
 		ManifestDigest:             evidence.Manifest.Record.Digest,
 		CandidateReleaseDescriptor: executionplan.CloneCandidateReleaseDescriptor(evidence.CandidateReleaseDescriptor),
 		ExecutedComposeArtifact:    executedArtifact,
+		PreparedRuntimes:           runtimes,
 		PublishedAt:                evidence.PublishedAt,
 	})
 	if err != nil {

@@ -7,15 +7,17 @@ import (
 	"time"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 const maximumReleaseTerminalBatchMembers = 10
 
-// finalizeReleaseTaskBatch advances at most ten Release members. The Task
+// finalizeReleaseTaskBatch considers at most ten Release members. The Task
 // primary is the retry cursor: it remains running until every immutable member
 // summary exists and the operation head and Environment fence are closed.
-// Ten members require at most 94 aggregate compares plus mutations.
+// Each member's complete write set is measured before joining the batch,
+// including proof guards and the store's physical key prefix.
 func (repository *TaskRepository) finalizeReleaseTaskBatch(
 	ctx context.Context,
 	task TaskRecord,
@@ -143,7 +145,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 	if err != nil {
 		return false, err
 	}
-	detailKeys := make([]string, 0, len(pending)*5)
+	detailKeys := make([]string, 0, len(pending)*6)
 	for _, index := range pending {
 		member := head.Members[index]
 		detailKeys = append(detailKeys,
@@ -152,6 +154,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 			releaseProjectionKey(member.ServiceID),
 			releaseTerminalKey(member.ReleaseID),
 			releaseRetentionKey(member.ReleaseID),
+			serviceruntimerecord.Key(member.ServiceID),
 		)
 	}
 	details, err := repository.store.GetMany(ctx, GetManyRequest{Keys: detailKeys, Revision: readRevision})
@@ -170,7 +173,8 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 	mutations := make([]Mutation, 0, len(pending)*4)
 	defer func() { clearMutations(mutations) }()
 	for offset, index := range pending {
-		values := details.Values[offset*5 : offset*5+5]
+		values := details.Values[offset*6 : offset*6+6]
+		keys := detailKeys[offset*6 : offset*6+6]
 		if values[0] == nil || values[1] == nil || values[3] != nil || values[4] != nil {
 			return false, corruptReleaseRecord()
 		}
@@ -287,41 +291,49 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 			retention.Digest,
 			terminalAt,
 		)
-		checkpointValue, err := encodeReleaseRecord("release-checkpoint", checkpoint)
+		memberMutations, err := releaseTerminalRecordMutations(keys, checkpoint, terminal, retention,
+			projection, serving || compensated)
 		if err != nil {
 			return false, err
 		}
-		terminalValue, err := encodeReleaseRecord("release-terminal-summary", terminal)
-		if err != nil {
-			clear(checkpointValue)
-			return false, err
-		}
-		retentionValue, err := encodeReleaseRecord("release-retention", retention)
-		if err != nil {
-			clear(checkpointValue)
-			clear(terminalValue)
-			return false, err
-		}
+		priorConditions, priorMutations := len(conditions), len(mutations)
 		conditions = append(conditions,
-			Condition{Key: detailKeys[offset*5], ModRevision: values[0].ModRevision},
-			Condition{Key: detailKeys[offset*5+1], ModRevision: values[1].ModRevision},
-			Condition{Key: detailKeys[offset*5+2], ModRevision: keyValueRevision(values[2])},
-			Condition{Key: detailKeys[offset*5+3]}, Condition{Key: detailKeys[offset*5+4]},
+			Condition{Key: keys[0], ModRevision: values[0].ModRevision},
+			Condition{Key: keys[1], ModRevision: values[1].ModRevision},
+			Condition{Key: keys[2], ModRevision: keyValueRevision(values[2])},
+			Condition{Key: keys[3]}, Condition{Key: keys[4]},
 		)
-		mutations = append(mutations,
-			Mutation{Type: MutationPut, Key: detailKeys[offset*5+1], Value: checkpointValue},
-			Mutation{Type: MutationPut, Key: detailKeys[offset*5+3], Value: terminalValue},
-			Mutation{Type: MutationPut, Key: detailKeys[offset*5+4], Value: retentionValue},
-		)
-		if serving || compensated {
-			projectionValue, err := encodeReleaseRecord("service-release-projection", projection)
+		mutations = append(mutations, memberMutations...)
+		if serving && !recovery && state == domain.StateCompleted {
+			runtimeValue, err := releaseAcknowledgedRuntime(
+				marker,
+				member.ServiceID,
+				task,
+				assignment,
+				evidence[0],
+				result,
+			)
 			if err != nil {
 				return false, err
 			}
-			mutations = append(
-				mutations,
-				Mutation{Type: MutationPut, Key: detailKeys[offset*5+2], Value: projectionValue},
-			)
+			conditions = append(conditions, Condition{Key: keys[5], ModRevision: keyValueRevision(values[5])})
+			mutations = append(mutations, Mutation{Type: MutationPut, Key: keys[5], Value: runtimeValue})
+		}
+		budget, err := repository.store.MeasureTransaction(
+			ctx,
+			append(slices.Clone(conditions), proofConditions...),
+			mutations,
+		)
+		if err != nil {
+			return false, err
+		}
+		if !budget.Fits() {
+			clearMutations(mutations[priorMutations:])
+			conditions, mutations = conditions[:priorConditions], mutations[:priorMutations]
+			if priorMutations == 0 {
+				return false, errs.New(errs.KindValidationFailed, "release terminal member exceeds transaction budget")
+			}
+			break
 		}
 	}
 	if len(conditions)+len(proofConditions)+len(mutations) > maximumTransactionOperations {
@@ -444,18 +456,6 @@ func (repository *TaskRepository) validateReleaseTerminalMembers(
 		return errs.New(errs.KindStateConflict, "release terminal outcome changed")
 	}
 	return nil
-}
-
-func decodeReleaseProjection(value *KeyValue, environmentID, serviceID string) (domain.ServiceProjection, error) {
-	if value == nil {
-		return domain.ServiceProjection{}, nil
-	}
-	projection, err := decodeReleaseRecord[domain.ServiceProjection](value.Value, "service-release-projection")
-	if err != nil || projection.EnvironmentID != environmentID || projection.ServiceID != serviceID ||
-		projection.ActiveOperationID != "" {
-		return domain.ServiceProjection{}, corruptReleaseRecord()
-	}
-	return projection, nil
 }
 
 func releaseFailedMemberOrdinal(task TaskRecord, terminalStatus TaskStatus, result TaskResultRecord) (uint32, error) {

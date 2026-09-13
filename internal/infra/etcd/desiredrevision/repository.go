@@ -13,6 +13,7 @@ type store interface {
 	Get(context.Context, string) (*etcd.GetResult, error)
 	GetMany(context.Context, etcd.GetManyRequest) (*etcd.GetManyResult, error)
 	Range(context.Context, etcd.RangeRequest) (*etcd.RangeResult, error)
+	MeasureTransaction(context.Context, []etcd.Condition, []etcd.Mutation) (etcd.TransactionBudget, error)
 	Transact(context.Context, []etcd.Condition, []etcd.Mutation) (etcd.TransactionResult, error)
 }
 

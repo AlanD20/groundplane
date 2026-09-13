@@ -235,6 +235,14 @@ func (store *channelMemoryStore) Range(
 	}, nil
 }
 
+func (store *channelMemoryStore) MeasureTransaction(
+	ctx context.Context,
+	conditions []etcd.Condition,
+	mutations []etcd.Mutation,
+) (etcd.TransactionBudget, error) {
+	return etcd.MeasureTransactionBudget(ctx, "/groundplane/", conditions, mutations)
+}
+
 func (store *channelMemoryStore) Transact(
 	ctx context.Context,
 	conditions []etcd.Condition,

@@ -72,6 +72,7 @@ type ReleasePublicationMarker struct {
 	ManifestDigest             string                                   `json:"manifest_digest"`
 	CandidateReleaseDescriptor executionplan.CandidateReleaseDescriptor `json:"candidate_release_descriptor"`
 	ExecutedComposeArtifact    []byte                                   `json:"executed_compose_artifact,omitempty"`
+	PreparedRuntimes           []executionplan.CandidateRuntime         `json:"prepared_runtimes,omitempty"`
 	NativePredecessors         []BlueprintNativePredecessorReference    `json:"native_predecessors,omitempty"`
 	PublishedAt                time.Time                                `json:"published_at"`
 }

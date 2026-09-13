@@ -639,6 +639,14 @@ func (store *memoryHierarchyStore) Range(
 	}, nil
 }
 
+func (store *memoryHierarchyStore) MeasureTransaction(
+	ctx context.Context,
+	conditions []Condition,
+	mutations []Mutation,
+) (TransactionBudget, error) {
+	return MeasureTransactionBudget(ctx, "/groundplane/", conditions, mutations)
+}
+
 func (store *memoryHierarchyStore) Transact(
 	_ context.Context,
 	conditions []Condition,

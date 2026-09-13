@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -176,6 +177,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		Mutation{Type: MutationPut, Key: keys[2], Value: headReference},
 		Mutation{Type: MutationPut, Key: keys[3], Value: candidateValue},
 		Mutation{Type: MutationDelete, Key: keys[0]},
+		Mutation{Type: MutationDelete, Key: serviceruntimerecord.Key(intent.ServiceID)},
 	)
 	return change, nil
 }

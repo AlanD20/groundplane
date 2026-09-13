@@ -187,6 +187,14 @@ func (s *blueprintTestStore) Delete(ctx context.Context, key string) (int64, err
 	return result.Revision, err
 }
 
+func (s *blueprintTestStore) MeasureTransaction(
+	ctx context.Context,
+	conditions []etcd.Condition,
+	mutations []etcd.Mutation,
+) (etcd.TransactionBudget, error) {
+	return etcd.MeasureTransactionBudget(ctx, "/groundplane/", conditions, mutations)
+}
+
 func (s *blueprintTestStore) Transact(
 	ctx context.Context,
 	conditions []etcd.Condition,

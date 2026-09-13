@@ -138,6 +138,14 @@ func (store *memoryStore) Range(_ context.Context, request etcd.RangeRequest) (*
 	return &etcd.RangeResult{ReadRevision: store.revision, ResponseRevision: store.revision}, nil
 }
 
+func (store *memoryStore) MeasureTransaction(
+	ctx context.Context,
+	conditions []etcd.Condition,
+	mutations []etcd.Mutation,
+) (etcd.TransactionBudget, error) {
+	return etcd.MeasureTransactionBudget(ctx, "/groundplane/", conditions, mutations)
+}
+
 func (store *memoryStore) Transact(
 	_ context.Context,
 	conditions []etcd.Condition,

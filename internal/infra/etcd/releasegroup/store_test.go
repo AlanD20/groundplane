@@ -321,6 +321,14 @@ func (store *memoryStore) Watch(context.Context, string, int64) (*infraetcd.Watc
 	return nil, errors.New("not implemented")
 }
 
+func (store *memoryStore) MeasureTransaction(
+	ctx context.Context,
+	conditions []infraetcd.Condition,
+	mutations []infraetcd.Mutation,
+) (infraetcd.TransactionBudget, error) {
+	return infraetcd.MeasureTransactionBudget(ctx, "/groundplane/", conditions, mutations)
+}
+
 func (store *memoryStore) Get(_ context.Context, key string) (*infraetcd.GetResult, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
