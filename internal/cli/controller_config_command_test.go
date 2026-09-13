@@ -14,6 +14,7 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
+// QA: HOST-08, HOST-09, UI-01; local CLI-to-HTTP replacement only, not file publication, replay, or restart.
 // Rationale: the operator command must read the exact file bytes, fetch the
 // current revision, and delegate one protected PUT through the human API.
 func TestControllerConfigSetPublishesExactFileAgainstCurrentRevision(t *testing.T) {

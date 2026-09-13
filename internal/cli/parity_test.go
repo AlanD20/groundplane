@@ -15,6 +15,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// QA: CMP-02, UI-01; local read route and rendering only, not preview consistency or serving bytes.
+// Rationale: router show must read the Environment-scoped projection through
+// its canonical endpoint rather than synthesize state from Component metadata.
 func TestRouterShowRequestsEnvironmentProjection(t *testing.T) {
 	t.Parallel()
 	environmentID := "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -35,6 +38,9 @@ func TestRouterShowRequestsEnvironmentProjection(t *testing.T) {
 	}
 }
 
+// QA: HOST-04, UI-01; local Task dispatch only, not credential revocation or re-enrollment.
+// Rationale: Agent removal must address the selected stable id through the
+// asynchronous lifecycle endpoint and expose that same Task identity.
 func TestAgentRemoveDispatchesRemovalTask(t *testing.T) {
 	t.Parallel()
 
@@ -55,6 +61,9 @@ func TestAgentRemoveDispatchesRemovalTask(t *testing.T) {
 	}
 }
 
+// QA: UP-02, UI-01; local selected-Agent request only, not image selection or runtime replacement.
+// Rationale: a selected Agent update must use the per-id endpoint and expose
+// the Controller-owned replacement Task rather than acting locally.
 func TestAgentUpdateDispatchesSelectedAgentTask(t *testing.T) {
 	t.Parallel()
 
@@ -75,6 +84,9 @@ func TestAgentUpdateDispatchesSelectedAgentTask(t *testing.T) {
 	}
 }
 
+// QA: UP-02, UI-01; local singleton lookup and dispatch only, not Agent replacement or enrollment.
+// Rationale: --all means the one local Agent, so the CLI must resolve that
+// singleton and still use the canonical stable-id update endpoint.
 func TestAgentUpdateAllResolvesSingletonThenUsesPerIDEndpoint(t *testing.T) {
 	t.Parallel()
 
@@ -111,6 +123,9 @@ func TestAgentUpdateAllResolvesSingletonThenUsesPerIDEndpoint(t *testing.T) {
 	}
 }
 
+// QA: UP-02, UI-03; local argument admission only, not API validation or absence of host effects.
+// Rationale: an Agent update must select exactly one explicit id or the singleton
+// --all mode so ambiguous or accidental replacement cannot be dispatched.
 func TestAgentUpdateRequiresExactlyIDOrAll(t *testing.T) {
 	t.Parallel()
 
@@ -128,6 +143,9 @@ func TestAgentUpdateRequiresExactlyIDOrAll(t *testing.T) {
 	}
 }
 
+// QA: HOST-04, UI-01; local bodyless dispatch only, not enrollment, authentication, or secret isolation.
+// Rationale: Agent join must create the local Agent through one bodyless Task
+// request and must not accept or emit a channel token on the CLI surface.
 func TestAgentJoinDispatchesCreationTaskWithoutToken(t *testing.T) {
 	t.Parallel()
 
@@ -148,9 +166,10 @@ func TestAgentJoinDispatchesCreationTaskWithoutToken(t *testing.T) {
 	}
 }
 
+// QA: HOST-07, UI-01; local read route and rendering only, not effective Agent configuration.
+// Rationale: the accepted Agent config singleton needs a read peer beside
+// config set; otherwise CLI/API parity is incomplete.
 func TestAgentConfigShowUsesConfigSingleton(t *testing.T) {
-	// Rationale: the accepted Agent config singleton needs a read peer beside
-	// config set; otherwise CLI/API parity is incomplete.
 	t.Parallel()
 
 	server := exactRequestServer(
@@ -178,6 +197,9 @@ func TestAgentConfigShowUsesConfigSingleton(t *testing.T) {
 	}
 }
 
+// QA: HOST-07, UI-01; local complete-replacement encoding only, not drain or Agent reconfiguration.
+// Rationale: Agent configuration must preserve repeatable labels as keyed values
+// beside the exact interval and concurrency decisions in one PUT.
 func TestAgentConfigSetSendsKeyedLabels(t *testing.T) {
 	t.Parallel()
 
@@ -210,6 +232,9 @@ func TestAgentConfigSetSendsKeyedLabels(t *testing.T) {
 	)
 }
 
+// QA: HOST-07, UI-03; pure CLI label parsing only, not server validation or applied configuration.
+// Rationale: malformed or duplicate label keys must fail before map construction
+// can discard input or silently select one competing value.
 func TestParseAgentLabelsRejectsMalformedAndDuplicateKeys(t *testing.T) {
 	t.Parallel()
 
@@ -220,9 +245,10 @@ func TestParseAgentLabelsRejectsMalformedAndDuplicateKeys(t *testing.T) {
 	}
 }
 
-func TestDedicatedRenameRoutesReturnUpdatedEntities(t *testing.T) {
-	// Rationale: rename is a synchronous POST update with one dedicated route,
-	// not a generic PATCH or a Task action.
+// QA: OWN-02, UI-01; local stable-id request routing only, not persisted rename or descendant preservation.
+// Rationale: rename is a synchronous POST update with one dedicated route,
+// not a generic PATCH or a Task action.
+func TestDedicatedRenameRoutesUseSynchronousPOST(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -270,6 +296,9 @@ func TestDedicatedRenameRoutesReturnUpdatedEntities(t *testing.T) {
 	}
 }
 
+// QA: NET-02, UI-01; local stable-id PATCH shaping only, not pool containment or reservation conflict checks.
+// Rationale: Environment pool replacement is a synchronous protected PATCH with
+// only the new network pool, not a whole-Environment update or Task action.
 func TestEnvironmentEditPatchesNetworkPoolAndReturnsEnvironment(t *testing.T) {
 	t.Parallel()
 	server := exactRequestServer(
@@ -293,6 +322,7 @@ func TestEnvironmentEditPatchesNetworkPoolAndReturnsEnvironment(t *testing.T) {
 	)
 }
 
+// QA: CMP-01, UI-01, UI-02; local endpoint and config encoding only, not Component effects or ownership checks.
 // Rationale: every component detail, action, and config operation must use
 // the component's stable id rather than its mutable kind label.
 func TestComponentActionsAndConfigUseStableID(t *testing.T) {
@@ -416,6 +446,7 @@ func TestComponentActionsAndConfigUseStableID(t *testing.T) {
 	})
 }
 
+// QA: CMP-01, HTTP-03, UI-01; local replacement shaping only, not Caddy validation, reload, or traffic.
 // Rationale: complete native policy and reserved Route references are opaque
 // transport bytes; importing them must not erase existing Zone placement or
 // depend on successfully rendering the template that the operator is replacing.
@@ -476,9 +507,10 @@ func TestComponentConfigSetImportsCaddyTemplateWithoutErasingZone(t *testing.T) 
 	}
 }
 
+// QA: TASK-06, UI-01; local finite SSE request and rendering only, not reconnect, compaction, or terminal drain.
+// Rationale: the CLI must expose the same SSE Task event stream the Console
+// follows, rather than requiring polling or a Console session.
 func TestTaskEventsStreamsCanonicalEndpoint(t *testing.T) {
-	// Rationale: the CLI must expose the same SSE Task event stream the Console
-	// follows, rather than requiring polling or a Console session.
 	t.Parallel()
 
 	server := httptest.NewServer(
@@ -518,9 +550,10 @@ func TestTaskEventsStreamsCanonicalEndpoint(t *testing.T) {
 	}
 }
 
+// QA: ATT-01, ATT-03, UI-01; local request shaping only, not credential provisioning or network attachment.
+// Rationale: an attach belongs to one explicit consumer service and one
+// backing service, and provisioning is a Task rather than a synchronous create.
 func TestServiceAttachDispatchesTaskWithBothTargets(t *testing.T) {
-	// Rationale: an attach belongs to one explicit consumer service and one
-	// backing service, and provisioning is a Task rather than a synchronous create.
 	t.Parallel()
 
 	body := `{"backing_service_id":"bks_1","credential":{"mode":"new"},"service_id":"svc_1"}`
@@ -544,6 +577,9 @@ func TestServiceAttachDispatchesTaskWithBothTargets(t *testing.T) {
 	}
 }
 
+// QA: TASK-05, UI-01; local bodyless dispatch only, not eligibility, frozen inputs, or execution safety.
+// Rationale: Retry must address the original Task through the canonical action
+// endpoint while exposing the distinct Task id of the new attempt.
 func TestTaskRetryDispatchesNewAttempt(t *testing.T) {
 	t.Parallel()
 
@@ -564,6 +600,9 @@ func TestTaskRetryDispatchesNewAttempt(t *testing.T) {
 	}
 }
 
+// QA: BAK-05, UI-01; local command shape and dispatch only, not policy admission, capture, or Retry behavior.
+// Rationale: manual Backup uses the policy's complete frozen source set, so the
+// CLI must expose no source selector and send one bodyless run request.
 func TestBackupRunPostsWithoutBodyOrSourceSelection(t *testing.T) {
 	t.Parallel()
 
@@ -596,6 +635,9 @@ func TestBackupRunPostsWithoutBodyOrSourceSelection(t *testing.T) {
 	}
 }
 
+// QA: BAK-14, UI-01; local raw-byte transport only, not key-era ownership, no-store headers, or persistence.
+// Rationale: key export is the exceptional bodyless read-like POST and the CLI
+// must preserve its exact attachment bytes instead of applying structured formatting.
 func TestBackupExportKeyPostsAndPrintsIdentity(t *testing.T) {
 	t.Parallel()
 
@@ -621,6 +663,9 @@ func TestBackupExportKeyPostsAndPrintsIdentity(t *testing.T) {
 	}
 }
 
+// Delivery: locked Release Group command inventory only; not product QA evidence.
+// Rationale: the flat Release Group noun must retain the locked authoring and
+// execution verbs, removal alias, and explicit rollback-preview/tag affordance.
 func TestReleaseGroupCommandTreeUsesLockedVerbs(t *testing.T) {
 	t.Parallel()
 

@@ -565,6 +565,30 @@ All 19 tests pass with `-race -count=1`; evidence is
 listeners after the sandbox-only attempt could not create them; no QA host was
 contacted. These results do not qualify any entire product row.
 
+#### CLI lifecycle, observation and Blueprint transport
+
+Reviewed all 48 tests in this second CLI batch; retained 46 behavioral tests and
+two separate command-inventory checks. Each has a reason and proof limit. The
+two CLI batches together cover 67 tests, not the entire CLI suite.
+
+| Reviewed tests | Retention reason and corrections | Matrix coverage or gap |
+| --- | --- | --- |
+| Three in [blueprint_bundle_test.go](../internal/cli/blueprint_bundle_test.go) | Preserve canonical multipart namespace and authored Compose order, reject symlinks, and send the revision-fenced protected Apply. Manifest checks now require independently expected part names, sizes and SHA-256 values. | BP-01/03/07, UI-01/03: local input/HTTP sequencing, not Apply effects or revision races. |
+| Seven in [releasegroup_test.go](../internal/cli/releasegroup_test.go) | Preserve create policy, reject empty edit/invalid enum, encode policy changes, distinguish omitted/explicit rollback tag, send exact preview tag and reject blank tag. Renamed the empty-edit test to match its actual assertion. | GRP-01/04, UI-01/03: local requests. Preserving an omitted policy during an unrelated edit remains unproved; the former test name did not supply that proof. |
+| Four in [task_journal_test.go](../internal/cli/task_journal_test.go) | Resolve Environment/workspace scopes, preserve both nouns' cursor/limit, bypass lookup for IDs and reject conflicting scopes. | TASK-01, UI-02/03: local query semantics, not durable journal ownership or concurrent pages. |
+| One in [controller_config_command_test.go](../internal/cli/controller_config_command_test.go) | Read the current revision and send the operator's exact file bytes in a protected replacement. | HOST-08/09, UI-01: CLI request only, not disk permissions or effective config after restart. |
+| Two in [controller_update_test.go](../internal/cli/controller_update_test.go) | Send a protected digest-only update; reject absent/path/URL/tag/noncanonical digest input. Invalid explicit values now require the correct validation kind and no HTTP request. | UP-01/03, UI-01/03: local dispatch/refusal, not activation, recovery or continuity. |
+| Four in [service_observation_test.go](../internal/cli/service_observation_test.go) | Present list/show evidence, expire machine-readable snapshots, and keep read-only observations out of mutation fields. Distinct count values are now checked against their actual rendered columns/keys; desired replicas remain distinct from expected replicas. | OBS-01/02/03, SVC-01, UI-01: local rendering, not live container counts or refresh races. |
+| Two in [environment_target_test.go](../internal/cli/environment_target_test.go) and two in [hierarchy_delete_test.go](../internal/cli/hierarchy_delete_test.go) | Resolve colliding scoped labels before stable-ID rename/pool edit or Tenant/Project deletion dispatch. | OWN-02/05, NET-02, UI-02: routing only, not persisted labels, descendant preservation or deletion completion. |
+| Four in [network_parity_test.go](../internal/cli/network_parity_test.go) | Keep the closed command inventory; encode Zone create; obtain impact before delete; use the canonical Route mutation endpoints. | Three local behavioral tests support NET-01/04, HTTP-01, UI-01. One inventory is delivery-only, not product parity. |
+| Nineteen in [parity_test.go](../internal/cli/parity_test.go) | Guard router reads, Agent lifecycle/config, rename/pool edits, stable Component IDs and Caddy replacement, Task streams/Retry, Attach targets, bodyless Backup and raw key export. Renamed the rename-routing test to stop claiming unasserted response values. Retain the Release Group command inventory separately. | Eighteen local HTTP/CLI tests support CMP-01/02, HOST-04/07, UP-02, OWN-02, NET-02, HTTP-03, TASK-05/06, ATT-01/03, BAK-05/14, UI-01/02/03. One delivery-only inventory. No real effects or cross-surface parity. |
+
+All 48 pass with the race detector in `.tmp/qa-test-review-cli-second.log`.
+After strengthening numeric output checks, the two affected observation tests
+pass again in `.tmp/qa-test-review-cli-observation-values.log`. Unchanged proof
+is reused. Environment pool-edit output values and Task-stream reconnect,
+compaction, cancellation and terminal drain remain unproved by this batch.
+
 #### Deployment and repository helper tests
 
 Reviewed all 73 tests in the 11 root-level `scripts/test_*.py` files; retained

@@ -28,6 +28,7 @@ func writeTaskJournalTestResponse(t *testing.T, writer io.Writer, response strin
 	}
 }
 
+// QA: TASK-01, UI-02; local scope resolution and rendering only, not journal ownership or API parity.
 // Rationale: both CLI nouns must resolve an Environment label through its
 // selected Tenant and Project before sending the identical stable-id filter.
 func TestTaskAndActivityResolveEnvironmentJournalScope(t *testing.T) {
@@ -95,6 +96,7 @@ func TestTaskAndActivityResolveEnvironmentJournalScope(t *testing.T) {
 	}
 }
 
+// QA: TASK-01, UI-02; local workspace query routing only, not persisted ownership across rename or deletion.
 // Rationale: a Tenant workspace is a renamable CLI label but the Controller
 // must receive the stable Tenant id; the platform literal bypasses resolution.
 func TestTaskJournalResolvesWorkspaceLabelAndPlatformLiteral(t *testing.T) {
@@ -137,6 +139,7 @@ func TestTaskJournalResolvesWorkspaceLabelAndPlatformLiteral(t *testing.T) {
 	}
 }
 
+// QA: TASK-01; local query forwarding only, not fixed-revision page contents or concurrent pagination.
 // Rationale: Task and Activity are one pageable journal, so both CLI nouns
 // must forward the same page size and interchangeable opaque cursor.
 func TestTaskAndActivityForwardPagination(t *testing.T) {
@@ -169,6 +172,7 @@ func TestTaskAndActivityForwardPagination(t *testing.T) {
 	}
 }
 
+// QA: TASK-01, UI-02, UI-03; pure option resolution only, not API authorization or journal contents.
 // Rationale: --id must bypass mutable label resolution, while selecting both
 // accepted journal scopes must fail locally with the public validation kind.
 func TestTaskJournalIDBypassAndDualScopeRejection(t *testing.T) {

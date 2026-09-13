@@ -9,9 +9,10 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// QA: GRP-01, UI-01; local CLI request shaping only, not persistence or group execution.
+// Rationale: create must materialize the contract default in the exact
+// request body rather than leaving default behavior to a handler.
 func TestReleaseGroupAddDefaultsOnFailure(t *testing.T) {
-	// Rationale: create must materialize the contract default in the exact
-	// request body rather than leaving default behavior to a handler.
 	t.Parallel()
 
 	body := `{"environment_id":"env_01J00000000000000000000000","name":"realtime","on_failure":"switch_back","order":null,"service_ids":["svc_01J00000000000000000000000","svc_01J00000000000000000000001"]}`
@@ -22,9 +23,10 @@ func TestReleaseGroupAddDefaultsOnFailure(t *testing.T) {
 		"add", "realtime", "--services", "svc_01J00000000000000000000000,svc_01J00000000000000000000001")
 }
 
-func TestReleaseGroupEditOmitsUnchangedOnFailure(t *testing.T) {
-	// Rationale: PATCH omission preserves the stored policy; a flag default
-	// must never overwrite it when the operator edits another field.
+// QA: GRP-01, UI-03; local empty-edit validation only, not PATCH persistence or policy preservation.
+// Rationale: an edit with no selected field must fail rather than sending an
+// empty PATCH whose semantics could diverge between clients and the Controller.
+func TestReleaseGroupEditRejectsNoChanges(t *testing.T) {
 	t.Parallel()
 
 	command := newReleaseGroupCmd()
@@ -35,9 +37,10 @@ func TestReleaseGroupEditOmitsUnchangedOnFailure(t *testing.T) {
 	}
 }
 
+// QA: GRP-01, UI-01; local CLI request shaping only, not stored policy or runtime failure handling.
+// Rationale: the CLI and JSON contracts use the same canonical enum value,
+// so the body must not translate or alias the operator's input.
 func TestReleaseGroupEditSendsChangedOnFailure(t *testing.T) {
-	// Rationale: the CLI and JSON contracts use the same canonical enum value,
-	// so the body must not translate or alias the operator's input.
 	t.Parallel()
 
 	body := `{"on_failure":"leave_active"}`
@@ -49,9 +52,10 @@ func TestReleaseGroupEditSendsChangedOnFailure(t *testing.T) {
 		"edit", groupID, "--on-failure", "leave_active")
 }
 
+// QA: GRP-01, UI-03; pure enum validation only, not API publication or runtime failure policy.
+// Rationale: invalid CLI input must enter the one canonical validation
+// taxonomy rather than escaping as an untyped parsing error.
 func TestReleaseGroupOnFailureRejectsInvalidValue(t *testing.T) {
-	// Rationale: invalid CLI input must enter the one canonical validation
-	// taxonomy rather than escaping as an untyped parsing error.
 	t.Parallel()
 
 	_, err := releaseGroupOnFailure("continue")
@@ -60,9 +64,10 @@ func TestReleaseGroupOnFailureRejectsInvalidValue(t *testing.T) {
 	}
 }
 
+// QA: GRP-04, UI-01; local request presence semantics only, not source selection or group rollback.
+// Rationale: rollback's tag is an operator override for every member, while
+// omission must remain a bodyless request that preserves automatic selection.
 func TestReleaseGroupRollbackSendsOptionalTag(t *testing.T) {
-	// Rationale: rollback's tag is an operator override for every member, while
-	// omission must remain a bodyless request that preserves automatic selection.
 	t.Parallel()
 	groupID := "rg_01J00000000000000000000000"
 	for _, test := range []struct {
@@ -83,6 +88,9 @@ func TestReleaseGroupRollbackSendsOptionalTag(t *testing.T) {
 	}
 }
 
+// QA: GRP-04, UI-01; local query encoding only, not preview accuracy or rollback execution.
+// Rationale: an explicit preview tag must reach the read-only endpoint exactly,
+// so the Controller rather than the CLI remains the rollback-source authority.
 func TestReleaseGroupRollbackPreviewSendsExactOptionalTag(t *testing.T) {
 	t.Parallel()
 	groupID := "rg_01J00000000000000000000000"
@@ -107,6 +115,9 @@ func TestReleaseGroupRollbackPreviewSendsExactOptionalTag(t *testing.T) {
 	)
 }
 
+// QA: GRP-04, UI-03; local CLI validation only, not API rejection or absence of durable effects.
+// Rationale: an explicitly supplied blank or padded rollback tag must not
+// collapse into omitted-tag automatic selection.
 func TestReleaseGroupRollbackRejectsExplicitBlankTag(t *testing.T) {
 	t.Parallel()
 	command := newReleaseGroupCmd()

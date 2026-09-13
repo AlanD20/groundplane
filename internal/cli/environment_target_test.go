@@ -7,6 +7,9 @@ import (
 	"testing"
 )
 
+// QA: OWN-02, UI-02; local label resolution and request routing only, not persisted rename invariants.
+// Rationale: Environment rename must resolve the complete mutable label chain,
+// then address the synchronous mutation by the Environment's stable id.
 func TestEnvironmentNameTargetResolvesThroughFullScopeChain(t *testing.T) {
 	t.Parallel()
 	const tenantID = "tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -66,6 +69,9 @@ func TestEnvironmentNameTargetResolvesThroughFullScopeChain(t *testing.T) {
 	}
 }
 
+// QA: NET-02, UI-02; local label resolution and PATCH shaping only, not reservation or overlap enforcement.
+// Rationale: Environment pool edits must resolve Tenant, Project, and Environment
+// labels in their scopes before sending the protected stable-id mutation.
 func TestEnvironmentEditResolvesTenantProjectAndEnvironmentLabels(t *testing.T) {
 	t.Parallel()
 	const tenantID = "tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV"

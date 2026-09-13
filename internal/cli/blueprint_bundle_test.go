@@ -15,9 +15,10 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// QA: BP-01, BP-07; local multipart construction only, not API validation, publication, or round-trip export.
+// Rationale: the CLI must reproduce the API's path-sorted file namespace
+// while preserving the operator's separate Compose layer order and independently expected part metadata.
 func TestBuildBlueprintMultipartProducesCanonicalManifestAndParts(t *testing.T) {
-	// Rationale: the CLI must reproduce the API's path-sorted file namespace
-	// while preserving the operator's separate Compose layer order.
 	directory := t.TempDir()
 	if err := os.Mkdir(filepath.Join(directory, "compose"), 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
@@ -52,7 +53,11 @@ func TestBuildBlueprintMultipartProducesCanonicalManifestAndParts(t *testing.T) 
 	if manifest.Root != "blueprint.yaml" || len(manifest.ComposeSources) != 2 ||
 		manifest.ComposeSources[1] != "compose/base.yaml" || manifest.Interpolation["TAG"] != "v1" ||
 		len(manifest.Files) != 2 || manifest.Files[0].Path != "blueprint.yaml" ||
-		manifest.Files[1].Path != "compose/base.yaml" {
+		manifest.Files[0].Part != "file-000001" || manifest.Files[0].Size != 4 ||
+		manifest.Files[0].SHA256 != "4813494d137e1631bba301d5acab6e7bb7aa74ce1185d456565ef51d737677b2" ||
+		manifest.Files[1].Path != "compose/base.yaml" || manifest.Files[1].Part != "file-000002" ||
+		manifest.Files[1].Size != 4 ||
+		manifest.Files[1].SHA256 != "cae662172fd450bb0cd710a769079c05bfc5d8e35efa6576edc7d0377afdd4a2" {
 		t.Fatalf("manifest = %#v", manifest)
 	}
 	for index, want := range [][]byte{[]byte("root"), []byte("base")} {
@@ -71,9 +76,10 @@ func TestBuildBlueprintMultipartProducesCanonicalManifestAndParts(t *testing.T) 
 	}
 }
 
+// QA: BP-07, UI-03; local directory admission only, not Controller rejection or absence of durable effects.
+// Rationale: local convenience must not make ambient files or symlink
+// targets part of a supposedly closed, reproducible Blueprint bundle.
 func TestBuildBlueprintMultipartRejectsSymlinks(t *testing.T) {
-	// Rationale: local convenience must not make ambient files or symlink
-	// targets part of a supposedly closed, reproducible Blueprint bundle.
 	directory := t.TempDir()
 	if err := os.WriteFile(filepath.Join(directory, "blueprint.yaml"), []byte("root"), 0o600); err != nil {
 		t.Fatalf("write root: %v", err)
@@ -87,10 +93,11 @@ func TestBuildBlueprintMultipartRejectsSymlinks(t *testing.T) {
 	}
 }
 
+// QA: BP-03, UI-01; local CLI-to-HTTP sequencing only, not revision races, replay, or Blueprint effects.
+// Rationale: the CLI command is the required 1:1 mirror of the Blueprint
+// API endpoint, including the revision read, fenced PUT, idempotency,
+// multipart media, and Task result.
 func TestEnvironmentApplySendsMultipartSingletonReplacement(t *testing.T) {
-	// Rationale: the CLI command is the required 1:1 mirror of the Blueprint
-	// API endpoint, including the revision read, fenced PUT, idempotency,
-	// multipart media, and Task result.
 	const environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	directory := t.TempDir()
 	if err := os.WriteFile(filepath.Join(directory, "blueprint.yaml"), []byte("services: {}\n"), 0o600); err != nil {

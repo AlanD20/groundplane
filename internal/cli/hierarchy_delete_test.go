@@ -10,6 +10,9 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
+// QA: OWN-05, UI-02; local resolution and Task dispatch only, not descendant cleanup or deletion recovery.
+// Rationale: Tenant deletion must translate the human slug to its stable id and
+// expose the authoritative asynchronous Task rather than reporting synchronous removal.
 func TestTenantDeleteResolvesSlugAndDispatchesAuthoritativeTask(t *testing.T) {
 	t.Parallel()
 	const tenantID = "tnt_01K3D7R40G0000000000000000"
@@ -49,6 +52,9 @@ func TestTenantDeleteResolvesSlugAndDispatchesAuthoritativeTask(t *testing.T) {
 	}
 }
 
+// QA: OWN-05, UI-02; local scoped resolution and Task dispatch only, not aggregate finalization.
+// Rationale: Project deletion must resolve within the selected Tenant before
+// dispatching the protected stable-id operation and returning its Task.
 func TestProjectDeleteResolvesScopedSlugAndDispatchesAuthoritativeTask(t *testing.T) {
 	t.Parallel()
 	const tenantID = "tnt_01K3D7R40G0000000000000000"
