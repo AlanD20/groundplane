@@ -3,6 +3,7 @@ package agentchannel
 import (
 	"context"
 	"encoding/hex"
+	"maps"
 	"testing"
 	"time"
 
@@ -79,6 +80,7 @@ func (store *taskReportConflictStore) ClaimNextTask(
 	return assignment, found, err
 }
 
+// QA: TASK-09, HOST-07; scripted channel and fake store, not real persistence conflicts or host recovery.
 // Rationale: a Task-level terminal publication conflict must quarantine only
 // that exact assignment. The authenticated Agent remains useful, keeps actual
 // Ready capacity, and may finish unrelated work without claiming the rejected
@@ -118,9 +120,14 @@ func TestConnectContainsAppliedTaskReportConflict(t *testing.T) {
 		taskReportMessage(second, secondPlan, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE),
 		readyMessage(2),
 	}}
-	server := New(auth, NewRegistry(), store, &assignmentQuarantinePlanResolver{plans: map[string]*agentpb.ExecutionPlan{
-		first.Task.Record.ID: firstPlan, second.Task.Record.ID: secondPlan,
-	}})
+	server := New(
+		auth,
+		NewRegistry(),
+		store,
+		&assignmentQuarantinePlanResolver{plans: map[string]*agentpb.ExecutionPlan{
+			first.Task.Record.ID: firstPlan, second.Task.Record.ID: secondPlan,
+		}},
+	)
 	server.now = func() time.Time { return at }
 
 	if err := server.Connect(stream); err != nil {
@@ -129,8 +136,9 @@ func TestConnectContainsAppliedTaskReportConflict(t *testing.T) {
 	if store.conflicts != 1 {
 		t.Fatalf("conflicting report attempts = %d, want 1", store.conflicts)
 	}
-	if store.conflictResult.Diagnostic != etcd.TaskResultDiagnosticComposeFailed {
-		t.Fatalf("conflicting durable diagnostic = %q, want compose_failed", store.conflictResult.Diagnostic)
+	if store.conflictResult.Diagnostic != "compose_failed" || store.conflictResult.ExecutionEpoch != 1 ||
+		store.conflictResult.FailedStepID != first.Task.Record.Steps[0].ID {
+		t.Fatalf("conflicting result = %#v, want exact failed step, epoch 1 and compose_failed", store.conflictResult)
 	}
 	if firstTask := store.tasks[first.Task.Record.ID].Record; firstTask.Status != etcd.TaskStatusRunning {
 		t.Fatalf("conflicting Task status = %q, want running", firstTask.Status)
@@ -171,6 +179,7 @@ func taskReportMessage(
 	}}}
 }
 
+// QA: TASK-07/09, CMP-05; two valid wire diagnostics only, not authenticated report or durable acceptance.
 // Rationale: the protobuf catalog reserves distinct Component failure codes,
 // and a failed Compose Task may report either without being misclassified as
 // a malformed Agent message.
@@ -198,6 +207,7 @@ func TestValidateComposeTaskResultAcceptsComponentFailureDiagnostics(t *testing.
 	}
 }
 
+// QA: TASK-07/09, CMP-05; pure diagnostic mapping only, not durable storage or Component recovery.
 // Rationale: the durable Task journal intentionally has coarser failure
 // classes than the helper wire. Component failures must retain their matching
 // failure class instead of being silently persisted as diagnostic none.
@@ -210,11 +220,11 @@ func TestDurableComposeTaskResultClassifiesComponentFailures(t *testing.T) {
 	}{
 		{
 			diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_CONFIG_REJECTED,
-			want:       etcd.TaskResultDiagnosticConfigRejected,
+			want:       "config_rejected",
 		},
 		{
 			diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
-			want:       etcd.TaskResultDiagnosticComposeFailed,
+			want:       "compose_failed",
 		},
 	} {
 		test := test
@@ -230,6 +240,7 @@ func TestDurableComposeTaskResultClassifiesComponentFailures(t *testing.T) {
 	}
 }
 
+// QA: TASK-09, HOST-07; fake-store dispatch at capacity one, not live worker counts or durable claim races.
 // Rationale: a quarantined report releases the Agent's local worker slot but
 // not its durable assignment. Dispatch must keep those two bounds distinct and
 // must not claim beyond the configured durable assignment limit.
@@ -283,6 +294,7 @@ func TestDispatchReadyDoesNotClaimPastQuarantinedDurableAssignment(t *testing.T)
 	}
 }
 
+// QA: TASK-09/10; pure containment selection, not prior authentication, validation or persistence.
 // Rationale: containment is reserved for a conflict from the final durable
 // application of an exact delivered report. Pre-validation faults and repeated
 // or unowned reports remain strict protocol/session failures.
@@ -291,6 +303,8 @@ func TestQuarantineTaskReportConflictRequiresAppliedExactDelivery(t *testing.T) 
 
 	taskID := ids.NewAt(ids.KindTask, testTime(), 9401)
 	assignmentID := ids.NewAt(ids.KindAssignment, testTime(), 9402)
+	otherTaskID := ids.NewAt(ids.KindTask, testTime(), 9403)
+	otherAssignmentID := ids.NewAt(ids.KindAssignment, testTime(), 9404)
 	ack := &agentpb.TaskAck{TaskId: taskID, AssignmentId: assignmentID}
 	conflict := errs.New(errs.KindStateConflict, "changed")
 	validation := errs.New(errs.KindValidationFailed, "invalid")
@@ -307,27 +321,39 @@ func TestQuarantineTaskReportConflictRequiresAppliedExactDelivery(t *testing.T) 
 			delivered: map[string]string{taskID: assignmentID}},
 		{name: "unowned application conflict", stage: taskReportApplicationAttempted, err: conflict,
 			delivered: map[string]string{}},
+		{name: "different assignment", stage: taskReportApplicationAttempted, err: conflict,
+			delivered: map[string]string{taskID: otherAssignmentID}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			before := maps.Clone(test.delivered)
 			quarantined := make(map[string]string)
 			if quarantineTaskReportConflict(test.stage, test.err, ack, test.delivered, quarantined) {
 				t.Fatal("strict report rejection was quarantined")
 			}
-			if len(quarantined) != 0 {
-				t.Fatalf("quarantined = %#v, want empty", quarantined)
+			if len(quarantined) != 0 || !maps.Equal(test.delivered, before) {
+				t.Fatalf(
+					"rejected report changed ownership: delivered=%#v quarantined=%#v",
+					test.delivered,
+					quarantined,
+				)
 			}
 		})
 	}
 
-	delivered := map[string]string{taskID: assignmentID}
+	delivered := map[string]string{taskID: assignmentID, otherTaskID: otherAssignmentID}
 	quarantined := make(map[string]string)
 	if !quarantineTaskReportConflict(taskReportApplicationAttempted, conflict, ack, delivered, quarantined) {
 		t.Fatal("exact applied Task conflict was not quarantined")
 	}
-	if len(delivered) != 0 || quarantined[taskID] != assignmentID {
+	if !maps.Equal(delivered, map[string]string{otherTaskID: otherAssignmentID}) ||
+		!maps.Equal(quarantined, map[string]string{taskID: assignmentID}) {
 		t.Fatalf("delivered/quarantined = %#v/%#v", delivered, quarantined)
 	}
 	if quarantineTaskReportConflict(taskReportApplicationAttempted, conflict, ack, delivered, quarantined) {
 		t.Fatal("repeated quarantined report was accepted again")
+	}
+	if !maps.Equal(delivered, map[string]string{otherTaskID: otherAssignmentID}) ||
+		!maps.Equal(quarantined, map[string]string{taskID: assignmentID}) {
+		t.Fatalf("repeated report changed delivered/quarantined = %#v/%#v", delivered, quarantined)
 	}
 }

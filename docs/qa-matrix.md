@@ -857,6 +857,29 @@ scoped to the event operation and the step's actual forbidden fields. Two test
 names now describe fake-page projection and injected resume-rejection mapping,
 without claiming storage behavior. Local HTTP clients have a two-second bound.
 
+#### Controller-Agent report containment and log ownership
+
+Reviewed and retained all ten behavioral tests in two Agent-channel files; all
+have concrete reasons and local case/proof-limit annotations. All ten pass with
+the race detector in `.tmp/qa-test-review-controller-agent-report-logs.log`.
+The logged quarantine warnings/errors are deliberately injected test inputs,
+not failures from a deployed Agent. Formatting and diff checks pass. No product
+defect was reproduced; no production code or live state changed.
+
+| Reviewed tests | Retention reason | Matrix coverage or gap |
+| --- | --- | --- |
+| Five in [task_report_containment_test.go](../internal/controller/agentchannel/task_report_containment_test.go) | An applied exact-report conflict preserves its claim while unrelated work completes; known Component diagnostics validate and map correctly; capacity-one dispatch cannot overclaim; only exact delivered ownership can enter quarantine. | TASK-07/09/10, HOST-07, CMP-05: scripted channel, fake store and pure selection, not real publication races, Agent restart/recovery or live workload continuity. |
+| Five in [logs_test.go](../internal/controller/agentchannel/logs_test.go) | Distinct pre-ready failures release slots; post-ready failure closes events; caller cleanup expiry and stalled subscribe sends retain ownership until cancel delivery; overflow reserves its slot until cancellation is confirmed. | LOG-01/02: controlled in-memory registry/channel tests, not actual gRPC send completion, Docker cleanup, public SSE or process memory measurements. |
+
+Stronger report assertions require the exact failed step/epoch and independent
+diagnostic spellings. A different assignment cannot be quarantined; refusal,
+successful containment and repeated reports must preserve unrelated ownership.
+Log limits now use independent eight-slot and 128-record expectations instead
+of production constants. Confirmed cancellation must remove the old slot;
+replacement must preserve all seven unrelated subscriptions. Sixteen sequential
+cancel cycles test slot reuse. Command waits and the overflow admission probe
+are bounded so a broken limit or missing handoff reports a local failure.
+
 The remaining root-module Go tests outside the reviewed files still require review.
 Helpers and fixtures are not standalone test cases; inventory counts must not
 classify them as behavioral coverage. No automatic blanket deletion based on

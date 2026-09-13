@@ -11,8 +11,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Rationale: ADR 0059 distinguishes pre-ready Docker availability from
-// invalid source state, while every post-ready failure only closes SSE.
+// QA: LOG-01; in-memory pre-ready classification, not Docker failure or public HTTP status.
+// Rationale: pre-ready availability and invalid-source failures must retain
+// distinct error kinds and release their pending subscription slots.
 func TestRecordLogEndPreservesPreReadyClassification(t *testing.T) {
 	t.Parallel()
 
@@ -36,7 +37,7 @@ func TestRecordLogEndPreservesPreReadyClassification(t *testing.T) {
 				_, openErr := registry.OpenLogs(context.Background(), testLogScope(), nil, 0, false)
 				result <- openErr
 			}()
-			command := <-session.logMessages()
+			command := nextAuditLogCommand(t, session)
 			command.result <- nil
 			if err := session.RecordLogEnd(&agentpb.LogEnd{
 				RequestId: command.message.GetLogSubscribe().GetRequestId(), Reason: test.reason,
@@ -46,10 +47,17 @@ func TestRecordLogEndPreservesPreReadyClassification(t *testing.T) {
 			if openErr := <-result; !errors.Is(openErr, errs.New(test.kind, "")) {
 				t.Fatalf("OpenLogs() error = %v, want %v", openErr, test.kind)
 			}
+			registry.mu.Lock()
+			active := len(registry.logs)
+			registry.mu.Unlock()
+			if active != 0 {
+				t.Fatalf("pre-ready failure retained %d subscriptions", active)
+			}
 		})
 	}
 }
 
+// QA: LOG-02; in-memory ready/end handling, not public SSE or real source failure.
 // Rationale: after readiness both availability and source failures are stream
 // termination only and must not synthesize a second public error contract.
 func TestRecordLogEndAfterReadyOnlyClosesEvents(t *testing.T) {
@@ -74,13 +82,16 @@ func TestRecordLogEndAfterReadyOnlyClosesEvents(t *testing.T) {
 				}
 				result <- subscription
 			}()
-			command := <-session.logMessages()
+			command := nextAuditLogCommand(t, session)
 			command.result <- nil
 			requestID := command.message.GetLogSubscribe().GetRequestId()
 			if err := session.RecordLogReady(&agentpb.LogReady{RequestId: requestID}); err != nil {
 				t.Fatalf("RecordLogReady() error = %v", err)
 			}
 			subscription := <-result
+			if subscription == nil {
+				t.Fatal("OpenLogs() returned no subscription")
+			}
 			if err := session.RecordLogEnd(&agentpb.LogEnd{RequestId: requestID, Reason: reason}); err != nil {
 				t.Fatalf("RecordLogEnd() error = %v", err)
 			}
@@ -91,9 +102,9 @@ func TestRecordLogEndAfterReadyOnlyClosesEvents(t *testing.T) {
 	}
 }
 
-// Rationale: cleanup timeout before the unbuffered cancel handoff must retain
-// durable in-session ownership until acknowledged delivery, allowing repeated
-// subscriptions to reuse all eight bounded slots without Agent orphans.
+// QA: LOG-02; repeated in-memory handoffs, not actual gRPC delivery or Agent/Docker cleanup.
+// Rationale: caller cleanup expiry must retain session ownership until cancel
+// delivery, then release it; sixteen sequential cycles expose leaked slots.
 func TestCancelLogsRetainsOwnershipUntilDeliveryAndRepeatedlyReleasesSlot(t *testing.T) {
 	registry := NewRegistry()
 	session, err := registry.Open(context.Background(), "agent-1", 1)
@@ -101,7 +112,7 @@ func TestCancelLogsRetainsOwnershipUntilDeliveryAndRepeatedlyReleasesSlot(t *tes
 		t.Fatalf("Open() error = %v", err)
 	}
 	defer session.Close()
-	for iteration := range maximumLogSubscriptions * 2 {
+	for iteration := range 16 {
 		opened := make(chan *LogSubscription, 1)
 		openErrors := make(chan error, 1)
 		go func() {
@@ -109,7 +120,7 @@ func TestCancelLogsRetainsOwnershipUntilDeliveryAndRepeatedlyReleasesSlot(t *tes
 			opened <- subscription
 			openErrors <- openErr
 		}()
-		subscribe := <-session.logMessages()
+		subscribe := nextAuditLogCommand(t, session)
 		subscribe.result <- nil
 		requestID := subscribe.message.GetLogSubscribe().GetRequestId()
 		if err := session.RecordLogReady(&agentpb.LogReady{RequestId: requestID}); err != nil {
@@ -130,7 +141,7 @@ func TestCancelLogsRetainsOwnershipUntilDeliveryAndRepeatedlyReleasesSlot(t *tes
 			t.Fatalf("iteration %d forgot cancellation before handoff", iteration)
 		}
 
-		cancel := <-session.logMessages()
+		cancel := nextAuditLogCommand(t, session)
 		if cancel.message.GetLogCancel().GetRequestId() != requestID {
 			t.Fatalf("iteration %d LogCancel = %#v, want %q", iteration, cancel.message.GetLogCancel(), requestID)
 		}
@@ -149,6 +160,7 @@ func TestCancelLogsRetainsOwnershipUntilDeliveryAndRepeatedlyReleasesSlot(t *tes
 	}
 }
 
+// QA: LOG-02; controlled pending-send race, not a real stalled socket or remote cleanup.
 // Rationale: after the subscribe handoff, HTTP cancellation must not wait for
 // a stalled stream.Send result, while the session still owns eventual cleanup.
 func TestOpenLogsCancellationAfterHandoffDoesNotWaitForSendResult(t *testing.T) {
@@ -165,7 +177,7 @@ func TestOpenLogsCancellationAfterHandoffDoesNotWaitForSendResult(t *testing.T) 
 		_, openErr := registry.OpenLogs(ctx, testLogScope(), []LogTarget{testLogTarget()}, 0, true)
 		openResult <- openErr
 	}()
-	subscribe := <-session.logMessages()
+	subscribe := nextAuditLogCommand(t, session)
 	cancel()
 	select {
 	case openErr := <-openResult:
@@ -186,7 +198,7 @@ func TestOpenLogsCancellationAfterHandoffDoesNotWaitForSendResult(t *testing.T) 
 	registry.mu.Unlock()
 
 	subscribe.result <- nil
-	cancelCommand := <-session.logMessages()
+	cancelCommand := nextAuditLogCommand(t, session)
 	if got := cancelCommand.message.GetLogCancel().GetRequestId(); got != requestID {
 		t.Fatalf("LogCancel request id = %q, want %q", got, requestID)
 	}
@@ -202,8 +214,15 @@ func TestOpenLogsCancellationAfterHandoffDoesNotWaitForSendResult(t *testing.T) 
 	case <-time.After(time.Second):
 		t.Fatal("LogCancel delivery did not release the subscription")
 	}
+	registry.mu.Lock()
+	_, retained := registry.logs[requestID]
+	registry.mu.Unlock()
+	if retained {
+		t.Fatal("delivered LogCancel retained the subscription slot")
+	}
 }
 
+// QA: LOG-02; in-memory 8-slot/128-record boundary, not wire cancellation or process memory measurement.
 // Rationale: queue overflow has initiated an Agent cancellation, so its slot
 // remains owned until that LogCancel is delivered rather than being reused early.
 func TestRecordLogEventOverflowRetainsSlotUntilCancelDelivery(t *testing.T) {
@@ -214,30 +233,32 @@ func TestRecordLogEventOverflowRetainsSlotUntilCancelDelivery(t *testing.T) {
 	}
 	defer session.Close()
 
-	subscriptions := make([]*LogSubscription, maximumLogSubscriptions)
+	subscriptions := make([]*LogSubscription, 8)
 	for index := range subscriptions {
 		subscriptions[index] = openReadyLogSubscription(t, registry, session)
 	}
 	overflowed := subscriptions[0]
-	for index := range maximumQueuedLogEvents {
+	for index := range 128 {
 		overflow, recordErr := session.RecordLogEvent(testLogEvent(overflowed.ID, int64(index+1)))
 		if recordErr != nil || overflow {
 			t.Fatalf("RecordLogEvent(%d) = (%v, %v), want (false, nil)", index+1, overflow, recordErr)
 		}
 	}
-	overflow, recordErr := session.RecordLogEvent(testLogEvent(overflowed.ID, maximumQueuedLogEvents+1))
+	overflow, recordErr := session.RecordLogEvent(testLogEvent(overflowed.ID, 129))
 	if recordErr != nil || !overflow {
 		t.Fatalf("overflow RecordLogEvent() = (%v, %v), want (true, nil)", overflow, recordErr)
 	}
 
 	registry.mu.Lock()
 	if registry.logs[overflowed.ID] != overflowed || !overflowed.canceling ||
-		len(registry.logs) != maximumLogSubscriptions {
+		len(registry.logs) != 8 {
 		registry.mu.Unlock()
 		t.Fatal("overflow did not retain the canceling subscription and its slot")
 	}
 	registry.mu.Unlock()
-	if _, openErr := registry.OpenLogs(context.Background(), testLogScope(), []LogTarget{testLogTarget()}, 0, true); !errors.Is(
+	refusalContext, stopRefusal := context.WithTimeout(context.Background(), time.Second)
+	defer stopRefusal()
+	if _, openErr := registry.OpenLogs(refusalContext, testLogScope(), []LogTarget{testLogTarget()}, 0, true); !errors.Is(
 		openErr,
 		errs.New(errs.KindStateConflict, ""),
 	) {
@@ -253,6 +274,24 @@ func TestRecordLogEventOverflowRetainsSlotUntilCancelDelivery(t *testing.T) {
 	}
 	if replacement := openReadyLogSubscription(t, registry, session); replacement == nil {
 		t.Fatal("replacement subscription is nil")
+	}
+	registry.mu.Lock()
+	_, retained := registry.logs[overflowed.ID]
+	unrelatedPreserved := true
+	for _, subscription := range subscriptions[1:] {
+		if registry.logs[subscription.ID] != subscription {
+			unrelatedPreserved = false
+		}
+	}
+	active := len(registry.logs)
+	registry.mu.Unlock()
+	if retained || !unrelatedPreserved || active != 8 {
+		t.Fatalf(
+			"replacement ownership: old retained=%t unrelated preserved=%t active=%d",
+			retained,
+			unrelatedPreserved,
+			active,
+		)
 	}
 }
 
@@ -271,7 +310,7 @@ func openReadyLogSubscription(t *testing.T, registry *Registry, session *Session
 		result <- subscription
 		errResult <- err
 	}()
-	command := <-session.logMessages()
+	command := nextAuditLogCommand(t, session)
 	command.result <- nil
 	requestID := command.message.GetLogSubscribe().GetRequestId()
 	if err := session.RecordLogReady(&agentpb.LogReady{RequestId: requestID}); err != nil {
@@ -281,6 +320,17 @@ func openReadyLogSubscription(t *testing.T, registry *Registry, session *Session
 		t.Fatalf("OpenLogs() error = %v", openErr)
 	}
 	return <-result
+}
+
+func nextAuditLogCommand(t *testing.T, session *Session) logCommand {
+	t.Helper()
+	select {
+	case command := <-session.logMessages():
+		return command
+	case <-time.After(time.Second):
+		t.Fatal("log command was not handed off within one second")
+		return logCommand{}
+	}
 }
 
 func testLogTarget() LogTarget {
