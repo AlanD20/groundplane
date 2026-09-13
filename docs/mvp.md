@@ -1713,11 +1713,28 @@ revision so a stale editor never overwrites newer desired state.
 
 ### Blueprint apply reconciliation
 
-A successful Blueprint apply is one Environment update Task with one operation
-id and one Agent assignment carrying the complete sealed execution plan. It is
-not a desired-state-only publication: the apply Task is the sole execution for
-that apply. It creates no child Deploy Task, hidden Deploy request, second
-operation, or new operator action or endpoint.
+The operator maintains one current Blueprint. A validated, accepted Apply has
+one Environment update Task and operation. Its private execution units apply
+only required resource changes, using fingerprints of effective inputs compared
+with successfully applied state. Identical requested input after a failed attempt
+is not proof of convergence. Formatting changes do not select runtime work;
+relevant configuration and dependency changes select their affected consumers.
+
+The latest accepted changes supersede obsolete Blueprint reconciliation. Pending
+superseded work never dispatches. Running superseded work cannot start further
+forward steps; cancellation and effect accounting must settle before newer work
+mutates conflicting resources. Still-required, unrelated work continues. Invalid
+submissions, failed publication and idempotency replay do not supersede work.
+Internal acceptance tokens fence execution; they are not operator-managed
+Blueprint versions. Existing `If-Match` still prevents stale-editor overwrites.
+
+[Latest-wins reconciliation](decisions/0078-latest-wins-blueprint-reconciliation.md)
+owns resource grouping, safe handoff, Task outcomes and late-message rules. Each
+unit's execution inputs are sealed after conflicting predecessors settle, then
+remain immutable. The Apply Task owns these units; there is no child public
+Deploy Task, hidden Deploy request, new operator action or endpoint. This does
+not automatically supersede explicit Deploy/Rollback, Release Groups, manual
+Scripts, Backup/Restore, native updates or destructive removals.
 
 From the sealed candidate projection, the Controller implicitly selects newly
 introduced or materially changed logical Services whose effective
@@ -1741,7 +1758,7 @@ pre-deploy, post-deploy, and possible `on-failure` execution is limited to 16
 hooks and 1,048,576 aggregate UTF-8 body bytes; phases do not receive separate
 budgets, and a violation is rejected before Task publication.
 
-The one Agent assignment executes these phases in order:
+Each selected execution unit follows the applicable phases in order:
 
 1. materialize the sealed environment files and file entries;
 2. ensure the candidate Volume leaves, perform required Attach adapter
@@ -1758,17 +1775,18 @@ The one Agent assignment executes these phases in order:
 7. execute the sealed registered Component actions.
 
 Compose apply does not intrinsically wait; readiness occurs only when the
-typed plan reaches its `WaitHealthy` step. Only after the assignment succeeds
-does the Controller perform the Controller-only atomic promotion. That
-transaction promotes the candidate Releases, applied Environment projection,
-Component state, and Routes together, then records the parent Task success.
-Before promotion, a failure must prove exact predecessor restoration for each
-selected Service that previously served, and exact first-candidate absence for
-each selected Service that did not. Restoration and its independent verification
+typed plan reaches its `WaitHealthy` step. Only verified unit completion may
+publish its applied resource fingerprints and successful runtime results. Failed
+or superseded units cannot claim the whole Blueprint applied. Successful unrelated
+units retain their results; the parent Task records its actual partial outcome.
+Publication and cancellation races must not permit an obsolete unit to take over
+newer work. Failure must account for each affected unit's effects, including exact
+predecessor restoration for a selected Service that previously served or exact
+first-candidate absence where required by its procedure. Restoration and its independent verification
 use the same per-Service native Release captured before execution, never the
 Environment-wide applied artifact as a substitute. A configured-only Service in
-an applied Environment projection is not a serving predecessor. Mixed recovery preserves
-unrelated runtime and the exact applied projection. The desired head is never
+an applied Environment projection is not a serving predecessor. Unit recovery preserves
+unrelated runtime and its verified applied results. The desired head is never
 rolled back, and no failed or unproven candidate may be published as a serving
 Release or Route. If the proof is not available, the Task remains
 nonterminal/recovery-required rather than claiming success or false serving
@@ -1960,8 +1978,11 @@ transfer the operation only while every selected execution is durably
 `script.retry_unsafe`. ADR 0040 owns execution, cleanup, and retry. ADR 0062
 owns prepared immutable-input reference generations and their bounded release.
 
-Blueprint candidate completion uses one closed terminal transaction ([Blueprint terminal contract](features/blueprints.md#atomic-terminal-publication)),
-separate from desired-state publication. Its complete physical request must fit
+The existing Blueprint candidate implementation uses one closed terminal
+transaction ([Blueprint terminal implementation](features/blueprints.md#atomic-terminal-publication)),
+separate from desired-state publication. ADR 0078 replaces aggregate promotion
+with per-unit applied results while retaining exact source closure and terminal
+authority. A complete physical terminal request must fit
 256 operations per comparison/success/failure arm and 1 MiB before Script
 source release begins; ordinary transactions and release batches retain their
 existing limits. Source closure stores the original terminal report with exact

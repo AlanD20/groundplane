@@ -19,7 +19,10 @@ execution semantics; this document routes authoring and publication design.
   use literal YAML block scalars. Import still accepts a closed multi-file bundle.
 - Validate parses the same bundle as Apply and returns a non-destructive
   `create | update | retain` diff without publishing any Task, revision or effect.
-  Apply publishes one reconcile Task and its sealed execution authority.
+  Apply accepts the latest desired input and publishes one reconcile Task.
+  [Latest-wins reconciliation](../decisions/0078-latest-wins-blueprint-reconciliation.md)
+  selects resource-level changes against verified applied inputs, supersedes
+  obsolete work, and seals each private execution unit after its safe handoff.
 - Omitted existing resources are retained. Omission never deletes or renames;
   ambiguous preservation fails closed. Only a resource's explicit protected
   Remove action may remove it. The earlier Entry-omission deletion proposal is
@@ -52,6 +55,12 @@ execution. Failed publication leaves no partial public revision. Retries and
 queued Tasks resolve their own sealed revision, not the latest desired head.
 
 ## Technical design
+
+[Latest-wins reconciliation](../decisions/0078-latest-wins-blueprint-reconciliation.md)
+owns the replacement for prebuilt whole-Environment execution and aggregate
+applied-state promotion. The implementation below predates that change; it must
+not be used to justify rejecting newer valid input or running obsolete units.
+Keep its safety fences until their resource-level replacements are connected.
 
 [Closed bundles](../decisions/0012-closed-blueprint-bundles.md) owns external input
 closure. [Staged publication](../decisions/0051-blueprint-staged-revision-publication.md)
@@ -94,11 +103,16 @@ disposition, never inferred witnesses or an ad-hoc compatibility reader.
 
 ### Atomic terminal publication
 
-One atomic terminal commit owns the original Task state, assignment/lifecycle
+The existing aggregate implementation uses the envelope below. ADR 0078 replaces
+its all-members promotion rule with per-unit applied results; exact authority,
+source-release safety and physical transaction limits still apply. Until that
+integration is complete, retain the existing aggregate writer and terminal guards.
+
+One atomic terminal commit currently owns the original Task state, assignment/lifecycle
 removal, idempotency/retention, applied artifact, every candidate's serving and
 current-successful projection, terminal evidence, Environment fences and final
-Script-source fragment. Do not promote members separately or infer completion
-from healthy containers.
+Script-source fragment. The existing implementation cannot promote members
+separately. Never infer completion from healthy containers.
 
 Only the owning Task repository constructs the closed terminal envelope after
 validating complete authority. Its store capability is separate from ordinary
@@ -146,6 +160,12 @@ rejection, interrupted release, public reconnect, no repeated Script effects and
 uncertain terminal-commit reconciliation from exact durable authority.
 
 ## Current status
+
+Latest-wins reconciliation is accepted but not connected to publication or Agent
+execution. Its pure resource/conflict selector is the first implementation slice;
+it is not an authorization to enable automatic cancellation. Resource fingerprint
+capture, private unit persistence, late plan preparation, safe supersession and
+operator-surface/live proof remain required.
 
 Authoring and substantial publication paths are implemented. Bounded marker and
 terminal-envelope regressions have local proof, including changed-epoch rejection

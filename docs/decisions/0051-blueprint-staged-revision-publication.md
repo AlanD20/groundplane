@@ -1,5 +1,11 @@
 # ADR 0051: Stage and publish immutable Blueprint revisions
 
+The one current desired document, bounded immutable input storage and guarded
+publication remain. [ADR 0078](0078-latest-wins-blueprint-reconciliation.md)
+replaces the requirement to freeze one whole-Environment execution before
+acceptance and to promote all applied state only at the parent Task's terminal
+acknowledgement. Internal snapshots do not form a queue of versions to execute.
+
 - Status: Accepted
 - Date: 2026-08-25
 

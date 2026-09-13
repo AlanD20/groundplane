@@ -386,12 +386,15 @@ The Controller parses the root envelope, resolves stable ownership, then loads
 the ordered sources through `compose-go` using only the closed namespace. It
 stages the canonical audit stream and lossless normalized projection as
 immutable `GDR1` chunks owned by one candidate revision. Publication changes
-the Environment desired head and creates one Environment update Task, one
-operation id, and one Agent assignment for the sealed candidate plan.
-Canonical Compose, generated files, and secret materializations are recreated
-from that revision and are never separate desired authority. The apply Task is
-the sole execution for the apply and creates no child Deploy Task, hidden
-Deploy request, second operation, or new operator action or endpoint.
+the Environment desired head and creates one public Environment update (Apply)
+Task and one operation id. Internal input snapshots preserve
+accepted work; they are not Blueprint versions that must all execute. The
+[latest-wins reconciliation contract](decisions/0078-latest-wins-blueprint-reconciliation.md)
+selects resource-level work against verified applied inputs and seals each
+private execution unit after conflicting predecessors settle. Canonical Compose,
+generated files and secret materializations come from that unit's pinned inputs,
+never a later desired reread. There is no child public Deploy Task, hidden Deploy
+request, second operation, or new operator action or endpoint.
 
 A Blueprint apply is non-destructive. If the submitted bundle omits a
 currently desired Service, Zone, Volume, or other owned resource, the candidate
@@ -403,6 +406,15 @@ explicit Remove workflow for that resource may publish a revision without it.
 Omission never implies deletion or rename.
 
 ### Apply execution contract
+
+Normalize and fingerprint each resource's effective inputs, including consumed
+configuration and relevant dependencies. Apply only changes not already verified
+applied, plus targeted repair for known drift. New accepted changes supersede
+obsolete pending work and request a safe handoff from conflicting running work;
+invalid input does neither. Keep unrelated, still-required work. Same desired
+input after a failed attempt is not a no-op merely because the document matches.
+This is resource-level reconciliation, not whole-Blueprint rollback or a sequence
+of historical versions to execute. ADR 0078 owns exact supersession rules.
 
 The Controller derives candidate Releases only from the sealed candidate
 projection. Implicit candidate selection includes newly introduced or materially
@@ -425,7 +437,7 @@ across pre-deploy, post-deploy, and possible `on-failure` execution is limited
 to 16 hooks and 1,048,576 aggregate UTF-8 body bytes; phases do not receive
 separate budgets, and a violation is rejected before Task publication.
 
-The single Agent assignment carries these phases in order: materialize sealed
+Each private execution unit carries its applicable phases in order: materialize sealed
 files and Entries; ensure candidate Volume leaves, perform required Attach
 adapter provisioning and grants, and prepare Network resources without applying
 those memberships to a consumer Compose Service; execute all selected
@@ -438,12 +450,14 @@ Component actions. There is no hidden consumer Compose start or recreate before
 the pre-hook barrier. This Blueprint-only split does not change standalone
 Attach or Detach ordering. Compose apply does not intrinsically wait.
 
-Only after the assignment succeeds does the Controller perform the
-Controller-only atomic promotion of candidate Releases, the applied projection,
-Component state, and Routes. A failure must prove exact predecessor restoration
-or exact first-candidate absence before terminalizing; the desired head is never
-rolled back, and an unproven candidate never becomes a serving Release or
-Route. If proof is unavailable, the Task remains nonterminal/recovery-required.
+Only verified unit completion may publish its applied fingerprints and successful
+runtime results. Unrelated successful units retain their results; the original
+Apply Task records partial failure or supersession without claiming the entire
+Blueprint applied. A failure must prove exact predecessor restoration or exact
+first-candidate absence where required by the affected unit's procedure. The
+desired head is never rolled back, and an unproven candidate never becomes a
+serving Release or Route. Missing proof keeps conflicting work blocked rather
+than permitting a newer execution to race unresolved effects.
 Retry transfers the operation only when every selected Script execution is
 durably `not_started`; `start_authorized` or later, or unknown Script state,
 returns `script.retry_unsafe` through the existing retry action and recovery
@@ -1436,9 +1450,12 @@ remains unresolved until ADR 0021's durable evidence identifies the one atomic
 result as wholly old or wholly new; marker absence alone never proves the prior
 head won.
 
-**Blueprint candidate terminal envelope.** [Blueprint terminal contract](features/blueprints.md#atomic-terminal-publication) preserves one atomic Task completion with all candidate promotion or
-failure records, applied projection, materialization cleanup, Environment
-fences, retention/idempotency records and final Script source fragment. It uses
+**Blueprint candidate terminal envelope.** The existing
+[Blueprint terminal implementation](features/blueprints.md#atomic-terminal-publication)
+combines candidate promotion or failure records, applied projection,
+materialization cleanup, Environment fences, retention/idempotency records and
+the final Script source fragment in one Task transaction. ADR 0078 replaces that
+aggregate promotion boundary with per-unit applied results. The envelope uses
 the same 256-operation per-arm and exact physical 1 MiB request ceilings, through
 a separate closed persistence method; it does not raise the ordinary 96 limit.
 

@@ -793,6 +793,15 @@ runtime must continue to reject `strategy.not_implemented` until a safe source
 contract lands: a shared-instance RDB is not a per-Attach backup, and live
 data-directory archival is forbidden.
 
+The existing Blueprint Apply surfaces use
+[latest-wins reconciliation](decisions/0078-latest-wins-blueprint-reconciliation.md).
+One accepted input returns its original `202 {task_id}` and idempotent replay.
+`If-Match` still guards stale edits; no Blueprint-history selection surface is
+added. Only valid accepted changes supersede obsolete reconciliation units.
+Task detail and Activity must identify supersession and its replacement Task;
+the original Task cannot claim complete application when some units were cancelled.
+This changed behavior is not yet connected in the implementation.
+
 Blueprint multipart requests begin with one `application/json` field named
 `manifest`, with exactly `{root, compose_sources, interpolation, files}`.
 Its `files` array is sorted by normalized path and contains

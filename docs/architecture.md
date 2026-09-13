@@ -299,6 +299,16 @@ workspace composition only; feature request state and actions live with the
 feature. Routes remain shallow, and generated OpenAPI types are the sole human
 wire contract.
 
+[Latest-wins Blueprint reconciliation](decisions/0078-latest-wins-blueprint-reconciliation.md)
+replaces the prebuilt whole-Environment plan with private effect-coupled execution
+units under the existing Apply Task. The pure `internal/core/blueprintreconcile`
+module selects required work and resource-conflict handoffs. The Controller owns
+effective-input capture and late plan preparation; capability persistence owns
+atomic acceptance, unit claims and applied-result publication. No change grants
+the Agent selection authority or permits two writers on conflicting resources.
+The current aggregate execution remains guarded until this replacement is wired
+and verified end to end.
+
 ### Errors
 
 - One taxonomy in `pkg/errs`: one typed error + stable dot-namespaced `code`

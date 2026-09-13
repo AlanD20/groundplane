@@ -49,6 +49,17 @@ Corrupt ownership is an Internal error, not an exception to cleanup. Offline or
 generation-mismatched Agent delivery fails closed; the durable timeout may still
 finish the Task and the operator may retry the Abort request.
 
+### Blueprint supersession
+
+[Latest-wins reconciliation](../decisions/0078-latest-wins-blueprint-reconciliation.md)
+adds Controller-requested cancellation of obsolete Blueprint execution units.
+It reuses the original public Apply Task and existing terminal states. Queued
+units lose dispatch eligibility atomically; running units retain their claims
+until cancellation and effects settle. Unrelated units continue. Superseded work
+records the replacement Task and cannot be revived by Retry. This is not a new
+Abort endpoint or permission to interrupt Backup, native activation, destructive
+removal or arbitrary Script effects.
+
 ## Non-functional requirements
 
 Each Task has at most 1,000 durable events, each at most 32 KiB of JSON. Events

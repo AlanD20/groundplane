@@ -1,5 +1,12 @@
 # ADR 0064: Candidate Release restoration authority
 
+[ADR 0078](0078-latest-wins-blueprint-reconciliation.md) replaces whole-Blueprint
+execution and aggregate promotion with latest-wins private execution units. The
+exact execution, recovery and source-safety rules below remain required within
+each affected unit. Supersession cannot steal recovery ownership or use a newer
+desired head to reject an otherwise lawful cleanup report. The separate proposed
+configuration-file restoration change is not accepted by ADR 0078.
+
 - Status: Accepted
 - Member selection and ordinary predecessor capture are owned by
   [Services and Releases](../features/services-and-releases.md#per-service-restoration).
