@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/controller/servicelifecycle"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -17,8 +18,9 @@ import (
 // EntryMutationRuntime captures the runtime onto which Entry decorations are
 // applied. The epoch fences its selection in the desired publication.
 type EntryMutationRuntime struct {
-	Projection    etcd.EnvironmentComposeProjection
-	EpochRevision int64
+	Projection        etcd.EnvironmentComposeProjection
+	EpochRevision     int64
+	RunningServiceIDs []string
 }
 
 func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
@@ -41,6 +43,7 @@ func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
 	}
 	var sources []*agentpb.ComposeArtifact
 	var retained []string
+	var running []string
 	for _, desired := range current.Record.DesiredServices {
 		planning, err := resolver.releases.LoadPlanningServices(ctx, scope, []string{desired.Desired.ID})
 		if err != nil {
@@ -74,6 +77,9 @@ func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
 			sources = append(sources, artifact)
 		}
 		retained = append(retained, desired.Desired.ID)
+		if planning[0].Service.Record.Runtime.RuntimeIntent == core.ServiceRuntimeIntentRunning {
+			running = append(running, desired.Desired.ID)
+		}
 	}
 	if len(retained) > 0 {
 		baseline, err = entryRuntimeWithoutReplacedProxyConfigs(baseline, sources)
@@ -85,6 +91,21 @@ func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
 			return EntryMutationRuntime{}, err
 		}
 	}
+	attaches, err := resolver.releases.LoadPlanningAttaches(ctx, scope)
+	if err != nil {
+		return EntryMutationRuntime{}, err
+	}
+	joins, err := ResolveAttachNetworkJoins(current.Record.EnvironmentID, current.Record, attaches, "")
+	if err != nil {
+		return EntryMutationRuntime{}, err
+	}
+	// Native Release inputs predate later Attach changes. Bind the current
+	// complete union before decorating Entries, preserving historical labels.
+	baseline, err = MutateAttachNetworkArtifact(ctx, baseline, current.Record, joins,
+		baseline.ArtifactId)
+	if err != nil {
+		return EntryMutationRuntime{}, err
+	}
 	baseline, err = mutateEnvironmentEntryArtifact(baseline, current.Record,
 		EnvironmentEntryArtifactMutation{ArtifactID: baseline.ArtifactId, Entries: current.Record.Entries})
 	if err != nil {
@@ -95,7 +116,10 @@ func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
 	if err != nil {
 		return EntryMutationRuntime{}, errs.Wrap(errs.KindInternal, err)
 	}
-	return EntryMutationRuntime{Projection: projection, EpochRevision: scope.EnvironmentEpochRevision}, nil
+	return EntryMutationRuntime{
+		Projection: projection, EpochRevision: scope.EnvironmentEpochRevision,
+		RunningServiceIDs: running,
+	}, nil
 }
 
 // Only a captured stable proxy can replace its old, exclusively owned config.

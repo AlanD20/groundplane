@@ -350,7 +350,7 @@ func (repository *ScriptRepository) loadExecutionSources(
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
-	intendedAttaches, err := loadScriptIntendedAttaches(ctx, repository.store, environment.ID, revision)
+	intendedAttaches, err := loadEnvironmentAttachesAtRevision(ctx, repository.store, environment.ID, revision)
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}

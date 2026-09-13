@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type AttachPlanGrantIdentity struct {
@@ -176,24 +177,24 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 		!projection.ServiceDependencyPlans.Equal(renderInput.Record.ServiceDependencyPlans) {
 		return nil, errs.New(errs.KindInternal, "durable Attach Task projection does not match its render input")
 	}
-	artifact, err := resolver.renderPinnedEnvironmentArtifact(
-		ctx,
-		task,
-		pinnedEnvironmentIdentity{
-			TenantID: renderInput.Record.TenantID, TenantSlug: renderInput.Record.TenantSlug,
-			ProjectID: renderInput.Record.ProjectID, ProjectSlug: renderInput.Record.ProjectSlug,
-			EnvironmentID:       renderInput.Record.EnvironmentID,
-			EnvironmentName:     renderInput.Record.EnvironmentName,
-			AuthorizedVolumeDir: renderInput.Record.AuthorizedVolumeDir,
-		},
-		renderInput.Record.DesiredRevisionID,
+	runtime := renderInput.Record.RuntimeProjection
+	if runtime.EnvironmentID != projection.EnvironmentID || runtime.RevisionID != projection.RevisionID ||
+		runtime.RenderGeneration != projection.RenderGeneration ||
+		!slices.Equal(attachPlanServiceSnapshots(runtime.DesiredServices), renderInput.Record.Services) {
+		return nil, errs.New(errs.KindInternal, "durable Attach Task runtime capture does not match its projection")
+	}
+	baseline := &agentpb.ComposeArtifact{}
+	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(runtime.ComposeArtifact, baseline); err != nil {
+		return nil, errs.New(errs.KindInternal, "durable Attach Task runtime artifact is corrupt")
+	}
+	artifact, err := MutateAttachNetworkArtifact(
+		ctx, baseline, runtime, renderInput.Record.NetworkJoins,
 		renderInput.Record.ArtifactID,
-		projection,
-		attachNetworkTransform(renderInput.Record),
 	)
 	if err != nil {
 		return nil, err
 	}
+	applyRuntime := slices.Contains(renderInput.Record.RunningServiceIDs, current.Record.ServiceID)
 	if adapter.Manual() || !current.Record.OwnsCredential() {
 		if len(task.Steps) != 1 {
 			return nil, errs.New(errs.KindInternal, "manual Attach Task step count is invalid")
@@ -203,7 +204,7 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 			RenderGeneration: uint64(task.RenderGeneration), Operation: operation,
 			TargetID: task.Target, Artifacts: []*agentpb.ComposeArtifact{artifact},
 			Steps: []*agentpb.ExecutionStep{
-				attachComposeStep(task, 0, artifact, []string{current.Record.ServiceID}),
+				attachComposeStep(task, 0, artifact, attachRuntimeServiceIDs(current.Record.ServiceID, applyRuntime)),
 			},
 		})
 	}
@@ -234,7 +235,7 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 			RenderGeneration: uint64(task.RenderGeneration), Operation: operation,
 			TargetID: task.Target, Artifacts: []*agentpb.ComposeArtifact{artifact},
 			Steps: []*agentpb.ExecutionStep{
-				attachComposeStep(task, 0, artifact, []string{current.Record.ServiceID}),
+				attachComposeStep(task, 0, artifact, attachRuntimeServiceIDs(current.Record.ServiceID, applyRuntime)),
 			},
 		})
 	}
@@ -244,7 +245,7 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 			return errs.New(errs.KindStateConflict, "Attach encrypted authentication mode changed")
 		}
 		steps, buildErr := attachNetworkProcedureSteps(
-			task, current.Record, renderInput.Record.AdapterKey, artifact, identity,
+			task, current.Record, renderInput.Record.AdapterKey, artifact, identity, applyRuntime,
 		)
 		if buildErr != nil {
 			return buildErr
@@ -285,6 +286,7 @@ func attachNetworkProcedureSteps(
 	adapterKey string,
 	artifact *agentpb.ComposeArtifact,
 	identity AttachPlanIdentity,
+	applyRuntime bool,
 ) ([]*agentpb.ExecutionStep, error) {
 	if len(task.Steps) != len(identity.Grants)+2 {
 		return nil, errs.New(errs.KindInternal, "durable Attach Task step count is invalid")
@@ -296,7 +298,9 @@ func attachNetworkProcedureSteps(
 		if err != nil {
 			return nil, err
 		}
-		return append(procedures, attachComposeStep(task, len(task.Steps)-1, artifact, []string{record.ServiceID})), nil
+		return append(procedures, attachComposeStep(
+			task, len(task.Steps)-1, artifact, attachRuntimeServiceIDs(record.ServiceID, applyRuntime),
+		)), nil
 	}
 	grantCount := len(identity.Grants)
 	procedureTask.Steps = append([]etcd.TaskStepRecord(nil), task.Steps[:grantCount]...)
@@ -306,8 +310,17 @@ func attachNetworkProcedureSteps(
 		return nil, err
 	}
 	steps := append([]*agentpb.ExecutionStep(nil), procedures[:grantCount]...)
-	steps = append(steps, attachComposeStep(task, grantCount, artifact, []string{record.ServiceID}))
+	steps = append(steps, attachComposeStep(
+		task, grantCount, artifact, attachRuntimeServiceIDs(record.ServiceID, applyRuntime),
+	))
 	return append(steps, procedures[grantCount]), nil
+}
+
+func attachRuntimeServiceIDs(serviceID string, running bool) []string {
+	if running {
+		return []string{serviceID}
+	}
+	return nil
 }
 
 func attachComposeStep(
@@ -316,25 +329,9 @@ func attachComposeStep(
 	artifact *agentpb.ComposeArtifact,
 	serviceIDs []string,
 ) *agentpb.ExecutionStep {
-	active := make(map[string]struct{}, len(artifact.Services))
-	for _, service := range artifact.Services {
-		if service.ExpectedReplicas != 0 {
-			active[service.ServiceId] = struct{}{}
-		}
-	}
-	allActive := true
-	for _, serviceID := range serviceIDs {
-		if _, exists := active[serviceID]; !exists {
-			allActive = false
-			break
-		}
-	}
 	apply := &agentpb.ComposeApply{ArtifactId: artifact.ArtifactId}
-	if allActive {
-		apply.ServiceIds = append([]string(nil), serviceIDs...)
-	} else {
-		apply.FullReconcile = true
-	}
+	apply.ServiceIds = append([]string(nil), serviceIDs...)
+	apply.NoDependencies = true
 	return &agentpb.ExecutionStep{
 		StepId: task.Steps[stepIndex].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
 		Payload: &agentpb.ExecutionStep_ComposeApply{ComposeApply: apply},

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
@@ -33,6 +34,7 @@ func TestBuildAttachTaskRenderInputCreatesCompleteNetworkUnion(t *testing.T) {
 
 	input, err := buildAttachTaskRenderInput(
 		fixture.scope,
+		controllerpkg.EntryMutationRuntime{Projection: fixture.scope.ComposeProjection.Record, EpochRevision: 1},
 		fixture.current,
 		[]etcd.Versioned[etcd.AttachRecord]{
 			{Record: worker, Revision: 1},
@@ -87,6 +89,7 @@ func TestBuildAttachTaskRenderInputDetachesOnlyTargetMembership(t *testing.T) {
 
 	input, err := buildAttachTaskRenderInput(
 		fixture.scope,
+		controllerpkg.EntryMutationRuntime{Projection: fixture.scope.ComposeProjection.Record, EpochRevision: 1},
 		detaching,
 		[]etcd.Versioned[etcd.AttachRecord]{
 			{Record: detaching, Revision: 1},

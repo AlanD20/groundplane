@@ -170,6 +170,15 @@ detach against dependent creation. Creation publishes the primary, indexes,
 immutable render input, Task, operation locks, queue entry, and idempotency
 evidence atomically.
 
+Standalone Attach and Detach capture native runtime, current Entry bindings and
+running intent at one fixed revision. Their immutable input retains that capture;
+the Environment mutation epoch fences publication. Network changes target the
+selected active physical workloads, keep historical Release labels and exclude
+stable proxies, inactive slots and dependencies. A stopped or configured-only
+consumer validates Compose without starting a container. The complete Attach
+union replaces the old managed network overlay; ordinary-name containers are
+not substitutes for native workloads.
+
 The rejected ADR 0054 attempted to define a compiled release ledger, runtime
 registry mutation rules, an ARM64-only image chain, new wire messages, and one
 static Valkey helper in a single proposal. It was rejected because that scope

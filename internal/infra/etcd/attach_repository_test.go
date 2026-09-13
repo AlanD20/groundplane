@@ -1364,17 +1364,20 @@ func createTestAttach(
 		TenantID: scope.Tenant.Record.ID, TenantSlug: scope.Tenant.Record.Slug,
 		ProjectID: scope.Project.Record.ID, ProjectSlug: scope.Project.Record.Slug,
 		EnvironmentID: record.EnvironmentID, EnvironmentName: scope.Environment.Record.Name,
-		AuthorizedVolumeDir: scope.Environment.Record.VolumeDir,
-		BackingServiceID:    scope.BackingService.Record.Desired.ID,
-		BackingProjectID:    record.BackingProjectID,
-		AdapterKey:          scope.BackingService.Record.Desired.Adapter,
-		Authentication:      scope.BackingService.Record.Desired.Authentication,
-		DesiredRevisionID:   scope.DesiredHead.Record.RevisionID,
-		ArtifactID:          ids.NewAt(ids.KindConfig, record.CreatedAt, seed+2000),
-		RenderGeneration:    scope.ComposeProjection.Record.RenderGeneration,
-		Services:            attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
-		Networks:            attachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones),
-		Volumes:             append([]EnvironmentVolumeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
+		AuthorizedVolumeDir:      scope.Environment.Record.VolumeDir,
+		BackingServiceID:         scope.BackingService.Record.Desired.ID,
+		BackingProjectID:         record.BackingProjectID,
+		AdapterKey:               scope.BackingService.Record.Desired.Adapter,
+		Authentication:           scope.BackingService.Record.Desired.Authentication,
+		DesiredRevisionID:        scope.DesiredHead.Record.RevisionID,
+		ArtifactID:               ids.NewAt(ids.KindConfig, record.CreatedAt, seed+2000),
+		RenderGeneration:         scope.ComposeProjection.Record.RenderGeneration,
+		EnvironmentEpochRevision: attachTestEpochRevision(t, ctx, repository.store, record.EnvironmentID),
+		RuntimeProjection:        scope.ComposeProjection.Record,
+		RunningServiceIDs:        []string{record.ServiceID},
+		Services:                 attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
+		Networks:                 attachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones),
+		Volumes:                  append([]EnvironmentVolumeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
 		VolumeMounts: append(
 			[]EnvironmentServiceVolumeMount(nil),
 			scope.ComposeProjection.Record.VolumeMounts...),
@@ -1455,17 +1458,20 @@ func publishTestDetach(
 		TenantID: scope.Tenant.Record.ID, TenantSlug: scope.Tenant.Record.Slug,
 		ProjectID: scope.Project.Record.ID, ProjectSlug: scope.Project.Record.Slug,
 		EnvironmentID: current.Record.EnvironmentID, EnvironmentName: scope.Environment.Record.Name,
-		AuthorizedVolumeDir: scope.Environment.Record.VolumeDir,
-		BackingServiceID:    scope.BackingService.Record.Desired.ID,
-		BackingProjectID:    current.Record.BackingProjectID,
-		AdapterKey:          scope.BackingService.Record.Desired.Adapter,
-		Authentication:      scope.BackingService.Record.Desired.Authentication,
-		DesiredRevisionID:   scope.DesiredHead.Record.RevisionID,
-		ArtifactID:          ids.NewAt(ids.KindConfig, createdAt, 904),
-		RenderGeneration:    scope.ComposeProjection.Record.RenderGeneration,
-		Services:            attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
-		Networks:            attachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones),
-		Volumes:             append([]EnvironmentVolumeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
+		AuthorizedVolumeDir:      scope.Environment.Record.VolumeDir,
+		BackingServiceID:         scope.BackingService.Record.Desired.ID,
+		BackingProjectID:         current.Record.BackingProjectID,
+		AdapterKey:               scope.BackingService.Record.Desired.Adapter,
+		Authentication:           scope.BackingService.Record.Desired.Authentication,
+		DesiredRevisionID:        scope.DesiredHead.Record.RevisionID,
+		ArtifactID:               ids.NewAt(ids.KindConfig, createdAt, 904),
+		RenderGeneration:         scope.ComposeProjection.Record.RenderGeneration,
+		EnvironmentEpochRevision: attachTestEpochRevision(t, ctx, repository.store, current.Record.EnvironmentID),
+		RuntimeProjection:        scope.ComposeProjection.Record,
+		RunningServiceIDs:        []string{current.Record.ServiceID},
+		Services:                 attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
+		Networks:                 attachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones),
+		Volumes:                  append([]EnvironmentVolumeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
 		VolumeMounts: append(
 			[]EnvironmentServiceVolumeMount(nil),
 			scope.ComposeProjection.Record.VolumeMounts...),
@@ -1482,4 +1488,18 @@ func publishTestDetach(
 		t.Fatalf("BeginAttachDetachWithTask().Classify() = %v, %v, %v", outcome, conflict, classifyErr)
 	}
 	return task
+}
+
+func attachTestEpochRevision(
+	t *testing.T,
+	ctx context.Context,
+	store hierarchyStore,
+	environmentID string,
+) int64 {
+	t.Helper()
+	result, err := store.Get(ctx, environmentMutationEpochKey(environmentID))
+	if err != nil || result == nil || result.Entry == nil {
+		t.Fatalf("read Attach Environment epoch = %#v, %v", result, err)
+	}
+	return result.Entry.ModRevision
 }

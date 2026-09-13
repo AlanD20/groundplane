@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 )
 
 func TestTaskPruningRetainsOwnedEnvironmentDeletionRetrySource(t *testing.T) {
@@ -426,27 +427,40 @@ func TestTaskPruningRemovesAttachInputOnlyAfterFinalPlanReference(t *testing.T) 
 }
 
 func taskPruningAttachRenderInput(now time.Time, planID string) AttachTaskRenderInput {
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 1713)
+	serviceID := ids.NewAt(ids.KindService, now, 1717)
+	revisionID := ids.NewAt(ids.KindTask, now, 1715)
+	runtime := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+		EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
+		DesiredServices: []EnvironmentServiceProjection{{
+			EnvironmentID: environmentID,
+			Desired:       core.Service{ID: serviceID, Name: "app", Image: "example/app:latest"},
+		}},
+	})
 	return AttachTaskRenderInput{
-		PlanID:              planID,
-		AttachID:            ids.NewAt(ids.KindAttach, now, 1710),
-		AttachName:          "database",
-		TenantID:            ids.NewAt(ids.KindTenant, now, 1711),
-		TenantSlug:          "tenant",
-		ProjectID:           ids.NewAt(ids.KindProject, now, 1712),
-		ProjectSlug:         "project",
-		EnvironmentID:       ids.NewAt(ids.KindEnvironment, now, 1713),
-		EnvironmentName:     "main",
-		AuthorizedVolumeDir: "/srv/groundplane/env",
-		BackingServiceID:    ids.NewAt(ids.KindService, now, 1714),
-		BackingProjectID:    ids.NewAt(ids.KindProject, now, 1718),
-		AdapterKey:          "manual",
-		DesiredRevisionID:   ids.NewAt(ids.KindTask, now, 1715),
-		ArtifactID:          ids.NewAt(ids.KindConfig, now, 1716),
-		RenderGeneration:    1,
+		PlanID:                   planID,
+		AttachID:                 ids.NewAt(ids.KindAttach, now, 1710),
+		AttachName:               "database",
+		TenantID:                 ids.NewAt(ids.KindTenant, now, 1711),
+		TenantSlug:               "tenant",
+		ProjectID:                ids.NewAt(ids.KindProject, now, 1712),
+		ProjectSlug:              "project",
+		EnvironmentID:            environmentID,
+		EnvironmentName:          "main",
+		AuthorizedVolumeDir:      "/srv/groundplane/env",
+		BackingServiceID:         ids.NewAt(ids.KindService, now, 1714),
+		BackingProjectID:         ids.NewAt(ids.KindProject, now, 1718),
+		AdapterKey:               "manual",
+		DesiredRevisionID:        revisionID,
+		ArtifactID:               ids.NewAt(ids.KindConfig, now, 1716),
+		RenderGeneration:         1,
+		EnvironmentEpochRevision: 1,
+		RuntimeProjection:        runtime,
+		RunningServiceIDs:        []string{serviceID},
 		Services: []AttachTaskServiceSnapshot{
-			{ID: ids.NewAt(ids.KindService, now, 1717), Name: "app"},
+			{ID: serviceID, Name: "app"},
 		},
-		ConsumerServiceIDs: []string{ids.NewAt(ids.KindService, now, 1717)},
+		ConsumerServiceIDs: []string{serviceID},
 	}
 }
 

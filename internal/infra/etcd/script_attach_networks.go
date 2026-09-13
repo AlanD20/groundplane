@@ -14,7 +14,7 @@ type ScriptAttachSources struct {
 	Attaches []Versioned[AttachRecord]
 }
 
-func loadScriptIntendedAttaches(
+func loadEnvironmentAttachesAtRevision(
 	ctx context.Context,
 	store hierarchyStore,
 	environmentID string,

@@ -899,7 +899,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Attach draft plan sealer: %w", err)
 	}
 	attachMutations, err := newAttachMutationService(
-		attachMutationRecords, attachFactValues, attachMutationPlans, attachMutationIdempotency,
+		attachMutationRecords, attachFactValues, attachMutationPlans, planResolver, attachMutationIdempotency,
 	)
 	if err != nil {
 		_ = store.Close()

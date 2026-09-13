@@ -681,20 +681,7 @@ func validateStep(
 	}
 	switch payload := step.Payload.(type) {
 	case *agentpb.ExecutionStep_ComposeApply:
-		if payload.ComposeApply == nil {
-			return errs.New(errs.KindValidationFailed, "Compose apply payload is empty")
-		}
-		selected := payload.ComposeApply.ServiceIds
-		if payload.ComposeApply.FullReconcile == (len(selected) != 0) {
-			return errs.New(errs.KindValidationFailed, "Compose apply selection is inconsistent")
-		}
-		if payload.ComposeApply.FullReconcile &&
-			(payload.ComposeApply.ForceRecreate || payload.ComposeApply.NoDependencies) ||
-			payload.ComposeApply.NoDependencies && !payload.ComposeApply.ForceRecreate &&
-				!dependencyFreeServiceSelection(plan, step, artifacts) {
-			return errs.New(errs.KindValidationFailed, "Compose apply replacement options are inconsistent")
-		}
-		return validateSelection(payload.ComposeApply.ArtifactId, selected, artifacts, false)
+		return validateComposeApply(plan, step, artifacts)
 	case *agentpb.ExecutionStep_ComposeStop:
 		if payload.ComposeStop == nil || payload.ComposeStop.GraceSeconds == 0 ||
 			payload.ComposeStop.GraceSeconds > 300 {

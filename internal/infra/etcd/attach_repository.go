@@ -36,47 +36,6 @@ type attachRemovalStore interface {
 	GetMany(context.Context, GetManyRequest) (*GetManyResult, error)
 }
 
-func attachDesiredHeadConditions(
-	consumerEnvironmentID string,
-	consumerRevision int64,
-	backingService Versioned[ServiceRecord],
-	services []Versioned[ServiceRecord],
-) ([]Condition, error) {
-	candidates := make([]Condition, 0, len(services)+2)
-	candidates = append(candidates,
-		Condition{
-			Key:         environmentBlueprintHeadKey(consumerEnvironmentID),
-			ModRevision: consumerRevision,
-		},
-		serviceDesiredCondition(backingService),
-	)
-	for _, service := range services {
-		candidates = append(candidates, serviceDesiredCondition(service))
-	}
-
-	conditions := make([]Condition, 0, len(candidates))
-	for _, candidate := range candidates {
-		duplicate := false
-		for _, condition := range conditions {
-			if condition.Key != candidate.Key {
-				continue
-			}
-			if condition.ModRevision != candidate.ModRevision {
-				return nil, errs.New(
-					errs.KindStateConflict,
-					"attach Service desired heads disagree on the Environment revision",
-				)
-			}
-			duplicate = true
-			break
-		}
-		if !duplicate {
-			conditions = append(conditions, candidate)
-		}
-	}
-	return conditions, nil
-}
-
 func NewAttachRepository(store Store) (*AttachRepository, error) {
 	if store == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Attach repository store is required")
@@ -117,6 +76,9 @@ func (repository *AttachRepository) CreateAttachWithTask(
 		scope.Project.Record.TenantID,
 	)
 	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateAttachRuntimeEpoch(mutationContext, record.EnvironmentID, renderInput); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	versionedTenant, versionedProject, versionedEnvironment, err := mutationContext.versionHierarchy(
@@ -402,6 +364,9 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		scope.Project.Record.TenantID,
 	)
 	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := validateAttachRuntimeEpoch(mutationContext, current.Record.EnvironmentID, renderInput); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	versionedTenant, versionedProject, versionedEnvironment, err := mutationContext.versionHierarchy(

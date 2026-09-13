@@ -18,7 +18,8 @@ func validRetainedOwnership(
 	if plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY {
 		return validBlueprintRetainedOwnership(plan, artifact, serviceID, labels)
 	}
-	if validOrdinaryRetainedOwnership(plan, artifact, serviceID, labels) ||
+	if validAttachMutationOwnership(plan, artifact, labels) ||
+		validOrdinaryRetainedOwnership(plan, artifact, serviceID, labels) ||
 		validVolumeResourceOnlyOwnership(plan, artifact, labels) || validEntryMutationOwnership(plan, labels) {
 		return true, ""
 	}

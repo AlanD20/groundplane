@@ -883,19 +883,8 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	entryProjection.Materializations = append(entryProjection.Materializations, entryRemovals...)
 	componentProjection.Project = entryProjection.Project
 	attachZones, attachServices, _ := environmentBlueprintTopologyProjection(zoneChanges, serviceChanges, nil)
-	attachProjection := etcd.EnvironmentComposeProjection{
-		EnvironmentID:   environmentID,
-		DesiredZones:    attachZones,
-		DesiredServices: attachServices,
-	}
-	attachJoins, err := resolveAttachNetworkJoins(environmentID, attachProjection, preparedAttaches.effective, "")
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	externalNetworks, err := controller.ProjectAttachNetworks(
-		componentProjection.Project,
-		attachProjection,
-		attachJoins,
+	externalNetworks, err := controller.ProjectEnvironmentAttachNetworks(
+		componentProjection.Project, environmentID, attachZones, attachServices, preparedAttaches.effective,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err

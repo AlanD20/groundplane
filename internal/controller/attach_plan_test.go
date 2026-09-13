@@ -12,7 +12,10 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters/manual"
 	"github.com/AlanD20/groundplane/internal/adapters/postgres16"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/internal/core"
+	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/internal/infra/docker/composehelper"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -69,6 +72,92 @@ func TestTaskPlanResolverBuildsManualNetworkOnlyAttach(t *testing.T) {
 	}
 }
 
+// Rationale: live Attach mutates the captured serving native workload, keeps
+// current Entry bindings, and never starts its stable proxy or inactive slot.
+func TestTaskPlanResolverAttachesCapturedNativeWorkload(t *testing.T) {
+	registerAttachPlanManual.Do(manual.Register)
+	fixture := newAttachPlanFixture(t, "manual", false)
+	makeNativeAttachRuntime(t, &fixture)
+	plan, err := fixture.resolver.ResolveExecutionPlan(t.Context(), fixture.task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifact := plan.Artifacts[0]
+	captured := &agentpb.ComposeArtifact{}
+	if err := proto.Unmarshal(fixture.state.renderInput.RuntimeProjection.ComposeArtifact, captured); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(artifact.CanonicalYaml, []byte("api--blue:")) ||
+		!bytes.Contains(artifact.CanonicalYaml, []byte("env_file:")) ||
+		!bytes.Contains(artifact.CanonicalYaml, []byte("gp_attach_")) || len(artifact.Services) != 2 ||
+		artifact.Services[0].Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY ||
+		artifact.Services[1].Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT {
+		t.Fatalf("native Attach artifact lost captured runtime: %s", artifact.CanonicalYaml)
+	}
+	for index := range captured.Services {
+		if !proto.Equal(captured.Services[index], artifact.Services[index]) {
+			t.Fatalf("native Attach rewrote historical Service ownership: %#v", artifact.Services[index])
+		}
+	}
+	request := &agentpb.ComposeHelperRequest{
+		Schema: composehelper.SchemaVersion, Plan: plan, StepId: plan.Steps[0].StepId,
+		TimeoutSeconds: 60, TaskId: fixture.task.ID,
+		AssignmentId: ids.New(ids.KindAssignment), OperationId: ids.New(ids.KindOperation),
+	}
+	selected, err := composehelper.StartupServices(request)
+	if err != nil || len(selected) != 1 || selected[0].ComposeName != "api--blue" ||
+		selected[0].Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT {
+		t.Fatalf("native Attach startup selection = %#v, %v", selected, err)
+	}
+	fake := runner.NewFake()
+	if _, err := composehelper.Execute(t.Context(), fake, request); err != nil {
+		t.Fatal(err)
+	}
+	calls := fake.RecordedCalls()
+	args := calls[len(calls)-1].Args
+	up := slices.Index(args, "up")
+	if up < 0 || !slices.Equal(args[up:], []string{"up", "--detach", "--no-deps", "api--blue"}) {
+		t.Fatalf("native Attach helper widened selection: %v", args)
+	}
+}
+
+func makeNativeAttachRuntime(t *testing.T, fixture *attachPlanFixture) {
+	t.Helper()
+	_, _, release := redeployRestorationInput(t, domain.StrategyBlueGreen)
+	runtime := release.Members[0].Render.Projection
+	runtime.ComposeArtifact = append([]byte(nil), release.Members[0].Render.PriorRuntime.CurrentArtifact...)
+	if runtime.EnvironmentID != fixture.reader.projection.EnvironmentID ||
+		runtime.DesiredServices[0].Desired.ID != fixture.record.ServiceID {
+		t.Fatal("native Attach fixture identities diverged")
+	}
+	entry := etcd.EntryRecord{EnvironmentID: runtime.EnvironmentID,
+		Entry: core.EnvEntry{ID: ids.New(ids.KindEnvEntry), Kind: core.EntryKindEnv,
+			Key: "MODE", Source: core.EntrySource{Kind: core.SourceLiteral}, Exposure: []string{"api"}},
+		CurrentValueGenerationID: ids.New(ids.KindConfig)}
+	runtime.Entries = []etcd.EntryRecord{entry}
+	artifact := &agentpb.ComposeArtifact{}
+	if err := proto.Unmarshal(runtime.ComposeArtifact, artifact); err != nil {
+		t.Fatal(err)
+	}
+	artifact, err := mutateEnvironmentEntryArtifact(artifact, runtime, EnvironmentEntryArtifactMutation{
+		ArtifactID: artifact.ArtifactId, Entries: runtime.Entries,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.reader.projection = runtime
+	fixture.state.renderInput.RuntimeProjection = runtime
+	fixture.state.renderInput.Services = attachPlanServiceSnapshots(runtime.DesiredServices)
+	fixture.state.renderInput.Networks = attachPlanOwnedNetworkSnapshots(runtime.DesiredZones)
+	fixture.state.renderInput.Volumes = append([]etcd.EnvironmentVolumeIdentity(nil), runtime.Volumes...)
+	fixture.state.renderInput.VolumeMounts = append([]etcd.EnvironmentServiceVolumeMount(nil), runtime.VolumeMounts...)
+	fixture.state.renderInput.RunningServiceIDs = []string{fixture.record.ServiceID}
+}
+
 func TestTaskPlanResolverReconcilesInactiveAttachWithoutActivatingProfile(t *testing.T) {
 	registerAttachPlanManual.Do(manual.Register)
 	fixture := newAttachPlanFixture(t, "manual", false)
@@ -84,6 +173,7 @@ func TestTaskPlanResolverReconcilesInactiveAttachWithoutActivatingProfile(t *tes
 	)
 	digest := sha256.Sum256(artifact.CanonicalYaml)
 	artifact.YamlSha256 = digest[:]
+	artifact.Services[0].ExpectedReplicas = 0
 	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
 	if err != nil {
 		t.Fatalf("marshal inactive normalized Compose artifact: %v", err)
@@ -95,15 +185,30 @@ func TestTaskPlanResolverReconcilesInactiveAttachWithoutActivatingProfile(t *tes
 		[]byte("    image: example/api:latest\n    profiles: [configured]"),
 		1,
 	)
+	fixture.state.renderInput.RuntimeProjection = fixture.reader.projection
+	fixture.state.renderInput.RunningServiceIDs = nil
 	plan, err := fixture.resolver.ResolveExecutionPlan(context.Background(), fixture.task)
 	if err != nil {
 		t.Fatalf("ResolveExecutionPlan() error = %v", err)
 	}
-	apply := plan.Steps[0].GetComposeApply()
-	if apply == nil || !apply.FullReconcile || len(apply.ServiceIds) != 0 || len(plan.Artifacts[0].Services) != 1 ||
+	if len(plan.Steps) != 1 || plan.Steps[0].GetComposeApply() == nil ||
+		len(plan.Steps[0].GetComposeApply().ServiceIds) != 0 || len(plan.Artifacts[0].Services) != 1 ||
 		plan.Artifacts[0].Services[0].ExpectedReplicas != 0 ||
 		!bytes.Contains(plan.Artifacts[0].CanonicalYaml, []byte("external: true")) {
 		t.Fatalf("inactive Attach plan = %#v", plan)
+	}
+	request := &agentpb.ComposeHelperRequest{
+		Schema: composehelper.SchemaVersion, Plan: plan, StepId: plan.Steps[0].StepId,
+		TimeoutSeconds: 60, TaskId: fixture.task.ID,
+		AssignmentId: ids.New(ids.KindAssignment), OperationId: ids.New(ids.KindOperation),
+	}
+	fake := runner.NewFake()
+	if _, err := composehelper.Execute(t.Context(), fake, request); err != nil {
+		t.Fatal(err)
+	}
+	calls := fake.RecordedCalls()
+	if len(calls) != 1 || slices.Contains(calls[0].Args, "up") {
+		t.Fatalf("configured-only Attach started runtime: %v", calls)
 	}
 }
 
@@ -112,6 +217,7 @@ func TestTaskPlanResolverReconcilesInactiveAttachWithoutActivatingProfile(t *tes
 func TestTaskPlanResolverOrdersDetachNetworkRemoval(t *testing.T) {
 	registerAttachPlanPostgres.Do(postgres16.Register)
 	fixture := newAttachPlanFixture(t, "postgres:16", true)
+	makeNativeAttachRuntime(t, &fixture)
 	fixture.record.Status = core.AttachDetaching
 	fixture.record.Operation = etcd.AttachOperationDetach
 	fixture.state.attaches[fixture.record.ID] = etcd.Versioned[etcd.AttachRecord]{Record: fixture.record}
@@ -127,6 +233,15 @@ func TestTaskPlanResolverOrdersDetachNetworkRemoval(t *testing.T) {
 		plan.Steps[2].GetAdapterProcedure().Phase != agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_DETACH ||
 		bytes.Contains(plan.Artifacts[0].CanonicalYaml, []byte("gp_net_"+fixture.networkID)) {
 		t.Fatalf("ResolveExecutionPlan(detach) = %#v", plan)
+	}
+	request := &agentpb.ComposeHelperRequest{
+		Schema: composehelper.SchemaVersion, Plan: plan, StepId: plan.Steps[1].StepId,
+		TimeoutSeconds: 60, TaskId: fixture.task.ID,
+		AssignmentId: ids.New(ids.KindAssignment), OperationId: ids.New(ids.KindOperation),
+	}
+	selected, err := composehelper.StartupServices(request)
+	if err != nil || len(selected) != 1 || selected[0].ComposeName != "api--blue" {
+		t.Fatalf("native Detach startup selection = %#v, %v", selected, err)
 	}
 }
 
@@ -196,22 +311,25 @@ func newAttachPlanFixture(t *testing.T, adapterKey string, withGrant bool) attac
 		},
 	}
 	input := etcd.AttachTaskRenderInput{
-		PlanID:              ids.NewAt(ids.KindPlan, now, 10),
-		AttachID:            attachID,
-		AttachName:          record.Name,
-		TenantID:            reader.tenant.ID,
-		TenantSlug:          reader.tenant.Slug,
-		ProjectID:           reader.project.ID,
-		ProjectSlug:         reader.project.Slug,
-		EnvironmentID:       reader.environment.ID,
-		EnvironmentName:     reader.environment.Name,
-		AuthorizedVolumeDir: reader.environment.VolumeDir,
-		BackingServiceID:    backingServiceID,
-		BackingProjectID:    record.BackingProjectID,
-		AdapterKey:          adapterKey,
-		DesiredRevisionID:   reader.revision.RevisionID,
-		ArtifactID:          ids.NewAt(ids.KindConfig, now, 21),
-		RenderGeneration:    reader.projection.RenderGeneration,
+		PlanID:                   ids.NewAt(ids.KindPlan, now, 10),
+		AttachID:                 attachID,
+		AttachName:               record.Name,
+		TenantID:                 reader.tenant.ID,
+		TenantSlug:               reader.tenant.Slug,
+		ProjectID:                reader.project.ID,
+		ProjectSlug:              reader.project.Slug,
+		EnvironmentID:            reader.environment.ID,
+		EnvironmentName:          reader.environment.Name,
+		AuthorizedVolumeDir:      reader.environment.VolumeDir,
+		BackingServiceID:         backingServiceID,
+		BackingProjectID:         record.BackingProjectID,
+		AdapterKey:               adapterKey,
+		DesiredRevisionID:        reader.revision.RevisionID,
+		ArtifactID:               ids.NewAt(ids.KindConfig, now, 21),
+		RenderGeneration:         reader.projection.RenderGeneration,
+		EnvironmentEpochRevision: 1,
+		RuntimeProjection:        reader.projection,
+		RunningServiceIDs:        []string{consumerServiceID},
 		Services: []etcd.AttachTaskServiceSnapshot{{
 			ID: consumerServiceID, Name: consumerServiceName,
 		}},

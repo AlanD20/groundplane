@@ -22,6 +22,9 @@ func dependencyFreeServiceSelection(
 	if plan.GetEntryMutationProcedure() != nil {
 		return validateEntryMutationPlan(plan) == nil
 	}
+	if _, selected, err := AttachMutationServices(plan, step.GetStepId()); selected {
+		return err == nil
+	}
 	_, selected, err := VolumeRemovalServices(plan, step.StepId)
 	return selected && err == nil
 }

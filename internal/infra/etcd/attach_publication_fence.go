@@ -1,0 +1,51 @@
+package etcd
+
+import "github.com/AlanD20/groundplane/pkg/errs"
+
+func attachDesiredHeadConditions(
+	consumerEnvironmentID string,
+	consumerRevision int64,
+	backingService Versioned[ServiceRecord],
+	services []Versioned[ServiceRecord],
+) ([]Condition, error) {
+	candidates := []Condition{{
+		Key: environmentBlueprintHeadKey(consumerEnvironmentID), ModRevision: consumerRevision,
+	}, serviceDesiredCondition(backingService)}
+	for _, service := range services {
+		candidates = append(candidates, serviceDesiredCondition(service))
+	}
+
+	conditions := make([]Condition, 0, len(candidates))
+	for _, candidate := range candidates {
+		duplicate := false
+		for _, condition := range conditions {
+			if condition.Key != candidate.Key {
+				continue
+			}
+			if condition.ModRevision != candidate.ModRevision {
+				return nil, errs.New(
+					errs.KindStateConflict,
+					"attach Service desired heads disagree on the Environment revision",
+				)
+			}
+			duplicate = true
+			break
+		}
+		if !duplicate {
+			conditions = append(conditions, candidate)
+		}
+	}
+	return conditions, nil
+}
+
+func validateAttachRuntimeEpoch(
+	mutationContext *ordinaryEnvironmentMutationContext,
+	environmentID string,
+	input AttachTaskRenderInput,
+) error {
+	epoch, ok := mutationContext.revisionForKey(environmentMutationEpochKey(environmentID))
+	if !ok || epoch != input.EnvironmentEpochRevision {
+		return errs.New(errs.KindStateConflict, "Attach captured runtime changed before publication")
+	}
+	return nil
+}

@@ -1,17 +1,77 @@
 package app
 
 import (
+	"context"
+	"math"
 	"slices"
-	"sort"
+	"time"
 
+	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+type attachRuntimeCapture interface {
+	CaptureEntryMutationRuntime(
+		context.Context,
+		etcd.Versioned[etcd.EnvironmentComposeProjection],
+	) (controllerpkg.EntryMutationRuntime, error)
+}
+
+func newAttachMutationTask(
+	project etcd.ProjectRecord,
+	environment etcd.EnvironmentRecord,
+	taskID string,
+	attachID string,
+	environmentID string,
+	taskType etcd.TaskType,
+	renderGeneration uint64,
+	stepCount int,
+	idempotencyKey string,
+	createdAt time.Time,
+) (etcd.TaskRecord, string, error) {
+	if ids.Validate(ids.KindTask, taskID) != nil || ids.Validate(ids.KindAttach, attachID) != nil ||
+		ids.Validate(ids.KindEnvironment, environmentID) != nil || renderGeneration == 0 ||
+		renderGeneration > math.MaxInt32 || stepCount <= 0 {
+		return etcd.TaskRecord{}, "", errs.New(errs.KindValidationFailed, "Attach Task input is invalid")
+	}
+	owner, err := etcd.EnvironmentTaskOwner(project, environment)
+	if err != nil || environment.ID != environmentID {
+		return etcd.TaskRecord{}, "", errs.New(errs.KindValidationFailed, "attach task owner is invalid")
+	}
+	steps := make([]etcd.TaskStepRecord, stepCount)
+	for index := range steps {
+		steps[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}
+	}
+	return etcd.TaskRecord{
+		ID: taskID, OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
+		Owner: owner, Actor: etcd.TaskActorOperator,
+		Executor: etcd.TaskExecutorAgent, PlanID: ids.New(ids.KindPlan),
+		RenderGeneration: int32(renderGeneration), Type: taskType, Target: attachID,
+		Params: map[string]string{etcd.TaskMutationEnvironmentParam: environmentID}, Steps: steps,
+		TimeoutSeconds: attachMutationTimeout, Status: etcd.TaskStatusPending,
+		NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
+	}, ids.New(ids.KindConfig), nil
+}
+
+func attachTaskStepCount(
+	adapter adapters.Adapter,
+	authentication core.BackingAuthentication,
+	grantCount int,
+	ownsCredential bool,
+) int {
+	if adapter.Manual() || !ownsCredential || authentication == core.BackingAuthenticationNone {
+		return 1
+	}
+	return grantCount + 2
+}
+
 func buildAttachTaskRenderInput(
 	scope etcd.AttachCreateScope,
+	runtime controllerpkg.EntryMutationRuntime,
 	record etcd.AttachRecord,
 	attaches []etcd.Versioned[etcd.AttachRecord],
 	task etcd.TaskRecord,
@@ -24,6 +84,15 @@ func buildAttachTaskRenderInput(
 		return etcd.AttachTaskRenderInput{}, errs.New(
 			errs.KindValidationFailed,
 			"Attach render scope records must be versioned",
+		)
+	}
+	if runtime.EpochRevision <= 0 ||
+		runtime.Projection.EnvironmentID != scope.ComposeProjection.Record.EnvironmentID ||
+		runtime.Projection.RevisionID != scope.ComposeProjection.Record.RevisionID ||
+		runtime.Projection.RenderGeneration != scope.ComposeProjection.Record.RenderGeneration {
+		return etcd.AttachTaskRenderInput{}, errs.New(
+			errs.KindStateConflict,
+			"Attach captured runtime does not match the desired projection",
 		)
 	}
 	if ids.Validate(ids.KindPlan, task.PlanID) != nil || ids.Validate(ids.KindConfig, artifactID) != nil ||
@@ -87,7 +156,7 @@ func buildAttachTaskRenderInput(
 		)
 	}
 
-	joins, err := resolveAttachNetworkJoins(
+	joins, err := controllerpkg.ResolveAttachNetworkJoins(
 		record.EnvironmentID,
 		scope.ComposeProjection.Record,
 		unionRecords,
@@ -102,99 +171,26 @@ func buildAttachTaskRenderInput(
 		TenantID:   scope.Tenant.Record.ID, TenantSlug: scope.Tenant.Record.Slug,
 		ProjectID: scope.Project.Record.ID, ProjectSlug: scope.Project.Record.Slug,
 		EnvironmentID: record.EnvironmentID, EnvironmentName: scope.Environment.Record.Name,
-		AuthorizedVolumeDir:    scope.Environment.Record.VolumeDir,
-		BackingServiceID:       record.BackingServiceID,
-		BackingProjectID:       record.BackingProjectID,
-		AdapterKey:             scope.BackingService.Record.Desired.Adapter,
-		Authentication:         scope.BackingService.Record.Desired.Authentication,
-		DesiredRevisionID:      scope.DesiredHead.Record.RevisionID,
-		ArtifactID:             artifactID,
-		RenderGeneration:       scope.ComposeProjection.Record.RenderGeneration,
-		Services:               attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
-		Networks:               attachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones),
-		Volumes:                slices.Clone(scope.ComposeProjection.Record.Volumes),
-		VolumeMounts:           slices.Clone(scope.ComposeProjection.Record.VolumeMounts),
-		NetworkJoins:           joins,
-		ConsumerServiceIDs:     []string{record.ServiceID},
-		GrantAttachIDs:         append([]string(nil), record.GrantAttachIDs...),
-		ServiceDependencyPlans: scope.ComposeProjection.Record.ServiceDependencyPlans.Clone(),
+		AuthorizedVolumeDir:      scope.Environment.Record.VolumeDir,
+		BackingServiceID:         record.BackingServiceID,
+		BackingProjectID:         record.BackingProjectID,
+		AdapterKey:               scope.BackingService.Record.Desired.Adapter,
+		Authentication:           scope.BackingService.Record.Desired.Authentication,
+		DesiredRevisionID:        scope.DesiredHead.Record.RevisionID,
+		ArtifactID:               artifactID,
+		RenderGeneration:         scope.ComposeProjection.Record.RenderGeneration,
+		EnvironmentEpochRevision: runtime.EpochRevision,
+		RuntimeProjection:        runtime.Projection,
+		RunningServiceIDs:        slices.Clone(runtime.RunningServiceIDs),
+		Services:                 attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
+		Networks:                 attachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones),
+		Volumes:                  slices.Clone(scope.ComposeProjection.Record.Volumes),
+		VolumeMounts:             slices.Clone(scope.ComposeProjection.Record.VolumeMounts),
+		NetworkJoins:             joins,
+		ConsumerServiceIDs:       []string{record.ServiceID},
+		GrantAttachIDs:           append([]string(nil), record.GrantAttachIDs...),
+		ServiceDependencyPlans:   scope.ComposeProjection.Record.ServiceDependencyPlans.Clone(),
 	}, nil
-}
-
-func resolveAttachNetworkJoins(
-	environmentID string,
-	projection etcd.EnvironmentComposeProjection,
-	attaches []etcd.Versioned[etcd.AttachRecord],
-	excludedAttachID string,
-) ([]etcd.AttachTaskNetworkJoin, error) {
-	if ids.Validate(ids.KindEnvironment, environmentID) != nil || projection.EnvironmentID != environmentID {
-		return nil, errs.New(errs.KindValidationFailed, "Attach network union Environment is invalid")
-	}
-	allowedServices := make(map[string]struct{}, len(projection.DesiredServices))
-	for _, service := range projection.DesiredServices {
-		allowedServices[service.Desired.ID] = struct{}{}
-	}
-	ownedNetworks := make(map[string]struct{}, len(projection.DesiredZones))
-	for _, network := range projection.DesiredZones {
-		ownedNetworks[network.Desired.ID] = struct{}{}
-	}
-
-	seenAttaches := make(map[string]struct{}, len(attaches))
-	union := make(map[string]map[string]struct{})
-	for _, current := range attaches {
-		record := current.Record
-		if _, duplicate := seenAttaches[record.ID]; duplicate {
-			return nil, errs.New(errs.KindInternal, "Attach network union contains a duplicate Attach")
-		}
-		seenAttaches[record.ID] = struct{}{}
-		if record.EnvironmentID != environmentID {
-			return nil, errs.New(errs.KindScopeUnauthorized, "Attach network union crosses Environments")
-		}
-		if record.ID == excludedAttachID || record.Operation == etcd.AttachOperationDetach ||
-			record.Status == core.AttachDetached {
-			continue
-		}
-		if record.Operation != etcd.AttachOperationProvision {
-			return nil, errs.New(errs.KindInternal, "Attach network union contains an invalid operation")
-		}
-		if ids.Validate(ids.KindNetwork, record.BackingNetworkID) != nil {
-			return nil, errs.New(errs.KindInternal, "Attach network union contains an invalid network")
-		}
-		if _, owned := ownedNetworks[record.BackingNetworkID]; owned {
-			return nil, errs.New(
-				errs.KindStateConflict,
-				"Attach backing network is owned by the consumer Environment",
-			)
-		}
-		services := union[record.BackingNetworkID]
-		if services == nil {
-			services = make(map[string]struct{})
-			union[record.BackingNetworkID] = services
-		}
-		if _, exists := allowedServices[record.ServiceID]; !exists {
-			return nil, errs.New(
-				errs.KindStateConflict,
-				"Attach network consumer is absent from the current Compose projection",
-			)
-		}
-		services[record.ServiceID] = struct{}{}
-	}
-
-	networkIDs := make([]string, 0, len(union))
-	for networkID := range union {
-		networkIDs = append(networkIDs, networkID)
-	}
-	sort.Strings(networkIDs)
-	joins := make([]etcd.AttachTaskNetworkJoin, len(networkIDs))
-	for index, networkID := range networkIDs {
-		serviceIDs := make([]string, 0, len(union[networkID]))
-		for serviceID := range union[networkID] {
-			serviceIDs = append(serviceIDs, serviceID)
-		}
-		sort.Strings(serviceIDs)
-		joins[index] = etcd.AttachTaskNetworkJoin{NetworkID: networkID, ServiceIDs: serviceIDs}
-	}
-	return joins, nil
 }
 
 func attachTaskServiceSnapshots(

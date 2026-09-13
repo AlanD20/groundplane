@@ -5,7 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"slices"
+	"strings"
 	"testing"
+
+	composetypes "github.com/compose-spec/compose-go/v2/types"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -15,6 +18,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
+	"gopkg.in/yaml.v3"
 )
 
 // Rationale: a successful native rollback changes the serving slot without
@@ -22,12 +26,27 @@ import (
 // merely complete a Task against the older desired runtime.
 func TestEntryMutationCapturesServingRuntimeAfterRollback(t *testing.T) {
 	for _, race := range []string{"none", "before publication", "at commit"} {
-		t.Run(race, func(t *testing.T) { testEntryMutationServingRuntime(t, race) })
+		t.Run(race, func(t *testing.T) { testEntryMutationServingRuntime(t, race, false) })
 	}
 }
 
-func testEntryMutationServingRuntime(t *testing.T, race string) {
-	testBlueprintExecutedArtifact(t, true, false, func(fixture *etcd.ExecutedArtifactFixture,
+// Rationale: Entry edits must preserve a completed Attach that is newer than
+// the serving Release. Capture and publication use the same Environment epoch.
+func TestEntryMutationPreservesNewerAttachNetwork(t *testing.T) {
+	for _, race := range []string{"none", "before publication", "at commit"} {
+		t.Run(race, func(t *testing.T) { testEntryMutationServingRuntime(t, race, true) })
+	}
+}
+
+func testEntryMutationServingRuntime(t *testing.T, race string, withAttach bool) {
+	configure := func(project *composetypes.Project) {
+		if withAttach {
+			service := project.Services["api"]
+			service.NetworkMode = ""
+			project.Services["api"] = service
+		}
+	}
+	testBlueprintExecutedArtifactConfigured(t, true, false, configure, func(fixture *etcd.ExecutedArtifactFixture,
 		resolver *controller.TaskPlanResolver, original etcd.ReleaseRenderInput, originalIntent domain.Intent,
 		_ *agentpb.ComposeArtifact) {
 		ctx := t.Context()
@@ -40,6 +59,10 @@ func testEntryMutationServingRuntime(t *testing.T, race string) {
 		currentRelease = fixture.SeedNativeBlueGreenPredecessor(t, currentRelease, intent)
 		if err := resolver.EnableReleasePlans(fixture.Ledger); err != nil {
 			t.Fatal(err)
+		}
+		var networkID string
+		if withAttach {
+			networkID = fixture.SeedEntryRuntimeAttach(t, original.ServiceID)
 		}
 		current, found, err := fixture.Hierarchy.GetEnvironmentComposeProjection(ctx, original.EnvironmentID)
 		if err != nil || !found {
@@ -86,6 +109,19 @@ func testEntryMutationServingRuntime(t *testing.T, race string) {
 		}
 		if !green {
 			t.Fatal("Entry candidate omits serving api--green after rollback")
+		}
+		if withAttach {
+			var document struct {
+				Services map[string]struct {
+					Networks map[string]any `yaml:"networks"`
+				} `yaml:"services"`
+			}
+			if err := yaml.Unmarshal(artifact.CanonicalYaml, &document); err != nil {
+				t.Fatal(err)
+			}
+			if _, found := document.Services["api--green"].Networks["gp_attach_"+strings.ToLower(networkID)]; !found {
+				t.Fatal("Entry edit discarded the newer native Attach network")
+			}
 		}
 		task := proveEntryServingPlanReconstruction(t, fixture, captured, current.Record, candidate, materials)
 		proveEntryServingPublication(t, fixture, current, candidate, task, race)

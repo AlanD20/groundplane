@@ -75,6 +75,11 @@ historical Entry decorations before attaching current generations so a deleted
 file cannot return from history. The mixed-runtime merger retains persistent
 resource authority.
 
+The same fixed-revision capture reads the current complete Attach union and
+overlays it before Entry decoration. Release history may predate an Attach or
+Detach; an Entry edit must not restore those old network memberships. The existing
+Environment epoch fence also rejects an intervening Attach change.
+
 Before merging, remove a predecessor stable proxy's generated config only after
 proving its canonical name, sealed content and digest, sole proxy binding and
 absence of another Service reference. The captured proxy supplies current config;

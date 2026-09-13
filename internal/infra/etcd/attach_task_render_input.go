@@ -32,30 +32,33 @@ type AttachTaskOwnedNetworkSnapshot struct {
 // needed to reproduce an Attach plan after restart. Retries retain PlanID and
 // therefore consume the exact same input without reading mutable topology.
 type AttachTaskRenderInput struct {
-	PlanID              string                           `json:"plan_id"`
-	AttachID            string                           `json:"attach_id"`
-	AttachName          string                           `json:"attach_name"`
-	TenantID            string                           `json:"tenant_id"`
-	TenantSlug          string                           `json:"tenant_slug"`
-	ProjectID           string                           `json:"project_id"`
-	ProjectSlug         string                           `json:"project_slug"`
-	EnvironmentID       string                           `json:"environment_id"`
-	EnvironmentName     string                           `json:"environment_name"`
-	AuthorizedVolumeDir string                           `json:"authorized_volume_dir"`
-	BackingServiceID    string                           `json:"backing_service_id"`
-	BackingProjectID    string                           `json:"backing_project_id"`
-	AdapterKey          string                           `json:"adapter_key"`
-	Authentication      core.BackingAuthentication       `json:"authentication,omitempty"`
-	DesiredRevisionID   string                           `json:"desired_revision_id"`
-	ArtifactID          string                           `json:"artifact_id"`
-	RenderGeneration    uint64                           `json:"render_generation"`
-	Services            []AttachTaskServiceSnapshot      `json:"services"`
-	Networks            []AttachTaskOwnedNetworkSnapshot `json:"networks,omitempty"`
-	Volumes             []EnvironmentVolumeIdentity      `json:"volumes,omitempty"`
-	VolumeMounts        []EnvironmentServiceVolumeMount  `json:"volume_mounts,omitempty"`
-	NetworkJoins        []AttachTaskNetworkJoin          `json:"network_joins"`
-	ConsumerServiceIDs  []string                         `json:"consumer_service_ids"`
-	GrantAttachIDs      []string                         `json:"grant_attach_ids,omitempty"`
+	PlanID                   string                           `json:"plan_id"`
+	AttachID                 string                           `json:"attach_id"`
+	AttachName               string                           `json:"attach_name"`
+	TenantID                 string                           `json:"tenant_id"`
+	TenantSlug               string                           `json:"tenant_slug"`
+	ProjectID                string                           `json:"project_id"`
+	ProjectSlug              string                           `json:"project_slug"`
+	EnvironmentID            string                           `json:"environment_id"`
+	EnvironmentName          string                           `json:"environment_name"`
+	AuthorizedVolumeDir      string                           `json:"authorized_volume_dir"`
+	BackingServiceID         string                           `json:"backing_service_id"`
+	BackingProjectID         string                           `json:"backing_project_id"`
+	AdapterKey               string                           `json:"adapter_key"`
+	Authentication           core.BackingAuthentication       `json:"authentication,omitempty"`
+	DesiredRevisionID        string                           `json:"desired_revision_id"`
+	ArtifactID               string                           `json:"artifact_id"`
+	RenderGeneration         uint64                           `json:"render_generation"`
+	EnvironmentEpochRevision int64                            `json:"environment_epoch_revision"`
+	RuntimeProjection        EnvironmentComposeProjection     `json:"runtime_projection"`
+	RunningServiceIDs        []string                         `json:"running_service_ids,omitempty"`
+	Services                 []AttachTaskServiceSnapshot      `json:"services"`
+	Networks                 []AttachTaskOwnedNetworkSnapshot `json:"networks,omitempty"`
+	Volumes                  []EnvironmentVolumeIdentity      `json:"volumes,omitempty"`
+	VolumeMounts             []EnvironmentServiceVolumeMount  `json:"volume_mounts,omitempty"`
+	NetworkJoins             []AttachTaskNetworkJoin          `json:"network_joins"`
+	ConsumerServiceIDs       []string                         `json:"consumer_service_ids"`
+	GrantAttachIDs           []string                         `json:"grant_attach_ids,omitempty"`
 	core.ServiceDependencyPlans
 }
 
@@ -120,7 +123,8 @@ func validateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 		validateStableID(ids.KindService, input.BackingServiceID) != nil ||
 		validateStableID(ids.KindProject, input.BackingProjectID) != nil ||
 		validateStableID(ids.KindTask, input.DesiredRevisionID) != nil ||
-		validateStableID(ids.KindConfig, input.ArtifactID) != nil || input.RenderGeneration == 0 {
+		validateStableID(ids.KindConfig, input.ArtifactID) != nil || input.RenderGeneration == 0 ||
+		input.EnvironmentEpochRevision <= 0 {
 		return errs.New(errs.KindValidationFailed, "Attach Task render input identity is invalid")
 	}
 	switch input.Authentication {
@@ -138,6 +142,12 @@ func validateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 	}
 	if err := validateAttachTaskServiceSnapshots(input.Services); err != nil {
 		return err
+	}
+	if validateEnvironmentComposeProjection(input.RuntimeProjection) != nil ||
+		input.RuntimeProjection.EnvironmentID != input.EnvironmentID ||
+		input.RuntimeProjection.RevisionID != input.DesiredRevisionID ||
+		input.RuntimeProjection.RenderGeneration != input.RenderGeneration {
+		return errs.New(errs.KindValidationFailed, "Attach Task runtime projection is invalid")
 	}
 	if len(input.Services) == 0 {
 		return errs.New(errs.KindValidationFailed, "Attach Task render input has no consumer Services")
@@ -161,6 +171,14 @@ func validateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 	for _, serviceID := range input.ConsumerServiceIDs {
 		if _, exists := serviceIDs[serviceID]; !exists {
 			return errs.New(errs.KindValidationFailed, "attach task removal evidence references an unknown service")
+		}
+	}
+	if validateSortedStableIDs(input.RunningServiceIDs, ids.KindService, "Attach running service_ids") != nil {
+		return errs.New(errs.KindValidationFailed, "Attach running service_ids are invalid or unsorted")
+	}
+	for _, serviceID := range input.RunningServiceIDs {
+		if _, exists := serviceIDs[serviceID]; !exists {
+			return errs.New(errs.KindValidationFailed, "Attach running service references an unknown Service")
 		}
 	}
 	if err := validateAttachTaskOwnedNetworkSnapshots(input.Networks); err != nil {
@@ -230,6 +248,9 @@ func validateAttachTaskRenderInputScope(
 		input.DesiredRevisionID != scope.DesiredHead.Record.RevisionID ||
 		input.RenderGeneration != scope.ComposeProjection.Record.RenderGeneration ||
 		input.RenderGeneration != uint64(task.RenderGeneration) ||
+		input.RuntimeProjection.EnvironmentID != scope.ComposeProjection.Record.EnvironmentID ||
+		input.RuntimeProjection.RevisionID != scope.ComposeProjection.Record.RevisionID ||
+		input.RuntimeProjection.RenderGeneration != scope.ComposeProjection.Record.RenderGeneration ||
 		!slices.Equal(input.Services, attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices)) ||
 		!slices.Equal(input.Networks, attachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones)) ||
 		!slices.Equal(input.Volumes, scope.ComposeProjection.Record.Volumes) ||

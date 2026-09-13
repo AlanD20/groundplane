@@ -9,6 +9,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -230,7 +231,7 @@ func TestEnvironmentBlueprintAttachPreparationUsesRetainedCredentialOwner(t *tes
 		prepared.effective[0].Revision != 31 || prepared.effective[0].Record.ID != ownerID {
 		t.Fatalf("retained credential owner preparation = %#v / %#v", prepared.publication.Intent, prepared.effective)
 	}
-	joins, err := resolveAttachNetworkJoins(environmentID, etcd.EnvironmentComposeProjection{
+	joins, err := controller.ResolveAttachNetworkJoins(environmentID, etcd.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, DesiredServices: []etcd.EnvironmentServiceProjection{
 			{Desired: core.Service{ID: consumerID, Name: "worker"}},
 		},

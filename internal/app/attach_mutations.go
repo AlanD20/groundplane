@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"math"
 	"net/http"
 	"slices"
 	"time"
@@ -300,6 +299,7 @@ type attachMutationService struct {
 	repository  attachMutationRepository
 	facts       attachMutationFacts
 	plans       attachDraftPlanSealer
+	runtime     attachRuntimeCapture
 	idempotency attachMutationIdempotency
 	random      io.Reader
 	now         func() time.Time
@@ -309,13 +309,14 @@ func newAttachMutationService(
 	repository attachMutationRepository,
 	facts attachMutationFacts,
 	plans attachDraftPlanSealer,
+	runtime attachRuntimeCapture,
 	idempotency attachMutationIdempotency,
 ) (*attachMutationService, error) {
-	if repository == nil || facts == nil || plans == nil || idempotency == nil {
+	if repository == nil || facts == nil || plans == nil || runtime == nil || idempotency == nil {
 		return nil, errs.New(errs.KindInternal, "Attach mutation service is not configured")
 	}
 	return &attachMutationService{
-		repository: repository, facts: facts, plans: plans, idempotency: idempotency,
+		repository: repository, facts: facts, plans: plans, runtime: runtime, idempotency: idempotency,
 		random: rand.Reader, now: time.Now,
 	}, nil
 }
@@ -384,6 +385,10 @@ func (service *attachMutationService) createAttachOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	runtime, err := service.runtime.CaptureEntryMutationRuntime(ctx, scope.ComposeProjection)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	name := request.Name
 	if name == "" {
 		existingNames := make(map[string]struct{}, len(currentAttaches))
@@ -443,7 +448,7 @@ func (service *attachMutationService) createAttachOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	renderInput, err := buildAttachTaskRenderInput(scope, record, currentAttaches, task, artifactID)
+	renderInput, err := buildAttachTaskRenderInput(scope, runtime, record, currentAttaches, task, artifactID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -569,6 +574,10 @@ func (service *attachMutationService) detachAttachOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	runtime, err := service.runtime.CaptureEntryMutationRuntime(ctx, scope.ComposeProjection)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	now := service.now().UTC()
 	taskID := ids.New(ids.KindTask)
 	detaching, err := etcd.BeginAttachDetaching(current.Record, taskID)
@@ -592,7 +601,7 @@ func (service *attachMutationService) detachAttachOnce(
 		task.Owner = initiation.Owner()
 		task.Actor = initiation.Actor()
 	}
-	renderInput, err := buildAttachTaskRenderInput(scope, detaching, currentAttaches, task, artifactID)
+	renderInput, err := buildAttachTaskRenderInput(scope, runtime, detaching, currentAttaches, task, artifactID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -957,42 +966,6 @@ func normalizeAttachRequest(request apiTypes.AttachRequest) (apiTypes.AttachRequ
 	return request, nil
 }
 
-func newAttachMutationTask(
-	project etcd.ProjectRecord,
-	environment etcd.EnvironmentRecord,
-	taskID string,
-	attachID string,
-	environmentID string,
-	taskType etcd.TaskType,
-	renderGeneration uint64,
-	stepCount int,
-	idempotencyKey string,
-	createdAt time.Time,
-) (etcd.TaskRecord, string, error) {
-	if ids.Validate(ids.KindTask, taskID) != nil || ids.Validate(ids.KindAttach, attachID) != nil ||
-		ids.Validate(ids.KindEnvironment, environmentID) != nil || renderGeneration == 0 ||
-		renderGeneration > math.MaxInt32 || stepCount <= 0 {
-		return etcd.TaskRecord{}, "", errs.New(errs.KindValidationFailed, "Attach Task input is invalid")
-	}
-	owner, err := etcd.EnvironmentTaskOwner(project, environment)
-	if err != nil || environment.ID != environmentID {
-		return etcd.TaskRecord{}, "", errs.New(errs.KindValidationFailed, "attach task owner is invalid")
-	}
-	steps := make([]etcd.TaskStepRecord, stepCount)
-	for index := range steps {
-		steps[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}
-	}
-	return etcd.TaskRecord{
-		ID: taskID, OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
-		Owner: owner, Actor: etcd.TaskActorOperator,
-		Executor: etcd.TaskExecutorAgent, PlanID: ids.New(ids.KindPlan),
-		RenderGeneration: int32(renderGeneration), Type: taskType, Target: attachID,
-		Params: map[string]string{etcd.TaskMutationEnvironmentParam: environmentID}, Steps: steps,
-		TimeoutSeconds: attachMutationTimeout, Status: etcd.TaskStatusPending,
-		NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
-	}, ids.New(ids.KindConfig), nil
-}
-
 func newAttachMutationResponse(
 	locator etcd.IdempotencyLocator,
 	intent etcd.ProtectedIntentRecord,
@@ -1020,18 +993,6 @@ func attachGrantIDs(grants []etcd.Versioned[etcd.AttachRecord]) []string {
 		values[index] = grant.Record.ID
 	}
 	return values
-}
-
-func attachTaskStepCount(
-	adapter adapters.Adapter,
-	authentication core.BackingAuthentication,
-	grantCount int,
-	ownsCredential bool,
-) int {
-	if adapter.Manual() || !ownsCredential || authentication == core.BackingAuthenticationNone {
-		return 1
-	}
-	return grantCount + 2
 }
 
 func cloneAttachFactMetadata(values []etcd.AttachFactSetMetadata) []etcd.AttachFactSetMetadata {

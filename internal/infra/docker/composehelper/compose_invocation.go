@@ -40,12 +40,19 @@ func commandsFor(
 	var commands []runner.RunCmdOpts
 	if apply := step.GetComposeApply(); apply != nil {
 		names, err := applyServiceNames(request.Plan, step, artifact)
-		if err != nil || !apply.FullReconcile && len(names) == 0 {
+		_, attachSelection, attachErr := executionplan.AttachMutationServices(request.Plan, step.StepId)
+		if err != nil || attachErr != nil || !apply.FullReconcile && len(names) == 0 && !attachSelection {
+			if err == nil {
+				err = attachErr
+			}
 			return nil, err
 		}
 		validation := base
 		validation.Args = append(append([]string(nil), prefix...), "config", "--quiet", "--no-interpolate")
 		commands = append(commands, validation)
+		if attachSelection && len(names) == 0 {
+			return commands, nil
+		}
 		mutation := base
 		activeServices := false
 		for _, service := range artifact.Services {
@@ -126,6 +133,10 @@ func applyServiceNames(
 		return executionplan.EntryMutationServices(plan, step.StepId)
 	}
 	names, selected, err := executionplan.VolumeRemovalServices(plan, step.StepId)
+	if selected || err != nil {
+		return names, err
+	}
+	names, selected, err = executionplan.AttachMutationServices(plan, step.StepId)
 	if selected || err != nil {
 		return names, err
 	}
