@@ -29,6 +29,7 @@ class SupervisorTests(unittest.TestCase):
         self.stopped = self.root / "stopped"
         self.failure = self.root / "failure"
         self.output = self.root / "child-output"
+        self.child_pid = self.root / "default-child.pid"
         self.control_socket = self.root / "control.socket"
         self.control_target = "fake-target"
         self.check_args = self.root / "check-args"
@@ -66,7 +67,11 @@ class SupervisorTests(unittest.TestCase):
         check_timeout: float = 0.2,
         ready_timeout: float = 1.0,
     ) -> list[str]:
-        child_code = child_code or "import time; time.sleep(60)"
+        child_code = child_code or (
+            "import os, pathlib, time; "
+            f"pathlib.Path({str(self.child_pid)!r}).write_text(str(os.getpid())); "
+            "time.sleep(60)"
+        )
         return [
             sys.executable,
             str(SUPERVISOR_PATH),
@@ -111,7 +116,7 @@ class SupervisorTests(unittest.TestCase):
     def assert_receipts_bounded(self) -> None:
         for path in (self.ready, self.stopped, self.failure):
             if path.exists():
-                self.assertLessEqual(path.stat().st_size, supervisor.MAX_RECEIPT_BYTES)
+                self.assertLessEqual(path.stat().st_size, 8192)
 
     def wait_for_child_exit(self, pid_file: Path) -> None:
         child_pid = int(pid_file.read_text())
@@ -124,6 +129,8 @@ class SupervisorTests(unittest.TestCase):
             time.sleep(0.01)
         self.fail(f"child {child_pid} did not exit")
 
+    # Delivery: verifier process/evidence safety; no GP runtime or real SSH qualification.
+    # Rationale: A missing executable must fail explicitly rather than leave a false ready receipt.
     def test_startup_failure_writes_failure_receipt(self) -> None:
         command = self.command()
         separator = command.index("--")
@@ -133,20 +140,28 @@ class SupervisorTests(unittest.TestCase):
         self.assertIn("reason=startup", self.failure.read_text())
         self.assert_receipts_bounded()
 
+    # Delivery: verifier process/evidence safety; no GP runtime or real SSH qualification.
+    # Rationale: A cancelled journey must not launch a new owned tunnel child.
     def test_preexisting_stop_does_not_start_child(self) -> None:
         self.stop.write_text("stop\n")
         result = subprocess.run(self.command(), capture_output=True, text=True, timeout=3)
         self.assertEqual(result.returncode, 0)
         self.assertFalse(self.ready.exists())
+        self.assertFalse(self.output.exists())
+        self.assertFalse(self.check_args.exists())
+        self.assertFalse(self.child_pid.exists())
         self.assertIn("reason=prelaunch-stop", self.stopped.read_text())
         self.assert_receipts_bounded()
 
+    # Delivery: verifier process/evidence safety; no GP runtime or real SSH qualification.
+    # Rationale: Normal cleanup must terminate its owned child and record the stop.
     def test_normal_stop_terminates_child_and_writes_receipts(self) -> None:
         process = subprocess.Popen(
             self.command(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
         try:
             self.wait_for(self.ready)
+            self.wait_for(self.child_pid)
             self.stop.write_text("stop\n")
             self.assertEqual(process.wait(timeout=3), 0)
         finally:
@@ -154,8 +169,11 @@ class SupervisorTests(unittest.TestCase):
                 process.kill()
                 process.wait()
         self.assertIn("reason=stop-file", self.stopped.read_text())
+        self.wait_for_child_exit(self.child_pid)
         self.assert_receipts_bounded()
 
+    # Delivery: verifier process/evidence safety; no GP runtime or real SSH qualification.
+    # Rationale: A started process alone cannot count as a ready control master.
     def test_ready_is_absent_until_control_proof(self) -> None:
         process = subprocess.Popen(
             self.command(
@@ -177,6 +195,8 @@ class SupervisorTests(unittest.TestCase):
                 process.wait()
         self.assertFalse(self.ready.exists())
 
+    # Delivery: verifier process/evidence safety; no GP runtime or real SSH qualification.
+    # Rationale: An exited child must not qualify as a usable tunnel.
     def test_early_child_exit_fails_before_ready(self) -> None:
         result = subprocess.run(
             self.command(child_code="import sys; sys.exit(7)"),
@@ -188,6 +208,8 @@ class SupervisorTests(unittest.TestCase):
         self.assertFalse(self.ready.exists())
         self.assertIn("reason=control-proof", self.failure.read_text())
 
+    # Delivery: verifier process/evidence safety; no GP runtime or real SSH qualification.
+    # Rationale: Readiness requires the exact config-free control-socket check.
     def test_normal_control_proof_emits_ready(self) -> None:
         process = subprocess.Popen(
             self.command(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
@@ -195,11 +217,10 @@ class SupervisorTests(unittest.TestCase):
         try:
             self.wait_for(self.ready)
             check_args = self.check_args.read_text().splitlines()
-            socket_index = check_args.index("-S")
-            self.assertEqual(check_args[socket_index + 1], str(self.control_socket))
             self.assertEqual(
-                check_args[socket_index + 2 :],
-                ["-O", "check", "--", self.control_target],
+                check_args,
+                ["-F", "/dev/null", "-S", str(self.control_socket),
+                 "-O", "check", "--", self.control_target],
             )
             self.stop.write_text("stop\n")
             self.assertEqual(process.wait(timeout=3), 0)
@@ -208,6 +229,8 @@ class SupervisorTests(unittest.TestCase):
                 process.kill()
                 process.wait()
 
+    # Delivery: verifier process/evidence safety; no GP runtime or real SSH qualification.
+    # Rationale: An expired journey must stop its owned child and record failure.
     def test_deadline_writes_failure_and_stops_child(self) -> None:
         result = subprocess.run(
             # Allow Python control-proof startup before testing the later lifetime deadline.
@@ -220,8 +243,11 @@ class SupervisorTests(unittest.TestCase):
         self.assertTrue(self.ready.exists())
         self.assertIn("reason=deadline", self.failure.read_text())
         self.assertIn("reason=deadline", self.stopped.read_text())
+        self.wait_for_child_exit(self.child_pid)
         self.assert_receipts_bounded()
 
+    # Delivery: verifier process/evidence safety; no GP runtime or real SSH qualification.
+    # Rationale: Killing the owner must not leave its tunnel child running.
     def test_supervisor_death_stops_ssh_child_with_pdeathsig(self) -> None:
         child_pid_file = self.root / "child.pid"
         child_code = (
@@ -245,7 +271,9 @@ class SupervisorTests(unittest.TestCase):
                 process.kill()
                 process.wait()
 
-    def test_ready_receipt_failure_still_tears_down_child(self) -> None:
+    # Delivery: verifier process/evidence safety; no GP runtime or real SSH qualification.
+    # Rationale: Readiness-publication failure must report teardown, not success.
+    def test_ready_receipt_failure_reports_child_teardown(self) -> None:
         ready_directory = self.root / "ready-directory"
         ready_directory.mkdir()
         child_code = "import time; time.sleep(60)"
@@ -263,6 +291,8 @@ class SupervisorTests(unittest.TestCase):
         self.assertIn("reason=supervisor-exception", self.failure.read_text())
         self.assertIn("action=terminate", self.stopped.read_text())
 
+    # Delivery: verifier process/evidence safety; no GP runtime or real SSH qualification.
+    # Rationale: An uncooperative child needs bounded TERM-to-KILL escalation, not an endless wait.
     def test_term_to_kill_escalation(self) -> None:
         class UncooperativeChild:
             def __init__(self) -> None:
@@ -289,12 +319,15 @@ class SupervisorTests(unittest.TestCase):
         self.assertTrue(child.terminated)
         self.assertTrue(child.killed)
 
+    # Delivery: verifier process/evidence safety; no GP runtime or real SSH qualification.
+    # Rationale: Oversized evidence must fail before creating a misleading receipt.
     def test_receipt_writer_rejects_unbounded_values(self) -> None:
         with self.assertRaises(ValueError):
             supervisor.write_receipt(
                 self.root / "receipt",
-                value="x" * supervisor.MAX_RECEIPT_BYTES,
+                value="x" * 8192,
             )
+        self.assertFalse((self.root / "receipt").exists())
 
 
 if __name__ == "__main__":

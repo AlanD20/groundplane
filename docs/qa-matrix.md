@@ -714,10 +714,31 @@ pass in `.tmp/qa-test-review-catalog-vet.log` and
 observed QA incident or proof of live DNS, upgrade recovery or publication races.
 No deployment occurred. CMP-04 remains unqualified as a whole.
 
-The remaining root-module Go and skill-owned verifier tests
-still require review. Helpers and fixtures are not standalone test cases;
-inventory counts must not classify them as behavioral coverage. No automatic
-blanket deletion based on filenames, missing comments, mocks or small test size.
+#### Verifier-helper safety tests
+
+Reviewed and retained all 20 checks in the three verifier-helper test files:
+11 named Python tests and nine separately documented shell scenarios. Each has
+a delivery-safety reason; none counts as a GP product-case pass. No actual SSH
+connection, host fault or GP process was used.
+
+| Reviewed tests | Retention reason and proof limits |
+| --- | --- |
+| Eleven in [test_ssh_tunnel_supervisor.py](../.agents/skills/verify-groundplane/scripts/test_ssh_tunnel_supervisor.py) | Missing child startup, pre-existing stop, normal stop, control-proof gating, early child exit, exact control-check arguments, lifetime deadline, owner death, readiness-receipt failure, TERM-to-KILL escalation and bounded receipt writing are distinct failure modes. Prelaunch cancellation now checks that no child output/PID or control-check evidence appears. Normal stop/deadline now verify that the independently recorded child PID exits; the owner-death test already did so. The control check now requires the complete config-free argument vector. Receipt bounds use an independent 8192-byte expectation and rejection must leave no receipt. Escalation uses a fake child; readiness-write failure proves failure/teardown reporting, not independent child exit, and its test was renamed accordingly. |
+| Five scenarios in [test_known_hosts_initialization.sh](../.agents/skills/verify-groundplane/scripts/test_known_hosts_initialization.sh) | Exact trusted-file copy with mode 0600; reject symlink, FIFO and over-2-MiB sources; remove temporary output after failed atomic replacement. These use actual temporary files but do not establish remote host identity or authorize trust enrollment. |
+| Four scenarios in [test_supervisor_wait.sh](../.agents/skills/verify-groundplane/scripts/test_supervisor_wait.sh) | Bound waiting for a running process; accept zombie and absent-process states; reject mismatched PID evidence as ambiguous. Simulated procfs, not a real GP restart or lifecycle test. |
+
+All 11 Python tests pass in `.tmp/qa-test-review-verifier-python.log`. Both shell
+scripts exit zero under separate ten-second limits; evidence is
+`.tmp/qa-test-review-verifier-known-hosts.log` and
+`.tmp/qa-test-review-verifier-wait.log`. Expected refused-input diagnostics are
+not failures; the wait log is empty on success. The tests clean their owned
+temporary files/children; the run logs remain. No helper implementation or
+verification workflow changed.
+
+The remaining root-module Go tests outside the CLI still require review.
+Helpers and fixtures are not standalone test cases; inventory counts must not
+classify them as behavioral coverage. No automatic blanket deletion based on
+filenames, missing comments, mocks or small test size.
 
 ## Running and maintaining the matrix
 

@@ -11,13 +11,16 @@ source_file="$temp_root/trusted_known_hosts"
 destination_file="$temp_root/evidence-known_hosts"
 printf 'test-host ssh-ed25519 AAAA\n' >"$source_file"
 
-# Exercise the same shell function used by the verification journey.
+# Delivery: trusted-host evidence copy; no SSH connection or host trust enrollment.
+# Rationale: preserve exact trusted bytes with owner-only permissions.
 # shellcheck source=/dev/null
 source "$script_dir/known_hosts_init.sh"
 copy_known_hosts "$source_file" "$destination_file"
 cmp -s "$source_file" "$destination_file"
 [[ "$(stat -c %a "$destination_file")" == 600 ]]
 
+# Delivery: known-host input type refusal.
+# Rationale: do not follow a substituted trust-file symlink.
 symlink_source="$temp_root/known_hosts.symlink"
 ln -s "$source_file" "$symlink_source"
 if copy_known_hosts "$symlink_source" "$temp_root/symlink-output"; then
@@ -25,6 +28,8 @@ if copy_known_hosts "$symlink_source" "$temp_root/symlink-output"; then
 	exit 1
 fi
 
+# Delivery: known-host input type refusal.
+# Rationale: reject a FIFO without blocking on a writer.
 fifo_source="$temp_root/known_hosts.fifo"
 mkfifo "$fifo_source"
 if copy_known_hosts "$fifo_source" "$temp_root/fifo-output"; then
@@ -32,6 +37,8 @@ if copy_known_hosts "$fifo_source" "$temp_root/fifo-output"; then
 	exit 1
 fi
 
+# Delivery: bounded trust-file evidence.
+# Rationale: refuse input above the independent 2 MiB ceiling.
 oversize_source="$temp_root/known_hosts.oversize"
 python3 -c 'from pathlib import Path; import sys; Path(sys.argv[1]).write_bytes(b"x" * 2097153)' \
 	"$oversize_source"
@@ -40,6 +47,8 @@ if copy_known_hosts "$oversize_source" "$temp_root/oversize-output"; then
 	exit 1
 fi
 
+# Delivery: failed atomic copy cleanup.
+# Rationale: replacement failure must not leave an owned temporary trust file.
 atomic_failure_destination="$temp_root/atomic-destination"
 mkdir "$atomic_failure_destination"
 if copy_known_hosts "$source_file" "$atomic_failure_destination"; then
