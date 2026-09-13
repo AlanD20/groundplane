@@ -87,8 +87,12 @@ stale union. The publisher now captures current Attach records at its fixed read
 and seals that union into the new candidate, without changing historical sources.
 The complete publication regression reproduces the removed network returning;
 it now proves removal, current membership inclusion and unchanged input bytes.
-This correction is locally verified, not yet deployed; it does not repair
-predecessor capture. The redeploy was an attempted mitigation, not a successful
+This correction is locally verified and deployed as `0.0.0-qa.recovery20260913.6`;
+it does not repair predecessor capture. The next normal Deploy staged a candidate
+but returned Internal without an accepted Task. The Controller reported
+`release durable record is corrupt`; read-only source, native rendering, hook
+selection and staged-render checks passed. The exact later rejection remains
+unresolved, and forward-deploy live proof is still missing. The redeploy was an attempted mitigation, not a successful
 recovery or a fix. Do not replay the fault or proceed
 to interrupted-Task/reboot testing while the application remains unqualified.
 Evidence is `failed-rollout-terminal.json`, `after-candidate-recovery-runtime.json`
@@ -103,6 +107,18 @@ publication rules resolved in the existing feature/ADR; it is not implemented or
 approved by this issue record. Preserve immutable Release/Task history and exact
 validation. Latest desired configuration and host observation are not substitutes
 for acknowledged state.
+
+The shared-consumer audit also found configuration-file paths whose contents can
+change after the immutable Release input was captured. Exact Compose bytes alone
+therefore cannot prove exact configuration restoration. The network failure above
+is observed QA evidence; the file-generation gap is a source-audit finding, not a
+separately executed fault test. A proposed correction would capture acknowledged
+runtime and exact configuration sources before each Task, and allow sealed
+prior-file restoration during compensation. This requires an owner decision on
+ADR 0064's current ban on recovery-only materialization. It must not restore
+databases, reread latest desired inputs, rewrite history or silently change Entry
+deletion and secret-retention requirements. The owner requested an explanation;
+this issue records the unresolved decision, not an accepted contract.
 
 Acceptance: reproduce Deploy, successful Attach/Entry change and Detach, then
 failed Deploy through normal surfaces. Prove preservation of the pre-failure
