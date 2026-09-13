@@ -10,6 +10,9 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
+// QA: CON-01/03/04, UI-01/03; local CLI-to-HTTP encoding, not credential encryption or remote connectivity.
+// Rationale: Connector add must preserve the explicit addressing choice and
+// distinguish a Secret reference from a write-only direct credential read from stdin.
 func TestConnectorAddRequiresExplicitAddressingAndFileBackedDirectValue(t *testing.T) {
 	t.Parallel()
 	environmentID := "env_01K3D7R40G0000000000000000"

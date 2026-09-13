@@ -5,6 +5,9 @@ import (
 	"testing"
 )
 
+// QA: OWN-01, OWN-03, UI-01; local CLI request encoding only, not persisted hierarchy state.
+// Rationale: Tenant create and partial edit must carry the operator-authored
+// description instead of dropping it as presentation-only text.
 func TestTenantCreateAndEditCarryDescription(t *testing.T) {
 	t.Parallel()
 

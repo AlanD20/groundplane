@@ -2,6 +2,9 @@ package cli
 
 import "testing"
 
+// QA: CMP-01, HTTP-08, UI-03; pure file decoding only, not Secret resolution or Tunnel activation.
+// Rationale: Tunnel files must reject unknown fields and trailing documents so
+// mixed or ambiguous configuration cannot reach Zone placement or mutation.
 func TestDecodeCloudflareTunnelConfigFileIsClosedBeforePlacement(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -29,6 +32,9 @@ func TestDecodeCloudflareTunnelConfigFileIsClosedBeforePlacement(t *testing.T) {
 	}
 }
 
+// QA: CMP-01, HTTP-08, UI-03; pure file decoding only, not the later Zone lookup or API request.
+// Rationale: a credential-only Tunnel file is complete only when the command
+// supplies placement separately; otherwise it must not invent an empty Zone set.
 func TestDecodeCloudflareTunnelConfigFileAllowsMissingZonesOnlyForExplicitPlacement(t *testing.T) {
 	value := `{"credential":{"mode":"new","secret_name":"TOKEN","token":"value"}}`
 	if _, err := decodeCloudflareTunnelConfigFile(value, false); err == nil {

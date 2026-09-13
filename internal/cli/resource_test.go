@@ -11,6 +11,7 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
+// QA: TASK-01, UI-01; pure TABLE presentation only, not Task acceptance or follow-up retrieval.
 // Rationale: asynchronous actions keep the concise follow-up hint for the
 // default TABLE format while JSON and YAML remain machine-readable.
 func TestRenderDispatchedTaskTableOutput(t *testing.T) {

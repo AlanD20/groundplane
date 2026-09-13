@@ -25,6 +25,9 @@ const (
 	createdInnerZoneID = "net_01ARZ3NDEKTSV4RRFFQ69G5FAY"
 )
 
+// QA: CMP-01, NET-02, HTTP-07, UI-01; local lookup/create/enable requests only, not Component activation.
+// Rationale: one enable must resolve existing Zone labels, create requested
+// Zones in authored order, and preserve that complete order in the Component input.
 func TestComponentEnableResolvesAndCreatesOrderedZones(t *testing.T) {
 	template := "{\n\t{gp.routes}\n}\n"
 	path := t.TempDir() + "/Caddyfile"
@@ -94,6 +97,9 @@ func TestComponentEnableResolvesAndCreatesOrderedZones(t *testing.T) {
 	}
 }
 
+// QA: CMP-05, NET-02, UI-03; local failure presentation only, not persisted Zone or Component state.
+// Rationale: if Component enable fails after a Zone create succeeds, the CLI
+// must identify the retained Zone rather than implying that it rolled back.
 func TestComponentEnableReportsCreatedZoneRetainedAfterFailure(t *testing.T) {
 	requestNumber := 0
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -101,17 +107,22 @@ func TestComponentEnableReportsCreatedZoneRetainedAfterFailure(t *testing.T) {
 		writer.Header().Set("Content-Type", "application/json")
 		switch requestNumber {
 		case 1:
+			assertComponentRequest(t, request, http.MethodGet, "/api/v1/components/"+componentTestID, "")
 			_, _ = io.WriteString(
 				writer,
 				`{"id":"`+componentTestID+`","owner":"environment","owner_id":"`+environmentTestID+`","environment_id":"`+environmentTestID+`","kind":"caddy","enabled":false,"config":null,"healthy":false,"status":"disabled"}`,
 			)
 		case 2:
+			want := `{"environment_id":"` + environmentTestID + `","internal":false,"name":"edge","subnet":"10.40.30.0/24"}`
+			assertComponentRequest(t, request, http.MethodPost, "/api/v1/zones", want)
 			writer.WriteHeader(http.StatusCreated)
 			_, _ = io.WriteString(
 				writer,
 				`{"id":"`+createdEdgeZoneID+`","environment_id":"`+environmentTestID+`","name":"edge","subnet":"10.40.30.0/24","internal":false,"owner_kind":"environment","owner_id":"`+environmentTestID+`"}`,
 			)
 		case 3:
+			want := `{"config":{"zone_ids":["` + createdEdgeZoneID + `"]}}`
+			assertComponentRequest(t, request, http.MethodPost, "/api/v1/components/"+componentTestID+"/enable", want)
 			writer.Header().Set("Content-Type", "application/problem+json")
 			writer.WriteHeader(http.StatusUnprocessableEntity)
 			_, _ = io.WriteString(
@@ -139,6 +150,9 @@ func TestComponentEnableReportsCreatedZoneRetainedAfterFailure(t *testing.T) {
 	}
 }
 
+// QA: CMP-01, HTTP-08, UI-01; local file/create/enable request sequence only, not provider ingress.
+// Rationale: first Tunnel enable must combine the file-only credential decision
+// with the stable ID returned by a Zone created in the same CLI invocation.
 func TestComponentTunnelFirstEnableCombinesCredentialFileWithCreatedZone(t *testing.T) {
 	path := t.TempDir() + "/tunnel.json"
 	if err := os.WriteFile(
@@ -192,6 +206,9 @@ func TestComponentTunnelFirstEnableCombinesCredentialFileWithCreatedZone(t *test
 	}
 }
 
+// QA: CMP-01, HTTP-08, UI-01, UI-02; local lookup and enable request only, not provider ingress.
+// Rationale: first Tunnel enable must resolve an existing Zone label and keep
+// the separately file-backed credential decision in the same typed request.
 func TestComponentTunnelFirstEnableCombinesCredentialFileWithExistingZone(t *testing.T) {
 	path := t.TempDir() + "/tunnel.json"
 	if err := os.WriteFile(
@@ -238,6 +255,9 @@ func TestComponentTunnelFirstEnableCombinesCredentialFileWithExistingZone(t *tes
 	}
 }
 
+// QA: CMP-04, HTTP-08, UI-03; local validation ordering only, not Controller publication.
+// Rationale: an incomplete new Tunnel credential must fail before a requested
+// Zone is created, avoiding a partial CLI-side mutation.
 func TestComponentTunnelInvalidCredentialStopsBeforeZoneCreation(t *testing.T) {
 	path := t.TempDir() + "/tunnel.json"
 	if err := os.WriteFile(
@@ -253,6 +273,7 @@ func TestComponentTunnelInvalidCredentialStopsBeforeZoneCreation(t *testing.T) {
 		if requests != 1 {
 			t.Fatalf("unexpected mutation after invalid credential: %s %s", request.Method, request.URL.Path)
 		}
+		assertComponentRequest(t, request, http.MethodGet, "/api/v1/components/"+componentTestID, "")
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(
 			writer,
@@ -274,6 +295,9 @@ func TestComponentTunnelInvalidCredentialStopsBeforeZoneCreation(t *testing.T) {
 	}
 }
 
+// QA: CMP-01, UI-03; local platform-Component admission only, not config persistence or enablement.
+// Rationale: platform Component enable is bodyless, so inline configuration
+// must direct the operator to config set before any mutation request.
 func TestPlatformComponentEnableRejectsInlineConfigBeforeMutation(t *testing.T) {
 	path := t.TempDir() + "/Corefile"
 	if err := os.WriteFile(path, []byte(".:53 {\n  forward . 1.1.1.1\n}\n"), 0o600); err != nil {
@@ -285,6 +309,7 @@ func TestPlatformComponentEnableRejectsInlineConfigBeforeMutation(t *testing.T) 
 		if requests != 1 {
 			t.Fatalf("unexpected platform enable mutation: %s %s", request.Method, request.URL.Path)
 		}
+		assertComponentRequest(t, request, http.MethodGet, "/api/v1/components/"+componentTestID, "")
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(
 			writer,
@@ -304,6 +329,9 @@ func TestPlatformComponentEnableRejectsInlineConfigBeforeMutation(t *testing.T) 
 	}
 }
 
+// QA: CMP-01, HTTP-08, UI-02; local read/resolve/config request only, not credential resolution or activation.
+// Rationale: changing Tunnel Zone placement must resolve labels while retaining
+// the current stable Secret identity instead of clearing or replacing it.
 func TestComponentTunnelConfigResolvesZonesAndPreservesExistingCredential(t *testing.T) {
 	const secretID = "sec_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	requestNumber := 0
@@ -348,6 +376,9 @@ func TestComponentTunnelConfigResolvesZonesAndPreservesExistingCredential(t *tes
 	}
 }
 
+// QA: CMP-01, HTTP-08, UI-03; local validation ordering only, not Component state.
+// Rationale: an unconfigured Tunnel cannot infer credential authority from a
+// Zone-only edit and must reject before sending a mutation.
 func TestComponentTunnelFirstZoneConfigRequiresFile(t *testing.T) {
 	requestNumber := 0
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -355,11 +386,13 @@ func TestComponentTunnelFirstZoneConfigRequiresFile(t *testing.T) {
 		writer.Header().Set("Content-Type", "application/json")
 		switch requestNumber {
 		case 1:
+			assertComponentRequest(t, request, http.MethodGet, "/api/v1/components/"+componentTestID, "")
 			_, _ = io.WriteString(
 				writer,
 				`{"id":"`+componentTestID+`","owner":"environment","owner_id":"`+environmentTestID+`","environment_id":"`+environmentTestID+`","kind":"cloudflare-tunnel","enabled":false,"config":null,"healthy":false,"status":"disabled"}`,
 			)
 		case 2:
+			assertComponentRequest(t, request, http.MethodGet, "/api/v1/zones", "")
 			_, _ = io.WriteString(
 				writer,
 				`{"items":[{"id":"`+frontendZoneID+`","environment_id":"`+environmentTestID+`","name":"frontend","subnet":"10.40.10.0/24","internal":false,"owner_kind":"environment","owner_id":"`+environmentTestID+`"}],"next_cursor":""}`,
@@ -381,6 +414,9 @@ func TestComponentTunnelFirstZoneConfigRequiresFile(t *testing.T) {
 	}
 }
 
+// Delivery: superseded CLI flag removal; no Component request or behavior is exercised.
+// Rationale: the public config command must expose one Zone operand model and
+// must not reintroduce the removed --zone-id compatibility surface.
 func TestComponentConfigHasNoSupersededZoneIDFlag(t *testing.T) {
 	config, _, err := newComponentCmd().Find([]string{"config", "set"})
 	if err != nil {
@@ -391,6 +427,9 @@ func TestComponentConfigHasNoSupersededZoneIDFlag(t *testing.T) {
 	}
 }
 
+// QA: CMP-01, UI-02; pure ID-mode resolution only, not ownership validation by the Controller.
+// Rationale: global --id must preserve ordered stable Zone IDs verbatim and
+// bypass label lookup, including when no reachable API client exists.
 func TestResolveComponentZoneIDsUsesRawStableIDsWithGlobalID(t *testing.T) {
 	command := &cobra.Command{}
 	command.SetContext(context.WithValue(context.Background(), appKey{}, &App{

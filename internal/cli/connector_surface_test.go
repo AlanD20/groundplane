@@ -2,6 +2,7 @@ package cli
 
 import "testing"
 
+// Delivery: locked Connector command inventory; no request or remote connectivity is exercised.
 // Rationale: immutable Connector names and no CRUD connectivity probe leave
 // exactly list/add/show/remove; edit, rename, and check must not appear as
 // accidental operator commands.

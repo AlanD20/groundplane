@@ -589,6 +589,30 @@ pass again in `.tmp/qa-test-review-cli-observation-values.log`. Unchanged proof
 is reused. Environment pool-edit output values and Task-stream reconnect,
 compaction, cancellation and terminal drain remain unproved by this batch.
 
+#### Remaining CLI commands and presentation
+
+Reviewed the remaining 59 top-level CLI/common tests in 21 files. Retained
+45 behavioral tests and 14 delivery/tooling checks; none lacked a distinct
+requirement or failure-prevention reason. Together with the two earlier CLI
+batches and the API-client audit below, all 64 committed CLI test files are
+reviewed: 186 original tests, one duplicate removed, 185 retained. This is test
+review completion for the CLI, not completion of its product QA cases.
+
+| Reviewed tests | Retention reason | Matrix coverage or gap |
+| --- | --- | --- |
+| One in [tenant_description_test.go](../internal/cli/tenant_description_test.go), one in [tenant_target_test.go](../internal/cli/tenant_target_test.go), two in [project_target_test.go](../internal/cli/project_target_test.go) | Preserve authored descriptions, resolve mutable labels to scoped stable IDs, and omit the response-only Project kind from create. | OWN-01/02/03, UI-01/02/03: local requests, not persistence, rename races or descendant safety. |
+| One each in [connector_create_test.go](../internal/cli/connector_create_test.go), [connector_remove_test.go](../internal/cli/connector_remove_test.go), [connector_surface_test.go](../internal/cli/connector_surface_test.go) | Preserve explicit addressing and distinct credential sources; resolve names or bypass lookup in ID mode; retain the closed operation inventory as delivery-only. | Two behavioral tests support CON-01/03/04/06 and UI-01/02/03 locally. No provider access, secret storage or deletion finalization. |
+| Three in [backup_key_export_test.go](../internal/cli/backup_key_export_test.go) | Write exact private bytes with mode 0600; reject a symlink without altering its target; refuse structured output before raw export. | BAK-14, UI-03: actual temporary-file safety and local admission, not HTTP cache headers or remote recovery. |
+| Eleven in [backup_policy_test.go](../internal/cli/backup_policy_test.go), two in [backup_points_test.go](../internal/cli/backup_points_test.go), two in [volume_list_test.go](../internal/cli/volume_list_test.go) | Preserve source order/stable references and configured versus absent fields on disable; reject invalid source cardinality and decimal/integer boundaries; resolve scoped Environment labels or bypass lookup with stable IDs. | BAK-01/02/07, VOL-01, UI-01/02/03: parser/lookup/request proof, not atomic persistence, point verification or data preservation. |
+| Ten in [component_zone_test.go](../internal/cli/component_zone_test.go), two in [component_config_file_test.go](../internal/cli/component_config_file_test.go), one in [component_config_test.go](../internal/cli/component_config_test.go) | Keep ordered Zone placement, Tunnel credentials, explicit first-enable inputs and non-normalizing CoreDNS parsing. Partial-failure/validation fixtures now require exact HTTP methods, paths and bodies, so unrelated calls cannot consume a success response. The removed flag inventory is delivery-only. | Twelve behavioral tests support CMP-01/04/05, NET-02, HTTP-07/08, DNS-02, UI-01/02/03. Created-Zone retention is CLI reporting only, not Controller persistence or actual ingress. |
+| Four in [controllerctl_test.go](../internal/cli/controllerctl_test.go), seven in [root_test.go](../internal/cli/root_test.go), two in [grammar_test.go](../internal/cli/grammar_test.go), one in [route_flags_test.go](../internal/cli/route_flags_test.go) | Preserve same-host/tool exemptions, safe diagnostic output, injected runner errors, fail-closed unavailable local commands, closed completions/flags and exact operands. Two are behavioral API admission tests; twelve are local tooling/static delivery checks. | UI-03: local admission only. Injected diagnostics are not live etcd/key/Controller observations; command inventory is not 1:1 product parity. |
+| One in [resource_test.go](../internal/cli/resource_test.go), two in [common/errors_test.go](../internal/cli/common/errors_test.go), one in [common/recovery_points_test.go](../internal/cli/common/recovery_points_test.go), three in [common/service_observation_test.go](../internal/cli/common/service_observation_test.go) | Preserve Task follow-up output, canonical/secret-safe errors, exact Recovery Point columns and honest observation freshness/empty arrays. Recovery Point checks now compare every header/value. Observation checks compare an independent full projection; distinct counts 1..7 detect swapped fields instead of seven identical values masking them. | TASK-01, SEC-05, BAK-07, OBS-01/02/03, UI-01/03: presentation only, not API publication, live observation or process exit behavior. |
+
+The focused 59-test race run passes in `.tmp/qa-test-review-cli-remaining.log`.
+The final distinct-count correction passes separately in
+`.tmp/qa-test-review-cli-common-values.log`; unchanged proof is reused. Formatting
+passes. No production code, dependency or live state changed.
+
 #### CLI API-client boundary
 
 Reviewed all 60 tests in the 24 API-client test files. Retained 57 behavioral

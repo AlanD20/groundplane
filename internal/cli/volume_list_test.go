@@ -8,6 +8,7 @@ import (
 	"testing"
 )
 
+// QA: VOL-01, UI-01, UI-02; local scope lookup and list rendering only, not Volume persistence or data.
 // Rationale: Volume is Environment-scoped, so direct list must resolve the
 // normal Tenant/Project/Environment labels before sending the stable id.
 func TestVolumeListResolvesEnvironmentLabel(t *testing.T) {
@@ -44,6 +45,7 @@ func TestVolumeListResolvesEnvironmentLabel(t *testing.T) {
 	}
 }
 
+// QA: VOL-01, UI-02; local ID routing only, not Volume ownership enforcement.
 // Rationale: global --id makes the Environment scope stable already, so the
 // typed Volume list must not perform any label collection reads.
 func TestVolumeListHonorsGlobalIDMode(t *testing.T) {

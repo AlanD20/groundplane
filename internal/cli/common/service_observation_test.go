@@ -1,6 +1,7 @@
 package common
 
 import (
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -8,6 +9,7 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
+// QA: OBS-01, OBS-02, UI-01; pure projection only, not live container observation or API rendering.
 // Rationale: the Service collection must show runtime intent separately from
 // every exact serving-workload count without losing the nested JSON snapshot.
 func TestServiceObservationTableFormatsExactProjection(t *testing.T) {
@@ -15,15 +17,15 @@ func TestServiceObservationTableFormatsExactProjection(t *testing.T) {
 	observedAt := time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC)
 	expiresAt := observedAt.Add(serviceObservationFreshness)
 	releaseID := "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	expected := uint32(7)
+	expected := uint32(28)
 	services := []apiTypes.Service{{
 		ID: "svc_1", Name: "api", RuntimeIntent: apiTypes.ServiceRuntimeIntentStopped,
 		Observation: &apiTypes.ServiceObservation{
 			State: apiTypes.ServiceObservationDegraded, ObservedAt: &observedAt, ExpiresAt: &expiresAt,
 			ServingReleaseID: &releaseID, ExpectedReplicas: &expected,
 			Replicas: &apiTypes.ServiceReplicaCounts{
-				Running: 1, Healthy: 1, Starting: 1, Unhealthy: 1,
-				Transitional: 1, Stopped: 1, Failed: 1,
+				Running: 1, Healthy: 2, Starting: 3, Unhealthy: 4,
+				Transitional: 5, Stopped: 6, Failed: 7,
 			},
 		},
 	}}
@@ -36,14 +38,23 @@ func TestServiceObservationTableFormatsExactProjection(t *testing.T) {
 	}
 	wantRow := []string{
 		"svc_1", "api", "stopped", "degraded", "2026-09-12T12:00:00Z", "2026-09-12T12:00:15Z",
-		releaseID, "7", "1", "1", "1", "1", "1", "1", "1",
+		releaseID, "28", "1", "2", "3", "4", "5", "6", "7",
+	}
+	wantObservation := &apiTypes.ServiceObservation{
+		State: apiTypes.ServiceObservationDegraded, ObservedAt: &observedAt, ExpiresAt: &expiresAt,
+		ServingReleaseID: &releaseID, ExpectedReplicas: &expected,
+		Replicas: &apiTypes.ServiceReplicaCounts{
+			Running: 1, Healthy: 2, Starting: 3, Unhealthy: 4,
+			Transitional: 5, Stopped: 6, Failed: 7,
+		},
 	}
 	if !slices.Equal(headers, wantHeaders) || len(rows) != 1 || !slices.Equal(rows[0], wantRow) ||
-		presented[0].Observation != services[0].Observation {
+		!reflect.DeepEqual(presented[0].Observation, wantObservation) {
 		t.Fatalf("Service observation table = %#v / %#v / %#v", presented, headers, rows)
 	}
 }
 
+// QA: OBS-02, OBS-03, UI-01; local clock and schema checks only, not stalled refresh or live health.
 // Rationale: expiry is exclusive at the exact boundary, and incomplete,
 // contradictory, over-bounded, or falsely enriched evidence must never appear
 // as current workload health.
@@ -114,6 +125,7 @@ func TestPresentServiceObservationRejectsExpiredOrMalformedEvidence(t *testing.T
 	}
 }
 
+// QA: OBS-01, UI-01; pure empty-list projection only, not an API response serialization test.
 // Rationale: normal empty list responses remain JSON arrays, not null, and
 // still expose stable table headers without inventing a Service observation.
 func TestServiceObservationTablePreservesEmptyArray(t *testing.T) {

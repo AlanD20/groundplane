@@ -7,6 +7,7 @@ import (
 	"testing"
 )
 
+// QA: BAK-07, UI-02; local scope resolution and request query only, not concurrent point publication.
 // Rationale: backup points accepts an Environment label but the generated
 // operation must receive the stable id and only the documented cursor query.
 func TestBackupPointsResolvesEnvironmentLabel(t *testing.T) {
@@ -46,6 +47,7 @@ func TestBackupPointsResolvesEnvironmentLabel(t *testing.T) {
 	}
 }
 
+// QA: BAK-07, UI-02; local ID routing only, not point ordering or fixed-revision pagination.
 // Rationale: global --id is the explicit stable-id path and must bypass all
 // mutable Environment label collection reads.
 func TestBackupPointsHonorsGlobalIDMode(t *testing.T) {

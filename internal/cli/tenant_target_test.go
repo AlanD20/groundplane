@@ -7,6 +7,9 @@ import (
 	"testing"
 )
 
+// QA: OWN-01, OWN-02, UI-02; local slug lookup and PATCH routing only, not persisted hierarchy state.
+// Rationale: the mutable Tenant slug operand must resolve to its stable ID
+// before an edit so later label changes do not become wire identity.
 func TestTenantSlugTargetResolvesToStableIDBeforeMutation(t *testing.T) {
 	t.Parallel()
 

@@ -14,6 +14,9 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// Delivery: closed API/local/tool command classification; no command is executed.
+// Rationale: representative commands must retain the execution class that
+// controls whether they load human CLI config or invoke same-host tooling.
 func TestCommandExecutionClasses(t *testing.T) {
 	t.Parallel()
 
@@ -42,6 +45,9 @@ func TestCommandExecutionClasses(t *testing.T) {
 	}
 }
 
+// Delivery: local Controller process command with an injected runner; no daemon is started.
+// Rationale: controller serve must not parse unrelated human API client config
+// before invoking its local process runner.
 func TestControllerServeSkipsCLIConfigAndInvokesRunner(t *testing.T) {
 	t.Parallel()
 
@@ -66,6 +72,9 @@ func TestControllerServeSkipsCLIConfigAndInvokesRunner(t *testing.T) {
 	}
 }
 
+// Delivery: local Controller process error propagation with an injected runner.
+// Rationale: controller serve must return its runner's causal error so startup
+// failures are not converted into success or an unrelated CLI error.
 func TestControllerServePreservesRunnerError(t *testing.T) {
 	t.Parallel()
 
@@ -79,6 +88,9 @@ func TestControllerServePreservesRunnerError(t *testing.T) {
 	}
 }
 
+// Delivery: local version/completion behavior; no API request or daemon action is exercised.
+// Rationale: standalone tooling must remain usable even when the human API
+// client configuration is malformed.
 func TestToolCommandsSkipCLIConfig(t *testing.T) {
 	t.Parallel()
 
@@ -102,6 +114,9 @@ func TestToolCommandsSkipCLIConfig(t *testing.T) {
 	}
 }
 
+// Delivery: locked completion command inventory; no generated script is executed.
+// Rationale: completion must expose exactly the documented Bash, Fish, and Zsh
+// generators without Cobra adding an unsupported default command.
 func TestCompletionCommandHasOnlyLockedShells(t *testing.T) {
 	t.Parallel()
 
@@ -132,6 +147,9 @@ func TestCompletionCommandHasOnlyLockedShells(t *testing.T) {
 	}
 }
 
+// QA: UI-03; representative API-command preflight only, with no HTTP request executed.
+// Rationale: API commands must strictly load human CLI config instead of
+// inheriting the exemptions reserved for closed local/tool commands.
 func TestAPICommandsStillLoadCLIConfig(t *testing.T) {
 	t.Parallel()
 
@@ -148,6 +166,9 @@ func TestAPICommandsStillLoadCLIConfig(t *testing.T) {
 	}
 }
 
+// Delivery: local foreground Agent command refusal; no Agent process is started.
+// Rationale: the unimplemented local command must bypass human CLI config yet
+// fail closed with its specific error rather than appearing successful.
 func TestUnimplementedAgentRunFailsClosedWithoutCLIConfig(t *testing.T) {
 	t.Parallel()
 

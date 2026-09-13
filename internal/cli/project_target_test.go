@@ -7,6 +7,9 @@ import (
 	"testing"
 )
 
+// QA: OWN-01, OWN-02, UI-02; local scoped lookup and PATCH routing only, not persisted rename safety.
+// Rationale: a Project slug must resolve within the selected Tenant and the
+// mutation must address the resulting stable Project ID.
 func TestProjectSlugTargetResolvesThroughTenantAndProjectCollections(t *testing.T) {
 	t.Parallel()
 	const tenantID = "tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -51,6 +54,9 @@ func TestProjectSlugTargetResolvesThroughTenantAndProjectCollections(t *testing.
 	}
 }
 
+// QA: OWN-01, UI-01, UI-03; local create-body encoding only, not Project persistence.
+// Rationale: ordinary Project creation must not send the response-only kind
+// field and accidentally select backing-project semantics.
 func TestProjectCreateOmitsResponseOnlyKind(t *testing.T) {
 	t.Parallel()
 	const tenantID = "tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV"

@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// QA: UI-03; local error projection only, not an HTTP response or end-to-end process exit.
 // Rationale: CLI rendering must project canonical Kind-owned fields and ignore
 // mutations to the embedded framework schema carrier.
 func TestHandleErrorsUsesCanonicalProblemProjection(t *testing.T) {
@@ -46,6 +47,7 @@ func TestHandleErrorsUsesCanonicalProblemProjection(t *testing.T) {
 	}
 }
 
+// QA: SEC-05, UI-03; local stderr sanitization only, not durable logs or API problem bodies.
 // Rationale: secret-bearing diagnostics passed to an opaque 500 constructor
 // must remain in Error() for logs but never enter operator-facing CLI output.
 func TestHandleErrorsSanitizesNewInternalMessage(t *testing.T) {

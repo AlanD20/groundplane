@@ -7,6 +7,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Delivery: closed Cobra grammar inventory; commands are not dispatched to the API or local runners.
+// Rationale: every runnable zero-operand leaf must reject stray operands so a
+// typo cannot be silently interpreted as a valid command.
 func TestRunnableZeroArgumentLeavesRejectOperands(t *testing.T) {
 	t.Parallel()
 
@@ -31,6 +34,9 @@ func TestRunnableZeroArgumentLeavesRejectOperands(t *testing.T) {
 	})
 }
 
+// QA: UI-03; local Cobra argument admission only, not action dispatch or effects.
+// Rationale: representative operator commands must enforce their documented
+// positional arity instead of dropping or reinterpreting targets.
 func TestParityOperandLeavesEnforceExactArity(t *testing.T) {
 	t.Parallel()
 

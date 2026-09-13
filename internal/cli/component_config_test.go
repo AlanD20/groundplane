@@ -2,6 +2,7 @@ package cli
 
 import "testing"
 
+// QA: DNS-02, CMP-01, UI-03; pure flag parsing only, not Controller validation or DNS answers.
 // Rationale: CLI input must not be rewritten into a different value before
 // the Controller validates the complete typed configuration.
 func TestParseCoreDNSForwardFlagsRejectsWhitespaceInsteadOfNormalizing(t *testing.T) {

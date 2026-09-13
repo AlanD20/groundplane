@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// QA: BAK-14; local filesystem export only, not no-store HTTP headers or off-host recovery.
 // Rationale: file export must preserve the exact private identity attachment
 // while enforcing the contract's owner-only 0600 mode.
 func TestWritePrivateExportFileWritesExactBytesWithPrivateMode(t *testing.T) {
@@ -34,6 +35,7 @@ func TestWritePrivateExportFileWritesExactBytesWithPrivateMode(t *testing.T) {
 	}
 }
 
+// QA: BAK-14, UI-03; local filesystem refusal only, not server-side key handling.
 // Rationale: O_NOFOLLOW must reject a symlink destination before truncating or
 // writing the file it targets.
 func TestWritePrivateExportFileRejectsSymlinkWithoutChangingTarget(t *testing.T) {
@@ -58,6 +60,7 @@ func TestWritePrivateExportFileRejectsSymlinkWithoutChangingTarget(t *testing.T)
 	}
 }
 
+// QA: BAK-14, UI-03; local CLI admission only, with no export request executed.
 // Rationale: raw private-key export has its own --file contract and must reject
 // the global structured-output formatter before making a request.
 func TestBackupExportKeyRejectsGlobalOutput(t *testing.T) {

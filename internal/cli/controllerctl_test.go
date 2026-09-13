@@ -15,6 +15,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// Delivery: same-host diagnostic invocation and safe rendering; no Controller API or key file is inspected.
 // Rationale: same-host key inspection must bypass malformed human CLI config
 // while rendering only the approved safe projection returned by the app port.
 func TestControllerKeyShowUsesInjectedLocalInspector(t *testing.T) {
@@ -48,6 +49,7 @@ func TestControllerKeyShowUsesInjectedLocalInspector(t *testing.T) {
 	}
 }
 
+// Delivery: same-host diagnostic partial-result rendering; endpoints are injected, not probed.
 // Rationale: one unreachable etcd peer must remain visible beside healthy
 // peers instead of collapsing the local diagnostic into an all-or-nothing API.
 func TestControllerEtcdShowRendersPartialResultsBeforeError(t *testing.T) {
@@ -87,6 +89,7 @@ func TestControllerEtcdShowRendersPartialResultsBeforeError(t *testing.T) {
 	}
 }
 
+// Delivery: same-host diagnostic output-format contract; no local key is read.
 // Rationale: key diagnostics must keep one exact safe projection in every
 // supported output format, with the approved TABLE headers in approved order.
 func TestControllerKeyShowFormats(t *testing.T) {
@@ -115,6 +118,7 @@ func TestControllerKeyShowFormats(t *testing.T) {
 	}
 }
 
+// Delivery: same-host diagnostic output-format contract; etcd health values are injected.
 // Rationale: healthy zero-valued observations are valid data in structured
 // formats, while unavailable rows must omit every status-only field.
 func TestControllerEtcdShowFormats(t *testing.T) {

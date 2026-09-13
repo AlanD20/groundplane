@@ -2,9 +2,10 @@ package cli
 
 import "testing"
 
+// Delivery: locked CLI flag namespace only; no Route request or routing effect is exercised.
+// Rationale: Route creation must retain the global Controller --host while
+// accepting a distinct public hostname, including when both flags are used.
 func TestRouteAddDoesNotShadowControllerHost(t *testing.T) {
-	// Rationale: Route creation must retain the global Controller --host while
-	// accepting a distinct public hostname, including when both flags are used.
 	root := NewRootCmd(Dependencies{})
 	add, _, err := root.Find([]string{"route", "add"})
 	if err != nil {

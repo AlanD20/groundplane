@@ -21,6 +21,7 @@ const (
 	backupPolicyVolumeID          = "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 )
 
+// QA: BAK-01, BAK-02, UI-03; pure CLI source parsing only, not lookup or persistence.
 // Rationale: source order is part of the replacement contract and each CLI
 // label form must remain distinct until it is resolved to a stable id.
 func TestParseBackupPolicySourcesPreservesOrder(t *testing.T) {
@@ -45,8 +46,9 @@ func TestParseBackupPolicySourcesPreservesOrder(t *testing.T) {
 	}
 }
 
+// QA: BAK-02, UI-03; pure parser rejection only, not HTTP sequencing or Controller validation.
 // Rationale: malformed, duplicate, and oversized source selections must fail
-// before any label-resolution requests can make a partial operator intent.
+// before the caller can resolve or publish a partial operator intent.
 func TestParseBackupPolicySourcesRejectsInvalidSelections(t *testing.T) {
 	t.Parallel()
 
@@ -76,6 +78,7 @@ func TestParseBackupPolicySourcesRejectsInvalidSelections(t *testing.T) {
 	}
 }
 
+// QA: BAK-01, UI-01, UI-02; local scope resolution and GET only, not policy persistence.
 // Rationale: policy show is locked to the typed Environment singleton and
 // must resolve the complete human scope chain before using the stable id.
 func TestBackupPolicyShowResolvesEnvironmentLabel(t *testing.T) {
@@ -112,6 +115,7 @@ func TestBackupPolicyShowResolvesEnvironmentLabel(t *testing.T) {
 	)
 }
 
+// QA: BAK-01, BAK-02, UI-01, UI-02; local lookup and PUT encoding only, not atomic persistence.
 // Rationale: one policy replacement must resolve every display label through
 // its live Environment collection and preserve submitted source order as ids.
 func TestBackupPolicySetResolvesLabelsAndPreservesSourceOrder(t *testing.T) {
@@ -172,6 +176,7 @@ func TestBackupPolicySetResolvesLabelsAndPreservesSourceOrder(t *testing.T) {
 	)
 }
 
+// QA: BAK-01, BAK-02, UI-02; local ID-mode request encoding only, not ownership validation.
 // Rationale: global --id switches every policy reference to stable-id mode;
 // no label collection may be consulted in that mode.
 func TestBackupPolicySetHonorsGlobalIDMode(t *testing.T) {
@@ -206,6 +211,7 @@ func TestBackupPolicySetHonorsGlobalIDMode(t *testing.T) {
 	)
 }
 
+// QA: BAK-01, UI-03; local public-integer boundary and request encoding only.
 // Rationale: the CLI flag and generated-client dispatch preserve the largest
 // retention integer represented exactly by every public JSON consumer.
 func TestBackupPolicySetDispatchesMaximumPublicKeep(t *testing.T) {
@@ -240,6 +246,7 @@ func TestBackupPolicySetDispatchesMaximumPublicKeep(t *testing.T) {
 	)
 }
 
+// QA: BAK-01, UI-03; local admission only, with no HTTP server involved.
 // Rationale: a syntactically valid int64 above the public contract must fail
 // before scope resolution or any HTTP request can begin.
 func TestBackupPolicySetRejectsKeepAbovePublicMaximumBeforeHTTP(t *testing.T) {
@@ -252,6 +259,7 @@ func TestBackupPolicySetRejectsKeepAbovePublicMaximumBeforeHTTP(t *testing.T) {
 	}
 }
 
+// QA: BAK-01, UI-03; local admission only, with no HTTP server involved.
 // Rationale: the documented CLI integer grammar has one unambiguous spelling;
 // Go-style hexadecimal, octal, signs, leading zeroes, and whitespace must fail
 // before context resolution or HTTP dispatch.
@@ -267,6 +275,7 @@ func TestBackupPolicySetRejectsNonCanonicalKeepSyntaxBeforeHTTP(t *testing.T) {
 	}
 }
 
+// QA: BAK-01, UI-03; local admission only, with no HTTP server involved.
 // Rationale: values outside the signed 64-bit representation must fail at the
 // raw decimal boundary before scope resolution or any HTTP request can begin.
 func TestBackupPolicySetRejectsKeepOverflowBeforeHTTP(t *testing.T) {
@@ -279,6 +288,7 @@ func TestBackupPolicySetRejectsKeepOverflowBeforeHTTP(t *testing.T) {
 	}
 }
 
+// QA: BAK-01, UI-01; local GET-to-PUT preservation only, not atomic policy persistence.
 // Rationale: --off is a toggle over the singleton, not a zero-value
 // replacement; every configured field and ordered source must be retained.
 func TestBackupPolicySetOffRetainsConfiguredPolicy(t *testing.T) {
@@ -315,6 +325,7 @@ func TestBackupPolicySetOffRetainsConfiguredPolicy(t *testing.T) {
 	)
 }
 
+// QA: BAK-01, UI-01; local GET-to-PUT omission only, not durable absence semantics.
 // Rationale: a policy that was never configured has absent optional fields;
 // toggling it off must keep them absent rather than manufacture zero values.
 func TestBackupPolicySetOffRetainsUnconfiguredOptionals(t *testing.T) {

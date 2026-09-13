@@ -10,6 +10,7 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
+// QA: CON-01/06, UI-01/02; local lookup and DELETE dispatch only, not durable finalization.
 // Rationale: immutable Connector names are the default CLI operand while --id
 // bypasses lookup; both modes must dispatch the same stable-id DELETE Task.
 func TestConnectorRemoveResolvesNameUnlessIDModeIsSelected(t *testing.T) {
