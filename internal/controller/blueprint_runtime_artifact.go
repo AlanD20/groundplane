@@ -102,7 +102,8 @@ func RetainBlueprintNativeRuntime(
 				before, beforeErr := yaml.Marshal(value)
 				after, afterErr := yaml.Marshal(nextMapping.Content[currentIndex+1])
 				if beforeErr != nil || afterErr != nil || !bytes.Equal(before, after) {
-					return nil, errs.New(errs.KindStateConflict, "retained Blueprint resource configuration changed")
+					return nil, errs.Newf(errs.KindStateConflict,
+						"retained Blueprint %s resource %q configuration changed", section, name)
 				}
 			} else if section == "configs" || section == "secrets" {
 				appendMappingValue(nextMapping, name, value)
