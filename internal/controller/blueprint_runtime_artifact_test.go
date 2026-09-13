@@ -126,3 +126,108 @@ func TestRetainBlueprintNativeRuntimeSourcesKeepsBothSlotsAndOneProxy(t *testing
 		}
 	}
 }
+
+// Rationale: retained-resource equality is semantic for YAML mappings, while
+// still rejecting changes to network configuration and ownership values.
+func TestRetainBlueprintRuntimeIgnoresNestedResourceMappingOrder(t *testing.T) {
+	current, _, retained := retainedNetworkOrderingArtifacts()
+	if _, err := RetainBlueprintNativeRuntime(current, retained, []string{"native"}); err != nil {
+		t.Fatal("equivalent reordered retained network was rejected", err)
+	}
+	for name, changed := range map[string]string{
+		"subnet":          "10.96.11.0/24",
+		"ownership label": "false",
+	} {
+		t.Run(name, func(t *testing.T) {
+			drifted := proto.CloneOf(retained)
+			if name == "subnet" {
+				drifted.CanonicalYaml = []byte(strings.ReplaceAll(
+					string(drifted.CanonicalYaml), "10.96.10.0/24", changed,
+				))
+			} else {
+				drifted.CanonicalYaml = []byte(strings.ReplaceAll(
+					string(drifted.CanonicalYaml), `com.groundplane.managed: "true"`,
+					`com.groundplane.managed: "`+changed+`"`,
+				))
+			}
+			if _, err := RetainBlueprintNativeRuntime(current, drifted, []string{"native"}); err == nil {
+				t.Fatal("retained network drift was accepted")
+			}
+		})
+	}
+}
+
+// Rationale: two physical sources for one retained Service may serialize the
+// same nested resource in different map order, but may not disagree on values.
+func TestRetainBlueprintRuntimeSourcesIgnoreNestedResourceMappingOrder(t *testing.T) {
+	current, proxy, workload := retainedNetworkOrderingArtifacts()
+	if _, err := RetainBlueprintNativeRuntimeSources(
+		current, []*agentpb.ComposeArtifact{proxy, workload}, []string{"native"},
+	); err != nil {
+		t.Fatal("equivalent reordered source networks were rejected", err)
+	}
+	drifted := proto.CloneOf(workload)
+	drifted.CanonicalYaml = []byte(strings.ReplaceAll(
+		string(drifted.CanonicalYaml), "10.96.10.0/24", "10.96.11.0/24",
+	))
+	if _, err := RetainBlueprintNativeRuntimeSources(
+		current, []*agentpb.ComposeArtifact{proxy, drifted}, []string{"native"},
+	); err == nil {
+		t.Fatal("disagreeing retained source network was accepted")
+	}
+}
+
+func retainedNetworkOrderingArtifacts() (
+	*agentpb.ComposeArtifact,
+	*agentpb.ComposeArtifact,
+	*agentpb.ComposeArtifact,
+) {
+	current := &agentpb.ComposeArtifact{
+		OwnerKind: agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		OwnerId:   "environment", ProjectName: "project", AuthorizedVolumeDir: "/volume",
+		CanonicalYaml: []byte(`services:
+  api:
+    image: desired
+    networks:
+      backend: {}
+networks:
+  backend:
+    name: gp_net_backend
+    ipam:
+      config:
+        - subnet: 10.96.10.0/24
+    labels:
+      com.groundplane.kind: network
+      com.groundplane.managed: "true"
+`),
+		Services: []*agentpb.ComposeService{{ServiceId: "native", ComposeName: "api"}},
+		Networks: []*agentpb.ComposeNetwork{{
+			NetworkId: "network", ComposeName: "backend", DockerName: "gp_net_backend",
+		}},
+	}
+	proxy := proto.CloneOf(current)
+	proxy.Services = []*agentpb.ComposeService{{
+		ServiceId: "native", ComposeName: "api", Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+	}}
+	workload := proto.CloneOf(current)
+	workload.CanonicalYaml = []byte(`services:
+  api--green:
+    networks:
+      backend: {}
+    image: sealed
+networks:
+  backend:
+    labels:
+      com.groundplane.managed: "true"
+      com.groundplane.kind: network
+    ipam:
+      config:
+        - subnet: 10.96.10.0/24
+    name: gp_net_backend
+`)
+	workload.Services = []*agentpb.ComposeService{{
+		ServiceId: "native", ComposeName: "api--green", Slot: "green",
+		Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
+	}}
+	return current, proxy, workload
+}

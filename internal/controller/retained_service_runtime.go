@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"bytes"
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -93,9 +92,7 @@ func RetainBlueprintNativeRuntimeSources(
 					appendMappingValue(next, name, value)
 					continue
 				}
-				before, e1 := yaml.Marshal(value)
-				after, e2 := yaml.Marshal(next.Content[existing+1])
-				if e1 != nil || e2 != nil || !bytes.Equal(before, after) {
+				if !sameComponentRuntimeNode(value, next.Content[existing+1]) {
 					return nil, errs.New(errs.KindStateConflict, "Blueprint retained resource sources disagree")
 				}
 			}

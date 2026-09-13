@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"sort"
 
@@ -99,9 +98,7 @@ func RetainBlueprintNativeRuntime(
 			}
 			currentIndex := mappingIndex(nextMapping, name)
 			if currentIndex >= 0 {
-				before, beforeErr := yaml.Marshal(value)
-				after, afterErr := yaml.Marshal(nextMapping.Content[currentIndex+1])
-				if beforeErr != nil || afterErr != nil || !bytes.Equal(before, after) {
+				if !sameComponentRuntimeNode(value, nextMapping.Content[currentIndex+1]) {
 					return nil, errs.Newf(errs.KindStateConflict,
 						"retained Blueprint %s resource %q configuration changed", section, name)
 				}
