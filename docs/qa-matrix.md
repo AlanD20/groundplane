@@ -203,7 +203,7 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 | TASK-03 | Abort pending, Agent-running and Controller-running work; repeat Abort. | Exact target terminates according to its effect contract; no extra Task; already-aborted replay returns the same result. | PARTIAL H6 |
 | TASK-04 | Race Abort with natural completion; Abort terminal work or an offline/stale Agent assignment. | Correct conflict or safe delivery failure; no false undone effect or released ownership; eventual timeout remains bounded. | PARTIAL H6 |
 | TASK-05 | Retry an eligible failed Task; try unsafe, superseded and unsupported retries separately. | Allowed attempt preserves original operation inputs/owner; forbidden retry cannot restart effects or silently rebase desired state. | PARTIAL H6 |
-| TASK-06 | Disconnect/resume event stream at boundaries, during compaction and terminal drain. | Immutable sequences have no loss or duplicate effects; terminal state is consistent; context cancellation releases subscriptions. | U |
+| TASK-06 | Disconnect/resume event stream at boundaries, during compaction and terminal drain. | Immutable sequences have no loss or duplicate effects; terminal state is consistent; context cancellation releases subscriptions. | BLOCKED D6 |
 | TASK-07 | Exceed event count/size limits or submit output/secret-bearing diagnostics. | Bounded typed events and safe errors; no secret/subprocess output in history and no unbounded growth. | U |
 | TASK-08 | Restart during 90-day terminal retention cleanup with shared retry inputs. | Only eligible history removed; live Tasks, required runtime receipts and shared inputs remain; cleanup resumes without orphaning records. | U |
 | TASK-09 | Deliver a valid report that conflicts during durable publication. | Assignment is quarantined for that session without an Agent crash loop, false success or lost claim; unrelated work obeys both capacity limits. | U |
@@ -440,6 +440,7 @@ application interruption. A machine reboot is not an interruption-free GP update
 | D3 | The restart verifier expects unchanged Agent start time, but normal Controller shutdown stops owned Agent/etcd containers. | Resolve the requirement/verifier disagreement with the user. Neither relax the assertion nor change lifecycle behavior automatically. |
 | D4 | Failed application-rollout recovery after runtime configuration changes remains unresolved. | Do not resume dependent interrupted-Task/reboot faults until baseline and required recovery are qualified and current permission allows them. |
 | D5 | Production load, duration, latency, acceptable recovery time and pressure safety bounds are not yet agreed for a full reliability run. | Obtain these inputs before calling load/soak/recovery qualification complete. Existing 600-second evidence is bounded, not a production capacity guarantee. |
+| D6 | Local Task-stream compaction recovery fails when a closed event channel wins selection over the queued compaction error. | Owner decision required for the scoped watch-completion repair. Preserve the failing test and evidence below; require recovery without lost/duplicate events, correct terminal drain and joined watches before closing the local failure. Live SSE/etcd qualification remains separate. |
 
 The MVP assumes a trusted operator organization and explicitly does not promise
 strict peer isolation on shared backing bridges, multi-host HA, database migration
@@ -879,6 +880,65 @@ of production constants. Confirmed cancellation must remove the old slot;
 replacement must preserve all seven unrelated subscriptions. Sixteen sequential
 cancel cycles test slot reuse. Command waits and the overflow admission probe
 are bounded so a broken limit or missing handoff reports a local failure.
+
+#### Controller-Agent assignment admission and session lifecycle
+
+Reviewed and retained all 29 behavioral tests in these seven files. Each has a
+case link, a concrete failure-prevention reason and a local proof limit. No test
+in this batch was a confirmed tautology or duplicate. The verification target is
+the exact 29 tests plus one unchanged consumer of the simplified fence helper.
+All 30 pass with the race detector in
+`.tmp/qa-test-review-agent-admission-registry.log`. That log also retains the
+initial test-only compile error: the three new plan-hash assertions addressed
+the assignment instead of its nested plan. The corrected assertions pass.
+
+| Reviewed tests | Retention reason and corrections | Matrix coverage or gap |
+| --- | --- | --- |
+| Five in [assignment_admission_test.go](../internal/controller/agentchannel/assignment_admission_test.go) | Resume wakes dispatch; each pause owns only its hold; lifecycle fences survive resume; cancellation restores admission without terminating an admitted send; preparation drains before pause completes. Stronger checks require callback execution, resumed snapshot identity and completion of the released send. | HOST-04/07, UP-04, TASK-10: in-memory admission and controlled concurrency, not durable claims, live update or workload continuity. |
+| One in [assignment_pause_dispatch_test.go](../internal/controller/agentchannel/assignment_pause_dispatch_test.go) | A pause during plan resolution leaves a valid assignment neither delivered nor quarantined; resume sends its exact Task, assignment and plan identity. | HOST-07, TASK-10: fake-store dispatch, not real claim persistence or execution. |
+| One in [assignment_quarantine_test.go](../internal/controller/agentchannel/assignment_quarantine_test.go) | One unrenderable recovered assignment is isolated while the valid assignment is sent, with exact delivered/quarantined ownership. The rationale no longer claims timeout or repeated-Ready proof. | TASK-09/10, HOST-05: one fake-store dispatch, not reconnect recovery or bounded timeout. |
+| One in [config_update_test.go](../internal/controller/agentchannel/config_update_test.go) | Initial and replacement interval/concurrency values are exact. Replacement must wait for a Ready showing full capacity under the old limit; premature lowering would reject that later Ready. | HOST-07: scripted sequencing, not real worker drain, saved labels or subsequent dispatch under the new limit. |
+| One in [blueprint_closing_dispatch_test.go](../internal/controller/agentchannel/blueprint_closing_dispatch_test.go) | Injected Controller completion must not resolve the old plan, quarantine it or consume capacity; the next assignment has exact ownership and wire identity. Renamed to describe reconnect completion rather than claim durable Blueprint proof. | TASK-10, BP-10: fake completion only, not actual Blueprint terminal publication or desired-state races. |
+| One in [native_predecessor_assignment_test.go](../internal/controller/agentchannel/native_predecessor_assignment_test.go) | Preserve complete restoration identity, candidate target and durable digest; native artifact bytes remain unchanged after the caller mutates its buffers. | SVC-09/12, TASK-10: wire conversion and copy ownership, not digest derivation, valid runtime artifacts or actual restoration. |
+| Nineteen in [registry_test.go](../internal/controller/agentchannel/registry_test.go) | Preserve coalesced wake signals, replacement/revocation ownership, exact-generation fresh Ready, canceled subscription cleanup, lifecycle drain responsiveness and stale/invalid/canceled-open rejection. Stronger checks require actual subscription removal, a fresh report after reconnect and rejected send callbacks while stopped. | HOST-04/05/07, TASK-01/09/10, UP-04: local registry and controlled send races, not credentials, durable lifecycle state, network teardown or process recovery. |
+
+The fence helper now calls the concrete registry method directly, removing stale
+runtime interface discovery. Its unchanged consumer
+`TestConnectDoesNotDeliverAssignmentClaimedDuringPriorGenerationFence` is included
+in verification; the rest of `server_test.go` is not reviewed by this batch.
+No production code or live state changed. These checks do not qualify a whole
+product case or uninterrupted hosting. Formatting and diff checks pass.
+
+#### Durable Task event-stream boundaries
+
+The bounded review retains five tests in
+[task_event_stream_test.go](../internal/infra/etcd/task_event_stream_test.go),
+each linked to TASK-06: suffix replay and terminal closure, resume validation
+before opening watches, sequence-based compaction recovery, gap refusal and
+subscription cleanup on blocked-consumer cancellation. Their in-memory store
+does not qualify real etcd compaction, HTTP SSE or Controller/Agent execution.
+The first focused race run passes all five in
+`.tmp/qa-test-review-durable-task-stream.log`, but subsequent failure invalidates
+the compaction pass. Seven of 20 runs fail in
+`.tmp/qa-test-review-durable-task-stream-compaction-repeat.log`. A final bounded
+run with an early-return assertion fails on its first iteration in
+`.tmp/qa-test-review-durable-task-stream-compaction-error.log` with
+`internal: task event watch closed unexpectedly`.
+
+The memory store injects the compaction error and closes both watch channels;
+the production adapter uses the same error-then-close sequence. The Task stream
+can select the closed event channel instead of the queued compaction error,
+returning before the required resnapshot. This reproduces a local stream failure,
+not a live etcd incident or application outage. The test edits remain uncommitted
+pending the owner's repair decision (D6). No product fix is authorized or applied.
+
+Stronger retained assertions require exact watch selectors and snapshot-successor
+revisions, no extra events after closure, zero watch starts for an invalid resume,
+preserved terminal replay records and released subscriptions after gap/cancellation.
+The blocked consumer is now actually delivering an event before cancellation.
+Compaction and final-drain delivery order are still scheduler-selected in these
+fixtures; they do not independently prove every notification ordering. The current
+failing test must not be weakened or converted into an expected-success disconnect.
 
 The remaining root-module Go tests outside the reviewed files still require review.
 Helpers and fixtures are not standalone test cases; inventory counts must not

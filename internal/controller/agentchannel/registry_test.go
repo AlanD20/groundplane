@@ -15,6 +15,7 @@ const (
 	testOtherAgentID = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 )
 
+// QA: TASK-01/09; in-memory wake delivery/coalescing, not Task publication or execution.
 // Rationale: repeated publication hints must wake every current session while
 // retaining at most one pending signal per Agent.
 func TestRegistryWakeTaskDispatchBroadcastsAndCoalesces(t *testing.T) {
@@ -65,6 +66,7 @@ type sessionOpenOutcome struct {
 	err     error
 }
 
+// QA: HOST-04/07, UP-04; controlled blocked sends, not network or process replacement.
 // Rationale: every lifecycle fence must close assignment admission atomically
 // without holding the global Registry lock while an admitted send ignores
 // session cancellation.
@@ -276,6 +278,7 @@ func assertAssignmentSendRejected(t *testing.T, session *Session) {
 	}
 }
 
+// QA: HOST-04/05, TASK-10; local session replacement, not credential authentication.
 // Rationale: a replaced connection must lose authority without being able to
 // mark its replacement offline or mutate its readiness state.
 func TestRegistryFencesReplacementSessions(t *testing.T) {
@@ -305,6 +308,7 @@ func TestRegistryFencesReplacementSessions(t *testing.T) {
 	second.Close()
 }
 
+// QA: HOST-04/05; local readiness subscription, not public health or enrollment completion.
 // Rationale: enrollment must not miss the first Ready when the Agent reports it
 // before the Controller installs its readiness subscription.
 func TestRegistryReadyClosesImmediatelyAfterMatchingReady(t *testing.T) {
@@ -328,6 +332,7 @@ func TestRegistryReadyClosesImmediatelyAfterMatchingReady(t *testing.T) {
 	}
 }
 
+// QA: HOST-05; local Ready freshness across disconnect, not observed host health.
 // Rationale: a Ready report belongs to one live authenticated stream; after
 // disconnect, provisioning must wait for a fresh same-generation stream and
 // report instead of reusing historical in-memory evidence.
@@ -359,6 +364,11 @@ func TestRegistryReadyWaitsForFreshReportAfterMatchingSessionCloses(t *testing.T
 		t.Fatalf("open replacement session: %v", err)
 	}
 	defer replacement.Close()
+	select {
+	case <-ready:
+		t.Fatal("replacement connection satisfied readiness without a fresh report")
+	default:
+	}
 	if err := replacement.RecordReady(testTime().Add(time.Second), 2, "v0.4.2"); err != nil {
 		t.Fatalf("record replacement Ready: %v", err)
 	}
@@ -369,6 +379,7 @@ func TestRegistryReadyWaitsForFreshReportAfterMatchingSessionCloses(t *testing.T
 	}
 }
 
+// QA: HOST-04/05; local subscribe-before-Ready sequencing, not enrollment completion.
 // Rationale: enrollment may subscribe before the Agent opens its stream, so
 // subscription registration and the later matching Ready must be atomic.
 func TestRegistryReadyClosesWhenMatchingReadyArrivesAfterSubscribe(t *testing.T) {
@@ -398,6 +409,7 @@ func TestRegistryReadyClosesWhenMatchingReadyArrivesAfterSubscribe(t *testing.T)
 	}
 }
 
+// QA: HOST-04/05; actual registry subscription cleanup, not transport teardown.
 // Rationale: canceling enrollment must release its pending readiness
 // subscription without changing a later subscriber for the same generation.
 func TestRegistryReadyCancellationReleasesSubscription(t *testing.T) {
@@ -412,6 +424,12 @@ func TestRegistryReadyCancellationReleasesSubscription(t *testing.T) {
 	case <-ready:
 	case <-time.After(time.Second):
 		t.Fatal("canceled Ready subscription did not close")
+	}
+	registry.mu.Lock()
+	remaining := len(registry.ready[readyKey{agentID: testAgentID, generation: 7}])
+	registry.mu.Unlock()
+	if remaining != 0 {
+		t.Fatalf("canceled Ready subscriptions retained = %d", remaining)
 	}
 
 	later, err := registry.Ready(context.Background(), testAgentID, 7)
@@ -438,6 +456,7 @@ func TestRegistryReadyCancellationReleasesSubscription(t *testing.T) {
 	}
 }
 
+// QA: HOST-04/05, TASK-10; local generation matching, not persisted authentication.
 // Rationale: a Ready report from a replacement generation must never satisfy
 // enrollment or health waiting for an older durable generation.
 func TestRegistryReadyIgnoresDifferentGeneration(t *testing.T) {
@@ -463,6 +482,7 @@ func TestRegistryReadyIgnoresDifferentGeneration(t *testing.T) {
 	}
 }
 
+// QA: HOST-04, UP-04, TASK-10; local fence/drain sequencing, not runtime recovery.
 // Rationale: a recovery fence must revoke every live session at or below its
 // bound and must not report completion until the canceled stream closes.
 func TestRegistryFenceThroughCancelsAndWaitsForPriorGeneration(t *testing.T) {
@@ -493,6 +513,7 @@ func TestRegistryFenceThroughCancelsAndWaitsForPriorGeneration(t *testing.T) {
 	assertStateConflict(t, err)
 }
 
+// QA: HOST-04, TASK-10; repeated local fencing, not durable recovery replay.
 // Rationale: recovery may repeat after the normal path already revoked and
 // disconnected the prior generation, so the bounded fence must remain a no-op.
 func TestRegistryFenceThroughIsIdempotentAfterNormalRevocation(t *testing.T) {
@@ -515,6 +536,7 @@ func TestRegistryFenceThroughIsIdempotentAfterNormalRevocation(t *testing.T) {
 	}
 }
 
+// QA: HOST-04, TASK-10; local newer-generation preservation, not Agent replacement.
 // Rationale: a current-generation session proves every lower generation has
 // already lost registry authority; recovery must not revoke or cancel it.
 func TestRegistryFenceThroughLeavesNewerRegisteredGenerationCurrent(t *testing.T) {
@@ -542,6 +564,7 @@ func TestRegistryFenceThroughLeavesNewerRegisteredGenerationCurrent(t *testing.T
 	prior.Close()
 }
 
+// QA: HOST-04, TASK-10; local stale-operation rejection, not durable lifecycle completion.
 // Rationale: stale lifecycle work must never stop, revoke, or wait on a newer
 // replacement generation that reused the same Agent id.
 func TestRegistryLifecycleOperationsFenceGenerationMismatch(t *testing.T) {
@@ -565,6 +588,7 @@ func TestRegistryLifecycleOperationsFenceGenerationMismatch(t *testing.T) {
 	}
 }
 
+// QA: HOST-04; local absent/offline lifecycle fences, not resource deletion or cleanup.
 // Rationale: deletion retries are allowed after disconnect or after the
 // in-memory session disappeared, and each matching operation must be a no-op.
 func TestRegistryLifecycleOperationsAreIdempotentWhenAbsentOrOffline(t *testing.T) {
@@ -606,6 +630,7 @@ func TestRegistryLifecycleOperationsAreIdempotentWhenAbsentOrOffline(t *testing.
 	}
 }
 
+// QA: HOST-04/07, TASK-10; local reconnect admission, not actual Task dispatch.
 // Rationale: quiescence belongs to an Agent generation, not one connection;
 // replacing a live same-generation stream must not silently reopen assignment.
 func TestRegistrySameGenerationReconnectRemainsStoppedAfterLiveQuiescence(t *testing.T) {
@@ -630,9 +655,11 @@ func TestRegistrySameGenerationReconnectRemainsStoppedAfterLiveQuiescence(t *tes
 	if replacement.AssignmentsAllowed() {
 		t.Fatal("same-generation replacement reopened assignments")
 	}
+	assertAssignmentSendRejected(t, replacement)
 	first.Close()
 }
 
+// QA: HOST-04, TASK-10; in-memory absent/offline fencing, not Controller restart durability.
 // Rationale: quiescence recorded before connection or after disconnect must
 // still fence a later same-generation stream during resumable deletion.
 func TestRegistrySameGenerationReconnectRemainsStoppedWhenAbsentOrOffline(t *testing.T) {
@@ -675,12 +702,14 @@ func TestRegistrySameGenerationReconnectRemainsStoppedWhenAbsentOrOffline(t *tes
 			if session.AssignmentsAllowed() {
 				t.Fatal("same-generation session reopened assignments")
 			}
+			assertAssignmentSendRejected(t, session)
 		})
 	}
 }
 
+// QA: HOST-04, TASK-10; local absent-generation revocation, not persisted token policy.
 // Rationale: removal can revoke while authentication is paused before Open;
-// the later Open must observe durable-policy fencing despite no live session.
+// the later Open must observe the registry fence despite no live session.
 func TestRegistryRevokeWhileAbsentRejectsPausedSameGenerationOpen(t *testing.T) {
 	registry := NewRegistry()
 	if err := registry.Revoke(context.Background(), testAgentID, 7); err != nil {
@@ -700,6 +729,7 @@ func TestRegistryRevokeWhileAbsentRejectsPausedSameGenerationOpen(t *testing.T) 
 	replacement.Close()
 }
 
+// QA: HOST-04/05, TASK-10; local input rejection preserving an existing session.
 // Rationale: invalid Open inputs must fail before a newer attempt can cancel
 // or otherwise mutate the current authenticated session.
 func TestRegistryOpenRejectsInvalidInputsWithoutFencingCurrentSession(t *testing.T) {
@@ -735,6 +765,7 @@ func TestRegistryOpenRejectsInvalidInputsWithoutFencingCurrentSession(t *testing
 	}
 }
 
+// QA: HOST-04/05; controlled lock/cancellation race, not network authentication.
 // Rationale: a parent canceled while Open waits for the registry lock is
 // already canceled at the mutation boundary and must not fence the live session.
 func TestRegistryOpenRejectsParentCanceledWhileWaitingForMutation(t *testing.T) {
@@ -768,6 +799,7 @@ func TestRegistryOpenRejectsParentCanceledWhileWaitingForMutation(t *testing.T) 
 	}
 }
 
+// QA: HOST-04, TASK-10; local revocation ownership, not credential rotation.
 // Rationale: revoking one generation must fence its stream idempotently while
 // still allowing a separately authenticated newer generation to replace it.
 func TestRegistryRevokeFencesOnlyMatchingGeneration(t *testing.T) {
@@ -805,13 +837,7 @@ func fenceRegistryThrough(
 	agentID string,
 	generation uint64,
 ) error {
-	fencer, ok := any(registry).(interface {
-		FenceThrough(context.Context, string, uint64) error
-	})
-	if !ok {
-		return errors.New("registry does not expose a prior-generation fence")
-	}
-	return fencer.FenceThrough(ctx, agentID, generation)
+	return registry.FenceThrough(ctx, agentID, generation)
 }
 
 func assertStateConflict(t *testing.T, err error) {

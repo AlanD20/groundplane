@@ -20,9 +20,10 @@ func (store *closingBlueprintTaskStore) ReconnectAgentAssignment(
 	return assignment, nil
 }
 
+// QA: TASK-10, BP-10; injected reconnect completion, not durable Blueprint completion.
 // Rationale: Controller-only completion must neither resolve closed Script
 // artifacts nor consume the Agent slot needed by the next pending Task.
-func TestDispatchReadySkipsControllerCompletedBlueprint(t *testing.T) {
+func TestDispatchReadySkipsControllerCompletedReconnect(t *testing.T) {
 	at := testTime()
 	agentID := ids.NewAt(ids.KindAgent, at, 921)
 	closing := assignmentQuarantineFixture(at, agentID, 922)
@@ -54,7 +55,13 @@ func TestDispatchReadySkipsControllerCompletedBlueprint(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(stream.sent) != 1 || stream.sent[0].GetTaskAssignment().GetTaskId() != next.Task.Record.ID ||
-		len(quarantined) != 0 || len(delivered) != 1 {
+		len(quarantined) != 0 || len(delivered) != 1 ||
+		delivered[next.Task.Record.ID] != next.Assignment.Record.AssignmentID {
 		t.Fatal("Controller completion was dispatched, quarantined, or consumed capacity")
+	}
+	assignment := stream.sent[0].GetTaskAssignment()
+	if assignment.GetAssignmentId() != next.Assignment.Record.AssignmentID ||
+		hex.EncodeToString(assignment.GetPlan().GetPlanHash()) != next.Task.Record.PlanHash {
+		t.Fatalf("next assignment identity = %v", assignment)
 	}
 }

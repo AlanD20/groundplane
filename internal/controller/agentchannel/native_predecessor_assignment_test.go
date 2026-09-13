@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
+// QA: SVC-09/12, TASK-10; wire encoding and byte ownership, not runtime restoration or digest derivation.
 // Rationale: the Controller wire encoder must preserve the durable authority
 // digest and clone each native C/inactive artifact byte slice. It must not
 // rederive a second digest format or alias the durable record.
@@ -61,6 +62,19 @@ func TestCandidateReleaseAssignmentAuthorityCarriesNativeWitnessAndDigest(t *tes
 	if !bytes.Equal(encoded.restoration.AuthoritySha256, mustDecodeDigest(t, durableDigest)) {
 		t.Fatal("wire authority omitted the durable authority digest")
 	}
+	if encoded.mode != agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD || len(encoded.recoveryDigest) != 0 ||
+		encoded.restoration.GetTaskId() != taskID || encoded.restoration.GetOperationId() != operationID ||
+		!bytes.Equal(encoded.restoration.GetPlanHash(), bytes.Repeat([]byte{0x21}, 32)) ||
+		encoded.restoration.GetEnvironmentId() != environment || encoded.restoration.GetCandidateArtifactId() != artifactID {
+		t.Fatalf("wire restoration identity = %v", encoded.restoration)
+	}
+	if len(encoded.restoration.Candidates) != 1 ||
+		encoded.restoration.Candidates[0].GetServiceId() != serviceID ||
+		encoded.restoration.Candidates[0].GetReleaseId() != candidateID ||
+		encoded.restoration.Candidates[0].GetTarget() !=
+			agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR {
+		t.Fatalf("wire restoration candidates = %v", encoded.restoration.Candidates)
+	}
 	if len(encoded.restoration.NativePredecessors) != 1 ||
 		encoded.restoration.NativePredecessors[0].GetServiceId() != serviceID ||
 		!bytes.Equal(encoded.restoration.NativePredecessors[0].GetCurrentArtifact(), current) ||
@@ -69,8 +83,8 @@ func TestCandidateReleaseAssignmentAuthorityCarriesNativeWitnessAndDigest(t *tes
 	}
 	current[0] ^= 0xff
 	retained[0] ^= 0xff
-	if encoded.restoration.NativePredecessors[0].CurrentArtifact[0] == current[0] ||
-		encoded.restoration.NativePredecessors[0].RetainedPriorArtifact[0] == retained[0] {
+	if !bytes.Equal(encoded.restoration.NativePredecessors[0].CurrentArtifact, []byte{0x0a, 0x01, 0xc1}) ||
+		!bytes.Equal(encoded.restoration.NativePredecessors[0].RetainedPriorArtifact, []byte{0x0a, 0x01, 0xb1}) {
 		t.Fatal("wire native authority aliases durable bytes")
 	}
 }

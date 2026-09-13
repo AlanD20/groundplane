@@ -8,6 +8,9 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
+// QA: HOST-07; scripted Ready sequencing, not actual worker drain or new-limit dispatch.
+// Rationale: replacement config must wait for full capacity under the old limit;
+// sending the lower limit on the busy Ready would reject the following idle Ready.
 func TestConfigUpdateDrainsBeforeDelivery(t *testing.T) {
 	t.Parallel()
 
@@ -34,7 +37,8 @@ func TestConfigUpdateDrainsBeforeDelivery(t *testing.T) {
 	}
 	initial := stream.sent[0].GetConfigUpdate().GetAgentConfig()
 	updated := stream.sent[1].GetConfigUpdate().GetAgentConfig()
-	if initial.GetMaxConcurrentTasks() != 2 || updated.GetMaxConcurrentTasks() != 1 ||
+	if initial.GetMaxConcurrentTasks() != 2 || initial.GetPullIntervalSeconds() != 2 ||
+		updated.GetMaxConcurrentTasks() != 1 ||
 		updated.GetPullIntervalSeconds() != 5 {
 		t.Fatalf("configs = initial %#v, updated %#v", initial, updated)
 	}

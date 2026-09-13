@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// QA: HOST-07, UP-04; local admission and wake signals, not an Agent update.
 // Rationale: update preparation must be reversible without resetting the
 // monotonic lifecycle fence or requiring an Agent reconnection to make progress.
 func TestRegistryAssignmentPauseResumesAndWakesDispatch(t *testing.T) {
@@ -21,13 +22,17 @@ func TestRegistryAssignmentPauseResumesAndWakesDispatch(t *testing.T) {
 	if session.AssignmentsAllowed() {
 		t.Fatal("paused session allows assignments")
 	}
-	snapshot, _ := registry.Snapshot(testAgentID)
-	if !snapshot.AssignmentsStopped || !snapshot.Online {
+	snapshot, ok := registry.Snapshot(testAgentID)
+	if !ok || !snapshot.AssignmentsStopped || !snapshot.Online || snapshot.Generation != 7 {
 		t.Fatalf("paused snapshot = %+v", snapshot)
 	}
 	resume()
 	resume()
 	assertAdmissionAllowed(t, session)
+	snapshot, ok = registry.Snapshot(testAgentID)
+	if !ok || snapshot.AssignmentsStopped || !snapshot.Online || snapshot.Generation != 7 {
+		t.Fatalf("resumed snapshot = %+v", snapshot)
+	}
 	select {
 	case <-session.taskDispatchWake():
 	default:
@@ -35,6 +40,7 @@ func TestRegistryAssignmentPauseResumesAndWakesDispatch(t *testing.T) {
 	}
 }
 
+// QA: HOST-07, UP-04; in-memory pause ownership across session replacement only.
 // Rationale: one operation can release only its own pause; an equal-generation
 // reconnect must inherit every pause that is still held.
 func TestRegistryAssignmentPauseOwnsOnlyItsAdmissionHold(t *testing.T) {
@@ -55,10 +61,12 @@ func TestRegistryAssignmentPauseOwnsOnlyItsAdmissionHold(t *testing.T) {
 	if reconnected.AssignmentsAllowed() {
 		t.Fatal("one released pause bypassed the other operation")
 	}
+	assertAssignmentSendRejected(t, reconnected)
 	second()
 	assertAdmissionAllowed(t, reconnected)
 }
 
+// QA: HOST-04/07, UP-04; local generation fences, not token rotation or deletion.
 // Rationale: resuming update preparation must never reopen a deletion fence,
 // revocation, or an unrelated newer session generation.
 func TestRegistryAssignmentPausePreservesLifecycleAuthority(t *testing.T) {
@@ -91,13 +99,19 @@ func TestRegistryAssignmentPausePreservesLifecycleAuthority(t *testing.T) {
 	}
 }
 
+// QA: HOST-07, UP-04; controlled send cancellation, not network delivery or execution.
 // Rationale: cancellation while a prior send drains must undo only the temporary
 // pause and must not terminate the already admitted assignment payload.
 func TestRegistryAssignmentPauseCancellationRestoresAdmission(t *testing.T) {
 	registry := NewRegistry()
 	session := openAdmissionSession(t, registry, 7)
 	releaseSend, sent := startUncooperativeAssignmentSend(t, session)
-	defer close(releaseSend)
+	released := false
+	defer func() {
+		if !released {
+			close(releaseSend)
+		}
+	}()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	result := make(chan error, 1)
@@ -121,8 +135,13 @@ func TestRegistryAssignmentPauseCancellationRestoresAdmission(t *testing.T) {
 		t.Fatal("pause terminated an already admitted send")
 	default:
 	}
+	close(releaseSend)
+	released = true
+	assertAdmittedSendCompleted(t, sent)
+	assertAdmissionAllowed(t, session)
 }
 
+// QA: HOST-07, TASK-10; controlled preparation hold, not an actual durable claim.
 // Rationale: preparation includes claims and plan resolution, not just the
 // final send; an idle check must not overtake an in-flight durable claim.
 func TestRegistryAssignmentPauseDrainsDispatchPreparation(t *testing.T) {
@@ -200,8 +219,12 @@ func assertAdmissionAllowed(t *testing.T, session *Session) {
 	if !session.AssignmentsAllowed() {
 		t.Fatal("session does not allow assignments")
 	}
-	sent, err := session.sendAssignment(func() error { return nil })
-	if err != nil || !sent {
-		t.Fatalf("assignment after resume: sent=%t, error=%v", sent, err)
+	calls := 0
+	sent, err := session.sendAssignment(func() error {
+		calls++
+		return nil
+	})
+	if err != nil || !sent || calls != 1 {
+		t.Fatalf("assignment after resume: sent=%t, calls=%d, error=%v", sent, calls, err)
 	}
 }

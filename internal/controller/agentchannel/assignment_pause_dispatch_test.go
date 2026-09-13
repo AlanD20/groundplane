@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
+// QA: HOST-07, TASK-10; fake-store dispatch across a controlled pause, not durable execution.
 // Rationale: a valid assignment delayed by update admission is not a corrupt
 // plan. Resuming must deliver it, rather than quarantine it until Task timeout.
 func TestDispatchReadyPauseDuringPreparationRemainsDispatchable(t *testing.T) {
@@ -51,15 +52,22 @@ func TestDispatchReadyPauseDuringPreparationRemainsDispatchable(t *testing.T) {
 		t.Fatal(paused.err)
 	}
 	defer paused.resume()
-	if len(stream.sent) != 0 || len(quarantined) != 0 {
-		t.Fatalf("paused assignment: sent=%d, quarantined=%d", len(stream.sent), len(quarantined))
+	if len(stream.sent) != 0 || len(quarantined) != 0 || len(delivered) != 0 {
+		t.Fatalf("paused assignment: sent=%d, quarantined=%v, delivered=%v", len(stream.sent), quarantined, delivered)
 	}
 	paused.resume()
 	server.plans = &fakePlanResolver{plan: plan}
 	if err := server.dispatchReady(stream, session, testAgentID, authorization, 1, delivered, quarantined); err != nil {
 		t.Fatal(err)
 	}
-	if len(stream.sent) != 1 || delivered[claim.Task.Record.ID] != claim.Assignment.Record.AssignmentID {
+	if len(stream.sent) != 1 || len(delivered) != 1 || len(quarantined) != 0 ||
+		delivered[claim.Task.Record.ID] != claim.Assignment.Record.AssignmentID {
 		t.Fatalf("resumed assignment was not delivered: sent=%d, delivered=%v", len(stream.sent), delivered)
+	}
+	assignment := stream.sent[0].GetTaskAssignment()
+	if assignment.GetTaskId() != claim.Task.Record.ID ||
+		assignment.GetAssignmentId() != claim.Assignment.Record.AssignmentID ||
+		hex.EncodeToString(assignment.GetPlan().GetPlanHash()) != claim.Task.Record.PlanHash {
+		t.Fatalf("resumed assignment identity = %v", assignment)
 	}
 }

@@ -28,8 +28,9 @@ func (resolver *assignmentQuarantinePlanResolver) ResolveExecutionPlan(
 	return resolver.plans[task.ID], nil
 }
 
-// Rationale: one corrupt durable plan must time out in isolation rather than
-// canceling the Agent stream and unrelated work every time Ready is reported.
+// QA: TASK-09/10, HOST-05; one fake-store dispatch, not timeout or reconnect recovery.
+// Rationale: an unrenderable recovered assignment must be quarantined without
+// preventing a valid unrelated assignment from being sent in the same dispatch.
 func TestDispatchReadyQuarantinesUnrenderableRecoveredAssignment(t *testing.T) {
 	t.Parallel()
 
@@ -71,9 +72,15 @@ func TestDispatchReadyQuarantinesUnrenderableRecoveredAssignment(t *testing.T) {
 	if len(stream.sent) != 1 || stream.sent[0].GetTaskAssignment().GetTaskId() != second.Task.Record.ID {
 		t.Fatalf("sent messages = %#v, want only the valid recovered assignment", stream.sent)
 	}
-	if quarantined[first.Task.Record.ID] != first.Assignment.Record.AssignmentID ||
+	if len(quarantined) != 1 || len(delivered) != 1 ||
+		quarantined[first.Task.Record.ID] != first.Assignment.Record.AssignmentID ||
 		delivered[second.Task.Record.ID] != second.Assignment.Record.AssignmentID {
 		t.Fatalf("delivered/quarantined = %#v/%#v", delivered, quarantined)
+	}
+	assignment := stream.sent[0].GetTaskAssignment()
+	if assignment.GetAssignmentId() != second.Assignment.Record.AssignmentID ||
+		hex.EncodeToString(assignment.GetPlan().GetPlanHash()) != second.Task.Record.PlanHash {
+		t.Fatalf("delivered assignment identity = %v", assignment)
 	}
 }
 
