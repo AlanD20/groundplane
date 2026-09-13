@@ -80,7 +80,7 @@ func TestSelectionUsesAppliedResultsAndRequiresKnownEffects(t *testing.T) {
 	assertKeys(t, "unapplied", mustSelect(t, input).Ready, unit.Target)
 	input.Applied[0] = testApplied(unit)
 	assertKeys(t, "applied", mustSelect(t, input).Satisfied, unit.Target)
-	input.Applied[0] = AppliedUnit{Target: unit.Target, State: Uncertain}
+	input.Applied[0] = AppliedUnit{Target: unit.Target, State: Uncertain, UncertainWrites: unit.Writes}
 	got := mustSelect(t, input)
 	assertKeys(t, "unknown effects", got.ResolveEffects, unit.Target)
 	if len(got.Ready)+len(got.Satisfied) != 0 {
@@ -89,6 +89,35 @@ func TestSelectionUsesAppliedResultsAndRequiresKnownEffects(t *testing.T) {
 	input.Applied = nil
 	if _, err := Select(input); err == nil {
 		t.Fatal("missing applied authority was treated as first application")
+	}
+}
+
+// Rationale: unresolved shared-file effects fence every consumer, including one
+// ordered before the uncertain owner and one whose own inputs otherwise match.
+func TestUncertainEffectsBlockSharedResourcesButNotUnrelatedWork(t *testing.T) {
+	shared := testKey(ids.KindEnvEntry, 90)
+	reader := testUnit(testKey(ids.KindService, 91), "reader")
+	writer := testUnit(testKey(ids.KindService, 92), "writer")
+	owner := testUnit(testKey(ids.KindService, 93), "latest-owner")
+	route := testUnit(testKey(ids.KindRoute, 94), "route")
+	reader.Reads = []ResourceKey{shared}
+	writer.Writes = append(writer.Writes, shared)
+	// The latest owner no longer touches shared. Its earlier effects still do.
+	input := Snapshot{Desired: []Unit{reader, writer, owner, route}, Applied: []AppliedUnit{
+		testApplied(reader), {Target: writer.Target, State: Absent},
+		{Target: owner.Target, State: Uncertain, UncertainWrites: []ResourceKey{owner.Target, shared}},
+		{Target: route.Target, State: Absent},
+	}}
+	got := mustSelect(t, input)
+	assertKeys(t, "independent work", got.Ready, route.Target)
+	assertKeys(t, "uncertain owner", got.ResolveEffects, owner.Target)
+	if len(got.Satisfied) != 0 || len(got.Waiting) != 2 ||
+		!slices.Contains(got.Waiting, reader.Target) || !slices.Contains(got.Waiting, writer.Target) {
+		t.Fatal("unknown shared effects did not fence readers and writers")
+	}
+	input.Applied[2].UncertainWrites = nil
+	if _, err := Select(input); err == nil {
+		t.Fatal("unknown effects without an explicit resource scope were accepted")
 	}
 }
 

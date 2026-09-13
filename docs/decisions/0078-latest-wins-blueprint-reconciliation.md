@@ -41,6 +41,9 @@ Compare required inputs with successfully applied inputs for each resource, not
 with the previous submission. An equal desired fingerprint does not prove an
 earlier attempt succeeded or that runtime drift is absent. Unknown effects must
 be resolved before they can be treated as applied or absent.
+Their resource scope comes from the affected execution or observation, not the
+latest desired unit: newer input may no longer reference a file changed earlier.
+Until resolved, those writes fence both readers and writers on the same resources.
 
 The planner groups changes that share inseparable effects into an execution
 unit. Each unit declares its exact read resources, write resources and required

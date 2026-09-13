@@ -39,11 +39,14 @@ const (
 
 // AppliedUnit records acknowledged execution, not an earlier desired document.
 // Absent requires explicit absence authority. Uncertain retains unresolved effects
-// or known drift and cannot justify a no-op or a new mutation.
+// or known drift and names every resource whose contents cannot be trusted. That
+// scope comes from observed effects, never from the possibly different latest unit.
+// Unfinished executors also retain their complete claims in Executions.
 type AppliedUnit struct {
-	Target      ResourceKey
-	State       AppliedState
-	Fingerprint Fingerprint
+	Target          ResourceKey
+	State           AppliedState
+	Fingerprint     Fingerprint
+	UncertainWrites []ResourceKey
 }
 
 type ExecutionState string

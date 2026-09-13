@@ -22,8 +22,12 @@ func Select(input Snapshot) (Selection, error) {
 		desired[unit.Target] = unit
 	}
 	applied := make(map[ResourceKey]AppliedUnit, len(snapshot.Applied))
+	uncertain := make(map[ResourceKey]bool)
 	for _, unit := range snapshot.Applied {
 		applied[unit.Target] = unit
+		for _, key := range unit.UncertainWrites {
+			uncertain[key] = true
+		}
 	}
 	result := Selection{}
 	held := make([]Unit, 0, len(snapshot.Executions)+len(snapshot.Desired))
@@ -61,6 +65,10 @@ func Select(input Snapshot) (Selection, error) {
 			result.ResolveEffects = append(result.ResolveEffects, unit.Target)
 			continue
 		}
+		if touchesUncertain(unit, uncertain) {
+			result.Waiting = append(result.Waiting, unit.Target)
+			continue
+		}
 		if prior.State == Applied && prior.Fingerprint == unit.Fingerprint {
 			result.Satisfied = append(result.Satisfied, unit.Target)
 			continue
@@ -69,6 +77,17 @@ func Select(input Snapshot) (Selection, error) {
 		held = append(held, unit)
 	}
 	return result, nil
+}
+
+func touchesUncertain(unit Unit, uncertain map[ResourceKey]bool) bool {
+	for _, keys := range [][]ResourceKey{unit.Reads, unit.Writes} {
+		for _, key := range keys {
+			if uncertain[key] {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func dependenciesApplied(

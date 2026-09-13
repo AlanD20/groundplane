@@ -25,7 +25,7 @@ func normalizeSnapshot(input Snapshot) (Snapshot, error) {
 		desired[unit.Target], result.Desired[index] = normalized, normalized
 	}
 	applied := make(map[ResourceKey]AppliedUnit, len(result.Applied))
-	for _, unit := range result.Applied {
+	for index, unit := range result.Applied {
 		if !validKey(unit.Target) || unit.State != Applied && unit.State != Absent && unit.State != Uncertain ||
 			(unit.State == Applied) == (unit.Fingerprint == Fingerprint{}) {
 			return Snapshot{}, invalidSnapshot("blueprint reconciliation applied authority is invalid")
@@ -33,6 +33,16 @@ func normalizeSnapshot(input Snapshot) (Snapshot, error) {
 		if _, duplicate := applied[unit.Target]; duplicate {
 			return Snapshot{}, invalidSnapshot("blueprint reconciliation repeats an applied target")
 		}
+		writes, err := normalizeKeys(unit.UncertainWrites)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		if unit.State == Uncertain && !slices.Contains(writes, unit.Target) ||
+			unit.State != Uncertain && len(writes) != 0 {
+			return Snapshot{}, invalidSnapshot("blueprint reconciliation uncertain effect scope is invalid")
+		}
+		unit.UncertainWrites = writes
+		result.Applied[index] = unit
 		applied[unit.Target] = unit
 	}
 	for key := range desired {
