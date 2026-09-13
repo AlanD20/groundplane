@@ -12,6 +12,7 @@ import (
 	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
 )
 
+// QA: LOG-01; injected source-open classification only, not Docker selection or public HTTP/SSE status.
 // Rationale: only typed Docker availability may become a pre-ready 503;
 // malformed managed source state must remain the distinct internal failure path.
 func TestLogManagerClassifiesOpenFailures(t *testing.T) {
@@ -40,6 +41,7 @@ func TestLogManagerClassifiesOpenFailures(t *testing.T) {
 	}
 }
 
+// QA: LOG-01; fake zero-source Agent handshake only, not Controller SSE headers or fixed source selection.
 // Rationale: a valid zero-source subscription still crosses readiness and
 // completes normally, allowing the Controller to commit 200 SSE and return EOF.
 func TestLogManagerReadiesAndCompletesZeroSources(t *testing.T) {
@@ -65,12 +67,14 @@ func TestLogManagerReadiesAndCompletesZeroSources(t *testing.T) {
 	}
 }
 
+// QA: LOG-02, TASK-07; local queue overflow and cleanup only, not client reconnect or process memory measurement.
 // Rationale: the 129th undrained record must overflow the exact 128-record
 // ownership bound, cancel and join the producer, close sources, and free the Agent slot.
 func TestLogManagerTerminatesUndrainedQueueOverflow(t *testing.T) {
 	t.Parallel()
 
-	sources := &burstLogSources{exited: make(chan struct{})}
+	const expectedMaximumQueuedLogEvents = 128
+	sources := &burstLogSources{exited: make(chan struct{}), records: expectedMaximumQueuedLogEvents + 1}
 	manager := newLogManager(logReaderStub{sources: sources})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -88,8 +92,8 @@ func TestLogManagerTerminatesUndrainedQueueOverflow(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("129-record producer remained blocked after queue overflow")
 	}
-	if sources.sent.Load() != maxQueuedLogEvents+1 {
-		t.Fatalf("producer sent %d records, want %d", sources.sent.Load(), maxQueuedLogEvents+1)
+	if sources.sent.Load() != expectedMaximumQueuedLogEvents+1 {
+		t.Fatalf("producer sent %d records, want %d", sources.sent.Load(), expectedMaximumQueuedLogEvents+1)
 	}
 
 	deadline := time.After(time.Second)
@@ -138,14 +142,15 @@ func validAgentLogSubscribe() *agentpb.LogSubscribe {
 }
 
 type burstLogSources struct {
-	exited chan struct{}
-	sent   atomic.Int32
-	closes atomic.Int32
+	exited  chan struct{}
+	records int
+	sent    atomic.Int32
+	closes  atomic.Int32
 }
 
 func (sources *burstLogSources) Run(ctx context.Context, output chan<- *agentpb.LogEvent) error {
 	defer close(sources.exited)
-	for sequence := range maxQueuedLogEvents + 1 {
+	for sequence := range sources.records {
 		select {
 		case output <- &agentpb.LogEvent{RequestId: "request-1", Line: string(rune(sequence))}:
 			sources.sent.Add(1)

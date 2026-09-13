@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
+// QA: CON-07; in-memory slot assembly and zeroization only, not Controller resolution or subprocess exposure.
 // Rationale: the inbox must assemble only the exact assignment slot, transfer
 // ownership to one callback, and clear its buffer immediately after consume.
 func TestBackupSecretInboxConsumesOnceAndClears(t *testing.T) {
@@ -53,6 +54,7 @@ func TestBackupSecretInboxConsumesOnceAndClears(t *testing.T) {
 	}
 }
 
+// QA: CON-07; local Agent receive ownership only, not gRPC memory reclamation or durable secret absence.
 // Rationale: the gRPC receive object is untrusted transient ownership; the
 // Client must clear it after the inbox has copied the accepted chunk.
 func TestClientClearsBackupSecretTransferChunk(t *testing.T) {
@@ -77,8 +79,26 @@ func TestClientClearsBackupSecretTransferChunk(t *testing.T) {
 	if frames[1].GetChunk().Content != nil || !agentAllZero(chunkAlias) {
 		t.Fatal("Client retained received Backup secret chunk")
 	}
+	if _, err := client.handleControllerMessage(context.Background(), &agentpb.ControllerMessage{
+		Payload: &agentpb.ControllerMessage_BackupSecretSlotTransfer{BackupSecretSlotTransfer: frames[2]},
+	}); err != nil {
+		t.Fatalf("handleControllerMessage(end) error = %v", err)
+	}
+	if err := pool.ConsumeBackupSecretSlot(
+		context.Background(), assignment.TaskID, assignment.AssignmentID, workerTestStepID,
+		agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY,
+		func(content []byte) error {
+			if !bytes.Equal(content, []byte("access")) {
+				t.Fatalf("inbox copy = %q, want access", content)
+			}
+			return nil
+		},
+	); err != nil {
+		t.Fatalf("ConsumeBackupSecretSlot() error = %v", err)
+	}
 }
 
+// QA: CON-07, TASK-10; in-memory assignment fence only, not authenticated generation or Controller authorization.
 // Rationale: stale assignment traffic must not mutate the currently reserved
 // slot or close its ready signal.
 func TestBackupSecretInboxRejectsStaleAssignment(t *testing.T) {
@@ -92,8 +112,26 @@ func TestBackupSecretInboxRejectsStaleAssignment(t *testing.T) {
 	if err := inbox.Accept(context.Background(), frame); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("Accept(stale assignment) error = %v, want state conflict", err)
 	}
+	for _, valid := range agentBackupSecretFrames(assignment, []byte("valid")) {
+		if err := inbox.Accept(context.Background(), valid); err != nil {
+			t.Fatalf("Accept(valid after stale) error = %v", err)
+		}
+	}
+	if err := inbox.Consume(
+		context.Background(), assignment.TaskID, assignment.AssignmentID, workerTestStepID,
+		agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY,
+		func(content []byte) error {
+			if !bytes.Equal(content, []byte("valid")) {
+				t.Fatalf("content after stale frame = %q, want valid", content)
+			}
+			return nil
+		},
+	); err != nil {
+		t.Fatalf("Consume(valid after stale) error = %v", err)
+	}
 }
 
+// QA: CON-07, BAK-05/08; local plan-to-slot selection only, not credential resolution or S3 execution.
 // Rationale: capture encrypts with a public recipient and prune does not
 // decrypt, so neither current operation may reserve or accept either private
 // restore identity purpose.
@@ -135,6 +173,7 @@ func TestBackupSecretInboxReservesOnlyS3PurposesForCaptureAndPrune(t *testing.T)
 	}
 }
 
+// QA: CON-07, BAK-16; in-memory abort/stop zeroization only, not process memory or reconnect recovery.
 // Rationale: abort and stream teardown share reservation ownership and must
 // synchronously zero every partially or fully received slot.
 func TestWorkerPoolClearsBackupSecretsOnAbortAndStop(t *testing.T) {
@@ -168,6 +207,7 @@ func TestWorkerPoolClearsBackupSecretsOnAbortAndStop(t *testing.T) {
 	}
 }
 
+// QA: CON-07; local WorkerOutput ordering only, not TaskAck transport or durable terminal publication.
 // Rationale: terminal acknowledgement becomes publishable as soon as the
 // WorkerOutput is visible, so every slot must already be zero at that point.
 func TestWorkerPoolClearsBackupSecretsBeforeTerminalOutput(t *testing.T) {
@@ -208,6 +248,7 @@ func TestWorkerPoolClearsBackupSecretsBeforeTerminalOutput(t *testing.T) {
 	<-done
 }
 
+// QA: CON-07, BAK-16; controlled in-memory race only, not live stream loss or external consumer termination.
 // Rationale: abort and stream teardown must wake a blocked consumer with a
 // lifecycle conflict, rather than strand it or classify cancellation as an
 // internal corruption.
@@ -256,6 +297,7 @@ func TestWorkerPoolBlockedBackupSecretConsumeRacingAbortAndStop(t *testing.T) {
 	}
 }
 
+// QA: CON-07; controlled inbox release/consume race only, not worker or external process cancellation.
 // Rationale: a complete slot can be selected by Consume while lifecycle
 // release wins the following lock. That cancellation is a state conflict, not
 // an impossible internal state.
@@ -291,6 +333,7 @@ func TestBackupSecretInboxCompleteReleaseRacingConsumeIsStateConflict(t *testing
 	}
 }
 
+// QA: CON-07, TASK-10; local transfer-state validation only, not wire truncation or durable credential absence.
 // Rationale: every record transition is closed. Malformed, duplicate, extra,
 // and incomplete streams fail closed and release any accumulated plaintext.
 func TestBackupSecretInboxRejectsInvalidFrameSequences(t *testing.T) {
@@ -305,12 +348,18 @@ func TestBackupSecretInboxRejectsInvalidFrameSequences(t *testing.T) {
 
 	t.Run("duplicate header", func(t *testing.T) {
 		inbox, assignment := registeredBackupSecretInbox(t)
-		frame := agentBackupSecretFrames(assignment, []byte("access"))[0]
-		if err := inbox.Accept(context.Background(), frame); err != nil {
-			t.Fatalf("Accept(header) error = %v", err)
+		frames := agentBackupSecretFrames(assignment, []byte("access"))
+		for _, frame := range frames[:2] {
+			if err := inbox.Accept(context.Background(), frame); err != nil {
+				t.Fatalf("Accept(initial record) error = %v", err)
+			}
 		}
-		if err := inbox.Accept(context.Background(), frame); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+		alias := inbox.tasks[assignment.TaskID].steps[workerTestStepID][agentpb.BackupSecretSlotPurpose_BACKUP_SECRET_SLOT_PURPOSE_S3_ACCESS_KEY].content
+		if err := inbox.Accept(context.Background(), frames[0]); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 			t.Fatalf("Accept(duplicate header) error = %v, want internal", err)
+		}
+		if !agentAllZero(alias) {
+			t.Fatal("duplicate header retained accumulated slot bytes")
 		}
 	})
 
@@ -347,6 +396,7 @@ func TestBackupSecretInboxRejectsInvalidFrameSequences(t *testing.T) {
 	})
 }
 
+// QA: CON-07, BAK-16; recreated in-memory pools only, not actual reconnect, durable claim, or S3 effects.
 // Rationale: stream loss destroys the old inbox. Redispatch of the identical
 // durable claim on a fresh connection accepts only freshly transferred bytes.
 func TestWorkerPoolBackupSecretInboxResetsAcrossReconnectRedispatch(t *testing.T) {

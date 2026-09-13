@@ -8,6 +8,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// QA: TASK-07, CMP-05; protobuf acknowledgement preservation only, not durable classification or runtime recovery.
 // Rationale: Component configuration and activation failures are closed Task
 // failures, not unknown protocol values. The Agent must preserve their exact
 // enum numbers through TaskAck construction and protobuf serialization.
@@ -23,10 +24,11 @@ func TestSendTaskAckPreservesComponentFailureDiagnostics(t *testing.T) {
 			t.Parallel()
 			stream := newFakeStream()
 			client := &Client{}
+			wantPlanHash := PlanHash{1}
 			result := TaskResult{
 				AssignmentID:   workerTestAssignmentID,
 				TaskID:         workerTestTaskID,
-				PlanHash:       PlanHash{1},
+				PlanHash:       wantPlanHash,
 				Terminal:       TaskTerminalFailed,
 				ExitCode:       17,
 				ExecutionEpoch: 3,
@@ -50,8 +52,12 @@ func TestSendTaskAckPreservesComponentFailureDiagnostics(t *testing.T) {
 			if err := proto.Unmarshal(wire, decoded); err != nil {
 				t.Fatalf("Unmarshal(TaskAck) error = %v", err)
 			}
-			if decoded.GetComposeResult().GetDiagnostic() != diagnostic ||
-				!bytes.Equal(decoded.GetPlanHash(), result.PlanHash[:]) {
+			if decoded.GetAssignmentId() != workerTestAssignmentID || decoded.GetTaskId() != workerTestTaskID ||
+				decoded.GetExecutionEpoch() != 3 || decoded.GetExitCode() != 17 ||
+				decoded.GetTerminal() != agentpb.TaskTerminal_TASK_TERMINAL_FAILED ||
+				decoded.GetComposeResult().GetFailedStepId() != "step-component" ||
+				decoded.GetComposeResult().GetDiagnostic() != diagnostic ||
+				!bytes.Equal(decoded.GetPlanHash(), wantPlanHash[:]) {
 				t.Fatalf("decoded TaskAck = %#v", decoded)
 			}
 		})

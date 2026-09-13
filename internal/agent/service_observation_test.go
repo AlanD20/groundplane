@@ -58,6 +58,7 @@ func (stream *serviceCaptureStream) Send(message *agentpb.AgentMessage) error {
 	return stream.agentStream.Send(message)
 }
 
+// QA: OBS-01/02; fake observer/channel projection only, not Docker selection or actual workload health.
 // Rationale: ordinary read failure must return unavailable on the authenticated
 // stream, not disconnect, create a Task, or consume worker-pool capacity.
 func TestServiceObservationClientStream(t *testing.T) {
@@ -114,8 +115,12 @@ func TestServiceObservationClientStream(t *testing.T) {
 				if err := serviceobservation.ValidateResult(request, result); err != nil {
 					t.Fatal(err)
 				}
-				if result.Observations[0].GetUnavailable() != (mode != "success" && mode != "image busy") {
+				wantUnavailable := mode != "success" && mode != "image busy"
+				if result.Observations[0].GetUnavailable() != wantUnavailable {
 					t.Fatalf("wrong result: %v", result)
+				}
+				if !wantUnavailable && result.Observations[0].GetReplicas().GetHealthy() != 1 {
+					t.Fatalf("healthy replicas = %d, want 1", result.Observations[0].GetReplicas().GetHealthy())
 				}
 			case <-ctx.Done():
 				t.Fatal("observation did not return")
@@ -131,6 +136,7 @@ func TestServiceObservationClientStream(t *testing.T) {
 	}
 }
 
+// QA: OBS-03/04; in-memory request cancellation/correlation only, not source-revision or Agent-generation fences.
 // Rationale: one busy read is bounded independently of image work. A stale
 // cancel cannot stop it; its matching cancel joins it and discards late output.
 func TestServiceObservationWorkerCancellation(t *testing.T) {
@@ -200,6 +206,7 @@ func TestServiceObservationWorkerCancellation(t *testing.T) {
 	}
 }
 
+// QA: OBS-03; local caller deadline and late-result replacement only, not Controller 15-second expiry or refresh loops.
 // Rationale: timed-out reads cannot return valid-looking late counts; the
 // observer receives the five-second cap or the caller's earlier deadline.
 func TestServiceObservationDeadlineDiscardsLateCounts(t *testing.T) {
@@ -230,6 +237,7 @@ func TestServiceObservationDeadlineDiscardsLateCounts(t *testing.T) {
 	}
 }
 
+// QA: OBS-03/04; local envelope validation only, not Controller correlation or serving-source rechecks.
 // Rationale: outer unknown fields and malformed cancellation are rejected
 // before they can acquire or release the read-only worker slot.
 func TestServiceObservationRejectsUnknownEnvelope(t *testing.T) {

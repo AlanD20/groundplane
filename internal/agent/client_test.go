@@ -29,6 +29,7 @@ import (
 
 const clientTestAgentID = "agt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
+// QA: HOST-04/05; local Agent stream ordering and copied bytes, not Controller authentication or liveness expiry.
 // Rationale: authentication must be the exact first frame, using a private
 // token copy, before readiness or any work can flow.
 func TestClientSendsAuthenticationFirstAndCopiesToken(t *testing.T) {
@@ -59,6 +60,7 @@ func TestClientSendsAuthenticationFirstAndCopiesToken(t *testing.T) {
 	}
 }
 
+// QA: TASK-07/10; hermetic Agent exchange only, not durable event/terminal publication or host effects.
 // Rationale: terminal acknowledgement identity must survive the worker boundary
 // exactly, while an unresolved procedure fails closed instead of being executed.
 func TestClientSendsExactFailedTaskAcknowledgement(t *testing.T) {
@@ -99,13 +101,20 @@ func TestClientSendsExactFailedTaskAcknowledgement(t *testing.T) {
 		}
 	}
 	if acknowledgement == nil || acknowledgement.TaskId != workerTestTaskID ||
+		acknowledgement.AssignmentId != assignment.AssignmentID ||
 		!bytes.Equal(acknowledgement.PlanHash, planHash[:]) ||
+		acknowledgement.ExecutionEpoch != 7 ||
 		acknowledgement.Terminal != agentpb.TaskTerminal_TASK_TERMINAL_FAILED ||
 		acknowledgement.GetComposeResult() == nil {
 		t.Fatalf("TaskAck = %#v", acknowledgement)
 	}
-	if len(events) != 2 || events[0].ExecutionEpoch != 7 || events[0].Ordinal != 1 ||
+	if len(events) != 2 || events[0].TaskId != workerTestTaskID ||
+		events[0].AssignmentId != assignment.AssignmentID ||
+		!bytes.Equal(events[0].PlanHash, planHash[:]) || events[0].StepId != workerTestStepID ||
+		events[0].ExecutionEpoch != 7 || events[0].Ordinal != 1 ||
 		events[0].State != agentpb.TaskState_TASK_STATE_RUNNING ||
+		events[1].TaskId != workerTestTaskID || events[1].AssignmentId != assignment.AssignmentID ||
+		!bytes.Equal(events[1].PlanHash, planHash[:]) || events[1].StepId != workerTestStepID ||
 		events[1].ExecutionEpoch != 7 || events[1].Ordinal != 2 ||
 		events[1].State != agentpb.TaskState_TASK_STATE_FAILED {
 		t.Fatalf("TaskEvents = %#v", events)
@@ -116,6 +125,7 @@ func TestClientSendsExactFailedTaskAcknowledgement(t *testing.T) {
 	}
 }
 
+// QA: CMP-05, DNS-03; in-memory acknowledgement ownership only, not DNS traffic or durable compensation.
 // Rationale: the client must clone and transmit the complete typed proof so
 // later mutation of worker-owned memory cannot change the acknowledgement.
 func TestClientSendsOwnedDNSResolverObservationEvidence(t *testing.T) {
@@ -139,6 +149,7 @@ func TestClientSendsOwnedDNSResolverObservationEvidence(t *testing.T) {
 	if err := dnsproof.Seal(evidence); err != nil {
 		t.Fatal(err)
 	}
+	wantEvidence := proto.CloneOf(evidence)
 	result := TaskResult{
 		AssignmentID: workerTestAssignmentID, TaskID: workerTestTaskID,
 		Terminal: TaskTerminalCompleted,
@@ -149,23 +160,26 @@ func TestClientSendsOwnedDNSResolverObservationEvidence(t *testing.T) {
 	}
 	evidence.ComponentId = "changed"
 	evidence.ImageConfigDigest[0] = 8
+	evidence.CatchAllQuery.Answers[0].NameServer = "changed.invalid."
+	evidence.CatchAllQuery.Counters[0].After = 99
 	acks := stream.taskAcknowledgements()
-	if len(acks) != 1 ||
-		acks[0].GetComposeResult().GetDnsResolverCandidateObservation().GetComponentId() != "cmp_exact" ||
-		!bytes.Equal(
-			acks[0].GetComposeResult().GetDnsResolverCandidateObservation().GetImageConfigDigest(),
-			bytes.Repeat([]byte{7}, 32),
-		) ||
-		acks[0].GetComposeResult().GetDnsResolverCandidateObservation().GetRenderGeneration() != 11 {
+	if len(acks) != 1 || !proto.Equal(
+		acks[0].GetComposeResult().GetDnsResolverCandidateObservation(), wantEvidence,
+	) {
 		t.Fatalf("TaskAck evidence = %#v", acks)
 	}
 }
 
+// QA: HOST-04; constructor validation only, not token generation, storage, revocation, or Controller acceptance.
 // Rationale: malformed decoded credentials must fail at construction before dialing.
 func TestNewClientRequiresExactlyThirtyTwoTokenBytes(t *testing.T) {
 	t.Parallel()
 
-	for _, size := range []int{0, agentprotocol.RawTokenBytes - 1, agentprotocol.RawTokenBytes + 1} {
+	const expectedRawTokenBytes = 32
+	if agentprotocol.RawTokenBytes != expectedRawTokenBytes {
+		t.Fatalf("Agent protocol raw token bytes = %d, want %d", agentprotocol.RawTokenBytes, expectedRawTokenBytes)
+	}
+	for _, size := range []int{0, expectedRawTokenBytes - 1, expectedRawTokenBytes + 1} {
 		_, err := NewClient(
 			agentprotocol.SocketPath, clientTestAgentID, make([]byte, size),
 			"/var/lib/groundplane/vol", testLogger(),
@@ -180,6 +194,7 @@ func TestNewClientRequiresExactlyThirtyTwoTokenBytes(t *testing.T) {
 	}
 }
 
+// QA: HOST-04/07; local first-frame rejection only, not Controller dispatch fencing or saved config authority.
 // Rationale: the Agent must fail closed when work arrives before authenticated configuration.
 func TestClientRequiresConfigUpdateBeforeReadyOrWork(t *testing.T) {
 	t.Parallel()
@@ -197,6 +212,7 @@ func TestClientRequiresConfigUpdateBeforeReadyOrWork(t *testing.T) {
 	}
 }
 
+// QA: TASK-10; local Agent admission only, not durable claim validation or reconnect recovery.
 // Rationale: zero is the protobuf default and must never become a durable
 // event identity; only a positive Controller-authored epoch may enter a worker.
 func TestClientRejectsZeroExecutionEpoch(t *testing.T) {
@@ -218,6 +234,7 @@ func TestClientRejectsZeroExecutionEpoch(t *testing.T) {
 	}
 }
 
+// QA: HOST-05, LOG-02; fake-stream process teardown only, not stale detection or live subscription cleanup.
 // Rationale: process cancellation must close the authenticated stream without surfacing an error.
 func TestClientCancellationClosesStreamGracefully(t *testing.T) {
 	t.Parallel()
@@ -242,6 +259,7 @@ func TestClientCancellationClosesStreamGracefully(t *testing.T) {
 	}
 }
 
+// QA: HOST-05; local goroutine cancellation only, not socket loss or authenticated reconnect.
 // Rationale: a receive pump must exit rather than block on result delivery
 // after the owning stream context is canceled.
 func TestReceiveNextDoesNotBlockAfterCancellation(t *testing.T) {
@@ -252,9 +270,14 @@ func TestReceiveNextDoesNotBlockAfterCancellation(t *testing.T) {
 	stream := newFakeStream(&agentpb.ControllerMessage{})
 	stream.ctx = ctx
 	done := receiveNext(ctx, stream, make(chan receiveResult))
-	<-done
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("receive pump remained blocked after cancellation")
+	}
 }
 
+// QA: HOST-04; injected send-error sanitization only, not daemon logs or Controller-side credential handling.
 // Rationale: transport implementations are untrusted error sources and must
 // not be able to reflect the credential into Agent errors.
 func TestClientDoesNotLeakTokenFromTransportError(t *testing.T) {
@@ -278,6 +301,7 @@ func TestClientDoesNotLeakTokenFromTransportError(t *testing.T) {
 	}
 }
 
+// QA: HOST-05, TASK-10; fake reconnect/redispatch only, not durable claim recovery or actual interrupted effects.
 // Rationale: one Agent process must reauthenticate after a transient stream
 // loss, fully stop the old pool first, and execute Controller redispatch only
 // on the replacement pool without rereading or exposing its channel token.
@@ -364,6 +388,7 @@ func TestClientReconnectsSameInstanceAndExecutesRedispatchOnReplacementPool(t *t
 	}
 }
 
+// QA: HOST-04/05; injected gRPC status handling only, not live token revocation or replacement generation.
 // Rationale: rejected authentication is permanent for the current runtime
 // material and must terminate without a retry loop or reflected server detail.
 func TestClientDoesNotReconnectPermanentAuthenticationFailure(t *testing.T) {
@@ -389,6 +414,7 @@ func TestClientDoesNotReconnectPermanentAuthenticationFailure(t *testing.T) {
 	}
 }
 
+// QA: HOST-05; injected transport-error classification only, not live socket failure or stale-state projection.
 // Rationale: a plain receive error has no authenticated gRPC status and must
 // terminate without retrying or reflecting private transport diagnostics.
 func TestClientAuthenticatedStreamPlainErrorIsTerminal(t *testing.T) {
@@ -411,6 +437,7 @@ func TestClientAuthenticatedStreamPlainErrorIsTerminal(t *testing.T) {
 	}
 }
 
+// QA: HOST-05; pure backoff bounds only, not elapsed reconnect timing or restored authenticated Ready.
 // Rationale: reconnect delay must grow exponentially without exceeding its
 // ceiling, while equal jitter prevents synchronized reconnect storms.
 func TestAgentChannelReconnectDelayIsBoundedAndJittered(t *testing.T) {
@@ -436,6 +463,7 @@ func TestAgentChannelReconnectDelayIsBoundedAndJittered(t *testing.T) {
 	}
 }
 
+// QA: HOST-05; pre-cancelled wait only, not cancellation during a live randomized delay.
 // Rationale: process cancellation must interrupt a pending reconnect delay so
 // shutdown never waits for the backoff ceiling.
 func TestAgentChannelReconnectWaitHonorsCancellation(t *testing.T) {
@@ -446,6 +474,7 @@ func TestAgentChannelReconnectWaitHonorsCancellation(t *testing.T) {
 	}
 }
 
+// QA: TASK-07; local Unix-socket gRPC receive boundary, not Controller enqueue fairness or durable event bounds.
 // Rationale: the Agent must receive the complete 5 MiB Controller envelope
 // while rejecting the first byte beyond that transport boundary.
 func TestConnectGRPCEnforcesExactReceiveMessageLimit(t *testing.T) {
@@ -487,6 +516,7 @@ func TestConnectGRPCEnforcesExactReceiveMessageLimit(t *testing.T) {
 	}
 }
 
+// QA: TASK-07; local Unix-socket gRPC send boundary, not Controller validation or durable storage bounds.
 // Rationale: the Agent must send the complete 16 MiB envelope while rejecting
 // the first byte beyond that transport boundary.
 func TestConnectGRPCEnforcesExactSendMessageLimit(t *testing.T) {

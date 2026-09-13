@@ -21,6 +21,7 @@ type blockingImageResolver struct {
 	stopped chan struct{}
 }
 
+// QA: SVC-01, TASK-07; local envelope validation only, not prepublication state or Docker side-effect absence.
 // Rationale: outer protobuf envelope bytes also count toward the closed image
 // request; ignored unknown fields must not bypass the inner request validator.
 func TestClientRejectsUnknownImageEnvelope(t *testing.T) {
@@ -63,6 +64,7 @@ func (stream *imageCaptureStream) Send(message *agentpb.AgentMessage) error {
 	return stream.agentStream.Send(message)
 }
 
+// QA: SVC-01; fake resolver/channel exchange only, not Docker inspection, Release sealing, or publication.
 // Rationale: the authenticated client must dispatch and return a real image
 // exchange without allocating a Task or consuming worker-pool capacity.
 func TestClientResolvesWorkloadImagesOnAuthenticatedStream(t *testing.T) {
@@ -88,6 +90,12 @@ func TestClientResolvesWorkloadImagesOnAuthenticatedStream(t *testing.T) {
 	case result := <-results:
 		if err := workloadimage.ValidateResult(request, result); err != nil {
 			t.Fatal(err)
+		}
+		resolutions := result.GetSuccess().GetResolutions()
+		if len(resolutions) != 1 ||
+			!proto.Equal(resolutions[0].GetSelector(), request.GetSelectors()[0]) ||
+			resolutions[0].GetLocalImageId() != "sha256:"+strings.Repeat("a", 64) {
+			t.Fatalf("image resolutions = %#v, want exact requested reference and local image id", resolutions)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("client did not return image resolution")
@@ -128,6 +136,7 @@ func imageRequest() *agentpb.ResolveWorkloadImages {
 	}
 }
 
+// QA: SVC-01, HOST-05; in-memory image-worker admission/join only, not Docker cancellation or reconnect fencing.
 // Rationale: image inspection must not occupy the stream writer or survive its
 // session; a second active batch must not start another Docker worker.
 func TestImageSessionBoundsAndJoinsWorker(t *testing.T) {

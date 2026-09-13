@@ -134,6 +134,7 @@ func managedConfigTestFileState(digest []byte) ManagedConfigFileState {
 	return state
 }
 
+// QA: DNS-02; hermetic action-to-result projection only, not managed-file activation or actual DNS answers.
 // Rationale: Agent-local typed observation evidence must survive the action
 // runtime and worker result union without Controller synthesis.
 func TestWorkerReturnsDNSResolverObservationFromGenericComponentAction(t *testing.T) {
@@ -174,6 +175,7 @@ func TestWorkerReturnsDNSResolverObservationFromGenericComponentAction(t *testin
 	}
 }
 
+// QA: CMP-05, DNS-03; hermetic compensation result only, not predecessor DNS service or durable terminal replay.
 // Rationale: once a managed resolver candidate has been applied, failure of
 // its serving check must publish a distinct catalog proof for the compensated
 // prior digest rather than terminalizing on rollback mechanics alone.
@@ -188,6 +190,7 @@ func TestWorkerReturnsDNSResolverRollbackObservationAfterCandidateCompensation(t
 	}
 }
 
+// QA: CMP-05, DNS-03, SVC-09; fake Compose/action ordering only, not containers, DNS traffic, or publication.
 // Rationale: an UPDATE that fails after candidate service activation must
 // restore the exact predecessor Compose artifact before proving its serving
 // observation; restoring only managed configuration is insufficient.
@@ -265,6 +268,7 @@ func TestWorkerRestoresPredecessorComposeArtifactBeforeRollbackObservation(t *te
 	}
 }
 
+// QA: CMP-05, DNS-03; hermetic pre-mutation failure result only, not host-state preservation.
 // Rationale: a failure before the managed-config step has not changed the
 // serving resolver, so the Agent must not manufacture candidate or rollback
 // observation evidence.
@@ -291,6 +295,7 @@ func TestWorkerReturnsNoDNSResolverRollbackObservationBeforeMutation(t *testing.
 	}
 }
 
+// QA: CMP-05, DNS-03; injected rollback failures only, not actual resolver restoration or reconciliation.
 // Rationale: a terminal failure is safe to acknowledge as compensated only
 // when both rollback mechanics and the catalog observation of the restored
 // serving resolver succeed.
@@ -318,6 +323,8 @@ func TestWorkerFailsClosedWhenDNSResolverRollbackCannotBeProven(t *testing.T) {
 	}
 }
 
+// QA: CMP-05, DNS-03; injected lost publication response only, not host-file uncertainty or live DNS restoration.
+// Rationale: an uncertain managed-file publication must compensate to the predecessor and return its proof.
 func TestWorkerRollsBackAmbiguousManagedConfigPublication(t *testing.T) {
 	result, previous := runWorkerResolverRollbackScenario(t, workerRollbackActionStub{
 		publishErr: errors.New("managed-config response was lost"),
@@ -330,6 +337,8 @@ func TestWorkerRollsBackAmbiguousManagedConfigPublication(t *testing.T) {
 	}
 }
 
+// QA: CMP-05, DNS-03; injected commit-finalization failure only, not filesystem durability or live DNS restoration.
+// Rationale: a lost candidate commit response must restore and report the proven predecessor instead of success.
 func TestWorkerRollsBackManagedConfigCommitFailure(t *testing.T) {
 	candidate := sha256.Sum256([]byte("candidate Corefile"))
 	result, previous := runWorkerResolverRollbackScenario(t, workerRollbackActionStub{
@@ -484,6 +493,7 @@ const (
 	workerPreviousConfigArtifactID   = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 )
 
+// QA: TASK-06/10; in-memory receipt identity only, not durable event publication or reconnect resumption.
 // Rationale: every published Task event must have exactly one consumable receipt,
 // while replayed or identity-changed acknowledgements must remain conflicts.
 func TestWorkerPoolAcceptsReceiptForNonBlockingTaskEventAndRejectsReplay(t *testing.T) {
@@ -525,6 +535,7 @@ func TestWorkerPoolAcceptsReceiptForNonBlockingTaskEventAndRejectsReplay(t *test
 	}
 }
 
+// QA: TASK-06; in-memory receipt cleanup race only, not Controller persistence or stream reconnection.
 // Rationale: a canceled publication can finish cleanup after its acknowledgement;
 // unique registration ownership must keep a replacement receipt for the same key.
 func TestWorkerPoolReceiptCleanupPreservesReplacementRegistration(t *testing.T) {
@@ -564,6 +575,7 @@ func TestWorkerPoolReceiptCleanupPreservesReplacementRegistration(t *testing.T) 
 	}
 }
 
+// QA: TASK-02/10; hermetic live reservation behavior only, not durable replay after Controller or Agent restart.
 // Rationale: replaying one live assignment must neither execute twice nor
 // replace the cancellation authority reserved by the first delivery.
 func TestWorkerPoolDeduplicatesMatchingLiveAssignmentAndRejectsHashMismatch(t *testing.T) {
@@ -632,6 +644,7 @@ func TestWorkerPoolDeduplicatesMatchingLiveAssignmentAndRejectsHashMismatch(t *t
 	}
 }
 
+// QA: TASK-03/04; hermetic queued-abort ordering only, not durable Abort response or publication races.
 // Rationale: TaskAbort can overtake worker dequeue, so cancellation ownership
 // must exist while queued and must suppress every step side effect.
 func TestWorkerPoolRetainsQueuedAbortAndReservationCapacity(t *testing.T) {
@@ -672,6 +685,7 @@ func TestWorkerPoolRetainsQueuedAbortAndReservationCapacity(t *testing.T) {
 	<-done
 }
 
+// QA: HOST-07, TASK-09; local pool admission latency only, not Controller claim capacity or unrelated progress.
 // Rationale: the gRPC receive goroutine is the only task/control reader; a
 // full pool must reject promptly instead of blocking TaskAbort or Shutdown.
 func TestWorkerPoolSubmitReturnsConflictWithoutBlockingWhenFull(t *testing.T) {
@@ -693,6 +707,8 @@ func TestWorkerPoolSubmitReturnsConflictWithoutBlockingWhenFull(t *testing.T) {
 	}
 }
 
+// QA: TASK-10; local assignment validation only, not authenticated-session or durable claim fencing.
+// Rationale: an assignment without its immutable assignment id cannot acquire capacity or execute any step.
 func TestWorkerPoolRejectsMissingAssignmentIdentity(t *testing.T) {
 	t.Parallel()
 	pool := NewWorkerPool(1, "/var/lib/groundplane/vol", nil, testLogger())
@@ -703,6 +719,7 @@ func TestWorkerPoolRejectsMissingAssignmentIdentity(t *testing.T) {
 	}
 }
 
+// QA: TASK-03/04; injected executor cancellation/join only, not Docker interruption or terminal publication.
 // Rationale: Run returning is the shutdown join boundary; cancellation must
 // reach active task contexts and wait for their executor cleanup.
 func TestWorkerPoolCancellationJoinsActiveWorkers(t *testing.T) {
@@ -739,6 +756,7 @@ func TestWorkerPoolCancellationJoinsActiveWorkers(t *testing.T) {
 	}
 }
 
+// QA: CON-07; in-memory adapter secret zeroization only, not credential delivery, subprocess state, or persistence.
 // Rationale: the validated assignment remains immutable across all task steps, then its transient
 // adapter credential must be destroyed at the WorkerPool reservation ownership boundary.
 func TestWorkerPoolCompletionClearsAdapterPlanSecret(t *testing.T) {
@@ -827,6 +845,8 @@ func nextWorkerResult(t *testing.T, pool *WorkerPool) TaskResult {
 	}
 }
 
+// QA: BP-04/10; pure Agent executor routing only, not Blueprint admission, effects, or durable reconciliation.
+// Rationale: only a Blueprint plan carrying a sealed candidate release procedure may use release execution.
 func TestBlueprintCandidatePlanUsesReleaseExecutor(t *testing.T) {
 	plan := &agentpb.ExecutionPlan{
 		Operation:                 agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,

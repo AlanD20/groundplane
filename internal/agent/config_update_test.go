@@ -8,6 +8,8 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
+// QA: HOST-07; fake-stream drained capacity replacement only, not running-Task continuity or saved config.
+// Rationale: a drained live configuration update must replace worker capacity and advertise the new exact value.
 func TestClientAppliesLiveConfigAndReadvertisesCapacity(t *testing.T) {
 	t.Parallel()
 

@@ -766,6 +766,37 @@ sandbox-only listener failures. Those 14 pass with local loopback permission in
 retained tests with the race detector. Formatting passes. No production code,
 generated artifact, dependency or deployed state changed.
 
+#### Agent transport, workers and transient inputs
+
+Reviewed and retained all 54 tests in eight files. Each now names its matrix
+cases, local proof limit and concrete failure-prevention reason. None was a
+confirmed duplicate or coverage-only test. These are local behavioral checks,
+not live Agent, application or upgrade qualification.
+
+| Reviewed tests | Retention reason | Matrix coverage or gap |
+| --- | --- | --- |
+| Sixteen in [client_test.go](../internal/agent/client_test.go) | Authentication-first ordering and token ownership; exact Task acknowledgement/event authority; copied DNS proof; configuration/epoch admission; cancellation; private-error handling; reconnect classification, replacement-pool execution and bounded backoff; exact gRPC envelope limits. | HOST-04/05/07, TASK-07/10, CMP-05, DNS-03, LOG-02. Fake streams and two local Unix-socket exchanges do not prove Controller authorization, persistence, live liveness expiry or actual interrupted effects. |
+| Sixteen in [worker_test.go](../internal/agent/worker_test.go) | Typed DNS results, predecessor compensation ordering and failure refusal; one-use receipts and replacement ownership; duplicate assignment handling; queued Abort, capacity and worker joins; transient credential clearing; Blueprint executor selection. | DNS-02/03, CMP-05, SVC-09, TASK-02/03/04/06/09/10, HOST-07, CON-07, BP-04/10. Injected executors and observations do not establish filesystem/Docker effects, restored DNS, durable receipts or recovery. |
+| One in [config_update_test.go](../internal/agent/config_update_test.go) | Drained configuration replaces capacity and advertises its exact new value. | HOST-07: local reconfiguration only; running-Task continuity and saved configuration remain unproved. |
+| One in [task_ack_diagnostic_test.go](../internal/agent/task_ack_diagnostic_test.go) | Component failure diagnostics and complete Task authority survive acknowledgement construction and protobuf serialization. | TASK-07, CMP-05: not Controller classification, durable publication or runtime recovery. |
+| Four in [service_observation_test.go](../internal/agent/service_observation_test.go) | Failed/malformed/unconfigured reads return unavailable without consuming Task capacity; success preserves counts; cancellation, deadlines and unknown envelopes cannot publish stale results or release another request. | OBS-01/02/03/04: fake observer/channel behavior, not Docker health, Controller freshness or source/generation fences. |
+| Three in [logs_test.go](../internal/agent/logs_test.go) | Typed open-error classification, zero-source readiness/completion and bounded overflow cleanup. | LOG-01/02, TASK-07: injected sources and local queues, not Docker source selection, public SSE or client reconnect. |
+| Three in [workload_images_test.go](../internal/agent/workload_images_test.go) | Unknown envelope rejection, exact image-result forwarding without Task capacity use, and one bounded image worker joined at teardown. | SVC-01, TASK-07, HOST-05: fake resolver/session behavior, not actual Docker inspection, Release publication or reconnect fencing. |
+| Ten in [backup_secret_inbox_test.go](../internal/agent/backup_secret_inbox_test.go) | Exact one-use slot ownership, receive-buffer clearing, stale assignment refusal, closed purpose selection, terminal/abort/stop clearing, cancellation races, malformed sequences and fresh-pool redispatch. | CON-07, TASK-10, BAK-05/08/16: in-memory ownership only, not Controller credential resolution, S3 execution, durable claim recovery or process-wide erasure. |
+
+Stronger assertions check complete Task identity, nested DNS proof ownership,
+independent 32-byte token and 128-record queue expectations, bounded receive-pump
+exit and exact observation/image values. Secret tests now prove the accepted copy
+survives receive-buffer clearing, a stale frame leaves the current slot usable,
+and duplicate headers clear previously accumulated bytes.
+
+All 54 tests pass with the race detector in
+`.tmp/qa-test-review-agent-transport.log`; the log also includes a passing focused
+rerun of two final assertion changes. Two Unix-socket checks initially required
+local socket permission; the complete successful run used that permission.
+Formatting passes. No production defect was reproduced, and no production code
+or live state changed.
+
 The remaining root-module Go tests outside the reviewed files still require review.
 Helpers and fixtures are not standalone test cases; inventory counts must not
 classify them as behavioral coverage. No automatic blanket deletion based on
