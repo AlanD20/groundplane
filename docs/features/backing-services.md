@@ -179,7 +179,9 @@ ownership never authorizes Component startup, recreation or lifecycle steps in
 an Attach or Detach plan. A stopped or configured-only
 consumer validates Compose without starting a container. The complete Attach
 union replaces the old managed network overlay; ordinary-name containers are
-not substitutes for native workloads.
+not substitutes for native workloads. Captured runtime may contain one serving
+slot at the current desired generation because native Deploy does not advance
+desired state. This does not permit incomplete fresh desired slot topology.
 
 The rejected ADR 0054 attempted to define a compiled release ledger, runtime
 registry mutation rules, an ARM64-only image chain, new wire messages, and one

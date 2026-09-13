@@ -143,7 +143,7 @@ func validateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 	if err := validateAttachTaskServiceSnapshots(input.Services); err != nil {
 		return err
 	}
-	if validateEnvironmentComposeProjection(input.RuntimeProjection) != nil ||
+	if validateEnvironmentProjection(input.RuntimeProjection, environmentArtifactCapturedRuntime) != nil ||
 		input.RuntimeProjection.EnvironmentID != input.EnvironmentID ||
 		input.RuntimeProjection.RevisionID != input.DesiredRevisionID ||
 		input.RuntimeProjection.RenderGeneration != input.RenderGeneration {

@@ -46,9 +46,11 @@ func TestEntryMutationCapturesImmutableRevisionSource(t *testing.T) {
 		if root.Revision == current.Revision {
 			t.Fatal("fixture must stage the immutable root before publishing the head")
 		}
-		if _, err := resolver.CaptureEntryMutationRuntime(ctx, root); err != nil {
+		captured, err := resolver.CaptureEntryMutationRuntime(ctx, root)
+		if err != nil {
 			t.Fatal("identical desired runtime from immutable root rejected", err)
 		}
+		etcd.AssertAttachRuntimeRoundTrip(t, captured.Projection, captured.EpochRevision, captured.RunningServiceIDs)
 		for _, mismatch := range []string{"revision identity", "artifact bytes"} {
 			t.Run(mismatch, func(t *testing.T) {
 				changed := root

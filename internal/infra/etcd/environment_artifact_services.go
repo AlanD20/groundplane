@@ -13,6 +13,7 @@ type environmentArtifactServiceIdentity struct {
 	name             string
 	componentID      string
 	renderGeneration uint64
+	capturedRuntime  bool
 }
 
 // One logical Service is either the normalized authored service, a portless
@@ -75,7 +76,7 @@ func validateEnvironmentArtifactServices(
 			(len(group) == 2 && group["singleton"] != nil || len(group) == 3 && group["blue"] != nil && group["green"] != nil) {
 			continue
 		}
-		if len(group) == 2 && retainedSingleSlotCoverage(group, owner.renderGeneration) {
+		if len(group) == 2 && retainedSingleSlotCoverage(group, owner) {
 			continue
 		}
 		return errs.New(errs.KindValidationFailed, "Environment Compose logical Service coverage is incomplete")
@@ -86,24 +87,30 @@ func validateEnvironmentArtifactServices(
 // Mixed Blueprint artifacts retain only physically authoritative old workloads.
 // A fresh slot topology still requires both slots. Publication independently
 // fences the historical source and binds the exact mixed artifact digest.
-func retainedSingleSlotCoverage(group map[string]*agentpb.ComposeService, generation uint64) bool {
+func retainedSingleSlotCoverage(
+	group map[string]*agentpb.ComposeService,
+	owner environmentArtifactServiceIdentity,
+) bool {
 	proxy := group["proxy"]
 	workload := group["blue"]
 	if workload == nil {
 		workload = group["green"]
 	}
-	if proxy == nil || workload == nil || generation == 0 {
+	if proxy == nil || workload == nil || owner.renderGeneration == 0 {
 		return false
 	}
-	proxyPlan, proxyGeneration, valid := historicalArtifactIdentity(proxy, generation)
+	proxyPlan, proxyGeneration, valid := historicalArtifactIdentity(proxy, owner)
 	if !valid {
 		return false
 	}
-	workloadPlan, workloadGeneration, valid := historicalArtifactIdentity(workload, generation)
+	workloadPlan, workloadGeneration, valid := historicalArtifactIdentity(workload, owner)
 	return valid && proxyPlan == workloadPlan && proxyGeneration == workloadGeneration
 }
 
-func historicalArtifactIdentity(service *agentpb.ComposeService, generation uint64) (string, uint64, bool) {
+func historicalArtifactIdentity(
+	service *agentpb.ComposeService,
+	owner environmentArtifactServiceIdentity,
+) (string, uint64, bool) {
 	plan, encodedGeneration := "", ""
 	for _, label := range service.ExpectedLabels {
 		switch label.GetKey() {
@@ -120,6 +127,7 @@ func historicalArtifactIdentity(service *agentpb.ComposeService, generation uint
 		}
 	}
 	prior, err := strconv.ParseUint(encodedGeneration, 10, 64)
-	return plan, prior, err == nil && prior > 0 && prior < generation &&
+	allowedGeneration := prior < owner.renderGeneration || owner.capturedRuntime && prior == owner.renderGeneration
+	return plan, prior, err == nil && prior > 0 && allowedGeneration &&
 		strconv.FormatUint(prior, 10) == encodedGeneration && ids.Validate(ids.KindPlan, plan) == nil
 }

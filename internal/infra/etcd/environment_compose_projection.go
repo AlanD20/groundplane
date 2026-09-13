@@ -408,57 +408,7 @@ func DecodeEnvironmentComposeProjectionStorage(value []byte) (EnvironmentCompose
 }
 
 func validateEnvironmentComposeProjection(projection EnvironmentComposeProjection) error {
-	if validateStableID(ids.KindEnvironment, projection.EnvironmentID) != nil ||
-		validateStableID(ids.KindTask, projection.RevisionID) != nil || projection.RenderGeneration == 0 {
-		return errs.New(errs.KindValidationFailed, "Environment Compose projection identity is invalid")
-	}
-	if err := validateEnvironmentServiceProjections(projection.EnvironmentID, projection.DesiredServices); err != nil {
-		return err
-	}
-	if err := validateEnvironmentNormalizedCompose(projection.NormalizedCompose); err != nil {
-		return err
-	}
-	if err := core.ValidateNormalizedBlueprintFiles(projection.RuntimeFiles); err != nil {
-		return errs.Wrap(errs.KindValidationFailed, err)
-	}
-	names := make([]string, len(projection.DesiredServices))
-	for index, service := range projection.DesiredServices {
-		names[index] = service.Desired.Name
-	}
-	if err := projection.ServiceDependencyPlans.Validate(names); err != nil {
-		return err
-	}
-	if err := projection.BlueprintRequirements.Validate(); err != nil {
-		return err
-	}
-	if err := validateEnvironmentServiceExtensions(names, projection.ServiceExtensions); err != nil {
-		return err
-	}
-	if err := validateEnvironmentBlueprintBackupPolicy(projection.EnvironmentID, projection.Backup); err != nil {
-		return err
-	}
-	if err := validateEnvironmentZoneProjections(projection.EnvironmentID, projection.DesiredZones); err != nil {
-		return err
-	}
-	if err := validateEnvironmentVolumeIdentities(projection.Volumes); err != nil {
-		return err
-	}
-	if err := validateEnvironmentServiceVolumeMounts(projection); err != nil {
-		return err
-	}
-	if err := validateEnvironmentComponentProjection(projection.EnvironmentID, projection.Components); err != nil {
-		return err
-	}
-	if err := validateManagedComponentRuntimeSources(projection); err != nil {
-		return err
-	}
-	if err := validateEnvironmentProjectionArtifact(projection); err != nil {
-		return err
-	}
-	if err := validateEnvironmentRouteProjections(projection.EnvironmentID, projection.DesiredRoutes); err != nil {
-		return err
-	}
-	return validateEnvironmentEntryProjection(projection.EnvironmentID, projection.Entries)
+	return validateEnvironmentProjection(projection, environmentArtifactDesired)
 }
 
 // ApplyEnvironmentRoute replaces the lossless desired Route and advances generation.
@@ -763,7 +713,10 @@ func cloneEnvironmentServiceExtensions(
 	return result
 }
 
-func validateEnvironmentProjectionArtifact(projection EnvironmentComposeProjection) error {
+func validateEnvironmentProjectionArtifact(
+	projection EnvironmentComposeProjection,
+	kind environmentArtifactKind,
+) error {
 	if len(projection.ComposeArtifact) == 0 ||
 		len(projection.ComposeArtifact) > EnvironmentBlueprintProjectionMaxBytes {
 		return errs.New(errs.KindValidationFailed, "Environment normalized Compose artifact is missing or oversized")
@@ -793,6 +746,7 @@ func validateEnvironmentProjectionArtifact(projection EnvironmentComposeProjecti
 	for _, service := range projection.DesiredServices {
 		expectedServices[service.Desired.ID] = environmentArtifactServiceIdentity{
 			name: service.Desired.Name, renderGeneration: projection.RenderGeneration,
+			capturedRuntime: kind == environmentArtifactCapturedRuntime,
 		}
 	}
 	for _, component := range projection.Components {
