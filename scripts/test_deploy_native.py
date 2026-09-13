@@ -9,6 +9,9 @@ import deploy
 
 
 class NativeDeployBranchTest(unittest.TestCase):
+    # QA: HOST-02; extracted installer on local paths, not a bootable installation.
+    # Rationale: both installed executable and predecessor guard must retain exact
+    # candidate bytes without writable permissions.
     def test_bootstrap_installs_immutable_controller_and_guard_bytes(self):
         parent = Path(__file__).resolve().parents[1] / ".tmp" / "test-deploy-native"
         parent.mkdir(mode=0o700, exist_ok=True)
@@ -63,6 +66,8 @@ class NativeDeployBranchTest(unittest.TestCase):
                                 capture_output=True, text=True, check=False)
         return result, bundle, calls.read_text()
 
+    # QA: UP-01; real installer branch with fake helpers, not native activation.
+    # Rationale: native updates must use the protected Task, never SSH overwrite.
     def test_success_uses_native_task_without_legacy_fallthrough(self):
         result, bundle, calls = self.run_branch()
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -70,12 +75,16 @@ class NativeDeployBranchTest(unittest.TestCase):
         self.assertIn("groundplane-deploy-0123456789abcdef0123456789abcdef", calls)
         self.assertFalse(bundle.exists())
 
+    # QA: UP-01; installer branch only, not running Controller state.
+    # Rationale: staging may select immutable input but must not start activation.
     def test_stage_only_never_activates(self):
         result, bundle, calls = self.run_branch(stage_only=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("controller_update.py", calls)
         self.assertFalse(bundle.exists())
 
+    # QA: UP-07, UP-11; installer response handling, not product recovery.
+    # Rationale: failed/uncertain native work retains evidence without SSH rollback.
     def test_unknown_or_failed_task_retains_bundle_and_never_rolls_back(self):
         for status in (1, 2):
             with self.subTest(status=status):
@@ -85,6 +94,8 @@ class NativeDeployBranchTest(unittest.TestCase):
                 self.assertIn("no SSH rollback attempted", result.stderr)
                 self.assertNotIn("remove-empty", calls)
 
+    # QA: UP-03; installer admission only, not host discovery.
+    # Rationale: an explicit bootstrap flag cannot bypass native recovery authority.
     def test_native_installation_refuses_bootstrap_override(self):
         result, bundle, calls = self.run_branch(bootstrap=True)
         self.assertEqual(result.returncode, 1, result.stderr)

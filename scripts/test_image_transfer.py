@@ -20,6 +20,8 @@ class Clock:
 
 
 class ImageTransferTest(unittest.TestCase):
+    # Delivery: byte-stream pacing with fake time, not real network continuity.
+    # Rationale: transport must preserve every byte while honoring the selected rate.
     def test_stream_is_bounded_and_preserves_exact_image_bytes(self):
         clock = Clock()
         raw = bytes(range(256)) * 3000
@@ -30,6 +32,8 @@ class ImageTransferTest(unittest.TestCase):
         self.assertGreaterEqual(clock.now, len(raw) / 65536 - 1)
         self.assertTrue(all(0 < delay <= 1 for delay in clock.sleeps))
 
+    # Delivery: transfer-child cleanup with injected processes, not host process state.
+    # Rationale: a broken receiver must leave neither owned transfer child running.
     def test_transfer_failure_terminates_only_owned_children(self):
         class BrokenInput(io.BytesIO):
             def write(self, value):
@@ -64,9 +68,18 @@ class ImageTransferTest(unittest.TestCase):
         self.assertEqual(len(processes), 2)
         self.assertTrue(all(process.terminated and process.waited for process in processes))
 
+    # Delivery: pacing-input validation, not measured throughput.
+    # Rationale: invalid rate must reject before consuming or writing image bytes.
     def test_invalid_rate_is_rejected_before_io(self):
+        class UnexpectedIO:
+            def read(self, _size):
+                raise AssertionError("invalid rate read image bytes")
+
+            def write(self, _value):
+                raise AssertionError("invalid rate wrote image bytes")
+
         with self.assertRaises(ValueError):
-            image_transfer.copy_paced(io.BytesIO(b"x"), io.BytesIO(), 0)
+            image_transfer.copy_paced(UnexpectedIO(), UnexpectedIO(), 0)
 
 
 if __name__ == "__main__":

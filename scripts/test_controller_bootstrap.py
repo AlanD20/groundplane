@@ -26,6 +26,8 @@ class ControllerBootstrapTest(unittest.TestCase):
         self.guard.chmod(0o500)
         self.unit.write_text(bootstrap.GUARD_LINE + "\n")
 
+    # QA: HOST-02; local layout detection only, not installation or enrollment.
+    # Rationale: partial initialization cannot count as native or be initialized twice.
     def test_fresh_initialize_then_native_detection(self):
         self.assertEqual(self.layout.mode(), "bootstrap")
         self.layout.initialize()
@@ -36,6 +38,8 @@ class ControllerBootstrapTest(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             self.layout.initialize()
 
+    # QA: HOST-02, UP-03; local preflight only, not full deployment.
+    # Rationale: an incomplete or substituted installation must not permit overwrite.
     def test_partial_and_symlink_installations_refuse_bootstrap(self):
         self.install_guard()
         with self.assertRaises(ValueError):
@@ -46,12 +50,16 @@ class ControllerBootstrapTest(unittest.TestCase):
         with self.assertRaises(OSError):
             self.layout.mode()
 
+    # QA: HOST-02; disposable bootstrap layout cleanup, not native update recovery.
+    # Rationale: failed fresh initialization may remove its empty owned layout.
     def test_empty_rollback_removes_only_owned_empty_layout(self):
         self.layout.initialize()
         (self.root / "journal.lock").touch(mode=0o600)
         self.layout.remove_empty()
         self.assertFalse(self.root.exists())
 
+    # QA: HOST-02, UP-09; local bootstrap retention, not journal-phase recovery.
+    # Rationale: cleanup must refuse as soon as release or recovery evidence exists.
     def test_rollback_retains_any_release_or_recovery_evidence(self):
         self.layout.initialize()
         (self.root / "journal.json").write_text("recovery evidence")
@@ -64,6 +72,8 @@ class ControllerBootstrapTest(unittest.TestCase):
             self.layout.remove_empty()
         self.assertTrue((self.root / "releases" / "candidate").is_dir())
 
+    # QA: HOST-02, UP-04; local preflight pagination, not admission/drain atomicity.
+    # Rationale: later-page active work or unreadable history must prevent bootstrap.
     def test_bootstrap_idle_check_requires_every_page_terminal(self):
         class Pages:
             def __init__(self, replies):
@@ -78,6 +88,11 @@ class ControllerBootstrapTest(unittest.TestCase):
                        (200, {"items": [{"status": "failed"}]})])
         bootstrap.require_idle(pages)
         self.assertEqual(len(pages.calls), 2)
+        with self.assertRaisesRegex(ValueError, "all Tasks terminal"):
+            bootstrap.require_idle(Pages([
+                (200, {"items": [{"status": "completed"}], "next_cursor": "next"}),
+                (200, {"items": [{"status": "running"}]}),
+            ]))
         for response in ((200, {"items": [{"status": "running"}]}),
                          (503, None), (200, {"items": [{"status": "unknown"}]})):
             with self.subTest(response=response):

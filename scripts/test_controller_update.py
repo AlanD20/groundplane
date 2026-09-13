@@ -43,6 +43,8 @@ class ControllerUpdateClientTest(unittest.TestCase):
     def client(self, transport):
         return update.Client(self.receipt, transport, lambda: 0, lambda seconds: None)
 
+    # QA: UP-11, UI-04; local update client and receipt, not Controller acceptance.
+    # Rationale: a lost reply must preserve the protected request and original Task.
     def test_lost_post_replays_same_key_then_reads_only_same_task(self):
         transport = Transport([OSError("lost response"), (202, {"task_id": TASK}),
                                OSError("restarting"), task("running"), task("completed")])
@@ -51,6 +53,8 @@ class ControllerUpdateClientTest(unittest.TestCase):
         self.assertEqual([call[0] for call in transport.calls], ["POST", "POST", "GET", "GET", "GET"])
         self.assertEqual(self.receipt.read()["status"], "completed")
 
+    # QA: UP-11, UI-04; local receipt reuse, not a process-crash recovery test.
+    # Rationale: a resumed client must observe the known Task without a second POST.
     def test_restart_retains_task_and_does_not_republish(self):
         original = self.receipt.begin(RELEASE, "deploy-original-key")
         original["task_id"] = TASK
@@ -60,24 +64,32 @@ class ControllerUpdateClientTest(unittest.TestCase):
         self.assertEqual(transport.calls[0][0], "GET")
         self.assertEqual(self.receipt.read()["key"], "deploy-original-key")
 
+    # QA: UP-11; local request ownership, not native publication fencing.
+    # Rationale: selecting another release cannot erase an unresolved operation.
     def test_other_release_cannot_replace_uncertain_intent(self):
         self.receipt.begin(RELEASE, "deploy-original-key")
         with self.assertRaisesRegex(ValueError, "unresolved"):
             self.receipt.begin("sha256:" + "b" * 64, "deploy-different-key")
         self.assertEqual(self.receipt.read()["release"], RELEASE)
 
+    # QA: UP-07; local result handling, not predecessor activation or traffic.
+    # Rationale: failed native work stays failed and cannot trigger a client Abort.
     def test_failed_update_is_not_success_and_never_aborts(self):
         transport = Transport([(202, {"task_id": TASK}), task("failed")])
         self.assertEqual(self.client(transport).run(RELEASE, "deploy-protected-key", 10), 1)
         self.assertEqual(len(transport.calls), 2)
         self.assertEqual(self.receipt.read()["status"], "failed")
 
+    # QA: UP-11; local observation deadline, not the Controller Task deadline.
+    # Rationale: an expired client budget must retain uncertainty without dispatch.
     def test_timeout_keeps_receipt_and_unknown_status(self):
         transport = Transport([])
         self.assertEqual(self.client(transport).run(RELEASE, "deploy-protected-key", 0), 2)
         self.assertEqual(self.receipt.read()["status"], "pending")
         self.assertEqual(transport.calls, [])
 
+    # QA: UP-11; local receipt path and Task identity, not server authorization.
+    # Rationale: neither a substituted receipt path nor another Task can settle intent.
     def test_unsafe_receipt_and_mismatched_task_are_rejected(self):
         (self.root / "deployment.json").symlink_to(self.root / "sentinel")
         with self.assertRaises(OSError):

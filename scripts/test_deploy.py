@@ -42,6 +42,8 @@ def shell_function(name: str) -> str:
 
 
 class DeployConnectionArgumentsTest(unittest.TestCase):
+    # Delivery: deployment transport arguments, not an SSH connection or product case.
+    # Rationale: ambient SSH config must not redirect a deployment or weaken host trust.
     def test_ssh_commands_ignore_workstation_and_system_configuration(self) -> None:
         deployment = deploy.Deployment(
             key=Path("/srv/keys/groundplane"),
@@ -122,6 +124,9 @@ class DeployStagingPathTest(unittest.TestCase):
             check=False,
         )
 
+    # Delivery: static staging-path constraint, not executed cleanup behavior.
+    # Rationale: deployment fragments must share the guarded private namespace;
+    # repository staging must not spill into system temporary storage.
     def test_staging_paths_are_repo_local_and_remote_private(self) -> None:
         self.assertEqual(deploy.LOCAL_DEPLOY_ROOT, deploy.REPOSITORY_ROOT / ".tmp")
         self.assertEqual(
@@ -136,6 +141,8 @@ class DeployStagingPathTest(unittest.TestCase):
             self.assertNotIn("/tmp/groundplane-deploy-", script)
             self.assertIn(deploy.REMOTE_DEPLOY_GUARD, script)
 
+    # Delivery: executed path guard only, not a remote installation.
+    # Rationale: the former system-temp namespace cannot authorize staging effects.
     def test_remote_guard_rejects_old_system_tmp_path(self) -> None:
         command = "set -eu\ndeploy_dir=$1\n" + deploy.REMOTE_DEPLOY_GUARD
         valid = subprocess.run(
@@ -165,6 +172,8 @@ class DeployStagingPathTest(unittest.TestCase):
         self.assertEqual(valid.returncode, 0, valid.stderr)
         self.assertNotEqual(old.returncode, 0, old.stderr)
 
+    # Delivery: receive-script cleanup ownership on disposable local paths.
+    # Rationale: a colliding staging directory is foreign state, not cleanup authority.
     def test_existing_deployment_directory_and_sentinel_survive_rejection(self) -> None:
         with temporary_directory() as temporary:
             root = Path(temporary)
@@ -183,6 +192,8 @@ class DeployStagingPathTest(unittest.TestCase):
             self.assertTrue(deploy_dir.is_dir())
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep\n")
 
+    # Delivery: local receive-script path rejection, not remote filesystem ownership.
+    # Rationale: a dangling symlink is still pre-existing state and cannot be adopted.
     def test_dangling_deployment_symlink_survives_rejection(self) -> None:
         with temporary_directory() as temporary:
             root = Path(temporary)
@@ -198,6 +209,8 @@ class DeployStagingPathTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0, result.stderr)
             self.assertTrue(deploy_dir.is_symlink())
 
+    # Delivery: local receive-script ancestor validation.
+    # Rationale: replacing the private root with a symlink must not expose its target.
     def test_symlinked_private_root_rejects_without_touching_target(self) -> None:
         with temporary_directory() as temporary:
             root = Path(temporary)
@@ -217,6 +230,8 @@ class DeployStagingPathTest(unittest.TestCase):
             self.assertTrue(private_root.is_symlink())
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep\n")
 
+    # Delivery: local receive-script immediate-parent validation.
+    # Rationale: trusting the root alone must not permit a substituted staging parent.
     def test_symlinked_private_tmp_parent_rejects_without_touching_target(self) -> None:
         with temporary_directory() as temporary:
             root = Path(temporary)
@@ -238,6 +253,8 @@ class DeployStagingPathTest(unittest.TestCase):
             self.assertTrue(private_parent.is_symlink())
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep\n")
 
+    # Delivery: local failed-transfer cleanup, not a remote deployment.
+    # Rationale: corrupt archives must release only the directory this receive created.
     def test_created_deployment_directory_is_cleaned_after_receive_failure(self) -> None:
         with temporary_directory() as temporary:
             root = Path(temporary)
@@ -258,15 +275,24 @@ class DeployStagingPathTest(unittest.TestCase):
 
 
 class DeployRollbackTest(unittest.TestCase):
+    # QA: HOST-02; bootstrap file capture only, not native update recovery.
+    # Rationale: a directory cannot masquerade as a recoverable installed binary.
     def test_backup_rejects_directory_installation_path(self) -> None:
         self.assert_backup_rejected("directory")
 
+    # QA: HOST-02; local bootstrap file capture only.
+    # Rationale: following a directory symlink would capture outside installation state.
     def test_backup_rejects_symlink_to_directory_installation_path(self) -> None:
         self.assert_backup_rejected("symlink-to-directory")
 
+    # QA: HOST-02; local bootstrap file capture only.
+    # Rationale: a dangling installed-path symlink is not an absent owned file.
     def test_backup_rejects_dangling_symlink_installation_path(self) -> None:
         self.assert_backup_rejected("dangling-symlink")
 
+    # QA: HOST-02; local bootstrap rollback file operation, not Controller recovery.
+    # Rationale: replacing an executing inode must preserve process liveness while
+    # restoring exact predecessor bytes/mode without a partial destination.
     def test_restore_atomically_replaces_an_executing_binary(self) -> None:
         with temporary_directory() as temporary:
             root = Path(temporary)
@@ -313,6 +339,9 @@ class DeployRollbackTest(unittest.TestCase):
                 [],
             )
 
+    # QA: HOST-02; bootstrap trap with fake systemd, not native update recovery.
+    # Rationale: successful compensation must restore bytes/modes and retain the
+    # original deployment failure, not report success.
     def test_finish_preserves_original_error_after_complete_rollback(self) -> None:
         result, deploy_dir, systemctl_log, destinations = self.run_finish_fixture(
             fail_stop=False,
@@ -326,6 +355,8 @@ class DeployRollbackTest(unittest.TestCase):
             self.assertEqual(destination.read_text(encoding="utf-8"), f"old-{name}\n")
             self.assertEqual(stat.S_IMODE(destination.stat().st_mode), 0o640)
 
+    # QA: HOST-02; bootstrap trap with fake systemd, not a real stop failure.
+    # Rationale: failed stop makes overwrite unsafe; keep installation and evidence.
     def test_finish_retains_recovery_and_prioritizes_rollback_error(self) -> None:
         result, deploy_dir, systemctl_log, destinations = self.run_finish_fixture(
             fail_stop=True,
@@ -339,6 +370,8 @@ class DeployRollbackTest(unittest.TestCase):
         for name, destination in destinations.items():
             self.assertEqual(destination.read_text(encoding="utf-8"), f"new-{name}\n")
 
+    # QA: HOST-02; local bootstrap trap, not real systemd unit lifecycle.
+    # Rationale: rollback of first installation must not invent or operate a prior unit.
     def test_finish_restores_prior_absent_disabled_inactive_unit(self) -> None:
         result, deploy_dir, systemctl_log, destinations = self.run_finish_fixture(
             fail_stop=False,
@@ -580,6 +613,8 @@ class DeployAgentIdlePreflightTest(unittest.TestCase):
                 list_count.read_text(encoding="utf-8"),
             )
 
+    # QA: UP-04; installer polling against fake CLI replies, not atomic admission.
+    # Rationale: active work must finish before the helper requests Agent replacement.
     def test_busy_agent_is_not_updated_until_authoritatively_idle(self) -> None:
         result, updates, list_count = self.run_dispatch_fixture(
             [
@@ -592,6 +627,8 @@ class DeployAgentIdlePreflightTest(unittest.TestCase):
         self.assertEqual(updates.splitlines(), ["update"])
         self.assertEqual(list_count.strip(), "2")
 
+    # QA: UP-04; polling-count bound with sleeps removed, not elapsed-time proof.
+    # Rationale: persistent work cannot cause endless polling or forced replacement.
     def test_persistent_busy_agent_exhausts_bound_without_update(self) -> None:
         result, updates, list_count = self.run_dispatch_fixture(
             ['{"items":[{"id":"agt_1","in_flight":1}]}']
@@ -602,6 +639,8 @@ class DeployAgentIdlePreflightTest(unittest.TestCase):
         self.assertEqual(list_count.strip(), "330")
         self.assertIn("remained busy for 330 seconds", result.stderr)
 
+    # QA: UP-04; local preflight parsing, not Controller availability.
+    # Rationale: malformed observation is not evidence that the Agent is idle.
     def test_malformed_agent_list_fails_closed_without_update(self) -> None:
         result, updates, list_count = self.run_dispatch_fixture(["not json"])
 
@@ -609,6 +648,8 @@ class DeployAgentIdlePreflightTest(unittest.TestCase):
         self.assertEqual(updates, "")
         self.assertEqual(list_count.strip(), "1")
 
+    # QA: UP-04; local CLI-error handling, not a live disconnection.
+    # Rationale: a failed read must stop preflight before requesting replacement.
     def test_agent_list_read_failure_fails_closed_without_update(self) -> None:
         result, updates, list_count = self.run_dispatch_fixture(
             ['{"items":[{"id":"agt_1","in_flight":0}]}'],

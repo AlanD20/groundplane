@@ -26,6 +26,8 @@ class HostVerificationContractTest(unittest.TestCase):
                                 text=True, capture_output=True, check=False)
         return result.returncode == 0
 
+    # Delivery: verifier predicate against fixed examples, not a HOST-01/UP-11 pass.
+    # Rationale: valid nullable update state and recovered history must be readable.
     def test_valid_absence_and_candidate_history(self):
         host = self.host()
         self.assertTrue(self.valid(host))
@@ -37,6 +39,8 @@ class HostVerificationContractTest(unittest.TestCase):
                                  "status": "failed", "phase": "recovered", "created_at": "2026-09-10T00:00:00Z"}
         self.assertTrue(self.valid(host))
 
+    # Delivery: verifier negative controls, not deployed Host health.
+    # Rationale: incomplete or wrongly typed update evidence must not pass the oracle.
     def test_missing_or_malformed_update_metadata_is_rejected(self):
         original = self.host()
         for key, bad in (("available", "false"), ("running_sha256", "mutable-tag"), ("candidate", {}),

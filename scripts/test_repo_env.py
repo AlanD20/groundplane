@@ -87,6 +87,8 @@ class RepoEnvironmentTest(unittest.TestCase):
                 self.assertIsNotNone(value)
                 self.assertTrue(Path(value).is_relative_to(self.root / ".tmp"), value)
 
+    # Delivery: repository temporary-path policy, not a product case.
+    # Rationale: unset overrides must create local paths before any child can spill.
     def test_unset_defaults_create_paths_before_child_starts(self) -> None:
         result = self.probe()
         for name, relative in (("TMPDIR", "tmp"), ("GOTMPDIR", "go-tmp"), ("GOCACHE", "go-cache")):
@@ -96,6 +98,8 @@ class RepoEnvironmentTest(unittest.TestCase):
         self.assertEqual(Path(result["actual"]).parent, self.root / ".tmp/tmp")
         self.assertEqual(result["GROUNDPLANE_COVERAGE_FILE"], str(self.root / ".tmp/coverage.out"))
 
+    # Delivery: repository cache lifecycle.
+    # Rationale: valid local overrides, including spaces, must reuse existing data.
     def test_custom_local_paths_preserve_existing_cache(self) -> None:
         for name in ("TMPDIR", "GOTMPDIR", "GOCACHE"):
             self.env[name] = ".tmp-custom/" + name.lower() + " with space"
@@ -107,6 +111,8 @@ class RepoEnvironmentTest(unittest.TestCase):
             self.assertEqual(result["GOCACHE"], str(marker.parent))
         self.assertEqual(marker.read_text(), "existing cache")
 
+    # Delivery: repository path-admission guard.
+    # Rationale: outside or noncanonical paths must reject before child effects.
     def test_unsafe_overrides_fail_before_child_runs(self) -> None:
         outside = Path(self.scratch.name) / "outside"
         for name in ("TMPDIR", "GOTMPDIR", "GOCACHE"):
@@ -118,6 +124,8 @@ class RepoEnvironmentTest(unittest.TestCase):
                     self.assertFalse(outside.exists())
             del self.env[name]
 
+    # Delivery: repository temporary-path ownership.
+    # Rationale: substituted ancestors cannot redirect writes or overwrite a file.
     def test_symlink_ancestors_and_files_are_rejected(self) -> None:
         outside = Path(self.scratch.name) / "outside"
         outside.mkdir()
@@ -131,6 +139,8 @@ class RepoEnvironmentTest(unittest.TestCase):
         self.assertEqual(list(outside.iterdir()), [])
         self.assertEqual((self.root / ".tmp/file").read_text(), "keep")
 
+    # Delivery: safe placement of optional diagnostic output, not coverage scoring.
+    # Rationale: output-path symlinks must not authorize writes outside the checkout.
     def test_coverage_parent_and_leaf_cannot_escape(self) -> None:
         outside = Path(self.scratch.name) / "outside"
         outside.mkdir()
@@ -144,6 +154,8 @@ class RepoEnvironmentTest(unittest.TestCase):
         self.run_command("bash", "scripts/repo-env.sh", "true", ok=False)
         self.assertFalse((outside / "coverage").exists())
 
+    # Delivery: recursive Make environment propagation; Go is a recorder, not proof.
+    # Rationale: child module invocations must retain the same safe temporary paths.
     def test_make_test_and_recursive_make_receive_local_paths(self) -> None:
         self.run_command("make", "test")
         self.assert_local_records()
@@ -151,6 +163,7 @@ class RepoEnvironmentTest(unittest.TestCase):
         self.assertTrue((self.root / ".tmp/coverage.out").is_file())
         self.assertFalse((self.root / "coverage.out").exists())
 
+    # Delivery: formatter gate scope and failure propagation, not product behavior.
     # Rationale: ignored caches can contain invalid Go fixtures. Formatting must
     # ignore them while rejecting malformed or unformatted repository source.
     def test_format_check_uses_source_roots_and_preserves_formatter_failures(self) -> None:
@@ -174,6 +187,8 @@ class RepoEnvironmentTest(unittest.TestCase):
         self.env["GP_TEST_FAIL"] = "1"
         self.run_command("make", "format-check", ok=False)
 
+    # Delivery: command environment after a simulated sudo reset; no sudo is run.
+    # Rationale: privileged checks need local paths and a distinct owned Go cache.
     def test_sudo_recipe_preserves_paths_after_environment_reset(self) -> None:
         self.stub("id", "#!/bin/sh\nprintf '1000\\n'\n")
         self.stub("sudo", '#!/bin/sh\nshift\nexec env -i "PATH=$PATH" "GP_TEST_RECORD=$GP_TEST_RECORD" "$@"\n')
@@ -182,6 +197,8 @@ class RepoEnvironmentTest(unittest.TestCase):
         privileged = next(r for r in self.records() if "backupstage_mount_acceptance" in r["args"])
         self.assertEqual(privileged["env"]["GOCACHE"], str(self.root / ".tmp/go-cache-root"))
 
+    # Delivery: smoke-runner scratch cleanup; fake Go/binary do not qualify assets.
+    # Rationale: a smoke run must leave tracked binaries intact and remove its scratch.
     def test_release_smoke_binary_uses_owned_temporary_directory(self) -> None:
         (self.root / "bin").mkdir()
         controller = self.root / "bin/controller"
@@ -203,6 +220,8 @@ class RepoEnvironmentTest(unittest.TestCase):
                         GROUNDPLANE_C07_ETCD_PREFIX="/groundplane-c07-acceptance/run-fixture/")
         return self.run_command("bash", str(VERIFY / name), ok=ok)
 
+    # Delivery: verifier wrapper ownership with fake test execution, not an L2 pass.
+    # Rationale: successful wrappers retain receipts and preserve pre-existing state.
     def test_local_verifiers_cleanup_only_their_runtime_and_retain_evidence(self) -> None:
         for name in ("network-zone-route-etcd.sh", "c11-attach-l2.sh"):
             with self.subTest(name=name):
@@ -220,6 +239,8 @@ class RepoEnvironmentTest(unittest.TestCase):
         for receipt in receipts:
             self.assertIn("runtime_cleanup=passed", receipt.read_text())
 
+    # Delivery: failed-verifier wrapper cleanup, not product failure recovery.
+    # Rationale: cleanup must preserve the original failure code and evidence.
     def test_failed_verifier_retains_evidence_and_cleans_runtime(self) -> None:
         self.env["GP_TEST_FAIL"] = "1"
         self.run_verifier("network-zone-route-etcd.sh", ok=False)
@@ -228,6 +249,8 @@ class RepoEnvironmentTest(unittest.TestCase):
         self.assertIn("runtime_cleanup=passed", receipt.read_text())
         self.assertEqual(list((self.root / ".tmp/tmp").iterdir()), [])
 
+    # Delivery: verifier path admission, not a host acceptance case.
+    # Rationale: outside paths must reject before any test command or output creation.
     def test_verifier_rejects_outside_evidence_and_runtime(self) -> None:
         for name in ("GROUNDPLANE_EVIDENCE_DIR", "GROUNDPLANE_VERIFY_RUNTIME_DIR"):
             with self.subTest(name=name):
@@ -237,6 +260,8 @@ class RepoEnvironmentTest(unittest.TestCase):
                 self.assertFalse(Path(self.env["GP_TEST_RECORD"]).exists())
                 del self.env[name]
 
+    # Delivery: verifier failed-preflight wrapper; SSH is stubbed and no host is read.
+    # Rationale: failed preparation still needs retained receipts and safe local cleanup.
     def test_remote_verifiers_cleanup_on_failed_preflight_without_host_calls(self) -> None:
         key = self.root / "test-key"
         key.write_text("fixture")

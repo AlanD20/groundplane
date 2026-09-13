@@ -51,6 +51,9 @@ class ControllerReleaseStageTest(unittest.TestCase):
             json.dumps(self.metadata, separators=(",", ":"), sort_keys=True), encoding="utf-8",
         )
 
+    # QA: UP-01, UP-03; real local staging files, not executable activation.
+    # Rationale: replay must preserve exact immutable bytes/modes and publish only
+    # the candidate selector, never activation or qualified-selection history.
     def test_stage_is_immutable_and_replayable(self):
         identity = self.store.stage(self.bundle, self.agent)
         expected = json.dumps({**self.metadata, "agent_image": self.agent}, separators=(",", ":"), sort_keys=True).encode()
@@ -65,6 +68,8 @@ class ControllerReleaseStageTest(unittest.TestCase):
         self.assertFalse((self.store_path / "journal.json").exists())
         self.assertFalse((self.store_path / "selected.json").exists())
 
+    # QA: UP-03; local staging rejection, not live candidate health.
+    # Rationale: changed transfer bytes cannot replace a verified candidate.
     def test_changed_binary_preserves_previous_candidate(self):
         identity = self.store.stage(self.bundle, self.agent)
         (self.bundle / "controller").chmod(0o700)
@@ -74,6 +79,9 @@ class ControllerReleaseStageTest(unittest.TestCase):
         self.assertEqual(json.loads((self.store_path / "candidate.json").read_bytes()), {"release": identity})
         self.assertEqual(len(list((self.store_path / "releases").iterdir())), 1)
 
+    # QA: UP-03; local filesystem trust checks, not installed-host ownership.
+    # Rationale: symlink substitution and writable release inputs must not gain
+    # immutable release authority through staging.
     def test_symlink_and_writable_inputs_are_rejected(self):
         for scenario in ("binary-symlink", "binary-writable", "candidate-symlink"):
             with self.subTest(scenario=scenario):
@@ -94,20 +102,27 @@ class ControllerReleaseStageTest(unittest.TestCase):
                 if (self.store_path / "candidate.json").is_symlink():
                     (self.store_path / "candidate.json").unlink()
 
+    # QA: UP-03; local release validation, not compatibility of a running candidate.
+    # Rationale: corrupted published bytes, coerced compatibility integers and
+    # mutable Agent images must each reject independently of the other faults.
     def test_invalid_metadata_and_mutated_published_release_fail_closed(self):
         identity = self.store.stage(self.bundle, self.agent)
         manifest = self.store_path / "releases" / identity[7:] / "manifest.json"
+        original_manifest = manifest.read_bytes()
         manifest.chmod(0o600)
         manifest.write_bytes(b"{}")
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "published release manifest was modified"):
             self.store.stage(self.bundle, self.agent)
+        manifest.write_bytes(original_manifest)
+        manifest.chmod(0o400)
+        self.assertEqual(self.store.stage(self.bundle, self.agent), identity)
         self.metadata["storage_epoch"] = True
         self.write_metadata()
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "compatibility metadata"):
             self.store.stage(self.bundle, self.agent)
         self.metadata["storage_epoch"] = 1
         self.write_metadata()
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "Agent image must be digest-pinned"):
             self.store.stage(self.bundle, "agent:latest")
 
 

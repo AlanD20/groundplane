@@ -565,7 +565,39 @@ All 19 tests pass with `-race -count=1`; evidence is
 listeners after the sandbox-only attempt could not create them; no QA host was
 contacted. These results do not qualify any entire product row.
 
-The remaining Go, registered-Component, SDK, deployment and verifier tests
+#### Deployment and repository helper tests
+
+Reviewed all 73 tests in the 11 root-level `scripts/test_*.py` files; retained
+all 73. These are not tests that merely ask whether a binary builds. They guard
+deployment authority, file safety, protected-request handling, resource limits
+or the reliability of the verification tooling. Each test now states its reason
+and either a partial case mapping or its separate delivery constraint.
+
+| Reviewed tests | Retention reason and assertion corrections | Proof limit |
+| --- | --- | --- |
+| Six in [test_controller_update.py](../scripts/test_controller_update.py) | Lost POST replays the same key; known Task resumes with GET only; another release cannot replace uncertainty; failed work stays failed without Abort; timeout retains intent; symlink receipt and wrong Task are rejected. | UP-07/11, UI-04: real local client/receipt with recorded transport, not activation or process-crash recovery. |
+| Four in [test_controller_release.py](../scripts/test_controller_release.py) | Exact immutable bytes/modes and selector on replay; changed binary retains previous candidate; symlink/writable input refusal; invalid compatibility/image and corrupted published-manifest refusal. The last test now restores valid state between faults and checks distinct rejection reasons so corruption cannot mask missing validation. | UP-01/03: real local filesystem staging only; no candidate is executed. |
+| Five in [test_controller_bootstrap.py](../scripts/test_controller_bootstrap.py) | Partial/duplicate and symlink initialization refusal; remove only an empty owned layout; retain release/journal evidence; require terminal Tasks across every page. Added an active Task on the later page, not just a two-page success. | HOST-02, UP-03/04/09: local layout and preflight only, not installation or durable recovery. |
+| Five in [test_deploy_native.py](../scripts/test_deploy_native.py) | Exact installed Controller/guard bytes and mode; native Task branch never falls into SSH overwrite; stage-only never activates; failed/unknown work retains its bundle without SSH rollback; bootstrap flag cannot bypass native ownership. | HOST-02, UP-01/03/07/11: extracted real shell branch with disposable paths and fake external helpers. |
+| Nineteen in [test_deploy.py](../scripts/test_deploy.py) | One SSH argument test and seven staging tests guard trust, path collision, symlink ancestors and owned cleanup. Seven bootstrap rollback tests guard invalid predecessor paths, atomic replacement of an executing inode, exact restoration, original errors and retained recovery evidence. Four Agent preflight tests guard busy-to-idle, bounded busy refusal, malformed output and read failure. | Eight delivery checks; seven HOST-02 bootstrap checks are **not native update recovery**; four UP-04 checks use recorded CLI replies and remove sleeps, so they do not prove elapsed timing or atomic admission. |
+| Five in [test_deploy_capacity.py](../scripts/test_deploy_capacity.py) | Inclusive selected threshold; measurement failure; capacity recheck before an uncached build; refusal before build commands or target access. | Delivery sequencing with injected measurements, not stress/load or free-space reservation. |
+| Six in [test_deploy_images.py](../scripts/test_deploy_images.py) | Bound build concurrency without changing parent/runtime settings; render expected command errors; select Runner only for bootstrap; reject unknown target mode; avoid Runner build/cache commands during native update. | Delivery commands and one static Dockerfile stage constraint, not image execution or runtime continuity. |
+| Five in [test_image_reuse.py](../scripts/test_image_reuse.py) | Send only absent content; bind reused alias to exact ID; reject wrong identity, SSH failure and untrusted output; spawn no archive for an empty transfer set. | Delivery command decisions with injected inspection; no real Docker/SSH or registry proof. |
+| Three in [test_image_transfer.py](../scripts/test_image_transfer.py) | Preserve paced bytes; terminate/wait owned children after receiver failure; reject invalid rate before I/O. The last assertion now fails on any read/write rather than merely expecting a value error. | Delivery stream/child lifecycle with fake clock and processes, not measured network or application continuity. |
+| Two in [test_host_contract.py](../scripts/test_host_contract.py) | Execute the verifier predicate on valid nullable/history state and independently malformed metadata. These are positive/negative controls for the oracle. | Delivery/verifier correctness only; no Host was contacted or qualified. |
+| Thirteen in [test_repo_env.py](../scripts/test_repo_env.py) | Local defaults/cache reuse; unsafe, symlink and diagnostic-output path rejection; recursive Make and simulated sudo environment; formatter source/failure handling; owned smoke scratch; verifier success/failure cleanup, outside-path refusal and failed-preflight receipts. | Delivery safety: Go, sudo and remote commands are doubles. Their fake passing binaries do not count as product behavior. |
+
+The first complete local run is `.tmp/qa-test-review-deployment.log`: 59 pass,
+14 setup/trust errors because the sandbox presents `/` with an untrusted owner.
+The three affected files (15 tests, one overlapping pass) then pass with the real
+filesystem ownership view in `.tmp/qa-test-review-deployment-trusted-paths.log`.
+Together these runs exercise all 73 tests successfully. No trust check or directory
+permission was weakened. Scratch and cleanup stayed in ignored repository-local
+paths; no SSH connection, Docker workload, systemd operation or QA fault occurred.
+Of these checks, 31 support only portions of named cases and 42 enforce separate
+delivery/tooling constraints. None qualifies a complete product row.
+
+The remaining Go, registered-Component, SDK and skill-owned verifier tests
 still require review. Helpers and fixtures are not standalone test cases;
 inventory counts must not classify them as behavioral coverage. No automatic
 blanket deletion based on filenames, missing comments, mocks or small test size.

@@ -15,6 +15,8 @@ def target():
 
 
 class DeploymentImagesTest(unittest.TestCase):
+    # Delivery: build environment selection, not build or runtime performance.
+    # Rationale: constrain this build without mutating the caller's environment.
     def test_native_compilation_has_bounded_parallelism_without_changing_parent_environment(self):
         parent = {"GOMAXPROCS": "64", "PRESERVED": "yes"}
         with patch.object(deploy, "run") as run, \
@@ -27,12 +29,16 @@ class DeploymentImagesTest(unittest.TestCase):
         self.assertEqual(environment["PRESERVED"], "yes")
         self.assertEqual(parent["GOMAXPROCS"], "64")
 
+    # Delivery: static Dockerfile stage constraint, not Agent concurrency behavior.
+    # Rationale: a build-only CPU limit must not leak into the deployed Agent stage.
     def test_agent_compilation_is_bounded_only_in_the_build_stage(self):
         dockerfile = (deploy.REPOSITORY_ROOT / "Dockerfile.agent").read_text()
         build, runtime = dockerfile.split("FROM docker/compose-bin:", 1)
         self.assertIn("GOMAXPROCS=2 go build -p=2", build)
         self.assertNotIn("GOMAXPROCS", runtime)
 
+    # Delivery: deployment command error boundary, not network recovery.
+    # Rationale: expected transport failures must return failure with a useful message.
     def test_transport_input_and_timeout_errors_are_reported_without_a_traceback(self):
         for error in (ValueError("invalid content identity"), subprocess.TimeoutExpired("image inspection", 30)):
             with self.subTest(error=type(error).__name__), patch.object(deploy, "parse_arguments", return_value=target()), \
@@ -40,10 +46,14 @@ class DeploymentImagesTest(unittest.TestCase):
                 self.assertEqual(deploy.main(), 1)
                 self.assertIn("deployment failed:", output.getvalue())
 
+    # Delivery: image-set selection with fake host probe, not live discovery.
+    # Rationale: native updates cannot introduce an unrelated Runner replacement.
     def test_native_target_selects_only_agent_transport(self):
         with patch.object(deploy, "run", return_value=subprocess.CompletedProcess([], 0, "native\n")):
             self.assertFalse(deploy.runner_required(target()))
 
+    # Delivery: bootstrap image-set selection, not installation.
+    # Rationale: fresh targets need Runner input, but unknown target mode cannot guess.
     def test_fresh_target_requires_runner_and_unknown_probe_fails_closed(self):
         with patch.object(deploy, "run", return_value=subprocess.CompletedProcess([], 0, "bootstrap\n")):
             self.assertTrue(deploy.runner_required(target()))
@@ -51,6 +61,8 @@ class DeploymentImagesTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 deploy.runner_required(target())
 
+    # Delivery: recorded build/image commands, not image validity or runtime behavior.
+    # Rationale: an Agent-only update must avoid all unrelated Runner build/cache work.
     def test_native_artifact_build_does_not_build_inspect_or_tag_runner(self):
         commands = []
         with patch.object(deploy, "run", side_effect=lambda command, **kwargs: commands.append(command)), \
