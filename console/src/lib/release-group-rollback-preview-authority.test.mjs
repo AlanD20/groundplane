@@ -15,6 +15,9 @@ const response = {
   sources: [{ service_id: 'service-a', release_id: 'release-a', tag: ' tag-exact ' }],
 }
 
+// QA: GRP-04; local preview identity, not Controller rollback selection.
+// Rationale: another Environment, group, tag or dialog session cannot reuse an
+// accepted preview; revision strings must not lose integer precision.
 test('accepted rollback previews are immutable and match their exact authority scope', () => {
   const scope = rollbackPreviewScope('env-a', 'group-a', ' tag-exact ', 7)
   const accepted = acceptRollbackPreview(scope, response)
@@ -32,6 +35,8 @@ test('accepted rollback previews are immutable and match their exact authority s
   assert.equal(isRollbackPreviewAccepted(accepted, rollbackPreviewScope('env-a', 'group-a', ' tag-exact ', 8)), false)
 })
 
+// QA: GRP-04; local dispatch guard, not the actual mutation wiring.
+// Rationale: stale preview authority must throw before a caller can dispatch.
 test('dispatch authority rejects the wrong scope without calling the mutation', () => {
   const accepted = acceptRollbackPreview(rollbackPreviewScope('env-a', 'group-a', undefined, 3), response)
   let mutationCalls = 0
@@ -47,6 +52,9 @@ test('dispatch authority rejects the wrong scope without calling the mutation', 
   assert.equal(mutationCalls, 1)
 })
 
+// QA: GRP-04, UI-05; local request ownership, not a rendered dialog race.
+// Rationale: late success or failure from an earlier edit/open cannot overwrite
+// the current preview, even if the operator edits back to the same values.
 test('late deferred preview results cannot regain ownership after scope or generation changes', async () => {
   const requestedScope = rollbackPreviewScope('env-a', 'group-a', 'v1', 1)
   const request = beginRollbackPreviewRequest(requestedScope, 10)

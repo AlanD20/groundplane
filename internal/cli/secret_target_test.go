@@ -7,6 +7,7 @@ import (
 	"testing"
 )
 
+// QA: SEC-03, UI-02; local CLI lookup routing only, not Controller authorization or plaintext isolation.
 // Rationale: Secret keys are mutable scoped labels, so the default CLI show path must resolve the
 // complete tenant/project scope and address the detail route by stable Secret id.
 func TestSecretKeyTargetResolvesWithinProjectScope(t *testing.T) {

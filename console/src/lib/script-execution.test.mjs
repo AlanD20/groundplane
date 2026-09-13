@@ -14,6 +14,7 @@ const execution = {
   volumes: [{ volume_id: volumeId, target: '/etc/tls', read_only: false }], entry_ids: [entryId],
 }
 
+// QA: SCRIPT-01, SCRIPT-05; local context decoding, not runner isolation.
 // Rationale: API projection preserves complete explicit authority, including
 // read-write access, and reports inherited mode without inventing grants.
 test('Script Console projection preserves the complete execution context', () => {
@@ -24,6 +25,7 @@ test('Script Console projection preserves the complete execution context', () =>
   assert.deepEqual(scriptFromAPI({ ...base, execution: { mode: 'inherited' } }).execution, { mode: 'inherited' })
 })
 
+// QA: SCRIPT-06, UI-05; local malformed-response rejection, not host denial.
 // Rationale: the Console must not display ambiguous/malformed access as a valid
 // execution choice, even when a response bypassed normal Controller validation.
 test('Script Console projection rejects malformed contexts and missing decisions', () => {
@@ -40,6 +42,7 @@ test('Script Console projection rejects malformed contexts and missing decisions
   ]) assert.throws(() => scriptFromAPI({ ...base, execution: invalid }), /execution/i)
 })
 
+// QA: SCRIPT-01; local request encoding, not persisted replacement semantics.
 // Rationale: store requests carry complete replacements; patch omission differs
 // from a deliberate reset and an explicit context with no resource grants.
 test('Console Script mutation projection preserves context replacement and omission', () => {

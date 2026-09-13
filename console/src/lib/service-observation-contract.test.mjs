@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import {
   applyServiceObservations,
@@ -35,6 +34,7 @@ function service(observation) {
   return { observation }
 }
 
+// QA: OBS-01, OBS-02; local snapshot validation, not actual container health.
 // Rationale: malformed evidence cannot be promoted into runtime health.
 test('Service observation accepts only complete state-consistent bounded snapshots', () => {
   const healthy = serviceObservationFromAPI(wireObservation('healthy', { healthy: 2 }, 2))
@@ -52,6 +52,7 @@ test('Service observation accepts only complete state-consistent bounded snapsho
   )
 })
 
+// QA: OBS-03; local expiry boundaries, not the refresh-loop lifecycle.
 // Rationale: a stalled response must not extend the previous snapshot's lifetime.
 test('Service observation expires locally at expires_at', () => {
   const observation = serviceObservationFromAPI(wireObservation('running', { running: 1 }))
@@ -60,6 +61,7 @@ test('Service observation expires locally at expires_at', () => {
   assert.deepEqual(currentServiceObservation(observation, Date.parse(expiresAt)), { state: 'unavailable' })
 })
 
+// QA: OBS-02, OBS-03; local aggregation, not an Agent observation.
 // Rationale: provisioning and desired intent cannot conceal incomplete workload evidence.
 test('Environment runtime aggregate never promotes incomplete or missing runtime to healthy', () => {
   const healthy = serviceObservationFromAPI(wireObservation('healthy', { healthy: 1 }))
@@ -82,6 +84,7 @@ test('Environment runtime aggregate never promotes incomplete or missing runtime
   assert.equal(environmentRuntimeState([], fresh), 'unavailable')
 })
 
+// QA: OBS-02, UI-05; local evidence merge, not in-flight generation fencing.
 // Rationale: refreshing evidence must not replace desired fields or another Environment.
 test('Service observation refresh replaces only matching runtime evidence', () => {
   const healthy = serviceObservationFromAPI(wireObservation('healthy', { healthy: 1 }))
@@ -98,17 +101,4 @@ test('Service observation refresh replaces only matching runtime evidence', () =
   assert.equal(selected.runtimeIntent, 'running')
   assert.deepEqual(missing.observation, { state: 'unavailable' })
   assert.equal(unrelated.observation, healthy)
-})
-
-// Rationale: one Agent observation worker requires serial visible refreshes.
-test('Console wiring refreshes visible observations serially and no longer stores Service status', async () => {
-  const [store, refresh] = await Promise.all([
-    readFile(new URL('./store.tsx', import.meta.url), 'utf8'),
-    readFile(new URL('../features/service/use-service-observation-refresh.ts', import.meta.url), 'utf8'),
-  ])
-  assert.match(store, /refreshEnvironmentServices/)
-  assert.doesNotMatch(store, /status: 'unknown'/)
-  assert.match(refresh, /document\.visibilityState !== 'visible'/)
-  assert.match(refresh, /for \(const environmentId of ids\)/)
-  assert.doesNotMatch(refresh, /Promise\.all\(ids\.map/)
 })

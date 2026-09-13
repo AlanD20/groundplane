@@ -12,6 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// QA: SEC-05, UI-01; local CLI-to-HTTP behavior only, not encrypted storage or authorized reveal.
 // Rationale: platform create must read plaintext only from stdin, send one
 // protected API mutation, and render only the redacted resource response.
 func TestSecretAddReadsPlatformValueFromStdin(t *testing.T) {
@@ -50,6 +51,7 @@ func TestSecretAddReadsPlatformValueFromStdin(t *testing.T) {
 	}
 }
 
+// QA: SEC-04, UI-03; local input-bound enforcement only, not API publication or ciphertext storage.
 // Rationale: the CLI must reject oversized values before constructing an HTTP
 // request so the public 255 KiB bound applies equally to files and stdin.
 func TestReadSecretValueRejectsOversizedInput(t *testing.T) {

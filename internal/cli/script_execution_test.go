@@ -15,6 +15,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// QA: SCRIPT-01, SCRIPT-06, UI-02; local scoped lookup and request shaping only, not Controller ownership checks.
 // Rationale: normal Script commands resolve mutable Volume labels and immutable
 // Entry keys through paginated metadata reads, then submit only stable ids.
 func TestScriptExecutionCLIResolvesScopedNames(t *testing.T) {
@@ -113,6 +114,7 @@ func TestScriptExecutionCLIResolvesScopedNames(t *testing.T) {
 	}
 }
 
+// QA: SCRIPT-01, UI-03; local CLI request and flag validation only, not persisted replacement or execution.
 // Rationale: edit supports whole-context replacement/reset without changing the
 // body, and conflicting context options fail before any HTTP call.
 func TestScriptExecutionCLIResetAndConflictingFlags(t *testing.T) {
@@ -132,8 +134,9 @@ func TestScriptExecutionCLIResetAndConflictingFlags(t *testing.T) {
 	}
 }
 
+// QA: SCRIPT-01, UI-02; local ID-mode request shaping only, not resource ownership or runtime access.
 // Rationale: ID mode can grant API-owned Entries without inventing a Blueprint
-// key or reading unrelated resource metadata; context-only edit stays bodyless.
+// key or reading unrelated resource metadata, and the edit sends only the complete replacement context.
 func TestScriptExecutionCLIIDsSkipResourceLookups(t *testing.T) {
 	const scriptID = "scr_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	const volumeID = "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -152,6 +155,7 @@ func TestScriptExecutionCLIIDsSkipResourceLookups(t *testing.T) {
 	executeNoun(t, command, server.URL, Scope{AsID: true}, "edit", scriptID, "--execution-file", "-")
 }
 
+// QA: SCRIPT-06, UI-03; local lookup rejection only, not Controller resource or mount validation.
 // Rationale: absent/ambiguous authored Entry keys must never fall back to an env
 // variable name, file path, first match or mutation with an unresolved label.
 func TestScriptExecutionCLIRejectsUnresolvedEntryKeys(t *testing.T) {

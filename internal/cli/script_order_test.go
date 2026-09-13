@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// QA: SCRIPT-01, UI-01, UI-03; local CLI request encoding only, not runtime hook ordering or surface parity.
 // Rationale: CLI order authoring must reach the same API field and allow an
 // explicit zero patch; the generated-client conversion must not discard it.
 func TestScriptAddAndEditCarryNumericOrder(t *testing.T) {

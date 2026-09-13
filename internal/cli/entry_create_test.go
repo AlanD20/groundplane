@@ -8,21 +8,26 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// Rationale: the CLI must preserve the API's optional granted-fact operand in
+// QA: ATT-06, ENT-02, UI-01; pure CLI request shaping only, not grant authorization or value materialization.
+// Rationale: the CLI must preserve the exact optional granted-fact operand in
 // the one flat Entry source rather than inventing a nested wire alias.
 func TestBuildEntrySourceIncludesGrantedAttach(t *testing.T) {
 	t.Parallel()
+	const ownerAttachID = "att_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	const grantAttachID = "att_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 	source, err := buildEntrySource(entrySourceOptions{
-		factAttach: "att_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		factGrant:  "att_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+		factAttach: ownerAttachID,
+		factGrant:  grantAttachID,
 		factKey:    "pg16_URL",
 		factSet:    true,
 	})
-	if err != nil || source.Kind != "fact" || source.GrantAttachID == "" {
+	if err != nil || source.Kind != "fact" || source.AttachID != ownerAttachID ||
+		source.GrantAttachID != grantAttachID || source.Fact != "pg16_URL" {
 		t.Fatalf("buildEntrySource() = %#v, %v", source, err)
 	}
 }
 
+// QA: ENT-01, UI-03; local input-bound enforcement only, not HTTP rejection or durable plaintext handling.
 // Rationale: Entry stdin/file input must enforce its own 256 KiB API ceiling
 // before an idempotent request containing plaintext is constructed.
 func TestReadEntryValueRejectsOversizedInput(t *testing.T) {

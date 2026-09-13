@@ -3,7 +3,10 @@ import test from 'node:test'
 
 import { applyAuthoritativeEnvironmentScalars } from './environment-authoritative.ts'
 
-test('Environment edit applies every authoritative scalar and preserves hydrated children', () => {
+// QA: OWN-02, NET-02, UI-01; local merge, not rename or network persistence.
+// Rationale: a synchronous edit response must update returned scalars without
+// erasing children that are loaded by separate operations.
+test('Environment edit applies returned scalars and preserves hydrated children', () => {
   const zones = [{ id: 'net_existing' }]
   const services = [{ id: 'svc_existing' }]
   const routes = [{ id: 'rte_existing' }]

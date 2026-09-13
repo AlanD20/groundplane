@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { routeSummaryHint } from '../features/environment/route-summary.ts'
 
+// QA: HTTP-01, UI-05; local Route summary, not public reachability or rendering.
 // Rationale: exposure alone cannot prove a missing provider or public reachability.
 test('Route summary distinguishes empty, applied and mixed exposure', () => {
   assert.equal(routeSummaryHint([]), 'no routes')
@@ -13,6 +13,7 @@ test('Route summary distinguishes empty, applied and mixed exposure', () => {
   ]), 'public + internal · provider applied')
 })
 
+// QA: HTTP-01, UI-05; local mixed-state summary, not live provider state.
 // Rationale: one applied Route must not hide other pending or failed Routes.
 test('Route summary counts every non-applied state in a stable order', () => {
   assert.equal(routeSummaryHint([{ exposure: 'public', status: 'unserved' }]), 'public · 1 unserved')
@@ -26,12 +27,4 @@ test('Route summary counts every non-applied state in a stable order', () => {
   const expected = 'public + internal · 1 degraded, 2 pending, 1 unserved'
   assert.equal(routeSummaryHint(routes), expected)
   assert.equal(routeSummaryHint([...routes].reverse()), expected)
-})
-
-// Rationale: the overview uses the API Route projection, not an independent
-// provider inference that could disagree with the individual Route rows.
-test('Environment overview delegates Route state presentation', async () => {
-  const page = await readFile(new URL('../features/environment/environment-page.tsx', import.meta.url), 'utf8')
-  assert.match(page, /hint=\{routeSummaryHint\(env\.routes\)\}/)
-  assert.doesNotMatch(page, /public · needs ingress component/)
 })

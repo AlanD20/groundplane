@@ -17,6 +17,7 @@ const zone = (id, name, ownerKind = 'environment') => ({
   ownerId: ownerKind === 'environment' ? 'env_test' : 'prj_backing',
 })
 
+// QA: CMP-01, HTTP-07; local selection, not Component networking.
 // Rationale: Component networking is multi-select, so choosing another Zone
 // must preserve every existing selection and deselect only the requested id.
 test('Zone selection preserves multiple stable ids', () => {
@@ -30,6 +31,7 @@ test('Zone selection preserves multiple stable ids', () => {
   )
 })
 
+// QA: NET-02, CMP-01; local callback and selection, not Controller allocation.
 // Rationale: the create response is authoritative; the picker must select its
 // exact stable id once and keep the returned Zone while parent hydration lags.
 test('successful creation selects and retains the exact returned Zone', async () => {
@@ -56,6 +58,7 @@ test('successful creation selects and retains the exact returned Zone', async ()
   )
 })
 
+// QA: NET-02, UI-03; local rejected-request state, not subnet overlap detection.
 // Rationale: a rejected Zone create must not manufacture an id, update the
 // Component selection, or leave a phantom option in local picker state.
 test('failed creation makes no selection and adds no phantom Zone', async () => {
@@ -82,6 +85,7 @@ test('failed creation makes no selection and adds no phantom Zone', async () => 
   ])
 })
 
+// QA: CMP-01, CMP-03; local option filtering, not API ownership enforcement.
 // Rationale: Component Zone choices are ordinary Environment Zones, but their
 // names and internal decisions are otherwise arbitrary and must not be inferred.
 test('options exclude backing-owned Zones without filtering names or internal state', () => {

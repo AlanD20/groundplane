@@ -29,6 +29,9 @@ func (lister *pagedEntryLister) ListEntries(
 	return apiTypes.Page[apiTypes.Entry]{Items: []apiTypes.Entry{{ID: "ev_third"}}}, nil
 }
 
+// QA: UI-01; local CLI pagination helper only, not rendered output or live surface parity.
+// Rationale: Entry-backed commands must follow opaque cursors so later-page
+// resources are not silently omitted from list output or Script grant resolution.
 func TestListAllCLIEntriesDrainsOpaquePagination(t *testing.T) {
 	lister := &pagedEntryLister{}
 	entries, err := listAllCLIEntries(context.Background(), lister, "env_01ARZ3NDEKTSV4RRFFQ69G5FAV")
@@ -41,11 +44,21 @@ func TestListAllCLIEntriesDrainsOpaquePagination(t *testing.T) {
 	}
 }
 
+// QA: ENT-04, UI-03; pure CLI flag validation only, not file materialization or host ownership.
+// Rationale: zero is a valid numeric owner, so presence must come from the
+// flags rather than a nonzero-value heuristic and neither half may default.
 func TestEntryFileOwnershipRequiresBothExplicitValues(t *testing.T) {
-	// Rationale: zero is a valid numeric owner, so presence must come from the
-	// flags rather than a nonzero-value heuristic and neither half may default.
-	if _, _, err := entryFileOwnership("file", 0, 0, false, false); err == nil {
-		t.Fatal("entryFileOwnership() accepted omitted ownership")
+	for _, presence := range []struct {
+		uid bool
+		gid bool
+	}{
+		{},
+		{uid: true},
+		{gid: true},
+	} {
+		if _, _, err := entryFileOwnership("file", 0, 0, presence.uid, presence.gid); err == nil {
+			t.Fatalf("entryFileOwnership() accepted ownership presence uid=%t gid=%t", presence.uid, presence.gid)
+		}
 	}
 	uid, gid, err := entryFileOwnership("file", 0, 0, true, true)
 	if err != nil {
@@ -56,9 +69,10 @@ func TestEntryFileOwnershipRequiresBothExplicitValues(t *testing.T) {
 	}
 }
 
+// QA: ENT-02, UI-01; pure CLI request shaping only, not source resolution, capture, or materialization.
+// Rationale: docs/api-cli.md makes attach_id and fact direct members of
+// the discriminated human-API source; a nested Blueprint shape is not wire-compatible.
 func TestBuildEntrySourceUsesFlatHumanAPIFactShape(t *testing.T) {
-	// Rationale: docs/api-cli.md makes attach_id and fact direct members of
-	// the discriminated human-API source; a nested Blueprint shape is not wire-compatible.
 	source, err := buildEntrySource(entrySourceOptions{
 		factAttach: "att_01J", factKey: "pg16_URL", factSet: true,
 	})

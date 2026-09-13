@@ -9,6 +9,7 @@ const script = {
   execution: { mode: 'inherited' },
 }
 
+// QA: SCRIPT-01, SCRIPT-03; local response order, not actual hook execution order.
 // Rationale: the Console shows the Controller's exact bounded order, including
 // zero, and refuses malformed data instead of presenting a fabricated default.
 test('Script response retains numeric order and rejects malformed values', () => {
@@ -18,6 +19,7 @@ test('Script response retains numeric order and rejects malformed values', () =>
   }
 })
 
+// QA: SCRIPT-01, UI-03; local authoring validation, not Controller admission.
 // Rationale: the editor permits zero and the maximum but never silently coerces
 // blank, fractional, negative, scientific-notation or out-of-range authoring.
 test('Script order input has an explicit bounded integer decision', () => {

@@ -485,15 +485,88 @@ qualify its full product case.
 | [Backing request admission](../internal/controller/backing_service_route_policy_test.go) | Retained with rationale. Valid JSON must reach its owning handler instead of being rejected by an unrelated body policy. | BACK-01, UI-01: dispatch policy only, not provisioning. |
 | [Disabled Backup authoring](../internal/controller/environment_blueprint_backup_validation_test.go) | Retained with rationale. Incomplete execution must not make a valid disabled desired declaration impossible to import. | BP-01, BAK-01: local validation only. |
 
-Cleanup verification: `.tmp/qa-test-review-retained-go.log` records the four
+First-batch verification: `.tmp/qa-test-review-retained-go.log` records the four
 retained Go checks with `-race`; `.tmp/qa-test-review-console-assertions.log`
 records 75 individual assertions with pinned Node 24.19.0 and in-process test
 execution. The default runner also returned success, but its log summarizes file
 wrappers rather than named assertions. These are local cleanup results, not
 row-wide product passes or an endorsement of unreviewed tests.
 
-The remaining Go, Console, registered-Component, SDK, deployment and verifier tests
-still require this review. Helpers and fixtures are not standalone test cases;
+#### Console review
+
+All committed Console test files were reviewed, including the compile-time
+generated-error assertion. This second batch removed 37 source/document-text
+tests and one test of an unused parser. It retained 35 behavioral tests and two
+Node-run static checks, plus the compile-time assertion. Every retained behavioral
+test names its cases, reason and proof limit next to its assertions.
+
+| Reviewed tests | Disposition and reason | Matrix coverage or remaining gap |
+| --- | --- | --- |
+| Four tests in `c07-network-contract.test.mjs` | Removed. Callback names, alert strings and a command-tree sentence do not execute Zone/Route reads, path rejection, Component actions or CLI impact. | NET-04, CMP-01, HTTP-02, UI-01/03 remain unqualified by these checks. |
+| Four tests in `c14-console-contract.test.mjs` | Removed. Source patterns do not enforce Secret scope, execute removal, observe plaintext lifetime or validate Task navigation. | SEC-01/02/04/06, TASK-01, UI-05 need actual request/state or interaction proof. |
+| Four tests in `c20-release-group-contract.test.mjs` | Removed. Matching callbacks, refresh names, input labels and preview markup cannot detect broken dispatch or stale rendered state. The independent preview-state tests below remain. | GRP-01/02/04, UI-01/05 lack interaction proof. |
+| Five tests in `environment-c04-final-contract.test.mjs` | Removed. No deletion fence, accepted retry generation, hydration race, failed create or observer cancellation is executed. | OWN-01/04/06, UI-04/05 remain unqualified by these checks. |
+| Five tests in `environment-c04-recovery-contract.test.mjs` | Removed. Source presence cannot prove stale-load suppression, missing-Task handling, definite-rejection cleanup, uncertain DELETE replay or startup recovery. | OWN-06, UI-04/05 require state-sequence tests. |
+| One test each in `environment-deletion-contract.test.mjs` and `environment-lifecycle-contract.test.mjs` | Removed. Broad source matching repeats lifecycle claims without a create, rename, deletion or protected request. | OWN-01/02/05/06 and UI-04/05 remain open. |
+| One test each in `environment-projection-contract.test.mjs`, `environment-release-live-state-contract.test.mjs` and `platform-component-live-state-contract.test.mjs` | Removed. Text in projection, store and pages does not prove failed health, serving summaries, Component configuration or DNS read/edit behavior. | OBS-02, SVC-01, CMP-01/02, DNS-02 and UI-05 remain open. |
+| Two export-lifecycle tests in [backup-key-export-contract.test.mjs](../console/src/lib/backup-key-export-contract.test.mjs) | Removed. Any matching no-store/finally/abort text could satisfy them without executing key export, revocation of the download URL or unmount cleanup. | BAK-14 and UI-05 require browser lifecycle/secret-safety proof. |
+| Three source/document tests in [backup-policy-contract.test.mjs](../console/src/lib/backup-policy-contract.test.mjs) | Removed. Cursor-query text, JSX nesting and a status paragraph do not exercise pagination or prove implementation. | BAK-07 needs actual empty-page continuation and request checks; status prose is not a product test. |
+| Two behavioral tests in that Backup Policy file | Retained. Validate the exact public numeric interval and reject unsafe response integers. Expectations now use the contract's numeric bound, not the implementation's exported constant. | BAK-01, UI-03/05: local validation only, not retention or persistence. |
+| Two authentication projection/presentation tests and the source assertions in [valkey-authentication-contract.test.mjs](../console/src/lib/valkey-authentication-contract.test.mjs) | Removed. Type/fixture strings and JSX cannot prove selected modes, form reset or mode-specific Attach facts. Retained the actual request-field test: reject empty/invalid Valkey choice, preserve all three explicit modes, omit authentication for PostgreSQL. | BACK-05, UI-03: local request fields only. BACK-06 and form/no-preselection interactions still need direct proof. |
+| One wiring test each in [caddy-template-contract.test.mjs](../console/src/lib/caddy-template-contract.test.mjs), [route-summary.test.mjs](../console/src/lib/route-summary.test.mjs) and [service-observation-contract.test.mjs](../console/src/lib/service-observation-contract.test.mjs) | Removed. A component/helper name or loop string does not prove editing, rendering or serial visible refresh. | HTTP-03, HTTP-01 and OBS-03 interaction/refresh coverage remains open. |
+| `Agent labels preserve keyed values and reject ambiguous input` in `agent-read-model.test.mjs` | Removed. It only invokes `parseAgentLabels`, which has no production caller; the current Agent editor uses the configuration surface. The production helper was not changed. | HOST-07 needs the actual settings path, not an unused parser. |
+| Two retained Caddyfile tests | Preserve BOM/native placeholders and exact text; reject byte-size, NUL and UTF-8 violations, including dishonest reported file size. | HTTP-03/04, UI-03: input handling only, not rendering/reload. |
+| Four tests in [component-zone-picker.test.mjs](../console/src/lib/component-zone-picker.test.mjs) | Retained. Preserve multi-selection, select the exact returned ID, leave no phantom selection on rejection, and exclude backing-owned options without guessing names/internal state. | NET-02, CMP-01/03, HTTP-07, UI-03: local callbacks and selection only. |
+| One test in [entry-api.test.mjs](../console/src/lib/entry-api.test.mjs) | Retained. Keep reconciliation identity, zero uid/gid and Secret reference/exposure metadata during decoding. | ENT-04, SCRIPT-01: response projection only, not materialization or grant enforcement. |
+| One test in [environment-authoritative.test.mjs](../console/src/lib/environment-authoritative.test.mjs) | Retained. Returned scalars replace stale ones without erasing independently hydrated children. Its name no longer claims unasserted fields. | OWN-02, NET-02, UI-01: local merge only, not stable-ID validation or a real edit. |
+| Three tests in [release-group-rollback-preview-authority.test.mjs](../console/src/lib/release-group-rollback-preview-authority.test.mjs) | Retained. Exact immutable scope/revision, rejection before caller dispatch, and late success/failure ownership after edit/reopen each guard a distinct stale-preview failure. | GRP-04, UI-05: local authority helpers, not dialog wiring or Controller rollback. |
+| Two retained Route-summary tests | Distinguish no Routes, public/internal/mixed exposure and all non-applied states regardless of list order. | HTTP-01, UI-05: summary computation only, not provider reachability. |
+| Three tests in [script-execution.test.mjs](../console/src/lib/script-execution.test.mjs) and two in [script-order.test.mjs](../console/src/lib/script-order.test.mjs) | Retained. Preserve complete explicit/inherited contexts, reject malformed grants, distinguish replacement from omission, preserve bounded order and reject ambiguous authoring. | SCRIPT-01/03/05/06, UI-03/05: request/response validation only, not actual hook order or isolation. |
+| Four retained observation tests | Reject inconsistent snapshots; expire exactly at the local boundary; never turn incomplete evidence into healthy aggregate state; refresh only selected evidence without replacing desired fields. | OBS-01/02/03, UI-05: local decoding/merge/expiry, not actual observations, refresh serialization or generation races. |
+| Four tests in [task-detail-actions.test.mjs](../console/src/lib/task-detail-actions.test.mjs) | Retained. Exclude native-update Retry and internal-prune controls while preserving ordinary Backup Retry and lifecycle-specific controls. | TASK-03/05, BAK-05/08, UP-07: visibility decisions only, not effect cancellation or recovery. |
+| Two tests in [task-read-model.test.mjs](../console/src/lib/task-read-model.test.mjs) | Retained. Reject unknown Task types and operator-owned internal pruning before display. | TASK-01, BAK-08, UI-05: local decoding only, not server provenance enforcement. |
+| Two tests in [transient-logs.test.mjs](../console/src/lib/transient-logs.test.mjs) | Retained. Real stream decoder delivers known lines across keepalive comments and valid CRLF framing. | LOG-01/02: finite local stream framing, not actual source selection, cancellation or reconnect. |
+| Two Controller update-intent tests | Already reviewed above; unchanged. | UP-11, UI-04: local protected-request state only. |
+| Remaining Backup-key rotation test; [Environment edit schema test](../console/src/lib/environment-edit-contract.test.mjs); [generated error tuple](../console/src/lib/api.generated.contract.test.ts) | Retained as delivery checks. Enforce generated wire-type ownership, parse the emitted closed edit schema and protected header, and reject extra generated RFC 7807 keys. Each has a concrete static constraint, not a behavior claim. | No product case passes from these checks. |
+
+Verification: `.tmp/qa-test-review-console-complete.log` records all 37 named Node
+tests passing with pinned Node 24.19.0 and `--test-isolation=none` (35 behavioral,
+two static). `.tmp/qa-test-review-console-types.log` records the TypeScript check,
+including the generated-error assertion. No runner configuration, dependency,
+production behavior or deployed state changed. Deleted source remains in Git.
+
+No committed Console browser/interaction suite was found. The retained tests do
+not establish action wiring, keyboard/mobile behavior, secret-download cleanup,
+or Environment deletion/reload recovery. Earlier isolated browser evidence stays
+bounded to its recorded build and scenarios; it does not fill these whole-case
+gaps. Adding the missing interaction suite or changing production behavior is not
+part of this existing-test cleanup.
+
+#### CLI inputs and scoped resolution
+
+Reviewed all 19 tests in the nine files below; retained all 19. Each calls the
+real CLI parser, request mapper or command against independent expected values
+or a local HTTP recorder. No production code changed.
+
+| Reviewed tests | Retention reason | Matrix coverage |
+| --- | --- | --- |
+| Three in [backingservice_test.go](../internal/cli/backingservice_test.go) | Missing/empty Valkey mode rejects before HTTP; explicit password mode reaches the exact request; show preserves the returned mode. The rejection test now detects any unexpected request. | BACK-05, UI-01/03: CLI admission/transport/display only, not protocol authentication. |
+| Three in [entry_test.go](../internal/cli/entry_test.go) | Follow opaque pagination; require both numeric ownership flags while accepting zero; encode the API's flat fact source. Missing either UID or GID is now independently asserted. | ENT-02/04, UI-01/03: helper/request behavior only. |
+| Two in [entry_create_test.go](../internal/cli/entry_create_test.go) | Preserve exact owner/grant/fact operands; reject Entry input above its 256 KiB ceiling. The grant assertion now rejects the wrong nonempty ID, not just absence. | ATT-06, ENT-01/02, UI-01/03: no grant authorization or materialization proof. |
+| One in [entry_edit_test.go](../internal/cli/entry_edit_test.go) | Preserve complete mutable PATCH state and bounded stdin transport without printing the secret response value. | ENT-01/03/06, UI-01: CLI-to-HTTP only, not encryption or runtime exposure. |
+| One in [secret_target_test.go](../internal/cli/secret_target_test.go) | Resolve the Project-scoped mutable key, then address detail by stable Secret ID. | SEC-03, UI-02: lookup routing only, not Controller authorization. |
+| Two in [secret_create_test.go](../internal/cli/secret_create_test.go) | Send one protected Platform create from stdin with redacted output; reject input above the distinct 255 KiB Secret ceiling. | SEC-04/05, UI-01/03: local input/output only, not durable encryption or reveal. |
+| One in [script_order_test.go](../internal/cli/script_order_test.go) | Preserve maximum create order and explicit zero edit through generated request conversion. | SCRIPT-01, UI-01/03: encoding only, not actual hook order. |
+| Four in [script_execution_test.go](../internal/cli/script_execution_test.go) | Resolve scoped Volume/Entry names across pages; encode inherited reset and reject conflicting flags; bypass lookup in ID mode; reject absent or ambiguous Entry keys before mutation. | SCRIPT-01/06, UI-02/03: local lookup and requests, not runner isolation. |
+| Two in [script_execution_file_test.go](../internal/cli/script_execution_file_test.go) | Preserve complete typed YAML with explicit false/inherited mode; reject null/coerced/duplicate/unknown/multi-document or oversized decisions. | SCRIPT-01/06, UI-03: file decoding only, not persistence or execution. |
+
+All 19 tests pass with `-race -count=1`; evidence is
+`.tmp/qa-test-review-cli-20260913.log`. The successful run allowed local loopback
+listeners after the sandbox-only attempt could not create them; no QA host was
+contacted. These results do not qualify any entire product row.
+
+The remaining Go, registered-Component, SDK, deployment and verifier tests
+still require review. Helpers and fixtures are not standalone test cases;
 inventory counts must not classify them as behavioral coverage. No automatic
 blanket deletion based on filenames, missing comments, mocks or small test size.
 

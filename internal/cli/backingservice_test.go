@@ -4,18 +4,26 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/cli/apiclient"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// QA: BACK-05, UI-03; local CLI admission only, not API/Console validation or durable publication.
 // Rationale: omitted and empty authentication flags must fail locally without
 // publishing a request or relying on a server to choose a mode.
 func TestBackingServiceCreateRequiresValkeyAuthentication(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		t.Error("missing Valkey authentication reached the API")
+		writer.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
 	for _, extra := range [][]string{nil, {"--authentication", ""}} {
 		command := newBackingServiceCmd()
-		command.SetContext(context.WithValue(context.Background(), appKey{}, &App{}))
+		command.SetContext(context.WithValue(context.Background(), appKey{}, &App{Client: apiclient.New(server.URL)}))
 		command.SetOut(io.Discard)
 		command.SetErr(io.Discard)
 		command.SetArgs(append([]string{"create", "cache", "--adapter", "valkey:9", "--name", "Cache",
@@ -27,6 +35,7 @@ func TestBackingServiceCreateRequiresValkeyAuthentication(t *testing.T) {
 	}
 }
 
+// QA: BACK-05, UI-01; local CLI-to-HTTP request and response shaping only, not Valkey provisioning.
 // Rationale: an explicitly selected password mode is sent unchanged.
 func TestBackingServiceCreateSendsValkeyAuthentication(t *testing.T) {
 	t.Parallel()
@@ -60,6 +69,9 @@ func TestBackingServiceCreateSendsValkeyAuthentication(t *testing.T) {
 	}
 }
 
+// QA: BACK-05, UI-01; local CLI rendering only, not cross-surface parity or stored instance policy.
+// Rationale: Backing-service reads must expose the explicit immutable Valkey mode
+// instead of omitting it or inferring it from an adapter or Attach.
 func TestBackingServiceShowIncludesAuthentication(t *testing.T) {
 	t.Parallel()
 

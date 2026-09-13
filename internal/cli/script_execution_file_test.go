@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// QA: SCRIPT-01; pure YAML decoding only, not resource resolution, persistence, or execution.
 // Rationale: the CLI file carries authored labels and preserves explicit false
 // without importing the Controller's Blueprint parser or domain model.
 func TestScriptExecutionFilePreservesAuthoredContext(t *testing.T) {
@@ -26,6 +27,7 @@ func TestScriptExecutionFilePreservesAuthoredContext(t *testing.T) {
 	}
 }
 
+// QA: SCRIPT-01, SCRIPT-06, UI-03; pure YAML rejection only, not Controller resource validation.
 // Rationale: bounded files reject null/coerced decisions, merge-erased presence,
 // duplicate/unknown fields and extra documents before resolving any resource.
 func TestScriptExecutionFileRejectsAmbiguousDecisions(t *testing.T) {

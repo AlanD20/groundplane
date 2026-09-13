@@ -12,6 +12,7 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
+// QA: ENT-01, ENT-03, ENT-06, UI-01; local CLI-to-HTTP behavior only, not storage or runtime materialization.
 // Rationale: Entry edit must use the generated operation with complete mutable
 // state, and secret literal bytes must come from a bounded file/stdin rather
 // than process argv.

@@ -48,8 +48,10 @@ toolchains and the lockfile, with generated-output drift rejected.
 
 ### Verification design
 
-Vitest owns unit checks, React Testing Library component/interaction tests, and
-Playwright committed production-build browser scenarios. Interactive diagnosis
+The intended automated stack is Vitest for unit checks, React Testing Library
+for component/interaction tests, and Playwright for committed production-build
+browser scenarios. This is not the current implementation; see status below.
+Interactive diagnosis
 uses an available isolated browser; it does not require configuring a specific
 agent tool for a docs change. Browser acceptance runs against the built SPA,
 not only Vite development mode.
@@ -74,3 +76,10 @@ The production SPA and API-first embedded packaging have recorded qualification.
 That does not qualify every feature action. Remaining root-store extraction,
 feature parity, generated/full checks and unfinished runtime observations remain
 in [capabilities.md](../capabilities.md) and the scoped issue/task lists.
+
+Committed frontend tests currently use Node's test runner and compile-time
+TypeScript assertions. The [existing-test review](../qa-matrix.md#console-review)
+retains meaningful local behavior and static contract checks; no committed
+Console browser/interaction suite was found. Source-text matches were removed
+where they did not prove the claimed behavior. Past isolated browser checks
+remain bounded evidence, not a substitute for the missing interaction suite.

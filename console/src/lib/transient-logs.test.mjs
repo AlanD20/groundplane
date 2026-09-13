@@ -3,6 +3,9 @@ import test from 'node:test'
 
 import { watchTransientLogs } from './transient-logs.ts'
 
+// QA: LOG-01, LOG-02; local stream decoding, not source selection or reconnect.
+// Rationale: keepalive comments must neither terminate the stream nor hide the
+// next real log event from the operator.
 test('watchTransientLogs ignores comment-only SSE frames between log events', async () => {
   const originalFetch = globalThis.fetch
   const event = (sequence, line) => `event: log\ndata: ${JSON.stringify({
@@ -42,6 +45,8 @@ test('watchTransientLogs ignores comment-only SSE frames between log events', as
   }
 })
 
+// QA: LOG-01; local protocol framing, not a live container log stream.
+// Rationale: valid CRLF framing must deliver the same log line as LF framing.
 test('watchTransientLogs accepts CRLF-delimited log events', async () => {
   const originalFetch = globalThis.fetch
   const event = `event: log\r\ndata: ${JSON.stringify({

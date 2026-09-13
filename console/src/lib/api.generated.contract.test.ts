@@ -7,6 +7,7 @@ type Equal<Left, Right> =
     : false
 type Expect<Value extends true> = Value
 
+// Delivery: compile-time generated error keys, not runtime error handling.
 // Rationale: Console code must receive the generated closed RFC 7807 tuple;
 // an open or extra key would hide drift in the code-first Controller contract.
 type ProblemKeysAreExact = Expect<
