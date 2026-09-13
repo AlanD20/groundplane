@@ -1294,7 +1294,7 @@ func (state *draftAttachPlanState) ResolveTaskIdentity(
 		return state.facts.ResolveTaskIdentity(ctx, current, taskID, consume)
 	}
 	identity := controllerpkg.AttachPlanIdentity{
-		Database: state.identity.Database, Role: state.identity.Role,
+		Authentication: state.identity.Authentication, Database: state.identity.Database, Role: state.identity.Role,
 		Password: append([]byte(nil), state.identity.Password...),
 		Grants:   append([]controllerpkg.AttachPlanGrantIdentity(nil), state.identity.Grants...),
 	}
