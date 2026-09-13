@@ -286,7 +286,10 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 			// Entry execution changes materialized generations and their Compose
 			// bindings, not unrelated desired workload or resource decisions.
 			current.RevisionID, current.RenderGeneration = projection.RevisionID, projection.RenderGeneration
-			current.Entries, current.ComposeArtifact = projection.Entries, projection.ComposeArtifact
+			current.Entries = projection.Entries
+			if !entryMutationHasOnlyMaterializationSteps(record) {
+				current.ComposeArtifact = projection.ComposeArtifact
+			}
 			projection = current
 			clear(projectionValue)
 			projectionValue, err = encodeEnvironmentComposeProjection(projection)
@@ -318,6 +321,26 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 		conditions: conditions,
 		mutations:  []Mutation{{Type: MutationPut, Key: projectionKey, Value: projectionValue}},
 	}, nil
+}
+
+func entryMutationHasOnlyMaterializationSteps(record TaskRecord) bool {
+	if record.Type != TaskUpdate || record.Params[TaskResourceKindParam] != TaskResourceEntry ||
+		len(record.Materializations) == 0 || len(record.Steps) != len(record.Materializations) {
+		return false
+	}
+	materializationSteps := make(map[string]struct{}, len(record.Materializations))
+	for _, materialization := range record.Materializations {
+		materializationSteps[materialization.StepID] = struct{}{}
+	}
+	if len(materializationSteps) != len(record.Steps) {
+		return false
+	}
+	for _, step := range record.Steps {
+		if _, materializes := materializationSteps[step.ID]; !materializes {
+			return false
+		}
+	}
+	return true
 }
 
 func taskHasSpecializedProjectionAcknowledgement(record TaskRecord) bool {

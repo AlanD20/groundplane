@@ -86,6 +86,10 @@ slot; the existing plan hash seals the pair. Execution selects only exposed
 workload instances, without dependency or stable-proxy restarts. Entry DELETE
 remains materialization-only and does not use this capture.
 
+When an Entry update has only materialization steps, terminal publication records
+the materialized generations without replacing the independently applied Compose
+artifact. Pending desired Volumes must not become applied through an Entry edit.
+
 `entry_runtime_epoch_revision` records the captured Environment mutation epoch.
 It must equal the direct publisher's epoch, which final commit also compares.
 Ordinary Release publication and terminalization advance that epoch and planning
