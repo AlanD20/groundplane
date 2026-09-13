@@ -9,6 +9,7 @@ function storage() {
   return { getItem: () => value, setItem: (_key, next) => { value = next }, removeItem: () => { value = null } }
 }
 
+// QA: UP-11, UI-04; local request-state behavior, not live activation.
 // Rationale: lost acceptance and page reload must replay the same protected
 // request; neither is permission to create a second native activation Task.
 test('native update retains one release and key across uncertain acceptance and reload', async () => {
@@ -35,6 +36,7 @@ test('native update retains one release and key across uncertain acceptance and 
   assert.equal(new ControllerUpdateIntent(saved).current, null)
 })
 
+// QA: UP-11, UI-04; local rejection/uncertainty behavior.
 // Rationale: a definite rejection permits a new explicit attempt; missing
 // storage or malformed acceptance cannot silently discard ambiguous authority.
 test('native publication distinguishes rejection from uncertainty', async () => {

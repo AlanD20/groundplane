@@ -446,6 +446,57 @@ strict peer isolation on shared backing bridges, multi-host HA, database migrati
 reversal or zero downtime for recreate. Test and report these boundaries; do not
 invent guarantees or silently remove relevant limitations from the report.
 
+## Existing test review
+
+Each existing test must answer: which requirement or real failure does it guard,
+what independent expectation does it assert, and would it fail if that behavior
+broke? Map it to the relevant case and state its proof level and limitations.
+A short pure-function test may guard an important boundary; a long test with
+many assertions may only confirm its own fixture. Length and coverage percentage
+are not review criteria.
+
+Retain tests with a concrete reason; add missing rationale and case links. Remove
+confirmed tautologies, duplicate tests with no distinct failure mode, tests of
+unused/superseded behavior, and checks that exist only to raise coverage. Do not
+delete a useful regression merely because its author omitted a comment. A mock's
+configured return value is not evidence of the external effect being claimed.
+
+Source-text checks may enforce an actual static delivery constraint, but finding
+a callback name or UI string does not prove action wiring, validation, persistence
+or rendered behavior. Such checks cannot stand in for behavioral tests. Deleting
+one does not qualify its feature: keep the missing interaction/runtime proof
+visible until a corresponding test is written and executed. Do not add a new
+framework or change product behavior as an incidental test cleanup.
+
+### Reviewed dispositions
+
+This is a partial audit, not completion of the repository-wide review. Git retains
+removed files. Update this table by coherent test area, not by creating another
+document for each test cleanup. Passing a retained local check still does not
+qualify its full product case.
+
+| Reviewed tests | Disposition and reason | Matrix coverage |
+| --- | --- | --- |
+| Three tests in `console/src/lib/console-parity-contract.test.mjs` | Removed. Source regexes checked old field text, helper names and Task-dialog strings without invoking a Service action, dispatching a Task or rendering no-op feedback. They did not prove their claimed behavior. | UI-01/03/05 and CMP-02 retain unverified interaction coverage. |
+| One test in `console/src/lib/environment-blueprint-script-contract.test.mjs` | Removed. Presence of JSX and get/validate/apply names can pass in dead code or comments; no Blueprint is read, validated, applied or rendered. | BP-01/02/04 and UI-01 remain independently unqualified. |
+| Two tests in [controller-update-contract.test.mjs](../console/src/lib/controller-update-contract.test.mjs) | Retained and linked. Execute the actual request-state owner through lost acceptance, reload, exact replay, definitive rejection and blocked storage; assert protected identity and absence of duplicate activation intent. | UP-11, UI-04: local behavior only. |
+| [Blueprint step budget](../internal/controller/taskcontract/environment_test.go) | Retained with rationale. Independently expected count includes each candidate's recovery pair, guarding under-budgeted plans. | BP-11: arithmetic only, not maximum-size live Apply. |
+| [Never-applied Entry selection](../internal/controller/entry/removal_projection_test.go) | Retained with rationale. Prevents absence from being treated as authority for host deletion. | ENT-11: local selection only. |
+| [Backing request admission](../internal/controller/backing_service_route_policy_test.go) | Retained with rationale. Valid JSON must reach its owning handler instead of being rejected by an unrelated body policy. | BACK-01, UI-01: dispatch policy only, not provisioning. |
+| [Disabled Backup authoring](../internal/controller/environment_blueprint_backup_validation_test.go) | Retained with rationale. Incomplete execution must not make a valid disabled desired declaration impossible to import. | BP-01, BAK-01: local validation only. |
+
+Cleanup verification: `.tmp/qa-test-review-retained-go.log` records the four
+retained Go checks with `-race`; `.tmp/qa-test-review-console-assertions.log`
+records 75 individual assertions with pinned Node 24.19.0 and in-process test
+execution. The default runner also returned success, but its log summarizes file
+wrappers rather than named assertions. These are local cleanup results, not
+row-wide product passes or an endorsement of unreviewed tests.
+
+The remaining Go, Console, registered-Component, SDK, deployment and verifier tests
+still require this review. Helpers and fixtures are not standalone test cases;
+inventory counts must not classify them as behavioral coverage. No automatic
+blanket deletion based on filenames, missing comments, mocks or small test size.
+
 ## Running and maintaining the matrix
 
 1. Select the exact clean candidate, scope and case IDs with the operator. Keep

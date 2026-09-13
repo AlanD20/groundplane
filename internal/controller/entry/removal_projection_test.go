@@ -6,6 +6,9 @@ import (
 	infraetcd "github.com/AlanD20/groundplane/internal/infra/etcd"
 )
 
+// QA: ENT-11; local removal selection.
+// Rationale: an absent Entry must not acquire host cleanup authority merely
+// because an Environment projection exists.
 func TestAppliedEntryProjectionExcludesEntryAbsentFromCurrentProjection(t *testing.T) {
 	var projection infraetcd.Versioned[infraetcd.EnvironmentComposeProjection]
 

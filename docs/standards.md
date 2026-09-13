@@ -255,10 +255,20 @@ in the same commit that adds it, never a guessed abbreviation.)
 - **L2 — real-host system tests**: CLI against a real Controller+Agent on
   a host; capability acceptance journeys exercise deploy, rollback, Backup and
   recovery through the supported operator surfaces.
-- Every test carries a `// Rationale:` header comment explaining *why* the
-  case exists (from the mvmctl practice) — the rationale is the
-  documentation, not the assertion.
-- Tests run with `-race -count=1`; coverage profile collected.
+- Every behavioral test names its [QA matrix case](qa-matrix.md) and carries a
+  `// Rationale:` header explaining the requirement or concrete failure it guards.
+  The assertions must actually detect that failure. Repeating the test name,
+  calling a helper, or increasing a coverage number is not a rationale.
+- Review existing tests against [the test-review rule](qa-matrix.md#existing-test-review).
+  Keep useful regressions and supply missing rationale/case links. Remove tests
+  with no defensible contract or failure-prevention reason, including tautologies
+  and redundant coverage-only checks. A missing comment alone does not prove that
+  a test is useless. Record deletions and the behavior that remains unproved.
+- Build, formatting, generation and architectural checks remain separate delivery
+  gates with their own reasons. They cannot count as passing product cases.
+- Go tests run with `-race -count=1`. Collected line/statement coverage is diagnostic
+  only, never a readiness target or a reason to add or retain a test. Product
+  coverage means documented cases and variants with adequate execution evidence.
 
 ## 14. CI gate (mirrors the mandatory local checks)
 

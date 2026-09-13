@@ -154,6 +154,9 @@ Use supported dependency versions; do not resolve conflicts with `--force` or
   supported by the changed behavior.
 - Changed behavioral tests map to documented QA cases; execution records identify
   the tested build, required variants, independent assertions, outcome and cleanup.
+- Each test has a concrete rationale; removals follow the matrix's test-review
+  rule and leave any lost or missing behavioral proof explicit. Coverage metrics
+  are not a delivery target.
 - Commits are focused, concise, and contain no co-author trailer.
 
 ## Delivery state
