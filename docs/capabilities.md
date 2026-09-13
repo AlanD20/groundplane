@@ -17,6 +17,10 @@ Missing implementation or evidence does not narrow the product contract. See
 [head.md](head.md) for the current work checkpoint and [tasks/todo.md](../tasks/todo.md)
 for remaining implementation and qualification.
 
+[The product QA matrix](qa-matrix.md) breaks these areas into behavioral cases,
+failure/recovery sequences and reviewed execution evidence. This coarse capability
+index is not a substitute for case-by-case qualification.
+
 ## Product-wide index
 
 | Capability | Current position | Remaining gap or qualification limit |

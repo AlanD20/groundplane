@@ -1,4 +1,63 @@
-# Private acceptance evidence
+# Acceptance evidence
+
+[The product QA matrix](qa-matrix.md) owns the case catalogue. This document
+indexes evidence and defines the record required for each execution. Feature
+requirements remain in their owning documents; a test report cannot change them.
+
+## Case run record
+
+Before a qualification run, enumerate the selected case IDs and every required
+variant from the matrix. Start them as NOT RUN. Keep the following fields for
+each case; a shared run header may supply identical build/target fields once.
+
+| Field | Required content |
+| --- | --- |
+| Case | Stable matrix ID, explicit variant, requirement link and test-definition revision. |
+| Implementation | Exact automated file and test selector, or reproducible bounded manual steps; explicitly state missing automation. |
+| Candidate | Source commit, clean/dirty state, dirty-patch identity if applicable, Controller binary/release digest, Agent image digest and relevant client/test revisions. |
+| Environment | UTC start/end, supported architecture, configuration/fixture identity, selected ingress and test dependencies. Private identity/topology belongs only in ignored evidence. |
+| Preconditions | Initial desired and serving state, actual application baseline, known data, ownership inventory, permission and existing blockers. |
+| Action | Exact operator operation/request, protected request identity, Task/attempt identity, parameters and actual fault point if any. Keep secret values out. |
+| Expected result | Independent application/data/runtime assertions and predeclared bounds, including what must remain unchanged. |
+| Observed result | Actual assertion results, traffic errors/latency/reconnects, data/content checks, Task outcome and runtime changes; not just an exit code. |
+| Outcome | PASS, FAIL, BLOCKED, NOT RUN, or NOT APPLICABLE with a contract reason. Use PARTIAL for incomplete historical evidence, never promote it to PASS. |
+| Evidence | Immutable run directory and exact receipt/log/capture paths with retained integrity information. Preserve failing evidence; a subsequent run does not overwrite it. |
+| Cleanup | Owned resources removed/restored, independent absence/baseline check, any residual state and whether it blocks the next case. |
+| Limits | Untested variants/surfaces, missing probes, mitigations and user decisions; link the finding and any later closing run. |
+
+Only complete assertions and successful required cleanup permit PASS. An expected
+rejection is a pass only when both the specified rejection and absence of forbidden
+effects are proved. Failure to inject a fault is NOT RUN for the recovery case.
+Product success after a manual workaround does not close its failed recovery case.
+
+Store private run manifests, commands, identities and raw artifacts under unique
+ignored repo-local evidence directories. Track only sanitized case IDs, outcome,
+tested public build identity where available, evidence locator and remaining limits.
+Do not publish application names, credentials, private endpoints or topology.
+Missing old provenance is a recorded gap, not permission to reconstruct a successful
+run from assumptions. Reuse needs an explicit unaffected-input justification.
+
+## Matrix evidence register
+
+Initial mapping reviewed on 2026-09-13. H references are historical evidence, not
+results for the next clean integrated candidate. This is a bounded mapping of
+available records, not an assertion that all older tests have been inventoried.
+
+| Ref | Matrix cases and outcome | Evidence and limits |
+| --- | --- | --- |
+| H1 | HOST-01: PASS for the dated API/CLI read-only journey. | `host-health-20260913T181552Z.68MSID/result.txt` in the ignored repair evidence directory records exit 0, canonical Host/API/CLI parity and successful tunnel/runtime cleanup, with no service mutation. Deployed Controller baseline was `0.0.0-qa.recovery20260913.7` / `637990dd4`; CLI was built from the current dirty checkout and its hash is in `cli.sha256`. Does not prove Console, bootstrap, application health, upgrade or clean-candidate qualification. |
+| H2 | UP-01, UP-07, UP-12, JOURNEY-05: PARTIAL. | `upgrade-traffic-within-api-limit-result.json` records 600 seconds, 2,948 HTTP 200 responses, zero recorded request failures, 118 pongs on the same WebSocket and worst response 5.105 seconds. `native-failure-result.json` records automatic predecessor recovery, unchanged checked application runtime/data and the original failed Task. These cover a successful GP update and a failed native Controller candidate, not all phases, routes, load levels or application-rollout recovery. Exact per-candidate digests/traffic timing still need correlation from the underlying run before reuse as a complete matrix pass. |
+| H3 | BP-04/05, OBS-01, HTTP-02/09, BACK-06/10, SCRIPT-03, JOURNEY-01: PARTIAL. | The [QA checkpoint](head.md#private-workload-qa) and ignored `fresh-baseline.json`, `check-fresh-resolved.log` and earlier hosting receipts record successful private hosting, exact reapply, actual authentication/realtime checks and healthy observations. Different parts used different builds. No row-wide current-build or every-mode/surface pass is inferred. |
+| H4 | SVC-14, ENT-08, ATT-08, SCRIPT-04, JOURNEY-03: PARTIAL. | `native-cutover-result.json` and `hook-source-forward-deploy-result.json` record successful cutover and forward Deploy; the latter records all 11 Services healthy, preserved checked data/unrelated Releases, current-only backing membership and both actual realtime clients passing. Forward Deploy used `637990dd4` / `.7`. These do not cover every case variant or automatic recovery. |
+| H5 | SVC-15, JOURNEY-02: FAIL. | Failed-candidate recovery restored an obsolete backing network after successful runtime configuration changes; application returned HTTP 500 although recovery steps completed. [The recovery finding](issues/runtime-qualification.md#recovery-after-runtime-configuration-changes) retains the cause and required proof. Later normal Deploy repaired the baseline, not the failed automatic-recovery result. No closing live recovery run exists. |
+| H6 | UI-03/04, TASK-02/03/04/05, SCRIPT-02/08, BACK-05, UP-03: PARTIAL. | [Independent edge checks](head.md#next-work) and the ignored simple-edge/authentication evidence record protected replay/rejection, Script Abort/unsafe Retry rejection, explicit authentication validation and rejected update input. These are subsets on historical builds, not all variants or current Console parity. |
+| H7 | HTTP-08, UP-12: PARTIAL, with unresolved failure. | [Safe-update evidence](acceptance/safe-updates.md) retains whole-build Tunnel timeout/continuity gaps. A private HTTP success cannot close them; public and private paths need distinct execution records and authority. |
+| H8 | ATT-12: FAIL during the overlapping-name window. | [The DNS finding](issues/runtime-qualification.md#same-name-backing-endpoints) records new credentials valid at the new address while the bare backing name resolved to the old instance. Completing old Detach restored resolution; concurrent same-name backing use remains unqualified. |
+
+The repair evidence directory for H1–H5 is
+`.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
+their exact build history remain in the operational checkpoint and existing
+acceptance records. Missing or unreviewed evidence remains explicit in the matrix.
 
 ## Evidence index
 

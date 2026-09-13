@@ -54,6 +54,15 @@ meaningful check first, then affected package/integration or operator-surface
 checks as the change becomes executable. Documentation-only changes use consistency,
 link and diff checks unless they alter executable behavior or a required gate.
 
+[The product QA matrix](qa-matrix.md) records each behavioral case and its
+independently observable result. Add or update the affected case before executing
+a new product test, including a regression or fault probe. Map automated behavioral
+tests and manual journeys to case IDs; mechanical build/lint checks remain separate.
+Existing unmapped tests are unverified coverage, not implicit passes. Qualification
+runs use [per-case records](acceptance.md#case-run-record), with explicit unrun,
+blocked and failed cases. A green build, matching internal projections or completed
+Task alone cannot qualify a product outcome.
+
 The primary inspects each completed slice and its proof. Reuse passing results
 when the tested inputs and relevant dependencies are unchanged; a commit id change
 alone does not require a rerun. Pause affected writers for consistent integration
@@ -143,6 +152,8 @@ Use supported dependency versions; do not resolve conflicts with `--force` or
 - Generated artifacts were regenerated rather than hand-edited.
 - Focused, integration, and real-surface evidence exists at the earliest rung
   supported by the changed behavior.
+- Changed behavioral tests map to documented QA cases; execution records identify
+  the tested build, required variants, independent assertions, outcome and cleanup.
 - Commits are focused, concise, and contain no co-author trailer.
 
 ## Delivery state

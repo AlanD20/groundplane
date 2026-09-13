@@ -15,6 +15,7 @@ Git preserves previous versions. Start with the document that owns the question.
 | [standards.md](standards.md) | Enforceable coding rules |
 | [agents.md](agents.md) and [delivery.md](delivery.md) | Repository workflow, verification and delivery |
 | [deployment.md](deployment.md) and [acceptance.md](acceptance.md) | Deployment and qualification procedures |
+| [qa-matrix.md](qa-matrix.md) | Product cases, independent expected outcomes, coverage gaps and links to execution evidence |
 | [head.md](head.md) | Current work, authority limits, blockers and next actions |
 | [capabilities.md](capabilities.md) | Product-wide implementation and qualification gaps |
 
@@ -63,7 +64,9 @@ Use these sections when relevant:
 4. **Technical design.** Owning modules, interfaces, data flow, state transitions
    and dependencies. Explain important choices and link to the code and schemas.
 5. **Acceptance.** Observable conditions and the tests or operator checks that
-   prove them. Reference evidence; do not paste execution transcripts.
+   prove them. Map behavioral tests to stable cases in [the QA matrix](qa-matrix.md)
+   and link per-case evidence; do not paste execution transcripts. Build success
+   is a prerequisite, not feature acceptance.
 6. **Current status.** Distinguish agreed requirements, implemented behavior and
    completed qualification. State remaining gaps and link to their evidence.
 
