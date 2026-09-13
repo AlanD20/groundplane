@@ -2209,6 +2209,10 @@ Tasks reference that exact generation, so a retry or Controller restart cannot
 observe a later edit. Plain generations remain desired-state plaintext with a
 verified digest; secret generations contain only Controller-key ciphertext and
 envelope metadata. Reusing a generation id with different bytes is rejected.
+Entry create, edit and bulk-upsert preserve Service runtime intent. They apply
+configuration to exposed running workloads only; stopped or absent Services
+receive no startup step. The Task pins this running-Service selection so retries
+do not derive it from later state.
 
 The Environment Entries card also provides an atomic bulk editor for literal
 environment variables. It accepts one `KEY=value` pair per line, splits only

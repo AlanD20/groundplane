@@ -31,7 +31,9 @@ func (runtime EntryMutationRuntime) PrepareTask(
 	if err != nil {
 		return etcd.TaskRecord{}, err
 	}
-	selected, err := entryMutationConsumerIDs(baseline, candidate, artifact)
+	task.EntryRuntime = &etcd.EntryTaskRuntime{RunningServiceIDs: append([]string{}, runtime.RunningServiceIDs...)}
+	sort.Strings(task.EntryRuntime.RunningServiceIDs)
+	selected, err := entryMutationConsumerIDs(baseline, candidate, artifact, task.EntryRuntime.RunningServiceIDs)
 	if err != nil {
 		return etcd.TaskRecord{}, err
 	}
@@ -140,7 +142,7 @@ func buildEntryMutationPlan(
 	if newArtifact.ArtifactId != task.Params[etcd.TaskComposeArtifactParam] {
 		return nil, errs.New(errs.KindInternal, "Entry mutation candidate artifact changed")
 	}
-	selected, err := entryMutationConsumerIDs(baseline, candidate, newArtifact)
+	selected, err := entryMutationConsumerIDs(baseline, candidate, newArtifact, task.EntryRuntime.RunningServiceIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +199,23 @@ func entryMutationArtifact(projection etcd.EnvironmentComposeProjection) (*agent
 
 func entryMutationConsumerIDs(
 	baseline, candidate etcd.EnvironmentComposeProjection, artifact *agentpb.ComposeArtifact,
+	runningServiceIDs []string,
 ) ([]string, error) {
+	running := make(map[string]bool, len(runningServiceIDs))
+	for _, id := range runningServiceIDs {
+		found := false
+		for _, service := range artifact.Services {
+			if service.GetServiceId() == id &&
+				service.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, errs.New(errs.KindInternal, "Entry running Service is absent from captured runtime")
+		}
+		running[id] = true
+	}
 	previous := make(map[string]etcd.EntryRecord, len(baseline.Entries))
 	for _, entry := range baseline.Entries {
 		previous[entry.Entry.ID] = entry
@@ -226,7 +244,7 @@ func entryMutationConsumerIDs(
 	}
 	selected := make(map[string]bool)
 	for _, identity := range identities.Services {
-		if !exposed["all"] && !exposed[identity.Name] {
+		if !running[identity.ID] || !exposed["all"] && !exposed[identity.Name] {
 			continue
 		}
 		for _, service := range artifact.Services {

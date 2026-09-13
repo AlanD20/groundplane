@@ -52,6 +52,17 @@ func TestEntryMutationPreservesRetainedNativeOwnership(t *testing.T) {
 // Rationale: publication and assignment must reconstruct the same pinned Entry
 // procedure, and the helper must not start its retained proxy or dependencies.
 func TestEntryMutationPlanReconstructsAndSelectsRetainedWorkload(t *testing.T) {
+	for _, running := range []bool{true, false} {
+		name := "stopped"
+		if running {
+			name = "running"
+		}
+		t.Run(name, func(t *testing.T) { testEntryMutationRuntimeSelection(t, running) })
+	}
+}
+
+func testEntryMutationRuntimeSelection(t *testing.T, running bool) {
+	t.Helper()
 	_, _, input := redeployRestorationInput(t, domain.StrategyBlueGreen)
 	render := input.Members[0].Render
 	current := render.Projection
@@ -81,7 +92,11 @@ func TestEntryMutationPlanReconstructsAndSelectsRetainedWorkload(t *testing.T) {
 			Length: 10, SHA256: hex.EncodeToString(digest[:]), Source: material.Source,
 		})
 	}
-	task, err = (EntryMutationRuntime{Projection: current, EpochRevision: 1}).PrepareTask(
+	runtime := EntryMutationRuntime{Projection: current, EpochRevision: 1}
+	if running {
+		runtime.RunningServiceIDs = []string{render.ServiceID}
+	}
+	task, err = runtime.PrepareTask(
 		"/var/lib/groundplane/vol",
 		task,
 		candidate,
@@ -103,6 +118,27 @@ func TestEntryMutationPlanReconstructsAndSelectsRetainedWorkload(t *testing.T) {
 	}
 	if hex.EncodeToString(plan.PlanHash) != task.PlanHash || plan.GetEntryMutationProcedure() == nil {
 		t.Fatal("Entry assignment changed the published plan")
+	}
+	missing := task
+	missing.EntryRuntime = nil
+	if _, err := resolver.ResolveExecutionPlan(t.Context(), missing); err == nil {
+		t.Fatal("Entry reconstruction accepted absent runtime capture")
+	}
+	foreign := task
+	foreign.EntryRuntime = &etcd.EntryTaskRuntime{RunningServiceIDs: []string{ids.New(ids.KindService)}}
+	if _, err := resolver.ResolveExecutionPlan(t.Context(), foreign); err == nil {
+		t.Fatal("Entry reconstruction accepted a Service outside its captured artifact")
+	}
+	if !running {
+		if len(plan.Steps) != len(task.Materializations) {
+			t.Fatal("Entry edit must only materialize configuration for a stopped Service")
+		}
+		for _, step := range plan.Steps {
+			if step.GetComposeApply() != nil {
+				t.Fatal("Entry edit started a stopped Service")
+			}
+		}
+		return
 	}
 	step := plan.Steps[len(plan.Steps)-1]
 	request := &agentpb.ComposeHelperRequest{Schema: composehelper.SchemaVersion, Plan: plan,

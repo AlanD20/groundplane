@@ -91,10 +91,17 @@ This correction is locally verified and deployed as `0.0.0-qa.recovery20260913.6
 it does not repair predecessor capture. The next normal Deploy staged a candidate
 but returned Internal without an accepted Task. The Controller reported
 `release durable record is corrupt`; read-only source, native rendering, hook
-selection and staged-render checks passed. The exact later rejection remains
-unresolved, and forward-deploy live proof is still missing. The redeploy was an attempted mitigation, not a successful
-recovery or a fix. Do not replay the fault or proceed
-to interrupted-Task/reboot testing while the application remains unqualified.
+selection and staged-render checks passed. The later rejection came from hook
+loading: it incorrectly compared recaptured generated Compose bytes with the
+authored Blueprint artifact. The hook-source correction is deployed as
+`0.0.0-qa.recovery20260913.7`. One fresh normal Deploy completed and restored the
+application baseline: all 11 Services are healthy, the profile is preserved,
+the API workload uses only the current backing network, and both actual realtime
+replicas pass authentication and subscription checks. This proves forward Deploy,
+not failed-rollout recovery. Its evidence is `hook-source-forward-deploy-result.json`
+and `hook-source-forward-deploy.log` in the same repair directory. Do not replay
+the prior fault or proceed to interrupted-Task/reboot testing until product-owned
+recovery is proved.
 Evidence is `failed-rollout-terminal.json`, `after-candidate-recovery-runtime.json`
 and `candidate-operator-repair.log` in
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`.
@@ -107,6 +114,14 @@ publication rules resolved in the existing feature/ADR; it is not implemented or
 approved by this issue record. Preserve immutable Release/Task history and exact
 validation. Latest desired configuration and host observation are not substitutes
 for acknowledged state.
+
+The applied-runtime audit found a separate Entry selection defect: capture reads
+running Service ids, but the planner discarded them and treated every exposed
+retained Release as runnable. The correction pins that set on the Task and
+intersects it with affected consumers during reconstruction. It prevents Entry
+edits from starting stopped or absent Services; it does not supply acknowledged
+runtime receipts or repair stale recovery input. The earlier running-only tests
+could not expose the discarded operational intent.
 
 The shared-consumer audit also found configuration-file paths whose contents can
 change after the immutable Release input was captured. Exact Compose bytes alone

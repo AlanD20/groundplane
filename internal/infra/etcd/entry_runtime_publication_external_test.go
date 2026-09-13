@@ -90,7 +90,11 @@ func proveEntryServingPublication(t *testing.T, fixture *etcd.ExecutedArtifactFi
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan, err := resolver.ResolveExecutionPlan(ctx, task)
+	stored, err := fixture.Tasks.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatal("read published Entry Task", err)
+	}
+	plan, err := resolver.ResolveExecutionPlan(ctx, stored.Record)
 	if err != nil || hex.EncodeToString(plan.GetPlanHash()) != task.PlanHash {
 		t.Fatal("published Entry plan did not reconstruct its captured runtime", err)
 	}

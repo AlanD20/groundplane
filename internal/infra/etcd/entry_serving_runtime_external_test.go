@@ -75,7 +75,9 @@ func TestEntryMutationCapturesImmutableRevisionSource(t *testing.T) {
 // merely complete a Task against the older desired runtime.
 func TestEntryMutationCapturesServingRuntimeAfterRollback(t *testing.T) {
 	for _, race := range []string{"none", "before publication", "at commit"} {
-		t.Run(race, func(t *testing.T) { testEntryMutationServingRuntime(t, race, false) })
+		t.Run(race, func(t *testing.T) {
+			testEntryMutationServingRuntime(t, race, false, core.ServiceRuntimeIntentRunning)
+		})
 	}
 }
 
@@ -83,11 +85,23 @@ func TestEntryMutationCapturesServingRuntimeAfterRollback(t *testing.T) {
 // the serving Release. Capture and publication use the same Environment epoch.
 func TestEntryMutationPreservesNewerAttachNetwork(t *testing.T) {
 	for _, race := range []string{"none", "before publication", "at commit"} {
-		t.Run(race, func(t *testing.T) { testEntryMutationServingRuntime(t, race, true) })
+		t.Run(race, func(t *testing.T) {
+			testEntryMutationServingRuntime(t, race, true, core.ServiceRuntimeIntentRunning)
+		})
 	}
 }
 
-func testEntryMutationServingRuntime(t *testing.T, race string, withAttach bool) {
+// Rationale: a retained serving Release does not authorize startup after Stop or
+// Destroy. Entry capture, publication and stored-plan reconstruction must agree.
+func TestEntryMutationPreservesNonRunningIntent(t *testing.T) {
+	for _, intent := range []core.ServiceRuntimeIntent{core.ServiceRuntimeIntentStopped, core.ServiceRuntimeIntentAbsent} {
+		t.Run(string(intent), func(t *testing.T) { testEntryMutationServingRuntime(t, "none", true, intent) })
+	}
+}
+
+func testEntryMutationServingRuntime(
+	t *testing.T, race string, withAttach bool, runtimeIntent core.ServiceRuntimeIntent,
+) {
 	configure := func(project *composetypes.Project) {
 		if withAttach {
 			service := project.Services["api"]
@@ -113,6 +127,7 @@ func testEntryMutationServingRuntime(t *testing.T, race string, withAttach bool)
 		if withAttach {
 			networkID = fixture.SeedEntryRuntimeAttach(t, original.ServiceID)
 		}
+		fixture.SeedEntryRuntimeIntent(t, original.ServiceID, runtimeIntent)
 		current, found, err := fixture.Hierarchy.GetEnvironmentComposeProjection(ctx, original.EnvironmentID)
 		if err != nil || !found {
 			t.Fatal("desired projection", err)
@@ -120,6 +135,12 @@ func testEntryMutationServingRuntime(t *testing.T, race string, withAttach bool)
 		captured, err := resolver.CaptureEntryMutationRuntime(ctx, current)
 		if err != nil {
 			t.Fatal(err)
+		}
+		if slices.Contains(
+			captured.RunningServiceIDs,
+			original.ServiceID,
+		) != (runtimeIntent == core.ServiceRuntimeIntentRunning) {
+			t.Fatal("Entry capture lost operational intent")
 		}
 		entry, err := etcd.NewBlueprintEntryRecord(original.EnvironmentID, "floor-probe",
 			core.EnvEntry{ID: ids.New(ids.KindEnvEntry), Kind: core.EntryKindEnv,
@@ -214,6 +235,17 @@ func proveEntryServingPlanReconstruction(t *testing.T, fixture *etcd.ExecutedArt
 	}
 	if hex.EncodeToString(plan.PlanHash) != task.PlanHash {
 		t.Fatal("reconstructed Entry plan differs from published hash")
+	}
+	if len(captured.RunningServiceIDs) == 0 {
+		if len(plan.Steps) != len(task.Materializations) {
+			t.Fatal("stored Entry plan would start a stopped or absent Service")
+		}
+		for _, step := range plan.Steps {
+			if step.GetComposeApply() != nil {
+				t.Fatal("materialization-only Entry plan contains a runtime apply")
+			}
+		}
+		return task
 	}
 	names, err := executionplan.EntryMutationServices(plan, plan.Steps[len(plan.Steps)-1].StepId)
 	if err != nil || !slices.Equal(names, []string{"api--blue", "api--green"}) {

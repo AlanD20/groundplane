@@ -87,9 +87,16 @@ authored/shared config and Network/Volume guards are unchanged.
 
 The immutable desired candidate stores the capture. Reconstruction uses that
 runtime and the baseline revision's prior Entry decorations, never a later live
-slot; the existing plan hash seals the pair. Execution selects only exposed
-workload instances, without dependency or stable-proxy restarts. Entry DELETE
-remains materialization-only and does not use this capture.
+slot; the existing plan hash seals the pair. The Task's typed `entry_runtime`
+capture stores sorted, unique running Service ids. Reconstruction intersects that
+set with changed Entry exposure and the candidate's retained workload identities.
+Execution therefore selects only exposed running workload instances, without
+dependency or stable-proxy restarts. Stopped and absent Services receive no
+startup step, even when their serving Release remains in history. An explicitly
+empty set produces materialization-only work; missing capture cannot authorize
+publication or execution. Entry DELETE remains materialization-only and does not
+use this capture. Journal encoding, status transitions and retry preserve this
+selection without sharing mutable slices between Tasks.
 
 When an Entry update has only materialization steps, terminal publication records
 the materialized generations without replacing the independently applied Compose
@@ -115,12 +122,18 @@ the complete transaction budget.
 For Entry capture, model a published native Blueprint followed by Deploy/Rollback
 with real immutable codecs. Prove serving selection, reconstruction and rejection
 of both pre-publication and commit-time epoch drift; replay must be read-only.
+Include stopped and absent runtime intent after a retained Release, then an Entry
+change. Prove materialization-only execution after loading the published Task,
+explicit empty-set retention on retry, and rejection of missing or malformed
+capture. A present Release alone is not evidence that a Service should run.
 Hermetic storage proof and real Docker/CLI proof remain distinct.
 
 ## Current status
 
 Lifecycle and desired-revision integration have recorded bounded qualification.
 The Entry serving-capture regressions proved selection, reconstruction and both
-epoch fences. Source-specific persistence and restore remain part of production
+epoch fences. Stopped and absent cases also pass through capture, publication and
+stored-plan reconstruction; journal/retry tests preserve explicit empty capture.
+Source-specific persistence and restore remain part of production
 qualification. See [capabilities.md](../capabilities.md), [acceptance.md](../acceptance.md)
 and the open storage/recovery issues; no fresh runtime proof is claimed here.
