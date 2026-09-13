@@ -800,6 +800,11 @@ One accepted input returns its original `202 {task_id}` and idempotent replay.
 added. Only valid accepted changes supersede obsolete reconciliation units.
 Task detail and Activity must identify supersession and its replacement Task;
 the original Task cannot claim complete application when some units were cancelled.
+When an automatically superseded unit has accounted-but-diverged effects, those
+effects remain distinct from unknown and successfully applied results while the
+replacement Task repairs forward. Existing Service list/show reads expose the
+actual observation, including `unavailable` or `degraded` where applicable; no
+additional action, endpoint or Task state is added.
 This changed behavior is not yet connected in the implementation.
 
 Blueprint multipart requests begin with one `application/json` field named

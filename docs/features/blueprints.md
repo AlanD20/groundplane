@@ -23,6 +23,12 @@ execution semantics; this document routes authoring and publication design.
   [Latest-wins reconciliation](../decisions/0078-latest-wins-blueprint-reconciliation.md)
   selects resource-level changes against verified applied inputs, supersedes
   obsolete work, and seals each private execution unit after its safe handoff.
+- A Blueprint unit automatically superseded by a newer valid accepted input after
+  changing shared configuration may hand off forward repair without first restoring
+  the predecessor, but only after its executor is proven stopped and its exact
+  effects are accounted for. Accounted-but-diverged effects are neither unknown
+  nor applied success; successor planning uses those settled effects plus current
+  desired input.
 - Omitted existing resources are retained. Omission never deletes or renames;
   ambiguous preservation fails closed. Only a resource's explicit protected
   Remove action may remove it. The earlier Entry-omission deletion proposal is
@@ -61,6 +67,16 @@ owns the replacement for prebuilt whole-Environment execution and aggregate
 applied-state promotion. The implementation below predates that change; it must
 not be used to justify rejecting newer valid input or running obsolete units.
 Keep its safety fences until their resource-level replacements are connected.
+
+Its [forward-repair exception](../decisions/0078-latest-wins-blueprint-reconciliation.md#forward-repair-after-a-superseded-shared-configuration-write)
+is Blueprint-supersession handoff, not generic recovery. Cancellation alone never
+proves the old executor stopped. Unknown effects continue to fence conflicts;
+accounted-but-diverged effects remain visible and may leave affected Services
+unavailable until the successor succeeds; reads still report the actual observation,
+including `unavailable` or `degraded` where applicable. The handoff never reopens
+old forward work, restores a database, reverses a migration, rewrites history or
+changes unsuperseded failure and non-Blueprint recovery contracts. The earlier
+generic pinned-configuration restoration proposal remains unapproved.
 
 [Closed bundles](../decisions/0012-closed-blueprint-bundles.md) owns external input
 closure. [Staged publication](../decisions/0051-blueprint-staged-revision-publication.md)
@@ -157,15 +173,17 @@ claim, terminal acknowledgement and replay for ten and the maximum 32 candidates
 including maximum hook/source fragments. Measure all arm/byte limits; reject
 oversize and compare loss without writes. Prove missing/substituted witness
 rejection, interrupted release, public reconnect, no repeated Script effects and
-uncertain terminal-commit reconciliation from exact durable authority.
+uncertain terminal-commit reconciliation from exact durable authority. Prove
+superseded shared-configuration repair from accounted effects, with unknown-effect
+fencing, current Service observation and immutable history, before enabling it.
 
 ## Current status
 
 Latest-wins reconciliation is accepted but not connected to publication or Agent
 execution. Its pure resource/conflict selector is the first implementation slice;
 it is not an authorization to enable automatic cancellation. Resource fingerprint
-capture, private unit persistence, late plan preparation, safe supersession and
-operator-surface/live proof remain required.
+capture, private unit persistence, late plan preparation, safe supersession,
+forward-repair effect accounting and operator-surface/live proof remain required.
 
 Authoring and substantial publication paths are implemented. Bounded marker and
 terminal-envelope regressions have local proof, including changed-epoch rejection

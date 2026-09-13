@@ -34,19 +34,24 @@ type AppliedState string
 const (
 	Absent    AppliedState = "absent"
 	Applied   AppliedState = "applied"
+	Diverged  AppliedState = "diverged"
 	Uncertain AppliedState = "uncertain"
 )
 
 // AppliedUnit records acknowledged execution, not an earlier desired document.
-// Absent requires explicit absence authority. Uncertain retains unresolved effects
-// or known drift and names every resource whose contents cannot be trusted. That
-// scope comes from observed effects, never from the possibly different latest unit.
+// Fingerprint retains the last successful inputs, if any, even when later effects
+// invalidate them. Absent requires explicit absence authority. Diverged means
+// stopped executors and accounted effects allow repair, not that input was applied.
+// Uncertain effects still block conflicting work. AffectedWrites comes from the
+// observed effects, never from the possibly different latest unit.
+// Accounted divergence is recorded separately for each changed write resource;
+// its AffectedWrites contains only Target, so settling one cannot clear another.
 // Unfinished executors also retain their complete claims in Executions.
 type AppliedUnit struct {
-	Target          ResourceKey
-	State           AppliedState
-	Fingerprint     Fingerprint
-	UncertainWrites []ResourceKey
+	Target         ResourceKey
+	State          AppliedState
+	Fingerprint    Fingerprint
+	AffectedWrites []ResourceKey
 }
 
 type ExecutionState string
@@ -58,10 +63,12 @@ const (
 )
 
 // Execution is one private unit's sealed plan inside its public Apply Task.
+// Epoch is zero while Pending and positive after assignment; it fences redispatch.
 // Draining retains claims until cancellation and effect accounting are proven.
 type Execution struct {
 	PlanID string
 	TaskID string
+	Epoch  int64
 	Unit   Unit
 	State  ExecutionState
 }

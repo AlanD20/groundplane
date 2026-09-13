@@ -23,11 +23,22 @@ func Select(input Snapshot) (Selection, error) {
 	}
 	applied := make(map[ResourceKey]AppliedUnit, len(snapshot.Applied))
 	uncertain := make(map[ResourceKey]bool)
+	diverged := make(map[ResourceKey]bool)
 	for _, unit := range snapshot.Applied {
 		applied[unit.Target] = unit
-		for _, key := range unit.UncertainWrites {
-			uncertain[key] = true
+		for _, key := range unit.AffectedWrites {
+			if unit.State == Uncertain {
+				uncertain[key] = true
+			} else {
+				diverged[key] = true
+			}
 		}
+	}
+	trusted := make(map[ResourceKey]bool, len(snapshot.Desired))
+	for _, unit := range snapshot.Desired {
+		prior := applied[unit.Target]
+		trusted[unit.Target] = prior.State == Applied && prior.Fingerprint == unit.Fingerprint &&
+			!touchesResources(unit, uncertain) && !touchesResources(unit, diverged)
 	}
 	result := Selection{}
 	held := make([]Unit, 0, len(snapshot.Executions)+len(snapshot.Desired))
@@ -56,7 +67,7 @@ func Select(input Snapshot) (Selection, error) {
 		if continuing[unit.Target] {
 			continue
 		}
-		if conflictsAny(unit, held) || !dependenciesApplied(unit, desired, applied, held) {
+		if conflictsAny(unit, held) {
 			result.Waiting = append(result.Waiting, unit.Target)
 			continue
 		}
@@ -65,11 +76,12 @@ func Select(input Snapshot) (Selection, error) {
 			result.ResolveEffects = append(result.ResolveEffects, unit.Target)
 			continue
 		}
-		if touchesUncertain(unit, uncertain) {
+		if touchesResources(unit, uncertain) || anyMarked(unit.Reads, diverged) ||
+			!dependenciesApplied(unit, desired, trusted, held) {
 			result.Waiting = append(result.Waiting, unit.Target)
 			continue
 		}
-		if prior.State == Applied && prior.Fingerprint == unit.Fingerprint {
+		if trusted[unit.Target] {
 			result.Satisfied = append(result.Satisfied, unit.Target)
 			continue
 		}
@@ -79,12 +91,14 @@ func Select(input Snapshot) (Selection, error) {
 	return result, nil
 }
 
-func touchesUncertain(unit Unit, uncertain map[ResourceKey]bool) bool {
-	for _, keys := range [][]ResourceKey{unit.Reads, unit.Writes} {
-		for _, key := range keys {
-			if uncertain[key] {
-				return true
-			}
+func touchesResources(unit Unit, resources map[ResourceKey]bool) bool {
+	return anyMarked(unit.Reads, resources) || anyMarked(unit.Writes, resources)
+}
+
+func anyMarked(keys []ResourceKey, resources map[ResourceKey]bool) bool {
+	for _, key := range keys {
+		if resources[key] {
+			return true
 		}
 	}
 	return false
@@ -93,14 +107,12 @@ func touchesUncertain(unit Unit, uncertain map[ResourceKey]bool) bool {
 func dependenciesApplied(
 	unit Unit,
 	desired map[ResourceKey]Unit,
-	applied map[ResourceKey]AppliedUnit,
+	trusted map[ResourceKey]bool,
 	held []Unit,
 ) bool {
 	for _, key := range unit.After {
 		dependency := desired[key]
-		prior := applied[key]
-		if prior.State != Applied || prior.Fingerprint != dependency.Fingerprint ||
-			pendingWritesAffect(dependency, held) {
+		if !trusted[key] || pendingWritesAffect(dependency, held) {
 			return false
 		}
 	}

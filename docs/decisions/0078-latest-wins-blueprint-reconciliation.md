@@ -4,7 +4,8 @@
 - Date: 2026-09-13
 - Owner approval: one current Blueprint, resource-level change selection and
   automatic supersession with a safe execution handoff.
-- Implementation and live qualification are incomplete.
+- Implementation and live qualification are incomplete; supersession execution
+  and forward repair remain guarded and disabled until end-to-end integration.
 
 ## Context
 
@@ -71,15 +72,43 @@ reselects old desired state.
 - Still-required units continue even if another unit from their original Apply
   is superseded. A new acceptance token alone does not obsolete equal effective
   inputs. Shared-file or dependency conflicts are not unrelated work.
-- Replan remaining work against the latest accepted input and settled applied
-  state. If A is running and B then C arrive, discard obsolete pending B and
-  proceed toward C after A's handoff; do not finish B first.
+- Replan remaining work against the latest accepted input, verified applied
+  results and any settled accounted-but-diverged effects. Never treat divergence
+  as applied success or absence. If A is running and B then C arrive, discard
+  obsolete pending B and proceed toward C after A's handoff; do not finish B first.
 
 Late messages may record real effects of the exact old execution. They cannot
 promote superseded input as the latest desired state, authorize another old
 forward step or release another execution's claims. Cancellation and natural
 completion races have one durable winner. Cleanup and recovery remain bound to
 their original execution; newer input cannot rewrite an old plan.
+
+### Forward repair after a superseded shared-configuration write
+
+One narrow handoff may proceed without first restoring the previous working
+configuration or runtime. It applies only when a Blueprint execution unit was
+automatically superseded after it changed shared configuration, the old executor
+is proven stopped, and the exact effects of that execution are accounted for.
+Cancellation, timeout, loss of connection or loss of a claim is never proof that
+the executor stopped.
+
+Effect accounting preserves three distinct facts: successfully applied inputs,
+accounted-but-diverged effects, and unknown effects. Accounted-but-diverged means
+the old effects are settled and exactly known, but are neither a successful
+application nor proof of predecessor absence or restoration. The successor plans
+from those settled observed effects and the newest valid accepted input. It must
+not plan from a fabricated absence or mark either the old or new input applied
+before verification. Unknown effects continue to fence conflicting work.
+
+The successor may then repair forward while affected Services remain unavailable
+until it succeeds; Service reads keep reporting the actual observation, including
+`unavailable` or `degraded` where applicable. This handoff does not reopen the old
+execution's forward steps, restore a database, reverse a migration, rewrite a
+Task, Release or other stored history, or publish the superseded input as
+successful. It does not apply to an ordinary unsuperseded Blueprint failure,
+manual Abort, explicit Deploy/Rollback or Release Groups, Backup/Restore, native
+upgrade, destructive removal or arbitrary Script execution. Those workflows
+retain their existing recovery and serialization rules.
 
 ### Task and failure ownership
 
@@ -112,8 +141,10 @@ their product rules.
 
 There is no automatic database restore or migration reversal. Preserve healthy
 serving workloads where possible and clean up only the affected execution's
-owned effects. The earlier proposal to restore pinned configuration files during
-recovery remains a separate unresolved decision; this ADR does not authorize it.
+owned effects. Forward repair above changes only the order of one superseded
+Blueprint handoff. The earlier generic proposal to retain and restore pinned
+configuration files during recovery remains a separate unresolved decision; this
+ADR does not authorize it.
 
 ## Implementation boundaries
 
@@ -150,6 +181,11 @@ Prove A-to-B-to-C supersession, invalid-input non-interference, pending/claim an
 cancellation/completion races, same-input retry after failure, unrelated progress,
 shared-file and dependency conflicts, and restart during handoff. Old execution
 messages must not authorize effects after handoff or claim newer input applied.
+For a superseded shared-configuration write, prove executor-stop authority,
+unknown-effect fencing, durable accounted-but-diverged classification, successor
+planning from exact settled effects plus current desired input, continued Service
+observation and immutable Task/Release history. Prove the exception is unavailable
+to ordinary failure, manual Abort and every excluded non-Blueprint workflow.
 Hash order must be deterministic; relevant dependency/file changes must select
 all affected consumers while unrelated changes do not. Prove the behavior through
 the existing Console, CLI and API and a real Controller/Agent before enabling it

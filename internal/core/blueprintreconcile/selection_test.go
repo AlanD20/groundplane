@@ -80,7 +80,7 @@ func TestSelectionUsesAppliedResultsAndRequiresKnownEffects(t *testing.T) {
 	assertKeys(t, "unapplied", mustSelect(t, input).Ready, unit.Target)
 	input.Applied[0] = testApplied(unit)
 	assertKeys(t, "applied", mustSelect(t, input).Satisfied, unit.Target)
-	input.Applied[0] = AppliedUnit{Target: unit.Target, State: Uncertain, UncertainWrites: unit.Writes}
+	input.Applied[0] = AppliedUnit{Target: unit.Target, State: Uncertain, AffectedWrites: unit.Writes}
 	got := mustSelect(t, input)
 	assertKeys(t, "unknown effects", got.ResolveEffects, unit.Target)
 	if len(got.Ready)+len(got.Satisfied) != 0 {
@@ -105,7 +105,7 @@ func TestUncertainEffectsBlockSharedResourcesButNotUnrelatedWork(t *testing.T) {
 	// The latest owner no longer touches shared. Its earlier effects still do.
 	input := Snapshot{Desired: []Unit{reader, writer, owner, route}, Applied: []AppliedUnit{
 		testApplied(reader), {Target: writer.Target, State: Absent},
-		{Target: owner.Target, State: Uncertain, UncertainWrites: []ResourceKey{owner.Target, shared}},
+		{Target: owner.Target, State: Uncertain, AffectedWrites: []ResourceKey{owner.Target, shared}},
 		{Target: route.Target, State: Absent},
 	}}
 	got := mustSelect(t, input)
@@ -115,7 +115,7 @@ func TestUncertainEffectsBlockSharedResourcesButNotUnrelatedWork(t *testing.T) {
 		!slices.Contains(got.Waiting, reader.Target) || !slices.Contains(got.Waiting, writer.Target) {
 		t.Fatal("unknown shared effects did not fence readers and writers")
 	}
-	input.Applied[2].UncertainWrites = nil
+	input.Applied[2].AffectedWrites = nil
 	if _, err := Select(input); err == nil {
 		t.Fatal("unknown effects without an explicit resource scope were accepted")
 	}
@@ -260,9 +260,14 @@ func testApplied(unit Unit) AppliedUnit {
 }
 
 func testExecution(unit Unit, state ExecutionState, seed int64) Execution {
+	var epoch int64
+	if state != Pending {
+		epoch = 1
+	}
 	return Execution{
 		PlanID: testKey(ids.KindPlan, seed).ID,
 		TaskID: testKey(ids.KindTask, seed).ID,
+		Epoch:  epoch,
 		Unit:   unit,
 		State:  state,
 	}

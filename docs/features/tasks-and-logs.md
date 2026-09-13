@@ -60,6 +60,18 @@ records the replacement Task and cannot be revived by Retry. This is not a new
 Abort endpoint or permission to interrupt Backup, native activation, destructive
 removal or arbitrary Script effects.
 
+If a Blueprint unit eligible for automatic supersession changed shared
+configuration, its existing Task detail and events must distinguish
+accounted-but-diverged effects from unknown effects and verified applied success.
+After proven executor stop and exact effect accounting, the replacement Task may
+repair forward under
+[ADR 0078](../decisions/0078-latest-wins-blueprint-reconciliation.md#forward-repair-after-a-superseded-shared-configuration-write);
+the old Task still records its supersession reason, replacement Task and actual
+partial outcome. It is never rewritten as successful or reopened. Service reads
+continue to expose the actual observation, including `unavailable` or `degraded`
+where applicable, while the successor has not restored health. Manual Abort and
+non-Blueprint Tasks gain no such handoff or new public Task state.
+
 ## Non-functional requirements
 
 Each Task has at most 1,000 durable events, each at most 32 KiB of JSON. Events

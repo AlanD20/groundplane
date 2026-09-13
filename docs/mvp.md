@@ -1782,17 +1782,33 @@ publish its applied resource fingerprints and successful runtime results. Failed
 or superseded units cannot claim the whole Blueprint applied. Successful unrelated
 units retain their results; the parent Task records its actual partial outcome.
 Publication and cancellation races must not permit an obsolete unit to take over
-newer work. Failure must account for each affected unit's effects, including exact
-predecessor restoration for a selected Service that previously served or exact
-first-candidate absence where required by its procedure. Restoration and its independent verification
-use the same per-Service native Release captured before execution, never the
-Environment-wide applied artifact as a substitute. A configured-only Service in
-an applied Environment projection is not a serving predecessor. Unit recovery preserves
-unrelated runtime and its verified applied results. The desired head is never
-rolled back, and no failed or unproven candidate may be published as a serving
-Release or Route. If the proof is not available, the Task remains
-nonterminal/recovery-required rather than claiming success or false serving
-state.
+newer work. Failure and supersession must account for each affected unit's exact
+effects. Ordinary unsuperseded failure still requires exact predecessor
+restoration for a selected Service that previously served or exact first-candidate
+absence where required by its procedure. Restoration and its independent
+verification use the same per-Service native Release captured before execution,
+never the Environment-wide applied artifact as a substitute. A configured-only
+Service in an applied Environment projection is not a serving predecessor.
+
+Only for a Blueprint unit automatically superseded by a newer valid accepted
+input after changing shared configuration,
+[ADR 0078](decisions/0078-latest-wins-blueprint-reconciliation.md#forward-repair-after-a-superseded-shared-configuration-write)
+permits the newest valid accepted input to repair forward without first restoring
+the previous working configuration or runtime. The old executor must first be
+proven stopped and its exact effects accounted for; cancellation alone is not
+proof. Accounted-but-diverged effects remain distinct from unknown effects and
+successfully applied inputs. The successor plans from those settled observed
+effects plus current desired input, never a fabricated absence or success.
+Affected Services may remain unavailable or degraded until it succeeds.
+
+Unit recovery preserves unrelated runtime and its verified applied results. The
+desired head is never rolled back, and no failed or unproven candidate may be
+published as a serving Release or Route. If required proof or effect accounting
+is not available, the Task remains nonterminal/recovery-required rather than
+claiming success or false serving state. Forward repair does not restore databases,
+reverse migrations, reopen old forward execution or rewrite stored history, and
+does not change ordinary failure, manual Abort, explicit Deploy/Rollback or Release
+Groups, Backup/Restore, native upgrade, removal or Script recovery.
 
 A pre-deploy hook failure therefore performs no application candidate workload
 mutation and leaves the serving and current-successful projections unchanged.
@@ -1972,9 +1988,12 @@ candidate workload mutates before every selected pre hook is clean. This
 Blueprint-only split does not change standalone Attach or Detach ordering.
 Success atomically promotes the candidate
 Releases, applied projection, Components, and Route observations. Failure never
-rolls back the desired head and is accepted only after proving exact predecessor
-restoration or first-candidate absence; it never publishes a false serving
-Release or served Route. Task detail and events expose non-secret durable Script
+rolls back the desired head and ordinarily is accepted only after proving exact
+predecessor restoration or first-candidate absence. The sole ordering exception
+is [ADR 0078's superseded Blueprint forward repair](decisions/0078-latest-wins-blueprint-reconciliation.md#forward-repair-after-a-superseded-shared-configuration-write),
+after proven executor stop and exact effect accounting; it never turns divergence
+into absence or success and never publishes a false serving Release or served
+Route. Task detail and events expose non-secret durable Script
 identity and terminal metadata linked to the parent Blueprint Task. Retry may
 transfer the operation only while every selected execution is durably
 `not_started`; `start_authorized` or an unknown state rejects with

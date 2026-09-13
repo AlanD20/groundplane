@@ -455,11 +455,25 @@ Attach or Detach ordering. Compose apply does not intrinsically wait.
 Only verified unit completion may publish its applied fingerprints and successful
 runtime results. Unrelated successful units retain their results; the original
 Apply Task records partial failure or supersession without claiming the entire
-Blueprint applied. A failure must prove exact predecessor restoration or exact
-first-candidate absence where required by the affected unit's procedure. The
-desired head is never rolled back, and an unproven candidate never becomes a
-serving Release or Route. Missing proof keeps conflicting work blocked rather
-than permitting a newer execution to race unresolved effects.
+Blueprint applied. Ordinary unsuperseded failure must prove exact predecessor
+restoration or exact first-candidate absence where required by the affected
+unit's procedure. Only a Blueprint unit automatically superseded by a newer
+valid accepted input after changing shared configuration may use
+[ADR 0078's forward-repair handoff](decisions/0078-latest-wins-blueprint-reconciliation.md#forward-repair-after-a-superseded-shared-configuration-write):
+after the old executor is proven stopped and its exact effects are accounted for,
+the newest valid accepted input may repair forward without first restoring the
+previous working configuration or runtime. Cancellation alone is not proof.
+Accounted-but-diverged effects stay distinct from unknown effects and successfully
+applied inputs; the successor plans from settled observed effects plus current
+desired input, never a false absence or success. Affected Services may remain
+unavailable or degraded until the successor succeeds.
+
+The desired head is never rolled back, and an unproven candidate never becomes a
+serving Release or Route. Missing executor-stop proof or unknown effects keep
+conflicting work blocked. Forward repair does not reopen old execution, restore
+databases, reverse migrations or rewrite stored history, and does not change
+ordinary failure, manual Abort, explicit Deploy/Rollback or Release Groups,
+Backup/Restore, native upgrade, removal or Script recovery.
 Retry transfers the operation only when every selected Script execution is
 durably `not_started`; `start_authorized` or later, or unknown Script state,
 returns `script.retry_unsafe` through the existing retry action and recovery

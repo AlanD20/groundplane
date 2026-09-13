@@ -26,22 +26,25 @@ func normalizeSnapshot(input Snapshot) (Snapshot, error) {
 	}
 	applied := make(map[ResourceKey]AppliedUnit, len(result.Applied))
 	for index, unit := range result.Applied {
-		if !validKey(unit.Target) || unit.State != Applied && unit.State != Absent && unit.State != Uncertain ||
-			(unit.State == Applied) == (unit.Fingerprint == Fingerprint{}) {
+		if !validKey(unit.Target) ||
+			unit.State != Applied && unit.State != Absent && unit.State != Diverged && unit.State != Uncertain ||
+			unit.State == Applied && unit.Fingerprint == (Fingerprint{}) ||
+			unit.State == Absent && unit.Fingerprint != (Fingerprint{}) {
 			return Snapshot{}, invalidSnapshot("blueprint reconciliation applied authority is invalid")
 		}
 		if _, duplicate := applied[unit.Target]; duplicate {
 			return Snapshot{}, invalidSnapshot("blueprint reconciliation repeats an applied target")
 		}
-		writes, err := normalizeKeys(unit.UncertainWrites)
+		writes, err := normalizeKeys(unit.AffectedWrites)
 		if err != nil {
 			return Snapshot{}, err
 		}
-		if unit.State == Uncertain && !slices.Contains(writes, unit.Target) ||
-			unit.State != Uncertain && len(writes) != 0 {
-			return Snapshot{}, invalidSnapshot("blueprint reconciliation uncertain effect scope is invalid")
+		affected := unit.State == Uncertain || unit.State == Diverged
+		if affected && !slices.Contains(writes, unit.Target) || !affected && len(writes) != 0 ||
+			unit.State == Diverged && len(writes) != 1 {
+			return Snapshot{}, invalidSnapshot("blueprint reconciliation effect scope is invalid")
 		}
-		unit.UncertainWrites = writes
+		unit.AffectedWrites = writes
 		result.Applied[index] = unit
 		applied[unit.Target] = unit
 	}
@@ -59,16 +62,16 @@ func normalizeSnapshot(input Snapshot) (Snapshot, error) {
 	pending := make(map[ResourceKey]bool)
 	held := make([]Unit, 0, len(result.Executions))
 	for index, execution := range result.Executions {
-		if ids.Validate(ids.KindPlan, execution.PlanID) != nil || ids.Validate(ids.KindTask, execution.TaskID) != nil ||
-			plans[execution.PlanID] || execution.State != Pending && execution.State != Running && execution.State != Draining {
-			return Snapshot{}, invalidSnapshot("blueprint reconciliation execution identity or state is invalid")
-		}
-		plans[execution.PlanID] = true
-		unit, err := normalizeUnit(execution.Unit)
+		execution, err := normalizeExecution(execution)
 		if err != nil {
 			return Snapshot{}, err
 		}
-		result.Executions[index].Unit = unit
+		if plans[execution.PlanID] {
+			return Snapshot{}, invalidSnapshot("blueprint reconciliation repeats an execution plan")
+		}
+		plans[execution.PlanID] = true
+		result.Executions[index] = execution
+		unit := execution.Unit
 		if execution.State != Pending {
 			if conflictsAny(unit, held) {
 				return Snapshot{}, invalidSnapshot("blueprint reconciliation has conflicting execution owners")
@@ -87,6 +90,20 @@ func normalizeSnapshot(input Snapshot) (Snapshot, error) {
 		func(left, right Execution) int { return strings.Compare(left.PlanID, right.PlanID) },
 	)
 	return result, nil
+}
+
+func normalizeExecution(input Execution) (Execution, error) {
+	if ids.Validate(ids.KindPlan, input.PlanID) != nil || ids.Validate(ids.KindTask, input.TaskID) != nil ||
+		input.State != Pending && input.State != Running && input.State != Draining ||
+		input.State == Pending && input.Epoch != 0 || input.State != Pending && input.Epoch <= 0 {
+		return Execution{}, invalidSnapshot("blueprint reconciliation execution identity or state is invalid")
+	}
+	unit, err := normalizeUnit(input.Unit)
+	if err != nil {
+		return Execution{}, err
+	}
+	input.Unit = unit
+	return input, nil
 }
 
 func normalizeUnit(input Unit) (Unit, error) {
