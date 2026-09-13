@@ -223,7 +223,7 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 | CMP-01 | Enable/configure/disable/update each supported Component in its correct scope. | Closed typed settings, immutable image and intended effect; disabled/unconfigured config is null; no duplicate router or wrong owner. | U |
 | CMP-02 | Read/preview Component configuration while its desired inputs change. | One consistent read-only view and managed-file array; no writes or claim that preview proves serving bytes. | U |
 | CMP-03 | Read Component-owned resources directly and through collections; attempt direct mutation. | Ordinary collections exclude them, detail groups them, known-ID reads work; unauthorized direct mutation fails. | U |
-| CMP-04 | Reject invalid grants/catalog/source revision or race candidate publication. | No partial Component graph or address publication; current active state remains authoritative until successful terminal commit. | U |
+| CMP-04 | Reject invalid grants/catalog/source revision, mutate caller-owned catalog inputs, or race candidate publication. | Catalog authority remains an immutable snapshot; no partial Component graph or address publication; current active state remains authoritative until successful terminal commit. | U; local copy regression below |
 | CMP-05 | Fail, Abort or time out a Component candidate; lose terminal acknowledgement. | Preserve old active config/address; release only candidate reservations; replay causes no duplicate mutation or address leak. | U |
 
 ## DNS and application ingress
@@ -621,7 +621,47 @@ paths; no SSH connection, Docker workload, systemd operation or QA fault occurre
 Of these checks, 31 support only portions of named cases and 42 enforce separate
 delivery/tooling constraints. None qualifies a complete product row.
 
-The remaining Go, registered-Component, SDK and skill-owned verifier tests
+#### Component SDK and registered planners
+
+Reviewed all 35 tests in the ten SDK/registered-planner test files; retained all
+35 with cases, rationale and local proof limits. Removed six redundant internal
+checks, not whole tests: three Caddy rejection inputs already exercised through
+the same `Plan` entrypoint in the comprehensive template table; a same-fixture
+file-equality assertion; a repeated valid-image equality check already covered
+by registration authority; and CoreDNS validation argv already checked by its
+dedicated validation-port case.
+
+| Reviewed tests | Retention reason and corrections | Matrix coverage |
+| --- | --- | --- |
+| Two in [action_test.go](../component-sdk/component/action_test.go) | Canonical action order/digest sensitivity and exact sealed envelope identity. Distinct digests now detect swapped fields; six invalid authority variants reject independently. | CMP-04: SDK values only, not publication or Agent execution. |
+| Seven in [environment_plan_test.go](../component-sdk/component/environment_plan_test.go) | Bind Service and gateway behavior into replay identity; select authenticated platform; reject invalid OCI authority/origin/ordered Zones; detach immutable Route snapshots. | CMP-01/02/04, NET-02, HTTP-03/04/07/08: pure validation, selection, copying and digest behavior. |
+| One in [managed_healthcheck_test.go](../component-sdk/component/managed_healthcheck_test.go) | Bound, copy and digest-bind readiness argv/timing rather than permitting mutable or invisible execution behavior. | CMP-04: local authority, not runtime readiness. |
+| Two in [baseline_test.go](../component-sdk/dnsresolver/baseline_test.go) | Canonical immutable resolver/host inputs and rejection of one hostname with competing addresses. Now assert source identity, sort order and detachment after caller mutation. | DNS-01/02: input snapshots only, not DNS answers. |
+| Three in [caddy_test.go](../registered-components/caddy/caddy_test.go) and four in [template_test.go](../registered-components/caddy/template_test.go) | Deterministic Route plans; no resources when disabled; Route/origin injection rejection; exact native policy substitution; invalid/unaccounted Route rejection; internal/colon references; aggregate and empty-set rendering. | CMP-01, HTTP-01/03/04/07: planner output only, not runtime activation or traffic. |
+| Six in [catalog_test.go](../registered-components/catalog/catalog_test.go) | Scoped action lookup; copied validator authority; digest sensitivity; sole registered-image authority; Tunnel image binding without action recipes; closed DNS observation input. Strengthened lookup to reject an action present only in another implementation and mutated constructor/getter inputs to test ownership. | CMP-04, DNS-01, HTTP-08: local catalog authority. The DNS input-copy assertion exposed the defect described below. |
+| One in [container_preflight_test.go](../registered-components/catalog/container_preflight_test.go) | Require, copy and digest-bind the stdin preflight recipe rather than validating only the later reload command. | CMP-04, HTTP-05: local recipe, not native Caddy execution. |
+| Three in [cloudflaretunnel_test.go](../registered-components/cloudflaretunnel/cloudflaretunnel_test.go) | Preserve opaque Secret and explicit Zone/gateway decisions; reject incomplete identity and invalid/internal-only placement. | CMP-01/04, NET-03, HTTP-08: plan only, not credential resolution or provider ingress. |
+| Six in [coredns_test.go](../registered-components/coredns/coredns_test.go) | Deterministic bytes/digest; conflicting-host rejection; overridable validation port; exact serving image/observation action; exact marker expansion; invalid-template rejection. Renamed the image/action test after removing its duplicated argv assertion. | CMP-01/04, DNS-01/02: renderer/catalog output only, not serving DNS or restoration. |
+
+The initial race run in `.tmp/qa-test-review-components.log` passes every package
+except the new DNS observation-recipe copy assertion. The constructor validated
+an `OCIImage` but stored its caller-owned `Platforms` slice. Changing that slice
+after construction changed the recipe's supposedly immutable image authority;
+the old test compared shared state to itself and missed the alias. The other
+recipe constructors and the image getter already copied this slice.
+
+The owner explicitly approved the scoped fix. The constructor now uses the same
+defensive copy, without a new interface or changed catalog identity for unchanged
+inputs. The exact failing regression and all catalog tests pass with the race
+detector in `.tmp/qa-test-review-catalog-copy-fixed.log`; unchanged passing SDK and
+planner proof is reused. The two existing affected app runtime-wiring tests pass
+in `.tmp/qa-test-review-catalog-wiring.log`; focused vet and pinned Staticcheck
+pass in `.tmp/qa-test-review-catalog-vet.log` and
+`.tmp/qa-test-review-catalog-staticcheck.log`. This is an L0 ownership fix, not an
+observed QA incident or proof of live DNS, upgrade recovery or publication races.
+No deployment occurred. CMP-04 remains unqualified as a whole.
+
+The remaining root-module Go and skill-owned verifier tests
 still require review. Helpers and fixtures are not standalone test cases;
 inventory counts must not classify them as behavioral coverage. No automatic
 blanket deletion based on filenames, missing comments, mocks or small test size.

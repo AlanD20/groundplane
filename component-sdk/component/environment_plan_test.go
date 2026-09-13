@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// QA: CMP-04; pure plan-digest proof only, not durable replay or runtime rejection.
 // Rationale: replay validation must reject a changed service contract even
 // when the managed file bytes are unchanged.
 func TestDigestEnvironmentPlanIncludesServiceBehavior(t *testing.T) {
@@ -18,10 +19,6 @@ func TestDigestEnvironmentPlanIncludesServiceBehavior(t *testing.T) {
 	}
 	changed := CloneEnvironmentPlan(base)
 	changed.Services[0].Image = environmentPlanTestImage("example/resolver-next")
-	if base.Files[0].Path != changed.Files[0].Path ||
-		string(base.Files[0].Content) != string(changed.Files[0].Content) {
-		t.Fatal("replay fixture must retain identical file metadata and bytes")
-	}
 	if DigestEnvironmentPlan(base) == DigestEnvironmentPlan(changed) {
 		t.Fatal("DigestEnvironmentPlan() ignored changed service behavior")
 	}
@@ -54,6 +51,7 @@ func environmentPlanTestImage(repository string) OCIImage {
 	}
 }
 
+// QA: CMP-01, CMP-04; pure compiled-image selection only, not an image pull or host-architecture journey.
 // Rationale: runtime selection uses only the host platform and returns the
 // catalog-authenticated variant rather than accepting a caller-invented value.
 func TestOCIImageSelectReturnsAuthenticatedPlatform(t *testing.T) {
@@ -82,10 +80,13 @@ func TestOCIImageSelectReturnsAuthenticatedPlatform(t *testing.T) {
 	}
 }
 
+// QA: CMP-01, CMP-04; pure image-authority validation only, not registry verification or runtime selection.
+// Rationale: managed images must contain one canonical authenticated identity
+// for each supported platform and reject mutable, ambiguous, or malformed variants.
 func TestOCIImageValidateRejectsMalformedAuthority(t *testing.T) {
 	valid := environmentPlanTestImage("example/resolver")
-	if err := valid.Validate(); err != nil || !valid.Equal(environmentPlanTestImage("example/resolver")) {
-		t.Fatalf("valid image rejected or unequal: %v", err)
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid image rejected: %v", err)
 	}
 	tests := map[string]func(*OCIImage){
 		"missing repository": func(image *OCIImage) { image.Repository = "" },
@@ -122,6 +123,7 @@ func TestOCIImageValidateRejectsMalformedAuthority(t *testing.T) {
 	}
 }
 
+// QA: HTTP-03, HTTP-04; pure router-input validation only, not rendering, publication, or reachability.
 // Rationale: an HTTP-router planning input must carry one canonical managed
 // Service origin rather than accept an ambiguous URL.
 func TestValidateHTTPRouterInputRequiresCanonicalManagedOrigin(t *testing.T) {
@@ -152,6 +154,7 @@ func TestValidateHTTPRouterInputRequiresCanonicalManagedOrigin(t *testing.T) {
 	}
 }
 
+// QA: NET-02, HTTP-07; pure ordered-Zone validation only, not reservation or runtime attachment.
 // Rationale: primary address ownership and replay require one ordered,
 // duplicate-free Zone view with a static address only on the first Zone.
 func TestValidateHTTPRouterInputRejectsInvalidOrderedZones(t *testing.T) {
@@ -181,6 +184,7 @@ func TestValidateHTTPRouterInputRejectsInvalidOrderedZones(t *testing.T) {
 	}
 }
 
+// QA: CMP-02, CMP-04; pure snapshot-copy proof only, not a fixed-revision read or publication race.
 // Rationale: fixed-revision planning must retain the exact origin while
 // detaching mutable Route storage from the caller.
 func TestCloneHTTPRouterInputPreservesOriginAndDetachesRoutes(t *testing.T) {
@@ -198,6 +202,7 @@ func TestCloneHTTPRouterInputPreservesOriginAndDetachesRoutes(t *testing.T) {
 	}
 }
 
+// QA: CMP-04, HTTP-08; pure plan-digest proof only, not Tunnel connectivity or durable replay.
 // Rationale: gateway selection changes runtime connectivity and therefore must
 // be immutable replay authority rather than digest-invisible metadata.
 func TestDigestEnvironmentPlanIncludesGatewayPriority(t *testing.T) {

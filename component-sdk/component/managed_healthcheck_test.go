@@ -2,6 +2,9 @@ package component
 
 import "testing"
 
+// QA: CMP-04; pure managed-healthcheck validation and plan-digest proof only, not container readiness.
+// Rationale: readiness argv and timing bounds are sealed planner authority;
+// cloned plans must not alias them or omit any health behavior from replay identity.
 func TestManagedHealthcheckCloneDigestAndBounds(t *testing.T) {
 	plan := EnvironmentPlan{
 		Services: []ManagedService{

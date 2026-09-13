@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// QA: CMP-04; pure SDK catalog identity only, not publication or Agent execution.
 // Rationale: catalog identity must stay independent of source declaration
 // order while changing whenever an executable action contract changes.
 func TestDefinitionDigestIncludesCanonicalActions(t *testing.T) {
@@ -29,6 +30,7 @@ func TestDefinitionDigestIncludesCanonicalActions(t *testing.T) {
 	}
 }
 
+// QA: CMP-04; pure SDK envelope validation only, not catalog resolution or runtime effects.
 // Rationale: a Task action must carry only sealed catalog and artifact
 // identities so Agent execution cannot recover commands from untrusted input.
 func TestActionEnvelopeRequiresSealedIdentity(t *testing.T) {
@@ -40,21 +42,43 @@ func TestActionEnvelopeRequiresSealedIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewArtifactID() error = %v", err)
 	}
-	digest := sha256.Sum256([]byte("sealed"))
-	artifact, err := NewArtifactReference(artifactID, digest)
+	definitionDigest := sha256.Sum256([]byte("definition"))
+	catalogDigest := sha256.Sum256([]byte("catalog"))
+	artifactDigest := sha256.Sum256([]byte("artifact"))
+	artifact, err := NewArtifactReference(artifactID, artifactDigest)
 	if err != nil {
 		t.Fatalf("NewArtifactReference() error = %v", err)
 	}
-	envelope, err := NewActionEnvelope(ActionEnvelopeInput{
-		ComponentID: componentID, DefinitionDigest: digest, CatalogDigest: digest,
+	input := ActionEnvelopeInput{
+		ComponentID: componentID, DefinitionDigest: definitionDigest, CatalogDigest: catalogDigest,
 		ActionID: "activate-config", Artifact: artifact, Generation: 1,
-	})
+	}
+	envelope, err := NewActionEnvelope(input)
 	if err != nil {
 		t.Fatalf("NewActionEnvelope() error = %v", err)
 	}
 	if envelope.ComponentID() != componentID || envelope.ActionID() != "activate-config" ||
-		envelope.Artifact().ID() != artifactID || envelope.Generation() != 1 {
+		envelope.DefinitionDigest() != definitionDigest || envelope.CatalogDigest() != catalogDigest ||
+		envelope.Artifact().ID() != artifactID || envelope.Artifact().Digest() != artifactDigest ||
+		envelope.Generation() != 1 {
 		t.Fatal("ActionEnvelope changed sealed identity")
+	}
+
+	for name, mutate := range map[string]func(*ActionEnvelopeInput){
+		"component":  func(candidate *ActionEnvelopeInput) { candidate.ComponentID = ComponentID{} },
+		"definition": func(candidate *ActionEnvelopeInput) { candidate.DefinitionDigest = [sha256.Size]byte{} },
+		"catalog":    func(candidate *ActionEnvelopeInput) { candidate.CatalogDigest = [sha256.Size]byte{} },
+		"action":     func(candidate *ActionEnvelopeInput) { candidate.ActionID = "invalid action" },
+		"artifact":   func(candidate *ActionEnvelopeInput) { candidate.Artifact = ArtifactReference{} },
+		"generation": func(candidate *ActionEnvelopeInput) { candidate.Generation = 0 },
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := input
+			mutate(&candidate)
+			if _, err := NewActionEnvelope(candidate); err == nil {
+				t.Fatal("NewActionEnvelope() accepted incomplete execution authority")
+			}
+		})
 	}
 }
 

@@ -78,7 +78,7 @@ func NewDNSResolverObservationRecipe(
 	}
 	return DNSResolverObservationRecipe{
 		actionID: actionID, serviceName: serviceName, artifactTarget: artifactTarget,
-		image: image, listenEndpoint: listenEndpoint,
+		image: cloneOCIImage(image), listenEndpoint: listenEndpoint,
 		metricsURL: metricsURL, reloadMetric: reloadMetric,
 	}, nil
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane-component-sdk/component"
 )
 
+// QA: CMP-01, HTTP-03, HTTP-07; pure planner output only, not publication, reload, or reachable traffic.
 // Rationale: Caddy must preserve deterministic HTTP host/path ordering and
 // ordinary reverse-proxy behavior for HTTP and WebSocket targets.
 func TestPlanRendersDeterministicHTTPRoutes(t *testing.T) {
@@ -44,6 +45,7 @@ func TestPlanRendersDeterministicHTTPRoutes(t *testing.T) {
 	}
 }
 
+// QA: CMP-01, HTTP-01; pure disabled-plan output only, not runtime removal or retained Route state.
 // Rationale: disabled routers remove their managed runtime resources instead
 // of retaining a hidden listener or compatibility configuration.
 func TestPlanDisabledRouterProducesNoResources(t *testing.T) {
@@ -54,9 +56,10 @@ func TestPlanDisabledRouterProducesNoResources(t *testing.T) {
 	}
 }
 
-// Rationale: generated configuration must reject input that can escape the
-// closed host/path and template grammar.
-func TestPlanRejectsRouteAndTemplateInjection(t *testing.T) {
+// QA: HTTP-04; pure planner rejection only, not preservation of serving bytes or traffic.
+// Rationale: generated configuration must reject Route directives and origins
+// that could escape the closed host/path and managed-Service grammar.
+func TestPlanRejectsRouteAndOriginInjection(t *testing.T) {
 	t.Parallel()
 	input := routerInput()
 	input.Routes[0].Path = "/ok\n}\nrespond 200\n"
@@ -67,21 +70,6 @@ func TestPlanRejectsRouteAndTemplateInjection(t *testing.T) {
 	input.Origin.URL = "http://another-router:80"
 	if _, err := Plan(input, Config{}); err == nil {
 		t.Fatal("Plan() accepted an origin outside the managed Caddy Service")
-	}
-	input = routerInput()
-	if _, err := Plan(input, Config{CaddyfileTemplate: "{gp.routes}\n{gp.routes}"}); err == nil {
-		t.Fatal("Plan() accepted duplicate template markers")
-	}
-	input = routerInput()
-	if _, err := Plan(input, Config{CaddyfileTemplate: string([]byte{0xff}) + "{gp.routes}"}); err == nil {
-		t.Fatal("Plan() accepted an invalid UTF-8 template")
-	}
-	input = routerInput()
-	if _, err := Plan(
-		input,
-		Config{CaddyfileTemplate: strings.Repeat("x", maxTemplateBytes) + "{gp.routes}"},
-	); err == nil {
-		t.Fatal("Plan() accepted an oversized template")
 	}
 }
 

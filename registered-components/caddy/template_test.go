@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane-component-sdk/component"
 )
 
+// QA: HTTP-03; pure template rendering only, not read-preview consistency, reload, or serving traffic.
 // Rationale: the full file must preserve native policy while Route references
 // resolve to immutable matches and stable, slot-independent Service upstreams.
 func TestPlanRendersFullTemplateFromDeclaredRoutes(t *testing.T) {
@@ -52,6 +53,7 @@ http://app.example.com {
 	}
 }
 
+// QA: HTTP-04; pure template rejection only, not old-config retention after a runtime edit.
 // Rationale: a missing or mistyped Route must not silently create a second
 // upstream/hostname authority or omit a declared Route from the template.
 func TestFullTemplateRejectsUnresolvedAndUnaccountedRoutes(t *testing.T) {
@@ -80,6 +82,7 @@ func TestFullTemplateRejectsUnresolvedAndUnaccountedRoutes(t *testing.T) {
 	}
 }
 
+// QA: HTTP-03; pure reference expansion only, not internal-route reachability.
 // Rationale: template references use portable immutable matches, including an
 // internal catch-all and legal path colons, rather than generated Route ids.
 func TestFullTemplateSupportsInternalHostAndColonPath(t *testing.T) {
@@ -100,6 +103,7 @@ func TestFullTemplateSupportsInternalHostAndColonPath(t *testing.T) {
 	}
 }
 
+// QA: HTTP-01, HTTP-03; pure default and empty-set rendering only, not router enable/disable effects.
 // Rationale: the default remains deterministic all-Route rendering, whereas a
 // complete native deny-only file is valid when there are no Routes to omit.
 func TestFullTemplateAggregateAndEmptyRouteSet(t *testing.T) {

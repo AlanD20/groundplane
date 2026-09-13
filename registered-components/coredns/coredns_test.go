@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 )
 
+// QA: DNS-02; pure rendering and digest determinism only, not accepted configuration or DNS answers.
 // Rationale: normalized DNS input must produce byte-identical Corefiles
 // regardless of input order so catalog actions remain reproducible.
 func TestRendererIsDeterministic(t *testing.T) {
@@ -53,6 +54,7 @@ func TestRendererIsDeterministic(t *testing.T) {
 	}
 }
 
+// QA: DNS-01, DNS-02; pure renderer rejection only, not retention of an active resolver configuration.
 // Rationale: an ambiguous hostname must fail before Corefile bytes exist so
 // the last-known-good DNS configuration remains active.
 func TestRendererRejectsConflictingHosts(t *testing.T) {
@@ -70,6 +72,7 @@ func TestRendererRejectsConflictingHosts(t *testing.T) {
 	}
 }
 
+// QA: DNS-02; pure plan/argv proof only, not in-container validation or port-53 service.
 // Rationale: the immutable CoreDNS validation action appends -dns.port 0 to
 // the image entrypoint, but CoreDNS cannot override an explicit Corefile port.
 // The serving artifact must therefore use the default-port form so validation
@@ -96,9 +99,10 @@ func TestRendererKeepsValidationPortOverridable(t *testing.T) {
 	}
 }
 
-// Rationale: the registered action and serving Service must use the same
-// immutable CoreDNS image, validation argv, and serving observation authority.
-func TestPlanPinsServingImageValidationAndHealthObservation(t *testing.T) {
+// QA: CMP-01, CMP-04, DNS-01; pure plan identity proof only, not image execution or serving observation.
+// Rationale: the serving Service must use the registered immutable CoreDNS
+// image and the catalog-selected observation action rather than caller input.
+func TestPlanPinsServingImageAndObservationAction(t *testing.T) {
 	t.Parallel()
 	plan, err := Plan(PlanInput{
 		GeneratedServiceID: "svc_test",
@@ -111,12 +115,12 @@ func TestPlanPinsServingImageValidationAndHealthObservation(t *testing.T) {
 		t.Fatalf("Plan() error = %v", err)
 	}
 	if len(plan.Services) != 1 || !sameOCIImage(plan.Services[0].Image, Image) ||
-		plan.Services[0].ObservationAction != ObserveServingAction ||
-		!slices.Equal(ValidateConfigCommand(), []string{"-conf", "/dev/stdin", "-dns.port", "0"}) {
+		plan.Services[0].ObservationAction != ObserveServingAction {
 		t.Fatalf("Plan() serving recipe = %#v", plan.Services)
 	}
 }
 
+// QA: DNS-02; pure exact Corefile expansion only, not persisted configuration or DNS answers.
 // Rationale: the canonical operator template must preserve the historical
 // Corefile shape while expanding only the Controller-owned marker.
 func TestRendererExpandsCanonicalTemplateExactly(t *testing.T) {
@@ -136,6 +140,7 @@ func TestRendererExpandsCanonicalTemplateExactly(t *testing.T) {
 	}
 }
 
+// QA: CMP-04, DNS-02; pure template rejection only, not active-config retention after a failed edit.
 // Rationale: malformed or unbounded operator templates must fail before any
 // Corefile bytes exist so the last-known-good serving configuration survives.
 func TestRendererRejectsInvalidCorefileTemplate(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane-component-sdk/component"
 )
 
+// QA: CMP-01, NET-03, HTTP-08; pure Tunnel plan output only, not Secret resolution or provider ingress.
 // Rationale: the registered planner must expose only an opaque Secret id and
 // start the remotely managed connector without configuring provider routing.
 func TestPlanBuildsSecretBoundTunnelConnector(t *testing.T) {
@@ -54,6 +55,7 @@ func TestPlanBuildsSecretBoundTunnelConnector(t *testing.T) {
 	}
 }
 
+// QA: CMP-04; pure planner rejection only, not request-boundary validation or publication.
 // Rationale: a planner must reject incomplete capability observations before
 // it can emit a managed Service intent.
 func TestPlanRejectsMissingConnectorIdentity(t *testing.T) {
@@ -63,6 +65,7 @@ func TestPlanRejectsMissingConnectorIdentity(t *testing.T) {
 	}
 }
 
+// QA: CMP-04, NET-03, HTTP-08; pure placement rejection only, not network attachment or egress.
 // Rationale: the connector must never receive an implicit default bridge or
 // silently treat an internal-only placement as internet egress.
 func TestPlanRejectsInvalidZonePlacement(t *testing.T) {

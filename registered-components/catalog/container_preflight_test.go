@@ -6,9 +6,10 @@ import (
 	"github.com/AlanD20/groundplane-component-sdk/component"
 )
 
+// QA: CMP-04, HTTP-05; pure recipe validation and catalog-digest proof only, not native Caddy validation.
+// Rationale: the early stdin validator is execution authority and cannot be
+// omitted, mutated through an input slice, or changed without a new catalog.
 func TestContainerConfigRecipeRequiresAndSealsPreflight(t *testing.T) {
-	// Rationale: the early stdin validator is execution authority and cannot be
-	// omitted, mutated through an input slice, or changed without a new catalog.
 	image := testOCIImage("example/router", "a")
 	makeRecipe := func(args []string) (ContainerConfigActionRecipe, error) {
 		return NewContainerConfigActionRecipe("activate-config", "router/config", "/config/file",

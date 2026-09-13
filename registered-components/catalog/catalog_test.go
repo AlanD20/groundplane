@@ -8,6 +8,7 @@ import (
 	registeredtunnel "github.com/AlanD20/groundplane-registered-components/cloudflaretunnel"
 )
 
+// QA: CMP-04; pure catalog lookup only, not action-envelope resolution or Agent execution.
 // Rationale: action ids are scoped to one immutable implementation definition
 // and must never resolve through another Component registration.
 func TestFindActionResolvesWithinImplementation(t *testing.T) {
@@ -29,7 +30,25 @@ func TestFindActionResolvesWithinImplementation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDefinition() error = %v", err)
 	}
-	catalog, err := New(definition)
+	otherAction, err := component.NewActionDefinition(
+		"observe-config",
+		component.CapabilityManagedConfig,
+		component.OperationObserve,
+	)
+	if err != nil {
+		t.Fatalf("NewActionDefinition(other) error = %v", err)
+	}
+	otherDefinition, err := component.NewDefinition(component.DefinitionInput{
+		Implementation: "other-router",
+		ConfigVariant:  "other-router-v1",
+		Provides:       []component.Capability{component.CapabilityHTTPRouter},
+		OwnerScopes:    []component.OwnerScope{component.OwnerScopeEnvironment},
+		Actions:        []component.ActionDefinition{otherAction},
+	})
+	if err != nil {
+		t.Fatalf("NewDefinition(other) error = %v", err)
+	}
+	catalog, err := New(definition, otherDefinition)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -38,23 +57,30 @@ func TestFindActionResolvesWithinImplementation(t *testing.T) {
 	if !found || gotDefinition.Implementation() != "test-router" || gotAction.ID() != "activate-config" {
 		t.Fatal("FindAction() did not resolve the registered action")
 	}
-	if _, _, found := catalog.FindAction("test-router", "missing"); found {
-		t.Fatal("FindAction() resolved an unknown action")
+	if _, _, found := catalog.FindAction("other-router", "activate-config"); found {
+		t.Fatal("FindAction() resolved an action from another implementation")
 	}
 }
 
+// QA: CMP-04; pure recipe construction and copying only, not staged-file validation or activation.
+// Rationale: a managed-config recipe must own its pinned validator argv and
+// authenticated image so callers cannot mutate executable catalog authority.
 func TestManagedConfigRecipeSealsPinnedValidator(t *testing.T) {
 	t.Parallel()
 	image := testOCIImage("example/resolver", "a")
+	expectedImage := cloneOCIImage(image)
 	recipe, err := NewManagedConfigActionRecipe(
 		"activate-config", "resolver/config", []string{"-conf", "/dev/stdin", "-dns.port", "0"}, image,
 	)
 	if err != nil {
 		t.Fatalf("NewManagedConfigActionRecipe() error = %v", err)
 	}
+	image.Platforms[0].ConfigDigest = strings.Repeat("1", 64)
 	arguments := recipe.ValidateArgs()
 	arguments[0] = "changed"
-	if !sameOCIImage(recipe.Image(), image) || recipe.ValidateArgs()[0] != "-conf" {
+	returnedImage := recipe.Image()
+	returnedImage.Platforms[0].ConfigDigest = strings.Repeat("2", 64)
+	if !sameOCIImage(recipe.Image(), expectedImage) || recipe.ValidateArgs()[0] != "-conf" {
 		t.Fatal("managed-config recipe did not retain immutable validator inputs")
 	}
 	if _, err := NewManagedConfigActionRecipe(
@@ -63,7 +89,7 @@ func TestManagedConfigRecipeSealsPinnedValidator(t *testing.T) {
 		t.Fatal("NewManagedConfigActionRecipe() accepted a mutable validator image")
 	}
 	for name, value := range map[string]string{"missing": "", "zero": strings.Repeat("0", 64)} {
-		invalid := cloneOCIImage(image)
+		invalid := cloneOCIImage(expectedImage)
 		invalid.Platforms[0].ConfigDigest = value
 		if _, err := NewManagedConfigActionRecipe(
 			"activate-config", "resolver/config", []string{"-conf", "/dev/stdin"}, invalid,
@@ -73,6 +99,7 @@ func TestManagedConfigRecipeSealsPinnedValidator(t *testing.T) {
 	}
 }
 
+// QA: CMP-04; pure catalog-digest proof only, not durable source fencing or runtime image verification.
 // Rationale: the catalog identity must change when only an authenticated
 // platform config digest changes.
 func TestCatalogDigestBindsImageConfigDigest(t *testing.T) {
@@ -112,7 +139,9 @@ func TestCatalogDigestBindsImageConfigDigest(t *testing.T) {
 		t.Fatal(err)
 	}
 	changed, err := NewRegistered(Registration{
-		Definition: definition, Images: []component.OCIImage{image}, ManagedConfigActions: []ManagedConfigActionRecipe{changedRecipe},
+		Definition:           definition,
+		Images:               []component.OCIImage{image},
+		ManagedConfigActions: []ManagedConfigActionRecipe{changedRecipe},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -122,6 +151,9 @@ func TestCatalogDigestBindsImageConfigDigest(t *testing.T) {
 	}
 }
 
+// QA: CMP-04; pure registration and planned-image validation only, not planner authorization or publication.
+// Rationale: every recipe and planned Service image must match one complete
+// image authority declared by the same immutable implementation registration.
 func TestRegistrationImagesAreSoleRecipeAuthority(t *testing.T) {
 	actionOne, err := component.NewActionDefinition(
 		"activate-one",
@@ -157,10 +189,14 @@ func TestRegistrationImagesAreSoleRecipeAuthority(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewRegistered(Registration{Definition: definition, ManagedConfigActions: []ManagedConfigActionRecipe{first}}); err == nil {
+	if _, err := NewRegistered(Registration{
+		Definition: definition, ManagedConfigActions: []ManagedConfigActionRecipe{first},
+	}); err == nil {
 		t.Fatal("NewRegistered() accepted recipe without registered image")
 	}
-	if _, err := NewRegistered(Registration{Definition: definition, Images: []component.OCIImage{image, image}}); err == nil {
+	if _, err := NewRegistered(Registration{
+		Definition: definition, Images: []component.OCIImage{image, image},
+	}); err == nil {
 		t.Fatal("NewRegistered() accepted duplicate image repository")
 	}
 	if _, err := NewRegistered(Registration{
@@ -201,6 +237,9 @@ func TestRegistrationImagesAreSoleRecipeAuthority(t *testing.T) {
 	}
 }
 
+// QA: CMP-04, HTTP-08; pure catalog-digest proof only, not Tunnel startup or provider ingress.
+// Rationale: a planner-only Component image must still change catalog identity
+// even when the implementation declares no executable action recipe.
 func TestCatalogDigestBindsCloudflareTunnelImageWithoutRecipes(t *testing.T) {
 	definition, err := registeredtunnel.Definition()
 	if err != nil {
@@ -226,11 +265,13 @@ func TestCatalogDigestBindsCloudflareTunnelImageWithoutRecipes(t *testing.T) {
 	}
 }
 
+// QA: CMP-04, DNS-01; pure recipe construction only, not Agent observation or a real DNS query.
 // Rationale: observation is a catalog-selected closed capability recipe; no
 // Controller-provided command or Compose healthcheck may become its authority.
 func TestDNSResolverObservationRecipeClosesAgentLocalProofInputs(t *testing.T) {
 	t.Parallel()
 	image := testOCIImage("example/resolver", "b")
+	expectedImage := cloneOCIImage(image)
 	recipe, err := NewDNSResolverObservationRecipe(
 		"observe-serving", "resolver", "/etc/resolver/config", image,
 		"127.0.0.1:53", "http://127.0.0.1:9153/metrics", "resolver_reload_version_info",
@@ -238,12 +279,21 @@ func TestDNSResolverObservationRecipeClosesAgentLocalProofInputs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDNSResolverObservationRecipe() error = %v", err)
 	}
+	image.Platforms[0].ConfigDigest = strings.Repeat("1", 64)
+	returnedImage := recipe.Image()
+	returnedImage.Platforms[0].ConfigDigest = strings.Repeat("2", 64)
 	if recipe.ActionID() != "observe-serving" || recipe.ServiceName() != "resolver" ||
-		recipe.ArtifactTarget() != "/etc/resolver/config" || !sameOCIImage(recipe.Image(), image) ||
+		recipe.ArtifactTarget() != "/etc/resolver/config" || !sameOCIImage(recipe.Image(), expectedImage) ||
 		recipe.ListenEndpoint() != "127.0.0.1:53" ||
 		recipe.MetricsURL() != "http://127.0.0.1:9153/metrics" ||
 		recipe.ReloadMetric() != "resolver_reload_version_info" {
 		t.Fatal("DNS resolver observation recipe changed its closed Agent-local proof inputs")
+	}
+	if _, err := NewDNSResolverObservationRecipe(
+		"observe-serving", "resolver", "/etc/resolver/config", expectedImage,
+		"0.0.0.0:53", "http://127.0.0.1:9153/metrics", "resolver_reload_version_info",
+	); err == nil {
+		t.Fatal("NewDNSResolverObservationRecipe() accepted a non-loopback DNS proof endpoint")
 	}
 }
 

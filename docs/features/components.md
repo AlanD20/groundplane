@@ -61,6 +61,11 @@ owns the shared planning and execution seam. Implementations live in
 [registered-components](../../registered-components/); public types live in
 [component-sdk](../../component-sdk/).
 
+Catalog recipes own copies of caller-supplied image/platform and argument slices;
+getters return copies too. Validating an input does not make its backing memory
+immutable. Test ownership by changing the original input and a returned value,
+then comparing the recipe to a separate expected snapshot.
+
 ### Task-owned Component candidates
 
 One Agent Task owns one immutable Component candidate set for an Environment.
