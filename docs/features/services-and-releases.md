@@ -169,5 +169,9 @@ from runtime aggregation; desired edits do not replace serving expectations.
 Focused Go race/HTTP/CLI checks, Console tests and build pass. An isolated
 GET-only browser fixture proves rendering, manual refresh and expiry during a
 stalled response. [Visibility evidence](../acceptance/router-and-visibility.md#service-observation)
-records the exact scope. Full CI, deployment and live qualification remain open;
-[head.md](../head.md) routes the next work. No new endpoint or mutation was added.
+records the exact scope. Fresh QA now proves healthy observation of 11 Services
+and 12 workload replicas, CLI/API semantic parity and matching Console runtime
+status. An exact Blueprint reapply preserves every serving Release. Full CI,
+failure-state and recovery qualification remain open; [head.md](../head.md) records
+the private evidence and application-level blocker. No new endpoint or mutation
+was added.
