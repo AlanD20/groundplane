@@ -343,7 +343,7 @@ func (repository *ScriptRepository) loadExecutionSources(
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
-	if releaseID != "" && !sameServiceRemovalProjection(desiredProjection.Record, renderInput.Record.Projection) {
+	if releaseID != "" && !sameReleaseHookAuthoredInputs(desiredProjection.Record, renderInput.Record.Projection) {
 		return ScriptExecutionSources{}, corruptReleaseRecord()
 	}
 	networks, err := resolveScriptExecutionNetworks(desiredProjection)
@@ -383,6 +383,15 @@ func (repository *ScriptRepository) loadExecutionSources(
 		DesiredHead: desiredHead, DesiredProjection: desiredProjection,
 		Networks: networks, AttachSources: attachNetworks,
 	}, nil
+}
+
+// A Release can recapture Attach memberships in its generated artifact without
+// changing the pinned authored inputs. Hooks consume normalized Compose and typed
+// sources, not that artifact. Its bytes remain validated and bound by the Release
+// render digest above; neither this comparison nor hook loading rewrites them.
+func sameReleaseHookAuthoredInputs(root, captured EnvironmentComposeProjection) bool {
+	captured.ComposeArtifact = root.ComposeArtifact
+	return sameServiceRemovalProjection(root, captured)
 }
 
 func loadScriptExecutionDesiredProjection(

@@ -161,6 +161,15 @@ Script records and revision/source-reference checks in [`internal/infra/etcd`](.
 Persistence continues to use the existing Script record and immutable runner/source
 publication protocol.
 
+Ordinary Release hooks bind the exact staged Release and its pinned authored
+Blueprint inputs. The Release's generated Compose artifact may differ from the
+Blueprint artifact after current Attach memberships are captured; it is not an
+authored-input identity. Hook source validation still requires the Release's
+render digest and matching authored Compose, typed topology, resource bindings
+and generation. Runner planning uses those inputs and separately captured,
+publication-fenced Attach sources, not the generated artifact. It does not change
+which historical Release an on-failure hook selects or any recovery authority.
+
 [`internal/common/executionplan`](../../internal/common/executionplan) carries the
 closed execution plan. The Agent Script runtime and Docker one-off runner in
 [`internal/agent`](../../internal/agent) and
