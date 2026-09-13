@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -16,10 +17,56 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
 )
+
+// Rationale: Attach reads the immutable Blueprint root, while Entry reads its
+// published head. Those keys can have different etcd modification revisions
+// even when they identify exactly the same desired runtime at the capture read.
+func TestEntryMutationCapturesImmutableRevisionSource(t *testing.T) {
+	testBlueprintExecutedArtifact(t, true, false, func(fixture *etcd.ExecutedArtifactFixture,
+		resolver *controller.TaskPlanResolver, original etcd.ReleaseRenderInput, _ domain.Intent,
+		_ *agentpb.ComposeArtifact) {
+		ctx := t.Context()
+		if err := resolver.EnableReleasePlans(fixture.Ledger); err != nil {
+			t.Fatal(err)
+		}
+		current, found, err := fixture.Hierarchy.GetEnvironmentComposeProjection(ctx, original.EnvironmentID)
+		if err != nil || !found {
+			t.Fatal("desired head", err)
+		}
+		root, found, err := fixture.Hierarchy.GetEnvironmentComposeProjectionRevision(ctx,
+			original.EnvironmentID, current.Record.RevisionID)
+		if err != nil || !found {
+			t.Fatal("immutable root", err)
+		}
+		if root.Revision == current.Revision {
+			t.Fatal("fixture must stage the immutable root before publishing the head")
+		}
+		if _, err := resolver.CaptureEntryMutationRuntime(ctx, root); err != nil {
+			t.Fatal("identical desired runtime from immutable root rejected", err)
+		}
+		for _, mismatch := range []string{"revision identity", "artifact bytes"} {
+			t.Run(mismatch, func(t *testing.T) {
+				changed := root
+				if mismatch == "revision identity" {
+					changed.Record.RevisionID = ids.New(ids.KindTask)
+				} else {
+					changed.Record.ComposeArtifact = []byte("different immutable artifact")
+				}
+				if _, err := resolver.CaptureEntryMutationRuntime(t.Context(), changed); !errors.Is(
+					err,
+					errs.New(errs.KindStateConflict, ""),
+				) {
+					t.Fatalf("changed desired runtime was not rejected: %v", err)
+				}
+			})
+		}
+	})
+}
 
 // Rationale: a successful native rollback changes the serving slot without
 // advancing desired Blueprint state. Entry changes must reach that slot, not

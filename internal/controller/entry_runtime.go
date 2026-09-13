@@ -33,7 +33,9 @@ func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
 	if err != nil {
 		return EntryMutationRuntime{}, err
 	}
-	if scope.Compose.Revision != current.Revision || scope.Compose.Record.RevisionID != current.Record.RevisionID ||
+	// The head and immutable-root readers report revisions of different etcd
+	// keys. Compare desired identity and bytes at the pinned read, not those keys.
+	if scope.Compose.Record.RevisionID != current.Record.RevisionID ||
 		!bytes.Equal(scope.Compose.Record.ComposeArtifact, current.Record.ComposeArtifact) {
 		return EntryMutationRuntime{}, errs.New(errs.KindStateConflict, "Entry desired runtime source changed")
 	}
