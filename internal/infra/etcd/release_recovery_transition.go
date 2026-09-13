@@ -330,11 +330,13 @@ func (repository *TaskRepository) normalizeReleaseRecoveryTerminalReplay(
 		return status, nil, true, errs.New(errs.KindStateConflict, "terminal release recovery replay status changed")
 	}
 	if task.Result == nil || !validTerminalTaskStatus(task.Status) || task.TerminalAssignment == nil ||
+		task.Result.ExecutionEpoch != result.ExecutionEpoch ||
+		task.Result.ReleaseRecoveryRecordSHA256 != result.ReleaseRecoveryRecordSHA256 ||
 		task.TerminalAssignment.AssignmentID != assignmentID || task.TerminalAssignment.AgentID != agentID ||
 		task.TerminalAssignment.AgentGeneration != agentGeneration {
 		return status, nil, true, errs.New(
 			errs.KindStateConflict,
-			"terminal release recovery replay assignment changed",
+			"terminal release recovery replay authority changed",
 		)
 	}
 	if !slices.Equal(task.Result.Projects, result.Projects) {

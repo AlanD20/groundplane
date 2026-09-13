@@ -74,6 +74,16 @@ func validateBlueprintCandidateManifest(
 	return nil
 }
 
+func blueprintCandidateCompensationResult(task TaskRecord, result TaskResultRecord) (*TaskResultRecord, error) {
+	if result.FailedStepID == "" && result.Diagnostic == TaskResultDiagnosticTimeoutBeforeEffect {
+		return nil, nil
+	}
+	if result.FailedStepID == "" || !taskContainsStep(task, result.FailedStepID) {
+		return nil, errs.New(errs.KindReleaseRecoveryRequired, "Blueprint failure lacks an exact failed step")
+	}
+	return &result, nil
+}
+
 func validateBlueprintCandidateCompensation(
 	intent domain.Intent,
 	render ReleaseRenderInput,
@@ -335,14 +345,36 @@ func (repository *TaskRepository) blueprintCandidateLiveWriterAuthority(
 	return Condition{Key: key, ModRevision: read.Values[0].ModRevision}, nil
 }
 
-func (repository *TaskRepository) blueprintCandidateAuthority(
+type blueprintCandidateAuthoritySnapshot struct {
+	conditions        []Condition
+	manifest          ReleaseStagedManifest
+	epochValue        []byte
+	epochRevision     int64
+	desiredRevisionID string
+}
+
+// Retry authorizes new execution, unlike acknowledgement of an already-owned
+// execution. It must still target the current input and unchanged terminal epoch.
+func (authority blueprintCandidateAuthoritySnapshot) validateRetry(task TaskRecord, terminalRevision int64) error {
+	if authority.desiredRevisionID != task.Params[EnvironmentDesiredRevisionParam] {
+		return errs.New(errs.KindStateConflict, "Blueprint desired head changed")
+	}
+	if terminalRevision <= 0 || authority.epochRevision != terminalRevision {
+		return errs.New(errs.KindStateConflict, "Blueprint mutation epoch changed")
+	}
+	return nil
+}
+
+// Read the sealed execution and captured applied inputs independently of current
+// desired input. Every observed authority remains compared in the terminal commit;
+// this snapshot cannot itself authorize dispatch or release a live writer.
+func (repository *TaskRepository) readBlueprintCandidateAuthority(
 	ctx context.Context,
 	task TaskRecord,
 	publicationID string,
 	appliedPredecessor taskMaterializationAppliedPredecessor,
-	epochAuthorityRevision int64,
 	revision int64,
-) ([]Condition, ReleaseStagedManifest, []byte, error) {
+) (blueprintCandidateAuthoritySnapshot, error) {
 	desiredRevisionID := task.Params[EnvironmentDesiredRevisionParam]
 	keys := []string{
 		releasePublicationKey(publicationID),
@@ -354,51 +386,55 @@ func (repository *TaskRepository) blueprintCandidateAuthority(
 	}
 	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
-		return nil, ReleaseStagedManifest{}, nil, err
+		return blueprintCandidateAuthoritySnapshot{}, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) ||
 		read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil ||
 		read.Values[3] == nil || read.Values[4] == nil {
-		return nil, ReleaseStagedManifest{}, nil, corruptReleaseRecord()
+		return blueprintCandidateAuthoritySnapshot{}, corruptReleaseRecord()
 	}
 	marker, err := decodeReleaseRecord[ReleasePublicationMarker](read.Values[0].Value, "release-publication")
 	if err != nil {
-		return nil, ReleaseStagedManifest{}, nil, corruptReleaseRecord()
+		return blueprintCandidateAuthoritySnapshot{}, corruptReleaseRecord()
 	}
 	manifest, err := decodeReleaseRecord[ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
 	if err != nil || validateBlueprintCandidateManifest(task, marker, manifest) != nil {
-		return nil, ReleaseStagedManifest{}, nil, corruptReleaseRecord()
+		return blueprintCandidateAuthoritySnapshot{}, corruptReleaseRecord()
 	}
 	headRevisionID, err := decodeTaskReference(read.Values[3].Value)
-	if err != nil || headRevisionID != desiredRevisionID {
-		return nil, ReleaseStagedManifest{}, nil, errs.New(errs.KindStateConflict, "Blueprint desired head changed")
+	if err != nil || ids.Validate(ids.KindTask, headRevisionID) != nil {
+		return blueprintCandidateAuthoritySnapshot{}, corruptReleaseRecord()
+	}
+	epoch, err := decodeEnvironmentMutationEpochRecord(read.Values[2].Value)
+	if err != nil || epoch.EnvironmentID != task.Owner.EnvironmentID {
+		return blueprintCandidateAuthoritySnapshot{}, errs.New(
+			errs.KindStateConflict,
+			"blueprint mutation epoch is invalid",
+		)
 	}
 	seal, err := decodeEnvironmentBlueprintSeal(read.Values[4].Value)
 	if err != nil || seal.EnvironmentID != task.Owner.EnvironmentID ||
 		seal.RevisionID != desiredRevisionID || seal.SourceKind != EnvironmentBlueprintSourceApply ||
 		seal.RenderGeneration != uint64(task.RenderGeneration) {
-		return nil, ReleaseStagedManifest{}, nil, corruptReleaseRecord()
+		return blueprintCandidateAuthoritySnapshot{}, corruptReleaseRecord()
 	}
 	observedPredecessor, predecessorErr := taskMaterializationAppliedPredecessorFromValue(
 		read.Values[5], task.Owner.EnvironmentID, task.RenderGeneration,
 	)
 	if predecessorErr != nil || observedPredecessor != appliedPredecessor {
-		return nil, ReleaseStagedManifest{}, nil, errs.New(
+		return blueprintCandidateAuthoritySnapshot{}, errs.New(
 			errs.KindStateConflict,
 			"blueprint applied predecessor changed",
-		)
-	}
-	if epochAuthorityRevision <= 0 || read.Values[2].ModRevision != epochAuthorityRevision {
-		return nil, ReleaseStagedManifest{}, nil, errs.New(
-			errs.KindStateConflict,
-			"Blueprint mutation epoch changed",
 		)
 	}
 	conditions := make([]Condition, len(keys))
 	for index, key := range keys {
 		conditions[index] = Condition{Key: key, ModRevision: keyValueRevision(read.Values[index])}
 	}
-	return conditions, manifest, slices.Clone(read.Values[2].Value), nil
+	return blueprintCandidateAuthoritySnapshot{
+		conditions: conditions, manifest: manifest, epochValue: slices.Clone(read.Values[2].Value),
+		epochRevision: read.Values[2].ModRevision, desiredRevisionID: headRevisionID,
+	}, nil
 }
 
 func (repository *TaskRepository) blueprintCandidateAttempts(

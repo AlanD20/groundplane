@@ -17,6 +17,10 @@ func (repository *TaskRepository) prepareReleaseTerminalReport(
 		(task.Type != TaskScript && task.Params[TaskReleasePublicationParam] == "") {
 		return nil, nil
 	}
+	if task.Params[TaskReleasePublicationParam] != "" && assignment.ExecutionMode == TaskExecutionModeForward &&
+		(result.ExecutionEpoch != assignment.ExecutionEpoch || result.ReleaseRecoveryRecordSHA256 != "") {
+		return nil, errs.New(errs.KindStateConflict, "release terminal execution epoch changed")
+	}
 	var conditions []Condition
 	if taskHasScriptClosingReport(task) {
 		report, value, err := repository.readScriptClosingReport(ctx, current)

@@ -2857,7 +2857,7 @@ func TestBackupRuntimeRepositoryRoutesAbortAndTimeoutThroughDomainTerminal(t *te
 						test.status,
 						TaskResultRecord{
 							Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
-							ReconciliationRequired: true,
+							ReconciliationRequired: true, ExecutionEpoch: 1,
 						},
 						run.CreatedAt.Add(2*time.Second),
 					)
@@ -2886,7 +2886,7 @@ func TestBackupRuntimeRepositoryRoutesAbortAndTimeoutThroughDomainTerminal(t *te
 			} else {
 				result := TaskResultRecord{
 					Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
-					ReconciliationRequired: true,
+					ReconciliationRequired: true, ExecutionEpoch: 1,
 				}
 				replay, replayErr := tasks.AcknowledgeTask(
 					context.Background(), agentID, 1, run.TaskID, assignmentID,
@@ -3069,7 +3069,7 @@ func TestBackupRuntimeRepositoryRoutesPruneAbortAndTimeoutThroughDomainTerminal(
 						test.status,
 						TaskResultRecord{
 							Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
-							ReconciliationRequired: true,
+							ReconciliationRequired: true, ExecutionEpoch: 1,
 						},
 						dispatch.CreatedAt.Add(2*time.Second),
 					)
@@ -3101,7 +3101,7 @@ func TestBackupRuntimeRepositoryRoutesPruneAbortAndTimeoutThroughDomainTerminal(
 			} else {
 				result := TaskResultRecord{
 					Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
-					ReconciliationRequired: true,
+					ReconciliationRequired: true, ExecutionEpoch: 1,
 				}
 				replay, replayErr := tasks.AcknowledgeTask(
 					context.Background(), agentID, 1, dispatch.TaskID, assignmentID,

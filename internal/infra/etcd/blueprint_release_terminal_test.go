@@ -547,7 +547,7 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesSealedWorkloadAndPreservesDe
 		t.Fatal(err)
 	}
 	failureResult := TaskResultRecord{
-		Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone, FailedStepID: stepID,
+		Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone, FailedStepID: stepID, ExecutionEpoch: 1,
 		RecreateEvidence: []TaskRecreateEvidence{{
 			ServiceID: serviceID, ReleaseID: priorReleaseID, ArtifactID: priorArtifactID,
 			Target: string(domain.WorkloadSingleton), Compensated: true,
@@ -773,7 +773,11 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesSealedWorkloadAndPreservesDe
 		retryUnproven.Values[2].ModRevision != retryAuthorityRevision {
 		t.Fatalf("unproven Blueprint retry failure wrote state = %#v, %v", retryUnproven, err)
 	}
-	completedResult := TaskResultRecord{Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone}
+	completedResult := TaskResultRecord{
+		Kind:           TaskResultCompose,
+		Diagnostic:     TaskResultDiagnosticNone,
+		ExecutionEpoch: 1,
+	}
 	completedVersion, err := repository.AcknowledgeTask(
 		ctx, agentID, 4, task.ID, assignment.AssignmentID,
 		TaskStatusCompleted, completedResult, now.Add(5*time.Second),

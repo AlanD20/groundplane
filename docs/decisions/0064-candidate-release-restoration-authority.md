@@ -195,6 +195,13 @@ Environment projection remains unchanged. For `candidate_absence`, no candidate
 workload is present and no applied predecessor is invented. Exact terminal replay is
 read-only; different evidence or an old epoch conflicts.
 
+The terminal Task result retains its execution epoch and recovery-record digest
+after the live assignment is removed. Persistence compares that authority on the
+first report and on replay; transport-only checks are insufficient. Recovery
+replay must compare the submitted authority before normalizing the result to the
+recorded failure. A timeout proven to precede all effects requires no compensation
+on either first acknowledgement or replay. The diagnostic alone is not that proof.
+
 ### Private Agent wire
 
 The private protobuf contract contains only the closed restoration target,

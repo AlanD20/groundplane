@@ -119,30 +119,27 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 	if err != nil {
 		return blueprintCandidateTerminalChange{}, err
 	}
-	baseConditions, manifest, epochValue, err := repository.blueprintCandidateAuthority(
-		ctx, task, publicationID, *writer.BlueprintAppliedPredecessor, writerCondition.ModRevision, revision,
+	authority, err := repository.readBlueprintCandidateAuthority(
+		ctx, task, publicationID, *writer.BlueprintAppliedPredecessor, revision,
 	)
 	if err != nil {
 		return blueprintCandidateTerminalChange{}, err
 	}
+	defer clear(authority.epochValue)
+	baseConditions, manifest, epochValue := authority.conditions, authority.manifest, authority.epochValue
 	_, procedure, err := repository.candidateReleaseDescriptorAtRevision(ctx, task, revision)
 	if err != nil || validateAssignmentRestorationDescriptor(task, assignment, procedure) != nil {
 		return blueprintCandidateTerminalChange{}, corruptTaskAssignment()
 	}
-	defer clear(epochValue)
 	baseConditions, err = appendBlueprintCandidateCondition(baseConditions, writerCondition)
 	if err != nil {
 		return blueprintCandidateTerminalChange{}, err
 	}
 	var compensationResult *TaskResultRecord
 	if terminalStatus != TaskStatusCompleted {
-		if result.FailedStepID == "" && result.Diagnostic == TaskResultDiagnosticTimeoutBeforeEffect {
-			compensationResult = nil
-		} else if result.FailedStepID == "" || !taskContainsStep(task, result.FailedStepID) {
-			return blueprintCandidateTerminalChange{}, errs.New(errs.KindReleaseRecoveryRequired,
-				"Blueprint failure lacks an exact failed step")
-		} else {
-			compensationResult = &result
+		compensationResult, err = blueprintCandidateCompensationResult(task, result)
+		if err != nil {
+			return blueprintCandidateTerminalChange{}, err
 		}
 	}
 	candidateConditions, err := repository.validateBlueprintCandidateUnpublished(
@@ -388,8 +385,14 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 				task.Result.Kind != TaskResultCompose {
 				return corruptReleaseRecord()
 			}
-			if proofErr := validateBlueprintCandidateCompensation(intent, render, *task.Result); proofErr != nil {
+			compensationResult, proofErr := blueprintCandidateCompensationResult(task, *task.Result)
+			if proofErr != nil {
 				return proofErr
+			}
+			if compensationResult != nil {
+				if proofErr := validateBlueprintCandidateCompensation(intent, render, *compensationResult); proofErr != nil {
+					return proofErr
+				}
 			}
 			continue
 		}
@@ -460,13 +463,17 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 	if err != nil {
 		return releaseTaskRetryChange{}, err
 	}
-	baseConditions, manifest, epochValue, err := repository.blueprintCandidateAuthority(
-		ctx, source, publicationID, sourceAuthority.AppliedPredecessor,
-		sourceAuthorityCondition.ModRevision, revision,
+	authority, err := repository.readBlueprintCandidateAuthority(
+		ctx, source, publicationID, sourceAuthority.AppliedPredecessor, revision,
 	)
 	if err != nil {
 		return releaseTaskRetryChange{}, err
 	}
+	defer clear(authority.epochValue)
+	if err := authority.validateRetry(source, sourceAuthorityCondition.ModRevision); err != nil {
+		return releaseTaskRetryChange{}, err
+	}
+	baseConditions, manifest, epochValue := authority.conditions, authority.manifest, authority.epochValue
 	descriptor, procedure, err := repository.candidateReleaseDescriptorAtRevision(ctx, source, revision)
 	if err != nil {
 		return releaseTaskRetryChange{}, corruptReleaseRecord()
@@ -479,7 +486,6 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 	if _, err := validateReleaseCandidateDescriptor(descriptor, retry, manifest); err != nil {
 		return releaseTaskRetryChange{}, err
 	}
-	defer clear(epochValue)
 	baseConditions, err = appendBlueprintCandidateCondition(baseConditions, sourceAuthorityCondition)
 	if err != nil {
 		return releaseTaskRetryChange{}, err

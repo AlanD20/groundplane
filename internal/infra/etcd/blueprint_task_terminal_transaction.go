@@ -228,5 +228,10 @@ func (repository *TaskRepository) transactTaskTerminal(
 		}
 		return TransactionResult{}, sourceAdvance.execute(ctx, repository)
 	}
-	return repository.blueprintTerminalStore.TransactBlueprintTaskTerminal(ctx, envelope)
+	transaction, err := repository.blueprintTerminalStore.TransactBlueprintTaskTerminal(ctx, envelope)
+	if err == nil && !transaction.Succeeded {
+		clearKeyValues(transaction.FailureReads)
+		return TransactionResult{}, errs.New(errs.KindStateConflict, "blueprint terminal authority changed")
+	}
+	return transaction, err
 }
