@@ -24,7 +24,8 @@ func validEnvironmentComponentOwnership(
 	}
 	switch plan.GetOperation() {
 	case agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY, agentpb.PlanOperation_PLAN_OPERATION_RECONCILE,
-		agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK:
+		agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK,
+		agentpb.PlanOperation_PLAN_OPERATION_ATTACH, agentpb.PlanOperation_PLAN_OPERATION_DETACH:
 	default:
 		return false
 	}
@@ -49,6 +50,12 @@ func validEnvironmentComponentOwnership(
 	}
 	if matches != 1 || owners != 1 {
 		return false
+	}
+	if plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_ATTACH ||
+		plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_DETACH {
+		// Attach may retain a Component, but its closed workload selection can
+		// never start or mutate that Component, even for a stopped consumer.
+		return validAttachMutationSelection(plan, artifact)
 	}
 	for _, step := range plan.GetSteps() {
 		apply := step.GetComposeApply()

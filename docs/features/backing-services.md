@@ -174,7 +174,9 @@ Standalone Attach and Detach capture native runtime, current Entry bindings and
 running intent at one fixed revision. Their immutable input retains that capture;
 the Environment mutation epoch fences publication. Network changes target the
 selected active physical workloads, keep historical Release labels and exclude
-stable proxies, inactive slots and dependencies. A stopped or configured-only
+Components, stable proxies, inactive slots and dependencies. Retained Component
+ownership never authorizes Component startup, recreation or lifecycle steps in
+an Attach or Detach plan. A stopped or configured-only
 consumer validates Compose without starting a container. The complete Attach
 union replaces the old managed network overlay; ordinary-name containers are
 not substitutes for native workloads.

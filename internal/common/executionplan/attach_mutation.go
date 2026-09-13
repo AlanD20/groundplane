@@ -18,9 +18,7 @@ func validAttachMutationOwnership(
 		(plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_ATTACH &&
 			plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_DETACH) ||
 		artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
-		labels[labelComponentID] != "" || ids.Validate(ids.KindPlan, labels[labelPlanID]) != nil ||
-		len(plan.GetArtifacts()) != 1 ||
-		plan.GetArtifacts()[0].GetArtifactId() != artifact.GetArtifactId() {
+		labels[labelComponentID] != "" || ids.Validate(ids.KindPlan, labels[labelPlanID]) != nil {
 		return false
 	}
 	generation, err := strconv.ParseUint(labels[labelRenderGen], 10, 64)
@@ -28,9 +26,17 @@ func validAttachMutationOwnership(
 		strconv.FormatUint(generation, 10) != labels[labelRenderGen] {
 		return false
 	}
+	return validAttachMutationSelection(plan, artifact)
+}
+
+func validAttachMutationSelection(plan *agentpb.ExecutionPlan, artifact *agentpb.ComposeArtifact) bool {
+	if len(plan.GetArtifacts()) != 1 ||
+		plan.GetArtifacts()[0].GetArtifactId() != artifact.GetArtifactId() {
+		return false
+	}
 	composeSteps := 0
 	for _, step := range plan.GetSteps() {
-		if step.GetComposeApply() == nil {
+		if step.GetAdapterProcedure() != nil {
 			continue
 		}
 		composeSteps++
@@ -45,8 +51,8 @@ func validAttachMutationOwnership(
 }
 
 // AttachMutationServices narrows an Attach/Detach Compose apply to currently
-// running workloads. Stable proxies and inactive native slots keep their
-// captured configuration without being started by the network mutation.
+// running workloads. Components, stable proxies and inactive native slots keep
+// their captured configuration without being started by the network mutation.
 func AttachMutationServices(
 	plan *agentpb.ExecutionPlan,
 	stepID string,
@@ -61,7 +67,7 @@ func AttachMutationServices(
 			continue
 		}
 		apply := step.GetComposeApply()
-		if apply == nil || apply.GetArtifactId() == "" || apply.GetFullReconcile() ||
+		if apply == nil || apply.GetArtifactId() == "" || apply.GetFullReconcile() || apply.GetForceRecreate() ||
 			!apply.GetNoDependencies() {
 			return nil, true, errs.New(errs.KindValidationFailed, "Attach runtime selection is invalid")
 		}
@@ -89,6 +95,7 @@ func AttachMutationServices(
 		var names []string
 		for _, service := range artifact.GetServices() {
 			if service == nil || !selected[service.GetServiceId()] || service.GetExpectedReplicas() == 0 ||
+				service.GetOwnerComponentId() != "" ||
 				service.GetRole() == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
 				continue
 			}
