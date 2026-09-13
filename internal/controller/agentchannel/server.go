@@ -832,9 +832,11 @@ func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) etcd.TaskResultR
 	result := acknowledgement.GetComposeResult()
 	diagnostic := etcd.TaskResultDiagnosticNone
 	switch result.GetDiagnostic() {
-	case agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CONFIG_REJECTED:
+	case agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CONFIG_REJECTED,
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_CONFIG_REJECTED:
 		diagnostic = etcd.TaskResultDiagnosticConfigRejected
-	case agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED:
+	case agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED,
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED:
 		diagnostic = etcd.TaskResultDiagnosticComposeFailed
 	}
 	durable := etcd.TaskResultRecord{
@@ -924,11 +926,7 @@ func validateComposeTaskResult(acknowledgement *agentpb.TaskAck) error {
 			previous = identity
 		}
 	}
-	switch result.GetDiagnostic() {
-	case agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
-		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CONFIG_REJECTED,
-		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED:
-	default:
+	if !validComposeTaskDiagnostic(result.GetDiagnostic()) {
 		return errs.New(errs.KindValidationFailed, "Agent Compose Task diagnostic is invalid")
 	}
 	if acknowledgement.GetTerminal() == agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED &&

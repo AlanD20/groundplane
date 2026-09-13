@@ -40,7 +40,7 @@ func TestEnvironmentDirectoryAcknowledgementUsesAtomicProvisioningPath(t *testin
 			EnvironmentDirectoryResult: &agentpb.EnvironmentDirectoryTaskResult{},
 		},
 	}
-	if err := server.acknowledge(context.Background(), agentID, 7, acknowledgement); err != nil {
+	if _, err := server.acknowledge(context.Background(), agentID, 7, acknowledgement); err != nil {
 		t.Fatalf("acknowledge() error = %v", err)
 	}
 	if store.genericCalled || !store.environmentCalled || store.environmentID != environmentID ||

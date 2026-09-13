@@ -267,12 +267,22 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				if s.tasks == nil {
 					return status.Error(codes.Internal, "agent task store is not configured")
 				}
-				if err := s.acknowledge(
+				stage, err := s.acknowledge(
 					stream.Context(),
 					authenticate.AgentId,
 					authorization.Generation,
 					acknowledgement,
-				); err != nil {
+				)
+				if err != nil {
+					if quarantineTaskReportConflict(stage, err, acknowledgement, delivered, quarantined) {
+						slog.Warn(
+							"controller: quarantine rejected Agent Task report",
+							slog.String("task_id", acknowledgement.TaskId),
+							slog.String("assignment_id", acknowledgement.AssignmentId),
+							slog.Any("error", err),
+						)
+						continue
+					}
 					slog.Error(
 						"controller: acknowledge Agent Task",
 						slog.String("task_id", acknowledgement.TaskId),

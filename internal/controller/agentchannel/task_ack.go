@@ -14,20 +14,27 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+type taskReportStage uint8
+
+const (
+	taskReportRejected taskReportStage = iota
+	taskReportApplicationAttempted
+)
+
 func (s *Server) acknowledge(
 	ctx context.Context,
 	agentID string,
 	agentGeneration uint64,
 	acknowledgement *agentpb.TaskAck,
-) error {
+) (taskReportStage, error) {
 	if acknowledgement == nil ||
 		ids.Validate(ids.KindAssignment, acknowledgement.AssignmentId) != nil ||
 		len(acknowledgement.PlanHash) != 32 || acknowledgement.GetExecutionEpoch() == 0 {
-		return errs.New(errs.KindValidationFailed, "Agent Task acknowledgement is invalid")
+		return taskReportRejected, errs.New(errs.KindValidationFailed, "Agent Task acknowledgement is invalid")
 	}
 	task, err := s.tasks.GetTask(ctx, acknowledgement.TaskId)
 	if err != nil {
-		return err
+		return taskReportRejected, err
 	}
 	if assignments, ok := s.tasks.(interface {
 		GetTaskAssignment(context.Context, string) (etcd.TaskAssignment, error)
@@ -35,17 +42,23 @@ func (s *Server) acknowledge(
 		assignment, assignmentErr := assignments.GetTaskAssignment(ctx, acknowledgement.GetTaskId())
 		terminalReplay := assignmentErr != nil && task.Record.Result != nil && task.Record.TerminalAssignment != nil
 		if assignmentErr != nil && !terminalReplay {
-			return assignmentErr
+			return taskReportRejected, assignmentErr
 		}
 		if !terminalReplay && assignment.Assignment.Record.AssignmentID != acknowledgement.GetAssignmentId() {
-			return errs.New(errs.KindStateConflict, "Agent Task acknowledgement execution epoch does not match")
+			return taskReportRejected, errs.New(
+				errs.KindStateConflict,
+				"Agent Task acknowledgement execution epoch does not match",
+			)
 		}
 		if terminalReplay {
 			if task.Record.Result.ExecutionEpoch != acknowledgement.GetExecutionEpoch() ||
 				task.Record.Result.ReleaseRecoveryRecordSHA256 != hex.EncodeToString(
 					acknowledgement.GetReleaseRecoveryRecordSha256(),
 				) {
-				return errs.New(errs.KindStateConflict, "Agent terminal acknowledgement replay authority changed")
+				return taskReportRejected, errs.New(
+					errs.KindStateConflict,
+					"Agent terminal acknowledgement replay authority changed",
+				)
 			}
 		} else {
 			recoveryDigest, decodeErr := hex.DecodeString(assignment.Assignment.Record.ReleaseRecoveryRecordSHA256)
@@ -53,36 +66,42 @@ func (s *Server) acknowledge(
 				acknowledgement.GetExecutionEpoch() < assignment.Assignment.Record.ExecutionEpoch &&
 				len(acknowledgement.GetReleaseRecoveryRecordSha256()) == 0
 			if !oldPrimaryReplay && assignment.Assignment.Record.ExecutionEpoch != acknowledgement.GetExecutionEpoch() {
-				return errs.New(errs.KindStateConflict, "Agent Task acknowledgement execution epoch does not match")
+				return taskReportRejected, errs.New(
+					errs.KindStateConflict,
+					"Agent Task acknowledgement execution epoch does not match",
+				)
 			}
 			if !oldPrimaryReplay && (decodeErr != nil || !bytes.Equal(recoveryDigest, acknowledgement.GetReleaseRecoveryRecordSha256())) {
-				return errs.New(errs.KindStateConflict, "Agent Task acknowledgement recovery digest does not match")
+				return taskReportRejected, errs.New(
+					errs.KindStateConflict,
+					"Agent Task acknowledgement recovery digest does not match",
+				)
 			}
 		}
 	}
 	environmentTarget := ids.Validate(ids.KindEnvironment, task.Record.Target) == nil
 	environmentCreation := task.Record.Type == etcd.TaskCreate && environmentTarget
 	if s.plans == nil {
-		return errs.New(errs.KindInternal, "Agent Task plan resolver is not configured")
+		return taskReportRejected, errs.New(errs.KindInternal, "Agent Task plan resolver is not configured")
 	}
 	plan, err := s.plans.ResolveExecutionPlan(ctx, task.Record)
 	if err != nil {
-		return err
+		return taskReportRejected, err
 	}
 	environmentDirectory := executionplan.UsesEnvironmentDirectoryResult(plan)
 	if environmentDirectory {
 		if err := validateEnvironmentDirectoryTaskResult(acknowledgement); err != nil {
-			return err
+			return taskReportRejected, err
 		}
 	} else if err := validateComposeTaskResult(acknowledgement); err != nil {
-		return err
+		return taskReportRejected, err
 	}
 	if err := validateDNSResolverResultShape(acknowledgement, plan); err != nil {
-		return err
+		return taskReportRejected, err
 	}
 	planHash, err := hex.DecodeString(task.Record.PlanHash)
 	if err != nil || !bytes.Equal(planHash, acknowledgement.PlanHash) {
-		return errs.New(
+		return taskReportRejected, errs.New(
 			errs.KindStateConflict,
 			"Agent Task acknowledgement plan hash does not match",
 		)
@@ -98,7 +117,7 @@ func (s *Server) acknowledge(
 	case agentpb.TaskTerminal_TASK_TERMINAL_ABORTED:
 		terminal = etcd.TaskStatusAborted
 	default:
-		return errs.New(
+		return taskReportRejected, errs.New(
 			errs.KindValidationFailed,
 			"Agent Task acknowledgement terminal state is invalid",
 		)
@@ -106,7 +125,10 @@ func (s *Server) acknowledge(
 	if environmentCreation {
 		store, ok := s.tasks.(environmentCreationTaskStore)
 		if !ok {
-			return errs.New(errs.KindInternal, "Environment creation Task store is not configured")
+			return taskReportRejected, errs.New(
+				errs.KindInternal,
+				"Environment creation Task store is not configured",
+			)
 		}
 		_, err = store.AcknowledgeEnvironmentCreation(
 			ctx,
@@ -137,7 +159,37 @@ func (s *Server) acknowledge(
 			s.now().UTC(),
 		)
 	}
-	return err
+	return taskReportApplicationAttempted, err
+}
+
+func quarantineTaskReportConflict(
+	stage taskReportStage,
+	err error,
+	acknowledgement *agentpb.TaskAck,
+	delivered map[string]string,
+	quarantined map[string]string,
+) bool {
+	kind, ok := errs.KindOf(err)
+	if stage != taskReportApplicationAttempted || !ok || kind != errs.KindStateConflict || acknowledgement == nil ||
+		delivered[acknowledgement.GetTaskId()] != acknowledgement.GetAssignmentId() {
+		return false
+	}
+	delete(delivered, acknowledgement.GetTaskId())
+	quarantined[acknowledgement.GetTaskId()] = acknowledgement.GetAssignmentId()
+	return true
+}
+
+func validComposeTaskDiagnostic(diagnostic agentpb.ComposeHelperDiagnostic) bool {
+	switch diagnostic {
+	case agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CONFIG_REJECTED,
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED,
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_CONFIG_REJECTED,
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED:
+		return true
+	default:
+		return false
+	}
 }
 
 func validateDNSResolverResultShape(acknowledgement *agentpb.TaskAck, plan *agentpb.ExecutionPlan) error {

@@ -47,6 +47,7 @@ func (s *Server) dispatchReady(
 		return nil
 	}
 	remaining := capacity
+	claimCapacity := authorization.Config.MaxConcurrentTasks - int32(len(recovered))
 	for _, assignment := range recovered {
 		if !session.AssignmentsAllowed() {
 			return nil
@@ -61,6 +62,7 @@ func (s *Server) dispatchReady(
 				return err
 			}
 			if controllerCompletedAssignment(assignment) {
+				claimCapacity++
 				continue
 			}
 		}
@@ -93,7 +95,7 @@ func (s *Server) dispatchReady(
 			return nil
 		}
 	}
-	for remaining > 0 {
+	for remaining > 0 && claimCapacity > 0 {
 		if !session.AssignmentsAllowed() {
 			return nil
 		}
@@ -109,6 +111,7 @@ func (s *Server) dispatchReady(
 		if !found || !session.AssignmentsAllowed() {
 			return nil
 		}
+		claimCapacity--
 		if err := validateAgentDispatchClaim(
 			assignment,
 			agentID,

@@ -63,6 +63,24 @@ non-compaction storage failures forever.
 
 ## Technical design
 
+### Agent report failures
+
+The Agent's closed Component failure diagnostics map to the existing durable
+Task classes: configuration rejection to `config_rejected`, activation failure
+to `compose_failed`. They must never become `none` or an unknown wire value.
+
+After report validation, a durable publication conflict for the exact assignment
+delivered on the current session quarantines that assignment for that session.
+The Controller logs the reason and keeps the Agent connection alive. It does not
+record terminal success, release ownership or repeatedly redispatch the same
+conflicting report. A new session can resume the existing recovery authority.
+Authentication, malformed reports, stale authority and other protocol failures
+remain strict connection errors.
+
+Ready reports describe actual worker capacity; they do not erase durable claims.
+Unrelated work can proceed only within both limits. With concurrency one, an
+unresolved assignment still prevents a new claim even though the Agent is online.
+
 | Concern | Current technical contract |
 | --- | --- |
 | Atomic mutation replay and operation ownership | [Durable idempotency](../decisions/0021-durable-mutation-idempotency.md) |

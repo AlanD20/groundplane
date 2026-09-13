@@ -388,7 +388,7 @@ func TestAcknowledgeEnvironmentRemovalAcceptsDirectoryResult(t *testing.T) {
 		}}},
 	}}, now: func() time.Time { return now }}
 
-	err := server.acknowledge(context.Background(), testAgentID, 1, &agentpb.TaskAck{
+	_, err := server.acknowledge(context.Background(), testAgentID, 1, &agentpb.TaskAck{
 		TaskId: taskID, AssignmentId: assignmentID, PlanHash: planHash[:],
 		ExecutionEpoch: 1,
 		Terminal:       agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED,
@@ -438,12 +438,12 @@ func TestAcknowledgeTerminalRecoveryReplaySurvivesAssignmentCleanup(t *testing.T
 			Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
 		}},
 	}
-	if err := server.acknowledge(context.Background(), testAgentID, 1, ack); err != nil {
+	if _, err := server.acknowledge(context.Background(), testAgentID, 1, ack); err != nil {
 		t.Fatalf("exact terminal replay error = %v", err)
 	}
 	changed := proto.Clone(ack).(*agentpb.TaskAck)
 	changed.ReleaseRecoveryRecordSha256[0] ^= 0xff
-	if err := server.acknowledge(context.Background(), testAgentID, 1, changed); !errors.Is(
+	if _, err := server.acknowledge(context.Background(), testAgentID, 1, changed); !errors.Is(
 		err,
 		errs.New(errs.KindStateConflict, ""),
 	) {
@@ -1342,7 +1342,7 @@ func TestServerRejectsMissingAssignmentIdentityOnAgentWrites(t *testing.T) {
 	); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("recordTaskEvent(missing assignment) error = %v, want validation failed", err)
 	}
-	if err := server.acknowledge(
+	if _, err := server.acknowledge(
 		context.Background(), testAgentID, 1, &agentpb.TaskAck{PlanHash: make([]byte, 32)},
 	); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("acknowledge(missing assignment) error = %v, want validation failed", err)
