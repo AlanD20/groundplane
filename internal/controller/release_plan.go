@@ -447,13 +447,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 			}
 			continue
 		}
-		priorConfig, err := domain.RenderProxyConfig(
-			member.Render.ServiceName,
-			priorReleaseID,
-			member.Render.PriorTarget,
-			member.Render.PriorProxyGeneration,
-			member.Render.ProxyPorts,
-		)
+		priorConfig, err := releasePriorProxyConfig(member, priorArtifacts[member.Render.ServiceID])
 		if err != nil {
 			return nil, err
 		}

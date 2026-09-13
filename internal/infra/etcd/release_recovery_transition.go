@@ -260,11 +260,14 @@ func (repository *TaskRepository) releaseRecoveryAcknowledgementAtRevision(
 		)
 	}
 	procedure, kinds, conditions, err := repository.recoveryProofSelectionAtRevision(ctx, task, assignment, revision)
-	if err != nil || validateReleaseRecoveryProof(assignment, procedure, result, kinds) != nil {
+	if err != nil {
 		return releaseRecoveryAcknowledgement{}, errs.New(
 			errs.KindStateConflict,
-			"release recovery proof does not match selected authority",
+			"release recovery authority selection failed",
 		)
+	}
+	if err := validateReleaseRecoveryProof(assignment, procedure, result, kinds); err != nil {
+		return releaseRecoveryAcknowledgement{}, errs.Wrap(errs.KindStateConflict, err)
 	}
 	componentEffect, err := repository.releaseComponentEffectAtRevision(ctx, task, assignment, revision)
 	if err != nil {

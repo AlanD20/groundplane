@@ -119,10 +119,6 @@ func (service *Service) publish(
 			EnvironmentID: scope.Environment.Record.ID, EnvironmentName: scope.Environment.Record.Name,
 			AuthorizedVolumeDir: scope.Environment.Record.VolumeDir, Projection: scope.Compose.Record,
 		}
-		if err := configureReleaseProxy(&render, candidate.planning.Service.Record.Desired.Expose,
-			candidate.priorReleaseID, candidate.planning.Projection.Revision); err != nil {
-			return etcd.IdempotencyResponse{}, err
-		}
 		var priorRender *etcd.ReleaseRenderInput
 		if candidate.priorReleaseID != "" {
 			prior, err := service.ledger.GetReleaseRenderInputAt(ctx, candidate.priorReleaseID, scope.ReadRevision)
@@ -136,6 +132,10 @@ func (service *Service) publish(
 				)
 			}
 			priorRender = &prior.Record
+		}
+		if err := configureReleaseProxy(&render, candidate.planning.Service.Record.Desired.Expose,
+			priorRender, candidate.planning.Projection.Revision); err != nil {
+			return etcd.IdempotencyResponse{}, err
 		}
 		if err := service.plans.PrepareReleaseProxyImage(&render, priorRender); err != nil {
 			return etcd.IdempotencyResponse{}, err

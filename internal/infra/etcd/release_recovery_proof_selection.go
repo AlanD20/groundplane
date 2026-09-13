@@ -9,6 +9,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -106,16 +107,29 @@ func validateReleaseRecoveryProof(
 			if kind == releaseRecoveryProofProxy || kind == releaseRecoveryProofCaptured && proxy != nil {
 				generation, generationErr := executionplan.ProxyConfigGeneration(proxy.GetProxyConfigJson(), releaseID)
 				if proxyIndex >= len(result.ProxyEvidence) {
-					return corruptTaskAssignment()
+					return errs.New(errs.KindStateConflict, "release recovery proxy evidence is missing")
 				}
 				evidence := result.ProxyEvidence[proxyIndex]
-				if generationErr != nil || evidence.ServiceID != candidate.ServiceID ||
-					evidence.ReleaseID != releaseID ||
-					evidence.Target != target ||
-					!evidence.Compensated ||
-					evidence.ConfigSHA256 != hex.EncodeToString(proxy.GetProxyConfigSha256()) ||
-					evidence.ProxyGeneration != generation {
-					return corruptTaskAssignment()
+				switch {
+				case generationErr != nil:
+					return errs.New(errs.KindStateConflict, "release recovery native proxy generation is invalid")
+				case evidence.ServiceID != candidate.ServiceID || evidence.ReleaseID != releaseID || evidence.Target != target:
+					return errs.New(
+						errs.KindStateConflict,
+						"release recovery proxy workload identity differs from native predecessor",
+					)
+				case !evidence.Compensated:
+					return errs.New(errs.KindStateConflict, "release recovery proxy restoration is not proven")
+				case evidence.ProxyGeneration != generation:
+					return errs.New(
+						errs.KindStateConflict,
+						"release recovery proxy generation differs from native predecessor",
+					)
+				case evidence.ConfigSHA256 != hex.EncodeToString(proxy.GetProxyConfigSha256()):
+					return errs.New(
+						errs.KindStateConflict,
+						"release recovery proxy configuration digest differs from native predecessor",
+					)
 				}
 				proxyIndex++
 			} else {

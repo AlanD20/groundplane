@@ -107,6 +107,13 @@ predecessor may have historical ownership; it cannot be a forward candidate via
 ComposeApply. Scoped predecessor removal and sealed recovery remain valid. An
 inactive predecessor needs the shared restoration pair for both captured artifacts.
 
+Proxy rollback uses the predecessor's captured configuration bytes, digest and
+generation. A mutable ledger revision is not proxy generation, and current names
+or exposed ports cannot reconstruct historical configuration. The next proxy
+generation advances beyond the serving generation. Conflicting rollback metadata
+fails before Task publication; terminal proof still requires the exact captured
+generation and digest and identifies which check failed.
+
 Claim validates staged witnesses and source revisions, then persists them in
 sorted assignment authority. It never selects a predecessor from the latest
 Environment applied artifact. Agent admission verifies exact plan-bound bytes,

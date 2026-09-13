@@ -17,7 +17,7 @@ func TestConfigureReleaseProxyFirstRecreateHasNoPriorAuthority(t *testing.T) {
 		Strategy: domain.StrategyRecreate, PriorStrategy: domain.StrategyRecreate,
 		CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
 	}
-	if err := configureReleaseProxy(&render, []string{"8080"}, "", 0); err != nil {
+	if err := configureReleaseProxy(&render, []string{"8080"}, nil, 0); err != nil {
 		t.Fatal(err)
 	}
 	if render.PriorProxyGeneration != 0 || render.PriorProxyDigest != "" {
@@ -47,7 +47,7 @@ func TestConfigureReleaseProxyFirstBlueGreenHasNoPriorAuthority(t *testing.T) {
 			ReplicaCount:       1,
 		},
 	}
-	if err := configureReleaseProxy(&render, []string{"8080"}, "", 0); err != nil {
+	if err := configureReleaseProxy(&render, []string{"8080"}, nil, 0); err != nil {
 		t.Fatal(err)
 	}
 	if render.PriorProxyGeneration != 0 || render.PriorProxyDigest != "" {
@@ -74,14 +74,21 @@ func TestConfigureReleaseProxyPreservesServingPredecessor(t *testing.T) {
 			ReplicaCount:       2,
 		},
 	}
-	if err := configureReleaseProxy(&render, []string{"8080"}, priorID, 7); err != nil {
-		t.Fatal(err)
-	}
 	want, err := domain.RenderProxyConfig("api", priorID, domain.WorkloadSingleton, 7, []uint16{8080})
 	if err != nil {
 		t.Fatal(err)
 	}
+	prior := &etcd.ReleaseRenderInput{ReleaseID: priorID, ProxyGeneration: 7,
+		ProxyConfigDigest: hex.EncodeToString(want.SHA256[:])}
+	// A ledger revision is not the serving proxy generation. Exposure edits
+	// also must not reconstruct historical proxy bytes from current decisions.
+	if err := configureReleaseProxy(&render, []string{"9090"}, prior, 1); err != nil {
+		t.Fatal(err)
+	}
 	if render.PriorProxyGeneration != 7 || render.PriorProxyDigest != hex.EncodeToString(want.SHA256[:]) {
 		t.Fatal("serving predecessor proxy authority was discarded or changed")
+	}
+	if render.ProxyGeneration != 8 {
+		t.Fatal("candidate proxy generation did not advance from its predecessor")
 	}
 }

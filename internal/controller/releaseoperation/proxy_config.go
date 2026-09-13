@@ -2,6 +2,7 @@ package releaseoperation
 
 import (
 	"encoding/hex"
+	"math"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -11,7 +12,7 @@ import (
 func configureReleaseProxy(
 	render *etcd.ReleaseRenderInput,
 	expose []string,
-	priorReleaseID string,
+	prior *etcd.ReleaseRenderInput,
 	revision uint64,
 ) error {
 	ports, err := domain.ProxyPorts(expose)
@@ -22,9 +23,15 @@ func configureReleaseProxy(
 		render.PriorSlot = ""
 		return nil
 	}
+	if revision == math.MaxUint64 || prior != nil && prior.ProxyGeneration == math.MaxUint64 {
+		return errs.New(errs.KindStateConflict, "release proxy generation is exhausted")
+	}
 	render.ProxyGeneration = revision + 1
 	if render.ProxyGeneration == 1 {
 		render.ProxyGeneration = 2
+	}
+	if prior != nil {
+		render.ProxyGeneration = max(render.ProxyGeneration, prior.ProxyGeneration+1)
 	}
 	render.ProxyPorts = ports
 	candidate, err := domain.RenderProxyConfig(
@@ -41,17 +48,9 @@ func configureReleaseProxy(
 	if render.PriorWorkload == nil {
 		return nil
 	}
-	render.PriorProxyGeneration = render.ProxyGeneration - 1
-	prior, err := domain.RenderProxyConfig(
-		render.ServiceName,
-		priorReleaseID,
-		render.PriorTarget,
-		render.PriorProxyGeneration,
-		ports,
-	)
-	if err != nil {
-		return err
+	if prior == nil || prior.ProxyGeneration == 0 || prior.ProxyConfigDigest == "" {
+		return errs.New(errs.KindStateConflict, "serving Release proxy authority is missing")
 	}
-	render.PriorProxyDigest = hex.EncodeToString(prior.SHA256[:])
+	render.PriorProxyGeneration, render.PriorProxyDigest = prior.ProxyGeneration, prior.ProxyConfigDigest
 	return nil
 }

@@ -40,6 +40,26 @@ func TestNativeRecreateRecoveryProofWithStableProxy(t *testing.T) {
 	}
 }
 
+// Rationale: a failure must identify a contradictory proxy generation or digest
+// without dumping secret-bearing artifact bytes or weakening exact validation.
+func TestRecoveryProxyMismatchIdentifiesFailedCheck(t *testing.T) {
+	for _, field := range []string{"generation", "configuration digest"} {
+		t.Run(field, func(t *testing.T) {
+			fixture, assignment, result, revision, _ := recoveryProofFixture(t, true)
+			if field == "generation" {
+				result.ProxyEvidence[0].ProxyGeneration++
+			} else {
+				result.ProxyEvidence[0].ConfigSHA256 = strings.Repeat("f", 64)
+			}
+			_, err := fixture.repository.releaseRecoveryAcknowledgementAtRevision(t.Context(),
+				fixture.claim.Task.Record, assignment, TaskStatusCompleted, result, revision)
+			if err == nil || !strings.Contains(err.Error(), "proxy "+field+" differs from native predecessor") {
+				t.Fatalf("mismatch did not identify %s: %v", field, err)
+			}
+		})
+	}
+}
+
 // Rationale: repository final acknowledgement must select exactly the immutable
 // ordinary render strategy, and source replacement or pruning must lose its CAS.
 func TestOrdinaryRecoveryProofSelectionAndSourceCAS(t *testing.T) {
