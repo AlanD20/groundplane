@@ -969,6 +969,26 @@ error; the successful rerun uses the ignored repository-local cache. Formatting
 and diff checks pass. This closes the local failure, not whole-case TASK-06,
 full CI, hosting continuity or live compaction qualification.
 
+#### Controller-Agent image, observation and materialization exchanges
+
+Reviewed and retained all 13 behavioral tests in the three files below. Each
+has a concrete reason and local proof limit; none is a confirmed tautology or
+duplicate. All 13 pass with the race detector in
+`.tmp/qa-test-review-agent-read-transfer.log`. Formatting and diff checks pass.
+
+| Reviewed tests | Retention reason and corrections | Matrix coverage or gap |
+| --- | --- | --- |
+| Five in [workload_images_test.go](../internal/controller/agentchannel/workload_images_test.go) | Unavailable correlation preserves Ready and queues no request; busy/stale responses cannot satisfy lookup; a replaced session returns unavailable; the Controller loop transports the exact selector/result; malformed/canceled lookups release their slot and retired responses cannot satisfy a later successful retry. Success now requires exact request, selector and local image identity, not just a nil error. | BP-08, SVC-05/10, HOST-05: local registry and in-memory stream, not Docker inspection, public preflight refusal, durable publication or network reconnect. |
+| Six in [service_observation_test.go](../internal/controller/agentchannel/service_observation_test.go) | Observation is independent of Task/image capacity; fresh exact correlation is required; replaced sessions and malformed rows fail without evidence; cancellation precedes replacement; offline/invalid/canceled reads retain the correct cause. Success now checks the full returned row and identity. The deadline check uses a ten-second parent and an independent five-second expectation, so omitting the product timeout can no longer pass. | OBS-01/03/04, HOST-05: local exchange and ordered sends, not actual container counts, serving-source revision races, public freshness or Agent worker teardown. |
+| Two in [materialization_sender_test.go](../internal/controller/agentchannel/materialization_sender_test.go) | Assignment precedes header/content/End; every record has exact execution identity; selected header fields and distinct chunk contents match the source at the independent 32 KiB boundary. Same-length corrupt bytes reach digest verification, return Internal and never send End. | ENT-02/04, BP-04, TASK-10: sender/recording-stream proof, not Agent/helper validation, file publication, ownership/mode effects or live secret safety. |
+
+The materialization recorder copies messages during Send because the sender clears
+its transient content afterward. Assertions observe bytes handed to transport,
+not cleared caller-owned references. The fake source's closed/cleared state proves
+the sender invoked its Close method; it does not qualify production-source memory
+clearing. No production code, test framework or live state changed, and no new
+product defect was reproduced. These results do not qualify a complete case.
+
 The remaining root-module Go tests outside the reviewed files still require review.
 Helpers and fixtures are not standalone test cases; inventory counts must not
 classify them as behavioral coverage. No automatic blanket deletion based on

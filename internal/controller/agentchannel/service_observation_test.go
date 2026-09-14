@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/serviceobservation"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 func servingTargets() []*agentpb.ServiceObservationTarget {
@@ -62,10 +62,11 @@ func nextServiceCommand(t *testing.T, ctx context.Context, session *Session) *ob
 	}
 }
 
+// QA: OBS-01/03/04; local exchange isolation, five-second deadline and typed result, not live health.
 // Rationale: the read has its own slot even with zero Task capacity and active
 // image lookup; only its exact raw ULID may complete the pending exchange.
 func TestServiceObservationCorrelationAndIndependence(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	r := NewRegistry()
 	s, err := r.Open(ctx, "agent", 1)
@@ -76,13 +77,15 @@ func TestServiceObservationCorrelationAndIndependence(t *testing.T) {
 	if err := s.RecordReady(time.Now(), 0, "1.0.0"); err != nil {
 		t.Fatal(err)
 	}
+	started := time.Now()
 	done := beginServiceRead(ctx, r, "agent")
 	command := nextServiceCommand(t, ctx, s)
 	if ids.Validate(ids.KindOperation, "op_"+command.request.RequestId) != nil {
 		t.Fatal("not a raw ULID")
 	}
-	if deadline, ok := command.ctx.Deadline(); !ok || time.Until(deadline) > serviceobservation.Timeout {
-		t.Fatal("unbounded exchange")
+	if deadline, ok := command.ctx.Deadline(); !ok || deadline.Before(started.Add(5*time.Second)) ||
+		deadline.After(time.Now().Add(5*time.Second)) {
+		t.Fatalf("exchange deadline = %v, want its own five-second bound", deadline)
 	}
 	if _, err := r.ObserveServices(ctx, "agent", servingTargets()); !errors.Is(
 		err,
@@ -115,15 +118,13 @@ func TestServiceObservationCorrelationAndIndependence(t *testing.T) {
 	default:
 	}
 	s.acceptObservationResult(ctx, servingResult(command.request))
-	if reply := awaitServiceRead(t, ctx, done); reply.err != nil ||
-		reply.result.Observations[0].GetReplicas().GetHealthy() != 1 {
-		t.Fatalf("read=%v", reply)
-	}
+	assertServingReply(t, awaitServiceRead(t, ctx, done), command.request.RequestId)
 	if err := s.RecordReady(time.Now(), 0, "1.0.0"); err != nil {
 		t.Fatal("observation closed session")
 	}
 }
 
+// QA: OBS-04, HOST-05; local request/session fencing and replacement read, not public freshness.
 // Rationale: equal-generation reconnection is still a different authenticated
 // session. Old results cannot satisfy either the retired or replacement read.
 func TestServiceObservationRejectsReplacementSession(t *testing.T) {
@@ -143,8 +144,9 @@ func TestServiceObservationRejectsReplacementSession(t *testing.T) {
 	}
 	defer next.Close()
 	old.acceptObservationResult(ctx, servingResult(command.request))
-	if reply := awaitServiceRead(t, ctx, done); reply.err == nil || reply.result != nil {
-		t.Fatal("retired session produced evidence")
+	if reply := awaitServiceRead(t, ctx, done); !errors.Is(reply.err, errs.New(errs.KindStorageUnavailable, "")) ||
+		reply.result != nil {
+		t.Fatalf("retired session reply = %v", reply)
 	}
 	done = beginServiceRead(ctx, r, "agent")
 	replacement := nextServiceCommand(t, ctx, next)
@@ -159,11 +161,10 @@ func TestServiceObservationRejectsReplacementSession(t *testing.T) {
 	default:
 	}
 	next.acceptObservationResult(ctx, servingResult(replacement.request))
-	if reply := awaitServiceRead(t, ctx, done); reply.err != nil {
-		t.Fatal(reply.err)
-	}
+	assertServingReply(t, awaitServiceRead(t, ctx, done), replacement.request.RequestId)
 }
 
+// QA: OBS-01/04; malformed machine evidence is rejected locally, not Docker observation or serving-source races.
 // Rationale: a correctly correlated but malformed result fails the read without
 // exposing partial counts or closing unrelated Agent traffic.
 func TestServiceObservationRejectsMalformedResults(t *testing.T) {
@@ -211,6 +212,7 @@ func nextServiceWire(t *testing.T, ctx context.Context, stream *liveStream) *age
 	}
 }
 
+// QA: OBS-03/04; Controller loop over an in-memory stream, not gRPC or worker cleanup.
 // Rationale: the actual stream loop must send explicit cancellation, keep the
 // connection, and serve a later read without a Task store or reconnect retry.
 func TestServiceObservationThroughControllerStream(t *testing.T) {
@@ -222,8 +224,13 @@ func TestServiceObservationThroughControllerStream(t *testing.T) {
 	go func() { serverDone <- New(authorizedAuthenticator(), r, nil, nil).Connect(stream) }()
 	t.Cleanup(func() {
 		cancel()
-		if err := <-serverDone; err != nil && !errors.Is(err, context.Canceled) {
-			t.Error(err)
+		select {
+		case err := <-serverDone:
+			if err != nil && !errors.Is(err, context.Canceled) {
+				t.Error(err)
+			}
+		case <-time.After(time.Second):
+			t.Error("Controller stream did not stop")
 		}
 	})
 	if nextServiceWire(t, ctx, stream).GetConfigUpdate() == nil {
@@ -235,6 +242,9 @@ func TestServiceObservationThroughControllerStream(t *testing.T) {
 	request := nextServiceWire(t, ctx, stream).GetObserveServices()
 	if request == nil {
 		t.Fatal("missing observation request")
+	}
+	if len(request.Targets) != 1 || !proto.Equal(request.Targets[0], servingTargets()[0]) {
+		t.Fatalf("wire observation targets = %v", request.Targets)
 	}
 	readCancel()
 	if reply := awaitServiceRead(t, ctx, done); !errors.Is(reply.err, context.Canceled) || reply.result != nil {
@@ -250,16 +260,18 @@ func TestServiceObservationThroughControllerStream(t *testing.T) {
 		t.Fatal("missing fresh read")
 	}
 	stream.received <- servingResult(next)
-	if reply := awaitServiceRead(t, ctx, done); reply.err != nil {
-		t.Fatal(reply.err)
-	}
+	assertServingReply(t, awaitServiceRead(t, ctx, done), next.RequestId)
 }
 
-// Rationale: invalid, already cancelled and disconnected reads must not wait
-// for reconnect or create any deferred transport work.
+// QA: OBS-03/04, HOST-05; local offline/input/cancellation errors, not a real connection outage.
+// Rationale: invalid, already canceled and disconnected reads must fail with
+// the expected cause and cannot return observation evidence.
 func TestServiceObservationUnavailableWithoutConnection(t *testing.T) {
 	r := NewRegistry()
-	if result, err := r.ObserveServices(context.Background(), "missing", servingTargets()); err == nil ||
+	if result, err := r.ObserveServices(context.Background(), "missing", servingTargets()); !errors.Is(
+		err,
+		errs.New(errs.KindStorageUnavailable, ""),
+	) ||
 		result != nil {
 		t.Fatal("offline read succeeded")
 	}
@@ -276,6 +288,7 @@ func TestServiceObservationUnavailableWithoutConnection(t *testing.T) {
 	}
 }
 
+// QA: OBS-03/04; explicitly ordered local send selection, not a network cancellation race.
 // Rationale: when cancellation races a new read, the stream sends the old
 // cancellation first even if it selects the new command before the cancel case.
 func TestServiceObservationCancelPrecedesReplacementRead(t *testing.T) {
@@ -309,7 +322,16 @@ func TestServiceObservationCancelPrecedesReplacementRead(t *testing.T) {
 		t.Fatal("missing replacement")
 	}
 	s.acceptObservationResult(ctx, servingResult(next.request))
-	if reply := awaitServiceRead(t, ctx, done); reply.err != nil {
-		t.Fatal(reply.err)
+	assertServingReply(t, awaitServiceRead(t, ctx, done), next.request.RequestId)
+}
+
+func assertServingReply(t *testing.T, reply observationReply, requestID string) {
+	t.Helper()
+	want := &agentpb.ServiceObservationResult{RequestId: requestID, Observations: []*agentpb.ServiceObservationRow{{
+		ServiceId: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV", ReleaseId: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+		Outcome: &agentpb.ServiceObservationRow_Replicas{Replicas: &agentpb.ServiceReplicaCounts{Healthy: 1}},
+	}}}
+	if reply.err != nil || !proto.Equal(reply.result, want) {
+		t.Fatalf("observation reply = %v, want exact serving identity and counts", reply)
 	}
 }

@@ -5,26 +5,29 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestSendTaskAssignmentStreamsExactMaterializationRecords(t *testing.T) {
+	// QA: ENT-02/04, BP-04, TASK-10; local wire bytes/metadata and source Close, not Agent publication or file permissions.
 	// Rationale: assignment metadata must arrive before separately owned bytes,
 	// and the transient channel must preserve bounded one-based record ordering.
-	content := bytes.Repeat([]byte("a"), entrymaterialization.MaximumChunkBytes+17)
+	content := append(bytes.Repeat([]byte("a"), 32*1024), bytes.Repeat([]byte("b"), 17)...)
 	task, plan := controllerMaterializationTask(t, content)
 	source := newOwnedControllerSource(content)
 	resolver := &fakeMaterializationResolver{source: source}
-	stream := &scriptedStream{}
+	stream := &materializationRecordingStream{}
 	server := NewWithMaterializations(
 		authorizedAuthenticator(), NewRegistry(), nil, &fakePlanResolver{plan: plan}, resolver,
 	)
@@ -52,9 +55,35 @@ func TestSendTaskAssignmentStreamsExactMaterializationRecords(t *testing.T) {
 	if source.content != nil || !source.closed {
 		t.Fatal("materialization resolver source retained plaintext after send")
 	}
+	assignment := stream.sent[0].GetTaskAssignment()
+	if assignment.GetTaskId() != task.ID || assignment.GetAssignmentId() != claim.Assignment.Record.AssignmentID ||
+		assignment.GetOperationId() != task.OperationID || !bytes.Equal(assignment.GetPlan().GetPlanHash(), plan.PlanHash) {
+		t.Fatalf("assignment identity = %v", assignment)
+	}
+	for index, message := range stream.sent[1:] {
+		record := message.GetMaterializationTransfer()
+		if record.GetTaskId() != task.ID || record.GetAssignmentId() != claim.Assignment.Record.AssignmentID ||
+			record.GetStepId() != task.Steps[0].ID || !bytes.Equal(record.GetPlanHash(), plan.PlanHash) {
+			t.Fatalf("transfer %d lost execution identity", index)
+		}
+	}
+	digest := sha256.Sum256(content)
+	header := transfer.GetHeader()
+	if header.GetArtifactId() != materialization.GetArtifactId() ||
+		header.GetEnvironmentId() != "env_01ARZ3NDEKTSV4RRFFQ69G5FAV" || header.GetRenderGeneration() != 7 ||
+		header.GetDestination() != "blueprints/plan_01ARZ3NDEKTSV4RRFFQ69G5FAV/blueprint.yaml" ||
+		header.GetOutputKind() != agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_PLAIN_FILE ||
+		header.GetMode() != 0o444 || header.GetLength() != 32*1024+17 || !bytes.Equal(header.GetSha256(), digest[:]) {
+		t.Fatalf("materialization header = %v", header)
+	}
+	if !bytes.Equal(stream.sent[2].GetMaterializationTransfer().GetChunk().GetContent(), content[:32*1024]) ||
+		!bytes.Equal(stream.sent[3].GetMaterializationTransfer().GetChunk().GetContent(), content[32*1024:]) {
+		t.Fatal("materialization chunks differ from the declared source bytes or 32 KiB bound")
+	}
 }
 
 func TestSendTaskAssignmentRejectsSourceDigestMismatchWithoutEnd(t *testing.T) {
+	// QA: ENT-02, TASK-10; sender rejects same-length corruption without End; no Agent or filesystem effects.
 	// Rationale: a stale or corrupt resolver result must close ownership and end
 	// the stream without an End record that could authorize Agent publication.
 	want := []byte("expected")
@@ -65,8 +94,16 @@ func TestSendTaskAssignmentRejectsSourceDigestMismatchWithoutEnd(t *testing.T) {
 		authorizedAuthenticator(), NewRegistry(), nil, &fakePlanResolver{plan: plan},
 		&fakeMaterializationResolver{source: source},
 	)
-	if err := server.sendTaskAssignment(stream, controllerMaterializationClaim(task)); err == nil {
-		t.Fatal("sendTaskAssignment() error = nil, want digest mismatch")
+	if err := server.sendTaskAssignment(stream, controllerMaterializationClaim(task)); !errors.Is(
+		err,
+		errs.New(errs.KindInternal, ""),
+	) {
+		t.Fatalf("sendTaskAssignment() error = %v, want internal digest mismatch", err)
+	}
+	if len(stream.sent) != 3 || stream.sent[0].GetTaskAssignment() == nil ||
+		stream.sent[1].GetMaterializationTransfer().GetHeader() == nil ||
+		stream.sent[2].GetMaterializationTransfer().GetChunk().GetSequence() != 1 {
+		t.Fatal("digest mismatch did not reach the intended post-content verification boundary")
 	}
 	for _, message := range stream.sent {
 		if message.GetMaterializationTransfer().GetEnd() != nil {
@@ -76,6 +113,14 @@ func TestSendTaskAssignmentRejectsSourceDigestMismatchWithoutEnd(t *testing.T) {
 	if source.content != nil || !source.closed {
 		t.Fatal("digest mismatch retained resolver plaintext")
 	}
+}
+
+type materializationRecordingStream struct{ scriptedStream }
+
+func (stream *materializationRecordingStream) Send(message *agentpb.ControllerMessage) error {
+	// Capture wire-time bytes; the sender clears its owned buffers after Send returns.
+	stream.sent = append(stream.sent, proto.CloneOf(message))
+	return nil
 }
 
 type fakeMaterializationResolver struct {
