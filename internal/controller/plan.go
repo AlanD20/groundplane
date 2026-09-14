@@ -15,11 +15,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/hierarchyplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
+	"github.com/AlanD20/groundplane/internal/controller/configurationrecovery"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -95,20 +95,21 @@ func BuildPlan(input PlanBuildInput) (*ExecutionPlan, error) {
 
 // TaskPlanResolver rebuilds plans from closed durable Task inputs and daemon-owned policy; plans are never stored.
 type TaskPlanResolver struct {
-	volumeRoot         string
-	blueprints         blueprintPlanStateReader
-	attaches           attachPlanRecordReader
-	services           attachPlanServiceReader
-	attachIdentities   attachPlanIdentityResolver
-	componentCatalog   []EnvironmentComponentRegistration
-	serviceProxyImage  *etcd.ReleaseProxyImage
-	routeState         routeProviderStateReader
-	releases           *etcd.ReleaseLedger
-	backupRuns         backupRunPlanReader
-	componentPlans     ComponentTaskPlanResolver
-	materializations   componentMaterializationContentRepository
-	scriptPlans        ScriptExecutionPlanReader
-	volumeRemovalPlans volumeRemovalPlanReader
+	volumeRoot            string
+	blueprints            blueprintPlanStateReader
+	attaches              attachPlanRecordReader
+	services              attachPlanServiceReader
+	attachIdentities      attachPlanIdentityResolver
+	componentCatalog      []EnvironmentComponentRegistration
+	serviceProxyImage     *etcd.ReleaseProxyImage
+	routeState            routeProviderStateReader
+	releases              *etcd.ReleaseLedger
+	backupRuns            backupRunPlanReader
+	componentPlans        ComponentTaskPlanResolver
+	materializations      componentMaterializationContentRepository
+	configurationRecovery *configurationrecovery.Sources
+	scriptPlans           ScriptExecutionPlanReader
+	volumeRemovalPlans    volumeRemovalPlanReader
 }
 
 type blueprintPlanStateReader interface {
@@ -129,38 +130,6 @@ type blueprintPlanStateReader interface {
 		string,
 		string,
 	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
-}
-
-func NewTaskPlanResolver(
-	volumeRoot string,
-	componentCatalog []EnvironmentComponentRegistration,
-) (*TaskPlanResolver, error) {
-	if err := environmentpath.ValidateRoot(volumeRoot); err != nil {
-		return nil, err
-	}
-	if err := ValidateEnvironmentComponentCatalog(componentCatalog); err != nil {
-		return nil, err
-	}
-	return &TaskPlanResolver{
-		volumeRoot:       volumeRoot,
-		componentCatalog: CloneEnvironmentComponentCatalog(componentCatalog),
-	}, nil
-}
-
-func NewTaskPlanResolverWithBlueprints(
-	volumeRoot string,
-	blueprints blueprintPlanStateReader,
-	componentCatalog []EnvironmentComponentRegistration,
-) (*TaskPlanResolver, error) {
-	resolver, err := NewTaskPlanResolver(volumeRoot, componentCatalog)
-	if err != nil {
-		return nil, err
-	}
-	if blueprints == nil {
-		return nil, errs.New(errs.KindInternal, "Blueprint plan state reader is required")
-	}
-	resolver.blueprints = blueprints
-	return resolver, nil
 }
 
 func (resolver *TaskPlanResolver) resolveExecutionPlan(
@@ -445,7 +414,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	expectedSteps += len(managedServiceSteps)
 	expectedSteps += len(resourceStepIDs)
 	if hasBlueprintReleases {
-		expectedSteps += releaseProcedureStepCount
+		expectedSteps += releaseProcedureStepCount + 2*len(task.Materializations)
 	} else if procedure == taskcontract.BlueprintComposeProcedureFullReconcile {
 		expectedSteps++
 	}
@@ -547,8 +516,8 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 			componentSteps = append(componentSteps, managedConfigStep)
 			releaseEnd++
 		}
-		if releaseEnd != len(task.Steps) {
-			return nil, errs.New(errs.KindInternal, "durable Blueprint Release step order is invalid")
+		if err := resolver.configurationRecoverySuffix(ctx, task, releaseEnd); err != nil {
+			return nil, err
 		}
 		releaseInput.PrefixSteps, releaseInput.ComponentSteps = steps, componentSteps
 		_, plan, prepareErr := resolver.PrepareBlueprintReleaseTask(ctx, task, releaseInput)

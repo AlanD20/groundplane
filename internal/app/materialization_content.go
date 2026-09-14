@@ -41,5 +41,15 @@ func initializeTaskMaterializationResolver(
 	if err := resolver.EnableComponentMaterializationContent(contents); err != nil {
 		return nil, fmt.Errorf("controller: initialize Component materialization runtime content: %w", err)
 	}
+	snapshots, err := etcd.NewRuntimeConfigurationRepository(store)
+	if err != nil {
+		return nil, err
+	}
+	if err := plans.EnableConfigurationRecovery(snapshots); err != nil {
+		return nil, err
+	}
+	if err := resolver.EnableConfigurationRecovery(snapshots); err != nil {
+		return nil, err
+	}
 	return resolver, nil
 }

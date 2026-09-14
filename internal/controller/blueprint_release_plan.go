@@ -274,6 +274,12 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 			}
 		}
 	}
+	configuration, fileSteps, err := resolver.configurationRecoverySteps(ctx, task, first.ArtifactID)
+	if err != nil {
+		return etcd.TaskRecord{}, nil, err
+	}
+	procedure.ConfigurationRestoration = configuration
+	steps = append(steps, fileSteps...)
 	plan, err := BuildPlan(PlanBuildInput{
 		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
 		RenderGeneration: uint64(task.RenderGeneration),

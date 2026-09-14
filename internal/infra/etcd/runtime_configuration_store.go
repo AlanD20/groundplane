@@ -10,6 +10,10 @@ import (
 // the immutable file-source repository. It performs no source selection.
 type runtimeConfigurationStore struct{ store hierarchyStore }
 
+func NewRuntimeConfigurationRepository(store hierarchyStore) (*runtimeconfiguration.Repository, error) {
+	return runtimeconfiguration.NewRepository(runtimeConfigurationStore{store: store})
+}
+
 func (adapter runtimeConfigurationStore) GetMany(
 	ctx context.Context, keys []string, revision int64,
 ) (*runtimeconfiguration.GetManyResult, error) {

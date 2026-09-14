@@ -41,6 +41,9 @@ func validateReleaseCandidateDescriptor(
 	for _, step := range task.Steps {
 		taskSteps[step.ID] = struct{}{}
 	}
+	if err := validateTaskConfigurationProcedure(task, procedure, taskSteps); err != nil {
+		return nil, err
+	}
 	for _, id := range descriptor.ComponentActionStepIDs {
 		if _, exists := taskSteps[id]; !exists {
 			return nil, corruptReleaseRecord()

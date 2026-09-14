@@ -244,6 +244,26 @@ candidate-assignment transition or Agent file I/O. Race, vet and pinned Staticch
 pass in `.tmp/recovery-file-accounting-{race,vet,staticcheck}-20260914.log`.
 No record-size, transaction or native-effect requirement changed; H5 remains failed.
 
+H24 is local SVC-15/JOURNEY-02 Controller/Agent integration proof. The real two-pass
+Blueprint producer, publication, replay, claim and acknowledgement test preserves
+the prior file bytes and owner under the existing record and transaction limits.
+Controller delivery tests load the original retained content under new recovery
+execution IDs and reject changed metadata or missing bytes. Agent tests cover a
+partially written file, durable admission before I/O, restore followed by separate
+read-only verification, native re-probe after file restoration, reconnect and
+buffer retirement. Deadline or epoch drift is rejected. The helper is controlled
+in these Agent tests; they do not execute a complete failed Task on a live host.
+
+The combined race check passes in `.tmp/pinned-file-recovery-combined-final.log`;
+vet and pinned Staticcheck pass in
+`.tmp/pinned-file-recovery-integrated-{vet,staticcheck}.log`. Initial failures in
+older executor fixtures are preserved in `.tmp/pinned-file-agent-affected-first.log`
+and subsequent correction logs. Those fixtures now provide sealed recovery pairs;
+production validation was not relaxed. Architecture reports 122 pre-existing
+finding identities, none added, in `.tmp/pinned-file-recovery-final-architecture.json`.
+The extracted Agent executor removes one oversized-file finding; no baseline or
+limit changed. Full CI and deployed recovery remain unqualified; H5 remains failed.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

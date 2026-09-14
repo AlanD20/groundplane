@@ -3,7 +3,10 @@ package etcd_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -49,6 +52,9 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := resolver.EnableReleasePlans(fixture.Ledger); err != nil {
+		t.Fatal(err)
+	}
+	if err := resolver.EnableConfigurationRecovery(fixture.ConfigurationSources(t)); err != nil {
 		t.Fatal(err)
 	}
 	scripts, sources := fixture.HookDependencies(t)
@@ -144,9 +150,14 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		prefix := prepareBlueprintFileFixture(t, &task, &projection, artifactID, pass)
+		environment, err := fixture.Hierarchy.GetEnvironment(ctx, fixture.Environment.Record.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
 		prepared, err := producer.Prepare(ctx, blueprintrelease.PrepareInput{Workloads: workloads,
 			VolumeRoot: "/var/lib/groundplane/vol", Task: task, Projection: projection, Tenant: tenant,
-			Project: fixture.Project, Environment: fixture.Environment, Memberships: memberships,
+			Project: fixture.Project, Environment: environment, Memberships: memberships, PrefixSteps: prefix,
 			ServiceChanges: changes, Artifact: artifact, CreatedAt: task.CreatedAt,
 			AllocateNamed: func(kind ids.Kind, purpose string) string {
 				return ids.DeriveAt(kind, task.CreatedAt, task.ID, purpose)
@@ -169,6 +180,7 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 		if err != nil || !proto.Equal(prepared.Plan, replayed) {
 			t.Fatalf("pass%d immutable plan replay: %v", pass, err)
 		}
+		assertBlueprintFileRecoveryFixture(t, prepared.Task, replayed, pass)
 		agentID := ids.New(ids.KindAgent)
 		claim, found, err := fixture.Tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second))
 		if err != nil || !found || claim.Task.Record.ID != task.ID {
@@ -231,5 +243,60 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 			t.Fatal("terminal completion did not retain the exact executed artifact")
 		}
 		previous, priorArtifact = project, executed
+	}
+}
+
+func prepareBlueprintFileFixture(t *testing.T, task *etcd.TaskRecord, projection *etcd.EnvironmentComposeProjection,
+	artifactID string, pass int) []*agentpb.ExecutionStep {
+	t.Helper()
+	content := []byte("configuration " + strconv.Itoa(pass))
+	digest := sha256.Sum256(content)
+	const destination = "config/runtime.yaml"
+	projection.RuntimeFiles = []core.BlueprintFile{{Path: destination, Content: content}}
+	record := etcd.TaskMaterializationRecord{StepID: ids.New(ids.KindStep), MaterializationID: ids.New(ids.KindConfig),
+		EnvironmentID: task.Target, Destination: destination, OutputKind: etcd.TaskMaterializationOutputPlainFile,
+		UID: uint32(
+			100 + pass,
+		), GID: 100, Mode: 0o444, Length: uint64(len(content)), SHA256: hex.EncodeToString(digest[:]),
+		Source: etcd.TaskMaterializationSource{Kind: etcd.TaskMaterializationSourceBlueprintFile,
+			BlueprintFile: &etcd.TaskBlueprintFileValueReference{RevisionID: task.ID, Path: destination}}}
+	task.Materializations = []etcd.TaskMaterializationRecord{record}
+	step, err := controller.BuildTaskMaterializationStep(record, artifactID, uint32(task.TimeoutSeconds))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return []*agentpb.ExecutionStep{step}
+}
+
+// SVC-15/JOURNEY-02: publication, replay and claim retain the previous pass's
+// bytes and owner, independently of this pass's desired output.
+func assertBlueprintFileRecoveryFixture(t *testing.T, task etcd.TaskRecord, plan *agentpb.ExecutionPlan, pass int) {
+	t.Helper()
+	configuration := plan.GetCandidateReleaseProcedure().GetConfigurationRestoration()
+	if len(configuration.GetFiles()) != 1 || task.Configuration == nil ||
+		configuration.Files[0].ForwardStepId != task.Materializations[0].StepID {
+		t.Fatal("published candidate lost its closed file recovery binding")
+	}
+	var probe *agentpb.MaterializeFile
+	for _, step := range plan.Steps {
+		if step.StepId == configuration.Files[0].ProbeStepId {
+			probe = step.GetMaterializeFile()
+		}
+	}
+	if probe == nil {
+		t.Fatal("file recovery probe absent after reconstruction")
+	}
+	if pass == 0 {
+		if configuration.PriorSnapshotId != "" ||
+			probe.OutputKind != agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_REMOVE_PLAIN_FILE {
+			t.Fatal("first pass invented pre-existing configuration")
+		}
+		return
+	}
+	digest := sha256.Sum256([]byte("configuration 0"))
+	if task.Configuration.Prior == nil || configuration.PriorSnapshotId != task.Configuration.Prior.ID ||
+		probe.Uid != 100 || probe.Gid != 100 || probe.Mode != 0o444 || probe.Length != 15 ||
+		hex.EncodeToString(probe.Sha256) != hex.EncodeToString(digest[:]) {
+		t.Fatal("second pass did not pin exact previously acknowledged file bytes and owner")
 	}
 }

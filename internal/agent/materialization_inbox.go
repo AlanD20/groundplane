@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -24,7 +25,10 @@ type materializationTaskInbox struct {
 	assignmentID     string
 	planHash         [sha256.Size]byte
 	renderGeneration uint64
+	executionEpoch   uint32
+	executionMode    agentpb.TaskExecutionMode
 	deadline         time.Time
+	recoveryDeadline time.Time
 	steps            map[string]*materializationStepInbox
 	retired          bool
 	expiry           *time.Timer
@@ -34,13 +38,21 @@ type materializationStepInbox struct {
 	expected *agentpb.MaterializeFile
 	header   entrymaterialization.Header
 	content  []byte
+	shared   *sharedMaterializationContent
+	group    string
 	chunks   uint32
 	received uint64
 	digest   entrymaterialization.Hasher
 	state    materializationTransferState
 	retired  bool
+	reusable bool
 	err      error
 	ready    chan struct{}
+}
+
+type sharedMaterializationContent struct {
+	content []byte
+	refs    uint32
 }
 
 type materializationTransferState uint8
@@ -73,9 +85,17 @@ func (inbox *materializationInbox) Register(assignment Assignment) error {
 		if materialization == nil {
 			continue
 		}
+		pair := executionplan.ConfigurationFilePair(assignment.Plan, step.GetStepId())
 		steps[step.GetStepId()] = &materializationStepInbox{
 			expected: proto.Clone(materialization).(*agentpb.MaterializeFile),
-			ready:    make(chan struct{}),
+			reusable: pair != nil,
+			group: func() string {
+				if pair == nil {
+					return ""
+				}
+				return pair.GetForwardStepId()
+			}(),
+			ready: make(chan struct{}),
 		}
 	}
 	if len(steps) == 0 {
@@ -87,15 +107,25 @@ func (inbox *materializationInbox) Register(assignment Assignment) error {
 			assignment.Plan,
 		),
 		renderGeneration: assignment.Plan.GetRenderGeneration(),
+		executionEpoch:   assignment.ExecutionEpoch,
+		executionMode:    assignment.ExecutionMode,
 		deadline:         assignment.Deadline,
+		recoveryDeadline: assignment.RecoveryDeadline,
 		steps:            steps,
 	}
 	inbox.mu.Lock()
 	defer inbox.mu.Unlock()
 	if existing := inbox.tasks[assignment.TaskID]; existing != nil {
+		sameAttempt := existing.executionMode == task.executionMode &&
+			existing.executionEpoch == task.executionEpoch
+		recoveryTransition := existing.executionMode == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD &&
+			task.executionMode == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY &&
+			task.executionEpoch == existing.executionEpoch+1
+		validDeadline := sameAttempt && task.deadline.Equal(existing.deadline) ||
+			recoveryTransition && task.deadline.Equal(existing.recoveryDeadline)
 		if !existing.retired || existing.assignmentID != task.assignmentID ||
 			existing.planHash != task.planHash || existing.renderGeneration != task.renderGeneration ||
-			!existing.deadline.Equal(task.deadline) {
+			!validDeadline || !task.recoveryDeadline.Equal(existing.recoveryDeadline) {
 			return errs.New(errs.KindInternal, "agent: materialization task was registered twice")
 		}
 		inbox.destroyTask(existing)
@@ -262,6 +292,25 @@ func (inbox *materializationInbox) acceptEnd(
 	if subtle.ConstantTimeCompare(digest[:], step.expected.GetSha256()) != 1 {
 		return inbox.failStep(step, "agent: materialization transfer digest is invalid")
 	}
+	if step.reusable {
+		for _, sibling := range task.steps {
+			if sibling == step || sibling.group != step.group || sibling.shared == nil {
+				continue
+			}
+			if !bytes.Equal(sibling.shared.content, step.content) {
+				return inbox.failStep(step, "agent: recovery materialization pair content differs")
+			}
+			clear(step.content)
+			step.content = nil
+			step.shared = sibling.shared
+			step.shared.refs++
+			break
+		}
+		if step.shared == nil {
+			step.shared = &sharedMaterializationContent{content: step.content, refs: 1}
+			step.content = nil
+		}
+	}
 	step.state = materializationComplete
 	close(step.ready)
 	return nil
@@ -353,9 +402,19 @@ func (inbox *materializationInbox) Take(
 		}
 		return materializationPayload{}, errs.New(errs.KindInternal, "agent: materialization payload is incomplete")
 	}
-	source := &ownedMaterializationSource{
-		content: step.content,
-		reader:  bytes.NewReader(step.content),
+	content := step.content
+	if step.reusable {
+		if step.shared == nil || step.shared.refs == 0 {
+			return materializationPayload{}, errs.New(
+				errs.KindInternal,
+				"agent: reusable materialization payload is invalid",
+			)
+		}
+		content = bytes.Clone(step.shared.content)
+	}
+	source := &ownedMaterializationSource{content: content, reader: bytes.NewReader(content)}
+	if step.reusable {
+		return materializationPayload{Header: step.header, Source: source}, nil
 	}
 	step.content = nil
 	step.state = materializationConsumed
@@ -455,6 +514,16 @@ func (inbox *materializationInbox) expire(
 func (inbox *materializationInbox) destroyStep(step *materializationStepInbox) {
 	clear(step.content)
 	step.content = nil
+	if step.shared != nil {
+		if step.shared.refs > 0 {
+			step.shared.refs--
+		}
+		if step.shared.refs == 0 {
+			clear(step.shared.content)
+			step.shared.content = nil
+		}
+		step.shared = nil
+	}
 	if step.digest != nil {
 		step.digest.Destroy()
 		step.digest = nil

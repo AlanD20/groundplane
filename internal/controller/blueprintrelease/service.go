@@ -111,7 +111,10 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 	if err != nil {
 		return Prepared{}, err
 	}
-	task := input.Task
+	task, err := service.prepareTaskConfiguration(ctx, input, len(candidates) != 0)
+	if err != nil {
+		return Prepared{}, err
+	}
 	if task.Params == nil {
 		task.Params = make(map[string]string)
 	}
@@ -618,14 +621,6 @@ func releaseImage(value string) (string, string, string, error) {
 		digest = digested.Digest().Encoded()
 	}
 	return named.String(), tag, digest, nil
-}
-
-func taskStepRecords(steps []*agentpb.ExecutionStep) []etcd.TaskStepRecord {
-	result := make([]etcd.TaskStepRecord, len(steps))
-	for index, step := range steps {
-		result[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: step.StepId}
-	}
-	return result
 }
 
 func bytesToHex(value []byte) string {

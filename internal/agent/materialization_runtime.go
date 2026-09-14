@@ -36,6 +36,25 @@ func (runtime *MaterializationRuntime) executeStep(
 	step *agentpb.ExecutionStep,
 	payload materializationPayload,
 ) error {
+	return runtime.runStep(ctx, assignment, step, payload, false)
+}
+
+func (runtime *MaterializationRuntime) verifyStep(
+	ctx context.Context,
+	assignment Assignment,
+	step *agentpb.ExecutionStep,
+	payload materializationPayload,
+) error {
+	return runtime.runStep(ctx, assignment, step, payload, true)
+}
+
+func (runtime *MaterializationRuntime) runStep(
+	ctx context.Context,
+	assignment Assignment,
+	step *agentpb.ExecutionStep,
+	payload materializationPayload,
+	verifyOnly bool,
+) error {
 	if runtime == nil || runtime.helper == nil || payload.Source == nil {
 		return closeMaterializationSource(payload.Source, "agent: materialization runtime is not configured")
 	}
@@ -46,9 +65,12 @@ func (runtime *MaterializationRuntime) executeStep(
 		return closeMaterializationSource(payload.Source, "agent: materialization runtime input is invalid")
 	}
 	var err error
-	payload, err = runtime.preflightComponentFile(ctx, assignment, step, payload)
-	if err != nil {
-		return err
+	if step.GetPolicy() != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE &&
+		step.GetPolicy() != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE {
+		payload, err = runtime.preflightComponentFile(ctx, assignment, step, payload)
+		if err != nil {
+			return err
+		}
 	}
 	reader, writer := io.Pipe()
 	encoded := make(chan error, 1)
@@ -70,14 +92,17 @@ func (runtime *MaterializationRuntime) executeStep(
 		encoded <- encodeErr
 	}()
 	helperErr := runtime.helper.Run(ctx, materializerrunner.Request{
-		VolumeDir: artifact.GetAuthorizedVolumeDir(),
-		Stream:    reader,
+		VolumeDir: artifact.GetAuthorizedVolumeDir(), Stream: reader, VerifyOnly: verifyOnly,
 	})
 	readerCloseErr := reader.Close()
 	encodeErr := <-encoded
 	if err := errors.Join(helperErr, readerCloseErr, encodeErr); err != nil {
 		if ctx != nil && ctx.Err() != nil {
 			return ctx.Err()
+		}
+		if verifyOnly && readerCloseErr == nil && encodeErr == nil &&
+			errors.Is(helperErr, errs.New(errs.KindStateConflict, "")) {
+			return helperErr
 		}
 		return errs.Wrap(errs.KindInternal, err)
 	}

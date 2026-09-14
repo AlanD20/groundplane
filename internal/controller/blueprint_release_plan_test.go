@@ -21,6 +21,7 @@ import (
 // identical when applied predecessor state advances before claim.
 func TestPrepareBlueprintReleaseTaskFirstCandidateAuthorityIsPredecessorIndependent(t *testing.T) {
 	reader, task := blueprintPlanTestState(t)
+	task.Materializations = nil // This case has no file-writing prefix.
 	const candidateReleaseID = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 	task.Params[etcd.TaskReleasePublicationParam] = "publication"
 	member := etcd.ReleaseTaskRenderMember{
@@ -86,6 +87,7 @@ func TestPrepareBlueprintReleaseTaskFirstCandidateAuthorityIsPredecessorIndepend
 // carries candidate Release ownership and must receive the candidate image.
 func TestPrepareBlueprintReleaseTaskBindsAddressableRecreateWorkload(t *testing.T) {
 	reader, task := blueprintPlanTestState(t)
+	task.Materializations = nil // This case checks workload ownership, not files.
 	project := &composetypes.Project{
 		Services: composetypes.Services{"api": {
 			Name: "api", Image: "example/api:latest", Expose: []string{"8080"},
@@ -287,6 +289,7 @@ func TestPrepareBlueprintReleaseTaskOwnsForwardStepPolicies(t *testing.T) {
 		RecoveryCompensateStepIDs: []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FB3"},
 		PostStepIDs:               [][]string{nil},
 	}
+	configureInitialFileRecoveryFixture(t, resolver, &task)
 	preparedTask, plan, err := resolver.PrepareBlueprintReleaseTask(context.Background(), task, input)
 	if err != nil {
 		t.Fatalf("PrepareBlueprintReleaseTask() error = %v", err)

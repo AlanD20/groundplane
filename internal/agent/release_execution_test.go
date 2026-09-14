@@ -192,9 +192,13 @@ func TestExecuteReleaseRecoveryProofFailurePublishesFailedProgress(t *testing.T)
 	helper.responses["probe-api"].ProxyEvidence.ProxyGeneration = 99
 	pool := releaseExecutionPool(t, helper)
 	plan := &agentpb.ExecutionPlan{PlanHash: make([]byte, 32), Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
-		Steps: []*agentpb.ExecutionStep{probe}, Artifacts: []*agentpb.ComposeArtifact{
+		Steps: []*agentpb.ExecutionStep{
+			probe,
+			releaseCompensate("compensate-api", "switch-api"),
+		}, Artifacts: []*agentpb.ComposeArtifact{
 			releaseTestArtifact("candidate-artifact"), releaseTestArtifact("prior-artifact"),
 		}}
+	bindProxyRecoveryFixture(t, plan)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	reservation := &taskReservation{assignment: Assignment{
@@ -202,7 +206,7 @@ func TestExecuteReleaseRecoveryProofFailurePublishesFailedProgress(t *testing.T)
 		Plan: plan, ExecutionEpoch: 1, ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY,
 		ReleaseRecoveryDirective: &agentpb.ReleaseRecoveryDirective{
 			Phase:   agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROBE,
-			StepIds: []string{"probe-api"},
+			StepIds: []string{"probe-api", "compensate-api"},
 		},
 	}, ctx: ctx, cancel: cancel, eventsDurable: true}
 	go pool.executeRelease(context.Background(), reservation)
@@ -498,6 +502,9 @@ func TestExecuteReleaseRestartCompensatesAfterAmbiguousTransitionProbe(t *testin
 // proxy evidence and step selection stay scoped to the owning Task.
 func TestExecuteReleaseConcurrentRetriesKeepEvidenceIsolated(t *testing.T) {
 	t.Parallel()
+	probe := releaseProbe("probe-api")
+	probe.GetServiceProxyProbe().ExpectedTarget = "blue"
+	probe.GetServiceProxyProbe().ReleaseId = "release-api"
 	helper := &releaseExecutionHelper{responses: map[string]*agentpb.ComposeHelperResponse{
 		"probe-api": releaseExecutionSuccess("api", false),
 	}}
@@ -505,9 +512,12 @@ func TestExecuteReleaseConcurrentRetriesKeepEvidenceIsolated(t *testing.T) {
 	plan := &agentpb.ExecutionPlan{
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY,
 		Steps: []*agentpb.ExecutionStep{
-			releaseForwardSwitch("switch-api"), releaseProbe("probe-api"),
+			releaseForwardSwitch(
+				"switch-api",
+			), probe, releaseCompensate("compensate-api", "switch-api"),
 		},
 	}
+	bindProxyRecoveryFixture(t, plan)
 	var wait sync.WaitGroup
 	for _, taskID := range []string{"task-a", "task-b"} {
 		wait.Add(1)
@@ -564,6 +574,7 @@ func runReleaseExecution(
 		ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
 	}, ctx: taskCtx, cancel: cancel}
 	if retryOf != "" {
+		bindProxyRecoveryFixture(t, plan)
 		reservation.assignment.ExecutionMode = agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY
 		stepIDs := make([]string, 0)
 		compensateIDs := make([]string, 0)

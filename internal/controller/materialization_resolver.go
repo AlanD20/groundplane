@@ -11,6 +11,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/configurationrecovery"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -47,12 +48,13 @@ type materializationSecretValueReader interface {
 // TaskMaterializationResolver resolves only the immutable Controller source
 // named by one durable Task reference and returns one clearing byte stream.
 type TaskMaterializationResolver struct {
-	blueprints       materializationBlueprintReader
-	values           materializationEntryValueReader
-	secrets          materializationSecretValueReader
-	components       materializationComponentFileReader
-	materializations componentMaterializationContentRepository
-	protector        *secretvalue.Protector
+	blueprints            materializationBlueprintReader
+	values                materializationEntryValueReader
+	secrets               materializationSecretValueReader
+	components            materializationComponentFileReader
+	materializations      componentMaterializationContentRepository
+	configurationRecovery *configurationrecovery.Sources
+	protector             *secretvalue.Protector
 }
 
 func NewTaskMaterializationResolver(
@@ -112,14 +114,14 @@ func (resolver *TaskMaterializationResolver) ResolveMaterialization(
 		task.PlanHash != hex.EncodeToString(plan.PlanHash) {
 		return nil, errs.New(errs.KindInternal, "materialization Task and plan identity are inconsistent")
 	}
-	reference, err := taskMaterializationReference(task, step.StepId)
+	reference, metadata, err := resolver.materializationReference(ctx, task, plan, step)
 	if err != nil {
 		return nil, err
 	}
 	if reference.EnvironmentID != materialization.EnvironmentId {
 		return nil, errs.New(errs.KindInternal, "materialization source Environment is inconsistent")
 	}
-	if !taskMaterializationMetadataMatches(reference, materialization) {
+	if !taskMaterializationMetadataMatches(metadata, materialization) {
 		return nil, errs.New(errs.KindInternal, "materialization Task and plan metadata are inconsistent")
 	}
 	var content []byte

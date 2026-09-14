@@ -121,10 +121,22 @@ func prepareRuntimeConfigurationTask(
 		return TaskRecord{}, errs.New(errs.KindStateConflict, "applied Environment has no acknowledged configuration")
 	}
 	if headRevision == 0 || len(task.Materializations) != 0 {
+		configurationID := ids.New(ids.KindConfig)
+		if task.Configuration != nil {
+			if _, _, err := taskConfigurationCondition(task); err != nil {
+				return TaskRecord{}, err
+			}
+			if task.Configuration.PriorRevision != headRevision ||
+				(task.Configuration.Prior == nil) != (prior == nil) ||
+				prior != nil && *task.Configuration.Prior != *prior {
+				return TaskRecord{}, errs.New(errs.KindStateConflict, "prepared configuration predecessor changed")
+			}
+			configurationID = task.Configuration.Current.ID
+		}
 		var candidate runtimeconfiguration.Snapshot
 		if headRevision == 0 {
 			candidate = runtimeconfiguration.Snapshot{
-				ID: ids.New(ids.KindConfig), EnvironmentID: environmentID,
+				ID: configurationID, EnvironmentID: environmentID,
 				Generation: uint64(
 					task.RenderGeneration,
 				), Files: taskmaterialization.Clone(task.Materializations),
@@ -135,7 +147,7 @@ func prepareRuntimeConfigurationTask(
 			})
 		} else {
 			candidate, err = runtimeconfiguration.Merge(previous, task.Materializations,
-				ids.New(ids.KindConfig), uint64(task.RenderGeneration))
+				configurationID, uint64(task.RenderGeneration))
 			if err != nil {
 				return TaskRecord{}, err
 			}
@@ -144,6 +156,9 @@ func prepareRuntimeConfigurationTask(
 		if err != nil {
 			return TaskRecord{}, err
 		}
+	}
+	if task.Configuration != nil && reference != task.Configuration.Current {
+		return TaskRecord{}, errs.New(errs.KindStateConflict, "prepared configuration source set changed")
 	}
 	prepared := cloneTaskRecord(task)
 	prepared.Configuration = &TaskConfiguration{Current: reference, Prior: prior, PriorRevision: headRevision}

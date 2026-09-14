@@ -250,6 +250,20 @@ reverse native restoration. Untouched files and host observations cannot create
 write permission. Native completion requirements remain unchanged. H23 records
 the local journal and replay checks, not a live restoration.
 
+Controller planning captures file sources before sealing the candidate plan;
+publication reuses that snapshot identity and fences the prior head. Replay and
+delivery resolve the original retained source, not the candidate's current file.
+The Agent waits for durable Running acknowledgement before a forward file write.
+A failed file-bearing candidate enters durable recovery, where file restoration
+precedes native compensation. Every restored file is independently verified with
+the read-only helper before reporting completion. Native health is probed again
+after file restoration. Reconnect retains the exact plan, execution epoch and
+deadline; it cannot extend the recovery budget. Recovery transfer buffers survive
+repeated proof reads within that assignment and are cleared on retirement.
+H24 records local Controller/store and Agent checks. The full failed-deployment
+journey and real helper execution on QA remain unqualified; this does not add a
+generic file-only Task recovery procedure.
+
 The plan binds explicit predecessor artifact, Release, target and optional
 inactive-artifact references. Historical labels remain exact. Only that named
 predecessor may have historical ownership; it cannot be a forward candidate via

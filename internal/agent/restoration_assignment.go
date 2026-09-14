@@ -41,8 +41,6 @@ func validateCandidateReleaseAssignmentAuthority(assignment Assignment, plan *ag
 	if err := executionplan.ValidateNativeRestorationAuthority(plan, authority); err != nil {
 		return errs.Wrap(errs.KindInternal, err)
 	}
-	selectedStepIDs := make([]string, 0, len(procedure.GetMembers())*2)
-	compensateStepIDs := make([]string, 0, len(procedure.GetMembers()))
 	for index, member := range procedure.GetMembers() {
 		candidate := authority.GetCandidates()[index]
 		if candidate.GetServiceId() != member.GetServiceId() ||
@@ -50,33 +48,33 @@ func validateCandidateReleaseAssignmentAuthority(assignment Assignment, plan *ag
 			authority.GetCandidateArtifactId() != member.GetCandidateArtifactId() {
 			return errs.New(errs.KindInternal, "agent: candidate Release restoration members diverge")
 		}
-		var probeID, compensateID string
 		switch candidate.GetTarget() {
 		case agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR:
 			selected := member.GetServingPredecessor()
 			if selected == nil || !hasServingPredecessorAuthority(authority, member.GetServiceId()) {
 				return errs.New(errs.KindInternal, "agent: serving predecessor authority is incomplete")
 			}
-			probeID, compensateID = selected.GetProbeStepId(), selected.GetCompensateStepId()
 		case agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE:
 			selected := member.GetCandidateAbsence()
 			if selected == nil {
 				return errs.New(errs.KindInternal, "agent: candidate absence authority is incomplete")
 			}
-			probeID, compensateID = selected.GetProbeStepId(), selected.GetCompensateStepId()
 		default:
 			return errs.New(errs.KindInternal, "agent: candidate Release restoration target is invalid")
 		}
-		selectedStepIDs = append(selectedStepIDs, probeID)
-		compensateStepIDs = append(compensateStepIDs, compensateID)
-	}
-	for index := len(compensateStepIDs) - 1; index >= 0; index-- {
-		selectedStepIDs = append(selectedStepIDs, compensateStepIDs[index])
 	}
 	if assignment.ExecutionMode != agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY {
 		return nil
 	}
-	directive := assignment.ReleaseRecoveryDirective
+	return validateReleaseRecoveryDirective(procedure, assignment.ReleaseRecoveryDirective)
+}
+
+func validateReleaseRecoveryDirective(
+	procedure *agentpb.CandidateReleaseProcedure,
+	directive *agentpb.ReleaseRecoveryDirective,
+) error {
+	selectedStepIDs := executionplan.RecoveryStepIDs(procedure)
+	probeCount := len(selectedStepIDs) / 2
 	if directive.GetCursor() > uint32(len(directive.GetStepIds())) ||
 		len(directive.GetStepIds()) != len(selectedStepIDs) {
 		return errs.New(errs.KindInternal, "agent: candidate Release recovery cursor is invalid")
@@ -87,7 +85,7 @@ func validateCandidateReleaseAssignmentAuthority(assignment Assignment, plan *ag
 		}
 	}
 	applicableIndex := 0
-	for _, compensationStepID := range selectedStepIDs[len(procedure.GetMembers()):] {
+	for _, compensationStepID := range selectedStepIDs[probeCount:] {
 		if applicableIndex < len(directive.GetApplicableCompensationStepIds()) &&
 			directive.GetApplicableCompensationStepIds()[applicableIndex] == compensationStepID {
 			applicableIndex++
@@ -98,11 +96,11 @@ func validateCandidateReleaseAssignmentAuthority(assignment Assignment, plan *ag
 	}
 	switch directive.GetPhase() {
 	case agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROBE:
-		if int(directive.GetCursor()) >= len(procedure.GetMembers()) {
+		if int(directive.GetCursor()) >= probeCount {
 			return errs.New(errs.KindInternal, "agent: recovery probe phase cursor is invalid")
 		}
 	case agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_COMPENSATE:
-		if int(directive.GetCursor()) < len(procedure.GetMembers()) ||
+		if int(directive.GetCursor()) < probeCount ||
 			int(directive.GetCursor()) >= len(selectedStepIDs) {
 			return errs.New(errs.KindInternal, "agent: recovery compensation phase cursor is invalid")
 		}

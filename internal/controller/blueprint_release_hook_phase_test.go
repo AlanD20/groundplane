@@ -22,6 +22,7 @@ import (
 // A separate setup image must keep this barrier and the consumer image binding.
 func TestPrepareBlueprintReleaseTaskGlobalHookPhases(t *testing.T) {
 	reader, task := blueprintPlanTestState(t)
+	task.Materializations = nil // This hook-order case has no file-writing prefix.
 	task.Params[etcd.TaskReleasePublicationParam] = "publication"
 	project, err := LoadNormalizedEnvironmentProject(t.Context(), reader.projection)
 	if err != nil {
