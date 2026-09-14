@@ -812,6 +812,42 @@ authenticated WebSockets, recording `sustained-results.jsonl`. The separately
 staged `0.0.0-qa.proxy20260914.2` has not yet been activated. Upgrade, sustained,
 interruption and reboot claims require their own completed results.
 
+H47 records the normal native upgrade sequence on the H43 production source.
+From `0.0.0-qa.proxy20260914.1`, normal update Task
+`task_01M2G6WAK0MJDQQX4QAJ2J2A2W` installs `.2`. A deliberately non-starting
+Controller candidate then fails as `task_01M2G6Y4MG2KRYWJF49AVCND63`; native recovery
+restores `.2` without application repair. The failed Task remains failed/recovered.
+Normal update `task_01M2G78G666NMXE8JF5TTCYXMH` subsequently installs `.3`, whose
+Controller is `sha256:601dabb8921ae717d47a5e2a0ea5b7ade6401551b0255c819eb98237563f1c2e`
+and Agent is `sha256:d0d4ab37cf415bfdede9f1c4990586d5bc061f0122494b5428c909dd11bfad8b`.
+Every non-Agent container identity/start time, serving Release and checked profile
+is preserved through each transition. The foundation normal-restart verifier then
+passes with unchanged etcd and application runtimes, permitted Agent restart and
+owned marker cleanup. Receipts in the H44 directory are `normal-upgrade-result.json`,
+`native-failure-result.json`, `successive-upgrade-result.json`,
+`normal-restart-result.json` and `normal-restart-foundation.stdout`.
+These operations ran during the active mixed workload; final traffic qualification
+remains pending. This does not prove every UP cancellation, journal-phase,
+Agent-startup-failure, standalone-update or ingress variant.
+
+H48 records REL-03's Controller-loss variant on `.3`. After observing the exact
+running sleep-only Script, the probe kills only the Controller process. Original
+Task `task_01M2G7FRHB93NG33CQ4T3FAF7X` completes within its 120-second observation
+bound. Exact-key replay returns the same Task. A live Docker event stream proves
+one physical runner start; the runner and owned Script are removed, and all
+11 Services, the existing profile and serving Release identities survive.
+`interrupted-task-live-result.json`, `interrupt-live-events.jsonl` and
+`interrupted-task-live.log` retain evidence in the H44 directory. The first
+attempt also completed but its retrospective Docker buffer omitted the start
+event, so `interrupt-incomplete-result.json` remains incomplete proof, not a
+duplicate-run defect or a pass. Its owned Script was removed before the corrected
+probe. No product code changed. The separate Agent-loss variant also passes:
+the exact Agent process is killed while a runner is active, original Task
+`task_01M2G7JNWF0CGYRAKWW8XAREZS` completes, replay returns that Task, and live events
+show one runner start. Application profile/Release authority and owned cleanup
+pass. Evidence is `interrupted-task-agent-result.json`, `interrupt-agent-events.jsonl`
+and `interrupted-task-agent.log`. Reboot and other effect boundaries remain separate.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

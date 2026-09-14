@@ -19,8 +19,9 @@ specified production application and its GP upgrade path; it does not replace
 the full catalogue or waive [MVP acceptance](mvp.md#acceptance-gates).
 No item below is complete merely because local tests pass.
 
-Live continuation is on clean `7322d2806`, installed as
-`0.0.0-qa.prodops20260914.5` by the approved one-time repair. H35 passes the repaired BP-05 first-cycle variant:
+Live continuation uses H43's signed writer repair `939fd039f`, installed fresh
+in H44 and normally upgraded through `.1` and `.2` to
+`0.0.0-qa.proxy20260914.3` in H47. H35 passes the repaired BP-05 first-cycle variant:
 router/native runtime and a held HTTP connection survive exact reapply. The
 configured first Deploy passes. The saved Attach/Entry/Detach cutover also passes
 actual password-only clients during the overlapping-network window and afterward
@@ -34,7 +35,11 @@ writer passes: Attach/Entry cutover → successful Deploy preserving the proxy �
 failed candidate → bounded automatic recovery → later healthy Deploy. Current
 bindings and authenticated data survive, the Agent releases its claim and the
 failed candidate is cleaned. The approved sustained/upgrade run is now active,
-not yet a passing result.
+not yet a passing result. H47 passes normal update, failed native startup recovery,
+later normal update and normal restart with unchanged application/etcd runtime.
+H48 passes separate Controller and Agent loss during a Script, each with one
+observed runner start, same-Task completion/replay and owned cleanup. Final
+sustained traffic and reboot results remain pending.
 H40 passes normal Controller restart with unchanged etcd/application runtime,
 45 authenticated requests and a held WebSocket without interruption. Sustained
 and complete native-upgrade qualification remain open. Earlier failures remain
@@ -581,7 +586,7 @@ application interruption. A machine reboot is not an interruption-free GP update
 | JOURNEY-05 | Application traffic and background work → GP update → rejected/broken GP update → later successful update. | Original application functionality and data survive the complete sequence; same operation outcomes and measured continuity, no manual runtime repairs. | PARTIAL H2 |
 | REL-01 | Restart Controller normally under an application workload. | Agent restart allowed; etcd container identity/start time unchanged. Preserve application requests, held connections, data, serving Releases and correct recovered Task state. | PASS H40: normal restart after recovered Task; interrupted active Task is separate REL-02 |
 | REL-02 | Reboot the authorized QA machine under known state and unfinished work. | Bounded recovery of owned runtimes, data and safely resumable work; no duplicate effects or lost acknowledged state. Record reboot downtime, never claim single-host HA. | NOT RUN; D4 |
-| REL-03 | Interrupt an actually running Task by Agent/process/channel loss at an identified effect boundary. | Exact operation resumes/terminates safely; unknown effects are fenced; no duplicate Script, data mutation or detached claim. | NOT RUN; D4 |
+| REL-03 | Interrupt an actually running Task by Agent/process/channel loss at an identified effect boundary. | Exact operation resumes/terminates safely; unknown effects are fenced; no duplicate Script, data mutation or detached claim. | PARTIAL H48: Controller and Agent loss after runner start pass; other boundaries separate |
 | REL-04 | Run the approved 30-minute mixed workload at 5 authenticated HTTP requests/second, with held WebSockets and background jobs. | Zero unexpected errors/disconnections; HTTP p95 below 1 second; correct job/results and preserved data. Record achieved rate and resource/restart measurements. | NOT RUN; baseline/recovery gate D4 |
 | REL-05 | Apply bounded CPU/memory/disk pressure separately on disposable QA. | Truthful unavailable/failure states, bounded recovery and no silent data corruption, leaked resources or unrelated cleanup. Record exact pressure and safety stop. | BLOCKED D5 |
 | REL-06 | Interrupt persistence at accepted-operation and terminal-commit boundaries, including storage full/unavailable. | Acknowledged durable state is not lost; unknown outcomes reconcile exactly; no partial success, duplicate effects or fabricated recovery evidence. | U |
