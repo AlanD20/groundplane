@@ -9,11 +9,15 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestTaskResultRecordRoundTripsAsBoundedSummary(t *testing.T) {
+	// QA: TASK-07 (L0 codec/validation proof; no Agent report transport, durable transaction, or secret/log inspection).
+	// Rationale: terminal history must preserve bounded typed summaries and exact
+	// replay authority without admitting an unbounded project-observation list.
 	record := validTaskRecord(taskJournalTime())
 	startedAt := record.CreatedAt.Add(1)
 	terminalAt := record.CreatedAt.Add(2)
@@ -24,10 +28,16 @@ func TestTaskResultRecordRoundTripsAsBoundedSummary(t *testing.T) {
 	retainUntil := terminalAt.Add(TaskRetention)
 	record.RetainUntil = &retainUntil
 	result := completedComposeTaskResult()
-	result.Projects = []TaskObservedProjectSummary{{
-		ProjectName: "gp-platform", ObservedAt: terminalAt,
-		ContainerCount: 3, NetworkCount: 2, VolumeCount: 1,
-	}}
+	result.ExecutionEpoch = 23
+	result.ReleaseRecoveryRecordSHA256 = strings.Repeat("4", 64)
+	result.Projects = make([]TaskObservedProjectSummary, 64)
+	for index := range result.Projects {
+		result.Projects[index] = TaskObservedProjectSummary{
+			ProjectName: fmt.Sprintf("gp-%02d", index), ObservedAt: terminalAt,
+			ContainerCount: uint32(index + 1), NetworkCount: uint32(index + 101),
+			VolumeCount: uint32(index + 201), CollisionCount: uint32(index + 301),
+		}
+	}
 	result.DNSResolverCandidateObservation = testDurableDNSProof(
 		"cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV", "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		"cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV", strings.Repeat("1", 64), 7, terminalAt, 0,
@@ -45,17 +55,28 @@ func TestTaskResultRecordRoundTripsAsBoundedSummary(t *testing.T) {
 	if !reflect.DeepEqual(decoded.Result, record.Result) {
 		t.Fatalf("decoded result = %#v, want %#v", decoded.Result, record.Result)
 	}
+	overLimit := record
+	overLimit.Result = cloneTaskResult(record.Result)
+	overLimit.Result.Projects = append(overLimit.Result.Projects, TaskObservedProjectSummary{
+		ProjectName: "gp-64", ObservedAt: terminalAt,
+	})
+	if _, err := encodeTaskRecord(overLimit); !isKind(err, errs.KindValidationFailed) {
+		t.Fatalf("encodeTaskRecord(65 project summaries) error = %v, want validation failed", err)
+	}
 	for name, digest := range map[string]string{"missing": "", "zero": strings.Repeat("0", 64)} {
 		invalid := record
 		invalid.Result = cloneTaskResult(record.Result)
 		invalid.Result.DNSResolverCandidateObservation.ImageConfigDigest = digest
-		if _, err := encodeTaskRecord(invalid); err == nil {
-			t.Fatalf("encodeTaskRecord() accepted %s DNS resolver image config digest", name)
+		if _, err := encodeTaskRecord(invalid); !isKind(err, errs.KindValidationFailed) {
+			t.Fatalf("encodeTaskRecord(%s DNS resolver image config digest) error = %v", name, err)
 		}
 	}
 	cloned := cloneTaskResult(record.Result)
-	cloned.DNSResolverCandidateObservation.ProofSHA256 = strings.Repeat("5", 64)
-	if record.Result.DNSResolverCandidateObservation.ProofSHA256 == cloned.DNSResolverCandidateObservation.ProofSHA256 {
+	originalProofByte := record.Result.DNSResolverCandidateObservation.CanonicalEvidence[0]
+	cloned.Projects[0].ProjectName = "changed"
+	cloned.DNSResolverCandidateObservation.CanonicalEvidence[0] ^= 0xff
+	if record.Result.Projects[0].ProjectName == cloned.Projects[0].ProjectName ||
+		record.Result.DNSResolverCandidateObservation.CanonicalEvidence[0] != originalProofByte {
 		t.Fatal("cloneTaskResult() aliased immutable DNS resolver evidence")
 	}
 }

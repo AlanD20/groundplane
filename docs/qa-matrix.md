@@ -989,6 +989,26 @@ the sender invoked its Close method; it does not qualify production-source memor
 clearing. No production code, test framework or live state changed, and no new
 product defect was reproduced. These results do not qualify a complete case.
 
+#### Durable Task assignment and result boundaries
+
+Reviewed and retained four behavioral tests across three files. Each has a
+concrete reason and a local proof limit. All four pass with the race detector in
+`.tmp/qa-test-review-task-assignment-result.log`; formatting and diff checks pass.
+
+| Reviewed test | Retention reason and corrections | Matrix coverage or gap |
+| --- | --- | --- |
+| `TestAgentTaskAcknowledgementFencesExactAssignmentAndReplay` in [task_assignment_fencing_test.go](../internal/infra/etcd/task_assignment_fencing_test.go) | Stale acknowledgement preserves the running claim; successful completion stores the expected result, exact terminal assignment and finish time and removes the active claim. Exact replay preserves persisted bytes and modification revision; a stale replay is rejected. | TASK-10: in-memory repository, not real etcd CAS races, Agent reconnect/effects or execution-epoch rejection. The simple result fixture has no execution epoch. |
+| `TestAgentTaskProgressFencesExactAssignmentAndGeneration` in that file | Stale assignment/generation and missing authority cannot consume a sequence; valid progress has exact identity, state and payload, with independently expected event count and next sequence. | TASK-07/10: local journal admission, not protobuf transport, actual reconnect or all event bounds. |
+| `TestGetTaskAssignmentResolvesTheTaskIndexedExecutionClaim` in [task_assignment_lookup_test.go](../internal/infra/etcd/task_assignment_lookup_test.go) | Lookup selects the exact Task's claim even while the Agent owns another Task; returned Task/assignment revisions agree at one read. Pending work is not mistaken for an assigned executor. | TASK-03/10: in-memory indexed lookup, not public Abort, real fixed-revision races or executor cancellation. |
+| `TestTaskResultRecordRoundTripsAsBoundedSummary` in [task_result_test.go](../internal/infra/etcd/task_result_test.go) | Preserve distinct summary counts, execution epoch and recovery digest; accept 64 project summaries and reject 65; reject missing/zero DNS image evidence; cloning must detach project entries and canonical DNS evidence bytes. | TASK-07: codec/validation and copy ownership, not Agent report transport, durable publication, secret/log inspection or recovery execution. |
+
+The initial replay assertion treated nil and empty project-summary slices as
+different despite identical persisted values; its evidence remains in
+`.tmp/qa-test-review-task-assignment-result-initial.log`. The corrected assertion
+compares persisted bytes and revision while retaining independent expected
+terminal fields. No product behavior was changed to satisfy that test. No test
+was removed, no new reflection was retained, and no product defect was reproduced.
+
 The remaining root-module Go tests outside the reviewed files still require review.
 Helpers and fixtures are not standalone test cases; inventory counts must not
 classify them as behavioral coverage. No automatic blanket deletion based on
