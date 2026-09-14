@@ -1139,6 +1139,35 @@ back without resetting its disk before post-boot qualification can continue.
 Manual startup, if approved/performed, would not turn this automatic-reboot
 failure into a pass. No product code changed or data was deliberately removed.
 
+H62 resumes H61 read-only after the owner restarts the existing disposable VM.
+A changed boot id is verified. Controller and Docker systemd services are enabled
+and running with zero service restarts recorded; Controller, Agent and etcd are
+healthy. The qualified Controller digest and native update record, Agent identity
+and complete Task history match the pre-reboot capture. The original sentinel
+bytes survive in the managed Volume's verified bind source. The first read used
+Docker's unmounted Volume mountpoint and failed; its error is retained and is not
+evidence of data loss. No Volume was mounted or container started for the read.
+
+Application recovery FAILS: the canary workload and its generated serving proxy
+remain exited, and the still-running Environment router returns HTTP 502.
+Both stopped containers have Docker restart policy `no`; neither reports OOM.
+The primary's upgrade canary Blueprint omitted the native Compose `restart`
+field. The proxy renderer copies `authored.Restart` in
+`internal/controller/service_proxy.go`; the product contract preserves native
+Compose restart semantics. This fixture therefore cannot qualify automatic
+application startup. It does not reproduce GP ignoring an authored restart
+policy, and earlier uninterrupted-upgrade results remain valid for their scope.
+No product code, Blueprint, service lifecycle or host configuration was changed.
+Correcting the fixture through normal Blueprint/Deploy and repeating the boot
+check is the proposed next scoped step. H61's automatic-host return failure
+remains failed, separate from successful platform startup after owner intervention.
+
+Evidence is in H61's directory: `post-boot.log`, `owner-boot-id.json`,
+`owner-startup.json`, `owner-after-reboot.json`, `owner-runtime-detail.json`,
+`owner-volume-mapping.json`, `owner-tasks-after.json` and
+`owner-post-boot-finding.json`. Workload HTTP/WebSocket recovery is not claimed.
+The existing hosting QA installation is untouched.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing
