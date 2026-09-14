@@ -80,7 +80,9 @@ export function serviceObservationFromAPI(observation: WireServiceObservation | 
     return unavailableObservation
   }
   if (replicaTotal(replicas) > 4_096) return unavailableObservation
-  if (observedState(expectedReplicas, replicas) !== observation.state) return unavailableObservation
+  const workloadState = observedState(expectedReplicas, replicas)
+  const proxyDegraded = observation.state === 'degraded' && (workloadState === 'healthy' || workloadState === 'running')
+  if (workloadState !== observation.state && !proxyDegraded) return unavailableObservation
 
   return {
     state: observation.state,

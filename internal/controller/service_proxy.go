@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -13,7 +14,7 @@ import (
 )
 
 const (
-	serviceProxyConfigPath = "/etc/caddy/groundplane-proxy.json"
+	serviceProxyConfigPath = serviceproxy.InitialConfigPath
 )
 
 func renderServiceProxyTopology(
@@ -168,7 +169,7 @@ func renderServiceProxyTopology(
 			Name: name, Networks: cloneProxyNetworks(authored.Networks),
 			Ports: slices.Clone(authored.Ports), Expose: slices.Clone(authored.Expose), Restart: authored.Restart,
 			Profiles: slices.Clone(authored.Profiles),
-			Command:  composetypes.ShellCommand{"caddy", "run", "--config", serviceProxyConfigPath},
+			Command:  composetypes.ShellCommand{"sh", "-ec", serviceproxy.Startup},
 			Configs: []composetypes.ServiceConfigObjConfig{
 				composetypes.ServiceConfigObjConfig(
 					composetypes.FileReferenceConfig{Source: configName, Target: serviceProxyConfigPath},

@@ -889,8 +889,11 @@ tenants and one database.
   `absent`, `failed`, `stopped`, `starting`, `healthy`, `running` or `degraded`
   with timestamp, expiry, serving Release id and replica counts. `healthy`
   requires every expected replica running with a healthy healthcheck; `running`
-  does not assert a missing healthcheck passed. This is workload evidence, not
-  route/application reachability. Missing, disconnected, invalid, changed or
+  does not assert a missing healthcheck passed. For an addressable Service,
+  both states also require its stable proxy running with the exact acknowledged
+  configuration. A missing/stopped proxy or configuration mismatch degrades an
+  otherwise healthy/running result without changing replica counts. This does
+  not prove end-to-end application reachability. Missing, disconnected, invalid, changed or
   expired evidence is unavailable; historical Task success never supplies health.
   Observations expire 15 seconds after the Controller's request-start time, and
   Console summaries expire them locally. Environment provisioning and runtime
@@ -1276,7 +1279,10 @@ tenants and one database.
   Controller-owned Caddy proxy for the logical service. Routed Caddy and
   internal consumers target only that stable proxy. The Controller starts the
   inactive slot, waits for exact candidate health, then atomically reloads the
-  proxy from a sealed JSON configuration to replace its upstream. The old
+  proxy from a sealed JSON configuration to replace its upstream. The selected
+  configuration must also survive proxy and host restart. Switch and recovery
+  success require independent agreement of live and restart configuration.
+  Deploy starts a stopped existing proxy without replacing a running one. The old
   healthy slot is retained for rollback. Blue-green is rejected when N is
   greater than one or when the Service has no addressable internal TCP port;
   replicated blue-green is post-MVP. Recreate stops the old logical set before

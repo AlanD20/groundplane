@@ -52,6 +52,18 @@ test('Service observation accepts only complete state-consistent bounded snapsho
   )
 })
 
+// QA: OBS-05; public projection only, not a live proxy probe.
+// Rationale: healthy replicas must not conceal a Controller-observed proxy failure.
+test('Service observation preserves proxy degradation without changing replica counts', () => {
+  for (const counts of [{ healthy: 1 }, { running: 1 }]) {
+    const observed = serviceObservationFromAPI(wireObservation('degraded', counts))
+    assert.equal(observed.state, 'degraded')
+    assert.deepEqual(observed.replicas, { ...zeroCounts, ...counts })
+    assert.equal(environmentRuntimeState([service(observed)], Date.parse(expiresAt) - 1), 'degraded')
+  }
+  assert.deepEqual(serviceObservationFromAPI(wireObservation('degraded', { stopped: 1 })), { state: 'unavailable' })
+})
+
 // QA: OBS-03; local expiry boundaries, not the refresh-loop lifecycle.
 // Rationale: a stalled response must not extend the previous snapshot's lifetime.
 test('Service observation expires locally at expires_at', () => {

@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/runner"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -37,7 +38,7 @@ func restorationProxyProven(
 		return proven, err
 	}
 	result, err := taskRunner.Run(ctx, runner.RunCmdOpts{
-		Name: DockerExecutable, Args: []string{"exec", "--interactive", containerID, "caddy", "reload", "--config", "-"},
+		Name: DockerExecutable, Args: []string{"exec", "--interactive", containerID, "sh", "-ec", serviceproxy.Activate},
 		Dir: WorkDirectory, Env: slices.Clone(fixedEnvironment), ReplaceEnv: true,
 		Stdin: slices.Clone(canonical), CaptureLimitBytes: maximumComponentConfig,
 	})
@@ -60,10 +61,35 @@ func observeRestorationProxy(
 	if err != nil || result.ExitCode != 0 {
 		return false, errs.New(errs.KindRequestFailed, "restoration proxy observation failed")
 	}
-	canonical, err := canonicalProxyJSON(result.Stdout)
-	if err != nil {
-		return false, errs.New(errs.KindStateConflict, "restoration proxy observation is invalid")
+	if !proxyBytesMatch(result.Stdout, digest) {
+		return false, nil
 	}
-	observed := sha256.Sum256(canonical)
-	return bytes.Equal(observed[:], digest), nil
+	command, err := taskRunner.Run(ctx, runner.RunCmdOpts{
+		Name: DockerExecutable, Args: []string{"exec", containerID, "cat", "/proc/1/cmdline"},
+		Dir: WorkDirectory, Env: slices.Clone(fixedEnvironment), ReplaceEnv: true, CaptureLimitBytes: 4096,
+	})
+	if err != nil || command.ExitCode != 0 {
+		return false, errs.New(errs.KindRequestFailed, "restoration proxy startup observation failed")
+	}
+	startupPath, recognized := serviceproxy.StartupConfigPath(command.Stdout)
+	if !recognized {
+		return false, nil
+	}
+	stored, err := taskRunner.Run(ctx, runner.RunCmdOpts{
+		Name: DockerExecutable, Args: []string{"exec", containerID, "cat", startupPath},
+		Dir: WorkDirectory, Env: slices.Clone(fixedEnvironment), ReplaceEnv: true, CaptureLimitBytes: maximumComponentConfig,
+	})
+	if err != nil || stored.ExitCode != 0 {
+		return false, errs.New(errs.KindRequestFailed, "restoration proxy restart observation failed")
+	}
+	return proxyBytesMatch(stored.Stdout, digest), nil
+}
+
+func proxyBytesMatch(value, digest []byte) bool {
+	canonical, err := canonicalProxyJSON(value)
+	if err != nil {
+		return false
+	}
+	actual := sha256.Sum256(canonical)
+	return bytes.Equal(actual[:], digest)
 }

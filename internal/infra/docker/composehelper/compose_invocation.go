@@ -105,6 +105,18 @@ func commandsFor(
 			mutation.Args = append(mutation.Args, releaseProxyName(artifact, apply.ServiceId))
 		}
 		mutation.Args = append(mutation.Args, releaseWorkloadName(artifact, apply.ServiceId, apply.Target))
+		if !apply.EnsureProxy {
+			// Start the existing stable proxy without reconciling its candidate
+			// YAML: it retains predecessor ownership and live connections.
+			start := base
+			start.Args = append(
+				append([]string(nil), prefix...),
+				"start",
+				"--wait",
+				releaseProxyName(artifact, apply.ServiceId),
+			)
+			return []runner.RunCmdOpts{validation, mutation, start}, nil
+		}
 		return []runner.RunCmdOpts{validation, mutation}, nil
 	}
 	mutation := base

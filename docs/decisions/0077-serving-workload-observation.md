@@ -19,21 +19,26 @@ input at one storage revision. The selected workload carries Environment,
 Service, Release, plan, render-generation, Compose-name and slot identity. Its
 expected replica count comes from the Release's workload seal, never current
 desired replicas. Only singleton/selected-slot workload containers count; stable
-proxies, Script runners, Components and retained releases are excluded. This
-reports workload process/healthcheck state, not routing or application reachability.
+proxies, Script runners, Components and retained releases are excluded from replica
+counts. The owner-approved proxy correction additionally checks the stable proxy
+for addressable Services. This reports workload state plus agreement with the
+acknowledged proxy configuration, not end-to-end application reachability.
 
 `internal/common/serviceobservation` owns the closed machine validation and pure
 count aggregation. `internal/infra/docker/serviceobserver` owns Docker reads via
-a consumer-owned list/inspect-only port. Agent/channel own exchange lifetime;
+a consumer-owned list/inspect and closed proxy-read port. Agent/channel own exchange lifetime;
 the Controller's Service observation module owns source selection, freshness and
 public projection. No observation query renders Compose, resolves Entry values,
-reads logs, executes a command, inspects storage contents or mutates Docker.
+reads logs or mutates Docker. A closed proxy probe executes only the fixed local
+Caddy admin GET inside the exactly owned proxy. It accepts no wire-supplied
+command, path or address and returns only a bounded result, never configuration
+bytes to the Controller.
 
 One request contains 1..200 unique Services from one Environment, no arbitrary
 filters, labels, paths or Docker arguments. Each protobuf envelope is at most
 262,144 bytes. Docker accepts at most 4,096 candidate containers; listing may
 fetch one extra row solely to detect overflow. Only selected serving workloads
-are inspected. Exceeding a bound is unavailable, not a
+and their stable proxies are inspected. Exceeding a bound is unavailable, not a
 truncated healthy sample. Inspect rechecks ownership against the frozen target;
 wrong generation, duplicate replica identity, malformed state, inspection error
 or mid-read removal makes that Service unavailable. An empty complete selection
@@ -41,7 +46,8 @@ is an observed absent workload, distinct from unavailable evidence.
 
 Each result contains exactly one row per target in request order. A row is
 either closed replica counts or an unavailable outcome, never partial counts
-plus failure. Counts partition containers into running without a healthcheck,
+plus failure. A proxied row also carries a closed matching/mismatched result;
+portless rows carry no proxy result. Counts partition containers into running without a healthcheck,
 running healthy, running with a starting healthcheck, running unhealthy,
 transitional (created/paused/restarting/removing), exited successfully, and
 failed (dead or nonzero exit). No container environment, labels, names, images,
@@ -61,7 +67,8 @@ matching worker and discards its output before reusing the slot. Read failures
 return unavailable rows; they do not terminate otherwise usable Task traffic.
 
 Before returning live evidence, the Controller rechecks the serving projection
-and Service runtime-intent revisions. A changed source yields unavailable, not
+and Service runtime-intent revisions, plus the acknowledged Service runtime
+receipt revision used for proxy authority. A changed source yields unavailable, not
 evidence attached to a different Release. The public observation window starts
 at the Controller's request-start time (a conservative lower bound) and expires
 15 seconds later. There is no persisted observation cache or Agent clock
@@ -74,8 +81,12 @@ bounded snapshot with `observed_at`, `expires_at`, `serving_release_id`, sealed
 (zero containers), `failed` (all failed), `stopped` (all exited successfully),
 `starting` (all transitional/starting), `healthy` (exact count, all running and
 healthchecked healthy), `running` (exact count, all running, some without a
-healthcheck), or `degraded` (every other nonempty combination). Runtime intent
-remains a separate field. Create/edit responses do not claim a fresh observation.
+healthcheck), or `degraded` (every other nonempty combination). For addressable Services, a missing/stopped
+proxy or live configuration digest mismatch turns otherwise healthy/running
+into degraded. Foreign or ambiguous proxy ownership, failed reads, invalid
+configuration or missing acknowledged authority yield unavailable. Proxy checks
+never change replica counts. They do not assert end-to-end application health.
+Runtime intent remains a separate field. Create/edit responses do not claim a fresh observation.
 Console and CLI show the same states/counts. The Console expires old evidence
 locally and refreshes visible Services; Environment summaries do not turn missing,
 stopped, absent or starting workloads into Healthy. Provisioning state is separate.

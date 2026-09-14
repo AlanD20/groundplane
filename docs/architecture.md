@@ -641,12 +641,18 @@ Service list/show reads. A named cross-binary `serviceobservation` leaf owns the
 closed machine values; Docker list/inspect lives in `infra/docker/serviceobserver`,
 exchange lifetime in Agent/channel, and source/freshness/public projection in
 the Controller's Service observation module. No renderer, secret resolution,
-Task or mutation path participates. The Controller captures serving Release
+Task or mutation path participates. A fixed read-only local Caddy admin probe
+checks the managed proxy against its acknowledged runtime receipt; wire input
+cannot supply commands, addresses or configuration bytes. The Controller captures serving Release
 authority at one revision and rechecks source revisions after the authenticated
 read. The sealed workload count is compared only with that Release's selected
 singleton/slot replicas, excluding proxies and retained releases. Five-second
 exchange and 15-second snapshot bounds prevent stale evidence becoming health.
-Missing or invalid evidence is unavailable; no durable health cache is added.
+The exact proxy ownership and configuration digest come from the independently
+revision-fenced acknowledged Service runtime, not the original Release's proxy
+labels. Missing or invalid evidence is unavailable; a confirmed proxy mismatch
+prevents healthy/running status without inflating replica counts. No durable
+health cache is added.
 
 The renderer delegates runtime primitives to Compose whenever possible:
 `deploy.replicas`, service `secrets`/`configs`, service `labels` and
@@ -752,6 +758,15 @@ Release seals to have `replica_count == 1` before mutation. `switch_back`
 restores and proves the exact prior topology
 before candidate cleanup. Recovery retries use the same fixed-revision input
 and run probes plus enabled compensation only.
+
+The stable proxy starts from a container-local runtime configuration. A new
+container initializes it from sealed Compose configuration; a restart preserves
+the last selected bytes. Activation stages complete bytes, syncs, renames and
+syncs before reload. Both live and restart bytes must match the sealed digest
+before switch or recovery acknowledgement. The file is not an inherited Volume:
+recreating a proxy for a sealed predecessor cannot reuse another target's state.
+Starting an existing stopped proxy uses Compose start, not candidate reconciliation,
+so an already-running proxy retains its identity and connections.
 
 The managed stable proxy's compiled OCI index reference, Agent-selected host
 platform child manifest, and local Docker image/config id are distinct identities.

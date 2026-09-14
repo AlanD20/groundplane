@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/runner"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	"github.com/AlanD20/groundplane/internal/infra/docker/composehelper"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -70,11 +71,14 @@ func assertRestorationProxyScenario(
 	fake := runner.NewFake()
 	fake.RunFunc = func(_ context.Context, options runner.RunCmdOpts) (runner.Result, error) {
 		if options.Args[0] == "exec" {
-			if slices.Contains(options.Args, "reload") {
+			if slices.Equal(options.Args, []string{"exec", "bbbbbbbbbbbbbbbb", "cat", "/proc/1/cmdline"}) {
+				return runner.Result{Stdout: []byte(serviceproxy.RunningCommand)}, nil
+			}
+			if slices.Contains(options.Args, serviceproxy.Activate) {
 				if !compensate ||
 					!slices.Equal(
 						options.Args,
-						[]string{"exec", "--interactive", "bbbbbbbbbbbbbbbb", "caddy", "reload", "--config", "-"},
+						[]string{"exec", "--interactive", "bbbbbbbbbbbbbbbb", "sh", "-ec", serviceproxy.Activate},
 					) ||
 					!bytes.Equal(options.Stdin, proxy.ProxyConfigJson) {
 					t.Fatalf("unauthorized reload: %v", options.Args)
@@ -82,6 +86,12 @@ func assertRestorationProxyScenario(
 				reloads++
 				activeMatches = reloadWorks
 				return runner.Result{}, nil
+			}
+			if slices.Equal(options.Args, []string{"exec", "bbbbbbbbbbbbbbbb", "cat", serviceproxy.RuntimeConfigPath}) {
+				if activeMatches {
+					return runner.Result{Stdout: slices.Clone(proxy.ProxyConfigJson)}, nil
+				}
+				return runner.Result{Stdout: []byte(`{"apps":{}}`)}, nil
 			}
 			if !slices.Equal(
 				options.Args,

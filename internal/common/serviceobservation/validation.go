@@ -2,6 +2,7 @@
 package serviceobservation
 
 import (
+	"crypto/sha256"
 	"strings"
 	"time"
 
@@ -48,6 +49,17 @@ func ValidateRequest(request *agentpb.ObserveServices) error {
 			target.RuntimeRole != "singleton" && target.RuntimeRole != "slot" {
 			return invalid()
 		}
+		proxyFields := target.ProxyPlanId != "" || target.ProxyRenderGeneration != 0 ||
+			len(target.ProxyConfigSha256) != 0
+		if target.ProxyComposeName == "" && proxyFields {
+			return invalid()
+		}
+		if target.ProxyComposeName != "" && (!composeNameValid(target.ProxyComposeName) ||
+			ids.Validate(ids.KindPlan, target.ProxyPlanId) != nil || target.ProxyRenderGeneration == 0 ||
+			len(target.ProxyConfigSha256) != sha256.Size || target.ProxyComposeName == target.ComposeName ||
+			target.ProxyComposeName == "") {
+			return invalid()
+		}
 		seen[target.ServiceId], seenNames[target.ComposeName] = true, true
 	}
 	return nil
@@ -80,8 +92,11 @@ func ValidateResult(request *agentpb.ObserveServices, result *agentpb.ServiceObs
 				return invalid()
 			}
 			total += Total(outcome.Replicas)
+			if !validProxyState(target, row.ProxyState, false) {
+				return invalid()
+			}
 		case *agentpb.ServiceObservationRow_Unavailable:
-			if outcome == nil || !outcome.Unavailable {
+			if outcome == nil || !outcome.Unavailable || !validProxyState(target, row.ProxyState, true) {
 				return invalid()
 			}
 		default:
@@ -92,6 +107,25 @@ func ValidateResult(request *agentpb.ObserveServices, result *agentpb.ServiceObs
 		return invalid()
 	}
 	return nil
+}
+
+func validProxyState(
+	target *agentpb.ServiceObservationTarget,
+	state agentpb.ServiceProxyObservationState,
+	unavailable bool,
+) bool {
+	if unavailable || target.ProxyComposeName == "" {
+		return state == agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_UNSPECIFIED
+	}
+	switch state {
+	case agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_MATCHING,
+		agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_MISSING,
+		agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_STOPPED,
+		agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_CONFIG_MISMATCH:
+		return true
+	default:
+		return false
+	}
 }
 
 func ValidateCancel(request *agentpb.CancelServiceObservation) error {

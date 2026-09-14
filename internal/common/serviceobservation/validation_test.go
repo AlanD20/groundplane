@@ -117,6 +117,44 @@ func TestObservationResultCannotSubstituteOrOverflow(t *testing.T) {
 	}
 }
 
+// Rationale: OBS-05; the proxy proof is a closed digest-bound extension, not
+// a wire path/command or an optional state that can silently disappear.
+func TestObservationProxyWireRequiresCompleteAuthorityAndOutcome(t *testing.T) {
+	request := observationRequest()
+	target := request.Targets[0]
+	target.ProxyComposeName = "api"
+	target.ProxyPlanId = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	target.ProxyRenderGeneration = 4
+	target.ProxyConfigSha256 = make([]byte, 32)
+	result := observationResult(request)
+	result.Observations[0].ProxyState =
+		agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_MATCHING
+	if err := ValidateResult(request, result); err != nil {
+		t.Fatal(err)
+	}
+	for name, mutate := range map[string]func(*agentpb.ObserveServices, *agentpb.ServiceObservationResult){
+		"missing digest": func(request *agentpb.ObserveServices, _ *agentpb.ServiceObservationResult) {
+			request.Targets[0].ProxyConfigSha256 = nil
+		},
+		"missing result": func(_ *agentpb.ObserveServices, result *agentpb.ServiceObservationResult) {
+			result.Observations[0].ProxyState =
+				agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_UNSPECIFIED
+		},
+		"unknown result": func(_ *agentpb.ObserveServices, result *agentpb.ServiceObservationResult) {
+			result.Observations[0].ProxyState = agentpb.ServiceProxyObservationState(99)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			invalidRequest := proto.CloneOf(request)
+			invalidResult := proto.CloneOf(result)
+			mutate(invalidRequest, invalidResult)
+			if err := ValidateResult(invalidRequest, invalidResult); err == nil {
+				t.Fatal("accepted incomplete proxy evidence")
+			}
+		})
+	}
+}
+
 // Rationale: process liveness without a healthcheck is not application health,
 // and an undeployed desired scale may not excuse missing serving replicas.
 func TestObservationStateUsesExactSealedReplicaCount(t *testing.T) {
@@ -143,6 +181,30 @@ func TestObservationStateUsesExactSealedReplicaCount(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if got := Summarize(test.counts, test.expected); got != test.want {
+				t.Fatalf("state = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+// Rationale: OBS-05; proxy evidence changes the public aggregate only when a
+// workload-only count would otherwise claim healthy or running service.
+func TestObservationStateIncludesStableProxyEvidence(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		counts *agentpb.ServiceReplicaCounts
+		proxy  agentpb.ServiceProxyObservationState
+		want   State
+	}{
+		{"matching healthy", &agentpb.ServiceReplicaCounts{Healthy: 1}, agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_MATCHING, Healthy},
+		{"missing proxy", &agentpb.ServiceReplicaCounts{Healthy: 1}, agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_MISSING, Degraded},
+		{"stopped proxy", &agentpb.ServiceReplicaCounts{Running: 1}, agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_STOPPED, Degraded},
+		{"wrong target", &agentpb.ServiceReplicaCounts{Healthy: 1}, agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_CONFIG_MISMATCH, Degraded},
+		{"workload absent", &agentpb.ServiceReplicaCounts{}, agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_MISSING, Absent},
+		{"missing authority", &agentpb.ServiceReplicaCounts{Healthy: 1}, agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_UNSPECIFIED, Unavailable},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := SummarizeProxy(test.counts, 1, test.proxy); got != test.want {
 				t.Fatalf("state = %q, want %q", got, test.want)
 			}
 		})

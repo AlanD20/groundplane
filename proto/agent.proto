@@ -117,6 +117,10 @@ message ServiceObservationTarget {
   string compose_name = 6;
   string runtime_role = 7; // exactly singleton or slot
   string slot = 8; // empty for singleton; blue or green for slot
+  string proxy_compose_name = 9; // empty for a portless Service
+  string proxy_plan_id = 10;
+  uint64 proxy_render_generation = 11;
+  bytes proxy_config_sha256 = 12; // exact acknowledged active Caddy configuration
 }
 
 message ObserveServices {
@@ -146,6 +150,15 @@ message ServiceObservationRow {
     ServiceReplicaCounts replicas = 3;
     bool unavailable = 4; // must be true; no partial counts or diagnostic text
   }
+  ServiceProxyObservationState proxy_state = 5;
+}
+
+enum ServiceProxyObservationState {
+  SERVICE_PROXY_OBSERVATION_STATE_UNSPECIFIED = 0; // portless or unavailable
+  SERVICE_PROXY_OBSERVATION_STATE_MATCHING = 1;
+  SERVICE_PROXY_OBSERVATION_STATE_MISSING = 2;
+  SERVICE_PROXY_OBSERVATION_STATE_STOPPED = 3;
+  SERVICE_PROXY_OBSERVATION_STATE_CONFIG_MISMATCH = 4;
 }
 
 message ServiceObservationResult {

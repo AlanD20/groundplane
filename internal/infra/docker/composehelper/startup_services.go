@@ -38,9 +38,7 @@ func StartupServices(request *agentpb.ComposeHelperRequest) ([]*agentpb.ComposeS
 		apply := step.GetComposeWorkloadApply()
 		dependencies = true
 		names = append(names, releaseWorkloadName(artifact, apply.ServiceId, apply.Target))
-		if apply.EnsureProxy {
-			names = append(names, releaseProxyName(artifact, apply.ServiceId))
-		}
+		names = append(names, releaseProxyName(artifact, apply.ServiceId))
 	case step.GetServiceRecreateCompensate() != nil:
 		names = serviceNames(artifact, []string{step.GetServiceRecreateCompensate().ServiceId})
 	case step.GetServiceProxyCompensate() != nil:

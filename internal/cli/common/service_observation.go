@@ -146,7 +146,9 @@ func validServiceObservation(observation *apiTypes.ServiceObservation, now time.
 		now.Before(*observation.ObservedAt) || !now.Before(*observation.ExpiresAt) {
 		return false
 	}
-	return observation.State == summarizeServiceObservation(observation.Replicas, *observation.ExpectedReplicas)
+	workload := summarizeServiceObservation(observation.Replicas, *observation.ExpectedReplicas)
+	return observation.State == workload || observation.State == apiTypes.ServiceObservationDegraded &&
+		(workload == apiTypes.ServiceObservationHealthy || workload == apiTypes.ServiceObservationRunning)
 }
 
 func summarizeServiceObservation(

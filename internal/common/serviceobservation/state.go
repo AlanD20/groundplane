@@ -46,3 +46,26 @@ func Summarize(counts *agentpb.ServiceReplicaCounts, expected uint32) State {
 		return Degraded
 	}
 }
+
+// SummarizeProxy preserves the workload-only counts while preventing a managed
+// stable proxy failure from becoming healthy or running Service evidence.
+func SummarizeProxy(
+	counts *agentpb.ServiceReplicaCounts,
+	expected uint32,
+	proxy agentpb.ServiceProxyObservationState,
+) State {
+	state := Summarize(counts, expected)
+	switch proxy {
+	case agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_MATCHING:
+		return state
+	case agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_MISSING,
+		agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_STOPPED,
+		agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_CONFIG_MISMATCH:
+		if state == Healthy || state == Running {
+			return Degraded
+		}
+		return state
+	default:
+		return Unavailable
+	}
+}

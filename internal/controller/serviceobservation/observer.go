@@ -108,8 +108,12 @@ func (observer *Observer) Observe(
 			continue
 		}
 		counts := result.Observations[ordinal].GetReplicas()
+		state := wire.Summarize(counts, sources[index].expected)
+		if sources[index].target.ProxyComposeName != "" {
+			state = wire.SummarizeProxy(counts, sources[index].expected, result.Observations[ordinal].ProxyState)
+		}
 		observations[index] = Observation{
-			State: wire.Summarize(counts, sources[index].expected),
+			State: state,
 			Snapshot: &Snapshot{
 				ObservedAt: started.UTC(), ExpiresAt: started.Add(wire.Freshness).UTC(),
 				ServingReleaseID: sources[index].target.ReleaseId, ExpectedReplicas: sources[index].expected, Replicas: counts,

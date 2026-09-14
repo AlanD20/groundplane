@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -89,7 +90,7 @@ func TestRenderComposeAddressableRecreateHasOneWorkloadAndStableProxy(t *testing
 	if err := yaml.Unmarshal(artifact.CanonicalYaml, &rendered); err != nil {
 		t.Fatalf("decode rendered Compose YAML: %v", err)
 	}
-	wantCommand := []string{"caddy", "run", "--config", serviceProxyConfigPath}
+	wantCommand := []string{"sh", "-ec", serviceproxy.Startup}
 	if !reflect.DeepEqual(rendered.Services["api"].Command, wantCommand) {
 		t.Fatalf("stable proxy command = %#v, want %#v", rendered.Services["api"].Command, wantCommand)
 	}

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/runner"
+	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -122,7 +123,7 @@ func executeServiceProxy(
 		}
 	}
 	if step.GetServiceProxySwitch() != nil || step.GetServiceProxyCompensate() != nil {
-		if _, failure, err := run(config, "exec", "--no-TTY", proxyName, "caddy", "reload", "--config", "-"); err != nil ||
+		if _, failure, err := run(config, "exec", "--no-TTY", proxyName, "sh", "-ec", serviceproxy.Activate); err != nil ||
 			failure != nil {
 			return failure, err
 		}
@@ -152,6 +153,21 @@ func executeServiceProxy(
 		}
 	}
 	if !bytes.Equal(actualDigest[:], digest) {
+		return failedProxyResponse(), nil
+	}
+	command, failure, err := run(nil, "exec", "--no-TTY", proxyName, "cat", "/proc/1/cmdline")
+	if err != nil || failure != nil {
+		return failure, err
+	}
+	startupPath, recognized := serviceproxy.StartupConfigPath(command.Stdout)
+	if !recognized {
+		return failedProxyResponse(), nil
+	}
+	stored, failure, err := run(nil, "exec", "--no-TTY", proxyName, "cat", startupPath)
+	if err != nil || failure != nil {
+		return failure, err
+	}
+	if !proxyBytesMatch(stored.Stdout, digest) {
 		return failedProxyResponse(), nil
 	}
 	if compensate := step.GetServiceProxyCompensate(); compensate != nil {

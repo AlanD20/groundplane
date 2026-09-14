@@ -76,6 +76,13 @@ func TestPresentServiceObservationRejectsExpiredOrMalformedEvidence(t *testing.T
 	if got.State != "healthy" || got.Healthy != "1" {
 		t.Fatalf("fresh observation = %#v", got)
 	}
+	// OBS-05: a proxy mismatch degrades healthy workloads without inventing
+	// an unhealthy replica or discarding the Controller's valid snapshot.
+	proxyFailure := fresh()
+	proxyFailure.State = apiTypes.ServiceObservationDegraded
+	if got := PresentServiceObservation(proxyFailure, observedAt); got.State != "degraded" || got.Healthy != "1" {
+		t.Fatalf("proxy degradation lost: %#v", got)
+	}
 	tests := []struct {
 		name        string
 		observation *apiTypes.ServiceObservation

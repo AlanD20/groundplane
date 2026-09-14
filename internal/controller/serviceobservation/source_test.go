@@ -2,21 +2,29 @@ package serviceobservation
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type sourceFixture struct {
 	service etcd.Versioned[etcd.ServiceRecord]
 	serving etcd.ServingRelease
 	render  etcd.Versioned[etcd.ReleaseRenderInput]
+	runtime *etcd.Versioned[serviceruntimerecord.Record]
 }
 
 type sourceRead struct {
@@ -29,11 +37,43 @@ type fakeReleases struct {
 	fixtures       map[string]sourceFixture
 	resolveCalls   []sourceRead
 	renderCalls    []sourceRead
+	runtimeCalls   []sourceRead
 	resolveCounts  map[string]int
 	renderCounts   map[string]int
 	followRevision bool
 	mutateServing  func(string, int, *etcd.ServingRelease)
 	mutateRender   func(string, int, *etcd.Versioned[etcd.ReleaseRenderInput])
+	mutateRuntime  func(string, int, *etcd.Versioned[serviceruntimerecord.Record])
+	runtimeCounts  map[string]int
+}
+
+func (releases *fakeReleases) LoadAcknowledgedServiceRuntimesAtRevision(
+	ctx context.Context,
+	environmentID string,
+	serviceIDs []string,
+	revision int64,
+) ([]etcd.Versioned[serviceruntimerecord.Record], error) {
+	if len(serviceIDs) != 1 {
+		return nil, errs.New(errs.KindValidationFailed, "unexpected runtime selection")
+	}
+	serviceID := serviceIDs[0]
+	releases.runtimeCalls = append(releases.runtimeCalls, sourceRead{ctx: ctx, identity: serviceID, revision: revision})
+	fixture, ok := releases.fixtures[serviceID]
+	if !ok || fixture.runtime == nil || fixture.runtime.Record.EnvironmentID != environmentID {
+		return nil, errs.New(errs.KindStateConflict, "acknowledged runtime is unavailable")
+	}
+	if releases.runtimeCounts == nil {
+		releases.runtimeCounts = make(map[string]int)
+	}
+	releases.runtimeCounts[serviceID]++
+	result := *fixture.runtime
+	if releases.followRevision {
+		result.ReadRevision = revision
+	}
+	if releases.mutateRuntime != nil {
+		releases.mutateRuntime(serviceID, releases.runtimeCounts[serviceID], &result)
+	}
+	return []etcd.Versioned[serviceruntimerecord.Record]{result}, nil
 }
 
 func (releases *fakeReleases) ResolveServing(
@@ -126,6 +166,15 @@ func newSourceFixture(
 		EnvironmentID: environmentID,
 		Projection:    etcd.EnvironmentComposeProjection{EnvironmentID: environmentID, RenderGeneration: 7},
 	}
+	var runtime *etcd.Versioned[serviceruntimerecord.Record]
+	if len(proxyPorts) != 0 {
+		proxyConfig, proxyErr := domain.RenderProxyConfig(desired.Name, releaseID, target, 5, proxyPorts)
+		if proxyErr != nil {
+			t.Fatal(proxyErr)
+		}
+		input.ProxyGeneration, input.ProxyConfigDigest = 5, hex.EncodeToString(proxyConfig.SHA256[:])
+		runtime = sourceRuntimeFixture(t, stamp, seed, input, proxyConfig)
+	}
 	digest, err := domain.Digest(input)
 	if err != nil {
 		t.Fatal(err)
@@ -145,7 +194,147 @@ func newSourceFixture(
 			},
 			IntentRevision: 32, Revision: 40,
 		},
-		render: etcd.Versioned[etcd.ReleaseRenderInput]{Record: input, Revision: 33, ReadRevision: 40},
+		render: etcd.Versioned[etcd.ReleaseRenderInput]{
+			Record:       input,
+			Revision:     33,
+			ReadRevision: 40,
+		}, runtime: runtime,
+	}
+}
+
+func sourceRuntimeFixture(
+	t *testing.T,
+	stamp time.Time,
+	seed int64,
+	input etcd.ReleaseRenderInput,
+	config domain.ProxyConfig,
+) *etcd.Versioned[serviceruntimerecord.Record] {
+	t.Helper()
+	proxyPlan := ids.NewAt(ids.KindPlan, stamp, seed+6)
+	proxyGeneration := uint64(17)
+	workloadName := input.ServiceName
+	workloadRole := agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON
+	runtimeRole, slot := "singleton", ""
+	if input.CandidateTarget != domain.WorkloadSingleton {
+		workloadName = input.ServiceName + "--" + string(input.CandidateTarget)
+		workloadRole = agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT
+		runtimeRole, slot = "slot", string(input.CandidateTarget)
+	}
+	proxy := &agentpb.ComposeService{
+		ServiceId: input.ServiceID, ComposeName: input.ServiceName, ExpectedReplicas: 1,
+		Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY,
+		ExpectedLabels: sourceRuntimeLabels(
+			input.EnvironmentID,
+			input.ServiceID,
+			proxyPlan,
+			proxyGeneration,
+			"proxy",
+			"",
+			"",
+		),
+		ProxyConfigJson: append(
+			[]byte(nil),
+			config.JSON...), ProxyConfigSha256: append([]byte(nil), config.SHA256[:]...),
+	}
+	workload := &agentpb.ComposeService{
+		ServiceId: input.ServiceID, ComposeName: workloadName, ExpectedReplicas: input.CandidateWorkload.ReplicaCount,
+		HasHealthcheck: true, Role: workloadRole, Slot: slot, ImageReference: input.CandidateWorkload.LocalImageID,
+		ExpectedLabels: sourceRuntimeLabels(
+			input.EnvironmentID,
+			input.ServiceID,
+			input.PlanID,
+			input.Projection.RenderGeneration,
+			runtimeRole,
+			slot,
+			input.ReleaseID,
+		),
+	}
+	yaml := []byte("services: {}\n")
+	yamlDigest := sha256.Sum256(yaml)
+	artifact := &agentpb.ComposeArtifact{
+		ArtifactId: ids.NewAt(ids.KindConfig, stamp, seed+7),
+		OwnerKind:  agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
+		OwnerId:    input.EnvironmentID, ProjectName: "gp-" + strings.ToLower(input.EnvironmentID),
+		CanonicalYaml: yaml, YamlSha256: yamlDigest[:], Services: []*agentpb.ComposeService{proxy, workload},
+	}
+	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := serviceruntimerecord.Record{
+		EnvironmentID: input.EnvironmentID,
+		Runtime:       executionplan.CandidateRuntime{},
+	}
+	record.Runtime.ServiceID, record.Runtime.ReleaseID = input.ServiceID, input.ReleaseID
+	record.Runtime.Target, record.Runtime.ProxyGeneration = string(input.CandidateTarget), input.ProxyGeneration
+	record.Runtime.ProxyConfigSHA256, record.Runtime.CurrentArtifact = append([]byte(nil), config.SHA256[:]...), encoded
+	record.Source = serviceruntimerecord.Acknowledgement{
+		TaskID: ids.NewAt(ids.KindTask, stamp, seed+8), PlanID: ids.NewAt(ids.KindPlan, stamp, seed+9),
+		PlanHash: strings.Repeat("a", 64), StepID: ids.NewAt(ids.KindStep, stamp, seed+10),
+		AgentID: ids.NewAt(ids.KindAgent, stamp, seed+11), AssignmentID: ids.NewAt(ids.KindAssignment, stamp, seed+12),
+		ExecutionEpoch: 1, RenderGeneration: input.Projection.RenderGeneration,
+		EffectDigest: strings.Repeat("b", 64), AcknowledgedAt: stamp,
+	}
+	if err := serviceruntimerecord.Validate(record); err != nil {
+		t.Fatal(err)
+	}
+	return &etcd.Versioned[serviceruntimerecord.Record]{Record: record, Revision: 34, ReadRevision: 40}
+}
+
+func sourceRuntimeLabels(
+	environmentID, serviceID, planID string,
+	generation uint64,
+	role, slot, releaseID string,
+) []*agentpb.LabelPair {
+	values := []agentpb.LabelPair{
+		{Key: "com.groundplane.environment-id", Value: environmentID},
+		{Key: "com.groundplane.kind", Value: "service"},
+		{Key: "com.groundplane.managed", Value: "true"},
+		{Key: "com.groundplane.plan-id", Value: planID},
+	}
+	if releaseID != "" {
+		values = append(values, agentpb.LabelPair{Key: "com.groundplane.release-id", Value: releaseID})
+	}
+	values = append(values,
+		agentpb.LabelPair{Key: "com.groundplane.render-generation", Value: strconv.FormatUint(generation, 10)},
+		agentpb.LabelPair{Key: "com.groundplane.runtime-role", Value: role},
+		agentpb.LabelPair{Key: "com.groundplane.service-id", Value: serviceID},
+	)
+	if slot != "" {
+		values = append(values, agentpb.LabelPair{Key: "com.groundplane.slot", Value: slot})
+	}
+	result := make([]*agentpb.LabelPair, len(values))
+	for index := range values {
+		result[index] = &values[index]
+	}
+	return result
+}
+
+func rebindSourceRuntimeEnvironment(t *testing.T, fixture *sourceFixture, environmentID string) {
+	t.Helper()
+	if fixture.runtime == nil {
+		return
+	}
+	artifact := new(agentpb.ComposeArtifact)
+	if err := proto.Unmarshal(fixture.runtime.Record.Runtime.CurrentArtifact, artifact); err != nil {
+		t.Fatal(err)
+	}
+	artifact.OwnerId, artifact.ProjectName = environmentID, "gp-"+strings.ToLower(environmentID)
+	for _, service := range artifact.GetServices() {
+		for _, pair := range service.GetExpectedLabels() {
+			if pair.GetKey() == "com.groundplane.environment-id" {
+				pair.Value = environmentID
+			}
+		}
+	}
+	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.runtime.Record.EnvironmentID = environmentID
+	fixture.runtime.Record.Runtime.CurrentArtifact = encoded
+	if err := serviceruntimerecord.Validate(fixture.runtime.Record); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -195,6 +384,17 @@ func TestCaptureSelectsServingSealedWorkloadAndComposeIdentity(t *testing.T) {
 				captured.target.Slot != string(test.slot) {
 				t.Fatalf("target = %#v", captured.target)
 			}
+			if len(test.proxyPorts) == 0 {
+				if captured.target.ProxyComposeName != "" || len(releases.runtimeCalls) != 0 {
+					t.Fatalf("portless Service gained proxy authority: %#v", captured.target)
+				}
+			} else if captured.target.ProxyComposeName != "api" || captured.target.ProxyPlanId == "" ||
+				captured.target.ProxyPlanId == fixture.render.Record.PlanID ||
+				captured.target.ProxyRenderGeneration == 0 || len(captured.target.ProxyConfigSha256) != sha256.Size ||
+				captured.acknowledgedRuntimeRevision != fixture.runtime.Revision || len(releases.runtimeCalls) != 1 ||
+				releases.runtimeCalls[0].revision != fixture.service.ReadRevision {
+				t.Fatalf("proxy did not use exact acknowledged runtime: target=%#v calls=%v", captured.target, releases.runtimeCalls)
+			}
 			if len(releases.resolveCalls) != 1 || len(releases.renderCalls) != 1 ||
 				releases.resolveCalls[0].revision != fixture.service.ReadRevision ||
 				releases.renderCalls[0].revision != fixture.service.ReadRevision {
@@ -215,6 +415,19 @@ func TestCaptureRejectsRenderInputDigestMismatch(t *testing.T) {
 	}}
 	if _, ok := capture(t.Context(), releases, fixture.service); ok {
 		t.Fatal("render input with mismatched immutable digest accepted")
+	}
+}
+
+// Rationale: OBS-05; a proxied serving Release without its self-contained
+// acknowledged runtime cannot authorize a live proxy comparison.
+func TestCaptureRejectsMissingAcknowledgedProxyRuntime(t *testing.T) {
+	fixture := newSourceFixture(t, 55, domain.StrategyRecreate, "", []uint16{8080}, 1)
+	fixture.runtime = nil
+	releases := &fakeReleases{fixtures: map[string]sourceFixture{
+		fixture.service.Record.Desired.ID: fixture,
+	}}
+	if _, ok := capture(t.Context(), releases, fixture.service); ok {
+		t.Fatal("missing acknowledged proxy runtime became observation authority")
 	}
 }
 
@@ -262,10 +475,11 @@ func TestSourceUnchangedRejectsEveryRevisionFenceAfterABA(t *testing.T) {
 		t.Fatal("valid source was not stable")
 	}
 	for name, mutate := range map[string]func(*source){
-		"runtime":    func(value *source) { value.runtimeRevision++ },
-		"projection": func(value *source) { value.projectionRevision++ },
-		"intent":     func(value *source) { value.intentRevision++ },
-		"render":     func(value *source) { value.renderRevision++ },
+		"runtime":              func(value *source) { value.runtimeRevision++ },
+		"acknowledged runtime": func(value *source) { value.acknowledgedRuntimeRevision++ },
+		"projection":           func(value *source) { value.projectionRevision++ },
+		"intent":               func(value *source) { value.intentRevision++ },
+		"render":               func(value *source) { value.renderRevision++ },
 	} {
 		t.Run(name, func(t *testing.T) {
 			current := original

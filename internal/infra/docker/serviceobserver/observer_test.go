@@ -2,11 +2,16 @@ package serviceobserver
 
 import (
 	"context"
+	"crypto/sha256"
+	"errors"
 	"maps"
+	"net"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/serviceobservation"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -24,6 +29,27 @@ type readEngine struct {
 	listErr       error
 	calls         []string
 	options       client.ContainerListOptions
+	execOutput    []byte
+	execExit      int
+	execContainer string
+	execOptions   client.ExecCreateOptions
+	execAttach    client.ExecAttachOptions
+	execAttached  chan struct{}
+	execClosed    chan struct{}
+	execHoldOpen  bool
+	execNilReader bool
+	execPeer      net.Conn
+}
+
+type trackedConn struct {
+	net.Conn
+	closed chan struct{}
+	once   sync.Once
+}
+
+func (connection *trackedConn) Close() error {
+	connection.once.Do(func() { close(connection.closed) })
+	return connection.Conn.Close()
 }
 
 func (engine *readEngine) ContainerList(
@@ -51,6 +77,210 @@ func (engine *readEngine) ContainerInspect(
 }
 
 func (engine *readEngine) Close() error { return nil }
+
+func (engine *readEngine) ExecCreate(
+	ctx context.Context,
+	containerID string,
+	options client.ExecCreateOptions,
+) (client.ExecCreateResult, error) {
+	engine.calls = append(engine.calls, "exec-create")
+	engine.execContainer, engine.execOptions = containerID, options
+	return client.ExecCreateResult{ID: "exec-observation"}, ctx.Err()
+}
+
+func (engine *readEngine) ExecAttach(
+	ctx context.Context,
+	execID string,
+	options client.ExecAttachOptions,
+) (client.ExecAttachResult, error) {
+	engine.calls = append(engine.calls, "exec-attach")
+	engine.execAttach = options
+	reader, writer := net.Pipe()
+	engine.execPeer = writer
+	engine.execClosed = make(chan struct{})
+	connection := &trackedConn{Conn: reader, closed: engine.execClosed}
+	if engine.execAttached != nil {
+		close(engine.execAttached)
+	}
+	if engine.execNilReader {
+		return client.ExecAttachResult{HijackedResponse: client.HijackedResponse{Conn: connection}}, ctx.Err()
+	}
+	if engine.execHoldOpen {
+		return client.ExecAttachResult{HijackedResponse: client.NewHijackedResponse(connection, "")}, ctx.Err()
+	}
+	go func() {
+		defer writer.Close()
+		if _, err := writer.Write(engine.execOutput); err != nil {
+			return
+		}
+	}()
+	return client.ExecAttachResult{HijackedResponse: client.NewHijackedResponse(connection, "")}, ctx.Err()
+}
+
+func proxiedReadRequest(config []byte) *agentpb.ObserveServices {
+	request := readRequest()
+	digest := sha256.Sum256(config)
+	target := request.Targets[0]
+	target.ProxyComposeName = "api"
+	target.ProxyPlanId = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	target.ProxyRenderGeneration = 2
+	target.ProxyConfigSha256 = digest[:]
+	return request
+}
+
+func proxyLabels(target *agentpb.ServiceObservationTarget) map[string]string {
+	return map[string]string{
+		"com.groundplane.managed": "true", "com.groundplane.kind": "service",
+		"com.groundplane.environment-id": target.EnvironmentId, "com.groundplane.service-id": target.ServiceId,
+		"com.groundplane.release-id": "", "com.groundplane.plan-id": target.ProxyPlanId,
+		"com.groundplane.render-generation": strconv.FormatUint(target.ProxyRenderGeneration, 10),
+		"com.groundplane.runtime-role":      "proxy", "com.groundplane.slot": "",
+		"com.docker.compose.service": target.ProxyComposeName, "com.docker.compose.container-number": "1",
+		"com.docker.compose.oneoff": "False",
+	}
+}
+
+// Rationale: OBS-05; healthy serving replicas cannot hide a missing, stopped,
+// or wrong-target stable proxy, while an exact live Caddy config remains usable.
+func TestObservationIncludesStableProxyServingProof(t *testing.T) {
+	expectedConfig := []byte(`{"apps":{"http":{"servers":{"gp":{"listen":[":8080"]}}}}}`)
+	wrongConfig := []byte(`{"apps":{"http":{"servers":{"gp":{"listen":[":8081"]}}}}}`)
+	for _, test := range []struct {
+		name       string
+		proxyState *container.State
+		output     []byte
+		want       agentpb.ServiceProxyObservationState
+	}{
+		{name: "matching", proxyState: &container.State{Status: container.StateRunning, Running: true}, output: expectedConfig,
+			want: agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_MATCHING},
+		{name: "wrong target", proxyState: &container.State{Status: container.StateRunning, Running: true}, output: wrongConfig,
+			want: agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_CONFIG_MISMATCH},
+		{name: "stopped", proxyState: &container.State{Status: container.StateExited, ExitCode: 0},
+			want: agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_STOPPED},
+		{name: "absent", want: agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_MISSING},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := proxiedReadRequest(expectedConfig)
+			engine := &readEngine{execOutput: test.output}
+			engine.add("workload", readLabels(request.Targets[0], 1), &container.State{
+				Status: container.StateRunning, Running: true, Health: &container.Health{Status: container.Healthy},
+			})
+			if test.proxyState != nil {
+				engine.add("proxy", proxyLabels(request.Targets[0]), test.proxyState)
+			}
+			result := runRead(t, engine, request)
+			row := result.Observations[0]
+			if row.GetReplicas().GetHealthy() != 1 || row.GetProxyState() != test.want {
+				t.Fatalf("proxy observation = %v", row)
+			}
+			if test.name == "matching" && (!engine.execOptions.TTY || !engine.execOptions.AttachStdout ||
+				engine.execOptions.AttachStdin || engine.execOptions.Privileged || !engine.execAttach.TTY ||
+				!slices.Equal(engine.execOptions.Cmd, []string{
+					"wget", "-q", "-T", "4", "-t", "1", "-O", "-", "http://127.0.0.1:2019/config/",
+				})) {
+				t.Fatalf(
+					"proxy probe escaped fixed read-only command: create=%+v attach=%+v",
+					engine.execOptions,
+					engine.execAttach,
+				)
+			}
+		})
+	}
+}
+
+// Rationale: OBS-05; a container sharing the proxy's coarse Service labels but
+// not its acknowledged plan ownership is ambiguous authority, not absence.
+func TestObservationRejectsProxyWithStaleOwnership(t *testing.T) {
+	config := []byte(`{"apps":{"http":{"servers":{"gp":{}}}}}`)
+	request := proxiedReadRequest(config)
+	engine := &readEngine{}
+	engine.add("workload", readLabels(request.Targets[0], 1), &container.State{
+		Status: container.StateRunning, Running: true, Health: &container.Health{Status: container.Healthy},
+	})
+	labels := proxyLabels(request.Targets[0])
+	labels["com.groundplane.plan-id"] = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	engine.add("proxy", labels, &container.State{Status: container.StateRunning, Running: true})
+	row := runRead(t, engine, request).Observations[0]
+	if !row.GetUnavailable() || row.GetProxyState() !=
+		agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_UNSPECIFIED {
+		t.Fatalf("stale proxy authority became available: %v", row)
+	}
+}
+
+func TestProxyProbeClosesIncompleteAttachment(t *testing.T) {
+	config := []byte(`{"apps":{"http":{"servers":{"gp":{}}}}}`)
+	request := proxiedReadRequest(config)
+	engine := &readEngine{execNilReader: true}
+	defer func() { _ = engine.execPeer.Close() }()
+	engine.add("workload", readLabels(request.Targets[0], 1), &container.State{
+		Status: container.StateRunning, Running: true, Health: &container.Health{Status: container.Healthy},
+	})
+	engine.add(
+		"proxy",
+		proxyLabels(request.Targets[0]),
+		&container.State{Status: container.StateRunning, Running: true},
+	)
+	row := runRead(t, engine, request).Observations[0]
+	if !row.GetUnavailable() {
+		t.Fatalf("incomplete proxy attachment became available: %v", row)
+	}
+	select {
+	case <-engine.execClosed:
+	default:
+		t.Fatal("incomplete proxy attachment was not closed")
+	}
+}
+
+func TestProxyProbeCancellationUnblocksAttachedRead(t *testing.T) {
+	config := []byte(`{"apps":{"http":{"servers":{"gp":{}}}}}`)
+	request := proxiedReadRequest(config)
+	engine := &readEngine{execAttached: make(chan struct{}), execHoldOpen: true}
+	defer func() { _ = engine.execPeer.Close() }()
+	engine.add("workload", readLabels(request.Targets[0], 1), &container.State{
+		Status: container.StateRunning, Running: true, Health: &container.Health{Status: container.Healthy},
+	})
+	engine.add(
+		"proxy",
+		proxyLabels(request.Targets[0]),
+		&container.State{Status: container.StateRunning, Running: true},
+	)
+	observer, err := NewWithEngine(engine)
+	if err != nil {
+		t.Fatalf("new observer: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() {
+		_, observeErr := observer.Observe(ctx, request)
+		result <- observeErr
+	}()
+	<-engine.execAttached
+	cancel()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("observe error = %v, want context cancellation", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("cancelled proxy observation remained blocked on attachment")
+	}
+	select {
+	case <-engine.execClosed:
+	default:
+		t.Fatal("cancelled proxy attachment was not closed")
+	}
+}
+
+func (engine *readEngine) ExecInspect(
+	ctx context.Context,
+	execID string,
+	_ client.ExecInspectOptions,
+) (client.ExecInspectResult, error) {
+	engine.calls = append(engine.calls, "exec-inspect")
+	return client.ExecInspectResult{
+		ID: execID, ContainerID: engine.execContainer, ExitCode: engine.execExit,
+	}, ctx.Err()
+}
 
 func readRequest() *agentpb.ObserveServices {
 	return &agentpb.ObserveServices{

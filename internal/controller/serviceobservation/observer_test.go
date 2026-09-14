@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -77,6 +78,9 @@ func availableResult(
 			ServiceId: target.ServiceId, ReleaseId: target.ReleaseId,
 			Outcome: &agentpb.ServiceObservationRow_Replicas{Replicas: counts[target.ServiceId]},
 		}
+		if target.ProxyComposeName != "" {
+			rows[index].ProxyState = agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_MATCHING
+		}
 	}
 	return &agentpb.ServiceObservationResult{RequestId: "01ARZ3NDEKTSV4RRFFQ69G5FAV", Observations: rows}
 }
@@ -96,6 +100,7 @@ func rebindEnvironment(t *testing.T, fixture sourceFixture, environmentID string
 	fixture.serving.Intent.EnvironmentID = environmentID
 	fixture.render.Record.EnvironmentID = environmentID
 	fixture.render.Record.Projection.EnvironmentID = environmentID
+	rebindSourceRuntimeEnvironment(t, &fixture, environmentID)
 	digest, err := domain.Digest(fixture.render.Record)
 	if err != nil {
 		t.Fatal(err)
@@ -211,6 +216,67 @@ func TestObserveUsesOneBoundedBatchAndPreservesUnavailableDesiredReads(t *testin
 		if call.revision != 60 {
 			t.Fatalf("recheck source read revision = %d", call.revision)
 		}
+	}
+}
+
+// Rationale: OBS-05; exact healthy workload counts must be degraded when the
+// Agent confirms the acknowledged stable proxy serves different live config.
+func TestObserveDegradesHealthyWorkloadForProxyConfigMismatch(t *testing.T) {
+	fixture := newSourceFixture(t, 125, domain.StrategyBlueGreen, domain.SlotBlue, []uint16{8080}, 1)
+	releases := &fakeReleases{fixtures: fixtureMap(fixture), followRevision: true}
+	services := &fakeServices{pages: []etcd.Page[etcd.ServiceRecord]{servicePage(60, fixture)}}
+	channel := &fakeChannel{result: func(targets []*agentpb.ServiceObservationTarget) (
+		*agentpb.ServiceObservationResult, error,
+	) {
+		result := availableResult(targets, map[string]*agentpb.ServiceReplicaCounts{
+			fixture.service.Record.Desired.ID: {Healthy: 1},
+		})
+		result.Observations[0].ProxyState =
+			agentpb.ServiceProxyObservationState_SERVICE_PROXY_OBSERVATION_STATE_CONFIG_MISMATCH
+		return result, nil
+	}}
+	now := time.Date(2026, 9, 12, 14, 30, 0, 0, time.UTC)
+	observer, err := New(services, releases, channel, sequenceClock(now, now.Add(time.Second)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	observations := observer.Observe(
+		t.Context(), ids.NewAt(ids.KindAgent, now, 1), []etcd.Versioned[etcd.ServiceRecord]{fixture.service},
+	)
+	if len(observations) != 1 || observations[0].State != wire.Degraded ||
+		observations[0].Snapshot == nil || observations[0].Snapshot.Replicas.GetHealthy() != 1 {
+		t.Fatalf("proxy mismatch observation = %#v", observations)
+	}
+}
+
+// Rationale: OBS-05; byte-identical proxy authority rewritten after the Agent
+// read is stale evidence and cannot be degraded or healthy current state.
+func TestObserveRejectsAcknowledgedProxyRuntimeRevisionABA(t *testing.T) {
+	fixture := newSourceFixture(t, 126, domain.StrategyRecreate, "", []uint16{8080}, 1)
+	releases := &fakeReleases{fixtures: fixtureMap(fixture), followRevision: true}
+	releases.mutateRuntime = func(_ string, call int, runtime *etcd.Versioned[serviceruntimerecord.Record]) {
+		if call == 2 {
+			runtime.Revision++
+		}
+	}
+	services := &fakeServices{pages: []etcd.Page[etcd.ServiceRecord]{servicePage(60, fixture)}}
+	channel := &fakeChannel{result: func(targets []*agentpb.ServiceObservationTarget) (
+		*agentpb.ServiceObservationResult, error,
+	) {
+		return availableResult(targets, map[string]*agentpb.ServiceReplicaCounts{
+			fixture.service.Record.Desired.ID: {Healthy: 1},
+		}), nil
+	}}
+	now := time.Date(2026, 9, 12, 14, 31, 0, 0, time.UTC)
+	observer, err := New(services, releases, channel, sequenceClock(now, now.Add(time.Second)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	observations := observer.Observe(
+		t.Context(), ids.NewAt(ids.KindAgent, now, 2), []etcd.Versioned[etcd.ServiceRecord]{fixture.service},
+	)
+	if len(observations) != 1 || observations[0].State != wire.Unavailable || observations[0].Snapshot != nil {
+		t.Fatalf("stale acknowledged proxy authority escaped: %#v", observations)
 	}
 }
 

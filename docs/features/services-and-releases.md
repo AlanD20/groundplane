@@ -324,7 +324,7 @@ Exact-count recreate, replicated rollout/recovery and grouped hook qualification
 remain open in [capabilities.md](../capabilities.md).
 
 Service observation has a local protocol and Docker foundation: closed
-request/result validation, pure state aggregation and a bounded list/inspect-only
+request/result validation, pure state aggregation and a bounded workload/proxy
 observer. Focused race tests, vet and Staticcheck pass with Go 1.26.7. The tests
 include the real Docker client over a private HTTP transport and a protobuf
 round trip; they do not contact Docker or prove live workload visibility.
@@ -340,6 +340,24 @@ workloads retain their exact rendered names. After the bounded Agent read, it
 rechecks serving, render, intent and runtime-sidecar revisions at one newer view.
 Changed or expired evidence becomes unavailable without failing desired reads.
 The Controller clock supplies the 15-second window; no observation is persisted.
+
+The approved proxy correction extends that read with exact acknowledged proxy
+ownership and configuration, fenced by its runtime receipt revision. A fixed
+local Caddy admin GET compares live configuration with the acknowledged digest.
+An absent/stopped or mismatched proxy prevents healthy/running status; a failed
+or ambiguous observation is unavailable. Proxy containers never become workload
+replicas. This check detects the stale-target boot failure but does not replace
+independent routed application checks in QA.
+
+Proxy startup and activation share one closed procedure in
+`internal/common/serviceproxy`. New containers initialize their private runtime
+file from sealed Compose input. Switch and compensation stage complete bytes,
+sync and atomically rename them before reload, then verify both runtime-file and
+live configuration digests. Restart loads that selected file; recreation starts
+from its own sealed input, without inherited selection from a Volume. Candidate
+startup explicitly starts an existing stopped stable proxy without reconciling
+its new Compose definition or replacing a running proxy. REL-02, SVC-06/SVC-15
+and OBS-05 cover these sequences; implementation proof is not live qualification.
 
 Existing Service list/show now expose the public observation through regenerated
 OpenAPI and clients. The public reader also fences ready-Agent revision and
