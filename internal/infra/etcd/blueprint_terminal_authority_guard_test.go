@@ -112,7 +112,10 @@ func TestBlueprintTerminalAfterNewDesiredRetainsExecutionGuards(t *testing.T) {
 					taskMaterializationWriterKey(published.environmentID),
 					published.store.revision,
 				) == nil ||
-					published.store.valueAt(environmentComposeProjectionKey(published.environmentID), published.store.revision) != nil {
+					published.store.valueAt(
+						environmentComposeProjectionKey(published.environmentID),
+						published.store.revision,
+					) != nil {
 					t.Fatal("unproven recovery released its writer or promoted applied state")
 				}
 				return

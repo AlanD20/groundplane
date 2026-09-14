@@ -20,7 +20,8 @@ var environmentName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // ValidateRecord checks the metadata and its closed immutable source together.
 func ValidateRecord(record Record, generation uint64) error {
-	if ids.Validate(ids.KindStep, record.StepID) != nil || ids.Validate(ids.KindEnvironment, record.EnvironmentID) != nil {
+	if ids.Validate(ids.KindStep, record.StepID) != nil ||
+		ids.Validate(ids.KindEnvironment, record.EnvironmentID) != nil {
 		return errs.New(errs.KindValidationFailed, "materialization identity is invalid")
 	}
 	if err := validateMetadata(record, generation); err != nil {
@@ -46,7 +47,10 @@ func validServiceName(value string) bool {
 
 func validateSourcePath(value string) error {
 	if value == "" || !utf8.ValidString(value) || strings.ContainsRune(value, 0) || len(value) > 240 ||
-		strings.Contains(value, `\`) || path.IsAbs(value) || path.Clean(value) != value || value == "." || strings.HasPrefix(value, "../") {
+		strings.Contains(
+			value,
+			`\`,
+		) || path.IsAbs(value) || path.Clean(value) != value || value == "." || strings.HasPrefix(value, "../") {
 		return errs.New(errs.KindValidationFailed, "Blueprint revision path is invalid")
 	}
 	return nil

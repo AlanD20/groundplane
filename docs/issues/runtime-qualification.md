@@ -30,6 +30,22 @@ contracts. Local source-retention proof and retained wider failures are in
 [Script evidence](../acceptance/script-execution.md#manual-immutable-source-integration).
 Recheck code and relevant evidence before implementing an older suspected gap.
 
+Candidate qualification at `6c89049fa` reproduced a local VOL-07 failure on
+2026-09-14: `TestVolumeRemovalSuccessorCompletesRetainedAbsence` cannot complete
+a retried removal whose directory absence is already proved. The production
+terminal publisher constructs 27 comparisons, exceeding its fixed limit of 26,
+and returns Internal before committing. Normal, late-index and lost-response
+variants fail in `.tmp/recovery-candidate-runtime-packages.log`. No live removal
+or data loss was observed; the cause of the extra comparison is not yet established.
+The owner must select the narrow repair before implementation. Do not raise the
+budget or discard an ownership guard to pass the check.
+
+Acceptance: finish the same retained removal after proven absence without another
+physical deletion, preserve exact Task/operation/replay authority, reject stale
+ownership, and stay within the existing comparison, mutation and byte budgets.
+The normal, late-index, lost-response and late-Task variants must pass before this
+candidate blocker is closed.
+
 ## Blueprint integration
 
 The 692,408-byte historical failed publication and 412,657-byte local reproduction

@@ -9,14 +9,24 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// Rationale: initialization must not hand source authority to live handlers
+// SEC-07: initialization must not hand source authority to live handlers
 // before preparation recovery succeeds; unreadable recovery state fails startup.
 func TestInitializeScriptSourceReferencesRequiresRecovery(t *testing.T) {
-	for _, fail := range []bool{false, true} {
-		store := &scriptSourceStartupStore{fail: fail}
+	for failAt := 0; failAt <= 3; failAt++ {
+		store := &scriptSourceStartupStore{failAt: failAt}
 		authority, err := initializeExecutionSourceReferences(context.Background(), store)
-		if (err != nil) != fail || (authority == nil) != fail || store.calls != 1 {
-			t.Fatalf("source startup fail=%t: authority=%t calls=%d error=%v", fail, authority != nil, store.calls, err)
+		fail, calls := failAt != 0, failAt
+		if !fail {
+			calls = 3
+		}
+		if (err != nil) != fail || (authority == nil) != fail || store.calls != calls {
+			t.Fatalf(
+				"source startup failAt=%d: authority=%t calls=%d error=%v",
+				failAt,
+				authority != nil,
+				store.calls,
+				err,
+			)
 		}
 	}
 }
@@ -25,16 +35,19 @@ func TestInitializeScriptSourceReferencesRequiresRecovery(t *testing.T) {
 // an empty preparation range must not issue unrelated reads or writes.
 type scriptSourceStartupStore struct {
 	etcd.Store
-	fail  bool
-	calls int
+	failAt int
+	calls  int
 }
 
 func (store *scriptSourceStartupStore) Range(_ context.Context, request etcd.RangeRequest) (*etcd.RangeResult, error) {
 	store.calls++
-	if request.Prefix != scriptsourcereference.PreparationPrefix || request.Limit <= 0 || request.Limit > 16 {
+	expected := []string{"/v1/staging/task-secret-pin-sets/", "/v1/indexes/task-secret-pin-sets/releasing/",
+		scriptsourcereference.PreparationPrefix}
+	if store.calls > len(expected) || request.Prefix != expected[store.calls-1] ||
+		request.Limit <= 0 || request.Limit > 16 {
 		return nil, errs.New(errs.KindInternal, "unexpected source startup range")
 	}
-	if store.fail {
+	if store.calls == store.failAt {
 		return nil, errs.New(errs.KindInternal, "unreadable preparation state")
 	}
 	return &etcd.RangeResult{ReadRevision: 1}, nil

@@ -257,7 +257,9 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 				AttachID: grantID,
 				Params: adapters.FactParams{
 					Authentication: item.authentication,
-					Host:           backingendpoint.New(item.backingService.Record.Desired.ID), Port: item.adapter.Port(),
+					Host: backingendpoint.New(
+						item.backingService.Record.Desired.ID,
+					), Port: item.adapter.Port(),
 					Database: database, Role: identity.Role, Password: identity.Password,
 				},
 			})

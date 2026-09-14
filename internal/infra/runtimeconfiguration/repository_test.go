@@ -181,7 +181,13 @@ func TestMaximumFilesUsesBoundedStoreRequests(t *testing.T) {
 	maximumKeys, maximumOperations, maximumValue, calls := store.audit()
 	if maximumKeys > readBatchSize || maximumOperations > 4 || maximumValue > maximumEncodedRecordBytes ||
 		calls > MaximumFiles+2 {
-		t.Fatalf("Store bounds = keys:%d operations:%d value:%d txns:%d", maximumKeys, maximumOperations, maximumValue, calls)
+		t.Fatalf(
+			"Store bounds = keys:%d operations:%d value:%d txns:%d",
+			maximumKeys,
+			maximumOperations,
+			maximumValue,
+			calls,
+		)
 	}
 	store = newMemoryStore()
 	repository = mustRepository(t, store)
@@ -319,7 +325,11 @@ func fileRecord(destination string, output taskmaterialization.OutputKind, mode 
 }
 
 func removalRecord(destination string) taskmaterialization.Record {
-	record := fileRecord(destination, taskmaterialization.OutputRemovePlainFile, uint32(entrymaterialization.ModeReadOnly))
+	record := fileRecord(
+		destination,
+		taskmaterialization.OutputRemovePlainFile,
+		uint32(entrymaterialization.ModeReadOnly),
+	)
 	record.Length = 0
 	record.SHA256 = digest(nil)
 	record.Source = taskmaterialization.Source{Kind: taskmaterialization.SourceRemoval}

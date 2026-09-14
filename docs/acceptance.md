@@ -264,6 +264,42 @@ finding identities, none added, in `.tmp/pinned-file-recovery-final-architecture
 The extracted Agent executor removes one oversized-file finding; no baseline or
 limit changed. Full CI and deployed recovery remain unqualified; H5 remains failed.
 
+H25 records candidate qualification at `6c89049fa` on 2026-09-14, not a deployed
+recovery pass. The broader tagged race run is
+`.tmp/recovery-candidate-runtime-packages.log`. Controller, configuration-source,
+runtime-configuration and retained-content packages pass. App startup initially
+fails because its store fixture accepts only the older Script preparation scan;
+the corrected test covers all three startup scans and failure at each one, passing
+in `.tmp/recovery-candidate-startup-fixture.log`. The durable-store package has 30
+failing test functions. Some fixtures lack acknowledged sources or count private
+staging as published authority; these failures still need bounded classification.
+
+VOL-07 fails in `TestVolumeRemovalSuccessorCompletesRetainedAbsence`: normal,
+late-index and lost-response variants reach a production refusal at 27 comparisons
+against the 26-comparison terminal limit. No limit changed and no live removal ran.
+This is a candidate blocker requiring an owner decision, not a Backup/Restore test.
+The existing issue record owns its required outcome.
+
+The Agent, Agent-channel and Release-group package checks pass using the original
+run plus the socket-permitted transport rerun in
+`.tmp/recovery-candidate-{affected-packages,agent-loopback}.log`.
+`make ci` stopped on 14 sandbox ownership errors in deployment fixtures; all 73
+deployment checks subsequently pass with the real ownership view in
+`.tmp/recovery-candidate-deployment-trusted.log`. Console checks/build, Controller
+build and local Agent image smoke pass; their logs are
+`.tmp/recovery-candidate-{ci,controller-build,agent-image}.log`. Generated files
+match Git. The initial formatter invocation selected ambient Go 1.27; the pinned
+formatter found six wrapping differences, now corrected without behavior changes.
+Formatting and verifier-helper checks pass in
+`.tmp/recovery-candidate-{format-stable,verifier-final}.log`.
+These passing prerequisites do not make the failed durable-store gate green.
+
+Read-only HOST-01 passed at 07:12 UTC, including owned cleanup, in
+`.tmp/qa-pinned-recovery-20260914/host-health-20260914T071211Z.t0M5Ot/`.
+The target still runs the old QA release. No QA reset, deployment or deliberate
+fault ran. Full CI, live recovery, restart/upgrade continuity and the approved
+30-minute traffic run remain unqualified.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

@@ -53,8 +53,10 @@ func TestBlueprintSuccessRetainsAcknowledgedServiceRuntime(t *testing.T) {
 				_ *controller.TaskPlanResolver, render etcd.ReleaseRenderInput, intent domain.Intent,
 				_ *agentpb.ComposeArtifact) {
 				receipt := fixture.AcknowledgedRuntime(t, render.ServiceID)
-				if receipt.Record.Source.TaskID != intent.OriginatingTaskID || receipt.Record.Source.PlanID != render.PlanID ||
-					receipt.Record.Source.ExecutionEpoch != 1 || receipt.Record.Source.RenderGeneration != 1 ||
+				if receipt.Record.Source.TaskID != intent.OriginatingTaskID ||
+					receipt.Record.Source.PlanID != render.PlanID ||
+					receipt.Record.Source.ExecutionEpoch != 1 ||
+					receipt.Record.Source.RenderGeneration != 1 ||
 					receipt.Record.Runtime.ReleaseID != render.ReleaseID ||
 					receipt.Record.Runtime.Target != "singleton" {
 					t.Fatal("acknowledgement lost Blueprint identity or was replaced by configuration-only work")

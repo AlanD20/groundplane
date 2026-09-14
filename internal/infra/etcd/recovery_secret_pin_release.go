@@ -58,7 +58,8 @@ func (repository *TaskRepository) beginRecoverySecretPinRelease(
 		return taskMaterializationProjectionChange{}, err
 	}
 	binding := task.Configuration.SecretPins
-	if !found || root.AttemptID() != task.ID || root.TaskID() != binding.TaskID || root.MembershipCount() != binding.Count ||
+	if !found || root.AttemptID() != task.ID || root.TaskID() != binding.TaskID ||
+		root.MembershipCount() != binding.Count ||
 		root.MembershipSHA256() != binding.SHA256 ||
 		root.Phase() != tasksecretpins.RootPhaseActive {
 		return taskMaterializationProjectionChange{}, errs.New(

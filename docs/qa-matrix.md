@@ -33,8 +33,10 @@ from restoring its databases or files from a backup.
   success has local atomic/runtime/replay and maximum-size proof (H11 in the
   [evidence register](acceptance.md)); Entry completion has local selected-runtime
   and source-fence proof (H12). H16 proves local source snapshot and Task-head
-  bindings; exact generated-file retention, remaining file writers and recovery
-  readers are still pending. The owner approved blocking Secret deletion while a recoverable Task
+  bindings; H17–H24 record the integrated generated-file retention, remaining
+  writers, acknowledged-runtime readers and pinned-file execution. The combined
+  focused tests pass, but broader candidate qualification has the failures in H25.
+  The owner approved blocking Secret deletion while a recoverable Task
   holds its exact value. This is not a closing live SVC-15 pass. The owner
   approved restoring exact pinned configuration files as well as runtime under
   [ADR 0079](decisions/0079-pinned-task-configuration-recovery.md). This excludes database restoration, migration
@@ -373,7 +375,7 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 | VOL-04 | Preview Volume removal across all impact pages; change references before confirmation or provide a wrong key/token. | Complete fixed-revision impact is required; stale/incomplete/wrong confirmation cannot start destruction. | U |
 | VOL-05 | Remove an applied Volume through its accepted detach-and-cleanup operation. | Only confirmed consumers detach; owned root is removed before final publication; unrelated data and mounts remain. | U |
 | VOL-06 | Remove a never-applied Volume beside a similarly named unmanaged path. | No filesystem deletion effect; unmanaged path unchanged; intended definition is removed. | U |
-| VOL-07 | Fail, Abort, time out or restart during Volume removal, then use allowed Retry. | Exact ownership/removal authority survives; reconcile proven effects without losing retry state or reporting partial cleanup as success. | U |
+| VOL-07 | Fail, Abort, time out or restart during Volume removal, then use allowed Retry. | Exact ownership/removal authority survives; reconcile proven effects without losing retry state or reporting partial cleanup as success. | FAIL H25: local successor completion after proven absence exceeds the terminal comparison budget. Live variants NOT RUN. |
 | VOL-08 | Interrupt create before/after ownership-marker publication; provide a pre-existing unexpected leaf. | Resume only matching owned creation; never adopt a foreign leaf or delete it as cleanup. | U |
 | VOL-09 | Race Volume changes with another Environment mutation. | Revision-bound publication prevents lost edits and premature promotion of unapplied storage. | U |
 | ENT-01 | Create plain and secret literal Entries and inspect reads/history plus controlled storage/materialization. | Only documented plain values are public; secret values remain encrypted at rest and confined to authorized reveal/materialization. | U |
@@ -433,7 +435,7 @@ operation. Test existing add, resolve, reveal, delete and fallback behavior.
 | SEC-04 | Create env/file Secrets with valid and escaping/reserved paths; test UTF-8 at/above 255 KiB and invalid text. | Correct derived/relative references; invalid paths/text/size publish neither metadata nor ciphertext/replay records. | U |
 | SEC-05 | Create via CLI file/stdin; inspect normal responses, history and controlled process/durable evidence; explicitly reveal. | No plaintext argv or normal read value/digest; value visible only through authorized reveal; protected intent is encrypted. | U |
 | SEC-06 | Replay create; delete a referenced Secret and fail/Abort/time out deletion. | Exact replay; tombstone hides resolution while finalizing; success removes exact value, failure restores prescribed visibility; references do not silently preserve deleted data. | U |
-| SEC-07 | Reserve an exact Secret value for a recoverable Task; race reservation against delete and delete Retry, then release recovery authority. | Deletion returns resource.in_use while held; no stale or tombstoned source is reserved; release permits normal deletion with no retained ciphertext copy. Existing Script guards remain effective. | PARTIAL H14/H15: local deletion guards and bounded lifecycle module; Task/startup integration and live case NOT RUN |
+| SEC-07 | Reserve an exact Secret value for a recoverable Task; race reservation against delete and delete Retry, then release recovery authority. | Deletion returns resource.in_use while held; no stale or tombstoned source is reserved; release permits normal deletion with no retained ciphertext copy. Existing Script guards remain effective. | PARTIAL H14–H18/H25: local deletion, Task lifecycle and startup checks pass; live case NOT RUN |
 | CON-01 | Create/list/show/remove same-named Environment Connectors; try rename or cross-scope fallback. | Environment-only unique immutable name and stable ID; no cross-Environment lookup fallback. | U |
 | CON-02 | Test endpoint scheme/authority/path, bucket length/case and normalized prefix boundaries. | Exact S3 addressing validation before publication; no userinfo/query/fragment, unsafe prefix or undeclared address normalization. | U |
 | CON-03 | Omit region/path_style; test region length/characters and explicit auto. | Required explicit values; valid region preserved exactly; invalid/absent choices do not default silently. | U |
