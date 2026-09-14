@@ -22,6 +22,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/runtimeconfiguration"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -184,6 +185,11 @@ func (fake *routeRemovalRepositoryFake) BeginRouteDeletionWithTask(
 		routeID: route.Record.Desired.ID, environmentID: environment.Record.ID,
 		indexRevision: 40, revision: int64(100 + fake.begins), conflict: fake.begins <= fake.conflicts,
 	}
+	if len(task.Materializations) != 0 {
+		if err := store.seedConfiguration(ctx, projection); err != nil {
+			return etcd.IdempotencyTransactionResult{}, err
+		}
+	}
 	routes, err := etcd.NewRouteRepository(store)
 	if err != nil {
 		return etcd.IdempotencyTransactionResult{}, err
@@ -201,11 +207,47 @@ func (fake *routeRemovalRepositoryFake) BeginRouteDeletionWithTask(
 
 type routeRemovalTransactionStore struct {
 	etcd.Store
-	routeID       string
-	environmentID string
-	indexRevision int64
-	revision      int64
-	conflict      bool
+	routeID               string
+	environmentID         string
+	indexRevision         int64
+	revision              int64
+	conflict              bool
+	configuration         map[string]etcd.KeyValue
+	configurationRevision int64
+}
+
+// Model acknowledged configuration and immutable staging, not a second Route
+// planner. The production publisher still owns the final deletion transaction.
+func (store *routeRemovalTransactionStore) seedConfiguration(
+	ctx context.Context, projection *etcd.Versioned[etcd.EnvironmentComposeProjection],
+) error {
+	store.configuration = make(map[string]etcd.KeyValue)
+	store.configurationRevision = 1
+	sources, err := etcd.NewRuntimeConfigurationRepository(store)
+	if err != nil {
+		return err
+	}
+	reference, err := sources.Stage(ctx, runtimeconfiguration.Snapshot{
+		ID: ids.New(ids.KindConfig), EnvironmentID: store.environmentID,
+		Generation: projection.Record.RenderGeneration, Files: []etcd.TaskMaterializationRecord{},
+	})
+	if err != nil {
+		return err
+	}
+	value, err := runtimeconfiguration.EncodeReference(reference)
+	if err != nil {
+		return err
+	}
+	headKey := "/v1/runtime/environment-configurations/" + store.environmentID
+	store.configuration[headKey] = etcd.KeyValue{Key: headKey, Value: value, ModRevision: store.configurationRevision}
+	value, err = etcd.EncodeEnvironmentComposeProjectionStorage(projection.Record)
+	if err != nil {
+		return err
+	}
+	appliedKey := "/v1/records/environment-compose-projections/" + store.environmentID
+	store.configuration[appliedKey] = etcd.KeyValue{Key: appliedKey, Value: value, ModRevision: projection.Revision}
+	store.configurationRevision = projection.ReadRevision
+	return nil
 }
 
 type routeRemovalServiceEvidenceStore struct {
@@ -333,9 +375,28 @@ func routeRemovalServiceEvidence(
 }
 
 func (store *routeRemovalTransactionStore) GetMany(
-	context.Context,
-	etcd.GetManyRequest,
+	_ context.Context,
+	request etcd.GetManyRequest,
 ) (*etcd.GetManyResult, error) {
+	if len(request.Keys) != 0 && (strings.Contains(request.Keys[0], "/runtime-configuration-sources/") ||
+		strings.HasPrefix(request.Keys[0], "/v1/runtime/environment-configurations/")) {
+		revision := request.Revision
+		if revision == 0 {
+			revision = store.configurationRevision
+		}
+		values := make([]*etcd.KeyValue, len(request.Keys))
+		for index, key := range request.Keys {
+			if value, found := store.configuration[key]; found && value.ModRevision <= revision {
+				value.Value = append([]byte(nil), value.Value...)
+				values[index] = &value
+			}
+		}
+		return &etcd.GetManyResult{
+			Values:           values,
+			ReadRevision:     revision,
+			ResponseRevision: store.configurationRevision,
+		}, nil
+	}
 	return &etcd.GetManyResult{
 		Values: []*etcd.KeyValue{
 			{Value: []byte(store.routeID), ModRevision: store.indexRevision},
@@ -348,8 +409,25 @@ func (store *routeRemovalTransactionStore) GetMany(
 func (store *routeRemovalTransactionStore) Transact(
 	_ context.Context,
 	conditions []etcd.Condition,
-	_ []etcd.Mutation,
+	mutations []etcd.Mutation,
 ) (etcd.TransactionResult, error) {
+	if len(mutations) != 0 && strings.Contains(mutations[0].Key, "/runtime-configuration-sources/") {
+		for _, condition := range conditions {
+			if store.configuration[condition.Key].ModRevision != condition.ModRevision {
+				return etcd.TransactionResult{Revision: store.configurationRevision}, nil
+			}
+		}
+		store.configurationRevision++
+		for _, mutation := range mutations {
+			if mutation.Type == etcd.MutationDelete {
+				delete(store.configuration, mutation.Key)
+			} else {
+				store.configuration[mutation.Key] = etcd.KeyValue{Key: mutation.Key,
+					Value: append([]byte(nil), mutation.Value...), ModRevision: store.configurationRevision}
+			}
+		}
+		return etcd.TransactionResult{Succeeded: true, Revision: store.configurationRevision}, nil
+	}
 	if !store.conflict {
 		return etcd.TransactionResult{Succeeded: true, Revision: store.revision}, nil
 	}
@@ -609,7 +687,7 @@ func TestRouteRemovalPublishesExactDurableIdentity(t *testing.T) {
 	}
 }
 
-// Rationale: removing a Route present in an applied provider projection must
+// HTTP-06: Rationale: removing a Route present in an applied provider projection must
 // publish host work against the exact suppressed candidate generation.
 func TestRouteRemovalSelectsAgentProviderPlanForAppliedRoute(t *testing.T) {
 	t.Parallel()

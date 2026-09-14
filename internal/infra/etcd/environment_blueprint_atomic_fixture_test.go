@@ -50,7 +50,8 @@ type environmentBlueprintAtomicAuditStore struct {
 	conditionByKey   map[string]Condition
 }
 
-func (store *environmentBlueprintAtomicAuditStore) Transact(
+// Only final publication is faulted; private source staging must remain usable.
+func (store *environmentBlueprintAtomicAuditStore) TransactEnvironmentBlueprint(
 	ctx context.Context,
 	conditions []Condition,
 	mutations []Mutation,
@@ -66,14 +67,6 @@ func (store *environmentBlueprintAtomicAuditStore) Transact(
 		return TransactionResult{}, errs.New(errs.KindInternal, "injected final Blueprint publication failure")
 	}
 	return store.hierarchyStore.Transact(ctx, conditions, mutations)
-}
-
-func (store *environmentBlueprintAtomicAuditStore) TransactEnvironmentBlueprint(
-	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
-	return store.Transact(ctx, conditions, mutations)
 }
 
 type environmentBlueprintBackingScope struct {

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/netip"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -80,17 +81,24 @@ func TestEnvironmentBlueprintZonePoolPublishesSealedRevisionAndTaskAuthority(t *
 
 type environmentBlueprintPublicationAuditStore struct {
 	hierarchyStore
+	publicationKey   string
 	reject           bool
 	comparisons      int
 	successMutations int
 	failureReads     int
 }
 
+// Only final publication is rejected; source staging is not public authority.
 func (store *environmentBlueprintPublicationAuditStore) Transact(
 	ctx context.Context,
 	conditions []Condition,
 	mutations []Mutation,
 ) (TransactionResult, error) {
+	if !slices.ContainsFunc(mutations, func(mutation Mutation) bool {
+		return mutation.Key == store.publicationKey
+	}) {
+		return store.hierarchyStore.Transact(ctx, conditions, mutations)
+	}
 	store.comparisons = len(conditions)
 	store.successMutations = len(mutations)
 	if store.reject {
@@ -102,14 +110,7 @@ func (store *environmentBlueprintPublicationAuditStore) Transact(
 	return store.hierarchyStore.Transact(ctx, conditions, mutations)
 }
 
-func (store *environmentBlueprintPublicationAuditStore) TransactEnvironmentBlueprint(
-	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
-	return store.Transact(ctx, conditions, mutations)
-}
-
+// BP-04: final publication stays atomic and bounded independently of topology size.
 func TestEnvironmentBlueprintTopologyPublicationHasConstantCompactShape(t *testing.T) {
 	// Rationale: the sealed 6-Zone/13-Service/6-Route topology must publish by
 	// Environment head without consuming one transaction operation per resource.
@@ -140,6 +141,7 @@ func TestEnvironmentBlueprintTopologyPublicationHasConstantCompactShape(t *testi
 			)
 			audited := &environmentBlueprintPublicationAuditStore{
 				hierarchyStore: store,
+				publicationKey: taskKey(task.ID),
 				reject:         reject,
 			}
 			repository, err := newHierarchyRepository(audited)
@@ -169,17 +171,18 @@ func TestEnvironmentBlueprintTopologyPublicationHasConstantCompactShape(t *testi
 			if err != nil {
 				t.Fatalf("PublishEnvironmentDesiredRevisionWithTask() error = %v", err)
 			}
-			if audited.comparisons != 22 || audited.successMutations != 12 {
+			// The configuration-head fence adds one comparison, not one per resource.
+			if audited.comparisons != 23 || audited.successMutations != 12 {
 				t.Fatalf(
-					"publication partitions = %d/%d, want 22/12",
+					"publication partitions = %d/%d, want 23/12",
 					audited.comparisons,
 					audited.successMutations,
 				)
 			}
 			outcome, _, conflict, classifyErr := result.Classify()
 			if reject {
-				if audited.failureReads != 22 {
-					t.Fatalf("failure reads = %d, want 22", audited.failureReads)
+				if audited.failureReads != 23 {
+					t.Fatalf("failure reads = %d, want 23", audited.failureReads)
 				}
 				if classifyErr != nil || outcome != IdempotencyKnownConflict || conflict == nil {
 					t.Fatalf("rejected publication = %v/%v/%v", outcome, conflict, classifyErr)

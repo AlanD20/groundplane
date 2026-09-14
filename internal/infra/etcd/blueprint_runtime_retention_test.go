@@ -452,7 +452,7 @@ func TestBlueprintRuntimeRetentionExtendsCandidateCompareSet(t *testing.T) {
 	}
 }
 
-// Rationale: source-only authority must reach the actual owning publisher and
+// SVC-15/BP-04: Rationale: source-only authority must reach the actual owning publisher and
 // compare both acknowledged artifact and absent Release projection atomically.
 func TestBlueprintRuntimeRetentionActualPublisherSources(t *testing.T) {
 	for _, mutation := range []string{"none", "applied", "applied-existing", "absent-release", "tampered-artifact", "tampered-conditions", "absent-authority"} {
@@ -478,6 +478,12 @@ func TestBlueprintRuntimeRetentionActualPublisherSources(t *testing.T) {
 				if _, err := fixture.store.Put(ctx, environmentComposeProjectionKey(fixture.Environment.Record.ID), value); err != nil {
 					t.Fatal(err)
 				}
+				seedTestRuntimeConfigurationHead(
+					t,
+					fixture.store.memoryHierarchyStore,
+					fixture.Environment.Record.ID,
+					projection.RenderGeneration,
+				)
 			}
 			scope, err := fixture.Ledger.LoadPlanningScope(ctx, fixture.Environment.Record.ID)
 			if err != nil {
@@ -518,6 +524,12 @@ func TestBlueprintRuntimeRetentionActualPublisherSources(t *testing.T) {
 				if _, err := fixture.store.Put(ctx, environmentComposeProjectionKey(fixture.Environment.Record.ID), value); err != nil {
 					t.Fatal(err)
 				}
+				seedTestRuntimeConfigurationHead(
+					t,
+					fixture.store.memoryHierarchyStore,
+					fixture.Environment.Record.ID,
+					projection.RenderGeneration,
+				)
 			case "absent-release":
 				if _, err := fixture.store.Put(ctx, releaseProjectionKey(planning[0].Service.Record.Desired.ID), []byte("changed")); err != nil {
 					t.Fatal(err)

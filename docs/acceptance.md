@@ -326,10 +326,54 @@ The full race rerun, `.tmp/volume-retry-integrated-store.log`, resolves 22 of H2
 | `TestEnvironmentBlueprintCombinedMaximumInjectedFailurePublishesNoAuthority`, `TestEnvironmentBlueprintTopologyPublicationHasConstantCompactShape` | Audit doubles intercept private source staging as well as final publication; topology also expects the older comparison count. Target the intended final transaction and retain the actual budget assertions. |
 | `TestBlueprintPublicationExcludesVolumeRemovalLock` | Global storage revision counts private staging as public Task/desired publication. Independently check current public authority, including the retained removal lock. |
 
-These are source-traced test mismatches, not passing results or proof that no
-further defect is hidden behind them. No additional product defect is confirmed
-by this classification. The eight tests remain failed until corrected and rerun.
+These were source-traced test mismatches, not passing results or proof that no
+further defect was hidden behind them. No additional product defect was confirmed
+by that classification. H27 records their subsequent test-only corrections and rerun.
 No QA reset, deployment, removal or fault ran; live VOL-07 and H5 remain unqualified.
+
+H27 records production-operation candidate checks on `dde45bf9c` plus the
+test-only fixture corrections. No production source, validation rule, transaction
+limit or application configuration changed. Existing BP-04, SVC-15/JOURNEY-02,
+VOL-07, BACK-01 and HTTP-06 cases receive local supporting proof only:
+
+- H26's eight functions now pass. Applied-state fixtures include acknowledged
+  configuration; native Deploy/Rollback fixtures include current/retained runtime
+  receipts before the actual producer reads them. Original Blueprint state stays
+  unchanged. Existing source-replacement/pruning, replay, recovery-proof and
+  maximum-publication assertions remain.
+- Fault injectors now target final publication, not private source staging.
+  The topology assertion includes the configuration-head comparison (23 comparisons,
+  12 writes); combined-maximum budgets are unchanged. Rejected Volume-conflicting
+  publication is checked against current Task/queue/desired/configuration authority
+  and the unchanged removal lock, not global storage revision.
+- `.tmp/prod-operations-fixtures-first.log` passes seven corrected functions and
+  the legal maximum-shape table, but records a misrouted topology audit. Its scoped
+  correction passes in `.tmp/prod-operations-fixtures-topology.log`. The earlier
+  compile error is preserved in `.tmp/prod-operations-fixtures-publication.log`.
+- `.tmp/prod-operations-candidate-race.log` is the complete tagged root-module
+  race run: the durable-store package passes in 141.843s. Only
+  `TestBackingCreationSpecs` and
+  `TestRouteRemovalSelectsAgentProviderPlanForAppliedRoute` failed. The former
+  omitted the required explicit Valkey authentication choice. The latter's store
+  returned unrelated index records for configuration reads. Its test double now
+  retains acknowledged configuration and immutable staging with revision checks;
+  the actual Route publisher and original provider/Task assertions are unchanged.
+  Both full affected packages pass in
+  `.tmp/prod-operations-fixtures-adapters-network-corrected.log`; the initial
+  test-edit syntax error remains in `.tmp/prod-operations-fixtures-adapters-network.log`.
+
+Root vet, pinned Staticcheck and formatting pass in
+`.tmp/prod-operations-candidate-{vet,staticcheck,format}.log` before the two
+later fixture corrections. Architecture reports the same 122 existing finding
+identities in `.tmp/prod-operations-candidate-architecture.json`; no finding or
+limit was added. After the two later fixture corrections, affected vet and pinned
+Staticcheck and the root formatting gate pass in
+`.tmp/prod-operations-fixtures-final-{vet,staticcheck,format}.log`. The final
+architecture report is `.tmp/prod-operations-fixtures-final-architecture.json`,
+with the same 122 finding identities and no additions. These results
+do not close H5, H8, live restart/upgrade continuity or the approved 30-minute run.
+No live operation ran; the existing QA installation remains unchanged. This is
+not full CI or production qualification; Backup/Restore remains deferred.
 
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and

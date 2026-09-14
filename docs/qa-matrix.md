@@ -25,6 +25,16 @@ acceptance or full production qualification. Failed-deployment recovery below is
 still required: recovering a working application after a bad rollout is separate
 from restoring its databases or files from a backup.
 
+Current execution priority is production operations, in this order: failed Deploy
+after configuration/cutover changes (SVC-15/JOURNEY-02), overlapping backing
+endpoints (ATT-12), independent etcd during Controller restart (REL-01), and
+Controller/Agent upgrade continuity (JOURNEY-05 and the existing UP cases).
+Then finish the already-approved sustained traffic and interrupted-Task/reboot
+cases. Preserve real application requests, held connections, jobs and data;
+record unavoidable single-host reboot downtime separately. Do not add features,
+new case families or a broad cleanup to this work. A newly confirmed product
+defect or required scope decision returns to the owner before repair.
+
 - [ ] **Fix failed-rollout recovery first** — SVC-15, JOURNEY-02, D4.
   Recovery must preserve the last successfully applied networking and configuration
   after Attach/Entry changes, not reconstruct obsolete Release input. Reuse the
@@ -35,7 +45,8 @@ from restoring its databases or files from a backup.
   and source-fence proof (H12). H16 proves local source snapshot and Task-head
   bindings; H17–H24 record the integrated generated-file retention, remaining
   writers, acknowledged-runtime readers and pinned-file execution. The combined
-  focused tests pass, but broader candidate qualification has the failures in H25.
+  focused tests pass; H25–H27 distinguish candidate failures from their local
+  corrections. Live qualification is still required.
   The owner approved blocking Secret deletion while a recoverable Task
   holds its exact value. This is not a closing live SVC-15 pass. The owner
   approved restoring exact pinned configuration files as well as runtime under

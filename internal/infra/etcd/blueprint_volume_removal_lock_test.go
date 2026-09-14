@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
@@ -9,7 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// Rationale: the authored Blueprint entry point uses the same desired head as
+// VOL-07/BP-04: Rationale: the authored Blueprint entry point uses the same desired head as
 // direct mutations and must not invalidate a Volume removal's pinned revision.
 func TestBlueprintPublicationExcludesVolumeRemovalLock(t *testing.T) {
 	for _, locked := range []bool{false, true} {
@@ -44,6 +45,8 @@ func TestBlueprintPublicationExcludesVolumeRemovalLock(t *testing.T) {
 				}
 			}
 			before := store.revision
+			lockKey := removalrecord.EnvironmentLockKey(environment.Record.ID)
+			lockBefore := store.valueAt(lockKey, before)
 			result, err := publishEnvironmentBlueprintClaimTest(
 				repository,
 				ctx,
@@ -78,9 +81,18 @@ func TestBlueprintPublicationExcludesVolumeRemovalLock(t *testing.T) {
 			if err != nil || outcome != IdempotencyKnownConflict || !isKind(conflict, errs.KindStateConflict) {
 				t.Fatalf("Blueprint published across removal lock: %v/%v/%v", outcome, conflict, err)
 			}
-			if store.revision != before || store.valueAt(taskKey(task.ID), before) != nil ||
-				store.valueAt(environmentBlueprintHeadKey(environment.Record.ID), before) != nil {
-				t.Fatal("rejected Blueprint wrote desired or Task authority")
+			// Private source staging may advance storage revision; no public
+			// authority may appear, and the original removal lock must survive.
+			for _, key := range []string{taskKey(task.ID), taskQueueKey(task.Executor, task.ID),
+				environmentBlueprintHeadKey(environment.Record.ID), runtimeConfigurationHeadKey(environment.Record.ID)} {
+				if store.valueAt(key, store.revision) != nil {
+					t.Fatalf("rejected Blueprint published %q", key)
+				}
+			}
+			lockAfter := store.valueAt(lockKey, store.revision)
+			if lockBefore == nil || lockAfter == nil || lockBefore.ModRevision != lockAfter.ModRevision ||
+				!bytes.Equal(lockBefore.Value, lockAfter.Value) {
+				t.Fatal("rejected Blueprint changed the removal lock")
 			}
 		})
 	}

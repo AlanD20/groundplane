@@ -17,7 +17,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Rationale: native deploy/rollback advances serving identity independently
+// SVC-15/BP-04: Rationale: native deploy/rollback advances serving identity independently
 // of the original acknowledged Blueprint artifact. A new candidate must not
 // require rollback C to carry original Blueprint A's Release identity.
 func TestBlueprintCandidateAfterNativeRollbackUsesSealedPredecessor(t *testing.T) {
@@ -46,6 +46,29 @@ func proveNativeCandidatePreparation(
 	if err := resolver.EnableReleasePlans(fixture.Ledger); err != nil {
 		t.Fatal(err)
 	}
+	// Complete the simulated successful native transition before the real
+	// producer reads it. Original Blueprint A remains independently unchanged.
+	serving, err := fixture.Ledger.ResolveServing(ctx, current.EnvironmentID, current.ServiceID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	native := etcd.ServiceLifecycleRelease{ServingReleaseID: current.ReleaseID, Current: current}
+	if current.Strategy == domain.StrategyBlueGreen {
+		prior, readErr := fixture.Ledger.GetReleaseRenderInputAt(
+			ctx,
+			serving.Intent.PriorServingReleaseID,
+			serving.Revision,
+		)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		native.PriorServingReleaseID, native.RetainedPrior = prior.Record.ReleaseID, &prior.Record
+	}
+	fragments, err := resolver.RenderRetainedServiceRuntime(ctx, native)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.SeedEntryAcknowledgedRuntime(t, current, fragments)
 	scope, err := fixture.Ledger.LoadPlanningScope(ctx, current.EnvironmentID)
 	if err != nil {
 		t.Fatal(err)
@@ -206,7 +229,7 @@ func proveNativeCandidatePreparation(
 	fixture.ProveNativeCandidateRecovery(t, agentID, claim, prepared.Plan, current.ReleaseID)
 }
 
-// Rationale: the selected-candidate path carries both immutable blue/green
+// SVC-15/BP-04: Rationale: the selected-candidate path carries both immutable blue/green
 // sources and guards inactive source replacement/pruning before publication.
 func TestBlueprintNativePredecessorBlueGreenSnapshot(t *testing.T) {
 	for _, fault := range []string{"bg-snapshot", "inactive-replace", "inactive-prune"} {
@@ -226,7 +249,7 @@ func TestBlueprintNativePredecessorBlueGreenSnapshot(t *testing.T) {
 	}
 }
 
-// Rationale: replacement with identical bytes and pruning both invalidate the
+// SVC-15/BP-04: Rationale: replacement with identical bytes and pruning both invalidate the
 // source revision; no candidate Task, marker, or desired head may publish.
 func TestBlueprintNativePredecessorSourceCAS(t *testing.T) {
 	for _, fault := range []string{"intent-replace", "intent-prune", "render-replace", "render-prune", "projection-replace", "applied-replace"} {

@@ -94,6 +94,8 @@ func TestEnvironmentBlueprintFinalPublicationExactLegalShapes(t *testing.T) {
 	}
 }
 
+// BP-04: Rationale: a failed final commit must expose none of the staged maximum
+// topology or Task authority, and must preserve all pre-existing references.
 func TestEnvironmentBlueprintCombinedMaximumInjectedFailurePublishesNoAuthority(t *testing.T) {
 	test := environmentBlueprintAtomicShape{
 		name: "combined failure", releases: 32, hooks: 16, physicalSources: 17,

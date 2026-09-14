@@ -48,8 +48,10 @@ ownership, and stay within the existing comparison, mutation and byte budgets.
 The corrected producer selects configuration authority only for Blueprint Apply
 or an explicit file writer; it rejects supplied configuration authority on other
 desired mutations. Normal, late-index, lost-response and late-Task variants now
-pass locally without changing finalization guards or budgets. H26 in
-[acceptance](../acceptance.md) records the proof and remaining candidate failures.
+pass locally without changing finalization guards or budgets. H26–H27 in
+[acceptance](../acceptance.md) record the proof and subsequent test-only fixture
+corrections. The complete durable-store race suite now passes; the complete root
+run plus the two affected-package reruns also pass their recorded assertions.
 Live Volume-removal qualification remains unrun.
 
 ## Blueprint integration

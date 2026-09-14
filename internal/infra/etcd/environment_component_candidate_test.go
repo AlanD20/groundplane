@@ -17,6 +17,8 @@ func TestPrepareEnvironmentComponentTaskReservesWithoutPublishing(t *testing.T) 
 	testEnvironmentComponentTaskPublication(t, false)
 }
 
+// BP-04: Rationale: Component and Blueprint publication must share desired-head
+// authority without confusing an independently acknowledged runtime revision.
 func TestEnvironmentBlueprintPublishesComponentWithSharedDesiredHeadCompare(t *testing.T) {
 	testEnvironmentComponentTaskPublication(t, true)
 }
@@ -76,6 +78,7 @@ func testEnvironmentComponentTaskPublication(t *testing.T, combined bool) {
 	seedEnvironmentComponentCandidateValue(
 		t, store, environmentComposeProjectionKey(environment.Record.ID), appliedValue,
 	)
+	seedTestRuntimeConfigurationHead(t, store, environment.Record.ID, selectedProjection.RenderGeneration)
 	selectedState, err := store.GetMany(ctx, GetManyRequest{
 		Keys: []string{environmentComposeProjectionKey(environment.Record.ID)},
 	})
