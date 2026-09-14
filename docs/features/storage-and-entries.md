@@ -68,17 +68,18 @@ format and key contract without aliases or alternate decoders.
 
 ### Entry changes capture serving runtime
 
-Create, edit and bulk-upsert capture each serving native Release at the desired
-read's fixed revision through the lifecycle capture/renderer. Each retained
-workload keeps its exact Release, image, proxy and ownership metadata. Remove
-historical Entry decorations before attaching current generations so a deleted
-file cannot return from history. The mixed-runtime merger retains persistent
-resource authority.
+Create, edit and bulk-upsert capture each running Service's acknowledged runtime
+at the desired read's fixed revision. The receipt must identify its serving
+Release; missing or mismatched authority fails without historical backfill. Each
+retained workload keeps its exact Release, image, proxy and ownership metadata.
+Entry decoration updates only the captured bindings. The mixed-runtime merger
+retains persistent resource authority.
 
-The same fixed-revision capture reads the current complete Attach union and
-overlays it before Entry decoration. Release history may predate an Attach or
-Detach; an Entry edit must not restore those old network memberships. The existing
-Environment epoch fence also rejects an intervening Attach change.
+The same fixed-revision capture reads the current complete Attach union for the
+desired baseline and retains acknowledged running fragments over that baseline.
+Release history may predate an Attach or Detach; an Entry edit must not restore
+those old network memberships. The Environment epoch and exact receipt revisions
+reject an intervening runtime change.
 
 Before merging, remove a predecessor stable proxy's generated config only after
 proving its canonical name, sealed content and digest, sole proxy binding and
@@ -98,16 +99,23 @@ publication or execution. Entry DELETE remains materialization-only and does not
 use this capture. Journal encoding, status transitions and retry preserve this
 selection without sharing mutable slices between Tasks.
 
-When an Entry update has only materialization steps, terminal publication records
-the materialized generations without replacing the independently applied Compose
-artifact. Pending desired Volumes must not become applied through an Entry edit.
+The Task also stores a compact update recipe for each selected running Service:
+its exact source receipt revision and new current/retained artifact identities.
+It does not duplicate full runtime bytes. Publication, claim and successful
+acknowledgement compare those source revisions. Completion atomically records the
+selected workloads' new receipts, materialized generations and Task outcome.
+Stable proxy bytes and the independently applied aggregate Compose artifact stay
+unchanged; pending desired Volumes or workloads cannot become applied through an
+Entry edit. Materialization-only work writes no runtime receipt. See
+[runtime authority](services-and-releases.md#technical-design) for the remaining
+recovery-reader and file-retention limits.
 
 `entry_runtime_epoch_revision` records the captured Environment mutation epoch.
 It must equal the direct publisher's epoch, which final commit also compares.
 Ordinary Release publication and terminalization advance that epoch and planning
 excludes active Release/Environment operations. Drift before publication or at
 commit rejects the capture. This adds no second publisher, per-Service
-transaction, storage namespace or higher record/transaction limit. Blueprint
+transaction or higher record/transaction limit. Blueprint
 domain fragments remain forbidden on direct mutations. An old unstarted plan
 without capture authority is not rewritten; a fresh operation must capture it.
 

@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"sort"
 	"strings"
 
-	"github.com/AlanD20/groundplane/internal/controller/servicelifecycle"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -21,6 +22,7 @@ type EntryMutationRuntime struct {
 	Projection        etcd.EnvironmentComposeProjection
 	EpochRevision     int64
 	RunningServiceIDs []string
+	Sources           []etcd.Versioned[serviceruntimerecord.Record]
 }
 
 func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
@@ -43,56 +45,6 @@ func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
 	if err != nil {
 		return EntryMutationRuntime{}, err
 	}
-	var sources []*agentpb.ComposeArtifact
-	var retained []string
-	var running []string
-	for _, desired := range current.Record.DesiredServices {
-		planning, err := resolver.releases.LoadPlanningServices(ctx, scope, []string{desired.Desired.ID})
-		if err != nil {
-			return EntryMutationRuntime{}, err
-		}
-		if planning[0].Projection.ServingReleaseID == "" {
-			continue
-		}
-		captured, err := servicelifecycle.CaptureRelease(ctx, resolver.releases,
-			etcd.Versioned[etcd.EnvironmentComposeProjection]{ReadRevision: scope.ReadRevision},
-			current.Record.EnvironmentID, desired.Desired.ID)
-		if err != nil {
-			return EntryMutationRuntime{}, err
-		}
-		artifacts, err := resolver.RenderRetainedServiceRuntime(ctx, captured)
-		if err != nil {
-			return EntryMutationRuntime{}, err
-		}
-		for index, artifact := range artifacts {
-			source := captured.Current.Projection
-			if index > 0 {
-				source = captured.RetainedPrior.Projection
-			}
-			// Remove historical Entry decorations before attaching the current
-			// generations. A deleted file must not return from Release history.
-			artifact, err = mutateEnvironmentEntryArtifact(artifact, source,
-				EnvironmentEntryArtifactMutation{ArtifactID: artifact.ArtifactId})
-			if err != nil {
-				return EntryMutationRuntime{}, err
-			}
-			sources = append(sources, artifact)
-		}
-		retained = append(retained, desired.Desired.ID)
-		if planning[0].Service.Record.Runtime.RuntimeIntent == core.ServiceRuntimeIntentRunning {
-			running = append(running, desired.Desired.ID)
-		}
-	}
-	if len(retained) > 0 {
-		baseline, err = entryRuntimeWithoutReplacedProxyConfigs(baseline, sources)
-		if err != nil {
-			return EntryMutationRuntime{}, err
-		}
-		baseline, err = RetainBlueprintNativeRuntimeSources(baseline, sources, retained)
-		if err != nil {
-			return EntryMutationRuntime{}, err
-		}
-	}
 	attaches, err := resolver.releases.LoadPlanningAttaches(ctx, scope)
 	if err != nil {
 		return EntryMutationRuntime{}, err
@@ -101,12 +53,60 @@ func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
 	if err != nil {
 		return EntryMutationRuntime{}, err
 	}
-	// Native Release inputs predate later Attach changes. Bind the current
-	// complete union before decorating Entries, preserving historical labels.
-	baseline, err = MutateAttachNetworkArtifact(ctx, baseline, current.Record, joins,
-		baseline.ArtifactId)
+	baseline, err = MutateAttachNetworkArtifact(ctx, baseline, current.Record, joins, baseline.ArtifactId)
 	if err != nil {
 		return EntryMutationRuntime{}, err
+	}
+	var running []string
+	serving := make(map[string]string)
+	for _, desired := range current.Record.DesiredServices {
+		planning, err := resolver.releases.LoadPlanningServices(ctx, scope, []string{desired.Desired.ID})
+		if err != nil {
+			return EntryMutationRuntime{}, err
+		}
+		if planning[0].Projection.ServingReleaseID == "" {
+			continue
+		}
+		if planning[0].Service.Record.Runtime.RuntimeIntent == core.ServiceRuntimeIntentRunning {
+			running = append(running, desired.Desired.ID)
+			serving[desired.Desired.ID] = planning[0].Projection.ServingReleaseID
+		}
+	}
+	sort.Strings(running)
+	runtimeSources, err := resolver.releases.LoadAcknowledgedServiceRuntimesAtRevision(
+		ctx, current.Record.EnvironmentID, running, scope.ReadRevision,
+	)
+	if err != nil {
+		return EntryMutationRuntime{}, err
+	}
+	var sources []*agentpb.ComposeArtifact
+	for _, source := range runtimeSources {
+		if source.Record.Runtime.ReleaseID != serving[source.Record.Runtime.ServiceID] {
+			return EntryMutationRuntime{}, errs.New(errs.KindStateConflict, "Entry acknowledged runtime is not serving")
+		}
+		for _, value := range [][]byte{
+			source.Record.Runtime.CurrentArtifact,
+			source.Record.Runtime.RetainedPriorArtifact,
+		} {
+			if len(value) == 0 {
+				continue
+			}
+			artifact := new(agentpb.ComposeArtifact)
+			if proto.Unmarshal(value, artifact) != nil {
+				return EntryMutationRuntime{}, errs.New(errs.KindInternal, "Entry acknowledged runtime is corrupt")
+			}
+			sources = append(sources, artifact)
+		}
+	}
+	if len(running) > 0 {
+		baseline, err = entryRuntimeWithoutReplacedProxyConfigs(baseline, sources)
+		if err != nil {
+			return EntryMutationRuntime{}, err
+		}
+		baseline, err = RetainBlueprintNativeRuntimeSources(baseline, sources, running)
+		if err != nil {
+			return EntryMutationRuntime{}, err
+		}
 	}
 	baseline, err = mutateEnvironmentEntryArtifact(baseline, current.Record,
 		EnvironmentEntryArtifactMutation{ArtifactID: baseline.ArtifactId, Entries: current.Record.Entries})
@@ -120,7 +120,7 @@ func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
 	}
 	return EntryMutationRuntime{
 		Projection: projection, EpochRevision: scope.EnvironmentEpochRevision,
-		RunningServiceIDs: running,
+		RunningServiceIDs: running, Sources: runtimeSources,
 	}, nil
 }
 

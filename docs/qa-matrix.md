@@ -30,9 +30,11 @@ from restoring its databases or files from a backup.
   after Attach/Entry changes, not reconstruct obsolete Release input. Reuse the
   landed runtime-record work, but complete the affected writers and source retention
   before connecting readers; a partially maintained record is unsafe. Blueprint
-  success now has local atomic/runtime/replay and maximum-size proof (H11 in the
-  [evidence register](acceptance.md)); Entry completion, retained file sources and
-  recovery readers remain pending. This is not a closing live SVC-15 pass. The owner
+  success has local atomic/runtime/replay and maximum-size proof (H11 in the
+  [evidence register](acceptance.md)); Entry completion has local selected-runtime
+  and source-fence proof (H12). Retained file sources and recovery readers remain
+  pending. Secret deletion while recovery holds its value needs the owner's
+  decision. This is not a closing live SVC-15 pass. The owner
   approved restoring exact pinned configuration files as well as runtime under
   [ADR 0079](decisions/0079-pinned-task-configuration-recovery.md). This excludes database restoration, migration
   reversal, latest desired input and history rewriting. Close this item only after
@@ -364,7 +366,7 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 | ENT-05 | Try reserved, escaping, conflicting and noncanonical destinations. | No outside-root write, conflicting ownership or stale generated reference; valid paths remain relative to the owned Environment root. | U |
 | ENT-06 | Change exposure from all to selected Services, then remove one exposure; replay around value publication. | Exact eligible consumers receive the value; stale env/file references disappear; metadata/value generation publishes atomically once. | U |
 | ENT-07 | Change Entry exposed to running, stopped and absent Services. | Only captured exposed running workloads reconcile; no dependency, Component, stable proxy or inactive-slot startup. | U |
-| ENT-08 | Attach new backing, Detach old backing, then edit an Entry and Deploy. | Current complete Attach union persists; old networks/deleted decorations do not return from historical Release artifacts. | PARTIAL H4 |
+| ENT-08 | Attach new backing, Detach old backing, then edit an Entry and Deploy. | Current complete Attach union persists; old networks/deleted decorations do not return from historical Release artifacts. | PARTIAL H4; local receipt/source-fence proof H12 |
 | ENT-09 | Change Environment epoch or captured source between preparation, publication and terminal commit. | Stale authority rejects; no substituted live slot, latest Entry value or premature applied state. | U |
 | ENT-10 | Remove an applied Entry; repeat with failure, Abort and timeout. | Success removes exact owned metadata/generations and runtime references; non-success preserves required value and cleanup/recovery authority. | U |
 | ENT-11 | Remove never-applied Entry; complete materialization-only edit while unrelated Volume/Compose work is pending. | No invented host cleanup or workload startup; no promotion of the pending Volume or replacement of independently applied Compose state. | U |

@@ -136,6 +136,17 @@ databases, reread latest desired inputs, rewrite history or silently change Entr
 deletion and secret-retention requirements. Implementation and live proof remain
 outstanding; the decision is no longer blocked on owner approval.
 
+A narrower source-lifetime decision remains: reusable Secret deletion currently
+ignores desired-state references and destroys the ciphertext; only exact Script
+references block it (`mvp.md`, Secrets and generated credentials). The proposed
+recovery pins would need the same `resource.in_use` protection while a recoverable
+Task holds the value. This changes the existing Secret deletion contract beyond
+ADR 0079's file-restoration permission. The owner has
+been asked to approve that extension. Do not implement it, retain hidden value
+copies after deletion, or silently replace an unavailable pin with a new Secret.
+The independent Entry and Blueprint runtime writers have local proof; file-source
+retention and dependent live recovery remain paused for this decision.
+
 Acceptance: reproduce Deploy, successful Attach/Entry change and Detach, then
 failed Deploy through normal surfaces. Prove preservation of the pre-failure
 bindings, actual authenticated application behavior and unrelated workloads.

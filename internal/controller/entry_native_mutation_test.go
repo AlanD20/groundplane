@@ -12,6 +12,7 @@ import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/docker/composehelper"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -95,6 +96,9 @@ func testEntryMutationRuntimeSelection(t *testing.T, running bool) {
 	runtime := EntryMutationRuntime{Projection: current, EpochRevision: 1}
 	if running {
 		runtime.RunningServiceIDs = []string{render.ServiceID}
+		runtime.Sources = []etcd.Versioned[serviceruntimerecord.Record]{{
+			Revision: 1, Record: serviceruntimerecord.Record{Runtime: entryReceiptRuntimeFromAuthority(t, render)},
+		}}
 	}
 	task, err = runtime.PrepareTask(
 		"/var/lib/groundplane/vol",
@@ -125,7 +129,9 @@ func testEntryMutationRuntimeSelection(t *testing.T, running bool) {
 		t.Fatal("Entry reconstruction accepted absent runtime capture")
 	}
 	foreign := task
-	foreign.EntryRuntime = &etcd.EntryTaskRuntime{RunningServiceIDs: []string{ids.New(ids.KindService)}}
+	foreign.EntryRuntime = &etcd.EntryTaskRuntime{
+		RunningServiceIDs: []string{ids.New(ids.KindService)}, Updates: []etcd.EntryRuntimeUpdate{},
+	}
 	if _, err := resolver.ResolveExecutionPlan(t.Context(), foreign); err == nil {
 		t.Fatal("Entry reconstruction accepted a Service outside its captured artifact")
 	}

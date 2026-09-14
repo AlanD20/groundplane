@@ -43,12 +43,16 @@ func (repository *TaskRepository) prepareTaskMaterializationWriter(
 	environmentID string,
 	readRevision int64,
 ) (taskMaterializationWriterRecord, []Condition, error) {
+	entryRuntimeConditions, err := repository.entryRuntimeClaimConditions(ctx, record, readRevision)
+	if err != nil {
+		return taskMaterializationWriterRecord{}, nil, err
+	}
 	if !taskHasBlueprintCandidateAppliedAuthority(record) {
 		writer := taskMaterializationWriter(record, environmentID, nil)
 		if err := validateTaskMaterializationWriterForTask(writer, record, environmentID); err != nil {
 			return taskMaterializationWriterRecord{}, nil, err
 		}
-		return writer, nil, nil
+		return writer, entryRuntimeConditions, nil
 	}
 	predecessor, predecessorCondition, err := repository.readTaskMaterializationAppliedPredecessor(
 		ctx, environmentID, record.RenderGeneration, readRevision,
@@ -56,7 +60,7 @@ func (repository *TaskRepository) prepareTaskMaterializationWriter(
 	if err != nil {
 		return taskMaterializationWriterRecord{}, nil, err
 	}
-	conditions := []Condition{predecessorCondition}
+	conditions := append(entryRuntimeConditions, predecessorCondition)
 	if record.RetryOf != "" && record.Type == TaskUpdate && record.Params[TaskReleasePublicationParam] != "" {
 		authority, authorityCondition, authorityErr := repository.blueprintCandidateAttemptAuthority(
 			ctx, record, readRevision,
@@ -169,6 +173,29 @@ func taskMaterializationEnvironment(record TaskRecord) (string, bool, error) {
 		return "", false, errs.New(errs.KindValidationFailed, "task materialization Environment is invalid")
 	}
 	return environmentID, true, nil
+}
+
+func (repository *TaskRepository) prepareTaskMaterializationAcknowledgement(
+	ctx context.Context,
+	terminal TaskRecord,
+	assignment TaskAssignmentRecord,
+	readRevision int64,
+) (taskMaterializationProjectionChange, error) {
+	change, err := repository.prepareTaskMaterializationProjectionAcknowledgement(
+		ctx, terminal, terminal.Status, readRevision,
+	)
+	if err != nil {
+		return taskMaterializationProjectionChange{}, err
+	}
+	runtime, err := repository.prepareEntryRuntimeAcknowledgement(ctx, terminal, assignment, readRevision)
+	if err != nil {
+		clearTaskMaterializationProjectionChange(change)
+		return taskMaterializationProjectionChange{}, err
+	}
+	change.applies = change.applies || runtime.applies
+	change.conditions = append(change.conditions, runtime.conditions...)
+	change.mutations = append(change.mutations, runtime.mutations...)
+	return change, nil
 }
 
 func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledgement(
@@ -284,12 +311,11 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 		projectionRevisionCondition = state.Values[1].ModRevision
 		if entryMutation {
 			// Entry execution changes materialized generations and their Compose
-			// bindings, not unrelated desired workload or resource decisions.
+			// bindings, not unrelated applied workload or resource decisions. The
+			// selected Services' acknowledged runtime records own their new exact
+			// artifacts; this aggregate projection remains byte-identical.
 			current.RevisionID, current.RenderGeneration = projection.RevisionID, projection.RenderGeneration
 			current.Entries = projection.Entries
-			if !entryMutationHasOnlyMaterializationSteps(record) {
-				current.ComposeArtifact = projection.ComposeArtifact
-			}
 			projection = current
 			clear(projectionValue)
 			projectionValue, err = encodeEnvironmentComposeProjection(projection)
@@ -321,26 +347,6 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 		conditions: conditions,
 		mutations:  []Mutation{{Type: MutationPut, Key: projectionKey, Value: projectionValue}},
 	}, nil
-}
-
-func entryMutationHasOnlyMaterializationSteps(record TaskRecord) bool {
-	if record.Type != TaskUpdate || record.Params[TaskResourceKindParam] != TaskResourceEntry ||
-		len(record.Materializations) == 0 || len(record.Steps) != len(record.Materializations) {
-		return false
-	}
-	materializationSteps := make(map[string]struct{}, len(record.Materializations))
-	for _, materialization := range record.Materializations {
-		materializationSteps[materialization.StepID] = struct{}{}
-	}
-	if len(materializationSteps) != len(record.Steps) {
-		return false
-	}
-	for _, step := range record.Steps {
-		if _, materializes := materializationSteps[step.ID]; !materializes {
-			return false
-		}
-	}
-	return true
 }
 
 func taskHasSpecializedProjectionAcknowledgement(record TaskRecord) bool {

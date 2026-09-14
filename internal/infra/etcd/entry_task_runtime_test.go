@@ -13,13 +13,18 @@ import (
 func TestEntryTaskRuntimeSurvivesJournalAndRetry(t *testing.T) {
 	for _, running := range [][]string{{}, {ids.New(ids.KindService)}} {
 		task := entryRuntimeJournalTask(t, running)
+		if len(running) != 0 {
+			task.EntryRuntime.Updates = []EntryRuntimeUpdate{{ServiceID: running[0], PreviousRevision: 11,
+				CurrentArtifactID: ids.New(ids.KindConfig), RetainedPriorArtifactID: ids.New(ids.KindConfig)}}
+		}
 		encoded, err := encodeTaskRecord(task)
 		if err != nil {
 			t.Fatal(err)
 		}
 		restored, err := decodeTaskRecord(encoded)
 		if err != nil || restored.EntryRuntime == nil || restored.EntryRuntime.RunningServiceIDs == nil ||
-			!slices.Equal(restored.EntryRuntime.RunningServiceIDs, running) {
+			!slices.Equal(restored.EntryRuntime.RunningServiceIDs, running) ||
+			!slices.Equal(restored.EntryRuntime.Updates, task.EntryRuntime.Updates) {
 			t.Fatal("stored Entry running set changed", err)
 		}
 		reencoded, err := encodeTaskRecord(restored)
@@ -36,7 +41,8 @@ func TestEntryTaskRuntimeSurvivesJournalAndRetry(t *testing.T) {
 		}
 		retry, err := cloneRetryTask(failed, ids.New(ids.KindTask), TaskActorOperator, task.CreatedAt.Add(3))
 		if err != nil || retry.EntryRuntime == nil || retry.EntryRuntime.RunningServiceIDs == nil ||
-			!slices.Equal(retry.EntryRuntime.RunningServiceIDs, running) {
+			!slices.Equal(retry.EntryRuntime.RunningServiceIDs, running) ||
+			!slices.Equal(retry.EntryRuntime.Updates, task.EntryRuntime.Updates) {
 			t.Fatal("retry lost Entry running set", err)
 		}
 		if epoch, err := EntryRuntimeEpochRevision(retry); err != nil || epoch != 7 {
@@ -45,8 +51,12 @@ func TestEntryTaskRuntimeSurvivesJournalAndRetry(t *testing.T) {
 		if len(running) > 0 {
 			retry.EntryRuntime.RunningServiceIDs[0] = ids.New(ids.KindService)
 			failed.EntryRuntime.RunningServiceIDs[0] = ids.New(ids.KindService)
+			retry.EntryRuntime.Updates[0].CurrentArtifactID = ids.New(ids.KindConfig)
+			failed.EntryRuntime.Updates[0].CurrentArtifactID = ids.New(ids.KindConfig)
 			if restored.EntryRuntime.RunningServiceIDs[0] != running[0] ||
-				retry.EntryRuntime.RunningServiceIDs[0] == failed.EntryRuntime.RunningServiceIDs[0] {
+				retry.EntryRuntime.RunningServiceIDs[0] == failed.EntryRuntime.RunningServiceIDs[0] ||
+				restored.EntryRuntime.Updates[0].CurrentArtifactID != task.EntryRuntime.Updates[0].CurrentArtifactID ||
+				retry.EntryRuntime.Updates[0].CurrentArtifactID == failed.EntryRuntime.Updates[0].CurrentArtifactID {
 				t.Fatal("Entry capture aliases a prior Task")
 			}
 		}
@@ -64,6 +74,7 @@ func TestEntryTaskRuntimeRejectsMissingAndMalformedAuthority(t *testing.T) {
 		change func(*TaskRecord)
 	}{
 		{"missing set", func(task *TaskRecord) { task.EntryRuntime.RunningServiceIDs = nil }},
+		{"missing updates", func(task *TaskRecord) { task.EntryRuntime.Updates = nil }},
 		{"foreign kind", func(task *TaskRecord) { task.EntryRuntime.RunningServiceIDs = []string{task.ID} }},
 		{"duplicate", func(task *TaskRecord) { task.EntryRuntime.RunningServiceIDs = []string{first, first} }},
 		{"unsorted", func(task *TaskRecord) { task.EntryRuntime.RunningServiceIDs = []string{ordered[1], ordered[0]} }},
@@ -105,6 +116,8 @@ func entryRuntimeJournalTask(t *testing.T, running []string) TaskRecord {
 	task := validTaskRecord(taskJournalTime())
 	task.Target = ids.New(ids.KindEnvironment)
 	task.Params = map[string]string{TaskResourceKindParam: TaskResourceEntry, TaskEntryRuntimeEpochParam: "7"}
-	task.EntryRuntime = &EntryTaskRuntime{RunningServiceIDs: slices.Clone(running)}
+	task.EntryRuntime = &EntryTaskRuntime{
+		RunningServiceIDs: slices.Clone(running), Updates: []EntryRuntimeUpdate{},
+	}
 	return task
 }

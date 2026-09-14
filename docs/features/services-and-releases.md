@@ -168,8 +168,17 @@ Task and serving projection, under the held writer and epoch. Configuration-only
 failed and compensated work cannot promote a candidate. The maximum 32 candidates
 with 16 hooks remains within the existing 256-operation arms and 1 MiB envelope.
 
-These writers are not an enabled recovery source. Entry completion and
-recovery-retry publication still need the same authority.
+Entry create/edit/bulk-upsert capture the existing acknowledged runtime at a fixed
+revision. Compact Task recipes bind each selected Service's source revision and
+new artifact identities. Publication, claim and completion compare those exact
+sources. Successful completion atomically advances selected current/retained
+workload receipts and Entry metadata, preserving the stable proxy and unrelated
+runtime. The aggregate applied Compose artifact remains unchanged; it is not the
+selected Service's native authority. Stopped/materialization-only work creates no
+runtime receipt. Missing running receipts fail closed without Release backfill.
+
+These writers are not an enabled recovery source. Recovery-retry publication and
+configuration-source retention still need the same authority.
 Readers must not use a partially maintained record, backfill it from old Release
 input, or infer a missing acknowledgement. Consumer cutover and any clean QA
 rebuild follow only after those writers and source-retention checks are closed.

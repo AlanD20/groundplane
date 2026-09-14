@@ -75,6 +75,22 @@ run is `.tmp/pinned-recovery-blueprint-runtime-final-bounded.log`, including
 maximum-candidate/hook and stale-authority cases. Existing record/transaction
 limits are unchanged. No recovery reader or pinned-file execution is qualified.
 
+H12 is local ENT-08/SVC-13/15/JOURNEY-02 support, not a live pass:
+`TestEntryMutationPreparesOnlySelectedAcknowledgedRuntime` and the Entry serving
+producer tests prove current/retained workload selection, unchanged stable proxy,
+exact source rejection at publication/claim/acknowledgement, atomic receipt/Task
+completion and stopped/absent materialization-only behavior. The terminal oracle
+checks the new environment-file path independently; the aggregate applied artifact
+stays unchanged rather than promoting unrelated desired decisions. Fixtures model
+the preceding runtime acknowledgement; they do not execute Docker or prove file
+source retention. Journal/retry checks preserve the compact recipe.
+`.tmp/entry-runtime-final-tests.log` records the Go 1.26.7 race run, including the
+two affected Blueprint prerequisite cases after their missing runtime-role label
+was corrected. Pinned vet and Staticcheck pass; the final architecture report has
+123 pre-existing findings and no additions. No full CI or deployment ran. File
+retention and recovery-reader integration remain blocked on the documented Secret
+deletion decision, not qualified by these tests.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

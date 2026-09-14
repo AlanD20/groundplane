@@ -434,6 +434,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	mutations = append(mutations, epochMutation)
 	classified := scriptRemoval.classifyConflict(len(conditions), baseClassifier)
 	conditions = append(conditions, scriptRemoval.conditions...)
+	conditions, classified = bindEntryRuntimePublication(task, conditions, classified)
 	requirementBaseConditionCount := len(conditions)
 	conditions = append(conditions, requirementPublication.conditions...)
 	mutations = append(mutations, requirementPublication.mutations...)

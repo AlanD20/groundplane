@@ -1987,10 +1987,10 @@ func (repository *TaskRepository) acknowledgeTask(
 			}
 		}
 		defer blueprintCandidateChange.clear()
-		materializationProjectionChange, err := repository.prepareTaskMaterializationProjectionAcknowledgement(
+		materializationProjectionChange, err := repository.prepareTaskMaterializationAcknowledgement(
 			ctx,
-			task,
-			terminalStatus,
+			terminal,
+			assignment,
 			primaryAndAssignment.ReadRevision,
 		)
 		if err != nil {

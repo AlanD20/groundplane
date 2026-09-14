@@ -210,6 +210,7 @@ func blueprintRequirementGateCandidatePlan(
 				{Key: "com.groundplane.plan-id", Value: task.PlanID},
 				{Key: "com.groundplane.release-id", Value: releaseID},
 				{Key: "com.groundplane.render-generation", Value: strconv.Itoa(int(task.RenderGeneration))},
+				{Key: "com.groundplane.runtime-role", Value: "singleton"},
 				{Key: "com.groundplane.service-id", Value: service.ID},
 			},
 		}},

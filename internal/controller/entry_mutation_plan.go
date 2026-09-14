@@ -8,8 +8,10 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -31,12 +33,17 @@ func (runtime EntryMutationRuntime) PrepareTask(
 	if err != nil {
 		return etcd.TaskRecord{}, err
 	}
-	task.EntryRuntime = &etcd.EntryTaskRuntime{RunningServiceIDs: append([]string{}, runtime.RunningServiceIDs...)}
-	sort.Strings(task.EntryRuntime.RunningServiceIDs)
-	selected, err := entryMutationConsumerIDs(baseline, candidate, artifact, task.EntryRuntime.RunningServiceIDs)
+	running := append([]string{}, runtime.RunningServiceIDs...)
+	sort.Strings(running)
+	selected, err := entryMutationConsumerIDs(baseline, candidate, artifact, running)
 	if err != nil {
 		return etcd.TaskRecord{}, err
 	}
+	updates, err := prepareEntryRuntimeUpdates(artifact, selected, runtime.Sources)
+	if err != nil {
+		return etcd.TaskRecord{}, err
+	}
+	task.EntryRuntime = &etcd.EntryTaskRuntime{RunningServiceIDs: running, Updates: updates}
 	task.Params = map[string]string{
 		etcd.TaskResourceKindParam:               etcd.TaskResourceEntry,
 		etcd.TaskMaterializationEnvironmentParam: candidate.EnvironmentID,
@@ -63,6 +70,44 @@ func (runtime EntryMutationRuntime) PrepareTask(
 	}
 	task.PlanHash = hex.EncodeToString(plan.PlanHash)
 	return task, nil
+}
+
+func prepareEntryRuntimeUpdates(
+	artifact *agentpb.ComposeArtifact,
+	selected []string,
+	sources []etcd.Versioned[serviceruntimerecord.Record],
+) ([]etcd.EntryRuntimeUpdate, error) {
+	updates := make([]etcd.EntryRuntimeUpdate, 0, len(selected))
+	for _, serviceID := range selected {
+		var source *etcd.Versioned[serviceruntimerecord.Record]
+		for index := range sources {
+			if sources[index].Record.Runtime.ServiceID != serviceID {
+				continue
+			}
+			if source != nil {
+				return nil, errs.New(errs.KindStateConflict, "Entry acknowledged runtime source is ambiguous")
+			}
+			source = &sources[index]
+		}
+		if source == nil || source.Revision <= 0 {
+			return nil, errs.New(errs.KindStateConflict, "selected Entry runtime source is unavailable")
+		}
+		update := etcd.EntryRuntimeUpdate{ServiceID: serviceID, PreviousRevision: source.Revision,
+			CurrentArtifactID: ids.New(ids.KindConfig)}
+		if len(source.Record.Runtime.RetainedPriorArtifact) != 0 {
+			update.RetainedPriorArtifactID = ids.New(ids.KindConfig)
+		}
+		if _, err := executionplan.PrepareEntryRuntime(
+			artifact, source.Record.Runtime, update.CurrentArtifactID, update.RetainedPriorArtifactID,
+		); err != nil {
+			return nil, err
+		}
+		updates = append(updates, update)
+	}
+	if len(updates) == 0 {
+		return []etcd.EntryRuntimeUpdate{}, nil
+	}
+	return updates, nil
 }
 
 func (resolver *TaskPlanResolver) resolveUpdatePlan(

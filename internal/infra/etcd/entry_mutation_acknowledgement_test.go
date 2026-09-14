@@ -11,7 +11,8 @@ import (
 )
 
 // Rationale: Entry materialization must record the pinned generation needed by
-// subsequent removal, without promoting unrelated pending workload decisions.
+// subsequent removal, without promoting unrelated pending workload decisions
+// into the aggregate applied artifact owned by Service runtime receipts.
 func TestEntryMutationAcknowledgementRecordsEntriesWithoutPromotingWorkloads(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -80,8 +81,8 @@ func TestEntryMutationAcknowledgementRecordsEntriesWithoutPromotingWorkloads(t *
 	if applied.DesiredServices[0].Desired.Image != baseline.DesiredServices[0].Desired.Image {
 		t.Fatal("Entry completion promoted an unrelated pending image")
 	}
-	if !bytes.Equal(applied.ComposeArtifact, candidate.ComposeArtifact) {
-		t.Fatal("Entry completion did not retain the artifact applied by its Compose step")
+	if !bytes.Equal(applied.ComposeArtifact, baseline.ComposeArtifact) {
+		t.Fatal("Entry completion replaced unrelated aggregate applied runtime")
 	}
 }
 

@@ -74,7 +74,10 @@ func TestEntryMutationCapturesImmutableRevisionSource(t *testing.T) {
 // advancing desired Blueprint state. Entry changes must reach that slot, not
 // merely complete a Task against the older desired runtime.
 func TestEntryMutationCapturesServingRuntimeAfterRollback(t *testing.T) {
-	for _, race := range []string{"none", "before publication", "at commit"} {
+	for _, race := range []string{
+		"none", "before publication", "at commit", "source before publication", "source at commit",
+		"before claim", "before acknowledgement",
+	} {
 		t.Run(race, func(t *testing.T) {
 			testEntryMutationServingRuntime(t, race, false, core.ServiceRuntimeIntentRunning)
 		})
@@ -128,6 +131,35 @@ func testEntryMutationServingRuntime(
 			networkID = fixture.SeedEntryRuntimeAttach(t, original.ServiceID)
 		}
 		fixture.SeedEntryRuntimeIntent(t, original.ServiceID, runtimeIntent)
+		authorityView, found, err := fixture.Hierarchy.GetEnvironmentComposeProjection(ctx, original.EnvironmentID)
+		if err != nil || !found {
+			t.Fatal("runtime authority view", err)
+		}
+		prior, err := fixture.Ledger.GetReleaseRenderInputAt(
+			ctx,
+			intent.PriorServingReleaseID,
+			authorityView.ReadRevision,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		authority := etcd.ServiceLifecycleRelease{ServingReleaseID: currentRelease.ReleaseID,
+			PriorServingReleaseID: intent.PriorServingReleaseID, Current: currentRelease, RetainedPrior: &prior.Record}
+		fragments, err := resolver.RenderRetainedServiceRuntime(ctx, authority)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if withAttach {
+			for index, fragment := range fragments {
+				fragments[index], err = controller.MutateAttachNetworkArtifact(ctx, fragment, authorityView.Record,
+					[]etcd.AttachTaskNetworkJoin{{NetworkID: networkID, ServiceIDs: []string{original.ServiceID}}},
+					fragment.ArtifactId)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		fixture.SeedEntryAcknowledgedRuntime(t, currentRelease, fragments)
 		current, found, err := fixture.Hierarchy.GetEnvironmentComposeProjection(ctx, original.EnvironmentID)
 		if err != nil || !found {
 			t.Fatal("desired projection", err)
@@ -177,10 +209,10 @@ func testEntryMutationServingRuntime(
 				}
 			}
 		}
-		if !green {
+		if !green && runtimeIntent == core.ServiceRuntimeIntentRunning {
 			t.Fatal("Entry candidate omits serving api--green after rollback")
 		}
-		if withAttach {
+		if withAttach && runtimeIntent == core.ServiceRuntimeIntentRunning {
 			var document struct {
 				Services map[string]struct {
 					Networks map[string]any `yaml:"networks"`

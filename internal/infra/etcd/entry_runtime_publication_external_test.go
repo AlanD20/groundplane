@@ -46,10 +46,16 @@ func proveEntryServingPublication(t *testing.T, fixture *etcd.ExecutedArtifactFi
 		t.Fatal(err)
 	}
 	store := &entryRuntimePublicationStore{Store: fixture.EntryRemovalStore()}
+	publicationRace := race == "before publication" || race == "at commit" ||
+		race == "source before publication" || race == "source at commit"
 	if race == "before publication" {
 		fixture.AdvanceEntryRuntimeEpoch(t)
 	} else if race == "at commit" {
 		store.before = func() { fixture.AdvanceEntryRuntimeEpoch(t) }
+	} else if race == "source before publication" {
+		fixture.AdvanceAcknowledgedRuntime(t, task.EntryRuntime.Updates[0].ServiceID)
+	} else if race == "source at commit" {
+		store.before = func() { fixture.AdvanceAcknowledgedRuntime(t, task.EntryRuntime.Updates[0].ServiceID) }
 	}
 	publisher, err := etcd.NewHierarchyRepository(store)
 	if err != nil {
@@ -63,7 +69,7 @@ func proveEntryServingPublication(t *testing.T, fixture *etcd.ExecutedArtifactFi
 			etcd.ComponentTaskPreparation{}, etcd.BlueprintAttachTaskPreparation{}, task, marker)
 	}
 	result, err := publish()
-	if race != "none" {
+	if publicationRace {
 		_, _, conflict, classifyErr := result.Classify()
 		kind, _ := errs.KindOf(err)
 		conflictKind, _ := errs.KindOf(conflict)
@@ -102,6 +108,7 @@ func proveEntryServingPublication(t *testing.T, fixture *etcd.ExecutedArtifactFi
 	if _, err := publish(); err != nil || fixture.ReadRevision() != before {
 		t.Fatal("Entry publication replay wrote or failed", err)
 	}
+	completeEntryRuntimePublication(t, fixture, task, race)
 }
 
 type entryRuntimePublicationStore struct {
