@@ -156,55 +156,6 @@ func (repository *TaskRepository) releaseEffectEvidenceAtRevision(
 	return effect || scriptEffect || componentEffect, scriptConditions, nil
 }
 
-func (repository *TaskRepository) releaseCandidateMutationEvidenceAtRevision(
-	ctx context.Context,
-	task TaskRecord,
-	assignment TaskAssignmentRecord,
-	procedure *agentpb.CandidateReleaseProcedure,
-	revision int64,
-) (bool, []releaseRecoveryMutationEvidence, error) {
-	mutationSteps := make(map[string]int)
-	ordered := make([]string, 0)
-	for _, member := range procedure.GetMembers() {
-		for _, stepID := range member.GetForwardStepIds() {
-			if _, exists := mutationSteps[stepID]; !exists {
-				mutationSteps[stepID] = len(ordered)
-				ordered = append(ordered, stepID)
-			}
-		}
-	}
-	snapshot, err := repository.ListTaskEvents(ctx, task.ID, revision)
-	if err != nil || snapshot.Revision != revision || snapshot.Task.EventCount != task.EventCount {
-		if err != nil {
-			return false, nil, err
-		}
-		return false, nil, corruptTaskAssignment()
-	}
-	evidenceByStep := make(map[string]releaseRecoveryMutationEvidence)
-	for _, event := range snapshot.Events {
-		if event.Identity.AssignmentID != assignment.AssignmentID || event.Identity.AgentID != assignment.AgentID ||
-			event.Identity.AgentGeneration != assignment.AgentGeneration || event.Identity.Attempt == 0 ||
-			event.Identity.Attempt > assignment.ExecutionEpoch {
-			return false, nil, corruptTaskAssignment()
-		}
-		if _, mutation := mutationSteps[event.Identity.StepID]; mutation && event.State != TaskEventStatePending {
-			evidence := evidenceByStep[event.Identity.StepID]
-			evidence.StepID, evidence.Running = event.Identity.StepID, true
-			if event.State == TaskEventStateCompleted {
-				evidence.Completed = true
-			}
-			evidenceByStep[event.Identity.StepID] = evidence
-		}
-	}
-	evidence := make([]releaseRecoveryMutationEvidence, 0, len(evidenceByStep))
-	for _, stepID := range ordered {
-		if item, ok := evidenceByStep[stepID]; ok {
-			evidence = append(evidence, item)
-		}
-	}
-	return len(evidence) != 0, evidence, nil
-}
-
 func (repository *TaskRepository) releaseRecoveryAcknowledgementAtRevision(
 	ctx context.Context,
 	task TaskRecord,

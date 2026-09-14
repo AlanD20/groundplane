@@ -242,6 +242,14 @@ An older Component file can serve a later Task only with its exact original
 record and bytes. H22 records these local source and plan checks; Agent recovery
 execution and the real failure journey remain separate qualification.
 
+Durable recovery accounting selects a file compensation only after its forward
+write has recorded Running or Completed progress. It records files in sealed
+order before native effects; reconnect reconstructs the same recovery sequence
+and cursor. File probes precede native probes, then file restoration precedes
+reverse native restoration. Untouched files and host observations cannot create
+write permission. Native completion requirements remain unchanged. H23 records
+the local journal and replay checks, not a live restoration.
+
 The plan binds explicit predecessor artifact, Release, target and optional
 inactive-artifact references. Historical labels remain exact. Only that named
 predecessor may have historical ownership; it cannot be a forward candidate via

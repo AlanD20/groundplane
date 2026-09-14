@@ -235,6 +235,15 @@ common execution-plan checks also pass in the bounded file-accounting logs.
 Earlier test fixture failures are preserved. These are local checks, not file
 recovery execution or a deployed result. H5 remains failed.
 
+H23 is local SVC-15/JOURNEY-02 durable file-accounting proof. A real Task journal
+records a started file write, and a restarted repository reconstructs that file's
+compensation while excluding an untouched file. Foreign, reordered and non-Running
+evidence is rejected. The canonical sequence and probe/compensate/proven cursor
+boundaries are checked. The controlled record fixture does not exercise the full
+candidate-assignment transition or Agent file I/O. Race, vet and pinned Staticcheck
+pass in `.tmp/recovery-file-accounting-{race,vet,staticcheck}-20260914.log`.
+No record-size, transaction or native-effect requirement changed; H5 remains failed.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

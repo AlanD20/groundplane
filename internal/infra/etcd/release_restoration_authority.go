@@ -288,44 +288,6 @@ func (repository *TaskRepository) createReleaseRecoveryRecord(
 	}, nil
 }
 
-func releaseRestorationStepIDs(
-	procedure *agentpb.CandidateReleaseProcedure,
-	candidates []ReleaseRestorationCandidate,
-) ([]string, error) {
-	if err := validateSelectedRestorationTargets(procedure, candidates); err != nil {
-		return nil, err
-	}
-	stepIDs := make([]string, 0, len(procedure.GetMembers())*2)
-	for index, member := range procedure.GetMembers() {
-		switch candidates[index].Target {
-		case ReleaseRestorationServingPredecessor:
-			selected := member.GetServingPredecessor()
-			if selected == nil {
-				return nil, corruptTaskAssignment()
-			}
-			stepIDs = append(stepIDs, selected.GetProbeStepId())
-		case ReleaseRestorationCandidateAbsence:
-			selected := member.GetCandidateAbsence()
-			if selected == nil {
-				return nil, corruptTaskAssignment()
-			}
-			stepIDs = append(stepIDs, selected.GetProbeStepId())
-		default:
-			return nil, corruptTaskAssignment()
-		}
-	}
-	for index := len(procedure.GetMembers()) - 1; index >= 0; index-- {
-		member := procedure.GetMembers()[index]
-		switch candidates[index].Target {
-		case ReleaseRestorationServingPredecessor:
-			stepIDs = append(stepIDs, member.GetServingPredecessor().GetCompensateStepId())
-		case ReleaseRestorationCandidateAbsence:
-			stepIDs = append(stepIDs, member.GetCandidateAbsence().GetCompensateStepId())
-		}
-	}
-	return stepIDs, nil
-}
-
 func advanceReleaseRecoveryRecord(
 	record releaseRecoveryRecord,
 	input TaskEventInput,
@@ -418,60 +380,6 @@ func (repository *TaskRepository) releaseRecoveryDirectiveAtRevision(
 		Phase: record.Phase, StepIDs: slices.Clone(record.RecoveryStepIDs), Cursor: record.Cursor,
 		RecordSHA256: digest, ApplicableCompensationStepIDs: applicable,
 	}, nil
-}
-
-func releaseApplicableCompensationStepIDs(
-	procedure *agentpb.CandidateReleaseProcedure,
-	candidates []ReleaseRestorationCandidate,
-	evidence []releaseRecoveryMutationEvidence,
-) ([]string, error) {
-	if err := validateSelectedRestorationTargets(procedure, candidates); err != nil {
-		return nil, err
-	}
-	completed := make(map[string]struct{})
-	evidenceIndex := 0
-	for _, member := range procedure.GetMembers() {
-		for _, stepID := range member.GetForwardStepIds() {
-			if evidenceIndex >= len(evidence) || evidence[evidenceIndex].StepID != stepID {
-				continue
-			}
-			if evidence[evidenceIndex].Completed {
-				completed[stepID] = struct{}{}
-			}
-			evidenceIndex++
-		}
-	}
-	if evidenceIndex != len(evidence) {
-		return nil, corruptTaskAssignment()
-	}
-	result := make([]string, 0, len(procedure.GetMembers()))
-	for index := len(procedure.GetMembers()) - 1; index >= 0; index-- {
-		member := procedure.GetMembers()[index]
-		memberCompleted := false
-		for _, stepID := range member.GetForwardStepIds() {
-			if _, ok := completed[stepID]; ok {
-				memberCompleted = true
-				break
-			}
-		}
-		if !memberCompleted {
-			continue
-		}
-		var compensationStepID string
-		switch candidates[index].Target {
-		case ReleaseRestorationServingPredecessor:
-			compensationStepID = member.GetServingPredecessor().GetCompensateStepId()
-		case ReleaseRestorationCandidateAbsence:
-			compensationStepID = member.GetCandidateAbsence().GetCompensateStepId()
-		default:
-			return nil, corruptTaskAssignment()
-		}
-		if compensationStepID == "" {
-			return nil, corruptTaskAssignment()
-		}
-		result = append(result, compensationStepID)
-	}
-	return result, nil
 }
 
 func validTerminalTaskStatus(status TaskStatus) bool {
