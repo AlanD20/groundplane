@@ -11,6 +11,83 @@ prerequisites, not passing product cases. A completed Task or healthy process
 alone does not prove that an application works, its data survived, or recovery
 restored the correct configuration.
 
+## Minimum hosting and upgrade readiness checklist
+
+Requested priority checklist, 2026-09-14. This is a proposal for the owner's
+decision, not permission to implement, deploy or inject faults. It targets a
+specified production application and its GP upgrade path; it does not replace
+the full catalogue or waive [MVP acceptance](mvp.md#acceptance-gates).
+No item below is complete merely because local tests pass.
+
+- [ ] **Fix failed-rollout recovery first** — SVC-15, JOURNEY-02, D4.
+  Recovery must preserve the last successfully applied networking and configuration
+  after Attach/Entry changes, not reconstruct obsolete Release input. Reuse the
+  landed runtime-record work, but complete the affected writers and source retention
+  before connecting readers; a partially maintained record is unsafe. The owner
+  must first decide whether recovery may restore exact pinned configuration files
+  as well as runtime. That proposed change excludes database restoration, migration
+  reversal, latest desired input and history rewriting. Close this item only after
+  the combined change/cutover/failed-Deploy journey preserves authenticated requests,
+  data and unrelated workloads without manual repair. Do not add latest-wins or
+  general reconciliation work to this fix. See the [confirmed cause and required
+  proof](issues/runtime-qualification.md#recovery-after-runtime-configuration-changes).
+- [ ] **Resolve ambiguous backing endpoints** — ATT-12, H8.
+  If overlapping same-name backings are required, fix stable endpoint identity and
+  consistent HOST/URL facts; prove each reaches its own instance throughout cutover.
+  Otherwise the owner may explicitly exclude that overlap from the initial
+  deployment. Record the restriction and leave ATT-12 failed; completing Detach,
+  hardcoded IPs or a label rename is not a product fix. See the
+  [DNS finding](issues/runtime-qualification.md#same-name-backing-endpoints).
+- [ ] **Set the restart acceptance rule before changing code or its verifier** —
+  REL-01, D3. Normal Controller shutdown currently stops its owned Agent/etcd
+  containers; the verifier expects unchanged Agent start time. Decide whether those
+  restarts are allowed, then measure application traffic, durable Tasks and data
+  against that rule. Only a demonstrated contract violation calls for a repair.
+  Do not relax the separate interruption-free GP update requirement.
+- [ ] **Choose and prove a data-recovery path** — JOURNEY-04, D2.
+  GP Backup/Restore is incomplete. Full GP recovery qualification requires finishing
+  and testing its accepted source paths. A smaller initial hosting scope is possible
+  only if the owner accepts a separately tested external backup/restore procedure
+  for every actual durable application source and required GP configuration/key
+  material. Agree data-loss and restore-time limits; prove restoration with real
+  application queries. An external procedure does not pass GP Backup or Gate B.
+  Exclude a cache only after the owner confirms its contents are disposable.
+- [ ] **Select one clean, identified release candidate and pass release gates.**
+  `main` is clean after the test-audit commits, but no current candidate has complete
+  qualification. Record source and Controller/Agent digests; run required
+  [delivery gates](delivery.md#required-gates). Build success is a prerequisite, not
+  product QA. Report concrete gate failures for a scoped decision; do not silently
+  waive a gate or start a repository-wide architecture cleanup.
+- [ ] **Run the real hosting and upgrade cases on that candidate** — JOURNEY-01/02/03/05,
+  UP-01 through UP-13 and applicable HTTP/UI cases. Use actual transactions,
+  background jobs, held WebSockets and durable sentinels through each selected
+  private/public ingress. Cover normal updates, standalone Agent updates, busy
+  refusal, invalid candidates, cancellation boundaries, lost responses, failed
+  Controller/Agent startup, activation interruption and successive upgrades.
+  Reuse valid recorded proof where its inputs still apply; enumerate remaining
+  variants before execution. Require original Task identity, no duplicate effects,
+  preserved application containers/data and measured continuity. Private HTTP does
+  not qualify the production ingress. Provider mutations require separate approval.
+- [ ] **Finish bounded restart, interruption and reliability QA** — REL-01 through
+  REL-09 as applicable to the selected deployment. After recovery passes, exercise
+  reboot, actual in-flight Task interruption, persistence failures, repeated cleanup,
+  drift/concurrency and safe resource pressure. The owner supplies traffic mix,
+  duration, latency/error limits, recovery deadlines and pressure stop limits before
+  execution. Record single-host reboot downtime; do not promise uninterrupted
+  service through a machine reboot. The historical ten-minute run is supporting
+  evidence, not a substitute for the agreed sustained run.
+- [ ] **Make the release decision from per-case evidence.**
+  Record PASS, FAIL, BLOCKED and NOT RUN with exact build/topology and cleanup.
+  Every selected requirement needs a pass, or an explicit owner-approved scope
+  restriction that leaves the full-product gap visible. New safety/correctness
+  failures return to the owner before repairs. Stop at the agreed outcome; do not
+  keep adding speculative improvements or call a restricted deployment fully QA'd.
+
+The remaining repository-wide test-quality audit stays unfinished, but it is not
+proposed as a prerequisite to starting this focused qualification. Review tests
+needed to trust the selected cases; do not resume blanket annotation/removal work,
+cosmetic cleanup, new harnesses or unrelated features under this checklist.
+
 ## Qualification rules
 
 - Every product test has a stable case ID here, a setup/action, and an independently
