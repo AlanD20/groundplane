@@ -455,6 +455,22 @@ Services healthy, authenticated profile success and no active Task. BP-05 closin
 proof, Entry cutover, old Detach and failed-candidate recovery remain pending;
 the new defect requires the owner's scoped repair decision.
 
+H32 records the approved local H31 repair. `TestPublishFirstBlueGreenPreservesProfileDisabledService`
+uses the real publisher, immutable render storage, plan reconstruction and prepared
+runtime authority with empty and replacement Attach selections. Both variants fail
+with the live missing-Service error in `.tmp/first-deploy-profile-red.log`.
+Preserving definitions exposes the next zero-replica rejection in
+`.tmp/first-deploy-profile-green.log`: explicit Deploy still treated its selected
+profiled Service as disabled. Selecting only named Release members resolves that
+rejection without removing profiles or weakening runtime validation.
+`.tmp/first-deploy-profile-packages.log` passes both complete affected Controller
+and Release-operation race suites, including exact singleton replica counts,
+source immutability, current network selection and publication/reconstruction.
+Final vet and pinned Staticcheck pass in `.tmp/first-deploy-profile-final-vet.log`
+and `.tmp/first-deploy-profile-final-staticcheck.log`. Formatting passes; architecture
+has the same 122 finding identities, with no new findings or changed limits, in
+`.tmp/first-deploy-profile-architecture.json`. This is local proof, not a live pass.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

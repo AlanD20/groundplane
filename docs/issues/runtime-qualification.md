@@ -145,8 +145,13 @@ Acceptance: normal first Deploy preserves configured profile-disabled Services
 through current-Attach projection, publishes a valid Task and serves the declared
 application. Cover empty and present Attach selections without enabling unrelated
 Services or changing immutable source input. Then resume the same BP-05 sequence.
-No repair is authorized yet. The real application remains healthy, and the
-isolated failed canary and private diagnostic evidence are preserved.
+The owner approved the scoped repair. The shared serializer now includes disabled
+definitions. The same publisher regression then exposed zero expected replicas:
+explicit Release planning still treated its selected Service as disabled. It now
+selects only the named Release members, retaining authored profiles. Both empty
+and replacement Attach cases pass the real publication/reconstruction tests.
+H32 records local proof; live closing proof remains required. The real application
+and isolated canary remain preserved for immediate QA continuation.
 
 ## Recovery after runtime configuration changes
 

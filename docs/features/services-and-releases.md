@@ -38,6 +38,11 @@ external effects were absent.
 
 ## Technical design
 
+Release preparation preserves profile-disabled definitions when projecting current
+Attach memberships. Explicit Deploy selects only its named Service for runtime
+planning, even when a Compose profile left it configured-only. Authored profiles
+remain in the sealed YAML; this selection does not enable other profile members.
+
 | Concern | Current technical contract |
 | --- | --- |
 | Desired/runtime records | [Service records](../decisions/0028-service-desired-runtime-record.md) |

@@ -160,11 +160,9 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 				if err := applySealedWorkload(&service, image); err != nil {
 					return nil, err
 				}
-				if _, enabled := project.Services[name]; enabled {
-					project.Services[name] = service
-				} else {
-					project.DisabledServices[name] = service
-				}
+				// Explicit Deploy selects this Service, not its whole profile.
+				project.Services[name] = service
+				delete(project.DisabledServices, name)
 			}
 			if err := applyExternalReleaseDependencies(project, selected, dependencyPlan); err != nil {
 				return nil, err

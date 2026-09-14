@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"crypto/sha256"
+	"maps"
 	"sort"
 	"strings"
 
@@ -130,6 +131,9 @@ func MutateAttachNetworkArtifact(
 	if err := projectAttachRuntimeNetworks(project, projection, current, joins); err != nil {
 		return nil, err
 	}
+	// Serialize the complete topology; profiles still control later execution.
+	// The loader separates disabled Services, but MarshalYAML omits that map.
+	maps.Copy(project.Services, project.DisabledServices)
 	canonical, err := project.MarshalYAML()
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)

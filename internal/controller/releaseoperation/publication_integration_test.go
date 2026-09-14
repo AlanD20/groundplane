@@ -31,17 +31,27 @@ import (
 // selection, render encoding, plan construction, and final ledger transaction.
 // The store implements CAS; it does not substitute a publisher response.
 func TestPublishFirstBlueGreenCommitsTaskAndCandidateAuthority(t *testing.T) {
-	testPublishFirstBlueGreen(t, false)
+	testPublishFirstBlueGreen(t, false, false)
 }
 
 // Rationale: an Entry edit can seal an Attach network into its projection before
 // a later Detach removes that membership. A new Release must capture the current
 // Attach set, not revive membership from the earlier desired artifact.
 func TestPublishReleaseDropsDetachedNetworkFromEarlierProjection(t *testing.T) {
-	testPublishFirstBlueGreen(t, true)
+	testPublishFirstBlueGreen(t, true, false)
 }
 
-func testPublishFirstBlueGreen(t *testing.T, detachedNetwork bool) {
+// Rationale: SVC-06/H31 requires explicit first Deploy to retain profile-disabled
+// definitions through Attach projection, with either no joins or replacement joins.
+func TestPublishFirstBlueGreenPreservesProfileDisabledService(t *testing.T) {
+	for _, attached := range []bool{false, true} {
+		t.Run(fmt.Sprintf("attached=%t", attached), func(t *testing.T) {
+			testPublishFirstBlueGreen(t, attached, true)
+		})
+	}
+}
+
+func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bool) {
 	t.Helper()
 	ctx := context.Background()
 	store := &directPublicationStore{values: make(map[string]*etcd.KeyValue)}
@@ -92,6 +102,11 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork bool) {
 		Name: "api", Image: "api:first", Expose: []string{"8080"}, Networks: map[string]*composetypes.ServiceNetworkConfig{"backend": {}},
 		HealthCheck: &composetypes.HealthCheckConfig{Test: composetypes.HealthCheckTest{"CMD", "true"}},
 	}}, Networks: composetypes.Networks{"backend": {Driver: "bridge", Ipam: composetypes.IPAMConfig{Config: []*composetypes.IPAMPool{{Subnet: "10.96.10.0/24"}}}}}}
+	if profileDisabled {
+		service := projectInput.Services["api"]
+		service.Profiles = []string{"configured"}
+		projectInput.Services["api"] = service
+	}
 	normalized, err := controller.MarshalNormalizedEnvironmentProject(projectInput)
 	if err != nil {
 		t.Fatal(err)
@@ -354,6 +369,13 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork bool) {
 	if reconstructedArtifact == nil {
 		t.Fatal("reconstructed sealed plan omitted its candidate artifact")
 	}
+	if profileDisabled {
+		for _, service := range reconstructedArtifact.GetServices() {
+			if service.GetServiceId() != serviceID || service.GetExpectedReplicas() != 1 {
+				t.Fatal("explicit Deploy did not select exactly its configured singleton")
+			}
+		}
+	}
 	wantArtifact, err := (proto.MarshalOptions{Deterministic: true}).Marshal(reconstructedArtifact)
 	if err != nil {
 		t.Fatal(err)
@@ -391,6 +413,9 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork bool) {
 		}
 	}
 	provePreparedReleaseRuntime(t, store, envelope.Data, reconstructed, serviceID, detachedNetwork)
+	if !proto.Equal(artifact, mustPublicationArtifact(t, projection.ComposeArtifact)) {
+		t.Fatal("Release capture changed its immutable source")
+	}
 	// Rationale: aborting an unassigned Release must retire its publication
 	// fence as well as the Task, otherwise every subsequent deployment locks.
 	store.failAbortCleanup = true
