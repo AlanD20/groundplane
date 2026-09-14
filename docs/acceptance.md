@@ -764,6 +764,24 @@ hosting-continuity or upgrade pass.
 The read-only Host API/CLI journey passes independently, with owned cleanup, in
 `host-health-20260914T143727Z.bO8sNS/` under the same evidence directory.
 
+H45 records the fresh hosted-application baseline on `939fd039f` /
+`0.0.0-qa.proxy20260914.1`. Normal hierarchy, explicit password-only backing
+creation, Secret import, six Attach waves and the grouped Blueprint Apply
+completed. Eight ordinary Service Deploys then completed, including first
+blue-green Deploy after configured-only Apply. No runtime files or history were
+manually repaired. Evidence in the H44 directory is `bootstrap-workload.log`,
+`deploy-fresh.log` and their exact accepted/final Task receipts.
+
+`verify-fresh-app.log` passes actual registration/OTP/profile access, route
+isolation, unauthorized and foreign-session denial, strict TLS, reviewer login,
+held private-channel subscription and both native realtime replicas using
+password-only authentication. All 11 Services and the platform are healthy.
+`identity-full-proof.log` and `identity-full-result.json` additionally pass
+clearly marked synthetic uploads through real scanner/worker processing,
+authenticated reviewer approval and the signed callback updating the backend.
+These are fresh functional hosting passes, not failed-rollout recovery,
+uninterrupted upgrades, sustained load or public/provider ingress qualification.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing
