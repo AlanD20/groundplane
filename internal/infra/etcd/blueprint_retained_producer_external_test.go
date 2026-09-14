@@ -42,6 +42,7 @@ func proveRetainedBlueprintProducer(
 ) {
 	t.Helper()
 	ctx := context.Background()
+	nativeBefore := fixture.AcknowledgedRuntime(t, serviceID)
 	scope, err := fixture.Ledger.LoadPlanningScope(ctx, fixture.Environment.Record.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -222,8 +223,13 @@ func proveRetainedBlueprintProducer(
 		t.Fatal(err)
 	}
 	latest, found, err := fixture.Hierarchy.GetEnvironmentAppliedComposeProjection(ctx, fixture.Environment.Record.ID)
-	if err != nil || !found || latest.Revision != applied.Revision ||
-		!bytes.Equal(latest.Record.ComposeArtifact, applied.Record.ComposeArtifact) {
-		t.Fatal("managed publication changed native acknowledgement")
+	// BP-05: Component execution advances the aggregate applied artifact, not
+	// the independent native Service receipt retained for rollout recovery.
+	if err != nil || !found || latest.Record.RevisionID != task.ID ||
+		!bytes.Equal(latest.Record.ComposeArtifact, projection.ComposeArtifact) {
+		t.Fatal("managed publication omitted its executed Component artifact")
+	}
+	if fixture.AcknowledgedRuntime(t, serviceID).Revision != nativeBefore.Revision {
+		t.Fatal("managed publication changed the native Service receipt")
 	}
 }

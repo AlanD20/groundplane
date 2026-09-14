@@ -494,6 +494,27 @@ authenticated profile remain healthy. `canary-after-reapply-active.json` is empt
 No retry, input workaround, Entry cutover, old Detach or candidate fault followed.
 The owned canary remains for diagnosis; further repair requires owner decision.
 
+H34 records the owner-approved H33 acknowledgement repair. The no-native-Release
+Blueprint procedure was incorrectly grouped with metadata-only edits, so success
+could leave the older applied Component artifact. `TestConfiguredBlueprintAcknowledgementRetainsAppliedArtifact`
+fails before the correction in `.tmp/configured-router-ack-red.log`. It now requires
+the sealed applied artifact and root/predecessor guards on success while failed
+Apply and metadata-only edits publish nothing. The actual Blueprint producer and
+terminal test additionally requires the Component artifact to advance and the
+independent native Service runtime receipt to remain unchanged.
+
+The complete durable-store race run in `.tmp/configured-router-ack-package.log`
+passes except five functions sharing an old assertion that the aggregate artifact
+must stay unchanged. That assertion confused aggregate Component authority with
+the native Service receipt. After its correction, all five pass in
+`.tmp/configured-router-ack-package-rerun.log`; focused acknowledgement, Entry and
+Blueprint checks pass in `.tmp/configured-router-ack-final-focused.log`. Final vet
+and pinned Staticcheck pass in `.tmp/configured-router-ack-final-{vet,staticcheck}.log`.
+Formatting passes. `.tmp/configured-router-ack-architecture.json` has the same 122
+finding identities, with no new findings or changed limits. This is local proof;
+the fresh first-Apply/Deploy/reapply live cycle remains required. Existing applied
+history is neither backfilled nor rewritten.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

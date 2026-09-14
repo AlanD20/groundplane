@@ -268,13 +268,14 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 			"task desired revision is unavailable",
 		)
 	}
-	// Configuration-only updates and Volume identity Tasks do not execute the
-	// desired workloads. Preserve prior applied authority, including its absence.
+	// Metadata edits and Volume identity Tasks do not execute desired runtime.
+	// Blueprint Apply can execute Components even without native Releases.
 	volumeIdentity := record.Params[TaskResourceKindParam] == TaskResourceVolume &&
 		(record.Type == TaskCreate || record.Type == TaskUpdate)
 	entryMutation := record.Params[TaskResourceKindParam] == TaskResourceEntry && record.Type == TaskUpdate
+	configuredApply := record.Params[componentTaskBlueprintProcedureParam] == componentTaskBlueprintProcedureNone
 	if volumeIdentity ||
-		record.Type == TaskUpdate && !entryMutation && !taskHasBlueprintCandidateAppliedAuthority(record) &&
+		record.Type == TaskUpdate && !entryMutation && !configuredApply && !taskHasBlueprintCandidateAppliedAuthority(record) &&
 			state.Values[1] != nil {
 		if state.Values[1] != nil {
 			if _, err := decodeEnvironmentComposeProjection(state.Values[1].Value); err != nil {

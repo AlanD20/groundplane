@@ -132,7 +132,17 @@ Earlier fixed-revision capture showed an applied artifact without Component
 Services despite the running router. The retention reader requires applied
 Component bytes; diagnose the acknowledgement/source-capture path for configured-
 only Apply before proposing a correction. Do not fall back to desired state or
-repeat Apply to hide the first-cycle defect. Further repair awaits owner decision.
+repeat Apply to hide the first-cycle defect.
+
+The owner approved this remaining repair. The acknowledgement predicate skipped
+all existing applied updates without native Release publication, including a
+Blueprint that successfully executed Components. It now distinguishes explicit
+no-Release Apply from metadata-only edits. The regression fails before the change;
+the producer/completion check requires the exact new Component artifact and an
+unchanged independent native Service receipt. An older test incorrectly required
+the aggregate artifact to remain unchanged and missed this distinction. Failed
+Tasks, Entry/Volume rules, source guards and transaction limits remain intact.
+Live first-cycle qualification is still required; no stored history is rewritten.
 
 ## First Deploy loses profile-disabled Service
 

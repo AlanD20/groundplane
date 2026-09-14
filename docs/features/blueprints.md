@@ -99,6 +99,12 @@ runtime source; see [per-Service restoration](services-and-releases.md#per-servi
 
 The marker keeps sorted Service/read/projection identities, compact serving,
 target and retained-Release summaries, and the canonical prior-runtime digest.
+Successful Apply without native Releases still records its sealed applied
+Environment artifact: it may have executed Components. Metadata-only edits and
+failed Tasks do not gain that authority. Independent per-Service runtime receipts
+remain unchanged by Component-only execution; retaining the aggregate artifact
+does not claim a new application Release succeeded.
+
 The candidate manifest owns the render input and its lifetime; references never
 depend on a separately prunable predecessor input. The executed Environment
 artifact remains marker-owned. No new blob namespace, collector or higher limit
