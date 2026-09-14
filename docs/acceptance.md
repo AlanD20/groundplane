@@ -515,6 +515,35 @@ finding identities, with no new findings or changed limits. This is local proof;
 the fresh first-Apply/Deploy/reapply live cycle remains required. Existing applied
 history is neither backfilled nor rewritten.
 
+H35 records live qualification on signed `18e936fa9`, version
+`0.0.0-qa.prodops20260914.4`, in the H28 private evidence directory.
+`router-ack-update-result.json` binds the completed protected update to exact
+release and binary/image digests. Its 45-second traffic window has 45 authenticated
+HTTP 200 responses, zero errors, nine pongs on the same WebSocket and maximum
+HTTP latency 0.214 seconds. Application, backing, router and etcd runtime identities
+and start times survive; Agent replacement is permitted. This is partial update
+qualification, not the sustained run.
+
+`ack-canary.log` and `ack-canary-reapply-result.json` record BP-05 first-cycle PASS:
+fresh configured Blueprint Apply, explicit first Deploy and exact reapply preserve
+all router/native container identities and start times. `ack-canary-traffic.json`
+records 90 successful requests with identical content on the same TCP connection
+from 11:09:09 to 11:09:54 UTC, enclosing the entire reapply Task. Both owned canary
+Environments remain for normal cleanup; the original failed run is preserved.
+
+`cutover-resume.log` and `native-cutover-result.json` record the resumed four-consumer
+Attach/Entry/Detach PASS without replaying setup. After Entry rebinding, both actual
+realtime replicas pass password-only authentication, unauthorized/admin rejection
+and async subscription while both backing networks remain attached. Only then do
+the four dependent-first old Detaches run. All five consumer replicas afterward
+use only the new network; both client probes pass again. Serving Release ids,
+stable proxies, retained Components and authenticated profile survive; all 11
+application Services are healthy. ATT-12's tested overlap variant passes, not
+by direct-IP substitution or finishing Detach before checking authentication.
+Fresh complete background-job and sustained-traffic qualification remain open.
+The approved failed-candidate probe then starts from this healthy baseline; its
+separate terminal and recovery outcome must be recorded before SVC-15 can pass.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

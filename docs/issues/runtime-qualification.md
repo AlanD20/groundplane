@@ -142,7 +142,10 @@ the producer/completion check requires the exact new Component artifact and an
 unchanged independent native Service receipt. An older test incorrectly required
 the aggregate artifact to remain unchanged and missed this distinction. Failed
 Tasks, Entry/Volume rules, source guards and transaction limits remain intact.
-Live first-cycle qualification is still required; no stored history is rewritten.
+H35 now passes the fresh first-Apply/Deploy/reapply cycle with unchanged router
+and native runtime and 90 requests on one held connection. The observed H33
+failure is repaired on the current candidate. No stored history was rewritten;
+other genuine-change and interruption variants retain their own matrix status.
 
 ## First Deploy loses profile-disabled Service
 
@@ -282,6 +285,14 @@ This blocks qualification of overlapping same-name backing connections, includin
 that migration window. It is not an authentication-mode failure. Evidence is
 `cache-cutover-diagnostic.log` and `cutover-finish-after-dns.log` in
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`.
+
+H35 supersedes that failing variant on fresh fixed-candidate backings: both actual
+client replicas authenticate and subscribe after Entry rebinding while both networks
+remain attached, then pass again after dependent-first old Detach. All five native
+consumer replicas use only the new network afterward; serving Releases, proxies
+and checked application data survive. No direct-IP workaround or early Detach
+bypassed the overlap assertion. ATT-12's password-only cutover variant passes;
+old frozen artifacts and unrelated qualification are not implicitly migrated.
 
 The owner-approved local correction publishes a Service-id-derived backing
 network alias and uses it in standalone and Blueprint owner/grant HOST/URL

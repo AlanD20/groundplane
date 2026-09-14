@@ -19,18 +19,15 @@ specified production application and its GP upgrade path; it does not replace
 the full catalogue or waive [MVP acceptance](mvp.md#acceptance-gates).
 No item below is complete merely because local tests pass.
 
-Live continuation on clean source `76578c72f` now has a passing private application
-baseline (H28), but BP-05 failed: unchanged Apply recreated the ingress router
-(H29). The journey stopped before Entry cutover, old Detach and failed-candidate
-injection. The owner-approved consumed-resource retention correction has local
-proof in H30 and is deployed from `2895989f2`. H31 records a passing 45-second
-protected-update traffic window, not full upgrade or sustained qualification.
-H32's first-Deploy correction is deployed as `0.0.0-qa.prodops20260914.3` from
-`13d130929`. H33 proves the isolated first Deploy now completes, but its exact
-reapply still recreates the router and closes the held HTTP connection. BP-05
-remains failed; the real application is healthy. A second short protected-update
-traffic window passes, not full upgrade qualification. Owner decision is required
-before further repair; normal-restart/sustained cases remain open.
+Live continuation is on clean `18e936fa9`, deployed as
+`0.0.0-qa.prodops20260914.4`. H35 passes the repaired BP-05 first-cycle variant:
+router/native runtime and a held HTTP connection survive exact reapply. The
+configured first Deploy passes. The saved Attach/Entry/Detach cutover also passes
+actual password-only clients during the overlapping-network window and afterward
+(ATT-12), preserving serving Releases, proxies and the checked application profile.
+Short protected-update traffic windows pass, not full upgrade or sustained
+qualification. Failed-rollout recovery is now in progress; normal-restart and
+sustained cases remain open. H29/H31/H33 failures remain dated evidence.
 
 The owner deferred GP Backup/Restore and external backup/restore work from this
 immediate scope. JOURNEY-04, D2 and Gate B remain incomplete; this is not data-loss
@@ -69,13 +66,14 @@ defect or required scope decision returns to the owner before repair.
   data and unrelated workloads without manual repair. Do not add latest-wins or
   general reconciliation work to this fix. See the [confirmed cause and required
   proof](issues/runtime-qualification.md#recovery-after-runtime-configuration-changes).
-- [ ] **Resolve ambiguous backing endpoints** — ATT-12, H8.
+- [x] **Resolve ambiguous backing endpoints** — ATT-12, H8/H35.
   The approved local fix publishes stable runtime aliases and consistent HOST/URL
   facts for standalone and Blueprint Attaches. Focused race tests, vet and
-  Staticcheck pass; live proof remains required. Use fresh backing instances on
-  the fixed QA candidate: old frozen artifacts do not gain the alias automatically.
-  Prove each endpoint reaches its own instance throughout cutover. Completing
-  Detach, hardcoded IPs or a label rename is not a product fix. See the
+  Staticcheck pass. H35's fresh-instance cutover proves actual clients authenticate
+  and subscribe to the selected backing while both networks remain attached,
+  then after old Detach. Old frozen artifacts do not gain the alias automatically.
+  Completing Detach or hardcoded IP access was not used to bypass the overlap
+  assertion. See the
   [DNS finding](issues/runtime-qualification.md#same-name-backing-endpoints).
 - [ ] **Keep etcd independent of normal Controller restart** — REL-01, D3.
   The owner permits the Agent to restart with the Controller, but not etcd.
@@ -286,7 +284,7 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 | BP-02 | Validate a proposed create/update against existing resources. | Accurate create/update/retain diff and zero desired, Task, runtime or data writes. | U |
 | BP-03 | Try missing/stale/malformed If-Match, concurrent edits and exact request replay. | Only correctly revision-bound input is accepted; stale input never overwrites current desired state; exact replay has one operation. | U |
 | BP-04 | First Apply a valid complete workload with host-local images and ordered setup hooks. | Declared resources and exact replicas serve real requests; all selected pre-hooks clean up before any candidate consumer starts. | PARTIAL H3 |
-| BP-05 | Reapply the exact successful Blueprint. | Same stable IDs, generated values and serving Releases; no duplicate resources, restarted workloads or rerun hooks. | FAIL H29/H33: router recreated; held connection lost in H33 |
+| BP-05 | Reapply the exact successful Blueprint. | Same stable IDs, generated values and serving Releases; no duplicate resources, restarted workloads or rerun hooks. | PASS H35 first-cycle router/native/held-HTTP variant; prior FAIL H29/H33 |
 | BP-06 | Omit existing direct, Blueprint and Component-owned resources from a new valid input. | Omitted resources remain; no implicit delete/rename; ambiguous preservation fails closed. | U |
 | BP-07 | Import unsafe/incomplete bundles: escaping paths/symlinks, absent referenced files, unknown fields, invalid YAML and unresolved variables. | Closed-bundle and grammar errors before publication or host effects; no external file disclosure. | U |
 | BP-08 | Supply dependency cycles, missing dependencies, unsupported Compose behavior, mutable/missing images or invalid rendered configuration. | Specific validation failure before dispatch; running state and persisted data remain unchanged. | U |
@@ -443,7 +441,7 @@ Shared backing bridges are not strict peer-isolation boundaries.
 | ATT-09 | Attach/Detach stopped and configured-only consumers with historical Releases. | Validate configuration without starting or recreating a workload. | PARTIAL H9 |
 | ATT-10 | Change sources/epoch during publication, claim and acknowledgement; replay and Retry. | Stale authority cannot execute/promote; exact replay preserves IDs/plan/current union and does not repeat credential provisioning. | PARTIAL H9 |
 | ATT-11 | Fail provisioning, fact publication, credential use or acknowledgement. | No false ready facts, leaked plaintext or widened access; exact effects and retry/recovery authority remain accounted for. | PARTIAL H9 |
-| ATT-12 | Overlap two same-name backings during consumer cutover; check DNS and actual authentication before and after Detach. | New endpoint selection is unambiguous at each claimed successful stage; any shared-name collision remains a reported limitation, not a pass inferred from direct-IP access. | FAIL H8 |
+| ATT-12 | Overlap two same-name backings during consumer cutover; check DNS and actual authentication before and after Detach. | New endpoint selection is unambiguous at each claimed successful stage; any shared-name collision remains a reported limitation, not a pass inferred from direct-IP access. | PASS H35 password-only cutover; prior FAIL H8 |
 | ATT-13 | Exercise an authored manual/network-only Attach where permitted by the Blueprint contract. | Network edge only: no generated database, role, password, managed facts or GP backup; do not invent a managed manual-backing create operation. | U |
 
 ## Secrets and Connectors
