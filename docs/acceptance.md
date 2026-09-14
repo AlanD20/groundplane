@@ -744,6 +744,26 @@ or removed; no baseline or limit changed. The owner-approved disposable rebuild
 and live recovery rerun remain pending. Private reset preparation has not stopped
 the Controller or changed application data.
 
+H44 records the owner-approved disposable QA rebuild after signed repair
+`939fd039f`. Fresh exact-target checks and a stopped Controller preceded removal
+of 28 managed containers, 11 reviewed never-started QA helpers, 11 managed networks
+and nine disposable Volumes. Deleted Volume data is not recoverable. Registry
+and images were preserved; the saved pre-installation resolver was restored.
+The old installation and Task history were archived without editing them.
+`incident-installation.tar` in `.tmp/qa-proxy-recovery-20260914-pH4bBi2l/` matches
+a second remote tar hash; only then was the exact remote archive removed.
+The `reset-*` and `archive-relocation-*` receipts record scope and hashes.
+Space increased to 4,216,629,248 available bytes. This reset is an approved
+qualification setup, not product-owned recovery of the invalid H41 Task.
+Fresh `0.0.0-qa.proxy20260914.1` installation and Agent enrollment completed.
+`deploy.log` records release `sha256:81c670b0710f015621d1420a060db89686da831e75bf010e54114fbc52f5e195`,
+Controller `sha256:b04e1ff189fc1db8b2fd6e5524860c2e717babbeb100d02399e0a79bc5a0bcda`
+and Agent `sha256:7fae2dbebed889168d0a630a9db9dc79025469bde2e87575addf103567b4a5d0`.
+Application setup is running; this installation record claims no new recovery,
+hosting-continuity or upgrade pass.
+The read-only Host API/CLI journey passes independently, with owned cleanup, in
+`host-health-20260914T143727Z.bO8sNS/` under the same evidence directory.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing
