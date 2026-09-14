@@ -23,6 +23,7 @@ type taskRecordData struct {
 	Steps              []TaskStepRecord              `json:"steps,omitempty"`
 	Materializations   []TaskMaterializationRecord   `json:"materializations,omitempty"`
 	EntryRuntime       *EntryTaskRuntime             `json:"entry_runtime,omitempty"`
+	Configuration      *TaskConfiguration            `json:"configuration,omitempty"`
 	TimeoutSeconds     int64                         `json:"timeout_seconds"`
 	Status             TaskStatus                    `json:"status"`
 	Result             *taskResultData               `json:"result,omitempty"`
@@ -89,6 +90,7 @@ func taskRecordToData(record TaskRecord) taskRecordData {
 		ManagedComponentTeardownSources: cloneManagedComponentRuntimeSources(record.ManagedComponentTeardownSources),
 		Materializations:                cloneTaskMaterializationReferences(record.Materializations),
 		EntryRuntime:                    cloneEntryTaskRuntime(record.EntryRuntime),
+		Configuration:                   cloneTaskConfiguration(record.Configuration),
 		Status:                          record.Status, NextEventSequence: record.NextEventSequence,
 		Result:             taskResultToData(record.Result),
 		TerminalAssignment: cloneTaskTerminalAssignment(record.TerminalAssignment),
@@ -136,6 +138,7 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 		ManagedComponentTeardownSources: cloneManagedComponentRuntimeSources(data.ManagedComponentTeardownSources),
 		Materializations:                data.Materializations,
 		EntryRuntime:                    data.EntryRuntime,
+		Configuration:                   data.Configuration,
 		TimeoutSeconds:                  data.TimeoutSeconds, Status: data.Status,
 		Result:             result,
 		TerminalAssignment: cloneTaskTerminalAssignment(data.TerminalAssignment),
@@ -143,4 +146,22 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 		CreatedAt: createdAt, UpdatedAt: updatedAt, StartedAt: startedAt, FinishedAt: finishedAt,
 		RetainUntil: retainUntil, idempotencyMarker: cloneIdempotencyLocator(data.IdempotencyMarker),
 	}, nil
+}
+
+func cloneTaskRecord(record TaskRecord) TaskRecord {
+	cloned := record
+	cloned.ComponentActionStepIDs = append([]string(nil), record.ComponentActionStepIDs...)
+	cloned.ManagedComponentTeardownSources = cloneManagedComponentRuntimeSources(record.ManagedComponentTeardownSources)
+	cloned.Params = cloneStringMap(record.Params)
+	cloned.Steps = cloneTaskSteps(record.Steps)
+	cloned.Materializations = cloneTaskMaterializationReferences(record.Materializations)
+	cloned.EntryRuntime = cloneEntryTaskRuntime(record.EntryRuntime)
+	cloned.Configuration = cloneTaskConfiguration(record.Configuration)
+	cloned.StartedAt = cloneTimePointer(record.StartedAt)
+	cloned.FinishedAt = cloneTimePointer(record.FinishedAt)
+	cloned.RetainUntil = cloneTimePointer(record.RetainUntil)
+	cloned.Result = cloneTaskResult(record.Result)
+	cloned.TerminalAssignment = cloneTaskTerminalAssignment(record.TerminalAssignment)
+	cloned.idempotencyMarker = cloneIdempotencyLocator(record.idempotencyMarker)
+	return cloned
 }

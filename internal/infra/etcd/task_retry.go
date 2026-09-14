@@ -43,6 +43,7 @@ func cloneRetryTask(source TaskRecord, id string, actor TaskActor, createdAt tim
 		ManagedComponentTeardownSources: cloneManagedComponentRuntimeSources(source.ManagedComponentTeardownSources),
 		Materializations:                cloneTaskMaterializationReferences(source.Materializations),
 		EntryRuntime:                    cloneEntryTaskRuntime(source.EntryRuntime),
+		Configuration:                   cloneTaskConfiguration(source.Configuration),
 		Status:                          TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
 	if err := validateTaskRecord(retry); err != nil {

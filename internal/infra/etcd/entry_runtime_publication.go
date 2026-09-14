@@ -266,6 +266,11 @@ func (repository *TaskRepository) prepareEntryRuntimeAcknowledgement(
 				ExecutionEpoch: assignment.ExecutionEpoch, RenderGeneration: uint64(terminal.RenderGeneration),
 				EffectDigest: hex.EncodeToString(digest[:]), AcknowledgedAt: *terminal.FinishedAt,
 			}}
+		record.Configuration, err = taskRuntimeConfiguration(terminal)
+		if err != nil {
+			clearTaskMaterializationProjectionChange(change)
+			return taskMaterializationProjectionChange{}, err
+		}
 		if validateErr := serviceruntimerecord.Validate(record); validateErr != nil {
 			clearTaskMaterializationProjectionChange(change)
 			return taskMaterializationProjectionChange{}, validateErr

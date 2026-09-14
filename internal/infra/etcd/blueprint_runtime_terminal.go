@@ -66,6 +66,10 @@ func blueprintAcknowledgedRuntime(
 			AgentID: assignment.AgentID, AssignmentID: assignment.AssignmentID, ExecutionEpoch: assignment.ExecutionEpoch,
 			RenderGeneration: uint64(task.RenderGeneration), EffectDigest: digest, AcknowledgedAt: terminalAt,
 		}}
+	record.Configuration, err = taskRuntimeConfiguration(task)
+	if err != nil {
+		return nil, err
+	}
 	if err := serviceruntimerecord.Validate(record); err != nil {
 		return nil, err
 	}

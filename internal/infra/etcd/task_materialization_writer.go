@@ -47,6 +47,15 @@ func (repository *TaskRepository) prepareTaskMaterializationWriter(
 	if err != nil {
 		return taskMaterializationWriterRecord{}, nil, err
 	}
+	configurationConditions, err := repository.runtimeConfigurationClaimConditions(
+		ctx,
+		record,
+		readRevision,
+	)
+	if err != nil {
+		return taskMaterializationWriterRecord{}, nil, err
+	}
+	entryRuntimeConditions = append(entryRuntimeConditions, configurationConditions...)
 	if !taskHasBlueprintCandidateAppliedAuthority(record) {
 		writer := taskMaterializationWriter(record, environmentID, nil)
 		if err := validateTaskMaterializationWriterForTask(writer, record, environmentID); err != nil {
@@ -195,6 +204,14 @@ func (repository *TaskRepository) prepareTaskMaterializationAcknowledgement(
 	change.applies = change.applies || runtime.applies
 	change.conditions = append(change.conditions, runtime.conditions...)
 	change.mutations = append(change.mutations, runtime.mutations...)
+	configuration, err := prepareRuntimeConfigurationAcknowledgement(terminal)
+	if err != nil {
+		clearTaskMaterializationProjectionChange(change)
+		return taskMaterializationProjectionChange{}, err
+	}
+	change.applies = change.applies || configuration.applies
+	change.conditions = append(change.conditions, configuration.conditions...)
+	change.mutations = append(change.mutations, configuration.mutations...)
 	return change, nil
 }
 

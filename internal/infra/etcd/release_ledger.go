@@ -243,6 +243,15 @@ func (ledger *ReleaseLedger) Publish(
 		fragment.condition,
 	}
 	conditions = append(conditions, hookFragment.conditions...)
+	configurationCondition, hasConfiguration, err := taskConfigurationCondition(evidence.Task)
+	if err != nil {
+		return ReleasePublicationResult{}, err
+	}
+	configurationConditions := 0
+	if hasConfiguration {
+		conditions = append(conditions, configurationCondition)
+		configurationConditions = 1
+	}
 	mutations := make([]Mutation, 0, len(evidence.Manifest.Record.Members)*2+11)
 	for _, member := range evidence.Manifest.Record.Members {
 		environmentValue, encodeErr := json.Marshal(releaseEnvironmentIndexValue{
@@ -300,7 +309,7 @@ func (ledger *ReleaseLedger) Publish(
 			Value: slices.Clone(evidence.EnvironmentEpochValue),
 		},
 	)
-	if len(conditions) != 11+len(hookFragment.conditions) ||
+	if len(conditions) != 11+len(hookFragment.conditions)+configurationConditions ||
 		len(mutations) != len(evidence.Manifest.Record.Members)*2+11+len(hookFragment.mutations) ||
 		len(conditions)+len(mutations) > maximumTransactionOperations {
 		return ReleasePublicationResult{}, errs.New(

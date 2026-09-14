@@ -32,8 +32,9 @@ from restoring its databases or files from a backup.
   before connecting readers; a partially maintained record is unsafe. Blueprint
   success has local atomic/runtime/replay and maximum-size proof (H11 in the
   [evidence register](acceptance.md)); Entry completion has local selected-runtime
-  and source-fence proof (H12). Retained file sources and recovery readers remain
-  pending. The owner approved blocking Secret deletion while a recoverable Task
+  and source-fence proof (H12). H16 proves local source snapshot and Task-head
+  bindings; exact generated-file retention, remaining file writers and recovery
+  readers are still pending. The owner approved blocking Secret deletion while a recoverable Task
   holds its exact value. This is not a closing live SVC-15 pass. The owner
   approved restoring exact pinned configuration files as well as runtime under
   [ADR 0079](decisions/0079-pinned-task-configuration-recovery.md). This excludes database restoration, migration

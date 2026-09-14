@@ -106,6 +106,13 @@ func releaseAcknowledgedRuntime(
 		if err != nil {
 			return nil, err
 		}
+		record.Configuration, err = taskRuntimeConfiguration(task)
+		if err != nil {
+			return nil, err
+		}
+		if err := serviceruntimerecord.Validate(record); err != nil {
+			return nil, err
+		}
 		return encodeReleaseRecord("service-acknowledged-runtime", record)
 	}
 	return nil, errs.New(errs.KindStateConflict, "release prepared runtime is missing for acknowledged member")

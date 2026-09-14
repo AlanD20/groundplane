@@ -212,6 +212,7 @@ type TaskRecord struct {
 	Steps              []TaskStepRecord              `json:"steps,omitempty"`
 	Materializations   []TaskMaterializationRecord   `json:"materializations,omitempty"`
 	EntryRuntime       *EntryTaskRuntime             `json:"entry_runtime,omitempty"`
+	Configuration      *TaskConfiguration            `json:"configuration,omitempty"`
 	TimeoutSeconds     int64                         `json:"timeout_seconds"`
 	Status             TaskStatus                    `json:"status"`
 	Result             *TaskResultRecord             `json:"result,omitempty"`
@@ -476,6 +477,9 @@ func isTerminalTaskStatus(status TaskStatus) bool {
 }
 
 func validateTaskRecord(record TaskRecord) error {
+	if _, _, err := taskConfigurationCondition(record); err != nil {
+		return err
+	}
 	if err := validateTaskEntryRuntime(record); err != nil {
 		return err
 	}
@@ -996,23 +1000,6 @@ func taskContainsStep(task TaskRecord, stepID string) bool {
 		}
 	}
 	return false
-}
-
-func cloneTaskRecord(record TaskRecord) TaskRecord {
-	cloned := record
-	cloned.ComponentActionStepIDs = append([]string(nil), record.ComponentActionStepIDs...)
-	cloned.ManagedComponentTeardownSources = cloneManagedComponentRuntimeSources(record.ManagedComponentTeardownSources)
-	cloned.Params = cloneStringMap(record.Params)
-	cloned.Steps = cloneTaskSteps(record.Steps)
-	cloned.Materializations = cloneTaskMaterializationReferences(record.Materializations)
-	cloned.EntryRuntime = cloneEntryTaskRuntime(record.EntryRuntime)
-	cloned.StartedAt = cloneTimePointer(record.StartedAt)
-	cloned.FinishedAt = cloneTimePointer(record.FinishedAt)
-	cloned.RetainUntil = cloneTimePointer(record.RetainUntil)
-	cloned.Result = cloneTaskResult(record.Result)
-	cloned.TerminalAssignment = cloneTaskTerminalAssignment(record.TerminalAssignment)
-	cloned.idempotencyMarker = cloneIdempotencyLocator(record.idempotencyMarker)
-	return cloned
 }
 
 func cloneTaskResult(result *TaskResultRecord) *TaskResultRecord {

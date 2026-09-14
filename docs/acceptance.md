@@ -131,6 +131,24 @@ not the lost process-local input list. Race, vet and pinned Staticcheck pass in
 These are local module tests with a controlled store. The actual Task lifecycle
 and startup callers, deployed Secret protection and recovery journey remain unrun.
 
+H16 is local SVC-15/JOURNEY-02 source-acknowledgement support. The immutable source
+repository tests cover independent lifetime, partial staging, changed replay,
+missing/corrupt members and bounded reads/writes. `TestRuntimeConfiguration*`
+checks success-only acknowledgement, head races, missing applied authority, Task
+serialization and Retry preservation. Existing Blueprint success, ordinary Release
+publication and Entry runtime reconstruction tests exercise the new Task bindings.
+Evidence is `.tmp/runtime-configuration-module-tests.log`,
+`.tmp/runtime-configuration-typed-task.log` and
+`.tmp/runtime-configuration-codec-green.log`. Initial Entry parameter-count and
+Retry-copy failures are preserved in the corresponding `entry-callers` and
+`codec-proof` logs. Vet and pinned Staticcheck pass in the `typed-*` and `retry-*`
+logs under `.tmp/runtime-configuration-`. Architecture reports the same 123 prior
+finding identities in `.tmp/runtime-configuration-architecture.log`.
+
+This retains source metadata, not all generated Component bytes. Other file
+writers, exact source lifetime, automatic Secret pins, recovery execution and
+live qualification remain unfinished. H5's live failure is not closed.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

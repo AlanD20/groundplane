@@ -177,8 +177,18 @@ runtime. The aggregate applied Compose artifact remains unchanged; it is not the
 selected Service's native authority. Stopped/materialization-only work creates no
 runtime receipt. Missing running receipts fail closed without Release backfill.
 
-These writers are not an enabled recovery source. Recovery-retry publication and
-configuration-source retention still need the same authority.
+The shared `common/taskmaterialization` model owns the closed file-source format.
+`infra/runtimeconfiguration` stages immutable source sets independently of Task
+history; a prepared set is not applied state. Blueprint, Entry and ordinary Release
+publication bind the previous acknowledged set in a typed Task field. Claim checks
+that head and the retained members; successful acknowledgement advances the head
+in the same terminal transaction. Task encoding, cloning and Retry preserve this
+authority. An already-applied Environment without it fails closed, without guessing
+from historical Release input. Local regression evidence is H16.
+
+These writers are not an enabled recovery source. Generated Component bytes,
+other file writers, Secret source lifetime and recovery execution still need the
+same authority. The current snapshots retain metadata only, not resolved Secrets.
 Readers must not use a partially maintained record, backfill it from old Release
 input, or infer a missing acknowledgement. Consumer cutover and any clean QA
 rebuild follow only after those writers and source-retention checks are closed.

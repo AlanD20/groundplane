@@ -226,7 +226,10 @@ func (service *Service) publish(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	task = preparedTask
+	task, err = service.ledger.PrepareTaskConfigurationAtRevision(ctx, preparedTask, scope.ReadRevision)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	candidateDescriptor, err := executionplan.DescribeCandidateRelease(plan)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)

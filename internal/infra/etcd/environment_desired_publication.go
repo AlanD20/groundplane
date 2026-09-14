@@ -287,6 +287,10 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	}
 	defer clear(publication.publishedDescriptor)
 
+	task, err = prepareRuntimeConfigurationTask(ctx, repository.store, task, fence.readAtRevision())
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	taskValue, err := encodeTaskRecord(task)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -435,6 +439,10 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	classified := scriptRemoval.classifyConflict(len(conditions), baseClassifier)
 	conditions = append(conditions, scriptRemoval.conditions...)
 	conditions, classified = bindEntryRuntimePublication(task, conditions, classified)
+	conditions, classified, err = bindRuntimeConfigurationPublication(task, conditions, classified)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	requirementBaseConditionCount := len(conditions)
 	conditions = append(conditions, requirementPublication.conditions...)
 	mutations = append(mutations, requirementPublication.mutations...)

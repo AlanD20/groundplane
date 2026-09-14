@@ -71,5 +71,9 @@ func AcknowledgeAttach(previous Record, prepared AttachPreparation, source Ackno
 		return Record{}, errs.New(errs.KindStateConflict, "Attach runtime acknowledgement changed unselected authority")
 	}
 	record := Record{EnvironmentID: prepared.EnvironmentID, Runtime: next, Source: source}
+	if previous.Configuration != nil {
+		configuration := *previous.Configuration
+		record.Configuration = &configuration
+	}
 	return record, Validate(record)
 }

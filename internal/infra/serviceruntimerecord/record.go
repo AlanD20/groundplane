@@ -10,6 +10,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/infra/runtimeconfiguration"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -18,9 +19,10 @@ import (
 // Record is current applied authority, separate from the immutable Release
 // that originally selected the workload. Artifact bytes survive Task pruning.
 type Record struct {
-	EnvironmentID string                         `json:"environment_id"`
-	Runtime       executionplan.CandidateRuntime `json:"runtime"`
-	Source        Acknowledgement                `json:"source"`
+	EnvironmentID string                          `json:"environment_id"`
+	Runtime       executionplan.CandidateRuntime  `json:"runtime"`
+	Source        Acknowledgement                 `json:"source"`
+	Configuration *runtimeconfiguration.Reference `json:"configuration,omitempty"`
 }
 
 type Acknowledgement struct {
@@ -88,6 +90,12 @@ func AcknowledgeRelease(
 
 func Validate(record Record) error {
 	source := record.Source
+	if record.Configuration != nil &&
+		(runtimeconfiguration.ValidateReference(*record.Configuration) != nil ||
+			record.Configuration.EnvironmentID != record.EnvironmentID ||
+			record.Configuration.Generation > source.RenderGeneration) {
+		return errs.New(errs.KindValidationFailed, "acknowledged configuration source is invalid")
+	}
 	if ids.Validate(ids.KindTask, source.TaskID) != nil || ids.Validate(ids.KindPlan, source.PlanID) != nil ||
 		ids.Validate(ids.KindStep, source.StepID) != nil || ids.Validate(ids.KindAgent, source.AgentID) != nil ||
 		ids.Validate(
