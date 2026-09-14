@@ -127,13 +127,14 @@ The shared-consumer audit also found configuration-file paths whose contents can
 change after the immutable Release input was captured. Exact Compose bytes alone
 therefore cannot prove exact configuration restoration. The network failure above
 is observed QA evidence; the file-generation gap is a source-audit finding, not a
-separately executed fault test. A proposed correction would capture acknowledged
-runtime and exact configuration sources before each Task, and allow sealed
-prior-file restoration during compensation. This requires an owner decision on
-ADR 0064's current ban on recovery-only materialization. It must not restore
+separately executed fault test. The owner approved capturing acknowledged runtime
+and exact configuration sources before each Task, with sealed prior-file
+restoration during compensation, on 2026-09-14.
+[ADR 0079](../decisions/0079-pinned-task-configuration-recovery.md) narrows
+ADR 0064's former ban on recovery-only materialization. It must not restore
 databases, reread latest desired inputs, rewrite history or silently change Entry
-deletion and secret-retention requirements. The owner requested an explanation;
-this issue records the unresolved decision, not an accepted contract.
+deletion and secret-retention requirements. Implementation and live proof remain
+outstanding; the decision is no longer blocked on owner approval.
 
 Acceptance: reproduce Deploy, successful Attach/Entry change and Detach, then
 failed Deploy through normal surfaces. Prove preservation of the pre-failure
@@ -155,8 +156,16 @@ replicas passed actual authentication and subscription checks.
 This blocks qualification of overlapping same-name backing connections, including
 that migration window. It is not an authentication-mode failure. Evidence is
 `cache-cutover-diagnostic.log` and `cutover-finish-after-dns.log` in
-`.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Fact construction currently uses the
-Backing Service name in `internal/app/attach_mutations.go`.
+`.tmp/qa-recovery-repair-20260913-63vxXPTf/`.
+
+The owner-approved local correction publishes a Service-id-derived backing
+network alias and uses it in standalone and Blueprint owner/grant HOST/URL
+facts. The original mismatch fails in
+`.tmp/evidence/backing-endpoint-fix/red.log`; focused Go 1.26.7 race tests, vet
+and pinned Staticcheck pass in that directory. These are local checks, not a
+live ATT-12 pass. Existing frozen backing artifacts lack the new alias; the
+approved disposable QA run must create fresh backing instances on the fixed
+candidate. No stored-artifact migration or production deployment is included.
 
 Acceptance: give each backing endpoint a stable, unambiguous runtime identity
 and use it consistently in HOST and URL facts. Attach one consumer to two

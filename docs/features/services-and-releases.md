@@ -119,8 +119,9 @@ successful activation evidence; copying this artifact alone cannot prove the
 post-switch proxy state. Failed, skipped or merely staged work must not replace
 the last acknowledged inputs. Receipt sources must also remain available after
 their originating Task is pruned. Current Attach Task references alone do not
-provide that retention. These requirements do not permit recovery to restore
-mutable files or substitute current desired state for acknowledged inputs.
+provide that retention. [ADR 0079](../decisions/0079-pinned-task-configuration-recovery.md)
+permits restoring only the failed Task's exact pinned pre-operation files, with
+ownership and concurrency fences; current desired state is never a substitute.
 
 The ordinary Release writer now derives each prepared post-activation runtime
 from the sealed plan. It selects the candidate workload, replaces proxy metadata

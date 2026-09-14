@@ -943,12 +943,12 @@ tenants and one database.
   Console shows its prefixed fact set — key prefix from the adapter, values
   carrying the attach's identity:
 
-      pg16_HOST     = postgres
+      pg16_HOST     = gp-svc-01arz3ndektsv4rrffq69g5fav
       pg16_PORT     = 5432
       pg16_DATABASE = api_5d3f9a          # <service-name>_<first-6-of-attach-id> — random tail, instance-unique
       pg16_ROLE     = api_5d3f9a          # one role per attach
       pg16_PASSWORD = <generated>         # reveal-once, rotatable
-      pg16_URL      = pgsql://api_5d3f9a:••••••@postgres:5432/api_5d3f9a
+      pg16_URL      = pgsql://api_5d3f9a:••••••@gp-svc-01arz3ndektsv4rrffq69g5fav:5432/api_5d3f9a
 
   Because the identifiers embed the attach's unique id (the first 6
   characters of its random tail — never the timestamp portion), two
@@ -1009,10 +1009,13 @@ tenants and one database.
   Groundplane's immutable managed PostgreSQL 16 release record; no Project,
   Blueprint, operator setting, Controller configuration, or Agent configuration
   may select or override its repository, tag, digest, platform, helper, or
-  adapter contract version. `name` is the **unique service name**,
-  enforced unique by the schema — it is the DNS-resolvable name consumers
-  connect to on the joined network (`@postgres:5432`), so two backing projects
-  can never collide. A separate display `label` is presentation only. The
+  adapter contract version. `name` is unique within its Environment, not across
+  backing projects. Managed backing consumers use a stable network alias derived
+  from the backing Service id: `gp-` plus the lowercase id with `_` replaced by
+  `-`. Creation publishes that alias on the dedicated backing network; owner and
+  grant HOST/URL facts use it. Two same-name backings therefore have distinct
+  endpoints even while a consumer joins both networks. A separate display `label`
+  is presentation only. The
   Controller looks the adapter up by key and runs the image resolved by that
   accepted adapter contract. The
   auto-provisioning logic lives in the **adapter**, and adapters are part of
@@ -2398,8 +2401,10 @@ workload may advance it; preparation, skipped work, failure and compensation do
 not acknowledge candidate input. The record carries its exact Task, plan and
 execution epoch, current workload/proxy bytes and any retained inactive slot.
 Future execution captures this value into its immutable predecessor, without
-depending on the earlier Task's retention. This does not authorize configuration
-file restoration or replacement of acknowledged input with latest desired state.
+depending on the earlier Task's retention. Failed-operation recovery may restore
+only its exact pinned pre-operation configuration files under
+[ADR 0079](decisions/0079-pinned-task-configuration-recovery.md). It never replaces
+acknowledged input with latest desired state or restores databases or migrations.
 
 Attach state is also split. Desired state contains the Backing Service, Attach
 name, one consumer Service, credential mode and source, and owner-only grants.

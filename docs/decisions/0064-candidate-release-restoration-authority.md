@@ -9,8 +9,9 @@ first restoring the predecessor. The rules below remain authoritative for ordina
 Release and unsuperseded Blueprint failure, and for any predecessor restoration
 that is performed; they do not force restoration before that eligible handoff.
 Supersession cannot steal recovery ownership, reopen the old forward execution or
-use a newer desired head to reject an otherwise lawful cleanup report. The generic
-proposal to retain and restore pinned configuration files remains unapproved.
+use a newer desired head to reject an otherwise lawful cleanup report.
+[ADR 0079](0079-pinned-task-configuration-recovery.md) permits only the failed
+Task's exact pinned configuration restoration; all other recovery limits remain.
 
 - Status: Accepted
 - Member selection and ordinary predecessor capture are owned by
@@ -136,8 +137,9 @@ The recovery record is private. It is not another Task, desired-state record,
 retry attempt, presentation source, or decision authority.
 
 Recovery-only dispatch carries only the immutable selected probe and
-compensation ids plus cursor and authority. It can never run materialization,
-candidate apply, `RunScript`, health, switch, Component action, a completed
+compensation ids plus cursor and authority. File restoration is limited to the
+exact pinned sources and destinations authorized by ADR 0079. It can never run
+forward materialization, candidate apply, `RunScript`, health, switch, Component action, a completed
 forward step, or an alternative restoration target. It probes before
 compensation on every replay. A committed probe or compensation advances the
 record cursor atomically, making crash replay idempotent.

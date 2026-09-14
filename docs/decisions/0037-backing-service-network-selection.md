@@ -41,6 +41,12 @@ The adapter key, Environment id, Service id, Zone id, Volume id, Service name,
 Volume key, and Zone ownership are immutable. Project slug and name remain
 ordinary renamable labels through the Project capability.
 
+The compiled creation artifact publishes one runtime network alias derived from
+the Service id: `gp-` plus the lowercase id with `_` replaced by `-`. Managed
+Attach HOST/URL facts use this alias, including grant facts. The adapter-wide
+Service name is not a unique endpoint across backing networks. Start retains
+the frozen artifact; this correction does not migrate older stored artifacts.
+
 ### 2. Closed create request
 
 `POST /backing-services` is a protected JSON mutation requiring one

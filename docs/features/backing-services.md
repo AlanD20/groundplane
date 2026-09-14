@@ -77,6 +77,12 @@ and Valkey do not share one backing network. A Service attached to both joins
 both. Rendered network membership is a sorted, deduplicated union, but the
 Attach records remain distinct durable facts.
 
+Managed backing creation publishes a stable network alias: `gp-` plus the
+lowercase backing Service id with `_` replaced by `-`. Owner and grant HOST/URL
+facts use this alias, not the adapter-wide Service name. Joining two same-name
+backing networks must not make endpoint selection ambiguous. Slug changes do
+not change the endpoint.
+
 ### Facts, grants, and reveal
 
 Attach facts are not reusable Secret resources and are never injected

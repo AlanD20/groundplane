@@ -13,8 +13,8 @@ restored the correct configuration.
 
 ## Minimum hosting and upgrade readiness checklist
 
-Requested priority checklist, 2026-09-14. This is a proposal for the owner's
-decision, not permission to implement, deploy or inject faults. It targets a
+Owner-approved priority checklist, 2026-09-14. The owner authorized its repairs
+and QA validation, including narrowly scoped pinned-file recovery. It targets a
 specified production application and its GP upgrade path; it does not replace
 the full catalogue or waive [MVP acceptance](mvp.md#acceptance-gates).
 No item below is complete merely because local tests pass.
@@ -30,19 +30,20 @@ from restoring its databases or files from a backup.
   after Attach/Entry changes, not reconstruct obsolete Release input. Reuse the
   landed runtime-record work, but complete the affected writers and source retention
   before connecting readers; a partially maintained record is unsafe. The owner
-  must first decide whether recovery may restore exact pinned configuration files
-  as well as runtime. That proposed change excludes database restoration, migration
+  approved restoring exact pinned configuration files as well as runtime under
+  [ADR 0079](decisions/0079-pinned-task-configuration-recovery.md). This excludes database restoration, migration
   reversal, latest desired input and history rewriting. Close this item only after
   the combined change/cutover/failed-Deploy journey preserves authenticated requests,
   data and unrelated workloads without manual repair. Do not add latest-wins or
   general reconciliation work to this fix. See the [confirmed cause and required
   proof](issues/runtime-qualification.md#recovery-after-runtime-configuration-changes).
 - [ ] **Resolve ambiguous backing endpoints** — ATT-12, H8.
-  If overlapping same-name backings are required, fix stable endpoint identity and
-  consistent HOST/URL facts; prove each reaches its own instance throughout cutover.
-  Otherwise the owner may explicitly exclude that overlap from the initial
-  deployment. Record the restriction and leave ATT-12 failed; completing Detach,
-  hardcoded IPs or a label rename is not a product fix. See the
+  The approved local fix publishes stable runtime aliases and consistent HOST/URL
+  facts for standalone and Blueprint Attaches. Focused race tests, vet and
+  Staticcheck pass; live proof remains required. Use fresh backing instances on
+  the fixed QA candidate: old frozen artifacts do not gain the alias automatically.
+  Prove each endpoint reaches its own instance throughout cutover. Completing
+  Detach, hardcoded IPs or a label rename is not a product fix. See the
   [DNS finding](issues/runtime-qualification.md#same-name-backing-endpoints).
 - [ ] **Set the restart acceptance rule before changing code or its verifier** —
   REL-01, D3. Normal Controller shutdown currently stops its owned Agent/etcd
@@ -100,7 +101,7 @@ estimate, and it is not an implementation authorization.
 | Release gates and candidate-bound hosting, upgrade and fault qualification, reusing valid existing proof | 1–2 days |
 
 Recovery is the largest uncertainty: the existing runtime records are only
-partially maintained, and pinned-file recovery is still an unresolved contract.
+partially maintained. The pinned-file recovery contract is now approved.
 The range assumes timely decisions and no additional blocking gate or runtime
 failure. Any such failure needs a specific revised estimate and the owner's
 decision, not an open-ended extension. Excluding backing overlap can remove its

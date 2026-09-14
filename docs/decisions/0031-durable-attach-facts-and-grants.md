@@ -165,6 +165,12 @@ selects the credential owner's own fact set. Present `grant` selects an
 owner-declared granted Attach fact set. Grant semantics remain distinct from
 credential reuse.
 
+Managed owner and grant HOST/URL facts select the backing runtime's stable alias,
+not its adapter-wide Service name. The alias is `gp-` plus the lowercase backing
+Service id with `_` replaced by `-`, published at creation on its dedicated
+network. Same-name instances remain independently addressable during Attach
+overlap. Retrying keeps the original facts and runtime identity.
+
 Only a credential-owning managed-adapter Attach may be selected as a database
 Backup source. Dependent consumer Attaches are excluded, so one provisioned
 database is captured once regardless of how many Services use it.
