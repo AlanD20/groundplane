@@ -7154,7 +7154,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Canonical decimal Task-event sequence; absent or 0 replays the complete journal. */
+                /** @description Canonical decimal Task-event sequence; absent or 0 replays the retained journal. Trimmed resume cursors expire. */
                 "Last-Event-ID"?: string;
             };
             path: {

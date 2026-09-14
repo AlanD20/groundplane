@@ -118,11 +118,21 @@ func TestConsumeTaskEventStreamDeduplicatesReplayAndRejectsGap(t *testing.T) {
 	if _, err := consumeTaskEventStream(
 		context.Background(),
 		"/tasks/task_1/events",
-		strings.NewReader(event(2)),
-		0,
+		strings.NewReader(event(3)),
+		1,
 		func(apiTypes.TaskEvent) error { return nil },
 	); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("consume gap error = %v, want internal", err)
+	}
+	// TASK-07: a fresh connection begins at the retained window, not always 1.
+	sequences = nil
+	last, err = consumeTaskEventStream(context.Background(), "/tasks/task_1/events",
+		strings.NewReader(event(1001)+event(1002)), 0, func(event apiTypes.TaskEvent) error {
+			sequences = append(sequences, event.Sequence)
+			return nil
+		})
+	if err != nil || last != 1002 || fmt.Sprint(sequences) != "[1001 1002]" {
+		t.Fatalf("fresh rolling window = %d, %v, %v", last, sequences, err)
 	}
 }
 

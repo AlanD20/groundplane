@@ -44,8 +44,11 @@ func (repository *TaskRepository) OpenTaskEventStream(
 	if err != nil {
 		return nil, err
 	}
-	if after > uint64(len(snapshot.Events)) {
+	if after >= snapshot.Task.NextEventSequence {
 		return nil, errs.New(errs.KindMalformedRequest, "Last-Event-ID is ahead of the task journal")
+	}
+	if after != 0 && after < firstTaskEventSequence(snapshot.Task)-1 {
+		return nil, errs.New(errs.KindCursorExpired, "Task event history was trimmed; request a fresh snapshot")
 	}
 	stream := &TaskEventStream{
 		repository: repository,
@@ -150,6 +153,16 @@ func (stream *TaskEventStream) consumeEvent(
 	last uint64,
 	emit func(TaskEventRecord) error,
 ) (uint64, error) {
+	if event.Type == EventDelete {
+		sequence, err := taskEventSequenceFromKey(stream.taskID, event.Key)
+		if err != nil {
+			return last, err
+		}
+		if sequence <= last {
+			return last, nil
+		}
+		return last, errs.New(errs.KindCursorExpired, "Task event history overtook its reader")
+	}
 	if event.Type != EventPut {
 		return last, errs.New(errs.KindInternal, "task event journal was deleted during streaming")
 	}
@@ -207,7 +220,7 @@ func (stream *TaskEventStream) recoverWatch(
 	if err != nil {
 		return last, false, err
 	}
-	if uint64(len(snapshot.Events)) < last {
+	if snapshot.Task.NextEventSequence <= last {
 		return last, false, errs.New(errs.KindInternal, "task event journal regressed during compaction recovery")
 	}
 	if isTerminalTaskStatus(snapshot.Task.Status) {
@@ -237,7 +250,7 @@ func (stream *TaskEventStream) finalDrain(
 	if err != nil {
 		return err
 	}
-	if !isTerminalTaskStatus(snapshot.Task.Status) || uint64(len(snapshot.Events)) < last {
+	if !isTerminalTaskStatus(snapshot.Task.Status) || snapshot.Task.NextEventSequence <= last {
 		return errs.New(errs.KindInternal, "terminal Task event drain is inconsistent")
 	}
 	_, err = emitTaskEventSuffix(ctx, snapshot, last, emit)
@@ -250,12 +263,21 @@ func emitTaskEventSuffix(
 	last uint64,
 	emit func(TaskEventRecord) error,
 ) (uint64, error) {
-	if uint64(len(snapshot.Events)) < last {
+	if snapshot.Task.NextEventSequence <= last {
 		return last, errs.New(errs.KindInternal, "task event snapshot is behind the stream")
 	}
-	for index := last; index < uint64(len(snapshot.Events)); index++ {
-		event := snapshot.Events[index]
-		if event.Sequence != index+1 {
+	first := firstTaskEventSequence(snapshot.Task)
+	if last == 0 {
+		last = first - 1
+	}
+	if last < first-1 {
+		return last, errs.New(errs.KindCursorExpired, "Task event history was trimmed; request a fresh snapshot")
+	}
+	for _, event := range snapshot.Events {
+		if event.Sequence <= last {
+			continue
+		}
+		if event.Sequence != last+1 {
 			return last, errs.New(errs.KindInternal, "task event snapshot suffix has a sequence gap")
 		}
 		if err := emitTaskEvent(ctx, emit, event); err != nil {

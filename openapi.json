@@ -12572,11 +12572,11 @@
             }
           },
           {
-            "description": "Canonical decimal Task-event sequence; absent or 0 replays the complete journal.",
+            "description": "Canonical decimal Task-event sequence; absent or 0 replays the retained journal. Trimmed resume cursors expire.",
             "in": "header",
             "name": "Last-Event-ID",
             "schema": {
-              "description": "Canonical decimal Task-event sequence; absent or 0 replays the complete journal.",
+              "description": "Canonical decimal Task-event sequence; absent or 0 replays the retained journal. Trimmed resume cursors expire.",
               "pattern": "^(0|[1-9][0-9]{0,19})$",
               "type": "string"
             }

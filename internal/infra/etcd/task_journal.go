@@ -6,6 +6,7 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
+	"math"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -219,6 +220,7 @@ type TaskRecord struct {
 	TerminalAssignment *TaskTerminalAssignmentRecord `json:"terminal_assignment,omitempty"`
 	NextEventSequence  uint64                        `json:"next_event_sequence"`
 	EventCount         uint32                        `json:"event_count"`
+	EventCheckpoints   []TaskEventCheckpoint         `json:"event_checkpoints,omitempty"`
 	CreatedAt          time.Time                     `json:"created_at"`
 	UpdatedAt          time.Time                     `json:"updated_at"`
 	StartedAt          *time.Time                    `json:"started_at,omitempty"`
@@ -362,16 +364,6 @@ func transitionTaskStatus(
 	return replacement, nil
 }
 
-func nextTaskControllerTimestamp(previous time.Time, supplied time.Time) (time.Time, error) {
-	if err := validateTimestamp("task controller timestamp", supplied); err != nil {
-		return time.Time{}, err
-	}
-	if supplied.After(previous) {
-		return supplied, nil
-	}
-	return previous.Add(time.Nanosecond), nil
-}
-
 func prepareTaskEvent(
 	task TaskRecord,
 	input TaskEventInput,
@@ -401,6 +393,12 @@ func prepareTaskEvent(
 		return PreparedTaskEvent{}, err
 	}
 
+	if existing == nil {
+		existing, err = trimmedTaskEventReplay(task, input, hash)
+		if err != nil {
+			return PreparedTaskEvent{}, err
+		}
+	}
 	if existing != nil {
 		if err := validateTaskEventDedupRecord(*existing); err != nil {
 			return PreparedTaskEvent{}, err
@@ -415,7 +413,7 @@ func prepareTaskEvent(
 			)
 		}
 		return PreparedTaskEvent{
-			Task: cloneTaskRecord(task), Sequence: existing.Sequence, Duplicate: true,
+			Task: cloneTaskRecord(task), Sequence: existing.Sequence, Dedup: *existing, Duplicate: true,
 		}, nil
 	}
 	if isTerminalTaskStatus(task.Status) {
@@ -425,13 +423,8 @@ func prepareTaskEvent(
 		)
 	}
 
-	if task.EventCount >= MaximumTaskEvents {
-		return PreparedTaskEvent{}, errs.Newf(
-			errs.KindValidationFailed,
-			"task %s already has the maximum of %d durable events",
-			task.ID,
-			MaximumTaskEvents,
-		)
+	if task.NextEventSequence == math.MaxUint64 {
+		return PreparedTaskEvent{}, errs.New(errs.KindInternal, "task event sequence exhausted")
 	}
 	updated := cloneTaskRecord(task)
 	sequence := task.NextEventSequence
@@ -446,7 +439,7 @@ func prepareTaskEvent(
 	if _, err := encodeTaskEventRecord(event); err != nil {
 		return PreparedTaskEvent{}, err
 	}
-	updated.EventCount++
+	updated.EventCount = min(updated.EventCount+1, MaximumTaskEvents)
 	updated.NextEventSequence++
 	updated.UpdatedAt = eventAt
 	if err := validateTaskRecord(updated); err != nil {
@@ -552,8 +545,12 @@ func validateTaskRecord(record TaskRecord) error {
 			return errs.New(errs.KindInternal, "task terminal assignment identity is invalid")
 		}
 	}
-	if record.EventCount > MaximumTaskEvents || record.NextEventSequence != uint64(record.EventCount)+1 {
+	if record.NextEventSequence == 0 ||
+		uint64(record.EventCount) != min(record.NextEventSequence-1, MaximumTaskEvents) {
 		return errs.New(errs.KindInternal, "task event summary is inconsistent")
+	}
+	if err := validateTaskEventCheckpoints(record); err != nil {
+		return err
 	}
 	if err := validateTimestamp("task created_at", record.CreatedAt); err != nil {
 		return err

@@ -509,7 +509,7 @@ func (repository *TaskRepository) ListTaskEvents(
 		if err != nil {
 			return TaskEventSnapshot{}, err
 		}
-		if sequence != uint64(index)+1 {
+		if sequence != firstTaskEventSequence(task)+uint64(index) {
 			return TaskEventSnapshot{}, errs.New(errs.KindInternal, "task event snapshot has a sequence gap")
 		}
 		event, err := decodeTaskEventRecord(value.Value)
@@ -521,7 +521,7 @@ func (repository *TaskRepository) ListTaskEvents(
 		}
 		events[index] = event
 	}
-	if len(events) != int(task.EventCount) || task.NextEventSequence != uint64(len(events))+1 {
+	if len(events) != int(task.EventCount) || firstTaskEventSequence(task) > 1 && len(task.EventCheckpoints) == 0 {
 		return TaskEventSnapshot{}, errs.New(errs.KindInternal, "task event snapshot does not match its task summary")
 	}
 	return TaskEventSnapshot{Task: task, Events: events, Revision: eventsResult.ReadRevision}, nil
@@ -533,7 +533,16 @@ func (repository *TaskRepository) verifyDuplicateEvent(
 	task TaskRecord,
 	dedup TaskEventDedupRecord,
 ) error {
-	if dedup.Sequence > uint64(task.EventCount) || dedup.Sequence >= task.NextEventSequence {
+	if dedup.Sequence < firstTaskEventSequence(task) {
+		for _, checkpoint := range task.EventCheckpoints {
+			if checkpoint.Identity == dedup.Identity && checkpoint.Sequence == dedup.Sequence &&
+				checkpoint.PayloadSHA256 == dedup.PayloadSHA256 {
+				return nil
+			}
+		}
+		return errs.New(errs.KindStateConflict, "task replay is outside retained authority")
+	}
+	if dedup.Sequence >= task.NextEventSequence {
 		return errs.New(errs.KindInternal, "task event dedupe sequence is outside its task summary")
 	}
 	result, err := repository.store.GetMany(ctx, GetManyRequest{

@@ -198,13 +198,14 @@ excludes only named Volumes outside the sealed artifact. Required and unidentifi
 Volume conflicts still fail; full Agent race checks pass. Earlier fixtures tested
 healthy replicas without unrelated project Volumes, so missed this sequence.
 
-Journal exhaustion remains separately unresolved: each redispatch advances the
-execution epoch and generates new progress events until none can be accepted.
-The proposed saturation handling through the existing durable recovery record
-requires an owner decision because event persistence is an accepted contract.
-No timeout, cap, immutable history or restoration check has changed. The local
-Volume correction is not deployed. The historical incident below remains evidence,
-not the cause of H36.
+Journal exhaustion followed because each redispatch advances the execution epoch
+and generates new progress events. The owner approved trimming oldest events on
+append. H38 verifies the local rolling 1,000-event window, bounded replay and
+per-step mutation/progress checkpoints. Recovery checks and timeouts are unchanged;
+old public history now expires as explicitly approved. Neither repair is deployed.
+The normal updater requires healthy idle Agent state, so a one-time data-preserving
+repair installation awaits owner approval before the same Task can resume.
+The historical incident below remains evidence, not the cause of H36.
 
 Owner: Services and Releases delivery owner. Severity: high. This is an active
 recovery blocker, not deferred qualification. The failed-candidate QA sequence on

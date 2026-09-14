@@ -32,7 +32,7 @@ type taskEventStreamOpener interface {
 
 type taskEventStreamInput struct {
 	ID          string `path:"id" pattern:"^task_[0-9A-HJKMNP-TV-Z]{26}$"`
-	LastEventID string `header:"Last-Event-ID" required:"false" pattern:"^(0|[1-9][0-9]{0,19})$" doc:"Canonical decimal Task-event sequence; absent or 0 replays the complete journal."`
+	LastEventID string `header:"Last-Event-ID" required:"false" pattern:"^(0|[1-9][0-9]{0,19})$" doc:"Canonical decimal Task-event sequence; absent or 0 replays the retained journal. Trimmed resume cursors expire."`
 }
 
 type repositoryTaskEventStreamOpener struct {

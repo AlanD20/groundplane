@@ -318,8 +318,8 @@ func TestTaskRepositoryRejectsSequenceCollisionAndEventCap(t *testing.T) {
 		ctx,
 		taskEventInput(capped.ID, MaximumTaskEvents+1, TaskEventStateRunning),
 		taskJournalTime().Add(time.Second),
-	); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
-		t.Fatalf("AppendTaskEvent(cap) error = %v, want validation.failed", err)
+	); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+		t.Fatalf("AppendTaskEvent(missing oldest event) error = %v, want internal", err)
 	}
 }
 

@@ -74,7 +74,15 @@ non-Blueprint Tasks gain no such handoff or new public Task state.
 
 ## Non-functional requirements
 
-Each Task has at most 1,000 durable events, each at most 32 KiB of JSON. Events
+Each Task retains its latest 1,000 durable events, each at most 32 KiB of JSON.
+Appending at capacity atomically removes the oldest event and its replay record.
+Sequence numbers never reset. A compact per-step summary preserves trimmed
+progress, mutation evidence and the replay watermark; recovery cannot infer that
+an effect was absent merely because its event aged out. Retained-event replay
+stays exact; older-than-watermark delivery is rejected, never executed anew.
+Fresh streams start at the retained window; an expired nonzero resume cursor
+requires a fresh snapshot. Task identity, primary failure and recovery proof are
+not trimmed. This rolling policy was approved by the owner on 2026-09-14. Events
 contain closed progress metadata, not subprocess output, secret values or raw
 Agent diagnostics. Terminal Tasks and their subordinate records have a 90-day
 retention boundary with bounded, restart-safe cleanup. Exact storage bounds and

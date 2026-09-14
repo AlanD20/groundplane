@@ -3278,7 +3278,7 @@ type TaskAbortParams struct {
 
 // TaskEventsParams defines parameters for TaskEvents.
 type TaskEventsParams struct {
-	// LastEventID Canonical decimal Task-event sequence; absent or 0 replays the complete journal.
+	// LastEventID Canonical decimal Task-event sequence; absent or 0 replays the retained journal. Trimmed resume cursors expire.
 	LastEventID *string `json:"Last-Event-ID,omitempty"`
 }
 

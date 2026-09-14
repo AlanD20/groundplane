@@ -20,7 +20,7 @@ func (repository *TaskRepository) releaseComponentEffectAtRevision(
 	if err != nil {
 		return false, err
 	}
-	if snapshot.Revision != revision || snapshot.Task.EventCount != task.EventCount ||
+	if snapshot.Revision != revision || snapshot.Task.NextEventSequence != task.NextEventSequence ||
 		!slices.Equal(snapshot.Task.ComponentActionStepIDs, task.ComponentActionStepIDs) {
 		return false, corruptTaskAssignment()
 	}
@@ -35,6 +35,17 @@ func (repository *TaskRepository) releaseComponentEffectAtRevision(
 			return false, corruptTaskAssignment()
 		}
 		if event.State != TaskEventStatePending {
+			return true, nil
+		}
+	}
+	for _, checkpoint := range snapshot.Task.EventCheckpoints {
+		if !slices.Contains(task.ComponentActionStepIDs, checkpoint.Identity.StepID) {
+			continue
+		}
+		if !taskCheckpointAssignmentMatches(checkpoint, assignment) {
+			return false, corruptTaskAssignment()
+		}
+		if checkpoint.EffectPossible {
 			return true, nil
 		}
 	}

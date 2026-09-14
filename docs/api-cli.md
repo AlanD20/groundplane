@@ -433,7 +433,11 @@ Environment lock records `skipped_overlap`.
   rule: `POST /tenants/{id}/rename`, `POST /projects/{id}/rename`, and
   `POST /environments/{id}/rename` return the updated entity with `200`.
   Follow progress via `GET /tasks/{id}` and stream events via
-  `GET /tasks/{id}/events` (SSE). **Attach and detach are tasks like any
+  `GET /tasks/{id}/events` (SSE). Task history retains the latest 1,000 events;
+  absent or zero `Last-Event-ID` replays that window. A nonzero cursor older than
+  the window returns `cursor.expired`; take a fresh Task snapshot and reconnect
+  without the old cursor. Sequence numbers do not reset when history is trimmed.
+  **Attach and detach are tasks like any
   other**: `DELETE /attaches/{id}` returns `202 {task_id}` running the
   adapter's deprovision (revoke grants → drop role → optionally drop
   database); the desired-state record is removed as part of that task —

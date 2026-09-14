@@ -600,6 +600,36 @@ records that comparison without a baseline change. The repair is local, not depl
 pass. No host mutation or history rewrite ran. Event-saturation handling remains
 an unresolved contract decision before deployment and continuation of the same Task.
 
+H38 verifies the owner-approved rolling Task history on 2026-09-14, following H36's
+hard-cap failure. `TestTaskEventRollingWindowPreservesRecoveryAndReplay` appends
+1,003 events through the repository, retaining exactly 1,000 events and replay
+records with sequences 4–1,003. It exercises an atomic comparison conflict, lost
+commit response and repository restart, retained/trimmed replay, changed payload
+and stale identity rejection, out-of-order ordinal eviction, preserved file and
+Component mutation evidence, cursor expiry and terminal stream drain. Controller
+projection and CLI stream regressions prove retained step state and fresh streams
+starting above sequence 1,000. These are TASK-06/07 and SVC-15 local checks, not
+live recovery or uninterrupted application evidence.
+
+The complete durable-store and Agent-channel race suites pass in
+`.tmp/task-event-window-packages.log`. Final affected race checks pass in
+`.tmp/task-event-window-final.log`; final vet and pinned Staticcheck pass in
+`.tmp/task-event-window-final-{vet,staticcheck}.log`. Pinned API regeneration passes
+in `.tmp/task-event-window-api-final.log`. Formatting and diff checks pass;
+`.tmp/task-event-window-final-architecture.json` retains the same 122 existing
+finding identities without a baseline change. The earlier CLI sequence ceiling
+failure is retained in `.tmp/task-event-window-surface.log`; its corrected check
+passes in `.tmp/task-event-window-cli.log` and the final affected run.
+
+Private `recovery-history-before-trimming.jsonl` archives the live Task's existing
+1,000 public events before deployment. The Task remains on the old candidate;
+neither H37 nor H38 is deployed. The healthy/idle Agent requirement prevents normal
+native update while recovery is stuck. A one-time data-preserving repair installation
+awaits owner approval. No runtime reset, process restart, event deletion or new
+fault occurred in this local repair. After deployment, resume that same Task and
+require exact restoration proof before further faults; normal upgrade qualification
+remains separate.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

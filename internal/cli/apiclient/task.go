@@ -443,7 +443,7 @@ func consumeTaskEventStream(
 				return lastSequence, err
 			}
 			if sequence > lastSequence {
-				if sequence != lastSequence+1 {
+				if lastSequence != 0 && sequence != lastSequence+1 {
 					return lastSequence, errs.New(errs.KindInternal, "apiclient: Task event sequence has a gap")
 				}
 				if err := onEvent(event); err != nil {
@@ -504,15 +504,13 @@ func decodeTaskEventFrame(path string, frameID string, data string) (uint64, api
 	if err := decodeSingleJSON(http.MethodGet, path, strings.NewReader(data), &event); err != nil {
 		return 0, apiTypes.TaskEvent{}, err
 	}
-	if event.Sequence != sequence || sequence > maximumPublicTaskEvents || event.StepID == "" ||
+	if event.Sequence != sequence || event.StepID == "" ||
 		event.Attempt == 0 || event.Ordinal == 0 || event.ReceivedAt.IsZero() ||
 		!validPublicTaskStatus(event.State) {
 		return 0, apiTypes.TaskEvent{}, errs.New(errs.KindInternal, "apiclient: Task event data is invalid")
 	}
 	return sequence, event, nil
 }
-
-const maximumPublicTaskEvents = 1000
 
 func validPublicTaskStatus(status apiTypes.TaskStatus) bool {
 	switch status {

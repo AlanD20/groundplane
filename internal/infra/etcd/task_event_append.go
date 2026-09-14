@@ -70,7 +70,7 @@ func (repository *TaskRepository) AppendTaskEvent(
 			return TaskEventAppend{}, err
 		}
 		if prepared.Duplicate && isTerminalTaskStatus(task.Status) {
-			if err := repository.verifyDuplicateEvent(ctx, result.ReadRevision, task, *existing); err != nil {
+			if err := repository.verifyDuplicateEvent(ctx, result.ReadRevision, task, prepared.Dedup); err != nil {
 				return TaskEventAppend{}, err
 			}
 			return TaskEventAppend{Sequence: prepared.Sequence, Revision: result.ReadRevision, Duplicate: true}, nil
@@ -96,7 +96,7 @@ func (repository *TaskRepository) AppendTaskEvent(
 			return TaskEventAppend{}, errs.New(errs.KindStateConflict, "task event assignment identity does not match")
 		}
 		if prepared.Duplicate {
-			if err := repository.verifyDuplicateEvent(ctx, result.ReadRevision, task, *existing); err != nil {
+			if err := repository.verifyDuplicateEvent(ctx, result.ReadRevision, task, prepared.Dedup); err != nil {
 				return TaskEventAppend{}, err
 			}
 			return TaskEventAppend{Sequence: prepared.Sequence, Revision: result.ReadRevision, Duplicate: true}, nil
@@ -162,6 +162,10 @@ func (repository *TaskRepository) AppendTaskEvent(
 			return TaskEventAppend{}, errs.New(errs.KindInternal, "task event sequence is already occupied")
 		}
 
+		trimConditions, trimMutations, err := repository.prepareTaskEventTrim(ctx, task, &prepared, result.ReadRevision)
+		if err != nil {
+			return TaskEventAppend{}, err
+		}
 		encodedTask, err := encodeTaskRecord(prepared.Task)
 		if err != nil {
 			return TaskEventAppend{}, err
@@ -191,6 +195,8 @@ func (repository *TaskRepository) AppendTaskEvent(
 			{Type: MutationPut, Key: taskEventDedupKey(input.Identity), Value: encodedDedup},
 		}
 		mutations = append(mutations, recoveryMutation...)
+		conditions = append(conditions, trimConditions...)
+		mutations = append(mutations, trimMutations...)
 		transaction, err := repository.store.Transact(
 			ctx,
 			conditions,

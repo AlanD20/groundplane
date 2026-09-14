@@ -30,6 +30,7 @@ type taskRecordData struct {
 	TerminalAssignment *TaskTerminalAssignmentRecord `json:"terminal_assignment,omitempty"`
 	NextEventSequence  uint64                        `json:"next_event_sequence"`
 	EventCount         uint32                        `json:"event_count"`
+	EventCheckpoints   []TaskEventCheckpoint         `json:"event_checkpoints,omitempty"`
 	CreatedAt          string                        `json:"created_at"`
 	UpdatedAt          string                        `json:"updated_at"`
 	StartedAt          string                        `json:"started_at,omitempty"`
@@ -92,6 +93,7 @@ func taskRecordToData(record TaskRecord) taskRecordData {
 		EntryRuntime:                    cloneEntryTaskRuntime(record.EntryRuntime),
 		Configuration:                   cloneTaskConfiguration(record.Configuration),
 		Status:                          record.Status, NextEventSequence: record.NextEventSequence,
+		EventCheckpoints:   append([]TaskEventCheckpoint(nil), record.EventCheckpoints...),
 		Result:             taskResultToData(record.Result),
 		TerminalAssignment: cloneTaskTerminalAssignment(record.TerminalAssignment),
 		EventCount:         record.EventCount, CreatedAt: record.CreatedAt.UTC().Format(time.RFC3339Nano),
@@ -129,7 +131,8 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 		return TaskRecord{}, err
 	}
 	return TaskRecord{
-		ID: data.ID, OperationID: data.OperationID, RetryOf: data.RetryOf,
+		EventCheckpoints: append([]TaskEventCheckpoint(nil), data.EventCheckpoints...),
+		ID:               data.ID, OperationID: data.OperationID, RetryOf: data.RetryOf,
 		IdempotencyKey: data.IdempotencyKey, Owner: data.Owner, Actor: data.Actor,
 		Executor: data.Executor, PlanID: data.PlanID,
 		PlanHash: data.PlanHash, RenderGeneration: data.RenderGeneration,
@@ -150,6 +153,7 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 
 func cloneTaskRecord(record TaskRecord) TaskRecord {
 	cloned := record
+	cloned.EventCheckpoints = append([]TaskEventCheckpoint(nil), record.EventCheckpoints...)
 	cloned.ComponentActionStepIDs = append([]string(nil), record.ComponentActionStepIDs...)
 	cloned.ManagedComponentTeardownSources = cloneManagedComponentRuntimeSources(record.ManagedComponentTeardownSources)
 	cloned.Params = cloneStringMap(record.Params)

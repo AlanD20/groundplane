@@ -118,13 +118,28 @@ func (repository *TaskRepository) releaseCandidateMutationEvidenceAtRevision(
 ) (bool, []releaseRecoveryMutationEvidence, error) {
 	ordered, mutationSteps, fileSteps := releaseForwardMutationSteps(procedure)
 	snapshot, err := repository.ListTaskEvents(ctx, task.ID, revision)
-	if err != nil || snapshot.Revision != revision || snapshot.Task.EventCount != task.EventCount {
+	if err != nil || snapshot.Revision != revision || snapshot.Task.NextEventSequence != task.NextEventSequence {
 		if err != nil {
 			return false, nil, err
 		}
 		return false, nil, corruptTaskAssignment()
 	}
 	evidenceByStep := make(map[string]releaseRecoveryMutationEvidence)
+	for _, checkpoint := range snapshot.Task.EventCheckpoints {
+		if !taskCheckpointAssignmentMatches(checkpoint, assignment) {
+			return false, nil, corruptTaskAssignment()
+		}
+		if _, mutation := mutationSteps[checkpoint.Identity.StepID]; !mutation {
+			continue
+		}
+		_, file := fileSteps[checkpoint.Identity.StepID]
+		running := checkpoint.Running || !file && checkpoint.EffectPossible
+		if running {
+			evidenceByStep[checkpoint.Identity.StepID] = releaseRecoveryMutationEvidence{
+				StepID: checkpoint.Identity.StepID, Running: true, Completed: checkpoint.Completed,
+			}
+		}
+	}
 	for _, event := range snapshot.Events {
 		if event.Identity.AssignmentID != assignment.AssignmentID || event.Identity.AgentID != assignment.AgentID ||
 			event.Identity.AgentGeneration != assignment.AgentGeneration || event.Identity.Attempt == 0 ||

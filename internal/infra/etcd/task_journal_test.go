@@ -187,14 +187,15 @@ func TestTaskEventOrderingAndLimitsAreDeterministic(t *testing.T) {
 	}
 	task.EventCount = MaximumTaskEvents
 	task.NextEventSequence = MaximumTaskEvents + 1
-	_, err := prepareTaskEvent(
+	window, err := prepareTaskEvent(
 		task,
 		taskEventInput(task.ID, MaximumTaskEvents+1, TaskEventStateRunning),
 		nil,
 		now.Add(time.Hour),
 	)
-	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
-		t.Fatalf("prepareTaskEvent(limit) error = %v, want validation.failed", err)
+	if err != nil || window.Task.EventCount != 1000 || window.Sequence != 1001 ||
+		window.Task.NextEventSequence != 1002 {
+		t.Fatalf("prepareTaskEvent(rolling window) = %#v, %v", window, err)
 	}
 }
 

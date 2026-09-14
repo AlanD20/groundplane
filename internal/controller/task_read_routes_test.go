@@ -30,6 +30,31 @@ type fakeTaskQueries struct {
 	list           func(etcd.TaskListScope, etcd.PageRequest) (etcd.Page[etcd.TaskRecord], error)
 }
 
+// Rationale: TASK-07 trimming progress history must not reset completed steps
+// in Console, CLI or API; retained newer events still override the checkpoint.
+func TestTaskProgressSurvivesTrimmedHistory(t *testing.T) {
+	record := etcd.TaskRecord{Executor: etcd.TaskExecutorAgent,
+		Steps: []etcd.TaskStepRecord{{ID: "first"}, {ID: "second"}},
+		EventCheckpoints: []etcd.TaskEventCheckpoint{
+			{Identity: etcd.TaskEventIdentity{StepID: "first"}, State: etcd.TaskEventStateCompleted},
+		},
+	}
+	for _, newer := range []bool{false, true} {
+		snapshot := etcd.TaskEventSnapshot{}
+		want := apiTypes.TaskCompleted
+		if newer {
+			snapshot.Events = []etcd.TaskEventRecord{
+				{Identity: etcd.TaskEventIdentity{StepID: "first"}, State: etcd.TaskEventStateRunning},
+			}
+			want = apiTypes.TaskRunning
+		}
+		statuses, err := taskProgressStatuses(record, snapshot, apiTypes.TaskRunning)
+		if err != nil || statuses["first"] != want || statuses["second"] != apiTypes.TaskPending {
+			t.Fatalf("progress = %v, %v", statuses, err)
+		}
+	}
+}
+
 // QA: TASK-01; pure projection only, not stored ownership or HTTP corruption handling.
 // Rationale: malformed actor provenance must not be projected as an operator action.
 func TestTaskPublicProjectionRejectsMalformedDurableActor(t *testing.T) {

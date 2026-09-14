@@ -338,23 +338,9 @@ func taskResponse(record etcd.TaskRecord, snapshot etcd.TaskEventSnapshot) (apiT
 	if err != nil {
 		return apiTypes.Task{}, err
 	}
-	stepStatus := make(map[string]apiTypes.TaskStatus, len(record.Steps))
-	defaultStepStatus := apiTypes.TaskPending
-	if record.Executor == etcd.TaskExecutorController {
-		defaultStepStatus = response.Status
-	}
-	for _, step := range record.Steps {
-		stepStatus[step.ID] = defaultStepStatus
-	}
-	for _, event := range snapshot.Events {
-		mapped, err := taskEventAPIStatus(event.State)
-		if err != nil {
-			return apiTypes.Task{}, err
-		}
-		if _, exists := stepStatus[event.Identity.StepID]; !exists {
-			return apiTypes.Task{}, errs.New(errs.KindInternal, "Task event references an unknown step")
-		}
-		stepStatus[event.Identity.StepID] = mapped
+	stepStatus, err := taskProgressStatuses(record, snapshot, response.Status)
+	if err != nil {
+		return apiTypes.Task{}, err
 	}
 	response.Steps = make([]apiTypes.TaskStep, len(record.Steps))
 	for index, step := range record.Steps {

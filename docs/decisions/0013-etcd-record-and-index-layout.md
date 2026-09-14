@@ -87,8 +87,10 @@ were written. That approval resolves only the following choices:
   20-digit event sequence keys, and stable event-identity deduplication keys
   listed in section 6. The Controller-owned sequence, identical-replay versus
   mismatched-payload behavior, atomic event/summary/deduplication CAS, 32 KiB
-  event and 1,000-event caps, 90-day terminal retention, no nonterminal
-  pruning, and daily 100-key pruning batches are approved.
+  event and 1,000-retained-event caps, 90-day terminal retention, no nonterminal
+  Task deletion, and daily 100-key pruning batches are approved. On 2026-09-14 the
+  owner approved atomic oldest-event trimming when appending at capacity, with
+  monotonic sequences and compact per-step progress/effect/replay checkpoints.
 
 The approval cannot retroactively supply values or behavior that had not yet
 been presented. The detailed recommendations under “Unresolved owner choices”
@@ -642,8 +644,15 @@ owner approval or an exact key/interface needed for implementation.
    identical duplicate returns its existing sequence; the same identity with a
    different SHA-256 payload is a protocol/internal failure. Insert the event
    and CAS-update the Task summary and next sequence in one transaction. Limit
-   durable event JSON to 32 KiB and 1,000 events per Task; subprocess and log
-   streams remain excluded. Retain terminal Tasks, events, and
+   durable event JSON to 32 KiB and the latest 1,000 events per Task; subprocess and log
+   streams remain excluded. At capacity, the append CAS removes the oldest event
+   and matching deduplication record and folds its progress and mutation facts
+   into a bounded per-step checkpoint on the Task. Sequence numbers never reset;
+   the retained range is `next_event_sequence - event_count` through
+   `next_event_sequence - 1`. Checkpoints preserve exact last-trimmed replay and
+   reject older delivery; they do not authorize repeated execution. Recovery uses
+   checkpointed effects plus retained events, never retained history alone.
+   Retain terminal Tasks, remaining events, and
    deduplication records for 90 days; never prune nonterminal Tasks. Run
    pruning daily in transactions within the 96 compare-and-mutation ceiling.
    The Agent protocol carries the approved stable identity. Encode both Task
