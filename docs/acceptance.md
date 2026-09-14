@@ -911,6 +911,28 @@ yet qualify its functional behavior, recovery, upgrades or pressure on the
 replacement. The earlier installation's H43–H49 results are not silently rerun
 or represented as current observations.
 
+H52 passes the replacement's fresh functional hosting baseline on H51's
+`0.0.0-qa.owner20260914.1`. New hierarchy, PostgreSQL, explicitly password-only
+Valkey and credentials are created through normal GP actions. All six Attach
+stages complete; Blueprint Task `task_01M2G9RAKS1GC9GHWEW4W260QP` completes all
+43 steps, including TLS preparation. Eight ordinary Deploys then complete.
+No resource identities, accepted Task receipts or runtime/data from the destroyed
+installation are restored.
+
+All 11 Services and the platform are healthy, and the Agent has zero in-flight
+work. Registration/OTP/profile, denied unauthorized/foreign access, both actual
+realtime replicas' password-only authentication and async subscriptions, strict
+TLS and reviewer login pass. Clearly synthetic uploads pass real scanning/worker
+processing, authenticated approval and the signed callback updating the backend.
+The read-only Host API/CLI proof remains H51. Evidence in its directory is
+`bootstrap-workload.log`, `deploy-fresh.log`, `verify-fresh-app.log`,
+`identity-full-proof.log`, `identity-full-result.json` and
+`identity-complete-baseline.json`, with exact normal-operation receipts.
+Owned setup Script cleanup completes; application state and synthetic QA data
+remain for continued testing. No new operational fault, reboot, reset or pressure
+test ran on the replacement. This qualifies restored test hosting, not a rerun
+of H46–H49 or complete production readiness.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

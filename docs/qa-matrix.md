@@ -41,8 +41,10 @@ later normal update and normal restart with unchanged application/etcd runtime.
 H48 passes separate Controller and Agent loss during a Script, each with one
 observed runner start, same-Task completion/replay and owned cleanup. Final
 sustained traffic passes in H49. H50's guest reboot fails because the QA VMM exits
-without restarting. The owner replaced that VM; fresh setup is pending and
-earlier passes are not observations of the replacement.
+without restarting. The owner replaced that VM. H51/H52 pass its fresh installation
+and functional hosting baseline, including all 11 Services and the real synthetic
+Identity workflow. Earlier reliability passes are not observations of the
+replacement, and no new operational fault ran there.
 H40 passes normal Controller restart with unchanged etcd/application runtime,
 45 authenticated requests and a held WebSocket without interruption. Sustained
 and complete native-upgrade qualification remain open. Earlier failures remain
@@ -593,7 +595,7 @@ application interruption. A machine reboot is not an interruption-free GP update
 
 | Case | Setup and action | Pass condition | Record |
 | --- | --- | --- | --- |
-| JOURNEY-01 | Fresh hierarchy → backing resources → Entries/Volumes → Blueprint/hooks → Routes → application use. | Real authenticated transaction, durable read/write, background work and realtime result; configuration/data ownership and denied access independently verified. | PARTIAL H3 |
+| JOURNEY-01 | Fresh hierarchy → backing resources → Entries/Volumes → Blueprint/hooks → Routes → application use. | Real authenticated transaction, durable read/write, background work and realtime result; configuration/data ownership and denied access independently verified. | PASS H45/H52 private-hosting variant; public/provider ingress separate |
 | JOURNEY-02 | Reapply → Attach new backing → rebind Entry → detach old backing → Deploy → fail next candidate. | Each completed change remains effective through later operations/recovery; actual clients use only intended endpoints and credentials; original failure is not hidden by redeploy. | PASS H46; historical FAIL H5/H41 retained |
 | JOURNEY-03 | Deploy a second independent application and operate on the first. | Unselected runtime identities, data and working requests remain unchanged; declared shared dependencies are recorded rather than assumed isolated. | PARTIAL H4 |
 | JOURNEY-04 | Write known data → backup selected sources → mutate data → restore exact point/key era. | Original surviving targets match the selected recovery point; unrelated data unchanged; an application-level query proves usability, not just file/object presence. | BLOCKED D2 |
