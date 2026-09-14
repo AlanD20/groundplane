@@ -767,6 +767,22 @@ message ManagedComponentService {
 // every candidate Service mutation in an execution plan.
 message CandidateReleaseProcedure {
   repeated CandidateReleaseMember members = 1;
+  ConfigurationRestoration configuration_restoration = 2;
+}
+
+// ConfigurationRestoration binds only destinations written by this Task.
+// Empty prior snapshot identity records initial acknowledged absence, not
+// permission to inspect desired state or discover restoration targets on-host.
+message ConfigurationRestoration {
+  string prior_snapshot_id = 1;
+  bytes prior_snapshot_sha256 = 2;
+  repeated ConfigurationFileRestoration files = 3;
+}
+
+message ConfigurationFileRestoration {
+  string forward_step_id = 1;
+  string probe_step_id = 2;
+  string compensate_step_id = 3;
 }
 
 message CandidateReleaseMember {

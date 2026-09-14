@@ -271,7 +271,7 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 				return errs.New(errs.KindValidationFailed, "materialization ids must be unique within a plan")
 			}
 			materializationIDs[materialization.MaterializationId] = struct{}{}
-			destinationKey := materialization.ArtifactId + "\x00" + materialization.Destination
+			destinationKey := materializationDestinationKey(step)
 			if _, duplicate := materializationDestinations[destinationKey]; duplicate {
 				return errs.New(
 					errs.KindValidationFailed,

@@ -225,7 +225,7 @@ func validateCandidateReleasePlan(plan *agentpb.ExecutionPlan, artifacts map[str
 				)
 			}
 		}
-		return nil
+		return validateConfigurationRestorationPlan(plan)
 	}
 	if procedure == nil || len(procedure.GetMembers()) != len(mutations) {
 		return errs.New(errs.KindValidationFailed, "candidate Release mutations require exactly one complete procedure")
@@ -298,7 +298,7 @@ func validateCandidateReleasePlan(plan *agentpb.ExecutionPlan, artifacts map[str
 			}
 		}
 	}
-	return nil
+	return validateConfigurationRestorationPlan(plan)
 }
 
 // validateCandidateServingPredecessorReferences accepts either an unbound
@@ -506,7 +506,7 @@ func validateCandidateReleaseProcedure(
 			}
 		}
 	}
-	return nil
+	return validateConfigurationRestorationDescriptor(operation, procedure)
 }
 
 func restorationStepIDs(

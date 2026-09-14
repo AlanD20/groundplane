@@ -54,6 +54,20 @@ func (repository *Repository) Stage(ctx context.Context, snapshot Snapshot) (Ref
 	return repository.seal(ctx, canonical, stagingRevision)
 }
 
+// LoadRetained resolves the exact immutable reference at a fresh fixed storage
+// revision. It survives compaction of the original acknowledgement revision;
+// it does not read a mutable desired or applied head.
+func (repository *Repository) LoadRetained(ctx context.Context, reference Reference) (Snapshot, error) {
+	if ctx == nil || ValidateReference(reference) != nil {
+		return Snapshot{}, errs.New(errs.KindValidationFailed, "retained configuration authority is invalid")
+	}
+	read, err := repository.read(ctx, []string{publishedRootKey(reference.ID)}, 0)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	return repository.Load(ctx, reference, read.ReadRevision)
+}
+
 // Load resolves a published immutable snapshot at the caller's fixed owning
 // revision. No latest-state fallback is permitted.
 func (repository *Repository) Load(
@@ -249,7 +263,10 @@ func (repository *Repository) inspectMember(
 		return false, false, err
 	}
 	if !bytes.Equal(value.Value, member.value) {
-		return false, false, errs.New(errs.KindStateConflict, "runtime configuration member identity has different bytes")
+		return false, false, errs.New(
+			errs.KindStateConflict,
+			"runtime configuration member identity has different bytes",
+		)
 	}
 	return true, false, nil
 }
@@ -300,7 +317,10 @@ func (repository *Repository) verifyPublished(
 		return err
 	}
 	if !bytes.Equal(value.Value, canonical.rootValue) {
-		return errs.New(errs.KindStateConflict, "runtime configuration identity is already published with different bytes")
+		return errs.New(
+			errs.KindStateConflict,
+			"runtime configuration identity is already published with different bytes",
+		)
 	}
 	_, err := repository.Load(ctx, canonical.reference, readRevision)
 	return err

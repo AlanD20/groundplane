@@ -217,6 +217,24 @@ Staticcheck pass in `.tmp/configuration-writers-final-{vet,staticcheck}.log`.
 Earlier failure logs are preserved. Route Agent execution, recovery and deployment
 remain unqualified; these checks do not close H5.
 
+H22 is local SVC-15/JOURNEY-02 sealed-file and source-selection proof. Plan checks
+reject unbound or overlapping recovery steps, foreign destinations, changed
+metadata and invented files where the predecessor was absent. Source checks
+retain prior bytes, owner and mode, derive repeatable probe/restore identities,
+preserve original content-store identities, reject missing/foreign sources and
+exclude unrelated files. The exact immutable snapshot can be loaded at a fresh
+storage revision; this test does not emulate a real etcd compaction. Retained
+Component content remains available to later generations without allowing future
+content into an earlier one.
+Race evidence is `.tmp/pinned-file-authority-combined.log`,
+`.tmp/pinned-file-sources-valid-mode.log` and
+`.tmp/pinned-file-source-consumer-first.log` (the latter's passing runtime/content
+packages only; its transient etcd compilation failure remains preserved).
+Vet and pinned Staticcheck pass in `.tmp/pinned-file-sources-{vet,staticcheck}.log`;
+common execution-plan checks also pass in the bounded file-accounting logs.
+Earlier test fixture failures are preserved. These are local checks, not file
+recovery execution or a deployed result. H5 remains failed.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

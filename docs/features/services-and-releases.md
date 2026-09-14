@@ -232,6 +232,16 @@ changes only artifact identities, preserving YAML, labels, bindings, proxy bytes
 and any acknowledged inactive slot. H20 records local producer and store proof;
 file-restoration execution and the live failure journey remain pending.
 
+The sealed candidate procedure can bind one probe/restore pair per forward file
+write. Each pair records the previous snapshot digest or explicit initial
+absence, and restores only that forward destination. `configurationrecovery`
+selects the retained source and derives repeatable execution IDs; the original
+content-store identity remains unchanged. Snapshot loads use the exact immutable
+reference at a fresh fixed storage revision, without selecting a current head.
+An older Component file can serve a later Task only with its exact original
+record and bytes. H22 records these local source and plan checks; Agent recovery
+execution and the real failure journey remain separate qualification.
+
 The plan binds explicit predecessor artifact, Release, target and optional
 inactive-artifact references. Historical labels remain exact. Only that named
 predecessor may have historical ownership; it cannot be a forward candidate via

@@ -55,6 +55,8 @@ func (repository *Repository) Stage(
 
 // Load returns the exact published bytes named by the complete durable
 // materialization record. Missing content never falls back to a renderer.
+// generation is the consuming Task generation: unchanged retained files may
+// originate earlier, but a future generation cannot supply this execution.
 func (repository *Repository) Load(
 	ctx context.Context,
 	record taskmaterialization.Record,
@@ -78,7 +80,7 @@ func (repository *Repository) Load(
 	if err != nil {
 		return nil, err
 	}
-	if manifest.Generation != generation || !sameRecord(manifest.Record, record) {
+	if manifest.Generation > generation || !sameRecord(manifest.Record, record) {
 		return nil, corrupt("component materialization content root does not match its reference")
 	}
 	keys := make([]string, len(manifest.Chunks))
