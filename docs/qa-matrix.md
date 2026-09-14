@@ -25,10 +25,12 @@ baseline (H28), but BP-05 failed: unchanged Apply recreated the ingress router
 injection. The owner-approved consumed-resource retention correction has local
 proof in H30 and is deployed from `2895989f2`. H31 records a passing 45-second
 protected-update traffic window, not full upgrade or sustained qualification.
-The isolated BP-05 sequence is blocked by first blue-green Deploy dropping a
-profile-disabled Service from staged YAML (SVC-06). No Task was accepted; the
-real application remains healthy. Owner approval is required for that separate
-repair. Deployed reapply proof and normal-restart/sustained cases remain open.
+H32's first-Deploy correction is deployed as `0.0.0-qa.prodops20260914.3` from
+`13d130929`. H33 proves the isolated first Deploy now completes, but its exact
+reapply still recreates the router and closes the held HTTP connection. BP-05
+remains failed; the real application is healthy. A second short protected-update
+traffic window passes, not full upgrade qualification. Owner decision is required
+before further repair; normal-restart/sustained cases remain open.
 
 The owner deferred GP Backup/Restore and external backup/restore work from this
 immediate scope. JOURNEY-04, D2 and Gate B remain incomplete; this is not data-loss
@@ -284,7 +286,7 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 | BP-02 | Validate a proposed create/update against existing resources. | Accurate create/update/retain diff and zero desired, Task, runtime or data writes. | U |
 | BP-03 | Try missing/stale/malformed If-Match, concurrent edits and exact request replay. | Only correctly revision-bound input is accepted; stale input never overwrites current desired state; exact replay has one operation. | U |
 | BP-04 | First Apply a valid complete workload with host-local images and ordered setup hooks. | Declared resources and exact replicas serve real requests; all selected pre-hooks clean up before any candidate consumer starts. | PARTIAL H3 |
-| BP-05 | Reapply the exact successful Blueprint. | Same stable IDs, generated values and serving Releases; no duplicate resources, restarted workloads or rerun hooks. | FAIL H29: router recreated |
+| BP-05 | Reapply the exact successful Blueprint. | Same stable IDs, generated values and serving Releases; no duplicate resources, restarted workloads or rerun hooks. | FAIL H29/H33: router recreated; held connection lost in H33 |
 | BP-06 | Omit existing direct, Blueprint and Component-owned resources from a new valid input. | Omitted resources remain; no implicit delete/rename; ambiguous preservation fails closed. | U |
 | BP-07 | Import unsafe/incomplete bundles: escaping paths/symlinks, absent referenced files, unknown fields, invalid YAML and unresolved variables. | Closed-bundle and grammar errors before publication or host effects; no external file disclosure. | U |
 | BP-08 | Supply dependency cycles, missing dependencies, unsupported Compose behavior, mutable/missing images or invalid rendered configuration. | Specific validation failure before dispatch; running state and persisted data remain unchanged. | U |
@@ -305,7 +307,7 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 | SVC-03 | Destroy runtime, then Start. | Runtime disappears but desired definition, Volumes/data and immutable history remain; Start recreates the intended workload. | U |
 | SVC-04 | Remove a Service using fixed-revision impact confirmation. | Referencing resources handled as declared; only selected runtime/definition removed; unrelated Volumes, Services and Release history preserved. | U |
 | SVC-05 | Deploy recreate with one and multiple replicas, including a portless worker. | Exact desired count and image run; application/job results are correct; downtime is measured, not hidden or called zero-downtime. | U |
-| SVC-06 | Deploy a healthy blue-green singleton while sending requests and holding a WebSocket; include first Deploy from a profile-disabled definition. | First Deploy retains the configured definition; on subsequent Deploy the old workload serves until candidate health passes; stable proxy switches to exact candidate; recorded traffic and retained predecessor meet the contract. | FAIL H31: first Deploy rejected before Task |
+| SVC-06 | Deploy a healthy blue-green singleton while sending requests and holding a WebSocket; include first Deploy from a profile-disabled definition. | First Deploy retains the configured definition; on subsequent Deploy the old workload serves until candidate health passes; stable proxy switches to exact candidate; recorded traffic and retained predecessor meet the contract. | PARTIAL H33: profiled first Deploy repaired and completed; full traffic variant open |
 | SVC-07 | Request blue-green with more than one replica or an unsupported strategy. | Reject before Task/runtime mutation; previous serving application remains unchanged. | U |
 | SVC-08 | Fail first startup with no serving predecessor; repeat beside an unrelated running Service. | Remove only plan-owned failed candidate/proxy; no false serving Release; unrelated workload and data stay unchanged. | U |
 | SVC-09 | Fail a candidate before health/promotion with a real serving predecessor. | Exact predecessor remains/restores, independent application check succeeds, original failure persists on the same Task; no migration reversal. | U |

@@ -471,6 +471,29 @@ and `.tmp/first-deploy-profile-final-staticcheck.log`. Formatting passes; archit
 has the same 122 finding identities, with no new findings or changed limits, in
 `.tmp/first-deploy-profile-architecture.json`. This is local proof, not a live pass.
 
+H33 records live continuation from signed `13d130929`, version
+`0.0.0-qa.prodops20260914.3`, in the H28 private evidence directory.
+`profile-update-result.json` binds the protected update to exact release and
+binary/image digests. Its traffic receipt reports 45 authenticated HTTP 200
+responses in 46 seconds, zero errors, nine pongs on the same WebSocket and maximum
+HTTP latency 1.858 seconds. Application, backing, router and etcd container
+identities/images/start times survived; Agent replacement is permitted. This is
+PARTIAL JOURNEY-05, not sustained-load or complete upgrade qualification.
+
+`canary-resume.log` records the same isolated profile-disabled Service's successful
+first blue-green Deploy, closing H31's observed rejection. The subsequent exact
+Blueprint reapply completed from 09:52:09 to 09:52:16 UTC but recreated its router
+at 09:52:10 UTC. `canary-before-reapply.json` and `canary-after-reapply.json` show
+only the router identity/start time changed; the native workload and stable proxy
+were preserved. `canary-traffic.stderr` records `RemoteDisconnected` on the held
+HTTP connection. BP-05 is FAIL, not a closing pass for the earlier H30 correction.
+The probe lacks per-request timestamps, so no exact outage duration is claimed.
+`canary-after-reapply-http.json` subsequently reports HTTP 200;
+`canary-connection-diagnostic.log` proves the real application's 11 Services and
+authenticated profile remain healthy. `canary-after-reapply-active.json` is empty.
+No retry, input workaround, Entry cutover, old Detach or candidate fault followed.
+The owned canary remains for diagnosis; further repair requires owner decision.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

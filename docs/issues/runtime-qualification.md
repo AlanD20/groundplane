@@ -124,6 +124,16 @@ or failed-candidate fault performed. The repair is deployed in H31, but its
 isolated proof stopped on the first-Deploy defect below. Finish that proof;
 do not expand this permission to latest-wins or broader reconciliation work.
 
+H33 resumes after the first-Deploy repair: Deploy completes, but exact reapply
+still recreates the isolated router and breaks a held HTTP connection. The native
+workload and proxy remain unchanged; the real application is healthy. This is a
+remaining failure, not proof the resource-comparison correction closed BP-05.
+Earlier fixed-revision capture showed an applied artifact without Component
+Services despite the running router. The retention reader requires applied
+Component bytes; diagnose the acknowledgement/source-capture path for configured-
+only Apply before proposing a correction. Do not fall back to desired state or
+repeat Apply to hide the first-cycle defect. Further repair awaits owner decision.
+
 ## First Deploy loses profile-disabled Service
 
 Owner: Services and Releases delivery owner. Severity: high for first deployment.
@@ -150,8 +160,10 @@ definitions. The same publisher regression then exposed zero expected replicas:
 explicit Release planning still treated its selected Service as disabled. It now
 selects only the named Release members, retaining authored profiles. Both empty
 and replacement Attach cases pass the real publication/reconstruction tests.
-H32 records local proof; live closing proof remains required. The real application
-and isolated canary remain preserved for immediate QA continuation.
+H32 records local proof. H33 proves the same isolated Service now completes first
+Deploy on the repaired candidate. Its subsequent router-continuity failure is
+recorded above and does not reopen the missing-definition rejection. Broader
+SVC-06 traffic variants remain unqualified.
 
 ## Recovery after runtime configuration changes
 
