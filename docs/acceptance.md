@@ -1093,6 +1093,30 @@ windows are not a new sustained-load pass. Exact receipts are
 traffic results. Native-selection re-enrollment remains pending; the hosting QA
 machine is untouched. No product code changed.
 
+H60 completes UP-02's qualified-selection enrollment variant in H59's disposable
+installation and evidence directory. Controller version
+`0.0.0-qa.standalone20260914.3` is built from clean `8fdb5dbfe`, with unchanged
+product code and reused Console assets and Agent image. Normal native update
+Task `task_01M2GJ0TNVA2ENSB2VWFAPKW65` qualifies release
+`sha256:a894b0a5133b3c55b2fefa8a81a900f752b536a4e176dca70c263628f12ae62f`.
+Bootstrap configuration deliberately still names the older `.1` Agent digest.
+Normal CLI removal Task `task_01M2GJ0ZC3ZCYZKZA8ZTEMYV08` deletes the old Agent;
+join Task `task_01M2GJ1104CFWSPXPTJC5N7MXP` creates a new Agent at the qualified
+`.2` image, proving selection precedence rather than equal fixture inputs.
+The new Agent reaches authenticated Ready with zero in-flight work.
+
+Application and etcd container ids/images/start times, Service state and exact
+client-written sentinel bytes remain unchanged through native update, removal,
+join and Controller restarts. Eighteen HTTP 200 responses and four pongs on the
+held connections pass over 17 seconds, with zero errors/disconnections and maximum
+latency 0.0052 seconds. Bootstrap configuration is restored to `.2` through the
+normal revision-fenced API and restart; the qualified selection remains intact.
+Evidence is `qualified-enrollment.log`, `qualified-enrollment-result.json`,
+`qualified-enrollment-traffic-result.json` and `qualified-enrollment-final.json`.
+The disposable canary, Volume and image caches remain; no operation touched the
+existing hosting QA installation. This closes UP-02, not the other partial
+upgrade cases or full production qualification.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing
