@@ -23,8 +23,12 @@ Live continuation on clean source `76578c72f` now has a passing private applicat
 baseline (H28), but BP-05 failed: unchanged Apply recreated the ingress router
 (H29). The journey stopped before Entry cutover, old Detach and failed-candidate
 injection. The owner-approved consumed-resource retention correction has local
-proof in H30; deployed reapply proof remains required. Restart/upgrade and
-sustained qualification remain unrun on this candidate.
+proof in H30 and is deployed from `2895989f2`. H31 records a passing 45-second
+protected-update traffic window, not full upgrade or sustained qualification.
+The isolated BP-05 sequence is blocked by first blue-green Deploy dropping a
+profile-disabled Service from staged YAML (SVC-06). No Task was accepted; the
+real application remains healthy. Owner approval is required for that separate
+repair. Deployed reapply proof and normal-restart/sustained cases remain open.
 
 The owner deferred GP Backup/Restore and external backup/restore work from this
 immediate scope. JOURNEY-04, D2 and Gate B remain incomplete; this is not data-loss
@@ -301,7 +305,7 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 | SVC-03 | Destroy runtime, then Start. | Runtime disappears but desired definition, Volumes/data and immutable history remain; Start recreates the intended workload. | U |
 | SVC-04 | Remove a Service using fixed-revision impact confirmation. | Referencing resources handled as declared; only selected runtime/definition removed; unrelated Volumes, Services and Release history preserved. | U |
 | SVC-05 | Deploy recreate with one and multiple replicas, including a portless worker. | Exact desired count and image run; application/job results are correct; downtime is measured, not hidden or called zero-downtime. | U |
-| SVC-06 | Deploy a healthy blue-green singleton while sending requests and holding a WebSocket. | Old workload serves until candidate health passes; stable proxy switches to exact candidate; recorded traffic and retained predecessor meet the contract. | U |
+| SVC-06 | Deploy a healthy blue-green singleton while sending requests and holding a WebSocket; include first Deploy from a profile-disabled definition. | First Deploy retains the configured definition; on subsequent Deploy the old workload serves until candidate health passes; stable proxy switches to exact candidate; recorded traffic and retained predecessor meet the contract. | FAIL H31: first Deploy rejected before Task |
 | SVC-07 | Request blue-green with more than one replica or an unsupported strategy. | Reject before Task/runtime mutation; previous serving application remains unchanged. | U |
 | SVC-08 | Fail first startup with no serving predecessor; repeat beside an unrelated running Service. | Remove only plan-owned failed candidate/proxy; no false serving Release; unrelated workload and data stay unchanged. | U |
 | SVC-09 | Fail a candidate before health/promotion with a real serving predecessor. | Exact predecessor remains/restores, independent application check succeeds, original failure persists on the same Task; no migration reversal. | U |

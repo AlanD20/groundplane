@@ -120,8 +120,33 @@ preserve unchanged router identity/start time and held application connections,
 while still applying genuine router changes correctly. Then resume the saved
 cutover/recovery case without replaying its completed mutations. Application
 baseline is healthy; additional Attaches remain, with no Entry rebind, old Detach
-or failed-candidate fault performed. Deploy the scoped repair and run that proof;
+or failed-candidate fault performed. The repair is deployed in H31, but its
+isolated proof stopped on the first-Deploy defect below. Finish that proof;
 do not expand this permission to latest-wins or broader reconciliation work.
+
+## First Deploy loses profile-disabled Service
+
+Owner: Services and Releases delivery owner. Severity: high for first deployment.
+H31 / SVC-06 fails on `2895989f2`, deployed as
+`0.0.0-qa.prodops20260914.2`. An isolated configured singleton with a Compose
+profile and no Attaches completes Blueprint Apply, but normal blue-green Deploy
+returns Internal before accepting a Task. The Controller reports
+`sealed release binding Service is absent`.
+
+The captured desired artifact contains both Service YAML and metadata. Its
+staged Release keeps metadata but drops that Service's YAML. The ordinary Release
+publisher calls `MutateAttachNetworkArtifact`, which loads inactive-profile
+definitions into `DisabledServices`, then marshals without including them.
+The later sealed-binding check correctly rejects the inconsistent result. This
+path is separate from the scoped Component-retention correction; do not relax
+the binding check or add workload inputs to hide the failure.
+
+Acceptance: normal first Deploy preserves configured profile-disabled Services
+through current-Attach projection, publishes a valid Task and serves the declared
+application. Cover empty and present Attach selections without enabling unrelated
+Services or changing immutable source input. Then resume the same BP-05 sequence.
+No repair is authorized yet. The real application remains healthy, and the
+isolated failed canary and private diagnostic evidence are preserved.
 
 ## Recovery after runtime configuration changes
 

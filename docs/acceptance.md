@@ -430,6 +430,31 @@ cache denial remains in `staticcheck.log`. `architecture.json` has the same 122
 existing findings and no additions. No limit, dependency, API or execution
 authority changed. These are local results, not a deployed or closing BP-05 pass.
 
+H31 records live continuation on clean `2895989f2`, version
+`0.0.0-qa.prodops20260914.2`. In the H28 private run directory,
+`retention-update-result.json` binds the completed protected update to its exact
+release and binary/image digests. `retention-update-traffic-result.json` records
+45 seconds, 45 authenticated HTTP 200 responses, zero request errors, eight pongs
+on the same WebSocket and maximum HTTP latency 0.245 seconds. Before/after
+receipts preserve application, backing, router and etcd container identities,
+images and start times; the Agent update is permitted. JOURNEY-05 is PARTIAL,
+not the approved 30-minute/five-request-per-second run or full upgrade proof.
+
+The isolated BP-05 canary completed network-only and configured Blueprint Apply,
+then its first normal blue-green Deploy failed before Task acceptance. SVC-06 is
+FAIL for this profile-disabled variant; reapply and held canary traffic did not
+run. `retention-canary.log` and `canary-deploy-controller.log` record
+`sealed release binding Service is absent`. Read-only source capture in
+`.tmp/router-retention-20260914-KE6VP5fr/planning-probe-ion3ukfy/diagnostic.log`
+shows the Service in desired YAML and metadata, but only in staged Release
+metadata. The owned tunnel closed. Attach projection marshals the loaded project
+without including its disabled Service definitions. No input workaround, retry,
+new product repair or runtime-file modification followed. The isolated canary
+is preserved. `canary-failure-diagnostic.log` confirms all 11 real application
+Services healthy, authenticated profile success and no active Task. BP-05 closing
+proof, Entry cutover, old Detach and failed-candidate recovery remain pending;
+the new defect requires the owner's scoped repair decision.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing
