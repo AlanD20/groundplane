@@ -25,8 +25,9 @@ type CandidateRuntime struct {
 }
 
 type candidateRuntimeActivation struct {
-	target      string
-	proxySwitch *agentpb.ServiceProxySwitch
+	target       string
+	proxySwitch  *agentpb.ServiceProxySwitch
+	proxyApplied bool
 }
 
 // PrepareCandidateRuntimes derives post-activation native runtime bytes only
@@ -60,6 +61,21 @@ func PrepareCandidateRuntimes(plan *agentpb.ExecutionPlan) ([]CandidateRuntime, 
 			return nil, activationErr
 		}
 		candidate := artifacts[member.GetCandidateArtifactId()]
+		if activation.proxySwitch != nil && !activation.proxyApplied {
+			prior := member.GetServingPredecessor()
+			if prior == nil {
+				return nil, invalidCandidateRuntimeProxySource()
+			}
+			candidate, activationErr = retainCandidateRuntimeProxy(
+				candidate,
+				artifacts[prior.GetPriorArtifactId()],
+				member.GetServiceId(),
+				activation.target,
+			)
+			if activationErr != nil {
+				return nil, activationErr
+			}
+		}
 		current, proxyGeneration, proxyHash, projectionErr := projectCandidateRuntimeArtifact(
 			candidate,
 			member.GetServiceId(),
@@ -160,7 +176,9 @@ func openCandidateRuntimeActivation(
 				"candidate runtime proxy switch generation is inconsistent",
 			)
 		}
-		return candidateRuntimeActivation{target: workloadApply.GetTarget(), proxySwitch: proxySwitch}, nil
+		return candidateRuntimeActivation{
+			target: workloadApply.GetTarget(), proxySwitch: proxySwitch, proxyApplied: workloadApply.GetEnsureProxy(),
+		}, nil
 	}
 	return openRecreateCandidateRuntimeActivation(member, forward)
 }
@@ -219,14 +237,6 @@ func openRecreateCandidateRuntimeActivation(
 		return candidateRuntimeActivation{}, invalidCandidateRuntimeForwardSteps()
 	}
 	return candidateRuntimeActivation{target: "singleton"}, nil
-}
-
-func candidateRuntimeSingleService(values []string, serviceID string) bool {
-	return len(values) == 1 && values[0] == serviceID
-}
-
-func invalidCandidateRuntimeForwardSteps() error {
-	return errs.New(errs.KindValidationFailed, "candidate runtime forward steps do not bind one exact activation")
 }
 
 func projectCandidateRuntimeArtifact(
@@ -356,18 +366,6 @@ func prepareCandidateRetainedPrior(
 		)
 	}
 	return marshalCandidateRuntimeArtifact(retained)
-}
-
-func candidateRuntimeOppositeSlots(left, right string) bool {
-	return left == "blue" && right == "green" || left == "green" && right == "blue"
-}
-
-func marshalCandidateRuntimeArtifact(artifact *agentpb.ComposeArtifact) ([]byte, error) {
-	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
-	if err != nil || len(encoded) == 0 || len(encoded) > MaximumPlanBytes {
-		return nil, errs.New(errs.KindValidationFailed, "candidate runtime artifact encoding is invalid")
-	}
-	return encoded, nil
 }
 
 func projectCandidateRuntimeYAML(

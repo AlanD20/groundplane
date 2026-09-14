@@ -127,7 +127,10 @@ These are prepared execution inputs, not acknowledged runtime. In blue-green
 execution the artifact can contain the proxy configuration from before the
 sealed switch step. A runtime receipt must bind the actual selected member and
 successful activation evidence; copying this artifact alone cannot prove the
-post-switch proxy state. Failed, skipped or merely staged work must not replace
+post-switch proxy state. A switch changes proxy configuration, not the existing
+container's ownership labels. The receipt must retain that container's captured
+ownership independently of the newly applied workload and switched configuration.
+Failed, skipped or merely staged work must not replace
 the last acknowledged inputs. Receipt sources must also remain available after
 their originating Task is pruned. Current Attach Task references alone do not
 provide that retention. [ADR 0079](../decisions/0079-pinned-task-configuration-recovery.md)
@@ -143,8 +146,11 @@ The destination must still identify the checked inode after hashing. A changed
 file is distinct from missing authority or a helper failure. This checker does
 not itself restore files; its recovery-execution caller remains pending.
 
-The ordinary Release writer now derives each prepared post-activation runtime
-from the sealed plan. It selects the candidate workload, replaces proxy metadata
+The ordinary Release writer derives each prepared post-activation runtime
+from the sealed plan. `ComposeWorkloadApply.EnsureProxy` determines proxy ownership:
+when true, Compose applies the candidate proxy; otherwise the receipt keeps the
+exact proxy service, ownership and referenced resources from the captured serving
+predecessor. It selects the candidate workload, replaces proxy configuration
 and YAML with the sealed switch configuration, and retains only referenced
 resources. When both Releases use opposite blue-green slots, it copies the prior
 serving workload without its proxy from the sealed predecessor artifact. The

@@ -200,7 +200,11 @@ to rewrite the Task's sealed authority. Correct the writer from acknowledged
 proxy authority, preserving fresh first-Deploy behavior and exact config-switch
 proof, then test repeated Deploy → failed Deploy beside a preserved proxy.
 The owner approved the writer repair and a disposable QA rebuild retaining evidence.
-No production fix, reset, history rewrite or additional fault ran for H41.
+H43's local writer repair and affected checks pass; the live rerun remains pending.
+The receipt uses the candidate proxy only when the sealed step applies it;
+otherwise it retains exact predecessor proxy ownership/resources and applies
+only the new switch configuration. No reset, history rewrite or additional fault
+has run yet.
 
 Current H36 result on `18e936fa9`: the repaired backing cutover passes, but stopping
 only the next candidate exposes repeated failure of its Service proxy recovery

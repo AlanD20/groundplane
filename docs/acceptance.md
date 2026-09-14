@@ -722,6 +722,28 @@ contains H41's defect. The ignored 30-minute mixed-workload probe is prepared,
 not run: no fixture users, load traffic or queued jobs were created. Preparation
 does not count as REL-04 or upgrade evidence.
 
+H43 records H41's local writer repair, not a deployed recovery pass.
+`ComposeWorkloadApply.EnsureProxy` identifies whether the forward operation
+applies the proxy. When false, the receipt now combines the candidate workload
+with the sealed predecessor's proxy ownership, YAML and resources, then applies
+the exact switch configuration. When true, candidate proxy ownership remains
+correct. This covers ordinary Deploy and Rollback without changing recovery
+inventory checks, Task history, first-Deploy creation or Blueprint execution.
+Conflicting shared resource definitions fail before receipt publication.
+
+The strengthened Deploy/Rollback regression fails before the repair; the copied
+original tool output is `.tmp/proxy-receipt-fix/focused-red-copied-from-tool-output.txt`.
+Its focused green run is in that directory. The first full package run exposed
+a shared fixture rename; moving that mutation into the new regression fixed the
+test coupling without a production workaround. Final proof in
+`.tmp/qa-proxy-recovery-20260914-pH4bBi2l/` includes passing pinned Go 1.26.7 race
+checks in `writer-executionplan.log`, `writer-publication.log` and
+`writer-controller.log`. Vet, pinned Staticcheck and changed-file formatting pass.
+`writer-architecture.json` has the same 122 prior finding identities, none added
+or removed; no baseline or limit changed. The owner-approved disposable rebuild
+and live recovery rerun remain pending. Private reset preparation has not stopped
+the Controller or changed application data.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing
