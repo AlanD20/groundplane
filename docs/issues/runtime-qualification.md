@@ -36,15 +36,21 @@ a retried removal whose directory absence is already proved. The production
 terminal publisher constructs 27 comparisons, exceeding its fixed limit of 26,
 and returns Internal before committing. Normal, late-index and lost-response
 variants fail in `.tmp/recovery-candidate-runtime-packages.log`. No live removal
-or data loss was observed; the cause of the extra comparison is not yet established.
-The owner must select the narrow repair before implementation. Do not raise the
-budget or discard an ownership guard to pass the check.
+or data loss was observed. The owner approved the narrow repair. Diagnosis traced
+the extra comparison and write to configuration recovery: the shared desired
+publisher attached a source snapshot even to Volume Tasks that write no
+configuration. It also staged unnecessary source records before rejected
+metadata/Volume publications.
 
 Acceptance: finish the same retained removal after proven absence without another
 physical deletion, preserve exact Task/operation/replay authority, reject stale
 ownership, and stay within the existing comparison, mutation and byte budgets.
-The normal, late-index, lost-response and late-Task variants must pass before this
-candidate blocker is closed.
+The corrected producer selects configuration authority only for Blueprint Apply
+or an explicit file writer; it rejects supplied configuration authority on other
+desired mutations. Normal, late-index, lost-response and late-Task variants now
+pass locally without changing finalization guards or budgets. H26 in
+[acceptance](../acceptance.md) records the proof and remaining candidate failures.
+Live Volume-removal qualification remains unrun.
 
 ## Blueprint integration
 

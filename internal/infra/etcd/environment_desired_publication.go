@@ -287,9 +287,16 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	}
 	defer clear(publication.publishedDescriptor)
 
-	task, err = prepareRuntimeConfigurationTask(ctx, repository.store, task, fence.readAtRevision())
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
+	// Only Apply or an explicit file writer acknowledges configuration. Sharing
+	// desired publication does not grant a metadata/Volume Task file authority.
+	if publishDomain || len(task.Materializations) != 0 {
+		task, err = prepareRuntimeConfigurationTask(ctx, repository.store, task, fence.readAtRevision())
+		if err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+	} else if task.Configuration != nil {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed,
+			"non-materializing desired mutation cannot acknowledge configuration")
 	}
 	task, preparedPins, err := prepareRecoverySecretPins(ctx, repository.store, task)
 	if err != nil {

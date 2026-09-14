@@ -31,6 +31,11 @@ syntax, and [api-cli.md](../api-cli.md) owns the public operations.
 - Direct desired mutations and complete Blueprint application share the same
   Environment revision authority. Retry never silently selects later values or
   a different serving workload.
+- Sharing desired publication does not grant file-recovery authority. Blueprint
+  Apply and explicit file-writing mutations capture configuration sources;
+  metadata-only and Volume operations do not acknowledge unrelated file state.
+  A Volume Retry with proved directory absence completes its bookkeeping without
+  another physical deletion, within the existing transaction limits.
 
 ## Non-functional requirements
 

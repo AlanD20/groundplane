@@ -300,6 +300,37 @@ The target still runs the old QA release. No QA reset, deployment or deliberate
 fault ran. Full CI, live recovery, restart/upgrade continuity and the approved
 30-minute traffic run remain unqualified.
 
+H26 records the owner-approved VOL-07 correction after H25. A bounded diagnostic
+in `.tmp/volume-retry-comparison-diagnostic.log` identifies the extra comparison
+as the Environment configuration head. The shared desired publisher had attached
+configuration authority to a Volume Task without file writes. The correction
+selects that authority only for Blueprint Apply or explicit file writers and
+rejects unexpected supplied authority on other desired mutations. Temporary
+diagnostic instrumentation was removed. No terminal safeguard, transaction limit
+or immutable history changed.
+
+`TestVolumeRemovalSuccessorCompletesRetainedAbsence` passes all four variants in
+`.tmp/volume-retry-owner-selection-green.log`: normal completion, late derived
+indexes, lost-response replay and stale-Task refusal. The test also rejects
+unrelated configuration authority on the claimed retry. Its existing successful
+terminal assertions retain 26 comparisons, 18 mutations and 13,250 physical bytes.
+Vet and pinned Staticcheck pass in `.tmp/volume-retry-{vet,staticcheck}.log`.
+
+The full race rerun, `.tmp/volume-retry-integrated-store.log`, resolves 22 of H25's
+30 failing durable-store functions without changing their assertions. Eight remain:
+
+| Remaining functions | Traced mismatch; remaining proof |
+| --- | --- |
+| `TestBlueprintRuntimeRetentionActualPublisherSources`, `TestEnvironmentBlueprintPublishesComponentWithSharedDesiredHeadCompare` | Setup writes applied state without its configuration acknowledgement; the former also expects rejection only at final publication. Supply consistent authority or assert the intended earlier rejection, then rerun. |
+| `TestBlueprintCandidateAfterNativeRollbackUsesSealedPredecessor`, `TestBlueprintNativePredecessorBlueGreenSnapshot`, `TestBlueprintNativePredecessorSourceCAS` | Fixture changes serving/render records without advancing the acknowledged runtime receipt. Align the simulated successful transition before testing candidate capture or later races. |
+| `TestEnvironmentBlueprintCombinedMaximumInjectedFailurePublishesNoAuthority`, `TestEnvironmentBlueprintTopologyPublicationHasConstantCompactShape` | Audit doubles intercept private source staging as well as final publication; topology also expects the older comparison count. Target the intended final transaction and retain the actual budget assertions. |
+| `TestBlueprintPublicationExcludesVolumeRemovalLock` | Global storage revision counts private staging as public Task/desired publication. Independently check current public authority, including the retained removal lock. |
+
+These are source-traced test mismatches, not passing results or proof that no
+further defect is hidden behind them. No additional product defect is confirmed
+by this classification. The eight tests remain failed until corrected and rerun.
+No QA reset, deployment, removal or fault ran; live VOL-07 and H5 remain unqualified.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

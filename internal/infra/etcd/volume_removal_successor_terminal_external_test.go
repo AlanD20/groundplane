@@ -69,7 +69,7 @@ func TestVolumeRemovalSuccessorFailureRetainsReplay(t *testing.T) {
 	}
 }
 
-// Rationale: Retry after proved directory absence must finish the same removal
+// VOL-07. Rationale: Retry after proved directory absence must finish the same removal
 // operation without requiring another physical deletion or losing root replay.
 func TestVolumeRemovalSuccessorCompletesRetainedAbsence(t *testing.T) {
 	for _, mode := range []string{"normal", "late indexes", "lost response", "late Task"} {
@@ -107,6 +107,9 @@ func proveVolumeRemovalSuccessorCompletion(t *testing.T, mode string) {
 		t.Fatalf("claim successor: %v/%v", found, err)
 	}
 	finishedAt := retryAt.Add(2 * time.Second)
+	if claimed.Task.Record.Configuration != nil {
+		t.Fatal("Volume removal acquired unrelated configuration recovery authority")
+	}
 	if mode == "late indexes" {
 		fixture.BeforeRemovalTerminalCommit(func() { fixture.PutRemovalDerivedIndexes(t, retryID, finishedAt) })
 	}
