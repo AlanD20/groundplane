@@ -1006,6 +1006,69 @@ error-classification defect, not every UP-03 variant, all concurrency races or
 Console lost-response qualification. No application deploy, reset or manual
 installation repair was used.
 
+H56 passes the UP-08 coordinated unready-Agent variant and the selected
+UP-06/10/11 trial guards on H55's healthy `.2` baseline. A distinct immutable
+release combines the retained compatible `.1` Controller with an owned
+sleep-only Agent image; it is a deliberate QA candidate, not shipped software.
+Native Task `task_01M2GFFDS0057F91K69Y8Q8WCC` reaches the real `starting`
+journal phase with that exact Agent image. Ordinary Script edit, Script Run and
+committed Abort each return 409 `resource.in_use`. Reads and exact-key update
+replay remain available, with unchanged Script content/order.
+
+GP automatically restores H55's exact Controller/Agent digests. The same Task
+remains failed with phase `recovered`; no manual installation, journal change or
+application redeploy occurs. All non-Agent runtime identities/images/start times,
+serving Releases and the authenticated profile survive. A bodyless Agent update
+refuses the already-qualified image, proving the failed trial did not replace the
+selection. The previously refused owned Script edit succeeds after recovery;
+normal Script removal completes and healthy staging selection is restored.
+The 240-second concurrent window passes 240 authenticated HTTP 200 responses,
+zero failures/disconnections, 43 pongs on one WebSocket and maximum latency
+0.232 seconds. `unready-agent-result.json`, its exact operation/fixture receipts
+and `unready-agent-traffic-result.json` are in H55's evidence directory.
+The unused candidate fixture remains retained as evidence, not selected.
+Scheduled-writer and unknown-publication variants are not inferred from this run.
+
+H57 passes UP-09's `starting` interruption variant. Following H56's complete
+recovery and traffic pass, a new native Task
+`task_01M2GFRJ3HCB8940PR7S6MV1EJ` selects the same deliberate unready fixture.
+The probe opens a pidfd for systemd's current MainPID, hashes that process's
+actual executable and rereads its exact Task's journal. Only matching candidate
+digest and `starting` phase authorize SIGKILL. GP restores H55's Controller and
+Agent automatically; the original Task terminalizes failed/recovered. No manual
+restart, journal rewrite or application operation is used. Exact-key replay,
+qualified Agent selection, checked profile, serving Releases, all non-Agent
+runtime identities/start times and owned Script cleanup pass. Healthy staging
+selection is restored. The full 180-second traffic window passes 180 authenticated
+HTTP 200 responses, zero failures/disconnections, 33 pongs on one WebSocket and
+maximum HTTP latency 0.203 seconds. Evidence is `interrupted-starting-fault.json`,
+`interrupted-starting-result.json` and `interrupted-starting-traffic-result.json`
+in H55's directory. Other interruption phases and lost-commit boundaries remain
+separate; this does not qualify host reboot.
+
+H58 completes UP-03's remaining malformed, incompatible storage/channel and
+corrupt binary variants against H55's repaired `.2`. Fixtures use the retained
+different Controller digest so an unchanged-executable rejection cannot mask
+missing compatibility validation. Only a newly staged owned corrupt fixture's
+bytes are changed before any Task refers to it; prior releases and Task/journal
+history are untouched. All four requests return 422 `validation.failed`; Task
+history, runtime identities/images/start times and checked data remain unchanged.
+Healthy staging selection is restored; unselected fixtures remain as evidence.
+
+The first associated traffic probe fails on its first HTTP request with 401,
+before the refusal batch starts; its stale test session and successful normal
+refresh are retained in the logs. It is not a passing continuity window or a
+runtime outage. The confirmation reuses the same four fixtures without restaging,
+refreshes/verifies the session before starting traffic, and waits for the first
+successful authenticated request and WebSocket pong before submitting refusals.
+It passes 45 HTTP 200 responses, zero failures/disconnections, nine pongs on the
+same WebSocket and maximum latency 0.202 seconds. Evidence is
+`upgrade-candidate-refusals-result.json`, `candidate-refusals-traffic.stderr`,
+`confirm-candidate-refusals.log`, `candidate-refusals-confirmed-result.json` and
+its traffic result in H55's directory. The host remains healthy with zero active
+Agent work. H55–H58 do not qualify successful standalone Agent replacement,
+re-enrollment, Console lost-response behavior or every phase/race in the matrix.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing
