@@ -19,6 +19,12 @@ specified production application and its GP upgrade path; it does not replace
 the full catalogue or waive [MVP acceptance](mvp.md#acceptance-gates).
 No item below is complete merely because local tests pass.
 
+The owner deferred GP Backup/Restore and external backup/restore work from this
+immediate scope. JOURNEY-04, D2 and Gate B remain incomplete; this is not data-loss
+acceptance or full production qualification. Failed-deployment recovery below is
+still required: recovering a working application after a bad rollout is separate
+from restoring its databases or files from a backup.
+
 - [ ] **Fix failed-rollout recovery first** — SVC-15, JOURNEY-02, D4.
   Recovery must preserve the last successfully applied networking and configuration
   after Attach/Entry changes, not reconstruct obsolete Release input. Reuse the
@@ -44,14 +50,6 @@ No item below is complete merely because local tests pass.
   restarts are allowed, then measure application traffic, durable Tasks and data
   against that rule. Only a demonstrated contract violation calls for a repair.
   Do not relax the separate interruption-free GP update requirement.
-- [ ] **Choose and prove a data-recovery path** — JOURNEY-04, D2.
-  GP Backup/Restore is incomplete. Full GP recovery qualification requires finishing
-  and testing its accepted source paths. A smaller initial hosting scope is possible
-  only if the owner accepts a separately tested external backup/restore procedure
-  for every actual durable application source and required GP configuration/key
-  material. Agree data-loss and restore-time limits; prove restoration with real
-  application queries. An external procedure does not pass GP Backup or Gate B.
-  Exclude a cache only after the owner confirms its contents are disposable.
 - [ ] **Select one clean, identified release candidate and pass release gates.**
   `main` is clean after the test-audit commits, but no current candidate has complete
   qualification. Record source and Controller/Agent digests; run required
@@ -87,6 +85,27 @@ The remaining repository-wide test-quality audit stays unfinished, but it is not
 proposed as a prerequisite to starting this focused qualification. Review tests
 needed to trust the selected cases; do not resume blanket annotation/removal work,
 cosmetic cleanup, new harnesses or unrelated features under this checklist.
+
+### Remaining effort estimate
+
+Planning estimate as of 2026-09-14, excluding deferred Backup/Restore: about four
+to seven focused engineering days, plus the agreed soak duration and any wait for
+owner decisions or host access. This is not a measured agent-runtime or token
+estimate, and it is not an implementation authorization.
+
+| Remaining work | Estimated effort |
+| --- | --- |
+| Resolve the configuration-recovery contract; complete affected runtime writers, retained sources and recovery readers; add causal regressions | 2–4 days |
+| Fix ambiguous backing identity if overlap is retained; resolve and test the restart rule | 0.5–1 day |
+| Release gates and candidate-bound hosting, upgrade and fault qualification, reusing valid existing proof | 1–2 days |
+
+Recovery is the largest uncertainty: the existing runtime records are only
+partially maintained, and pinned-file recovery is still an unresolved contract.
+The range assumes timely decisions and no additional blocking gate or runtime
+failure. Any such failure needs a specific revised estimate and the owner's
+decision, not an open-ended extension. Excluding backing overlap can remove its
+repair, not the failed-rollout recovery requirement. Full-product qualification
+remains a separate, larger scope.
 
 ## Qualification rules
 
