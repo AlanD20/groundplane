@@ -1168,6 +1168,37 @@ Evidence is in H61's directory: `post-boot.log`, `owner-boot-id.json`,
 `owner-post-boot-finding.json`. Workload HTTP/WebSocket recovery is not claimed.
 The existing hosting QA installation is untouched.
 
+H63 attempts the approved canary correction, not another reboot. Current exported
+Blueprint input is compared with the saved authored input; only native export
+normalization is removed from the comparison. The initial raw comparison failure
+is retained and causes no mutation. The only authored change is
+`services.web.restart: unless-stopped`. Blueprint Apply
+`task_01M2GPPZQVXDGBFMZCZ9DKKK88` completes. The following blue-green Deploy
+`task_01M2GPQ4Z53K3BC5PMK5JCQPW1` FAILS proxy activation and completes automatic
+predecessor recovery. Its Agent diagnostic is
+`COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED`.
+
+Before Deploy the existing proxy is stopped. The blue-green planner sets
+`EnsureProxy` only when the prior strategy is recreate; proxy switching executes
+commands inside the existing proxy. That path cannot switch this stopped proxy.
+Recovery starts the retained predecessor: subsequent HTTP 200, WebSocket pong
+and exact original sentinel checks pass, with a healthy Agent and zero claims.
+Docker inspection proves both restored workload and proxy still have restart
+policy `no`. Desired publication and recovered service availability therefore do
+not qualify the requested restart-policy change. No new reboot or second Deploy
+ran. No product source, immutable history or direct runtime configuration changed.
+The proposed scoped continuation is a normal recreate Deploy to replace the
+container configuration, followed by independent restart-policy inspection and
+the approved reboot trial. This does not close the stopped-proxy blue-green
+limitation or permit treating the failed Deploy as success.
+
+Evidence in H61's directory includes `correct-restart.log`,
+`correct-restart-normalized.log`, `restart-policy-current-blueprint.json`,
+`restart-policy-blueprint.json`, both accepted Task receipts, the failed Task's
+terminal record and event stream, `restart-policy-failed-state.json`,
+`restart-policy-after-failure.json` and `restart-policy-recovered-canary.json`.
+The existing application host remains untouched.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

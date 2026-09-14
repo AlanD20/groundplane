@@ -650,6 +650,17 @@ loss during reboot is expected downtime, not an uninterrupted-service claim.
 Do not retry reboot, reset the host or repair the VM manager if it fails to return.
 The existing application host is excluded. In-flight Task reboot remains separate.
 
+Following H62, the owner approves correcting only the canary's omitted native
+restart policy to `unless-stopped` through Blueprint/Deploy. Before the next boot
+trial, independently inspect that the running workload and generated proxy both
+have this policy and that the original sentinel and HTTP/WebSocket work. Repeat
+the single 240-second boot trial without manual service startup; record VM return
+separately from in-guest application recovery. Preserve H61/H62's failed evidence.
+H63 accepts the desired policy but blue-green Deploy fails against the stopped
+proxy and recovers the old running configuration. The policy is not live and no
+new reboot ran. A normal recreate Deploy is proposed before the repeat; retain
+this stopped-proxy limitation separately from boot qualification.
+
 | Case | Setup and action | Pass condition | Record |
 | --- | --- | --- | --- |
 | JOURNEY-01 | Fresh hierarchy → backing resources → Entries/Volumes → Blueprint/hooks → Routes → application use. | Real authenticated transaction, durable read/write, background work and realtime result; configuration/data ownership and denied access independently verified. | PASS H45/H52 private-hosting variant; public/provider ingress separate |
