@@ -361,6 +361,9 @@ Compose's supported `start` command; activation owns the bounded readiness check
 The command regression executes the shipped tooling, rather than only comparing
 generated arguments. REL-02, SVC-06/SVC-15
 and OBS-05 cover these sequences; implementation proof is not live qualification.
+H65 in [acceptance evidence](../acceptance.md) records the scoped stopped/running
+proxy, observation and idle full-stack blue-green stop/start passes. It does not
+qualify the archived recovery identity failure or all release/observation variants.
 
 Existing Service list/show now expose the public observation through regenerated
 OpenAPI and clients. The public reader also fences ready-Agent revision and

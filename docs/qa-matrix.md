@@ -340,7 +340,7 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 | SVC-03 | Destroy runtime, then Start. | Runtime disappears but desired definition, Volumes/data and immutable history remain; Start recreates the intended workload. | U |
 | SVC-04 | Remove a Service using fixed-revision impact confirmation. | Referencing resources handled as declared; only selected runtime/definition removed; unrelated Volumes, Services and Release history preserved. | U |
 | SVC-05 | Deploy recreate with one and multiple replicas, including a portless worker. | Exact desired count and image run; application/job results are correct; downtime is measured, not hidden or called zero-downtime. | U |
-| SVC-06 | Deploy a healthy blue-green singleton while sending requests and holding a WebSocket; include first Deploy from a profile-disabled definition. | First Deploy retains the configured definition; on subsequent Deploy the old workload serves until candidate health passes; stable proxy switches to exact candidate; recorded traffic and retained predecessor meet the contract. | PARTIAL H33: profiled first Deploy repaired and completed; full traffic variant open |
+| SVC-06 | Deploy a healthy blue-green singleton while sending requests and holding a WebSocket; include first Deploy from a profile-disabled definition. | First Deploy retains the configured definition; on subsequent Deploy the old workload serves until candidate health passes; stable proxy switches to exact candidate; recorded traffic and retained predecessor meet the contract. | PARTIAL H33/H65: first Deploy, stopped/running proxy and HTTP continuity pass; held WebSocket belongs to an unchanged separate Service, not the selected proxy. |
 | SVC-07 | Request blue-green with more than one replica or an unsupported strategy. | Reject before Task/runtime mutation; previous serving application remains unchanged. | U |
 | SVC-08 | Fail first startup with no serving predecessor; repeat beside an unrelated running Service. | Remove only plan-owned failed candidate/proxy; no false serving Release; unrelated workload and data stay unchanged. | U |
 | SVC-09 | Fail a candidate before health/promotion with a real serving predecessor. | Exact predecessor remains/restores, independent application check succeeds, original failure persists on the same Task; no migration reversal. | U |
@@ -361,7 +361,7 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 | OBS-02 | Make replicas starting, unhealthy, missing, stopped and restarting, separately. | Correct counts and runtime status; desired intent, provisioning and route reachability remain distinct. | U |
 | OBS-03 | Stall observation past its 15-second window and the Console's next refresh. | Evidence expires to unavailable rather than stale healthy; desired reads still work; no overlapping refresh loop. | U |
 | OBS-04 | Change serving Release or Agent generation while a read is in flight. | Old response cannot become current health; fresh read binds the current serving expectation and authenticated Agent. | U |
-| OBS-05 | Keep the serving workload healthy while its stable proxy is stopped, absent or routes to a different target; then restore the exact acknowledged proxy configuration. Include a portless Service. | A broken proxy cannot yield healthy/running Service status; proxy containers never inflate replica counts. Missing authority is unavailable. Correct routing configuration restores the workload-derived status; portless observations are unchanged. This does not assert end-to-end application reachability. | U: scoped repair in progress |
+| OBS-05 | Keep the serving workload healthy while its stable proxy is stopped, absent or routes to a different target; then restore the exact acknowledged proxy configuration. Include a portless Service. | A broken proxy cannot yield healthy/running Service status; proxy containers never inflate replica counts. Missing authority is unavailable. Correct routing configuration restores the workload-derived status; portless observations are unchanged. This does not assert end-to-end application reachability. | PARTIAL H65: stopped/wrong-route API/CLI and return to healthy pass live; absence has local proof; new live Console trial unrun. |
 
 ## Release Groups
 
@@ -675,7 +675,7 @@ not qualify the separate blue-green boot variant or close H63's limitation.
 | JOURNEY-04 | Write known data → backup selected sources → mutate data → restore exact point/key era. | Original surviving targets match the selected recovery point; unrelated data unchanged; an application-level query proves usability, not just file/object presence. | BLOCKED D2 |
 | JOURNEY-05 | Application traffic and background work → GP update → rejected/broken GP update → later successful update. | Original application functionality and data survive the complete sequence; same operation outcomes and measured continuity, no manual runtime repairs. | PASS H47/H49 private-ingress variant; public/provider ingress separate |
 | REL-01 | Restart Controller normally under an application workload. | Agent restart allowed; etcd container identity/start time unchanged. Preserve application requests, held connections, data, serving Releases and correct recovered Task state. | PASS H40: normal restart after recovered Task; interrupted active Task is separate REL-02 |
-| REL-02 | Reboot the authorized QA machine under known state and unfinished work. | Bounded recovery of owned runtimes, data and safely resumable work; no duplicate effects or lost acknowledged state. Record reboot downtime, never claim single-host HA. | FAIL automatic host return: H64 requires owner restart of killed host. PASS post-boot GP/recreate-canary startup, retained state/data and HTTP/WebSocket without container intervention. In-flight and blue-green boot variants unrun. |
+| REL-02 | Reboot the authorized QA machine under known state and unfinished work. | Bounded recovery of owned runtimes, data and safely resumable work; no duplicate effects or lost acknowledged state. Record reboot downtime, never claim single-host HA. | FAIL automatic host return H64. PASS H65 idle full-stack blue-green operator-managed stop/start: selected routing, runtime/history/data and HTTP/WebSocket/TLS survive without container intervention. In-flight variant unrun. |
 
 The scoped proxy regressions also exercise REL-02 after a blue-green switch and
 after compensation: restart must load the exact selected configuration, not the
@@ -685,7 +685,8 @@ The shipped-tooling regression must execute the generated startup commands and
 compare proxy identity/start time; an argument-only assertion missed unsupported
 `start --wait`. Live and restart configuration must both match before
 switch/recovery success. The first live stopped-proxy attempt remains failed;
-its recovery identity rejection blocks the corrected live rerun and host boot.
+its recovery identity rejection is not repaired by reset. H65 passes the corrected
+stopped/running-proxy and idle full-stack boot variants on the fresh installation.
 
 | Case | Journey | Independent expected outcome | Qualification |
 | --- | --- | --- | --- |

@@ -1239,6 +1239,60 @@ unfinished Task, blue-green slot boot or the complete production application.
 H61's failed return and H63's stopped-proxy limitation remain separate. The
 existing application host is untouched, and the disposable fixture remains intact.
 
+H65 completes the owner-selected three proxy repairs' bounded verification on
+2026-09-14, not full production qualification. Clean source `9e0732ed4` contains
+the repairs in `263edafc7` and `51b79b0da`, installed as
+`0.0.0-qa.proxyboot20260914.2`. Controller bytes are
+`sha256:423d6c69ed7db4891c16cdf57564dd61044e4bf11483f76fc45e1fa34817d647`;
+Agent image is
+`localhost:5000/groundplane-agent@sha256:b92bd4dc01fe493152df024b58d483adac160fdd9f2e04692a186d9b2b9bf196`.
+Private target, timestamps, setup Tasks and fixture identities are retained in
+`.tmp/qa-proxy-final-20260914-2MGvGqY2/`.
+
+The owner-approved reset removes 21 managed containers, eight networks and eight
+disposable Volumes, preserving registry/images. Installation/history/logs are
+archived in byte-verified ignored `incident-installation.tar`; only its verified
+remote copy is removed. Normal fresh bootstrap, six Attach stages, configuration
+Apply and eight workload Deploys complete. All 11 Services and independent
+authenticated profile, routed realtime and strict TLS portal checks pass before
+fault injection. The other QA host is untouched.
+
+SVC-06's stopped-proxy variant PASSES: stop the exact owned API proxy, require
+API/CLI degraded status with one healthy workload replica, then ordinary Deploy
+starts that same container and completes with working application checks. The
+already-running variant preserves exact proxy id/start time through another
+Deploy. Forty-five authenticated HTTP requests and nine pongs on the same
+WebSocket pass over 45 seconds with no errors, maximum HTTP latency 0.299 seconds.
+The socket belongs to a separate unchanged Service; this is not proof of a held
+WebSocket through the selected proxy's reload. OBS-05's stopped/return-to-healthy
+API/CLI variant PASSES; wrong-route API/CLI proof from the preceding incident is
+reused because that code is unchanged. Missing-proxy and Console decoding have
+local regressions, not new live deletion/browser trials.
+
+REL-02's idle full-stack blue-green operator-managed stop/start variant PASSES.
+Before stopping, no pending/running Task exists; live/restart routing agrees with
+the selected Release and differs from initial startup configuration. After the
+same VM starts, a changed boot id, all container ids/images/running states,
+Agent id, complete Task history and the existing profile are verified. Live and
+restart proxy configuration exactly match their pre-boot selection. All 11
+Services, authenticated HTTP, WebSocket authorization/subscription and strict TLS
+portal checks pass without any container-level intervention. Reboot downtime is
+expected; automatic VM-manager return, in-flight recovery and single-host HA are
+not qualified.
+
+Exact receipts include `proxy-stopped-proxy-result.json`,
+`proxy-running-proxy-result.json`, `proxy-running-traffic-result.json`,
+`proxy-before-boot-routing.json`, `proxy-after-boot-routing.json`,
+`proxy-boot-result.json`, `vm-stop.log`, `vm-start.log` and `result.md`.
+The earlier unsupported-flag trial and subsequent recovery identity rejection
+remain failed evidence in `.tmp/qa-fullstack-boot-20260914-tUH4XNUJ/`.
+Reset did not repair or qualify that recovery path. The real shipped-tooling
+regression fails on `start --wait` and passes with supported `start` in
+`.tmp/proxy-start-shipped-{red,green}.log`; the existing actual Caddy regression
+also proves switch and compensated configuration survive container restart.
+The fresh host is healthy and idle. No further case, repair, cleanup or broader
+QA is selected; work stops here.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing
