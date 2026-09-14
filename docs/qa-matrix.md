@@ -661,9 +661,10 @@ proxy and recovers the old running configuration. The policy is not live and no
 new reboot ran. A normal recreate Deploy is proposed before the repeat; retain
 this stopped-proxy limitation separately from boot qualification.
 The owner-approved recreate Deploy passes independent runtime-policy and canary
-checks in H64. The repeat boot trial also passes within 240 seconds, using the
-resulting singleton workload plus serving proxy. It does not qualify the separate
-blue-green boot variant or close H63's stopped-proxy limitation.
+checks in H64. After the owner restarts the killed host, the singleton workload
+plus serving proxy recover without container-level intervention. Automatic host
+return FAILS; the observed 220.84 seconds includes owner intervention. This does
+not qualify the separate blue-green boot variant or close H63's limitation.
 
 | Case | Setup and action | Pass condition | Record |
 | --- | --- | --- | --- |
@@ -673,7 +674,7 @@ blue-green boot variant or close H63's stopped-proxy limitation.
 | JOURNEY-04 | Write known data → backup selected sources → mutate data → restore exact point/key era. | Original surviving targets match the selected recovery point; unrelated data unchanged; an application-level query proves usability, not just file/object presence. | BLOCKED D2 |
 | JOURNEY-05 | Application traffic and background work → GP update → rejected/broken GP update → later successful update. | Original application functionality and data survive the complete sequence; same operation outcomes and measured continuity, no manual runtime repairs. | PASS H47/H49 private-ingress variant; public/provider ingress separate |
 | REL-01 | Restart Controller normally under an application workload. | Agent restart allowed; etcd container identity/start time unchanged. Preserve application requests, held connections, data, serving Releases and correct recovered Task state. | PASS H40: normal restart after recovered Task; interrupted active Task is separate REL-02 |
-| REL-02 | Reboot the authorized QA machine under known state and unfinished work. | Bounded recovery of owned runtimes, data and safely resumable work; no duplicate effects or lost acknowledged state. Record reboot downtime, never claim single-host HA. | PARTIAL H64: idle-host recreate canary returns healthy in 220.84s with unchanged runtime/resource identity, Task history and data, working HTTP/WebSocket and no agent-issued manual startup. In-flight and blue-green boot variants unrun; historical H61/H62 failures retained. |
+| REL-02 | Reboot the authorized QA machine under known state and unfinished work. | Bounded recovery of owned runtimes, data and safely resumable work; no duplicate effects or lost acknowledged state. Record reboot downtime, never claim single-host HA. | FAIL automatic host return: H64 requires owner restart of killed host. PASS post-boot GP/recreate-canary startup, retained state/data and HTTP/WebSocket without container intervention. In-flight and blue-green boot variants unrun. |
 | REL-03 | Interrupt an actually running Task by Agent/process/channel loss at an identified effect boundary. | Exact operation resumes/terminates safely; unknown effects are fenced; no duplicate Script, data mutation or detached claim. | PARTIAL H48: Controller and Agent loss after runner start pass; other boundaries separate |
 | REL-04 | Run the approved 30-minute mixed workload at 5 authenticated HTTP requests/second, with held WebSockets and background jobs. | Zero unexpected errors/disconnections; HTTP p95 below 1 second; correct job/results and preserved data. Record achieved rate and resource/restart measurements. | PASS H49: 9,000 requests, five unchanged WebSockets, 30 jobs, p95 0.194s |
 | REL-05 | Apply bounded CPU/memory/disk pressure separately on disposable QA. | Truthful unavailable/failure states, bounded recovery and no silent data corruption, leaked resources or unrelated cleanup. Record exact pressure and safety stop. | BLOCKED D5 |
