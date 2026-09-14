@@ -19,6 +19,13 @@ specified production application and its GP upgrade path; it does not replace
 the full catalogue or waive [MVP acceptance](mvp.md#acceptance-gates).
 No item below is complete merely because local tests pass.
 
+Live continuation on clean source `76578c72f` now has a passing private application
+baseline (H28), but BP-05 failed: unchanged Apply recreated the ingress router
+(H29). The journey stopped before Entry cutover, old Detach and failed-candidate
+injection. Owner decision is required before repair; no new implementation is
+authorized by this finding. Restart/upgrade and sustained qualification remain
+unrun on this candidate.
+
 The owner deferred GP Backup/Restore and external backup/restore work from this
 immediate scope. JOURNEY-04, D2 and Gate B remain incomplete; this is not data-loss
 acceptance or full production qualification. Failed-deployment recovery below is
@@ -273,7 +280,7 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 | BP-02 | Validate a proposed create/update against existing resources. | Accurate create/update/retain diff and zero desired, Task, runtime or data writes. | U |
 | BP-03 | Try missing/stale/malformed If-Match, concurrent edits and exact request replay. | Only correctly revision-bound input is accepted; stale input never overwrites current desired state; exact replay has one operation. | U |
 | BP-04 | First Apply a valid complete workload with host-local images and ordered setup hooks. | Declared resources and exact replicas serve real requests; all selected pre-hooks clean up before any candidate consumer starts. | PARTIAL H3 |
-| BP-05 | Reapply the exact successful Blueprint. | Same stable IDs, generated values and serving Releases; no duplicate resources, restarted workloads or rerun hooks. | PARTIAL H3 |
+| BP-05 | Reapply the exact successful Blueprint. | Same stable IDs, generated values and serving Releases; no duplicate resources, restarted workloads or rerun hooks. | FAIL H29: router recreated |
 | BP-06 | Omit existing direct, Blueprint and Component-owned resources from a new valid input. | Omitted resources remain; no implicit delete/rename; ambiguous preservation fails closed. | U |
 | BP-07 | Import unsafe/incomplete bundles: escaping paths/symlinks, absent referenced files, unknown fields, invalid YAML and unresolved variables. | Closed-bundle and grammar errors before publication or host effects; no external file disclosure. | U |
 | BP-08 | Supply dependency cycles, missing dependencies, unsupported Compose behavior, mutable/missing images or invalid rendered configuration. | Specific validation failure before dispatch; running state and persisted data remain unchanged. | U |

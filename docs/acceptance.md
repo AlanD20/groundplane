@@ -375,6 +375,44 @@ do not close H5, H8, live restart/upgrade continuity or the approved 30-minute r
 No live operation ran; the existing QA installation remains unchanged. This is
 not full CI or production qualification; Backup/Restore remains deferred.
 
+H28 records the fresh live QA baseline on 2026-09-14, clean source `76578c72f`,
+version `0.0.0-qa.prodops20260914.1`. Evidence is
+`.tmp/qa-prod-operations-20260914-HrZj9vKz/`; exact Controller binary/release and
+Agent digests are in `host-health-20260914T083836Z.JpFM59/api.json` and the private
+run record. The approved guarded reset archived installation/history/logs and
+preserved registry/images; it removed 21 managed containers, nine networks and
+nine disposable Volumes. Volume contents were discarded, not backed up.
+`fresh-install.log`, `fresh-workload-setup.log` and `deploy-fresh.log` record normal
+installation and application deployment. HOST-01's API/CLI journey and owned
+tunnel cleanup pass. `verify-fresh-app.log` and `fresh-baseline.json` prove all
+11 Services healthy, authenticated registration/profile, route isolation, actual
+WebSocket authorization/subscription, Identity/TLS, reviewer login and both native
+password-only backing clients. JOURNEY-01 is PARTIAL: no fresh full background-job
+transaction, public-ingress or continuity claim is made. Test inputs and topology
+stay ignored; this is not full CI or production qualification.
+
+H29 records BP-05 FAIL during the same run. The unchanged Apply completed at
+08:45:23 UTC but recreated the ingress router at 08:45:17 UTC. `fresh-runtime.json`
+and `after-unchanged-reapply.json` show only that container changed identity/start
+time across Apply. Its image is unchanged; plan/generation labels and Compose
+configuration hash changed. Serving Releases and checked profile survived.
+`cutover-recovery-proof.log` later failed its retained-Component assertion after
+four successful Attaches because it compared against the pre-reapply snapshot.
+`cutover-attached-runtime.json` versus the saved post-reapply observation proves
+the Attaches preserved the replacement router. The attribution error does not
+close the actual reapply failure; the [finding](issues/runtime-qualification.md#unchanged-blueprint-recreates-router)
+separates observed evidence from the incomplete retention diagnosis.
+
+`cutover-paused-baseline.log` confirms healthy platform/application, authenticated
+profile and zero active Tasks after the stop. The second backing and its four
+Attaches remain; Entry still selects the original backing. No Entry cutover,
+old Detach, failed-candidate injection, Controller restart, upgrade or sustained
+run executed. ATT-12 and SVC-15/JOURNEY-02 are incomplete; H5/H8 remain open.
+No product code or history was changed, no recovery workaround ran, and no
+interruption duration was measured. Owner decision is required before repair
+or resuming the paused journey. Exact action receipts and evidence hashes are
+retained in the private run directory.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

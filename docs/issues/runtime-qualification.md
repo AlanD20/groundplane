@@ -84,6 +84,36 @@ vet passes. The architecture gate reports the same 125 outstanding findings;
 the three findings on edited mixed-fixture files concern imports already present
 before this change. No baseline was raised.
 
+## Unchanged Blueprint recreates router
+
+Owner: Blueprint/Component delivery owner. Severity: high for uninterrupted
+ingress. BP-05 failed on clean `76578c72f`, deployed as
+`0.0.0-qa.prodops20260914.1` on 2026-09-14. Applying the same successful bundle
+recreated the ingress router while retaining its image. The new container carries
+the reapply's plan id and generation; both labels and Compose configuration hash
+changed. Other container identities/start times were unchanged across that Apply.
+The Task completed and subsequent authenticated requests passed; neither proves
+connection continuity. The run did not measure the interruption duration.
+
+The later Attach probe initially compared against its pre-reapply snapshot.
+Comparing the saved post-reapply observation instead proves the four Attaches
+preserved the replacement router. This corrects attribution, not the reapply
+failure. Evidence and exact identities are H29 in [acceptance](../acceptance.md).
+
+The existing `RetainEnvironmentComponentRuntime` path is intended to preserve
+equivalent runtime and ignores plan/generation labels when comparing it. The
+specific reason retention was not selected in this sequence remains to be
+isolated; label churn is observed, not a complete upstream causal diagnosis.
+Do not remove ownership labels, relax checks or start latest-wins implementation
+as an inferred repair. No product fix is authorized yet.
+
+Acceptance: repeat the first Apply, normal Service Deploys and exact reapply;
+preserve unchanged router identity/start time and held application connections,
+while still applying genuine router changes correctly. Then resume the saved
+cutover/recovery case without replaying its completed mutations. Application
+baseline is healthy; additional Attaches remain, with no Entry rebind, old Detach
+or failed-candidate fault performed. Owner decision controls the next action.
+
 ## Recovery after runtime configuration changes
 
 Owner: Services and Releases delivery owner. Severity: high. This is an active
