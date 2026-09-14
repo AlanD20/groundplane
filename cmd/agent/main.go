@@ -55,6 +55,17 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) == 2 && os.Args[1] == app.EntryMaterializationVerificationArgument {
+		proven, err := app.VerifyEntryMaterialization(ctx, os.Stdin)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "agent materialization verification:", err)
+			os.Exit(1)
+		}
+		if !proven {
+			os.Exit(2)
+		}
+		return
+	}
 	if len(os.Args) != 1 {
 		fmt.Fprintln(os.Stderr, "agent: unsupported execution mode")
 		os.Exit(1)

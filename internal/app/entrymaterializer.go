@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"io"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
@@ -10,7 +11,8 @@ import (
 )
 
 const (
-	EntryMaterializerArgument = "materialize"
+	EntryMaterializerArgument                = "materialize"
+	EntryMaterializationVerificationArgument = "verify-materialization"
 )
 
 // RunEntryMaterializer is the thin application boundary for the short-lived
@@ -27,4 +29,17 @@ func RunEntryMaterializer(ctx context.Context, source io.ReadCloser) error {
 		MaxContentBytes:     entrymaterialization.MaximumContentBytes,
 		MaxDestinationBytes: entrymaterialization.MaximumDestinationBytes,
 	})
+}
+
+// VerifyEntryMaterialization exposes only an independently checked
+// postcondition. False is file drift, not a helper or authority failure.
+func VerifyEntryMaterialization(ctx context.Context, source io.ReadCloser) (bool, error) {
+	err := entrymaterializer.Verify(ctx, source, entrymaterialization.Limits{
+		MaxContentBytes:     entrymaterialization.MaximumContentBytes,
+		MaxDestinationBytes: entrymaterialization.MaximumDestinationBytes,
+	})
+	if errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+		return false, nil
+	}
+	return err == nil, err
 }

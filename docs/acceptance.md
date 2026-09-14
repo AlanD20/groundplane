@@ -176,6 +176,20 @@ retained in `.tmp/recovery-secret-actual-lifecycle-{first,second,third}.log`.
 These are local controlled-store checks, not deployed source protection, file
 restoration or a closing SVC-15/JOURNEY-02 result.
 
+H19 is local SVC-15/JOURNEY-02 support for independent pinned-file verification.
+Real filesystem tests reject changed bytes, mode, ownership, absence, unsafe
+links and destination replacement during hashing, without repairing the selected
+file. Truncated input is rejected before root access. Controlled Docker tests
+prove a read-only bind, read-only root, fixed verification command, read-only
+capability and distinct drift versus helper-failure results. The affected
+materializer and runner packages pass race tests in
+`.tmp/recovery-file-verification-packages.log`; the added replacement race passes
+in `.tmp/recovery-file-verification-replacement.log`. Vet and pinned Staticcheck
+pass in `.tmp/recovery-file-verification-{vet,staticcheck}.log`.
+The initial test-only formatting error is preserved in
+`.tmp/recovery-file-verification-first.log`; its corrected check passes separately.
+No real Docker helper, deployment or recovery execution ran. H5 remains failed.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

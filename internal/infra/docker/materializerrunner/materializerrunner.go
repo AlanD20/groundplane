@@ -35,8 +35,9 @@ const (
 // been authorized by the durable task plan; this adapter still rejects a
 // malformed value before contacting Docker.
 type Request struct {
-	VolumeDir string
-	Stream    io.ReadCloser
+	VolumeDir  string
+	Stream     io.ReadCloser
+	VerifyOnly bool
 }
 
 type engineClient interface {
@@ -213,12 +214,19 @@ func (r *Runner) Run(ctx context.Context, request Request) (resultErr error) {
 		return errs.New(errs.KindInternal, "materializer runner: Docker reported a helper wait failure")
 	}
 	if response.StatusCode != 0 {
+		if request.VerifyOnly && response.StatusCode == 2 {
+			return errs.New(errs.KindStateConflict, "materializer runner: pinned configuration is not restored")
+		}
 		return errs.Newf(errs.KindInternal, "materializer runner: helper exited with status %d", response.StatusCode)
 	}
 	return nil
 }
 
 func createOptions(image string, request Request) client.ContainerCreateOptions {
+	command, capabilities := helperCommand, []string{"CHOWN", "FOWNER"}
+	if request.VerifyOnly {
+		command, capabilities = "verify-materialization", []string{"DAC_READ_SEARCH"}
+	}
 	return client.ContainerCreateOptions{
 		Config: &container.Config{
 			Image:           image,
@@ -227,14 +235,14 @@ func createOptions(image string, request Request) client.ContainerCreateOptions 
 			OpenStdin:       true,
 			StdinOnce:       true,
 			Entrypoint:      []string{helperEntrypoint},
-			Cmd:             []string{helperCommand},
+			Cmd:             []string{command},
 			NetworkDisabled: true,
 		},
 		HostConfig: &container.HostConfig{
 			LogConfig:      container.LogConfig{Type: "none"},
 			NetworkMode:    container.NetworkMode("none"),
 			RestartPolicy:  container.RestartPolicy{Name: container.RestartPolicyDisabled},
-			CapAdd:         []string{"CHOWN", "FOWNER"},
+			CapAdd:         capabilities,
 			CapDrop:        []string{"ALL"},
 			ReadonlyRootfs: true,
 			SecurityOpt:    []string{"no-new-privileges=true"},
@@ -242,7 +250,7 @@ func createOptions(image string, request Request) client.ContainerCreateOptions 
 				Type:        mount.TypeBind,
 				Source:      request.VolumeDir,
 				Target:      helperMountPath,
-				ReadOnly:    false,
+				ReadOnly:    request.VerifyOnly,
 				BindOptions: &mount.BindOptions{Propagation: mount.PropagationRPrivate},
 			}},
 		},

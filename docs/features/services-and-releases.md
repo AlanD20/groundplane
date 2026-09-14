@@ -123,6 +123,15 @@ provide that retention. [ADR 0079](../decisions/0079-pinned-task-configuration-r
 permits restoring only the failed Task's exact pinned pre-operation files, with
 ownership and concurrency fences; current desired state is never a substitute.
 
+Pinned-file postconditions are checked independently through the closed
+materialization helper in read-only verification mode. The helper reads only the
+sealed destination under the Environment bind. It checks the complete input frame
+before filesystem access, then verifies file bytes, uid/gid, mode and presence.
+Symlinks, hardlinks and unsafe parent paths are failures, not repair instructions.
+The destination must still identify the checked inode after hashing. A changed
+file is distinct from missing authority or a helper failure. This checker does
+not itself restore files; its recovery-execution caller remains pending.
+
 The ordinary Release writer now derives each prepared post-activation runtime
 from the sealed plan. It selects the candidate workload, replaces proxy metadata
 and YAML with the sealed switch configuration, and retains only referenced
