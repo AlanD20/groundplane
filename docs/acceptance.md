@@ -1199,6 +1199,38 @@ terminal record and event stream, `restart-policy-failed-state.json`,
 `restart-policy-after-failure.json` and `restart-policy-recovered-canary.json`.
 The existing application host remains untouched.
 
+H64 PASSES the owner-approved recreate correction and repeated REL-02 idle-host
+boot trial. Recreate Deploy `task_01M2GQESMWNFRJ59H1YB524DWV` completes normally
+using the already accepted restart-policy input. Independent Docker inspection
+proves `unless-stopped` on the running singleton workload, serving proxy and
+Environment router. Routed HTTP 200, real WebSocket ping/pong and the original
+client-written sentinel pass before reboot. Preparation receipts and
+`recreate-policy-result.json` are retained in H61's evidence directory. No manual
+Docker lifecycle/configuration operation or product code change is used.
+
+The new reboot trial has its own directory,
+`.tmp/qa-reboot-policy-20260914-F10roqpX/`. Preflight proves no pending/running
+Tasks, enabled boot services, healthy platform and functioning canary. One
+`systemctl reboot` returns exit zero. Polling observes a changed boot id and
+verified healthy hosting after 220.84 seconds, within the 240-second bound.
+Controller, Agent and etcd are healthy; exact container ids/images/running states,
+Service state, qualified Controller digest/update record, Agent identity and
+complete Task history match the new pre-reboot baseline. Existing sentinel bytes
+match, HTTP returns 200, and a new WebSocket completes handshake/ping/pong.
+Post-boot inspection retains all three restart policies. No agent-issued service
+start, second reboot, reset or VM-manager change occurs.
+
+Evidence includes `before-reboot.json`, `tasks-before.json`, `boot-before.json`,
+`canary-before.json`, `reboot-command.json`, `reboot.log`, `after-reboot.json`,
+`canary-after.json`, `reboot-result.json`, `post-reboot-policies.json` and
+`post-reboot-startup.json`. The 220.84 seconds measures submission to completed
+verification, not an exact externally sampled outage duration. Reboot disconnects
+are expected; this is not uninterrupted service or single-host high availability.
+This pass covers the idle recreate/singleton canary with serving proxy, not an
+unfinished Task, blue-green slot boot or the complete production application.
+H61's failed return and H63's stopped-proxy limitation remain separate. The
+existing application host is untouched, and the disposable fixture remains intact.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing
