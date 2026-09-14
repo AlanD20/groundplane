@@ -38,6 +38,53 @@ func TestBlueprintRetainedProducerRejectsServingPointerRace(t *testing.T) {
 	testBlueprintExecutedArtifact(t, true, true)
 }
 
+// QA: BP-04, SVC-15, JOURNEY-02; real publisher and in-memory durable completion,
+// not host execution or a live failed-rollout recovery pass.
+// Rationale: Blueprint must seed the same runtime authority as Deploy; later
+// configuration-only work cannot replace that acknowledgement.
+func TestBlueprintSuccessRetainsAcknowledgedServiceRuntime(t *testing.T) {
+	for _, addressable := range []bool{false, true} {
+		name := "portless"
+		if addressable {
+			name = "with proxy"
+		}
+		t.Run(name, func(t *testing.T) {
+			testBlueprintExecutedArtifact(t, addressable, false, func(fixture *etcd.ExecutedArtifactFixture,
+				_ *controller.TaskPlanResolver, render etcd.ReleaseRenderInput, intent domain.Intent,
+				_ *agentpb.ComposeArtifact) {
+				receipt := fixture.AcknowledgedRuntime(t, render.ServiceID)
+				if receipt.Record.Source.TaskID != intent.OriginatingTaskID || receipt.Record.Source.PlanID != render.PlanID ||
+					receipt.Record.Source.ExecutionEpoch != 1 || receipt.Record.Source.RenderGeneration != 1 ||
+					receipt.Record.Runtime.ReleaseID != render.ReleaseID ||
+					receipt.Record.Runtime.Target != "singleton" {
+					t.Fatal("acknowledgement lost Blueprint identity or was replaced by configuration-only work")
+				}
+				artifact := &agentpb.ComposeArtifact{}
+				if err := proto.Unmarshal(receipt.Record.Runtime.CurrentArtifact, artifact); err != nil {
+					t.Fatal(err)
+				}
+				workloads, proxies := 0, 0
+				for _, service := range artifact.Services {
+					if service.ServiceId != render.ServiceID {
+						t.Fatal("per-Service runtime retained an unrelated Service")
+					}
+					if service.Role == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+						proxies++
+						continue
+					}
+					workloads++
+					if service.ExpectedReplicas != 2 || service.ImageReference != "sha256:"+strings.Repeat("a", 64) {
+						t.Fatal("runtime did not retain the executed two-replica image")
+					}
+				}
+				if workloads != 1 || (proxies == 1) != addressable || proxies > 1 {
+					t.Fatalf("runtime selection: workloads=%d proxies=%d", workloads, proxies)
+				}
+			})
+		})
+	}
+}
+
 func testBlueprintExecutedArtifact(
 	t *testing.T,
 	addressable, servingRace bool,

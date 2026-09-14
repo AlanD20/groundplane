@@ -5,6 +5,7 @@ import (
 	"time"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -105,7 +106,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 	mutations := make([]Mutation, 0, len(pending)*4)
 	defer clearMutations(mutations)
 	for offset, index := range pending {
-		values := details.Values[offset*5 : offset*5+5]
+		keys, values := detailKeys[offset*5:offset*5+5], details.Values[offset*5:offset*5+5]
 		if values[0] == nil || values[1] == nil || values[3] != nil || values[4] != nil {
 			return false, corruptReleaseRecord()
 		}
@@ -179,13 +180,13 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 		conditions = append(conditions,
 			Condition{Key: values[0].Key, ModRevision: values[0].ModRevision},
 			Condition{Key: values[1].Key, ModRevision: values[1].ModRevision},
-			Condition{Key: detailKeys[offset*5+2], ModRevision: keyValueRevision(values[2])},
-			Condition{Key: detailKeys[offset*5+3]}, Condition{Key: detailKeys[offset*5+4]},
+			Condition{Key: keys[2], ModRevision: keyValueRevision(values[2])},
+			Condition{Key: keys[3]}, Condition{Key: keys[4]},
 		)
 		mutations = append(mutations,
 			Mutation{Type: MutationPut, Key: values[1].Key, Value: checkpointValue},
-			Mutation{Type: MutationPut, Key: detailKeys[offset*5+3], Value: terminalValue},
-			Mutation{Type: MutationPut, Key: detailKeys[offset*5+4], Value: retentionValue},
+			Mutation{Type: MutationPut, Key: keys[3], Value: terminalValue},
+			Mutation{Type: MutationPut, Key: keys[4], Value: retentionValue},
 		)
 		if successful {
 			projectionValue, encodeErr := encodeReleaseRecord("service-release-projection", projection)
@@ -194,7 +195,18 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 			}
 			mutations = append(
 				mutations,
-				Mutation{Type: MutationPut, Key: detailKeys[offset*5+2], Value: projectionValue},
+				Mutation{Type: MutationPut, Key: keys[2], Value: projectionValue},
+			)
+			runtimeValue, err := blueprintAcknowledgedRuntime(marker, task, assignment, member, result, terminalAt)
+			if err != nil {
+				return false, err
+			}
+			// This full replacement consumes no prior runtime receipt. The owning
+			// Blueprint terminal envelope fences the held Environment writer and
+			// epoch; another runtime writer cannot publish under that ownership.
+			mutations = append(
+				mutations,
+				Mutation{Type: MutationPut, Key: serviceruntimerecord.Key(member.ServiceID), Value: runtimeValue},
 			)
 		}
 	}

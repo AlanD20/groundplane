@@ -70,6 +70,7 @@ func environmentBlueprintAtomicFixturePlan(
 				{Key: "com.groundplane.plan-id", Value: task.PlanID},
 				{Key: "com.groundplane.release-id", Value: member.GetCandidateReleaseId()},
 				{Key: "com.groundplane.render-generation", Value: fmt.Sprintf("%d", task.RenderGeneration)},
+				{Key: "com.groundplane.runtime-role", Value: "singleton"},
 				{Key: "com.groundplane.service-id", Value: member.GetServiceId()},
 			},
 		}
@@ -106,6 +107,17 @@ func environmentBlueprintAtomicFixturePlan(
 			},
 		)
 	}
+	var document strings.Builder
+	document.WriteString("services:\n")
+	for _, service := range artifact.Services {
+		document.WriteString("  " + service.ComposeName + ":\n    image: " + service.ImageReference + "\n    labels:\n")
+		for _, label := range service.ExpectedLabels {
+			document.WriteString("      " + label.Key + ": " + fmt.Sprintf("%q", label.Value) + "\n")
+		}
+	}
+	artifact.CanonicalYaml = []byte(document.String())
+	yamlDigest = sha256.Sum256(artifact.CanonicalYaml)
+	artifact.YamlSha256 = yamlDigest[:]
 	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
 		Schema: executionplan.SchemaVersion, PlanId: task.PlanID,
 		RenderGeneration: uint64(task.RenderGeneration),

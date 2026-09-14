@@ -2,6 +2,9 @@ package etcd
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
+	"strings"
 	"testing"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -70,19 +73,23 @@ func blueprintServingPredecessorFixture(
 	if err := proto.Unmarshal(projection.ComposeArtifact, artifact); err != nil {
 		t.Fatal(err)
 	}
+	artifact.ProjectName = "gp-" + strings.ToLower(projection.EnvironmentID)
 	service := artifact.Services[0]
 	service.Role = agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON
 	service.ImageReference = workload.LocalImageID
 	service.ExpectedReplicas = uint32(workload.ReplicaCount)
+	service.HasHealthcheck = true
 	service.ExpectedLabels = []*agentpb.LabelPair{
 		{Key: "com.groundplane.release-id", Value: releaseID},
 		{Key: "com.groundplane.runtime-role", Value: "singleton"},
 	}
+	setBlueprintFixtureRuntimeYAML(artifact)
 	value, err := proto.MarshalOptions{Deterministic: true}.Marshal(artifact)
 	if err != nil {
 		t.Fatal(err)
 	}
 	projection.ComposeArtifact = value
+	projection.NormalizedCompose = append([]byte(nil), artifact.CanonicalYaml...)
 	return projection, artifact.GetArtifactId()
 }
 
@@ -106,9 +113,24 @@ func blueprintExecutedSingletonFixture(
 		{Key: "com.groundplane.release-id", Value: releaseID},
 		{Key: "com.groundplane.runtime-role", Value: "singleton"},
 	}
+	setBlueprintFixtureRuntimeYAML(artifact)
 	value, err := proto.MarshalOptions{Deterministic: true}.Marshal(artifact)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return value
+}
+
+func setBlueprintFixtureRuntimeYAML(artifact *agentpb.ComposeArtifact) {
+	var content strings.Builder
+	content.WriteString("services:\n")
+	for _, service := range artifact.Services {
+		fmt.Fprintf(&content, "  %s:\n    image: %q\n    labels:\n", service.ComposeName, service.ImageReference)
+		for _, label := range service.ExpectedLabels {
+			fmt.Fprintf(&content, "      %s: %q\n", label.Key, label.Value)
+		}
+	}
+	artifact.CanonicalYaml = []byte(content.String())
+	digest := sha256.Sum256(artifact.CanonicalYaml)
+	artifact.YamlSha256 = digest[:]
 }

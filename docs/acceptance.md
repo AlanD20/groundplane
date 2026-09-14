@@ -55,6 +55,26 @@ available records, not an assertion that all older tests have been inventoried.
 | H8 | ATT-12: FAIL during the overlapping-name window. | [The DNS finding](issues/runtime-qualification.md#same-name-backing-endpoints) records new credentials valid at the new address while the bare backing name resolved to the old instance. Completing old Detach restored resolution; concurrent same-name backing use remains unqualified. |
 | H9 | ATT-08/09/10/11, SVC-13/16/17, BACK-05: PARTIAL, local implementation only. | The Attach/Detach runtime slice after `e06a0d2bc` passes `TestPrepareAttachRuntimes*` / `TestAttachRuntimeSharedResourceEquality` in `internal/common/executionplan/attach_runtime_test.go`, `TestAttachRuntime*` in `internal/infra/etcd/attach_runtime*_test.go`, and `TestDraftAttachIdentityPreservesAuthenticationAndSecretOwnership` in `internal/controller/attachplanning/sealer_test.go`. `.tmp/attach-runtime-local-qualification.json` binds exact source hashes and proof paths. The broader Attach/Detach race run also passes. These prove selected-only projection, retained shared-resource safety, source conflicts, atomic acknowledgement, replay and pruning independence at local boundaries, not a live application case. No recovery reader was connected or deployed. |
 
+H10 records the 2026-09-14 HOST-01 API/CLI read-only rerun:
+`.tmp/qa-pinned-recovery-20260914/host-health-20260914T024049Z.4ZDrpp/result.txt`
+passes canonical assertions and owned cleanup without a service mutation. The
+deployed Controller remains `0.0.0-qa.recovery20260913.7`; exact running digest,
+Agent selection and client binary hash are in `api.json` and `cli.sha256`.
+The client was built from dirty source. This refreshes only that read-only
+baseline, not application health or clean-candidate/recovery qualification.
+
+H11 is local BP-04/SVC-15/JOURNEY-02 support, not a live pass:
+`TestBlueprintSuccessRetainsAcknowledgedServiceRuntime` in
+`internal/infra/etcd/blueprint_executed_artifact_external_test.go` and
+`TestBlueprintRuntimeSharesTerminalCommitAndReplay` in
+`internal/infra/etcd/blueprint_runtime_atomic_test.go` prove executed runtime
+selection, atomic completion, no-effect rejection and read-only replay.
+The failing-before receipt check is
+`.tmp/pinned-recovery-blueprint-runtime-red.log`; the full affected passing race
+run is `.tmp/pinned-recovery-blueprint-runtime-final-bounded.log`, including
+maximum-candidate/hook and stale-authority cases. Existing record/transaction
+limits are unchanged. No recovery reader or pinned-file execution is qualified.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

@@ -160,7 +160,15 @@ authority and replay cannot promote a prepared value or rewrite an existing
 acknowledgement. Missing runtime is rejected, never fabricated from old Release
 input; this is not an online migration for installations lacking those records.
 
-These writers are not an enabled recovery source. Entry, Blueprint success and
+Blueprint success prepares a compact member selection from its already-sealed
+executed artifact, retaining a distinct inactive slot separately only when needed.
+It does not duplicate each current artifact in the publication marker. Successful
+completion derives the self-contained runtime and commits it with the Blueprint
+Task and serving projection, under the held writer and epoch. Configuration-only,
+failed and compensated work cannot promote a candidate. The maximum 32 candidates
+with 16 hooks remains within the existing 256-operation arms and 1 MiB envelope.
+
+These writers are not an enabled recovery source. Entry completion and
 recovery-retry publication still need the same authority.
 Readers must not use a partially maintained record, backfill it from old Release
 input, or infer a missing acknowledgement. Consumer cutover and any clean QA

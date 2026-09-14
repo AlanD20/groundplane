@@ -29,7 +29,10 @@ from restoring its databases or files from a backup.
   Recovery must preserve the last successfully applied networking and configuration
   after Attach/Entry changes, not reconstruct obsolete Release input. Reuse the
   landed runtime-record work, but complete the affected writers and source retention
-  before connecting readers; a partially maintained record is unsafe. The owner
+  before connecting readers; a partially maintained record is unsafe. Blueprint
+  success now has local atomic/runtime/replay and maximum-size proof (H11 in the
+  [evidence register](acceptance.md)); Entry completion, retained file sources and
+  recovery readers remain pending. This is not a closing live SVC-15 pass. The owner
   approved restoring exact pinned configuration files as well as runtime under
   [ADR 0079](decisions/0079-pinned-task-configuration-recovery.md). This excludes database restoration, migration
   reversal, latest desired input and history rewriting. Close this item only after

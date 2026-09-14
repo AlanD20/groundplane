@@ -395,6 +395,8 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesSealedWorkloadAndPreservesDe
 			Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY, ProcedureBytes: procedureBytes,
 		},
 	}
+	marker.BlueprintRuntimes = []executionplan.BlueprintRuntimeInput{{ServiceID: serviceID, ReleaseID: releaseID,
+		Target: "singleton"}}
 	values := make(map[string][]byte)
 	for key, record := range map[string]struct {
 		typeName string

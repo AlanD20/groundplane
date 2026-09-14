@@ -33,6 +33,13 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 	if err != nil {
 		return BlueprintReleasePublication{}, err
 	}
+	runtimes, err := executionplan.PrepareBlueprintRuntimeInputs(
+		evidence.Plan,
+		evidence.Task.Params[TaskComposeArtifactParam],
+	)
+	if err != nil {
+		return BlueprintReleasePublication{}, err
+	}
 	conditions := []Condition{
 		{
 			Key:         releaseManifestStagingKey(evidence.Manifest.Record.PublicationID),
@@ -60,6 +67,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 		ManifestDigest:             evidence.Manifest.Record.Digest,
 		CandidateReleaseDescriptor: executionplan.CloneCandidateReleaseDescriptor(evidence.CandidateReleaseDescriptor),
 		ExecutedComposeArtifact:    artifact,
+		BlueprintRuntimes:          runtimes,
 		NativePredecessors:         nativeReferences,
 		PublishedAt:                evidence.PublishedAt,
 	})
