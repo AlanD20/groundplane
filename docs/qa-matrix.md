@@ -29,10 +29,12 @@ Short protected-update traffic windows pass, not full upgrade or sustained
 qualification. H39 resumes H36's original Task after the Volume-scope and rolling
 journal repairs: exact recovery completes, the Agent releases its claim, current
 bindings and authenticated data survive, and a later healthy Deploy passes.
-H36 remains a failed bounded run. The clean rerun FAILS H41: a successful Deploy
-recorded new ownership labels for its unchanged stable proxy, so the next recovery
-rejects the sealed predecessor. Its Task remains active; dependent qualification
-is paused. The actual serving workload and saved authenticated profile still pass.
+H36 and H41 remain failed historical runs. H46's fresh rerun on the repaired
+writer passes: Attach/Entry cutover → successful Deploy preserving the proxy →
+failed candidate → bounded automatic recovery → later healthy Deploy. Current
+bindings and authenticated data survive, the Agent releases its claim and the
+failed candidate is cleaned. The approved sustained/upgrade run is now active,
+not yet a passing result.
 H40 passes normal Controller restart with unchanged etcd/application runtime,
 45 authenticated requests and a held WebSocket without interruption. Sustained
 and complete native-upgrade qualification remain open. Earlier failures remain
@@ -54,7 +56,7 @@ record unavoidable single-host reboot downtime separately. Do not add features,
 new case families or a broad cleanup to this work. A newly confirmed product
 defect or required scope decision returns to the owner before repair.
 
-- [ ] **Fix failed-rollout recovery first** — SVC-15, JOURNEY-02, D4.
+- [x] **Fix failed-rollout recovery first** — SVC-15, JOURNEY-02, D4, H46.
   Recovery must preserve the last successfully applied networking and configuration
   after Attach/Entry changes, not reconstruct obsolete Release input. Reuse the
   landed runtime-record work, but complete the affected writers and source retention
@@ -66,9 +68,11 @@ defect or required scope decision returns to the owner before repair.
   writers, acknowledged-runtime readers and pinned-file execution. The combined
   focused tests pass; H25–H27 distinguish candidate failures from their local
   corrections. H39 proves resumed recovery after software repair and the subsequent
-  healthy Deploy. A clean bounded failure/recovery run without intervention is still required.
+  healthy Deploy. H46 now passes the clean bounded failure/recovery run without
+  intervention after correcting preserved proxy ownership in the receipt writer.
   The owner approved blocking Secret deletion while a recoverable Task
-  holds its exact value. This is not a closing live SVC-15 pass. The owner
+  holds its exact value. Those local retention checks alone did not close SVC-15;
+  H46 provides the combined live pass. The owner
   approved restoring exact pinned configuration files as well as runtime under
   [ADR 0079](decisions/0079-pinned-task-configuration-recovery.md). This excludes database restoration, migration
   reversal, latest desired input and history rewriting. Close this item only after
@@ -324,7 +328,7 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 | SVC-12 | Abort, time out or lose Agent acknowledgement after a rollout effect. | Recorded effects and exact predecessor authority govern recovery; no false no-effect result, duplicate switch or silent success. | U |
 | SVC-13 | Submit altered/missing/foreign predecessor evidence or stale source authority at publication, claim and acknowledgement. | Fail closed without selecting latest desired or inventing historical state; preserve last acknowledged runtime and immutable records. | PARTIAL H9 |
 | SVC-14 | Change Attach memberships, then Deploy with existing hooks. | Only current declared memberships reach the new workload; hooks use their captured authored context; detached endpoints stay absent. | PARTIAL H4 |
-| SVC-15 | Change Attach and Entry configuration successfully, complete a Deploy preserving the stable proxy, then fail the next rollout, including unrelated Volumes in the shared project. | Actual predecessor uses the last successfully applied bindings and serves authenticated requests; its saved proxy ownership matches the preserved container while configuration matches the successful switch. Unrelated named Volumes cannot block proof; required/unknown Volume collisions must block. Original Release input/history is not rewritten. | FAIL H41 clean rerun: incorrect saved proxy ownership; H39 resumed recovery passes after repair; historical FAIL H5/H36 |
+| SVC-15 | Change Attach and Entry configuration successfully, complete a Deploy preserving the stable proxy, then fail the next rollout, including unrelated Volumes in the shared project. | Actual predecessor uses the last successfully applied bindings and serves authenticated requests; its saved proxy ownership matches the preserved container while configuration matches the successful switch. Unrelated named Volumes cannot block proof; required/unknown Volume collisions must block. Original Release input/history is not rewritten. | PASS H46 clean deployed sequence; local collision guards H37/H43; historical FAIL H5/H36/H41 retained |
 | SVC-16 | Prune the earlier configuration Task, restart Controller, then perform supported rollout/recovery. | Required acknowledged inputs remain available independent of pruned Task history; no fallback to obsolete Release configuration. | PARTIAL H9 |
 | SVC-17 | Fail persistence between runtime acknowledgement and serving projection publication; replay the report. | Runtime receipt, serving state and Task outcome are atomic and exact; no promotion from failed, skipped, compensated or merely staged work. | PARTIAL H9 |
 
@@ -571,7 +575,7 @@ application interruption. A machine reboot is not an interruption-free GP update
 | Case | Setup and action | Pass condition | Record |
 | --- | --- | --- | --- |
 | JOURNEY-01 | Fresh hierarchy → backing resources → Entries/Volumes → Blueprint/hooks → Routes → application use. | Real authenticated transaction, durable read/write, background work and realtime result; configuration/data ownership and denied access independently verified. | PARTIAL H3 |
-| JOURNEY-02 | Reapply → Attach new backing → rebind Entry → detach old backing → Deploy → fail next candidate. | Each completed change remains effective through later operations/recovery; actual clients use only intended endpoints and credentials; original failure is not hidden by redeploy. | FAIL H41 clean rerun; preserved proxy ownership differs from saved predecessor |
+| JOURNEY-02 | Reapply → Attach new backing → rebind Entry → detach old backing → Deploy → fail next candidate. | Each completed change remains effective through later operations/recovery; actual clients use only intended endpoints and credentials; original failure is not hidden by redeploy. | PASS H46; historical FAIL H5/H41 retained |
 | JOURNEY-03 | Deploy a second independent application and operate on the first. | Unselected runtime identities, data and working requests remain unchanged; declared shared dependencies are recorded rather than assumed isolated. | PARTIAL H4 |
 | JOURNEY-04 | Write known data → backup selected sources → mutate data → restore exact point/key era. | Original surviving targets match the selected recovery point; unrelated data unchanged; an application-level query proves usability, not just file/object presence. | BLOCKED D2 |
 | JOURNEY-05 | Application traffic and background work → GP update → rejected/broken GP update → later successful update. | Original application functionality and data survive the complete sequence; same operation outcomes and measured continuity, no manual runtime repairs. | PARTIAL H2 |
@@ -592,7 +596,7 @@ application interruption. A machine reboot is not an interruption-free GP update
 | D1 | Latest-wins is accepted but not connected to production publication/execution. | Record its required cases; do not implement or enable it as an incidental QA task. |
 | D2 | End-to-end Backup/Restore is incomplete; Valkey's safe recovery source remains undecided. | No recovery-readiness pass. Preserve the required rejection case separately from unsupported successful capture/Restore. User decides any implementation or external recovery plan. |
 | D3 | Owner resolved the rule: Agent may restart with Controller; etcd must not. Local stop-on-close and verifier corrections pass (H13). | CLOSED H40: live normal restart preserves etcd and application traffic/data. Active-Task interruption remains separate. |
-| D4 | H41 proves that a successful blue-green Deploy records candidate ownership labels for the preserved proxy, poisoning the next recovery's sealed predecessor. | Owner approved the producer fix and disposable QA rebuild retaining evidence; do not relax ownership checks. Rerun recovery before dependent upgrade/load/interruption/reboot QA. |
+| D4 | H41's successful blue-green Deploy recorded candidate ownership for the preserved proxy, invalidating the next recovery's predecessor. | CLOSED H46: owner-approved producer fix, fresh QA rebuild and clean cutover/failed-Deploy recovery sequence pass without weakening ownership checks. |
 | D5 | First sustained target is approved: 30 minutes, 5 authenticated HTTP requests/second, held WebSockets/jobs, zero unexpected errors/disconnections and p95 below 1 second. Numeric pressure stops and separate fault recovery deadlines remain unspecified. | Run REL-04 only on the valid candidate/baseline. Record pressure thresholds before REL-05; neither this target nor the old 600-second run establishes production capacity. |
 | D6 | The Task stream discarded queued compaction errors when a closed event channel won selection. | Owner-approved repair passes the local regressions below. Both watches now consume terminal errors after event-channel closure. The local failure is closed; real etcd/SSE and full TASK-06 qualification remain unverified. Nothing was deployed. |
 

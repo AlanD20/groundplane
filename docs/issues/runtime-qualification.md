@@ -180,6 +180,15 @@ SVC-06 traffic variants remain unqualified.
 
 ## Recovery after runtime configuration changes
 
+Closed for the selected live sequence by H46 on repaired `939fd039f` /
+`0.0.0-qa.proxy20260914.1`: fresh cutover, successful Deploy preserving the proxy,
+failed candidate and automatic recovery preserve current bindings, authenticated
+data and unrelated Releases. The original failure terminalizes within six minutes;
+the Agent releases its claim and the later healthy Deploy cleans the candidate.
+No manual runtime repair or Task-history change was needed. The historical failed
+runs below remain evidence, not current host state. Sustained/upgrade and other
+reliability qualification remain separate.
+
 H41's clean rerun on `7322d2806` / `0.0.0-qa.prodops20260914.5` fails its
 600-second bound. This is not the previously corrected Volume-scope failure.
 The preceding healthy blue-green Deploy kept the proxy container, including its

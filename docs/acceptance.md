@@ -782,6 +782,36 @@ authenticated reviewer approval and the signed callback updating the backend.
 These are fresh functional hosting passes, not failed-rollout recovery,
 uninterrupted upgrades, sustained load or public/provider ingress qualification.
 
+H46 passes the clean SVC-15/JOURNEY-02 sequence on `939fd039f` /
+`0.0.0-qa.proxy20260914.1`. Exact reapply preserves the baseline; four new Attaches,
+Entry rebinding and dependent-first removal of four old Attaches complete.
+Both native realtime replicas authenticate and subscribe during the overlapping
+backing window and after Detach. All five consumer replicas use the new backing
+network only; proxies, retained Components, serving Releases and checked data
+survive. `cutover-recovery-proof.log` and `native-cutover-result.json` retain proof.
+
+A successful API Deploy then creates the receipt consumed by the next failed
+candidate. The fault stops only that exact candidate before promotion. The Task
+started at 14:48:38 UTC and ended `timed_out` at 14:54:30 UTC, preserving its
+original failure. An authenticated profile check passes during the timeout,
+and all 11 Services, current backing bindings, actual password-only clients and
+saved profile pass after automatic recovery. The Agent is healthy with zero
+in-flight claims. The owned hook is removed normally; a later healthy Deploy
+completes and cleans the failed candidate without changing unrelated Releases.
+No repair, reset, Task edit or ownership-check waiver occurred during this run.
+Receipts in the H44 directory are `candidate-fault-proof.log`,
+`failed-rollout-{accepted,fault,terminal,result}.json`,
+`during-candidate-timeout-result.json` and `automatic-recovery-result.json`.
+H41 remains failed historical evidence; the new pass does not rewrite it.
+
+The approved sustained run has started, not passed. Its first setup attempt
+used an incorrect probe bootstrap path and stopped before creating users or
+traffic; `run-sustained.log` is retained. After inspecting the real container
+working directory, the corrected run creates five scoped users and holds five
+authenticated WebSockets, recording `sustained-results.jsonl`. The separately
+staged `0.0.0-qa.proxy20260914.2` has not yet been activated. Upgrade, sustained,
+interruption and reboot claims require their own completed results.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing
