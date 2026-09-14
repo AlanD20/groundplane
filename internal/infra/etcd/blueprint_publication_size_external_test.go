@@ -191,9 +191,9 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 			}
 		}
 		fixture.AssertBlueprintPublicationRecordSizes(t, prepared.Task, claim)
-		publicationComparisons, assignmentComparisons := 26, 13
+		publicationComparisons, assignmentComparisons := 27, 14
 		if pass > 0 {
-			publicationComparisons, assignmentComparisons = 37, 17
+			publicationComparisons, assignmentComparisons = 40, 18
 		}
 		if audit.Publication.Comparisons != publicationComparisons || audit.Publication.Mutations != 19 ||
 			audit.Assignment.Comparisons != assignmentComparisons || audit.Assignment.Mutations != 7 {

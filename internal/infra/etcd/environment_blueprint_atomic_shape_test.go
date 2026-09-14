@@ -23,6 +23,7 @@ type environmentBlueprintAtomicShape struct {
 	failureReads                 int
 	detachRetainedBeforeFinal    bool
 	tombstoneRetainedBeforeFinal bool
+	runtimeReceiptFences         bool
 }
 
 func TestEnvironmentBlueprintFinalPublicationExactLegalShapes(t *testing.T) {
@@ -30,32 +31,38 @@ func TestEnvironmentBlueprintFinalPublicationExactLegalShapes(t *testing.T) {
 		{
 			name:     "QA eleven Releases two hooks three physical sources",
 			releases: 11, hooks: 2, physicalSources: 3,
-			comparisons: 34, successMutations: 43, failureReads: 34,
+			comparisons: 35, successMutations: 43, failureReads: 35,
 		},
 		{
 			name:     "maximum non-Backup Script",
 			releases: 32, hooks: 16, physicalSources: 17,
-			comparisons: 62, successMutations: 99, failureReads: 62,
+			comparisons: 63, successMutations: 99, failureReads: 63,
 		},
 		{
 			name:     "maximum non-Backup Script and two candidate Attaches",
 			releases: 32, hooks: 16, physicalSources: 17, attaches: true,
-			comparisons: 135, successMutations: 148, failureReads: 135,
+			comparisons: 136, successMutations: 148, failureReads: 136,
 		},
 		{
 			name:     "Backup-only maximum",
 			attaches: true, backup: true,
-			comparisons: 153, successMutations: 90, failureReads: 153,
+			comparisons: 154, successMutations: 90, failureReads: 154,
 		},
 		{
 			name:     "combined Backup and Script maximum",
 			releases: 32, hooks: 16, physicalSources: 17, attaches: true, backup: true,
-			comparisons: 192, successMutations: 176, failureReads: 192,
+			comparisons: 193, successMutations: 176, failureReads: 193,
+		},
+		{
+			name:     "combined maximum with acknowledged runtime receipt fences",
+			releases: 32, hooks: 16, physicalSources: 17, attaches: true, backup: true,
+			runtimeReceiptFences: true,
+			comparisons:          225, successMutations: 176, failureReads: 225,
 		},
 		{
 			name:     "combined Backup and explicit Script maximum",
 			releases: 32, hooks: 16, physicalSources: 17, attaches: true, backup: true, explicitHooks: true,
-			comparisons: 192, successMutations: 176, failureReads: 192,
+			comparisons: 193, successMutations: 176, failureReads: 193,
 		},
 	}
 	for _, test := range tests {
@@ -91,7 +98,7 @@ func TestEnvironmentBlueprintCombinedMaximumInjectedFailurePublishesNoAuthority(
 	test := environmentBlueprintAtomicShape{
 		name: "combined failure", releases: 32, hooks: 16, physicalSources: 17,
 		attaches: true, backup: true,
-		comparisons: 192, successMutations: 176, failureReads: 192,
+		comparisons: 193, successMutations: 176, failureReads: 193,
 	}
 	published, err := publishEnvironmentBlueprintAtomicShape(t, test, true)
 	if !isKind(err, errs.KindInternal) {

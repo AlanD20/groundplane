@@ -213,11 +213,20 @@ by the owner instruction in [head.md](../head.md).
 
 ### Ordinary Release predecessors
 
-Deploy/Rollback captures the exact per-Service serving Release at publication's
-fixed read revision through the immutable lifecycle renderer. The Environment
-mutation epoch fences it. The staged `ReleaseRenderInput` owns canonical current
+Deploy/Rollback captures the exact acknowledged per-Service runtime at publication's
+fixed read revision. Immutable Release history supplies identity and target
+metadata, not reconstructed runtime bytes. Missing or inconsistent receipts fail
+closed. The Environment mutation epoch fences the capture. The staged `ReleaseRenderInput` owns canonical current
 and optional retained inactive runtime artifacts, bound by its manifest digest.
 No full historical tree or duplicate witness enters the aggregate marker.
+
+Blueprint uses the same receipt reader. It retains each receipt revision in its
+compact source reference and compares it at publication alongside the existing
+serving projection and applied-source fences. Replay retains that exact source;
+later Attach or Entry writes cannot silently change the predecessor. The reader
+changes only artifact identities, preserving YAML, labels, bindings, proxy bytes
+and any acknowledged inactive slot. H20 records local producer and store proof;
+file-restoration execution and the live failure journey remain pending.
 
 The plan binds explicit predecessor artifact, Release, target and optional
 inactive-artifact references. Historical labels remain exact. Only that named

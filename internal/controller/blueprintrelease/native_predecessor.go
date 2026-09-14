@@ -6,13 +6,22 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/servicelifecycle"
+	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"google.golang.org/protobuf/proto"
 )
 
 func (service *Service) captureNativePredecessor(
 	ctx context.Context,
+	scope etcd.ReleasePlanningScope,
+	captured predecessorSnapshot,
+) (predecessorSnapshot, error) {
+	return captureNativePredecessor(ctx, service.ledger, scope, captured)
+}
+
+func captureNativePredecessor(
+	ctx context.Context,
+	reader servicelifecycle.AcknowledgedRuntimeReader,
 	scope etcd.ReleasePlanningScope,
 	captured predecessorSnapshot,
 ) (predecessorSnapshot, error) {
@@ -23,40 +32,53 @@ func (service *Service) captureNativePredecessor(
 	if captured.serving == nil {
 		return captured, nil
 	}
-	authority, err := servicelifecycle.CaptureRelease(
+	runtime, err := servicelifecycle.CaptureAcknowledgedRuntime(
 		ctx,
-		service.ledger,
+		reader,
 		captured.applied,
 		scope.Environment.Record.ID,
 		captured.native.ServiceID,
+		ids.New(ids.KindConfig),
 	)
 	if err != nil {
 		return predecessorSnapshot{}, err
 	}
-	artifacts, err := service.plans.RenderRetainedServiceRuntime(ctx, authority)
-	if err != nil {
-		return predecessorSnapshot{}, err
-	}
-	if len(artifacts) < 1 || len(artifacts) > 2 || (len(artifacts) == 2) != (authority.RetainedPrior != nil) {
+	return bindNativePredecessor(captured, runtime)
+}
+
+func bindNativePredecessor(
+	captured predecessorSnapshot,
+	runtime servicelifecycle.AcknowledgedRuntimeCapture,
+) (predecessorSnapshot, error) {
+	if captured.serving == nil {
+		runtime.Clear()
 		return predecessorSnapshot{}, errs.New(
 			errs.KindStateConflict,
-			"Blueprint native predecessor rendering is incomplete",
+			"Blueprint acknowledged predecessor has no serving authority",
 		)
 	}
-	captured.native.Serving = &authority
-	for _, artifact := range artifacts {
-		artifact.ArtifactId = ids.New(ids.KindConfig)
+	expectedTarget, targetErr := domain.TargetFor(captured.serving.Strategy, captured.serving.Slot)
+	if runtime.Release.ServingReleaseID != captured.serving.ID ||
+		targetErr != nil || runtime.Release.Current.CandidateTarget != expectedTarget {
+		runtime.Clear()
+		return predecessorSnapshot{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint acknowledged predecessor is not serving",
+		)
 	}
-	captured.native.CurrentArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(artifacts[0])
-	if err != nil {
-		return predecessorSnapshot{}, errs.Wrap(errs.KindInternal, err)
+	if runtime.RetainedPriorReleaseID != "" &&
+		runtime.RetainedPriorReleaseID != captured.serving.PriorServingReleaseID {
+		runtime.Clear()
+		return predecessorSnapshot{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint retained predecessor is not acknowledged",
+		)
 	}
-	if len(artifacts) == 2 {
-		captured.native.RetainedPriorArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(artifacts[1])
-		if err != nil {
-			return predecessorSnapshot{}, errs.Wrap(errs.KindInternal, err)
-		}
-	}
+	captured.native.RuntimeRevision = runtime.RuntimeRevision
+	captured.native.Serving = &runtime.Release
+	captured.native.RetainedPriorReleaseID = runtime.RetainedPriorReleaseID
+	captured.native.CurrentArtifact = runtime.CurrentArtifact
+	captured.native.RetainedPriorArtifact = runtime.RetainedPriorArtifact
 	return captured, nil
 }
 

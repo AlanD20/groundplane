@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -553,6 +554,20 @@ func prepareEnvironmentBlueprintReleaseShape(
 	)
 	if err != nil {
 		t.Fatalf("PrepareBlueprintReleasePublication() error = %v", err)
+	}
+	if shape.runtimeReceiptFences {
+		for _, member := range manifest.Members {
+			key := serviceruntimerecord.Key(member.ServiceID)
+			result, err := store.Transact(ctx, []Condition{{Key: key}}, []Mutation{{
+				Type: MutationPut, Key: key, Value: []byte("measured acknowledged runtime"),
+			}})
+			if err != nil || !result.Succeeded {
+				t.Fatalf("seed measured runtime receipt = %#v, %v", result, err)
+			}
+			publication.conditions = append(publication.conditions, Condition{
+				Key: key, ModRevision: result.Revision,
+			})
+		}
 	}
 	return publication, publicationID
 }

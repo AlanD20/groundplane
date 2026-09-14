@@ -17,6 +17,7 @@ type BlueprintNativePredecessorReference struct {
 	ServiceID          string                             `json:"service_id"`
 	FixedReadRevision  int64                              `json:"fixed_read_revision"`
 	ProjectionRevision int64                              `json:"projection_revision"`
+	RuntimeRevision    int64                              `json:"runtime_revision,omitempty"`
 	Serving            *BlueprintNativeServingPredecessor `json:"serving,omitempty"`
 	PriorRuntimeSHA256 string                             `json:"prior_runtime_sha256,omitempty"`
 }
@@ -29,7 +30,8 @@ func blueprintNativePredecessorReferences(
 		runtime := captured.Runtime()
 		reference := BlueprintNativePredecessorReference{
 			ServiceID: runtime.ServiceID, FixedReadRevision: runtime.FixedReadRevision,
-			ProjectionRevision: runtime.ProjectionRevision, Serving: runtime.Serving,
+			ProjectionRevision: runtime.ProjectionRevision, RuntimeRevision: runtime.RuntimeRevision,
+			Serving: runtime.Serving,
 		}
 		if runtime.Serving != nil {
 			digest, err := domain.Digest(ReleaseNativePredecessorAuthority{ServiceID: runtime.ServiceID,
@@ -60,10 +62,11 @@ func validateBlueprintNativePredecessorReferences(
 			return corruptReleaseRecord()
 		}
 		if reference.Serving == nil {
-			if reference.PriorRuntimeSHA256 != "" {
+			if reference.RuntimeRevision != 0 || reference.PriorRuntimeSHA256 != "" {
 				return corruptReleaseRecord()
 			}
 		} else if !validLowerSHA256(reference.PriorRuntimeSHA256) || reference.ProjectionRevision <= 0 ||
+			reference.RuntimeRevision <= 0 || reference.RuntimeRevision > reference.FixedReadRevision ||
 			ids.Validate(ids.KindDeployment, reference.Serving.ServingReleaseID) != nil ||
 			reference.Serving.Target.Validate() != nil || reference.Serving.RetainedPriorReleaseID != "" &&
 			ids.Validate(ids.KindDeployment, reference.Serving.RetainedPriorReleaseID) != nil {
@@ -113,7 +116,7 @@ func resolveBlueprintNativePredecessors(
 		matched[reference.ServiceID] = true
 		runtime := BlueprintNativePredecessor{ServiceID: reference.ServiceID,
 			FixedReadRevision: reference.FixedReadRevision, ProjectionRevision: reference.ProjectionRevision,
-			Serving: reference.Serving}
+			RuntimeRevision: reference.RuntimeRevision, Serving: reference.Serving}
 		if witness != nil {
 			digest, err := domain.Digest(witness)
 			if err != nil || digest != reference.PriorRuntimeSHA256 || witness.ServiceID != reference.ServiceID ||

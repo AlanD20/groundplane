@@ -12,6 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -20,12 +21,14 @@ import (
 // BlueprintNativePredecessorCapture is transient fixed-revision publication
 // evidence. Historical render inputs are not duplicated in the marker.
 type BlueprintNativePredecessorCapture struct {
-	ServiceID             string                   `json:"service_id"`
-	FixedReadRevision     int64                    `json:"fixed_read_revision"`
-	ProjectionRevision    int64                    `json:"projection_revision"`
-	Serving               *ServiceLifecycleRelease `json:"serving,omitempty"`
-	CurrentArtifact       []byte                   `json:"current_artifact,omitempty"`
-	RetainedPriorArtifact []byte                   `json:"retained_prior_artifact,omitempty"`
+	ServiceID              string                   `json:"service_id"`
+	FixedReadRevision      int64                    `json:"fixed_read_revision"`
+	ProjectionRevision     int64                    `json:"projection_revision"`
+	RuntimeRevision        int64                    `json:"runtime_revision,omitempty"`
+	Serving                *ServiceLifecycleRelease `json:"serving,omitempty"`
+	RetainedPriorReleaseID string                   `json:"retained_prior_release_id,omitempty"`
+	CurrentArtifact        []byte                   `json:"current_artifact,omitempty"`
+	RetainedPriorArtifact  []byte                   `json:"retained_prior_artifact,omitempty"`
 }
 
 // BlueprintNativePredecessor is the immutable runtime view reconstructed from
@@ -34,6 +37,7 @@ type BlueprintNativePredecessor struct {
 	ServiceID             string
 	FixedReadRevision     int64
 	ProjectionRevision    int64
+	RuntimeRevision       int64
 	Serving               *BlueprintNativeServingPredecessor
 	CurrentArtifact       []byte
 	RetainedPriorArtifact []byte
@@ -48,13 +52,14 @@ type BlueprintNativeServingPredecessor struct {
 func (capture BlueprintNativePredecessorCapture) Runtime() BlueprintNativePredecessor {
 	runtime := BlueprintNativePredecessor{
 		ServiceID: capture.ServiceID, FixedReadRevision: capture.FixedReadRevision,
-		ProjectionRevision: capture.ProjectionRevision, CurrentArtifact: capture.CurrentArtifact,
+		ProjectionRevision: capture.ProjectionRevision, RuntimeRevision: capture.RuntimeRevision,
+		CurrentArtifact:       capture.CurrentArtifact,
 		RetainedPriorArtifact: capture.RetainedPriorArtifact,
 	}
 	if capture.Serving != nil {
 		runtime.Serving = &BlueprintNativeServingPredecessor{
 			ServingReleaseID: capture.Serving.ServingReleaseID, Target: capture.Serving.Current.CandidateTarget,
-			RetainedPriorReleaseID: capture.Serving.PriorServingReleaseID,
+			RetainedPriorReleaseID: capture.RetainedPriorReleaseID,
 		}
 	}
 	return runtime
@@ -276,6 +281,9 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 	native := make([]BlueprintNativePredecessor, len(evidence.NativePredecessors))
 	for index, capture := range evidence.NativePredecessors {
 		native[index] = capture.Runtime()
+		if capture.Serving == nil && capture.RetainedPriorReleaseID != "" {
+			return nil, corruptReleaseRecord()
+		}
 		if capture.Serving != nil && (validateServiceLifecycleRelease(*capture.Serving,
 			ServiceLifecycleRenderInput{ServiceID: capture.ServiceID, EnvironmentID: evidence.EnvironmentID}) != nil ||
 			capture.Serving.ProjectionRevision != capture.ProjectionRevision) {
@@ -342,6 +350,12 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 			Condition{Key: releaseProjectionKey(captured.ServiceID), ModRevision: captured.ProjectionRevision},
 			Condition{Key: environmentComposeProjectionKey(evidence.EnvironmentID), ModRevision: applied.Revision},
 		)
+		if captured.Serving != nil {
+			conditions = append(conditions, Condition{
+				Key:         serviceruntimerecord.Key(captured.ServiceID),
+				ModRevision: captured.RuntimeRevision,
+			})
+		}
 		for _, value := range [][]byte{captured.CurrentArtifact, captured.RetainedPriorArtifact} {
 			if len(value) == 0 {
 				continue
@@ -416,11 +430,14 @@ func validateBlueprintNativePredecessors(
 			return corruptReleaseRecord()
 		}
 		if captured.Serving == nil {
-			if len(captured.CurrentArtifact) != 0 || len(captured.RetainedPriorArtifact) != 0 {
+			if captured.RuntimeRevision != 0 || len(captured.CurrentArtifact) != 0 ||
+				len(captured.RetainedPriorArtifact) != 0 {
 				return corruptReleaseRecord()
 			}
 		} else if ids.Validate(ids.KindDeployment, captured.Serving.ServingReleaseID) != nil ||
-			captured.ProjectionRevision <= 0 || captured.Serving.Target.Validate() != nil || len(captured.CurrentArtifact) == 0 ||
+			captured.ProjectionRevision <= 0 || captured.RuntimeRevision <= 0 ||
+			captured.RuntimeRevision > captured.FixedReadRevision || captured.Serving.Target.Validate() != nil ||
+			len(captured.CurrentArtifact) == 0 ||
 			(captured.Serving.RetainedPriorReleaseID != "") != (len(captured.RetainedPriorArtifact) != 0) ||
 			captured.Serving.RetainedPriorReleaseID != "" && ids.Validate(ids.KindDeployment, captured.Serving.RetainedPriorReleaseID) != nil ||
 			executionplan.ValidateNativePredecessorWitness(environmentID, captured.ServiceID, captured.CurrentArtifact, captured.RetainedPriorArtifact) != nil {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -127,6 +128,12 @@ func (fixture *ExecutedArtifactFixture) AssertBlueprintNativePublicationSourceFe
 		if err != nil || read.Entry == nil || !slices.Contains(publication.conditions,
 			Condition{Key: key, ModRevision: read.Entry.ModRevision}) {
 			t.Fatalf("staged native bytes lack exact final-publication CAS: %v", err)
+		}
+		runtimeKey := serviceruntimerecord.Key(member.ServiceID)
+		runtimeRead, err := fixture.store.Get(ctx, runtimeKey)
+		if err != nil || runtimeRead.Entry == nil || !slices.Contains(publication.conditions,
+			Condition{Key: runtimeKey, ModRevision: runtimeRead.Entry.ModRevision}) {
+			t.Fatal("acknowledged native runtime lacks exact final-publication CAS")
 		}
 	}
 }

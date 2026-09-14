@@ -190,6 +190,21 @@ The initial test-only formatting error is preserved in
 `.tmp/recovery-file-verification-first.log`; its corrected check passes separately.
 No real Docker helper, deployment or recovery execution ran. H5 remains failed.
 
+H20 is local SVC-15/JOURNEY-02 acknowledged-runtime reader proof. The shared
+reader and ordinary/Blueprint producers preserve exact receipt YAML, bindings,
+proxy metadata and retained-slot bytes, reject unavailable/foreign/mismatched
+receipts, and never call the historical runtime renderer. The real two-pass
+Blueprint store journey exercises receipt publication, next-publication source
+comparisons, marker replay and Agent claim. Its second publication uses 40
+comparisons/19 mutations; claim uses 18/7. A separate modeled maximum request
+adds all 32 receipt comparisons and remains within unchanged limits at 225
+comparisons/176 mutations; this is a request-budget check, not 32 live workloads.
+Race evidence is `.tmp/acknowledged-readers-integrated-race.log` and
+`.tmp/acknowledged-reader-producers-race.log`; vet and pinned Staticcheck pass in
+`.tmp/acknowledged-readers-and-writers-{vet,staticcheck}.log`.
+The complete ordinary Attach/Entry-to-failed-Deploy journey, file restoration and
+live qualification remain unrun. H5 is not closed.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing
