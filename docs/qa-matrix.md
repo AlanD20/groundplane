@@ -681,7 +681,14 @@ The scoped proxy regressions also exercise REL-02 after a blue-green switch and
 after compensation: restart must load the exact selected configuration, not the
 initial target. SVC-06 includes an existing stopped proxy and an already-running
 proxy: Deploy starts the former without replacing the latter or its connections.
-Live and restart configuration must both match before switch/recovery success.
+The shipped-tooling regression must execute the generated startup commands and
+compare proxy identity/start time; an argument-only assertion missed unsupported
+`start --wait`. Live and restart configuration must both match before
+switch/recovery success. The first live stopped-proxy attempt remains failed;
+its recovery identity rejection blocks the corrected live rerun and host boot.
+
+| Case | Journey | Independent expected outcome | Qualification |
+| --- | --- | --- | --- |
 | REL-03 | Interrupt an actually running Task by Agent/process/channel loss at an identified effect boundary. | Exact operation resumes/terminates safely; unknown effects are fenced; no duplicate Script, data mutation or detached claim. | PARTIAL H48: Controller and Agent loss after runner start pass; other boundaries separate |
 | REL-04 | Run the approved 30-minute mixed workload at 5 authenticated HTTP requests/second, with held WebSockets and background jobs. | Zero unexpected errors/disconnections; HTTP p95 below 1 second; correct job/results and preserved data. Record achieved rate and resource/restart measurements. | PASS H49: 9,000 requests, five unchanged WebSockets, 30 jobs, p95 0.194s |
 | REL-05 | Apply bounded CPU/memory/disk pressure separately on disposable QA. | Truthful unavailable/failure states, bounded recovery and no silent data corruption, leaked resources or unrelated cleanup. Record exact pressure and safety stop. | BLOCKED D5 |

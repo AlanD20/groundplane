@@ -112,7 +112,6 @@ func commandsFor(
 			start.Args = append(
 				append([]string(nil), prefix...),
 				"start",
-				"--wait",
 				releaseProxyName(artifact, apply.ServiceId),
 			)
 			return []runner.RunCmdOpts{validation, mutation, start}, nil

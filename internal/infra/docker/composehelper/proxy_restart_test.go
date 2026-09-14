@@ -80,7 +80,7 @@ func TestBlueGreenStartsExistingProxyWithoutRecreatingIt(t *testing.T) {
 		t.Fatalf("commands=%v error=%v", commands, err)
 	}
 	if !slices.Equal(commands[1].Args[len(commands[1].Args)-3:], []string{"up", "--detach", "api--green"}) ||
-		!slices.Equal(commands[2].Args[len(commands[2].Args)-3:], []string{"start", "--wait", "api"}) {
+		!slices.Equal(commands[2].Args[len(commands[2].Args)-2:], []string{"start", "api"}) {
 		t.Fatalf("candidate/proxy startup changed stable proxy: %v", commands)
 	}
 }

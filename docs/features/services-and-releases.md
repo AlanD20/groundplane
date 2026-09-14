@@ -356,7 +356,10 @@ sync and atomically rename them before reload, then verify both runtime-file and
 live configuration digests. Restart loads that selected file; recreation starts
 from its own sealed input, without inherited selection from a Volume. Candidate
 startup explicitly starts an existing stopped stable proxy without reconciling
-its new Compose definition or replacing a running proxy. REL-02, SVC-06/SVC-15
+its new Compose definition or replacing a running proxy. It uses the shipped
+Compose's supported `start` command; activation owns the bounded readiness check.
+The command regression executes the shipped tooling, rather than only comparing
+generated arguments. REL-02, SVC-06/SVC-15
 and OBS-05 cover these sequences; implementation proof is not live qualification.
 
 Existing Service list/show now expose the public observation through regenerated
