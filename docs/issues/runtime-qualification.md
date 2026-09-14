@@ -189,10 +189,22 @@ the 1,000-event Task journal limit. Controller rejects further progress at that
 limit; the Agent becomes degraded and Service observations become unavailable.
 Earlier profile, serving Release and Service health checks passed during the wait,
 but automatic recovery and a later healthy Deploy are unproved.
-The exact probe failure cause is not yet established. This is not permission to
-increase timeouts, weaken the probe, abort the Task or repair runtime files.
-Further diagnosis/repair requires owner decision. The historical incident below
-remains evidence, not the asserted cause of H36.
+H37 establishes the observation-scope cause: the Service's captured predecessor
+contains its one required Volume, but the shared project has five other Volumes.
+The observer reports those absent from the artifact as collisions; the Agent
+excluded unrelated networks but not unrelated Volumes. Compensation and subsequent
+probes therefore rejected matching restored workload identity. The local correction
+excludes only named Volumes outside the sealed artifact. Required and unidentified
+Volume conflicts still fail; full Agent race checks pass. Earlier fixtures tested
+healthy replicas without unrelated project Volumes, so missed this sequence.
+
+Journal exhaustion remains separately unresolved: each redispatch advances the
+execution epoch and generates new progress events until none can be accepted.
+The proposed saturation handling through the existing durable recovery record
+requires an owner decision because event persistence is an accepted contract.
+No timeout, cap, immutable history or restoration check has changed. The local
+Volume correction is not deployed. The historical incident below remains evidence,
+not the cause of H36.
 
 Owner: Services and Releases delivery owner. Severity: high. This is an active
 recovery blocker, not deferred qualification. The failed-candidate QA sequence on

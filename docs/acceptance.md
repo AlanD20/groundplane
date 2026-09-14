@@ -574,6 +574,32 @@ describe this later state. No event limit, runtime file or history was modified.
 that application pass from the stuck Task and degraded Agent. This does not prove
 uninterrupted traffic throughout the fault or successful automatic recovery.
 
+H37 diagnoses H36 and verifies its local Volume-scope correction on 2026-09-14.
+Private `recovery-agent-prelimit.log` preserves the forward health timeout followed
+by compensation and probe errors: `release restoration observation identity
+diverges`. `planning-probe-bzw7j1a4/diagnostic.log` captures the exact immutable
+predecessor; its supervised read-only tunnel closed successfully.
+`recovery-collision-runtime.json` shows the restored workload's matching labels
+and healthy state. `recovery-resource-collisions.jsonl` identifies five unrelated
+project Volumes absent from that artifact. The scoped verifier excluded unrelated
+networks but rejected every Volume collision. This explains the first recovery
+failure, independently of the later journal exhaustion.
+
+`TestReleaseRestorationWorkloadSetRequiresExactHealthyLineage` now covers unrelated,
+required and unidentified Volume collisions beside the exact healthy predecessor.
+Its new unrelated-Volume variant fails before correction in
+`.tmp/recovery-volume-scope-red.log`. The corrected shared lifecycle scope excludes
+only named Volumes absent from the sealed artifact; exact workload lineage and
+required/unknown resource guards remain. The recreate fixture now names its
+required Volume explicitly instead of assuming every project Volume is selected.
+Focused tests pass in `.tmp/recovery-volume-scope-green.log`; the full Agent race
+package passes in `.tmp/recovery-volume-scope-agent.log`. Vet, pinned Staticcheck,
+formatting and diff checks pass. Architecture retains the same 122 existing
+finding identities with none added; `.tmp/recovery-volume-scope-architecture.json`
+records that comparison without a baseline change. The repair is local, not deployed or a live SVC-15
+pass. No host mutation or history rewrite ran. Event-saturation handling remains
+an unresolved contract decision before deployment and continuation of the same Task.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

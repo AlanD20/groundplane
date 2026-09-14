@@ -156,8 +156,8 @@ func TestObservedRecreateSetRequiresExactSealedReplicas(t *testing.T) {
 }
 
 // Rationale: recreate acknowledgement observes one selected native service in
-// a shared Compose project. Unrelated named containers and networks are not
-// ownership evidence for that service, but selected, unnamed, and non-container
+// a shared Compose project (SVC-15). Unrelated named containers, networks and volumes
+// are not ownership evidence for that service, but selected, unnamed and unknown-kind
 // collisions must remain fail-closed.
 func TestObservedRecreateSetScopesLifecycleCollisions(t *testing.T) {
 	const serviceID = "svc_api"
@@ -169,6 +169,7 @@ func TestObservedRecreateSetScopesLifecycleCollisions(t *testing.T) {
 	artifact.Networks = []*agentpb.ComposeNetwork{{
 		ComposeName: "frontend", DockerName: "gp_net_frontend",
 	}}
+	artifact.Volumes = []*agentpb.ComposeVolume{{ComposeName: "data", DockerName: "shared-data"}}
 	valid := recreateTestProject(artifact, "candidate-release", 3)
 	tests := []struct {
 		name       string

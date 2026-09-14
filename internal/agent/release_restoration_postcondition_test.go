@@ -8,9 +8,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Rationale: helper evidence cannot prove restored runtime. The independent
+// Rationale: SVC-15 helper evidence cannot prove restored runtime. The independent
 // Compose observation must contain the complete sealed predecessor replica set
-// with exact lineage and health before recovery can close.
+// with exact lineage and health before recovery can close. Other Services' named
+// Volumes in the shared project must not block proof; required or unknown Volumes do.
 func TestReleaseRestorationWorkloadSetRequiresExactHealthyLineage(t *testing.T) {
 	const sealedImage = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	labels := []*agentpb.LabelPair{
@@ -19,6 +20,7 @@ func TestReleaseRestorationWorkloadSetRequiresExactHealthyLineage(t *testing.T) 
 	}
 	artifact := &agentpb.ComposeArtifact{
 		ArtifactId: "prior-artifact", ProjectName: "gp-release",
+		Volumes: []*agentpb.ComposeVolume{{ComposeName: "data", DockerName: "gp_data"}},
 		Services: []*agentpb.ComposeService{{
 			ServiceId: "api", ComposeName: "api", ExpectedReplicas: 2, HasHealthcheck: true,
 			ImageReference: sealedImage,
@@ -46,6 +48,21 @@ func TestReleaseRestorationWorkloadSetRequiresExactHealthyLineage(t *testing.T) 
 		wantOK bool
 	}{
 		{name: "complete healthy set", wantOK: true},
+		{name: "unrelated project volume", wantOK: true, mutate: func(value *agentpb.ObservedProject) {
+			value.Collisions = []*agentpb.ObservedCollision{{
+				Kind: agentpb.ObservedCollisionKind_OBSERVED_COLLISION_KIND_VOLUME, Name: "gp_other_data",
+			}}
+		}},
+		{name: "required volume collision", mutate: func(value *agentpb.ObservedProject) {
+			value.Collisions = []*agentpb.ObservedCollision{{
+				Kind: agentpb.ObservedCollisionKind_OBSERVED_COLLISION_KIND_VOLUME, Name: "gp_data",
+			}}
+		}},
+		{name: "unidentified volume collision", mutate: func(value *agentpb.ObservedProject) {
+			value.Collisions = []*agentpb.ObservedCollision{{
+				Kind: agentpb.ObservedCollisionKind_OBSERVED_COLLISION_KIND_VOLUME,
+			}}
+		}},
 		{name: "wrong actual image despite matching config", mutate: func(value *agentpb.ObservedProject) {
 			value.Containers[1].ImageId = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 		}},

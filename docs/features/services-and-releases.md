@@ -89,6 +89,12 @@ compensation. Foreign/ambiguous identity or failed observation remains failure.
 Compensation requires complete restoration evidence and an independent workload
 postcondition.
 
+Selected lifecycle and restoration checks observe a shared Compose project.
+Named Volumes and networks absent from the sealed artifact are outside that
+operation's resource scope; their presence cannot invalidate its workload proof.
+Collisions on required resources, unidentified resources and unknown collision
+kinds still fail closed. Original observation evidence remains unchanged.
+
 Independent observation opens a concrete read-only descriptor from the validated
 original plan, selected recovery step and canonical native witness. It retains exact
 historical labels and is accepted only by the Moby observer's restoration method,

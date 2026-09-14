@@ -51,8 +51,8 @@ func evaluateComposeConvergence(
 // Sealed lifecycle procedures reconcile selected services within a shared
 // Compose project. Unrelated containers can legitimately retain prior plan
 // labels. Only a named container outside the selected names and stable Service
-// ids is irrelevant here. Named networks outside the artifact are also outside
-// lifecycle authority; selected, unidentifiable, and volume collisions fail closed.
+// ids is irrelevant here. Named networks and volumes outside the artifact are
+// also outside lifecycle authority; selected and unidentifiable collisions fail closed.
 func evaluateLifecycleComposeConvergence(
 	artifact *agentpb.ComposeArtifact,
 	observed *agentpb.ObservedProject,
@@ -72,7 +72,7 @@ func evaluateLifecycleComposeConvergence(
 
 // scopeLifecycleComposeObservation keeps collision evidence that could affect
 // the selected sealed services while excluding unrelated named resources in
-// their shared Compose project. Unnamed, selected, and non-container evidence
+// their shared Compose project. Unnamed, selected, and unknown-kind evidence
 // remains fail-closed because it cannot be safely attributed elsewhere.
 func scopeLifecycleComposeObservation(
 	artifact *agentpb.ComposeArtifact,
@@ -98,9 +98,18 @@ func scopeLifecycleComposeObservation(
 		networkNames[network.GetDockerName()] = true
 		networkNames[network.GetComposeName()] = true
 	}
+	volumeNames := make(map[string]bool, len(artifact.GetVolumes())*2)
+	for _, volume := range artifact.GetVolumes() {
+		volumeNames[volume.GetDockerName()] = true
+		volumeNames[volume.GetComposeName()] = true
+	}
 	scoped := proto.CloneOf(observed)
 	scoped.Collisions = nil
 	for _, collision := range observed.GetCollisions() {
+		if collision.GetKind() == agentpb.ObservedCollisionKind_OBSERVED_COLLISION_KIND_VOLUME &&
+			collision.GetName() != "" && !volumeNames[collision.GetName()] {
+			continue
+		}
 		if collision.GetKind() == agentpb.ObservedCollisionKind_OBSERVED_COLLISION_KIND_NETWORK &&
 			collision.GetName() != "" && !networkNames[collision.GetName()] {
 			continue
