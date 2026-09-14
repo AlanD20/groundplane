@@ -888,6 +888,29 @@ H43–H49 remain evidence for the destroyed installation only. Replacement setup
 uses `.tmp/qa-owner-reset-20260914-hK6Yqeii/`, never old accepted Task receipts.
 Further reset/reboot needs an owner decision; no VM-manager repair is selected.
 
+H51 records the owner's replacement QA installation from signed `2676fbae6`,
+with unchanged H43 production repair, as `0.0.0-qa.owner20260914.1`. Strict SSH
+verification succeeds against the retained trusted identity; preflight found an
+uninstalled host with about 17.5 GB available. Normal prerequisite setup and fresh
+installation complete. Agent enrollment Task `task_01M2G9KK5K31GQYG0WD74N36F2`
+completes; release is `sha256:8b40637feb476439f5446202409dedd475619019af5835ea98727729ccdc25ff`
+and Agent is `sha256:621f7f1f793d1315d00a4e00702b3fc313fb575c99b4cb7062c915ed0dba38e9`.
+The Host API/CLI journey passes with owned tunnel cleanup in
+`.tmp/qa-owner-reset-20260914-hK6Yqeii/host-health-20260914T154737Z.GpvuV8/`.
+
+Both unchanged application images transfer and publish at the exact previously
+qualified registry digests. The private transfer check initially compared a
+classic Docker config ID with the replacement's containerd manifest ID. Retained
+diagnostics prove identical configuration and layers and the expected manifest.
+The corrected private probe verifies that manifest and the configuration/layers,
+then verifies the published RepoDigest; it resumes publication without another
+transfer. No GP or application code changes. `deploy.log`, `publish-images.log`,
+`image-transport-comparison.json` and `publish-images-resumed.log` retain evidence
+in the same directory. Fresh application setup is active; this record does not
+yet qualify its functional behavior, recovery, upgrades or pressure on the
+replacement. The earlier installation's H43–H49 results are not silently rerun
+or represented as current observations.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing
