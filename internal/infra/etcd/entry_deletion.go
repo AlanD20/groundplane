@@ -15,7 +15,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	entry Versioned[EntryRecord],
 	projection *Versioned[EnvironmentComposeProjection],
 	tombstone DeletionTombstoneRecord, intent EntryRemovalIntent, task TaskRecord, marker IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
+) (_ IdempotencyTransactionResult, publicationErr error) {
 	if err := validateEntryHierarchy(ctx, environment, project, entry.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -80,11 +80,6 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(intentValue)
-	taskValue, err := encodeTaskRecord(task)
-	if err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	defer clear(taskValue)
 	reference, err := encodeTaskReference(task.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -120,6 +115,20 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	configuration, err := prepareConfigurationTaskPublication(
+		ctx, repository.store, task, fence.readAtRevision(),
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	task = configuration.task
+	defer configuration.clear()
+	defer func() { publicationErr = configuration.finish(ctx, repository.store, publicationErr) }()
+	taskValue, err := encodeTaskRecord(task)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clear(taskValue)
 	epochMutation, err := fence.epochRewriteMutation()
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -180,23 +189,22 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	plan, err := newTaskIdempotencyMutationPlan(
-		task,
-		initiation,
-		conditions,
-		mutations,
-		classifyEntryScriptAbsenceConflict(
-			[]string{entry.Record.Entry.ID},
-			baseCount,
-			classifyEntryDeletionStartConflict(
-				entry,
-				projection,
-				ownerRevision,
-				task.OperationID,
-				fence,
-			),
+	classify := classifyEntryScriptAbsenceConflict(
+		[]string{entry.Record.Entry.ID},
+		baseCount,
+		classifyEntryDeletionStartConflict(
+			entry,
+			projection,
+			ownerRevision,
+			task.OperationID,
+			fence,
 		),
 	)
+	conditions, mutations, classify, err = configuration.bind(conditions, mutations, classify)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	plan, err := newTaskIdempotencyMutationPlan(task, initiation, conditions, mutations, classify)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

@@ -175,6 +175,10 @@ func TestEntryRemovalPromotesAppliedProjectionAfterAgentSuccess(t *testing.T) {
 	repository, store, environment, project, current, generationIDs := entryDeletionTestState(t)
 	projection := entryDeletionTestProjection(t, store, current)
 	task, marker, tombstone, intent := entryDeletionTestRecords(t, project, environment, current, &projection)
+	attachRemovalConfiguration(&task, environment.Record.ID)
+	projection.ReadRevision = seedTestRuntimeConfigurationHead(
+		t, store, environment.Record.ID, projection.Record.RenderGeneration,
+	)
 	result, err := repository.BeginEntryDeletionWithTask(
 		ctx, environment, project, current, &projection, tombstone, intent, task, marker,
 	)
@@ -211,6 +215,8 @@ func TestEntryRemovalPromotesAppliedProjectionAfterAgentSuccess(t *testing.T) {
 	if err != nil || terminal.Record.Status != TaskStatusCompleted {
 		t.Fatalf("AcknowledgeTask() = %#v/%v", terminal, err)
 	}
+	published := assertPublishedTaskConfiguration(t, store, task.ID)
+	assertRuntimeConfigurationHead(t, store, published, true)
 	if epoch := mustEnvironmentMutationEpochRevision(t, store, environment.Record.ID); epoch != terminal.Revision {
 		t.Fatalf("completed applied Entry deletion epoch = %d, want %d", epoch, terminal.Revision)
 	}
@@ -238,6 +244,47 @@ func TestEntryRemovalPromotesAppliedProjectionAfterAgentSuccess(t *testing.T) {
 			t.Fatalf("finalized key %s = %#v/%v", key, stored, getErr)
 		}
 	}
+}
+
+// Rationale: SVC-15/SEC-07 failure releases Entry-removal coordination but
+// cannot promote the staged candidate over the last acknowledged files.
+func TestEntryRemovalFailureDoesNotPromoteConfiguration(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	repository, store, environment, project, current, generationIDs := entryDeletionTestState(t)
+	projection := entryDeletionTestProjection(t, store, current)
+	task, marker, tombstone, intent := entryDeletionTestRecords(t, project, environment, current, &projection)
+	attachRemovalConfiguration(&task, environment.Record.ID)
+	projection.ReadRevision = seedTestRuntimeConfigurationHead(
+		t, store, environment.Record.ID, projection.Record.RenderGeneration,
+	)
+	result, err := repository.BeginEntryDeletionWithTask(
+		ctx, environment, project, current, &projection, tombstone, intent, task, marker,
+	)
+	if err != nil {
+		t.Fatalf("BeginEntryDeletionWithTask() error = %v", err)
+	}
+	assertAppliedResult(t, result)
+	published := assertPublishedTaskConfiguration(t, store, task.ID)
+	assertRuntimeConfigurationHead(t, store, published, false)
+	tasks, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agentID := ids.NewAt(ids.KindAgent, task.CreatedAt, 9350)
+	if _, found, err := tasks.ClaimNextTask(ctx, agentID, 1, task.CreatedAt.Add(time.Second)); err != nil || !found {
+		t.Fatalf("ClaimNextTask() found/error = %v/%v", found, err)
+	}
+	terminal, err := tasks.AcknowledgeTask(
+		ctx, agentID, 1, task.ID, taskAssignmentIDForTest(t, tasks, task.ID), TaskStatusFailed,
+		TaskResultRecord{Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticComposeFailed, ExitCode: 1},
+		task.CreatedAt.Add(2*time.Second),
+	)
+	if err != nil || terminal.Record.Status != TaskStatusFailed {
+		t.Fatalf("AcknowledgeTask(failed) = %#v/%v", terminal, err)
+	}
+	assertRuntimeConfigurationHead(t, store, published, false)
+	assertEntryRemovalRetained(t, repository, store, current, generationIDs)
 }
 
 // Rationale: an enabled Cloudflare Tunnel token is a live stable-id reference,

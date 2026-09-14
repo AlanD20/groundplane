@@ -202,9 +202,13 @@ record's retained bytes, not output from a later renderer. Secret-derived output
 are rejected at this store's boundary; their sources stay in the Secret/Entry
 stores. Missing or corrupt content fails closed. H17 records the local proof.
 
-These writers are not an enabled recovery source. Other file writers, Secret
-source lifetime and recovery execution still need the same authority. The current
-configuration snapshots retain source metadata, not resolved Secrets.
+Explicit Route create/edit/removal and applied Entry removal now bind the same
+configuration and Secret-pin authorities at publication's fixed revision. Their
+existing generic acknowledgement owns success; desired-only removal does not
+invent a runtime update. H21 records local publication and Entry completion proof.
+These writers are not yet an enabled recovery source. Recovery execution still
+needs the same authority. The current configuration snapshots retain source
+metadata, not resolved Secrets.
 Readers must not use a partially maintained record, backfill it from old Release
 input, or infer a missing acknowledgement. Consumer cutover and any clean QA
 rebuild follow only after those writers and source-retention checks are closed.

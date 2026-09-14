@@ -20,7 +20,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	intent RouteRemovalIntent,
 	task TaskRecord,
 	marker IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
+) (_ IdempotencyTransactionResult, publicationErr error) {
 	if err := validateRouteHierarchy(ctx, environment, project, target, route.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -92,6 +92,15 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	if err := validateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	configuration, err := prepareConfigurationTaskPublication(
+		ctx, repository.store, task, projection.ReadRevision,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	task = configuration.task
+	defer configuration.clear()
+	defer func() { publicationErr = configuration.finish(ctx, repository.store, publicationErr) }()
 	tombstoneValue, err := encodeDeletionTombstone(tombstone)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -159,10 +168,11 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	baseConditions := append([]Condition(nil), conditions...)
 	classify := func(revision int64, values []*KeyValue) error {
-		if len(values) == len(conditions) {
+		if len(values) == len(baseConditions) {
 			activeKey := componentTaskActiveEnvironmentKey(environment.Record.ID)
-			for index, condition := range conditions {
+			for index, condition := range baseConditions {
 				if condition.Key == activeKey && !conditionMatchesRead(condition, values[index]) {
 					return errs.New(
 						errs.KindResourceInUse,
@@ -171,7 +181,11 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 				}
 			}
 		}
-		return classifyRouteHeadConflict(conditions)(revision, values)
+		return classifyRouteHeadConflict(baseConditions)(revision, values)
+	}
+	conditions, mutations, classify, err = configuration.bind(conditions, mutations, classify)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
 	}
 	plan, err := newTaskIdempotencyMutationPlan(
 		task,

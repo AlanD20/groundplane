@@ -177,8 +177,12 @@ func taskMaterializationEnvironment(record TaskRecord) (string, bool, error) {
 	volumeMutation := record.Params[TaskResourceKindParam] == TaskResourceVolume &&
 		validateStableID(ids.KindVolume, record.Target) == nil &&
 		(record.Type == TaskCreate || record.Type == TaskUpdate || record.Type == TaskRemove)
+	routeMutation := record.Params[TaskResourceKindParam] == TaskResourceRoute &&
+		validateStableID(ids.KindRoute, record.Target) == nil &&
+		(record.Type == TaskCreate || record.Type == TaskUpdate) &&
+		record.Params[TaskRouteEnvironmentParam] == environmentID && record.Owner.EnvironmentID == environmentID
 	if record.Executor != TaskExecutorAgent || validateStableID(ids.KindEnvironment, environmentID) != nil ||
-		(record.Target != environmentID && !resourceRemoval && !volumeMutation) {
+		(record.Target != environmentID && !resourceRemoval && !volumeMutation && !routeMutation) {
 		return "", false, errs.New(errs.KindValidationFailed, "task materialization Environment is invalid")
 	}
 	return environmentID, true, nil

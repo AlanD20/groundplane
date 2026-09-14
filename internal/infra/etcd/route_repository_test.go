@@ -166,6 +166,8 @@ func routeRepositoryTestHierarchy(
 		t.Fatalf("encodeTaskReference() error = %v", err)
 	}
 	defer clear(headValue)
+	configurationValue := stageTestRuntimeConfiguration(t, store, environment.Record.ID, projection.RenderGeneration)
+	defer clear(configurationValue)
 	runtimeValue, err := encodeServiceRuntimeRecord(newServiceRuntimeRecord(targetRecord))
 	if err != nil {
 		t.Fatalf("encodeServiceRuntimeRecord() error = %v", err)
@@ -174,9 +176,11 @@ func routeRepositoryTestHierarchy(
 	seed, err := store.Transact(context.Background(), []Condition{
 		{Key: environmentBlueprintHeadKey(environment.Record.ID)},
 		{Key: serviceRuntimeKey(targetID)},
+		{Key: runtimeConfigurationHeadKey(environment.Record.ID)},
 	}, []Mutation{
 		{Type: MutationPut, Key: environmentBlueprintHeadKey(environment.Record.ID), Value: headValue},
 		{Type: MutationPut, Key: serviceRuntimeKey(targetID), Value: runtimeValue},
+		{Type: MutationPut, Key: runtimeConfigurationHeadKey(environment.Record.ID), Value: configurationValue},
 	})
 	if err != nil || !seed.Succeeded {
 		t.Fatalf("seed desired Service projection = %#v, %v", seed, err)

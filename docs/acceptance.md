@@ -205,6 +205,18 @@ Race evidence is `.tmp/acknowledged-readers-integrated-race.log` and
 The complete ordinary Attach/Entry-to-failed-Deploy journey, file restoration and
 live qualification remain unrun. H5 is not closed.
 
+H21 is local SVC-15/JOURNEY-02 source-writer support. Route creation/removal and
+applied Entry removal publish configuration references and Secret-pin ownership
+with their Tasks. Entry completion advances its acknowledged configuration head;
+never-applied removal remains Controller-only. Conflicting Environment owners,
+invalid Route targets and conflicting shared desired-head revisions are rejected.
+Two same-Environment completion effects and an identical Route/Service head
+comparison are accepted without weakening ownership. The focused race check
+passes in `.tmp/configuration-writers-primary-shared-head.log`; vet and pinned
+Staticcheck pass in `.tmp/configuration-writers-final-{vet,staticcheck}.log`.
+Earlier failure logs are preserved. Route Agent execution, recovery and deployment
+remain unqualified; these checks do not close H5.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

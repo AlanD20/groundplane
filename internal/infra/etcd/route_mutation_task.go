@@ -22,7 +22,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 	intent RouteMutationIntent,
 	task TaskRecord,
 	directMarker IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
+) (_ IdempotencyTransactionResult, publicationErr error) {
 	if err := validateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -101,7 +101,6 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 	conditions := []Condition{
 		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
-		serviceDesiredCondition(target),
 		{Key: deletionTombstoneKey("route", record.Desired.ID)},
 		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
 		{Key: deletionTombstoneKey("project", project.Record.ID)},
@@ -122,6 +121,15 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 	if task.IdempotencyKey == "" {
 		task.IdempotencyKey = directMarker.Locator.Key
 	}
+	configuration, err := prepareConfigurationTaskPublication(
+		ctx, repository.store, task, publicationRevision,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	task = configuration.task
+	defer configuration.clear()
+	defer func() { publicationErr = configuration.finish(ctx, repository.store, publicationErr) }()
 
 	taskValue, err := encodeTaskRecord(task)
 	if err != nil {
@@ -154,6 +162,10 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 		Mutation{Type: MutationPut, Key: routeMutationIntentKey(task.ID), Value: intentValue},
 	)
 	conditions = append(conditions, publication.conditions...)
+	conditions, err = routeHeadTargetConditions(conditions, serviceDesiredCondition(target))
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	mutations = append(mutations, publication.mutations...)
 	mutations = append(mutations, Mutation{
 		Type: MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
@@ -167,22 +179,42 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	baseConditions := append([]Condition(nil), conditions...)
 	classify := func(_ int64, values []*KeyValue) error {
-		if len(values) != len(conditions) {
+		if len(values) != len(baseConditions) {
 			return errs.New(errs.KindInternal, "Route mutation compare evidence is incomplete")
 		}
-		for index, condition := range conditions {
+		for index, condition := range baseConditions {
 			if !conditionMatchesRead(condition, values[index]) {
 				return errs.New(errs.KindStateConflict, "Route mutation desired head changed")
 			}
 		}
 		return errs.New(errs.KindStateConflict, "Route mutation state changed")
 	}
+	conditions, mutations, classify, err = configuration.bind(conditions, mutations, classify)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	plan, err := newTaskIdempotencyMutationPlan(task, initiation, conditions, mutations, classify)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	return applyRouteMutationTaskMarkers(ctx, repository.store, plan, taskMarker, directMarker)
+}
+
+// A Blueprint-owned target Service and its Route may share the same desired
+// head. One exact comparison fences both; different revisions are a conflict.
+func routeHeadTargetConditions(conditions []Condition, target Condition) ([]Condition, error) {
+	for _, condition := range conditions {
+		if condition.Key != target.Key {
+			continue
+		}
+		if condition != target {
+			return nil, errs.New(errs.KindStateConflict, "Route target desired head changed")
+		}
+		return conditions, nil
+	}
+	return append(conditions, target), nil
 }
 
 func validateRouteTaskAcceptanceMarker(marker IdempotencyMarker, environmentID string) error {
