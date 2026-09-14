@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
+	"github.com/AlanD20/groundplane/internal/common/backingendpoint"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -13,6 +14,7 @@ import (
 
 func backingComposeProject(
 	spec adapters.CreationSpec,
+	serviceID string,
 	image string,
 	zone core.Zone,
 	volume core.Volume,
@@ -24,7 +26,9 @@ func backingComposeProject(
 		Services: composetypes.Services{spec.ServiceName: {
 			Name: spec.ServiceName, Image: image, Command: composetypes.ShellCommand(backingComposeShell(spec.Command)),
 			Expose: composetypes.StringOrNumberList(spec.Expose), Restart: "unless-stopped",
-			Networks: map[string]*composetypes.ServiceNetworkConfig{zone.Name: {}},
+			Networks: map[string]*composetypes.ServiceNetworkConfig{
+				zone.Name: {Aliases: []string{backingendpoint.New(serviceID)}},
+			},
 			Volumes: []composetypes.ServiceVolumeConfig{
 				{Type: "volume", Source: volume.Key, Target: spec.MountPath},
 			},

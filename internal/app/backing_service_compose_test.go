@@ -40,7 +40,7 @@ func TestBackingServiceComposePreservesRuntimeShell(t *testing.T) {
 			}
 			zone := core.Zone{ID: "net_" + suffix, Name: "data", Subnet: "10.92.1.0/24"}
 			volume := core.Volume{ID: "vol_" + suffix, Key: spec.VolumeKey, Slug: spec.VolumeSlug}
-			project := backingComposeProject(spec, "valkey:9", zone, volume, environment)
+			project := backingComposeProject(spec, "svc_"+suffix, "valkey:9", zone, volume, environment)
 			artifact, err := controller.RenderCompose(controller.ComposeRenderInput{
 				Project: project, ProjectOwnerKind: controller.ComposeProjectOwnerBacking,
 				ProjectID: "prj_" + suffix, EnvironmentID: environment.ID,
@@ -77,5 +77,49 @@ func TestBackingServiceComposePreservesRuntimeShell(t *testing.T) {
 				t.Error("Compose changed the runtime health command")
 			}
 		})
+	}
+}
+
+// QA: ATT-12; local rendered-alias regression, not live Docker DNS or authentication proof.
+// Rationale: two backing networks can each contain an adapter service named valkey, so consumers need a stable
+// backing-Service-specific DNS alias instead of the ambiguous Compose service name.
+func TestBackingServiceComposePublishesStableEndpointAlias(t *testing.T) {
+	registerAdapters()
+	const suffix = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	spec, err := adapters.BackingCreationSpec("valkey:9", core.BackingAuthenticationNone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment := etcd.EnvironmentRecord{
+		ID:        "env_" + suffix,
+		VolumeDir: "/var/lib/groundplane/vol/backing/prj_" + suffix + "/env_" + suffix,
+	}
+	zone := core.Zone{ID: "net_" + suffix, Name: "data", Subnet: "10.92.1.0/24"}
+	volume := core.Volume{ID: "vol_" + suffix, Key: spec.VolumeKey, Slug: spec.VolumeSlug}
+	project := backingComposeProject(spec, "svc_"+suffix, "valkey:9", zone, volume, environment)
+	artifact, err := controller.RenderCompose(controller.ComposeRenderInput{
+		Project: project, ProjectOwnerKind: controller.ComposeProjectOwnerBacking,
+		ProjectID: "prj_" + suffix, EnvironmentID: environment.ID,
+		ArtifactID: "cfg_" + suffix, PlanID: "plan_" + suffix,
+		RenderGeneration: 1, AuthorizedVolumeDir: environment.VolumeDir,
+		Identities: controller.ComposeIdentitySnapshot{
+			Services: []controller.ComposeResourceIdentity{{ID: "svc_" + suffix, Name: spec.ServiceName}},
+			Networks: []controller.ComposeResourceIdentity{{ID: zone.ID, Name: zone.Name}},
+			Volumes:  []controller.ComposeResourceIdentity{{ID: volume.ID, Name: volume.Key}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := loader.LoadWithContext(context.Background(), composetypes.ConfigDetails{
+		WorkingDir:  environment.VolumeDir,
+		ConfigFiles: []composetypes.ConfigFile{{Filename: "compose.yaml", Content: artifact.CanonicalYaml}},
+	}, func(options *loader.Options) { options.SkipResolveEnvironment = true })
+	if err != nil {
+		t.Fatal(err)
+	}
+	aliases := parsed.Services[spec.ServiceName].Networks[zone.Name].Aliases
+	if !reflect.DeepEqual(aliases, []string{"gp-svc-01arz3ndektsv4rrffq69g5fav"}) {
+		t.Fatalf("backing endpoint aliases = %#v", aliases)
 	}
 }

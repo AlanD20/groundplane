@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
+	"github.com/AlanD20/groundplane/internal/common/backingendpoint"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
@@ -256,7 +257,7 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 				AttachID: grantID,
 				Params: adapters.FactParams{
 					Authentication: item.authentication,
-					Host:           item.backingService.Record.Desired.Name, Port: item.adapter.Port(),
+					Host:           backingendpoint.New(item.backingService.Record.Desired.ID), Port: item.adapter.Port(),
 					Database: database, Role: identity.Role, Password: identity.Password,
 				},
 			})
@@ -268,7 +269,7 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 		if identity != nil {
 			own = adapters.FactParams{
 				Authentication: item.authentication,
-				Host:           item.backingService.Record.Desired.Name, Port: item.adapter.Port(),
+				Host:           backingendpoint.New(item.backingService.Record.Desired.ID), Port: item.adapter.Port(),
 				Database: identity.Database, Role: identity.Role, Password: identity.Password,
 			}
 		}

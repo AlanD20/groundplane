@@ -262,7 +262,7 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 		Components: nil, Volumes: map[string]core.Volume{volume.Key: volume},
 		Entries: entryDesired, CreatedAt: environment.CreatedAt,
 	}
-	baseProject := backingComposeProject(spec, adapter.DefaultImage(), zone.Desired, volume, environment)
+	baseProject := backingComposeProject(spec, serviceID, adapter.DefaultImage(), zone.Desired, volume, environment)
 	componentProjection, err := controller.ProjectEnvironmentComponents(
 		baseProject,
 		environmentProjection,

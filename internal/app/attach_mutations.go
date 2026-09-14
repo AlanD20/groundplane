@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
+	"github.com/AlanD20/groundplane/internal/common/backingendpoint"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
@@ -829,8 +830,7 @@ func (service *attachMutationService) listAllAttaches(
 }
 
 func (service *attachMutationService) prepareAttachFacts(
-	ctx context.Context,
-	attachID string,
+	ctx context.Context, attachID string,
 	consumer etcd.Versioned[etcd.ServiceRecord],
 	scope etcd.AttachCreateScope,
 	adapter adapters.Adapter,
@@ -862,7 +862,7 @@ func (service *attachMutationService) prepareAttachFacts(
 	defer clear(password)
 	own := adapters.FactParams{
 		Authentication: authentication,
-		Host:           scope.BackingService.Record.Desired.Name, Port: adapter.Port(),
+		Host:           backingendpoint.New(scope.BackingService.Record.Desired.ID), Port: adapter.Port(),
 		Database: identityName, Role: role, Password: password,
 	}
 	grantFacts := make([]AttachGrantFactParams, 0, len(scope.Grants))
@@ -889,7 +889,7 @@ func (service *attachMutationService) prepareAttachFacts(
 			AttachID: grant.Record.ID,
 			Params: adapters.FactParams{
 				Authentication: authentication,
-				Host:           scope.BackingService.Record.Desired.Name, Port: adapter.Port(),
+				Host:           backingendpoint.New(scope.BackingService.Record.Desired.ID), Port: adapter.Port(),
 				Database: database, Role: role, Password: password,
 			},
 		})
