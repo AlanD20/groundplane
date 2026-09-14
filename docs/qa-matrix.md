@@ -203,7 +203,7 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 | TASK-03 | Abort pending, Agent-running and Controller-running work; repeat Abort. | Exact target terminates according to its effect contract; no extra Task; already-aborted replay returns the same result. | PARTIAL H6 |
 | TASK-04 | Race Abort with natural completion; Abort terminal work or an offline/stale Agent assignment. | Correct conflict or safe delivery failure; no false undone effect or released ownership; eventual timeout remains bounded. | PARTIAL H6 |
 | TASK-05 | Retry an eligible failed Task; try unsafe, superseded and unsupported retries separately. | Allowed attempt preserves original operation inputs/owner; forbidden retry cannot restart effects or silently rebase desired state. | PARTIAL H6 |
-| TASK-06 | Disconnect/resume event stream at boundaries, during compaction and terminal drain. | Immutable sequences have no loss or duplicate effects; terminal state is consistent; context cancellation releases subscriptions. | BLOCKED D6 |
+| TASK-06 | Disconnect/resume event stream at boundaries, during compaction and terminal drain. | Immutable sequences have no loss or duplicate effects; terminal state is consistent; context cancellation releases subscriptions. | U; D6 repaired locally |
 | TASK-07 | Exceed event count/size limits or submit output/secret-bearing diagnostics. | Bounded typed events and safe errors; no secret/subprocess output in history and no unbounded growth. | U |
 | TASK-08 | Restart during 90-day terminal retention cleanup with shared retry inputs. | Only eligible history removed; live Tasks, required runtime receipts and shared inputs remain; cleanup resumes without orphaning records. | U |
 | TASK-09 | Deliver a valid report that conflicts during durable publication. | Assignment is quarantined for that session without an Agent crash loop, false success or lost claim; unrelated work obeys both capacity limits. | U |
@@ -440,7 +440,7 @@ application interruption. A machine reboot is not an interruption-free GP update
 | D3 | The restart verifier expects unchanged Agent start time, but normal Controller shutdown stops owned Agent/etcd containers. | Resolve the requirement/verifier disagreement with the user. Neither relax the assertion nor change lifecycle behavior automatically. |
 | D4 | Failed application-rollout recovery after runtime configuration changes remains unresolved. | Do not resume dependent interrupted-Task/reboot faults until baseline and required recovery are qualified and current permission allows them. |
 | D5 | Production load, duration, latency, acceptable recovery time and pressure safety bounds are not yet agreed for a full reliability run. | Obtain these inputs before calling load/soak/recovery qualification complete. Existing 600-second evidence is bounded, not a production capacity guarantee. |
-| D6 | Local Task-stream compaction recovery fails when a closed event channel wins selection over the queued compaction error. | Owner decision required for the scoped watch-completion repair. Preserve the failing test and evidence below; require recovery without lost/duplicate events, correct terminal drain and joined watches before closing the local failure. Live SSE/etcd qualification remains separate. |
+| D6 | The Task stream discarded queued compaction errors when a closed event channel won selection. | Owner-approved repair passes the local regressions below. Both watches now consume terminal errors after event-channel closure. The local failure is closed; real etcd/SSE and full TASK-06 qualification remain unverified. Nothing was deployed. |
 
 The MVP assumes a trusted operator organization and explicitly does not promise
 strict peer isolation on shared backing bridges, multi-host HA, database migration
@@ -917,8 +917,8 @@ each linked to TASK-06: suffix replay and terminal closure, resume validation
 before opening watches, sequence-based compaction recovery, gap refusal and
 subscription cleanup on blocked-consumer cancellation. Their in-memory store
 does not qualify real etcd compaction, HTTP SSE or Controller/Agent execution.
-The first focused race run passes all five in
-`.tmp/qa-test-review-durable-task-stream.log`, but subsequent failure invalidates
+The first focused race run passed all five in
+`.tmp/qa-test-review-durable-task-stream.log`, but subsequent failure invalidated
 the compaction pass. Seven of 20 runs fail in
 `.tmp/qa-test-review-durable-task-stream-compaction-repeat.log`. A final bounded
 run with an early-return assertion fails on its first iteration in
@@ -926,19 +926,48 @@ run with an early-return assertion fails on its first iteration in
 `internal: task event watch closed unexpectedly`.
 
 The memory store injects the compaction error and closes both watch channels;
-the production adapter uses the same error-then-close sequence. The Task stream
-can select the closed event channel instead of the queued compaction error,
-returning before the required resnapshot. This reproduces a local stream failure,
-not a live etcd incident or application outage. The test edits remain uncommitted
-pending the owner's repair decision (D6). No product fix is authorized or applied.
+the production adapter uses the same error-then-close sequence. The old Task stream
+could select the closed event channel instead of the queued compaction error,
+returning before the required resnapshot. This reproduced a local stream failure,
+not a live etcd incident or application outage. The owner approved the scoped
+repair (D6), with no deployment or broader refactor.
 
 Stronger retained assertions require exact watch selectors and snapshot-successor
 revisions, no extra events after closure, zero watch starts for an invalid resume,
 preserved terminal replay records and released subscriptions after gap/cancellation.
 The blocked consumer is now actually delivering an event before cancellation.
-Compaction and final-drain delivery order are still scheduler-selected in these
-fixtures; they do not independently prove every notification ordering. The current
-failing test must not be weakened or converted into an expected-success disconnect.
+Final-drain delivery order remains scheduler-selected in these fixtures; they do
+not independently prove every notification ordering. No failure assertion was
+weakened or converted into an expected-success disconnect.
+
+Approved repair proof: `TestTaskEventStreamRecoversClosedWatchBeforeFollow` closes
+each watch before following begins, then commits a new event. It requires both
+watches to reopen, sequences 2 and 3 exactly once, terminal closure and no retained
+subscriptions. Its pre-fix failure is `.tmp/task-stream-completion-red.log` and
+its passing post-fix run is `.tmp/task-stream-completion-green.log`. Completion
+is arranged before following, rather than racing the producer against the reader;
+Go may still select either ready channel, and neither order may cause failure.
+The existing live-compaction regression remains.
+
+`TestTaskEventStreamClosedWatchPreservesFailureAndCancellation` exercises storage
+failure, closure without an error and caller cancellation on both watches. It
+requires the correct error, no invented progress, no watch restart and no retained
+subscription. Together these are seven final Task-stream tests: five reviewed and
+two added for the approved repair, all with reasons and local proof limits.
+
+The implementation disables closed event channels and handles both watches'
+terminal errors through one path. Compaction still resnapshots from the last
+sequence; ordinary failures disconnect and cancellation remains cancellation.
+All seven stream tests plus three existing watch-adapter tests pass with the race
+detector in `.tmp/task-stream-completion-tests.log`. The live-compaction,
+closed-before-follow and failure/cancellation tests each pass 20 bounded repeats
+in `.tmp/task-stream-completion-repeat.log` (60 top-level executions).
+Vet and pinned Staticcheck pass in `.tmp/task-stream-completion-vet.log` and
+`.tmp/task-stream-completion-staticcheck-local.log`. The initial analyzer log,
+`.tmp/task-stream-completion-staticcheck.log`, preserves a read-only external-cache
+error; the successful rerun uses the ignored repository-local cache. Formatting
+and diff checks pass. This closes the local failure, not whole-case TASK-06,
+full CI, hosting continuity or live compaction qualification.
 
 The remaining root-module Go tests outside the reviewed files still require review.
 Helpers and fixtures are not standalone test cases; inventory counts must not

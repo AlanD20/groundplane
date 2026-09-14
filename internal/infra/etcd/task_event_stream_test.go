@@ -10,8 +10,9 @@ import (
 )
 
 func TestTaskEventStreamReplaysSuffixAndFinalDrains(t *testing.T) {
-	// Rationale: reconnect must replay only unseen durable sequences, follow
-	// new commits without a read-to-watch gap, and close only after Task state.
+	// QA: TASK-06 (L1 in-memory repository; no real etcd watch scheduling or HTTP SSE framing).
+	// Rationale: resume must skip seen sequence 1, watch both exact selectors from the snapshot successor,
+	// emit each later durable sequence once, and close only after authoritative terminal Task state.
 	ctx := context.Background()
 	store := newMemoryTaskStore()
 	task := validTaskRecord(taskJournalTime())
@@ -22,31 +23,38 @@ func TestTaskEventStreamReplaysSuffixAndFinalDrains(t *testing.T) {
 	}
 	appendTaskStreamEvent(t, repository, task.ID, 1)
 	appendTaskStreamEvent(t, repository, task.ID, 2)
+	snapshotRevision := store.currentRevision()
 	stream, err := repository.OpenTaskEventStream(ctx, task.ID, 1)
 	if err != nil {
 		t.Fatalf("OpenTaskEventStream() error = %v", err)
 	}
+	assertTaskStreamWatchStarts(t, store,
+		memoryTaskWatchStart{prefix: taskKey(task.ID), revision: snapshotRevision + 1},
+		memoryTaskWatchStart{prefix: taskEventScopePrefix(task.ID), revision: snapshotRevision + 1},
+	)
 	emitted := make(chan TaskEventRecord, 4)
 	done := runTaskEventStream(ctx, stream, emitted)
 	if event := receiveTaskStreamEvent(t, emitted); event.Sequence != 2 {
 		t.Fatalf("initial suffix sequence = %d, want 2", event.Sequence)
 	}
 	appendTaskStreamEvent(t, repository, task.ID, 3)
-	if event := receiveTaskStreamEvent(t, emitted); event.Sequence != 3 {
-		t.Fatalf("live sequence = %d, want 3", event.Sequence)
-	}
 	terminalizeTaskStream(t, store, repository, task.ID)
+	if event := receiveTaskStreamEvent(t, emitted); event.Sequence != 3 {
+		t.Fatalf("final sequence = %d, want 3", event.Sequence)
+	}
 	if err := receiveTaskStreamDone(t, done); err != nil {
 		t.Fatalf("TaskEventStream.Run() error = %v", err)
 	}
+	assertNoTaskStreamEvent(t, emitted)
 	if count := store.watcherCount(); count != 0 {
 		t.Fatalf("watcher count after terminal close = %d, want 0", count)
 	}
 }
 
 func TestTaskEventStreamValidatesResumeBeforeOpeningWatches(t *testing.T) {
-	// Rationale: an ahead resume id is a deterministic 400-class request error,
-	// while an initially terminal Task must replay and close without live watches.
+	// QA: TASK-06 (L1 in-memory repository; HTTP 400 mapping and pre-header response timing are not proved).
+	// Rationale: an ahead resume sequence must fail as a malformed request before any watch opens, while an
+	// initially terminal Task must replay its durable event and close without creating live subscriptions.
 	ctx := context.Background()
 	store := newMemoryTaskStore()
 	task := validTaskRecord(taskJournalTime())
@@ -63,6 +71,9 @@ func TestTaskEventStreamValidatesResumeBeforeOpeningWatches(t *testing.T) {
 	) {
 		t.Fatalf("OpenTaskEventStream(ahead) error = %v, want malformed request", err)
 	}
+	if starts := store.watchStartCount(); starts != 0 {
+		t.Fatalf("ahead resume watch starts = %d, want 0", starts)
+	}
 	stream, err := repository.OpenTaskEventStream(ctx, task.ID, 0)
 	if err != nil {
 		t.Fatalf("OpenTaskEventStream(terminal) error = %v", err)
@@ -77,14 +88,18 @@ func TestTaskEventStreamValidatesResumeBeforeOpeningWatches(t *testing.T) {
 	if len(emitted) != 1 || emitted[0].Sequence != 1 {
 		t.Fatalf("terminal replay = %#v, want sequence 1", emitted)
 	}
+	if emitted[0].Identity.Ordinal != 1 || emitted[0].State != TaskEventStateRunning {
+		t.Fatalf("terminal replay event = %#v, want original ordinal 1 running event", emitted[0])
+	}
 	if starts := store.watchStartCount(); starts != 0 {
 		t.Fatalf("terminal stream watch starts = %d, want 0", starts)
 	}
 }
 
 func TestTaskEventStreamRecoversCompactionBySequence(t *testing.T) {
-	// Rationale: etcd compaction is private infrastructure state. A live client
-	// must continue from its last public sequence without cursor exposure.
+	// QA: TASK-06 (L1 fake cursor-expiry injection; real etcd compaction and revision retention are not proved).
+	// Rationale: compaction recovery must resnapshot from the last public sequence, filter any already observed
+	// event, reopen both exact watches at the new snapshot successor, and continue without loss or duplication.
 	ctx := context.Background()
 	store := newMemoryTaskStore()
 	task := validTaskRecord(taskJournalTime())
@@ -94,6 +109,7 @@ func TestTaskEventStreamRecoversCompactionBySequence(t *testing.T) {
 		t.Fatalf("newTaskRepository() error = %v", err)
 	}
 	appendTaskStreamEvent(t, repository, task.ID, 1)
+	initialRevision := store.currentRevision()
 	stream, err := repository.OpenTaskEventStream(ctx, task.ID, 0)
 	if err != nil {
 		t.Fatalf("OpenTaskEventStream() error = %v", err)
@@ -103,21 +119,169 @@ func TestTaskEventStreamRecoversCompactionBySequence(t *testing.T) {
 	if event := receiveTaskStreamEvent(t, emitted); event.Sequence != 1 {
 		t.Fatalf("initial sequence = %d, want 1", event.Sequence)
 	}
-	store.failWatch(taskEventScopePrefix(task.ID), errs.New(errs.KindCursorExpired, "compacted"))
-	waitForTaskWatchStarts(t, store, 4)
 	appendTaskStreamEvent(t, repository, task.ID, 2)
+	recoveryRevision := store.currentRevision()
+	store.failWatch(taskEventScopePrefix(task.ID), errs.New(errs.KindCursorExpired, "compacted"))
+	waitForTaskWatchStarts(t, store, 4, done)
+	assertTaskStreamWatchStarts(t, store,
+		memoryTaskWatchStart{prefix: taskKey(task.ID), revision: initialRevision + 1},
+		memoryTaskWatchStart{prefix: taskEventScopePrefix(task.ID), revision: initialRevision + 1},
+		memoryTaskWatchStart{prefix: taskKey(task.ID), revision: recoveryRevision + 1},
+		memoryTaskWatchStart{prefix: taskEventScopePrefix(task.ID), revision: recoveryRevision + 1},
+	)
 	if event := receiveTaskStreamEvent(t, emitted); event.Sequence != 2 {
 		t.Fatalf("post-compaction sequence = %d, want 2", event.Sequence)
+	}
+	appendTaskStreamEvent(t, repository, task.ID, 3)
+	if event := receiveTaskStreamEvent(t, emitted); event.Sequence != 3 {
+		t.Fatalf("post-restart sequence = %d, want 3", event.Sequence)
 	}
 	terminalizeTaskStream(t, store, repository, task.ID)
 	if err := receiveTaskStreamDone(t, done); err != nil {
 		t.Fatalf("TaskEventStream.Run() error = %v", err)
 	}
+	assertNoTaskStreamEvent(t, emitted)
+	if count := store.watcherCount(); count != 0 {
+		t.Fatalf("watcher count after recovered stream close = %d, want 0", count)
+	}
+}
+
+// QA: TASK-06; controlled L1 watch completion, not real etcd transport or HTTP SSE.
+// Rationale: an error queued before following must survive either channel being
+// selected first; recovery must replay the missed event and resume both watches.
+func TestTaskEventStreamRecoversClosedWatchBeforeFollow(t *testing.T) {
+	for _, primary := range []bool{false, true} {
+		name := "events"
+		if primary {
+			name = "primary"
+		}
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			store := newMemoryTaskStore()
+			task := validTaskRecord(taskJournalTime())
+			seedTaskRepositoryRunningTask(t, store, task)
+			repository, err := newTaskRepository(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			appendTaskStreamEvent(t, repository, task.ID, 1)
+			stream, err := repository.OpenTaskEventStream(ctx, task.ID, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			prefix := taskEventScopePrefix(task.ID)
+			if primary {
+				prefix = taskKey(task.ID)
+			}
+			store.failWatch(prefix, errs.New(errs.KindCursorExpired, "compacted"))
+			appendTaskStreamEvent(t, repository, task.ID, 2)
+			emitted := make(chan TaskEventRecord, 4)
+			done := runTaskEventStream(ctx, stream, emitted)
+			waitForTaskWatchStarts(t, store, 4, done)
+			if event := receiveTaskStreamEvent(t, emitted); event.Sequence != 2 {
+				t.Fatalf("recovered sequence = %d, want 2", event.Sequence)
+			}
+			appendTaskStreamEvent(t, repository, task.ID, 3)
+			terminalizeTaskStream(t, store, repository, task.ID)
+			if event := receiveTaskStreamEvent(t, emitted); event.Sequence != 3 {
+				t.Fatalf("final sequence = %d, want 3", event.Sequence)
+			}
+			if err := receiveTaskStreamDone(t, done); err != nil {
+				t.Fatalf("recovered stream = %v", err)
+			}
+			assertNoTaskStreamEvent(t, emitted)
+			if count := store.watcherCount(); count != 0 {
+				t.Fatalf("watchers after recovery and terminal drain = %d", count)
+			}
+		})
+	}
+}
+
+// QA: TASK-06; L1 watch completion classification and cleanup, not HTTP error mapping.
+// Rationale: preserving compaction recovery must not turn storage failures into
+// retries, hide missing terminal errors, or classify caller cancellation as corruption.
+func TestTaskEventStreamClosedWatchPreservesFailureAndCancellation(t *testing.T) {
+	for _, primary := range []bool{false, true} {
+		for _, test := range []struct {
+			name     string
+			watchErr error
+			wantErr  error
+			cancel   bool
+		}{
+			{"storage", errs.New(errs.KindStorageUnavailable, "offline"), errs.New(errs.KindStorageUnavailable, ""), false},
+			{"missing-error", nil, errs.New(errs.KindInternal, ""), false},
+			{"canceled", nil, context.Canceled, true},
+		} {
+			name := "events/" + test.name
+			if primary {
+				name = "primary/" + test.name
+			}
+			t.Run(name, func(t *testing.T) {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				store := newMemoryTaskStore()
+				task := validTaskRecord(taskJournalTime())
+				seedTaskRepositoryRunningTask(t, store, task)
+				repository, err := newTaskRepository(store)
+				if err != nil {
+					t.Fatal(err)
+				}
+				appendTaskStreamEvent(t, repository, task.ID, 1)
+				stream, err := repository.OpenTaskEventStream(ctx, task.ID, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				prefix := taskEventScopePrefix(task.ID)
+				if primary {
+					prefix = taskKey(task.ID)
+				}
+				finishTaskStreamWatch(t, store, prefix, test.watchErr)
+				var emitted []uint64
+				err = stream.Run(ctx, func(event TaskEventRecord) error {
+					emitted = append(emitted, event.Sequence)
+					if test.cancel {
+						cancel()
+					}
+					return nil
+				})
+				if !errors.Is(err, test.wantErr) {
+					t.Fatalf("closed watch = %v, want %v", err, test.wantErr)
+				}
+				if len(emitted) != 1 || emitted[0] != 1 {
+					t.Fatalf("emitted sequences = %v, want [1]", emitted)
+				}
+				if store.watchStartCount() != 2 || store.watcherCount() != 0 {
+					t.Fatalf("watch starts/remaining = %d/%d, want 2/0", store.watchStartCount(), store.watcherCount())
+				}
+			})
+		}
+	}
+}
+
+func finishTaskStreamWatch(t *testing.T, store *memoryTaskStore, prefix string, watchErr error) {
+	t.Helper()
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	for id, watcher := range store.watchers {
+		if watcher.prefix != prefix {
+			continue
+		}
+		delete(store.watchers, id)
+		if watchErr != nil {
+			watcher.errors <- watchErr
+		}
+		close(watcher.errors)
+		close(watcher.events)
+		return
+	}
+	t.Fatal("watch to finish was not registered")
 }
 
 func TestTaskEventStreamDisconnectsOnSequenceGap(t *testing.T) {
-	// Rationale: a watched gap is durable corruption, not permission to skip a
-	// sequence or reset the public resume point.
+	// QA: TASK-06 (L1 injected journal corruption; HTTP disconnect logging and real etcd delivery are not proved).
+	// Rationale: a watched sequence gap must emit neither the gapped record nor a synthetic replacement, return
+	// an internal corruption error, and release both subscriptions instead of skipping or resetting the resume point.
 	ctx := context.Background()
 	store := newMemoryTaskStore()
 	task := validTaskRecord(taskJournalTime())
@@ -156,11 +320,15 @@ func TestTaskEventStreamDisconnectsOnSequenceGap(t *testing.T) {
 		t.Fatalf("gapped stream emitted %#v", event)
 	default:
 	}
+	if count := store.watcherCount(); count != 0 {
+		t.Fatalf("watcher count after sequence-gap disconnect = %d, want 0", count)
+	}
 }
 
 func TestTaskEventStreamCancellationJoinsWatches(t *testing.T) {
-	// Rationale: abandoned and slow HTTP clients must not leave either etcd
-	// watch goroutine alive after their request context is canceled.
+	// QA: TASK-06 (L1 in-memory watches; real etcd transport and end-to-end HTTP disconnect are not proved).
+	// Rationale: cancellation while delivery is blocked on a slow consumer must return context cancellation and
+	// join both Task and event-watch goroutines before Run returns, preventing an abandoned subscription leak.
 	ctx, cancel := context.WithCancel(context.Background())
 	store := newMemoryTaskStore()
 	task := validTaskRecord(taskJournalTime())
@@ -173,7 +341,22 @@ func TestTaskEventStreamCancellationJoinsWatches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenTaskEventStream() error = %v", err)
 	}
-	done := runTaskEventStream(ctx, stream, make(chan TaskEventRecord))
+	if count := store.watcherCount(); count != 2 {
+		t.Fatalf("watcher count before cancellation = %d, want 2", count)
+	}
+	emitStarted := make(chan TaskEventRecord, 1)
+	done := make(chan error, 1)
+	go func() {
+		done <- stream.Run(ctx, func(event TaskEventRecord) error {
+			emitStarted <- event
+			<-ctx.Done()
+			return ctx.Err()
+		})
+	}()
+	appendTaskStreamEvent(t, repository, task.ID, 1)
+	if event := receiveTaskStreamEvent(t, emitStarted); event.Sequence != 1 {
+		t.Fatalf("blocked delivery sequence = %d, want 1", event.Sequence)
+	}
 	cancel()
 	if err := receiveTaskStreamDone(t, done); !errors.Is(err, context.Canceled) {
 		t.Fatalf("TaskEventStream.Run(canceled) error = %v, want context canceled", err)
@@ -268,14 +451,46 @@ func receiveTaskStreamDone(t *testing.T, done <-chan error) error {
 	}
 }
 
-func waitForTaskWatchStarts(t *testing.T, store *memoryTaskStore, count int) {
+func assertNoTaskStreamEvent(t *testing.T, emitted <-chan TaskEventRecord) {
+	t.Helper()
+	select {
+	case event := <-emitted:
+		t.Fatalf("unexpected additional Task event = %#v", event)
+	default:
+	}
+}
+
+func assertTaskStreamWatchStarts(
+	t *testing.T,
+	store *memoryTaskStore,
+	want ...memoryTaskWatchStart,
+) {
+	t.Helper()
+	store.mu.Lock()
+	got := append([]memoryTaskWatchStart(nil), store.watchStarts...)
+	store.mu.Unlock()
+	if len(got) != len(want) {
+		t.Fatalf("watch starts = %#v, want %#v", got, want)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("watch start %d = %#v, want %#v", index, got[index], want[index])
+		}
+	}
+}
+
+func waitForTaskWatchStarts(t *testing.T, store *memoryTaskStore, count int, done <-chan error) {
 	t.Helper()
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
 		if store.watchStartCount() >= count {
 			return
 		}
-		time.Sleep(time.Millisecond)
+		select {
+		case err := <-done:
+			t.Fatalf("stream exited before watches reopened: %v", err)
+		case <-time.After(time.Millisecond):
+		}
 	}
 	t.Fatalf("watch start count = %d, want at least %d", store.watchStartCount(), count)
 }

@@ -92,33 +92,29 @@ func (stream *TaskEventStream) Run(
 		return nil
 	}
 
+	taskEvents, journalEvents := stream.watches.task.Events, stream.watches.events.Events
 	for {
+		var watchErr error
+		var ok bool
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case event, ok := <-stream.watches.events.Events:
+		case event, ok := <-journalEvents:
 			if !ok {
-				return errs.New(errs.KindInternal, "task event watch closed unexpectedly")
+				// Closure cannot supersede a terminal error queued on the other channel.
+				journalEvents = nil
+				continue
 			}
 			last, err = stream.consumeEvent(ctx, event, last, emit)
 			if err != nil {
 				return err
 			}
-		case watchErr, ok := <-stream.watches.events.Errors:
+			continue
+		case watchErr, ok = <-stream.watches.events.Errors:
+		case event, ok := <-taskEvents:
 			if !ok {
-				return errs.New(errs.KindInternal, "task event watch failed without an error")
-			}
-			var done bool
-			last, done, err = stream.recoverWatch(ctx, watchErr, last, emit)
-			if err != nil {
-				return err
-			}
-			if done {
-				return nil
-			}
-		case event, ok := <-stream.watches.task.Events:
-			if !ok {
-				return errs.New(errs.KindInternal, "Task primary watch closed unexpectedly")
+				taskEvents = nil
+				continue
 			}
 			terminalRevision, terminal, consumeErr := stream.consumeTask(event)
 			if consumeErr != nil {
@@ -127,19 +123,24 @@ func (stream *TaskEventStream) Run(
 			if terminal {
 				return stream.finalDrain(ctx, terminalRevision, last, emit)
 			}
-		case watchErr, ok := <-stream.watches.task.Errors:
-			if !ok {
-				return errs.New(errs.KindInternal, "Task primary watch failed without an error")
-			}
-			var done bool
-			last, done, err = stream.recoverWatch(ctx, watchErr, last, emit)
-			if err != nil {
-				return err
-			}
-			if done {
-				return nil
-			}
+			continue
+		case watchErr, ok = <-stream.watches.task.Errors:
 		}
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
+		if !ok || watchErr == nil {
+			return errs.New(errs.KindInternal, "task stream watch failed without an error")
+		}
+		var done bool
+		last, done, err = stream.recoverWatch(ctx, watchErr, last, emit)
+		if err != nil {
+			return err
+		}
+		if done {
+			return nil
+		}
+		taskEvents, journalEvents = stream.watches.task.Events, stream.watches.events.Events
 	}
 }
 

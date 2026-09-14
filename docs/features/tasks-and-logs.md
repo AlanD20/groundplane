@@ -86,6 +86,20 @@ non-compaction storage failures forever.
 
 ## Technical design
 
+### Task event watch completion
+
+The Task stream follows both the Task record and its event journal. Each watch
+has separate event and terminal-error channels. Event-channel closure alone does
+not identify the outcome: a compaction error may already be waiting on the other
+channel. The stream stops selecting closed event channels and consumes the watch's
+terminal result. Both watches use the same completion handling.
+
+Compaction resnapshots from the last emitted sequence and reopens both watches.
+Other storage errors disconnect without retry, missing terminal errors remain
+internal failures, and caller cancellation remains cancellation. Every exit joins
+the owned watches. Tests must arrange watch completion before following starts,
+as well as during live delivery; a scheduling-dependent passing run is insufficient.
+
 ### Agent report failures
 
 The Agent's closed Component failure diagnostics map to the existing durable
