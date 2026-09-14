@@ -848,6 +848,46 @@ show one runner start. Application profile/Release authority and owned cleanup
 pass. Evidence is `interrupted-task-agent-result.json`, `interrupt-agent-events.jsonl`
 and `interrupted-task-agent.log`. Reboot and other effect boundaries remain separate.
 
+H49 passes the approved REL-04 target and the measured private-ingress
+JOURNEY-05 sequence from H47 on `.1` through `.3`: 1,800.035 seconds, five
+authenticated clients at one request/second each, 9,000 HTTP 200 responses and
+zero unexpected request failures or WebSocket disconnections. Each of the same
+five authenticated WebSockets receives 360 pongs; all 30 real queued jobs reach
+their intended held channel. Normal access-token refresh is exercised without
+lowering the requested load. HTTP p95 is 0.194049 seconds, below the one-second
+target; maximum is 2.299403 seconds. The maximum is not hidden by the passing
+percentile. The primary application profile and all serving Release identities
+survive, with all 11 Services and the platform healthy. The probe closes its
+connections and joins its workers; five scoped QA users remain as declared test
+data. No production source or application source changed during the run.
+
+Evidence in the H44 directory is `sustained-results.jsonl`,
+`sustained-result.json`, `sustained-complete.json` and
+`run-sustained-path-fixed.log`. The mixed window includes normal upgrade,
+broken-Controller recovery, later successful upgrade, normal restart and the
+separate Controller/Agent process-loss probes in H47–H48. This is bounded private
+hosting and upgrade continuity, not public/provider ingress, indefinite uptime,
+resource exhaustion, every native activation phase or complete production
+qualification. A final already-selected standalone Agent update returns
+`state.conflict`/409 with unchanged Tasks, all container identities/images/start
+times and native update history (`selected-agent-refusal-result.json`). It proves
+refusal and current selection, not a successful standalone replacement.
+
+H50 records an unsuccessful guest-reboot probe on the H49 installation. The guest
+accepted `systemctl reboot`, but SSH did not return within 240 seconds. Preserved
+Firecracker and serial logs show the guest reboot request followed by successful
+VMM process exit, not a restarted VM. The VM manager's subsequent start command
+reported success without a new process; a later manager reboot was attempted.
+Neither attempt establishes automatic reboot or GP cold-start qualification.
+The owner stopped that recovery work, destroyed the VM and supplied a fully
+fresh QA replacement at the same address and SSH identity. No pressure test ran.
+Evidence remains in the H44 directory: `reboot-proof.log`, `reboot-command.json`,
+`reboot-firecracker.log`, `reboot-firecracker-console.log`,
+`reboot-manual-vm-start.log` and `reboot-manager-recovery.log`.
+H43–H49 remain evidence for the destroyed installation only. Replacement setup
+uses `.tmp/qa-owner-reset-20260914-hK6Yqeii/`, never old accepted Task receipts.
+Further reset/reboot needs an owner decision; no VM-manager repair is selected.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

@@ -34,12 +34,15 @@ H36 and H41 remain failed historical runs. H46's fresh rerun on the repaired
 writer passes: Attach/Entry cutover → successful Deploy preserving the proxy →
 failed candidate → bounded automatic recovery → later healthy Deploy. Current
 bindings and authenticated data survive, the Agent releases its claim and the
-failed candidate is cleaned. The approved sustained/upgrade run is now active,
-not yet a passing result. H47 passes normal update, failed native startup recovery,
+failed candidate is cleaned. H49 passes the approved sustained run: 9,000 successful
+requests, no errors/disconnections, five held WebSockets, 30 delivered jobs and
+p95 0.194 seconds. H47 passes normal update, failed native startup recovery,
 later normal update and normal restart with unchanged application/etcd runtime.
 H48 passes separate Controller and Agent loss during a Script, each with one
 observed runner start, same-Task completion/replay and owned cleanup. Final
-sustained traffic and reboot results remain pending.
+sustained traffic passes in H49. H50's guest reboot fails because the QA VMM exits
+without restarting. The owner replaced that VM; fresh setup is pending and
+earlier passes are not observations of the replacement.
 H40 passes normal Controller restart with unchanged etcd/application runtime,
 45 authenticated requests and a held WebSocket without interruption. Sustained
 and complete native-upgrade qualification remain open. Earlier failures remain
@@ -151,6 +154,17 @@ Do not launch on an invalid baseline or bypass the recovery pause. Deliberate
 CPU/memory/disk pressure is separate: stop before unsafe host conditions, with
 numeric stop thresholds recorded before injection; no such thresholds were
 specified by this approval.
+
+The selected modest REL-05 variant records these experimental limits before
+execution: on the four-core QA host, run two CPU workers, then hold 512 MiB of
+memory, then write/hold an owned 128 MiB file, separately for 60 seconds each.
+Require one authenticated profile request per second and unchanged checked data
+and runtime identities. Stop on a non-200 response, a five-second request timeout,
+data mismatch, or less than 1 GiB available memory or disk. Remove only the probe's
+processes/file. Run after the sustained window and reboot, not as an undocumented
+change to the sustained target. These bounds test modest pressure, not resource
+exhaustion, storage-full recovery or production capacity; those variants remain
+unqualified.
 
 ### Remaining effort estimate
 
@@ -561,13 +575,13 @@ application interruption. A machine reboot is not an interruption-free GP update
 
 | Case | Setup and action | Pass condition | Record |
 | --- | --- | --- | --- |
-| UP-01 | Install a valid staged Controller/Agent release through the normal protected update action. | Exact candidate identities selected; same update Task survives API reconnect; application containers/data/routing remain intact with no observed request failure or held-WebSocket reconnect during the recorded window. | PARTIAL H2 |
+| UP-01 | Install a valid staged Controller/Agent release through the normal protected update action. | Exact candidate identities selected; same update Task survives API reconnect; application containers/data/routing remain intact with no observed request failure or held-WebSocket reconnect during the recorded window. | PASS H47/H49 normal CLI/private-ingress variant |
 | UP-02 | Perform standalone idle Agent update and subsequent enrollment using the qualified native selection. | Correct desired Agent image/generation; application containers and traffic remain unchanged; no self-owned Agent replacement. | U |
 | UP-03 | Request an already selected image or invalid/incompatible/corrupt/missing release candidate. | Documented refusal before replacement; same serving versions/history/data and no restart or new application effect. | PARTIAL H6 |
 | UP-04 | Start update with active work and race assignment admission against drain. | Busy refusal or bounded drain; active work not aborted; no new admitted send crosses the pause and no Script/migration replay. | U |
 | UP-05 | Abort or fail preparation before activation; race with permanent removal/revocation. | Release only the operation-owned pause; no replacement or revival of a removed/stale generation. | U |
 | UP-06 | Abort after activation is committed or uncertain. | Refuse unsafe cancellation; preserve recovery and dispatch hold until exact commit outcome is resolved. | U |
-| UP-07 | Activate a Controller candidate that cannot run at all. | Product-owned predecessor recovery works without the failed binary; exact same Task remains failed/recovered; real application data/traffic/identities survive. | PARTIAL H2 |
+| UP-07 | Activate a Controller candidate that cannot run at all. | Product-owned predecessor recovery works without the failed binary; exact same Task remains failed/recovered; real application data/traffic/identities survive. | PASS H47/H49 private-ingress variant |
 | UP-08 | Fail candidate readiness or coordinated Agent startup after native activation. | Restore compatible predecessor binary/Agent identities, preserve selected qualified release and application state; recovery failure is explicit. | U |
 | UP-09 | Restart/kill Controller at each declared activation-journal phase, including lost commit response. | Durable original Task and holds restored before dispatch; finish or recover exact candidate once without reopening an obsolete generation. | U |
 | UP-10 | Attempt ordinary writes and scheduled work during an unfinished native trial. | Guarded writes refuse; permitted reads, exact acceptance replay and pre-activation Abort still work; mere HTTP readiness grants no write authority. | U |
@@ -583,11 +597,11 @@ application interruption. A machine reboot is not an interruption-free GP update
 | JOURNEY-02 | Reapply → Attach new backing → rebind Entry → detach old backing → Deploy → fail next candidate. | Each completed change remains effective through later operations/recovery; actual clients use only intended endpoints and credentials; original failure is not hidden by redeploy. | PASS H46; historical FAIL H5/H41 retained |
 | JOURNEY-03 | Deploy a second independent application and operate on the first. | Unselected runtime identities, data and working requests remain unchanged; declared shared dependencies are recorded rather than assumed isolated. | PARTIAL H4 |
 | JOURNEY-04 | Write known data → backup selected sources → mutate data → restore exact point/key era. | Original surviving targets match the selected recovery point; unrelated data unchanged; an application-level query proves usability, not just file/object presence. | BLOCKED D2 |
-| JOURNEY-05 | Application traffic and background work → GP update → rejected/broken GP update → later successful update. | Original application functionality and data survive the complete sequence; same operation outcomes and measured continuity, no manual runtime repairs. | PARTIAL H2 |
+| JOURNEY-05 | Application traffic and background work → GP update → rejected/broken GP update → later successful update. | Original application functionality and data survive the complete sequence; same operation outcomes and measured continuity, no manual runtime repairs. | PASS H47/H49 private-ingress variant; public/provider ingress separate |
 | REL-01 | Restart Controller normally under an application workload. | Agent restart allowed; etcd container identity/start time unchanged. Preserve application requests, held connections, data, serving Releases and correct recovered Task state. | PASS H40: normal restart after recovered Task; interrupted active Task is separate REL-02 |
-| REL-02 | Reboot the authorized QA machine under known state and unfinished work. | Bounded recovery of owned runtimes, data and safely resumable work; no duplicate effects or lost acknowledged state. Record reboot downtime, never claim single-host HA. | NOT RUN; D4 |
+| REL-02 | Reboot the authorized QA machine under known state and unfinished work. | Bounded recovery of owned runtimes, data and safely resumable work; no duplicate effects or lost acknowledged state. Record reboot downtime, never claim single-host HA. | BLOCKED H50: guest reboot exited VMM; GP boot recovery unqualified; owner replaced QA |
 | REL-03 | Interrupt an actually running Task by Agent/process/channel loss at an identified effect boundary. | Exact operation resumes/terminates safely; unknown effects are fenced; no duplicate Script, data mutation or detached claim. | PARTIAL H48: Controller and Agent loss after runner start pass; other boundaries separate |
-| REL-04 | Run the approved 30-minute mixed workload at 5 authenticated HTTP requests/second, with held WebSockets and background jobs. | Zero unexpected errors/disconnections; HTTP p95 below 1 second; correct job/results and preserved data. Record achieved rate and resource/restart measurements. | NOT RUN; baseline/recovery gate D4 |
+| REL-04 | Run the approved 30-minute mixed workload at 5 authenticated HTTP requests/second, with held WebSockets and background jobs. | Zero unexpected errors/disconnections; HTTP p95 below 1 second; correct job/results and preserved data. Record achieved rate and resource/restart measurements. | PASS H49: 9,000 requests, five unchanged WebSockets, 30 jobs, p95 0.194s |
 | REL-05 | Apply bounded CPU/memory/disk pressure separately on disposable QA. | Truthful unavailable/failure states, bounded recovery and no silent data corruption, leaked resources or unrelated cleanup. Record exact pressure and safety stop. | BLOCKED D5 |
 | REL-06 | Interrupt persistence at accepted-operation and terminal-commit boundaries, including storage full/unavailable. | Acknowledged durable state is not lost; unknown outcomes reconcile exactly; no partial success, duplicate effects or fabricated recovery evidence. | U |
 | REL-07 | Repeat create/use/remove and failed-operation cleanup cycles. | Owned runtime, network, Volume, runner and temporary credential inventory returns to the declared baseline; no accumulating leaks; failed evidence retained. | U |
