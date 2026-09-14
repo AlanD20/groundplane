@@ -209,6 +209,13 @@ there is no etcd systemd unit, distro etcd service, Agent Task, configurable
 endpoint, or alternative hosting path. etcd status remains visible on the Host
 page and through `controller etcd show`, not as a platform component.
 
+**Normal Controller restart boundary (owner decision, 2026-09-14).** Restarting
+the Controller may restart its Agent, but must not stop, replace or restart
+etcd. Its process and data remain independent of that restart. Hosted application
+requests, held connections and data must survive. This does not relax the
+interruption-free application requirement for GP software upgrades or change
+etcd into an Agent-managed Component.
+
 **Host execution authority is closed (locked).** Workload and Platform
 execution supports exactly `linux/amd64` and `linux/arm64` hosts. One release
 publishes both variants under the same immutable release identity. The MVP
@@ -2509,6 +2516,11 @@ selected Secret nor normal platform fallback remains.
 An exact prepared, active, retry-open, or releasing Script value-generation
 reference is not a desired-state reference and blocks deletion with
 `resource.in_use` until ADR 0062's bounded release completes.
+An exact Secret value held by a recoverable Task also blocks deletion with
+`resource.in_use` until that Task's recovery/retry authority releases the pin
+(ADR 0079). Reservation and deletion must be mutually fenced. Ordinary desired
+references still do not block deletion, and successful deletion leaves no hidden
+retained ciphertext copy. This extension was approved on 2026-09-14.
 
 - **Secret references.** A secret is referenced by its env file
   (`secrets/.env.edge`, `secrets/.env.<project-id>`, the deterministic per-environment

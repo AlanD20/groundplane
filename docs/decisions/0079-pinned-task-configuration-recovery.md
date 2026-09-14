@@ -3,6 +3,7 @@
 - Status: Accepted by the owner on 2026-09-14; implementation and live proof pending.
 - Scope: failed-operation recovery for hosting and upgrades, not Backup/Restore.
 - Supersedes only ADR 0064's blanket prohibition on recovery file materialization.
+- Amends ADR 0030's deletion guard for exact recoverable-Task Secret value pins.
 
 ## Context
 
@@ -18,6 +19,14 @@ pre-operation configuration sources before admitting a Task that can change them
 Its immutable plan binds the selected files, prior presence or absence, content
 digest, destination, ownership and permissions. Sources remain resolvable through
 execution and recovery; secret plaintext is never added to Task history or logs.
+
+The owner additionally approved exact Secret value deletion protection on
+2026-09-14. A recoverable Task holds the selected value until its recovery/retry
+authority releases it; meanwhile deletion returns `resource.in_use`. Reservation,
+deletion admission and delete Retry must be mutually fenced. Existing Script
+source guards remain intact. Ordinary desired references do not become pins,
+no latest value may replace an unavailable pin, and successful Secret deletion
+must leave no hidden retained value copy.
 
 Recovery may restore only those pinned files affected by that Task, alongside
 the selected prior runtime. It must retain the exact assignment, execution epoch,

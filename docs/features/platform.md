@@ -13,6 +13,9 @@ and `linux/arm64`, not multi-host scheduling or emulation.
 - The native Controller is the only Groundplane systemd unit. It owns the private
   etcd container and Agent container lifecycle, including restart after Docker
   recovery. Neither depends on an Agent Task for its own bootstrap.
+- A normal Controller restart may restart the Agent, but must leave etcd running
+  unchanged. Application requests, held connections and data must survive.
+  etcd recovery is independent of a Controller restart; it is not an Agent Task.
 - Agent enrollment, configuration and replacement are explicit operator actions.
   Current-generation authenticated `Ready` is liveness evidence; container
   presence or HTTP/2 keepalive is not a substitute.
@@ -120,3 +123,7 @@ Host health, Agent lifecycle and settings have recorded qualification. Native
 updates retain the [Safe updates](upgrade-safety.md#current-status) limits.
 Current work and the live-mutation pause are in [head.md](../head.md); a dated
 health result never establishes present host health or operational permission.
+Normal shutdown currently calls the etcd manager's stop-on-close path. This
+violates the owner's 2026-09-14 restart boundary; the lifecycle correction and
+REL-01 live proof remain pending. Allowing an Agent restart does not waive etcd
+continuity or any hosted-application assertion.

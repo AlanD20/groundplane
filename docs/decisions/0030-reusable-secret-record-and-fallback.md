@@ -68,6 +68,13 @@ references do not block deletion; subsequent validation resolves the remaining
 normal fallback or fails when no Secret remains. A synchronous delete hidden
 behind a `202` response is forbidden.
 
+Exact execution pins are distinct from ordinary desired references. ADR 0062
+protects Script source generations; the owner-approved ADR 0079 extension also
+rejects deletion while a recoverable Task holds the exact Secret value. Return
+`resource.in_use` until recovery/retry authority releases it. Deletion and pin
+reservation share a concurrency fence, including delete Retry. No hidden value
+copy survives successful deletion.
+
 ## Consequences
 
 List and detail paths cannot expose ciphertext. Fallback cannot observe a

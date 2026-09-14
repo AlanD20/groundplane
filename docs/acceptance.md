@@ -88,8 +88,9 @@ source retention. Journal/retry checks preserve the compact recipe.
 two affected Blueprint prerequisite cases after their missing runtime-role label
 was corrected. Pinned vet and Staticcheck pass; the final architecture report has
 123 pre-existing findings and no additions. No full CI or deployment ran. File
-retention and recovery-reader integration remain blocked on the documented Secret
-deletion decision, not qualified by these tests.
+retention and recovery-reader integration were blocked on Secret deletion policy
+at this run. The owner subsequently approved exact recoverable-Task pins; that
+decision resumes implementation, not qualification by these tests.
 
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
