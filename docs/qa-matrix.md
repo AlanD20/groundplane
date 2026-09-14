@@ -583,6 +583,9 @@ not an internal server failure. Compare all runtime identities/start times,
 Task history, serving Releases and the authenticated profile, with HTTP traffic
 and a held WebSocket across the requests. Retain failures before further faults.
 No host reboot/reset, pressure test or provider change is selected.
+The approved UP-03 regression distinguishes an absent digest leaf from a missing
+store parent, missing manifest/binary and a closed store. Only the absent requested
+leaf becomes `validation.failed`; storage/integrity failures remain Internal.
 
 | Case | Setup and action | Pass condition | Record |
 | --- | --- | --- | --- |

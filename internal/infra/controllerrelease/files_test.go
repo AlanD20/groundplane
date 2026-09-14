@@ -8,7 +8,45 @@ import (
 	"testing"
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+// UP-03: an unstaged operator input is not a server failure. Missing store
+// structure or files in an existing release must not be mistaken for that input.
+func TestInspectMissingReleaseClassification(t *testing.T) {
+	for _, mode := range []string{"absent-release", "absent-parent", "absent-manifest", "absent-binary", "closed-store"} {
+		t.Run(mode, func(t *testing.T) {
+			store, id, _ := testReleaseStore(t)
+			defer store.Close()
+			parent := filepath.Join(store.root.Name(), "releases")
+			leaf := filepath.Join(parent, string(id)[7:])
+			want := errs.KindInternal
+			switch mode {
+			case "absent-release":
+				id = upgrade.Hash([]byte("not staged"))
+				want = errs.KindValidationFailed
+			case "absent-parent":
+				if err := os.Rename(parent, parent+".retained"); err != nil {
+					t.Fatal(err)
+				}
+			case "absent-manifest", "absent-binary":
+				name := "manifest.json"
+				if mode == "absent-binary" {
+					name = "controller"
+				}
+				if err := os.Rename(filepath.Join(leaf, name), filepath.Join(leaf, name+".retained")); err != nil {
+					t.Fatal(err)
+				}
+			case "closed-store":
+				store.Close()
+			}
+			_, err := store.Inspect(context.Background(), id)
+			if kind, ok := errs.KindOf(err); !ok || kind != want {
+				t.Fatalf("Inspect error = %v; want kind %v", err, want)
+			}
+		})
+	}
+}
 
 // Rationale: staging is a privileged filesystem boundary; its digest check
 // must cover the bytes actually opened and reject symlinks and writable inputs.

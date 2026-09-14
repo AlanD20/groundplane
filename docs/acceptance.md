@@ -956,6 +956,19 @@ Activation faults were not started after this assertion failure. The
 [missing-candidate finding](issues/runtime-qualification.md#missing-upgrade-candidate-refusal)
 requires a fix/defer decision; these results do not complete UP-03 or upgrade QA.
 
+H54 records the owner-approved missing-release classification repair. The actual
+release-store regression fails only its absent-release variant before the fix in
+`.tmp/upgrade-missing-release-red-trusted.log`; its initial sandbox run fails
+filesystem trust setup and is retained separately. The fix classifies absence
+only at the requested digest leaf. Missing parent, manifest/binary and closed
+store still return Internal; existing unsafe-path/digest checks remain unchanged.
+Both complete release-store and native-coordinator race suites pass in
+`.tmp/upgrade-missing-release-tests.log`. Focused vet and pinned Staticcheck pass
+in `.tmp/upgrade-missing-release-{vet,staticcheck}.log`; changed-file pinned
+formatting and diff checks pass. This is local proof, not closure of H53's live
+failure. Next is normal native deployment and the original request rerun, then
+the remaining upgrade-only cases. No broader implementation is included.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

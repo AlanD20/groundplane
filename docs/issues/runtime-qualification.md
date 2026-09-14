@@ -21,12 +21,16 @@ This is a refusal-classification defect, not demonstrated update interruption.
 
 The inspected path is `Service.freeze` to `Store.Inspect`, `releaseDirectory`
 and `openDirectory`. A missing directory's `Lstat` error reaches `fileError`,
-which wraps unclassified filesystem errors as Internal. No repair has been made.
+which wraps unclassified filesystem errors as Internal. The approved repair now
+classifies only an absent requested digest leaf as `validation.failed` (422).
+The regression fails before the fix and passes afterward; missing parent,
+manifest/binary and closed-store errors remain Internal. H54 records local proof;
+the deployed H53 failure remains open until its live rerun.
 Owner: native update/release-store boundary. Acceptance: classify absence as
 an operator input/resource refusal before publication, while retaining genuine
 storage errors and all existing path/digest/ownership checks; verify unchanged
-Tasks, runtime and application state. The owner must choose fix or defer before
-this stopped journey resumes. Evidence is H53 in [acceptance](../acceptance.md).
+Tasks, runtime and application state. The owner approved this repair and immediate
+upgrade QA continuation. Evidence is H53–H54 in [acceptance](../acceptance.md).
 
 ## Storage and source retirement
 

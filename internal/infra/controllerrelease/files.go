@@ -189,6 +189,9 @@ func (store *Store) releaseDirectory(ctx context.Context, id upgrade.Digest) (*o
 		return nil, err
 	}
 	root, err := openDirectory(ctx, releases, string(id)[7:])
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, errs.New(errs.KindValidationFailed, "requested controller release is not staged")
+	}
 	if err != nil {
 		return nil, err
 	}

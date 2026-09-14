@@ -1016,6 +1016,7 @@ contract change, not a convenient way to bypass the Console.
 `POST /controller/update` accepts `{release:"sha256:<64 lowercase hex>"}` and
 returns `202 {task_id}` with protected idempotency. Controller Update in the
 Console and `controller update --release` invoke exactly this endpoint.
+An unstaged release digest returns `validation.failed` (422) before Task publication.
 Equal-key acceptance replays the same Task while active as well as after it
 settles. A changed release mismatches; generic Task Retry is unavailable for a
 native update. After recovery, retry uses a fresh explicit Controller Update.

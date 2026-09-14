@@ -15,6 +15,9 @@ the shared process boundaries. Application Scripts do not perform self-update.
 
 - Before activation, identify the current and candidate releases, check their
   compatibility, and validate private staging and recovery state.
+- An unstaged requested release returns `validation.failed` before Task publication.
+  Missing store structure or files inside an existing release remain storage errors;
+  they must not be disguised as an ordinary absent candidate.
 - Pause new Agent assignments and drain admitted sends before checking for active
   work. Busy work returns `resource.in_use`; an update must not abort it.
 - Wait for active work within the update's drain bound. Do not replay application
