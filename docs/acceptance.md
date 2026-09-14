@@ -1117,6 +1117,28 @@ The disposable canary, Volume and image caches remain; no operation touched the
 existing hosting QA installation. This closes UP-02, not the other partial
 upgrade cases or full production qualification.
 
+H61 FAILS REL-02's owner-selected idle-host reboot variant on H60's separate
+disposable canary installation. Before the reboot, Controller, Agent and etcd
+are healthy; the Agent has zero in-flight work and the complete Task list has no
+pending/running Task. Controller and Docker boot services are enabled. The
+existing routed canary returns its exact previously client-written Volume
+sentinel and completes a real WebSocket handshake/ping/pong. Source, selected
+release, boot id, Service/runtime identities and Task history are retained.
+
+One `systemctl reboot` returns exit zero. The host does not return with a changed
+boot id within the 240-second bound; SSH connection attempts time out. No second
+reboot, reset, manual start or VM-manager change is attempted. Therefore GP startup,
+release selection, HTTP/WebSocket recovery and persisted data after reboot remain
+unverified. The observed failure is automatic host recovery; the current cause
+is not established and must not be inferred from H50's earlier VMM failure.
+The existing application host is untouched. Evidence is
+`.tmp/qa-reboot-20260914-KpdkEBhU/`: `before-reboot.json`, `tasks-before.json`,
+`boot-before.json`, `canary-before.json`, `reboot-command.json`, `reboot.log`,
+`reboot-result.json` and retained SSH receipts. The disposable VM must be brought
+back without resetting its disk before post-boot qualification can continue.
+Manual startup, if approved/performed, would not turn this automatic-reboot
+failure into a pass. No product code changed or data was deliberately removed.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing
