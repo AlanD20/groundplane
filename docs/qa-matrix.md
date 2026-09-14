@@ -19,19 +19,21 @@ specified production application and its GP upgrade path; it does not replace
 the full catalogue or waive [MVP acceptance](mvp.md#acceptance-gates).
 No item below is complete merely because local tests pass.
 
-Live continuation is on clean `18e936fa9`, deployed as
-`0.0.0-qa.prodops20260914.4`. H35 passes the repaired BP-05 first-cycle variant:
+Live continuation is on clean `7322d2806`, installed as
+`0.0.0-qa.prodops20260914.5` by the approved one-time repair. H35 passes the repaired BP-05 first-cycle variant:
 router/native runtime and a held HTTP connection survive exact reapply. The
 configured first Deploy passes. The saved Attach/Entry/Detach cutover also passes
 actual password-only clients during the overlapping-network window and afterward
 (ATT-12), preserving serving Releases, proxies and the checked application profile.
 Short protected-update traffic windows pass, not full upgrade or sustained
-qualification. Failed-rollout recovery is BLOCKED H36: its proxy probe repeats
-failed attempts and the Task remains active beyond the 600-second observation
-bound. Repeated attempts then exhaust the 1,000-event limit; Controller progress
-rejection degrades the Agent and makes Service observations unavailable. Earlier
-application checks passed; that does not prove recovery. Normal-restart and
-sustained cases remain open. H29/H31/H33 failures remain dated evidence.
+qualification. H39 resumes H36's original Task after the Volume-scope and rolling
+journal repairs: exact recovery completes, the Agent releases its claim, current
+bindings and authenticated data survive, and a later healthy Deploy passes.
+H36 remains a failed bounded run; a clean failed-rollout rerun is still required.
+H40 passes normal Controller restart with unchanged etcd/application runtime,
+45 authenticated requests and a held WebSocket without interruption. Sustained
+and complete native-upgrade qualification remain open. Earlier failures remain
+dated evidence, not passing runs.
 
 The owner deferred GP Backup/Restore and external backup/restore work from this
 immediate scope. JOURNEY-04, D2 and Gate B remain incomplete; this is not data-loss
@@ -60,7 +62,8 @@ defect or required scope decision returns to the owner before repair.
   bindings; H17–H24 record the integrated generated-file retention, remaining
   writers, acknowledged-runtime readers and pinned-file execution. The combined
   focused tests pass; H25–H27 distinguish candidate failures from their local
-  corrections. Live qualification is still required.
+  corrections. H39 proves resumed recovery after software repair and the subsequent
+  healthy Deploy. A clean bounded failure/recovery run without intervention is still required.
   The owner approved blocking Secret deletion while a recoverable Task
   holds its exact value. This is not a closing live SVC-15 pass. The owner
   approved restoring exact pinned configuration files as well as runtime under
@@ -79,13 +82,13 @@ defect or required scope decision returns to the owner before repair.
   Completing Detach or hardcoded IP access was not used to bypass the overlap
   assertion. See the
   [DNS finding](issues/runtime-qualification.md#same-name-backing-endpoints).
-- [ ] **Keep etcd independent of normal Controller restart** — REL-01, D3.
+- [x] **Keep etcd independent of normal Controller restart** — REL-01, D3, H40.
   The owner permits the Agent to restart with the Controller, but not etcd.
   The local stop-on-close correction and verifier regression pass (H13).
-  Qualify that exact lifecycle path live, permitting Agent restart while requiring
-  unchanged etcd runtime and preserved application requests, held connections,
-  durable Tasks and data. GP upgrades still require uninterrupted application
-  service. The requirement decision and local correction are complete; live proof is not.
+  H40 qualifies that lifecycle path live: the Agent restarts, etcd does not, all
+  application container identities/start times and serving Releases survive, and
+  authenticated requests, the held WebSocket and checked data remain intact.
+  GP upgrades still require their separate uninterrupted-service qualification.
 - [ ] **Select one clean, identified release candidate and pass release gates.**
   `main` is clean after the test-audit commits, but no current candidate has complete
   qualification. Record source and Controller/Agent digests; run required
@@ -318,7 +321,7 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 | SVC-12 | Abort, time out or lose Agent acknowledgement after a rollout effect. | Recorded effects and exact predecessor authority govern recovery; no false no-effect result, duplicate switch or silent success. | U |
 | SVC-13 | Submit altered/missing/foreign predecessor evidence or stale source authority at publication, claim and acknowledgement. | Fail closed without selecting latest desired or inventing historical state; preserve last acknowledged runtime and immutable records. | PARTIAL H9 |
 | SVC-14 | Change Attach memberships, then Deploy with existing hooks. | Only current declared memberships reach the new workload; hooks use their captured authored context; detached endpoints stay absent. | PARTIAL H4 |
-| SVC-15 | Change Attach and Entry configuration successfully, then fail the next rollout, including unrelated Volumes in the shared project. | Actual predecessor uses the last successfully applied bindings and serves authenticated requests; unrelated named Volumes cannot block proof, required/unknown Volume collisions must block; original Release input/history is not rewritten. | BLOCKED H36; H37/H38 local scope and journal fixes, deployment pending; prior FAIL H5 |
+| SVC-15 | Change Attach and Entry configuration successfully, then fail the next rollout, including unrelated Volumes in the shared project. | Actual predecessor uses the last successfully applied bindings and serves authenticated requests; unrelated named Volumes cannot block proof, required/unknown Volume collisions must block; original Release input/history is not rewritten. | H39 resumed recovery and later healthy Deploy PASS after repair; clean bounded rerun pending; historical FAIL H5/H36 |
 | SVC-16 | Prune the earlier configuration Task, restart Controller, then perform supported rollout/recovery. | Required acknowledged inputs remain available independent of pruned Task history; no fallback to obsolete Release configuration. | PARTIAL H9 |
 | SVC-17 | Fail persistence between runtime acknowledgement and serving projection publication; replay the report. | Runtime receipt, serving state and Task outcome are atomic and exact; no promotion from failed, skipped, compensated or merely staged work. | PARTIAL H9 |
 
@@ -351,7 +354,7 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 | TASK-04 | Race Abort with natural completion; Abort terminal work or an offline/stale Agent assignment. | Correct conflict or safe delivery failure; no false undone effect or released ownership; eventual timeout remains bounded. | PARTIAL H6 |
 | TASK-05 | Retry an eligible failed Task; try unsafe, superseded and unsupported retries separately. | Allowed attempt preserves original operation inputs/owner; forbidden retry cannot restart effects or silently rebase desired state. | PARTIAL H6 |
 | TASK-06 | Disconnect/resume event stream at boundaries, during compaction and terminal drain. | Immutable sequences have no loss or duplicate effects; terminal state is consistent; context cancellation releases subscriptions. | U; D6 repaired locally |
-| TASK-07 | Append beyond 1,000 events, replay retained/trimmed identities, and exceed event-size limits. | Atomic oldest-event trimming; monotonic sequences; bounded replay records; step status and recovery mutation proof survive trimming; no secret/subprocess output. | H38 local rolling-window PASS; H36 live saturation awaiting repaired deployment |
+| TASK-07 | Append beyond 1,000 events, replay retained/trimmed identities, and exceed event-size limits. | Atomic oldest-event trimming; monotonic sequences; bounded replay records; step status and recovery mutation proof survive trimming; no secret/subprocess output. | H38 local rolling-window PASS; H39 live 1,000 retained events at sequences 5–1,004, recovered terminal stream PASS |
 | TASK-08 | Restart during 90-day terminal retention cleanup with shared retry inputs. | Only eligible history removed; live Tasks, required runtime receipts and shared inputs remain; cleanup resumes without orphaning records. | U |
 | TASK-09 | Deliver a valid report that conflicts during durable publication. | Assignment is quarantined for that session without an Agent crash loop, false success or lost claim; unrelated work obeys both capacity limits. | U |
 | TASK-10 | Reconnect with stale identity, wrong epoch, mismatched plan or malformed report. | Reject invalid authority; valid generation can reconcile the original immutable operation; no repeated unknown effects. | U |
@@ -569,7 +572,7 @@ application interruption. A machine reboot is not an interruption-free GP update
 | JOURNEY-03 | Deploy a second independent application and operate on the first. | Unselected runtime identities, data and working requests remain unchanged; declared shared dependencies are recorded rather than assumed isolated. | PARTIAL H4 |
 | JOURNEY-04 | Write known data → backup selected sources → mutate data → restore exact point/key era. | Original surviving targets match the selected recovery point; unrelated data unchanged; an application-level query proves usability, not just file/object presence. | BLOCKED D2 |
 | JOURNEY-05 | Application traffic and background work → GP update → rejected/broken GP update → later successful update. | Original application functionality and data survive the complete sequence; same operation outcomes and measured continuity, no manual runtime repairs. | PARTIAL H2 |
-| REL-01 | Restart Controller normally under an application workload. | Agent restart allowed; etcd container identity/start time unchanged. Preserve application requests, held connections, data, serving Releases and correct recovered Task state. | Local repair H13; live NOT RUN, D4 |
+| REL-01 | Restart Controller normally under an application workload. | Agent restart allowed; etcd container identity/start time unchanged. Preserve application requests, held connections, data, serving Releases and correct recovered Task state. | PASS H40: normal restart after recovered Task; interrupted active Task is separate REL-02 |
 | REL-02 | Reboot the authorized QA machine under known state and unfinished work. | Bounded recovery of owned runtimes, data and safely resumable work; no duplicate effects or lost acknowledged state. Record reboot downtime, never claim single-host HA. | NOT RUN; D4 |
 | REL-03 | Interrupt an actually running Task by Agent/process/channel loss at an identified effect boundary. | Exact operation resumes/terminates safely; unknown effects are fenced; no duplicate Script, data mutation or detached claim. | NOT RUN; D4 |
 | REL-04 | Run the approved 30-minute mixed workload at 5 authenticated HTTP requests/second, with held WebSockets and background jobs. | Zero unexpected errors/disconnections; HTTP p95 below 1 second; correct job/results and preserved data. Record achieved rate and resource/restart measurements. | NOT RUN; baseline/recovery gate D4 |
@@ -585,7 +588,7 @@ application interruption. A machine reboot is not an interruption-free GP update
 | --- | --- | --- |
 | D1 | Latest-wins is accepted but not connected to production publication/execution. | Record its required cases; do not implement or enable it as an incidental QA task. |
 | D2 | End-to-end Backup/Restore is incomplete; Valkey's safe recovery source remains undecided. | No recovery-readiness pass. Preserve the required rejection case separately from unsupported successful capture/Restore. User decides any implementation or external recovery plan. |
-| D3 | Owner resolved the rule: Agent may restart with Controller; etcd must not. Local stop-on-close and verifier corrections pass (H13). | Live application/etcd continuity remains unqualified. Do not infer it from local manager or verifier tests. |
+| D3 | Owner resolved the rule: Agent may restart with Controller; etcd must not. Local stop-on-close and verifier corrections pass (H13). | CLOSED H40: live normal restart preserves etcd and application traffic/data. Active-Task interruption remains separate. |
 | D4 | Failed application-rollout recovery after runtime configuration changes remains unresolved. | Do not resume dependent interrupted-Task/reboot faults until baseline and required recovery are qualified and current permission allows them. |
 | D5 | First sustained target is approved: 30 minutes, 5 authenticated HTTP requests/second, held WebSockets/jobs, zero unexpected errors/disconnections and p95 below 1 second. Numeric pressure stops and separate fault recovery deadlines remain unspecified. | Run REL-04 only on the valid candidate/baseline. Record pressure thresholds before REL-05; neither this target nor the old 600-second run establishes production capacity. |
 | D6 | The Task stream discarded queued compaction errors when a closed event channel won selection. | Owner-approved repair passes the local regressions below. Both watches now consume terminal errors after event-channel closure. The local failure is closed; real etcd/SSE and full TASK-06 qualification remain unverified. Nothing was deployed. |

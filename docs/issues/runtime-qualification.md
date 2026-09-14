@@ -200,11 +200,15 @@ healthy replicas without unrelated project Volumes, so missed this sequence.
 
 Journal exhaustion followed because each redispatch advances the execution epoch
 and generates new progress events. The owner approved trimming oldest events on
-append. H38 verifies the local rolling 1,000-event window, bounded replay and
+append. H38 verifies the rolling 1,000-event window, bounded replay and
 per-step mutation/progress checkpoints. Recovery checks and timeouts are unchanged;
-old public history now expires as explicitly approved. Neither repair is deployed.
-The normal updater requires healthy idle Agent state, so a one-time data-preserving
-repair installation awaits owner approval before the same Task can resume.
+old public history now expires as explicitly approved. H39 deploys both repairs
+through the owner's approved data-preserving repair installation. The same Task
+completes exact recovery and remains `timed_out`; its live stream retains 1,000
+events at sequences 5–1,004. Current bindings, authenticated profile, all 11 healthy
+Services and a subsequent healthy Deploy pass. The incident is unstuck, but its
+original exceeded bound is not erased: a clean bounded failed-rollout rerun without
+repair intervention remains required before closing this qualification issue.
 The historical incident below remains evidence, not the cause of H36.
 
 Owner: Services and Releases delivery owner. Severity: high. This is an active

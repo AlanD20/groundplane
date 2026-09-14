@@ -630,6 +630,52 @@ fault occurred in this local repair. After deployment, resume that same Task and
 require exact restoration proof before further faults; normal upgrade qualification
 remains separate.
 
+H39 records the explicitly approved one-time QA repair on 2026-09-14, source
+`7322d2806`, version `0.0.0-qa.prodops20260914.5`. Staging passes in private
+`recovery-repair-stage.log`; the selected Controller and Agent digests are retained
+in `recovery-repair-candidate.json`. The installer archives the old binaries,
+configuration and settled native-update metadata verbatim on the QA host under
+`/root/.groundplane/.tmp/recovery-repair-7322d2806`. With the Controller stopped,
+an exact revision comparison changes only the enrolled Agent image. Its ID,
+generation, credentials and Task assignment remain intact. The original Task is
+compared unchanged before startup. The normal reconciler replaces the Agent;
+the installer does not change Task history, results, files owned by applications
+or etcd runtime. This is repair evidence, not native-upgrade qualification.
+
+The original failed rollout reaches terminal `timed_out` with its original failed
+step, execution epoch 754, exact recovery-record digest and compensated proxy proof.
+The Agent is healthy with no in-flight claim. `repaired-task-events.jsonl` contains
+exactly 1,000 events at sequences 5–1,004 and drains to completion. The original
+1,000 events remain archived separately. `repaired-recovery-result.json` and
+`resume-repaired-rollout.log` verify all 11 healthy Services, the saved authenticated
+profile and serving Releases, five native consumers on only the current backing,
+and both actual realtime clients' password authentication and async subscription.
+Every non-Agent container identity, image and start time, including etcd, survives
+the installation. `recovery-repair-traffic-result.json` records 45 HTTP 200s,
+zero failures and nine pongs on the same WebSocket over 45 seconds, maximum HTTP
+latency 0.394 seconds.
+
+The owned sleep hook was removed through its normal operation. The subsequent
+healthy Deploy completed, removed the old failed candidate and preserved the
+profile and unrelated serving Releases (`failed-rollout-result.json`). Hook/source
+history remains in Git/Task records; no application data was deleted. SVC-15's
+resumed recovery and follow-up Deploy pass after repair. H36 remains a failed
+bounded run; repeat the failure case cleanly before claiming unattended recovery.
+This result does not qualify normal upgrades or the approved sustained run.
+
+H40 separately passes REL-01's normal Controller restart on the same candidate.
+The foundation restart journey verifies a new Controller PID, preserved runtime
+directory inode, unchanged Agent identity/generation with permitted restart, and
+identical etcd container ID, start time and restart count. All non-Agent container
+identities/images/start times, serving Releases and the authenticated profile stay
+unchanged. `repaired-controller-restart-foundation.log` retains one transient
+Controller API error during its permitted readiness wait; application traffic
+has no failure. `repaired-controller-restart-traffic-result.json` records 45 HTTP
+200s and eight pongs on the same WebSocket over 45 seconds, maximum 0.209 seconds.
+`repaired-controller-restart-result.json` records the combined assertions. Owned
+traffic processes exited; the application and evidence remain. This is not a
+host-reboot, pressure, sustained-load or native-upgrade pass.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing
