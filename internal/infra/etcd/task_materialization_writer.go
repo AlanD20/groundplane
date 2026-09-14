@@ -212,6 +212,14 @@ func (repository *TaskRepository) prepareTaskMaterializationAcknowledgement(
 	change.applies = change.applies || configuration.applies
 	change.conditions = append(change.conditions, configuration.conditions...)
 	change.mutations = append(change.mutations, configuration.mutations...)
+	pins, err := repository.prepareRecoverySecretPinTerminal(ctx, terminal)
+	if err != nil {
+		clearTaskMaterializationProjectionChange(change)
+		return taskMaterializationProjectionChange{}, err
+	}
+	change.applies = change.applies || pins.applies
+	change.conditions = append(change.conditions, pins.conditions...)
+	change.mutations = append(change.mutations, pins.mutations...)
 	return change, nil
 }
 

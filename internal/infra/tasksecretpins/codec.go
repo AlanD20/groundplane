@@ -51,6 +51,13 @@ func validateSet(record setRecord) error {
 		record.PreparationCursor > record.MembershipCount || record.ReleaseCursor > record.PreparationCursor {
 		return corruption("secret pin set fields are invalid")
 	}
+	if record.Phase == phaseActive || record.Phase == phaseReleasing {
+		if ids.Validate(ids.KindTask, record.AttemptID) != nil {
+			return corruption("Secret pin active attempt identity is invalid")
+		}
+	} else if record.AttemptID != "" {
+		return corruption("unpublished Secret pin set has an active attempt")
+	}
 	switch record.Phase {
 	case phasePreparing:
 		if record.ReleaseCursor != 0 {

@@ -17,6 +17,7 @@ type TaskConfiguration struct {
 	Current       runtimeconfiguration.Reference  `json:"current"`
 	Prior         *runtimeconfiguration.Reference `json:"prior"`
 	PriorRevision int64                           `json:"prior_revision"`
+	SecretPins    *TaskSecretPinSet               `json:"secret_pins,omitempty"`
 }
 
 func cloneTaskConfiguration(configuration *TaskConfiguration) *TaskConfiguration {
@@ -24,6 +25,10 @@ func cloneTaskConfiguration(configuration *TaskConfiguration) *TaskConfiguration
 		return nil
 	}
 	cloned := *configuration
+	if configuration.SecretPins != nil {
+		pins := *configuration.SecretPins
+		cloned.SecretPins = &pins
+	}
 	if configuration.Prior != nil {
 		prior := *configuration.Prior
 		cloned.Prior = &prior
@@ -149,6 +154,9 @@ func taskRuntimeConfiguration(task TaskRecord) (*runtimeconfiguration.Reference,
 	if task.Configuration == nil {
 		return nil, nil
 	}
+	if err := validateTaskSecretPinSet(task.Configuration.SecretPins); err != nil {
+		return nil, err
+	}
 	reference := task.Configuration.Current
 	if runtimeconfiguration.ValidateReference(reference) != nil || task.RenderGeneration <= 0 ||
 		reference.EnvironmentID != task.Owner.EnvironmentID ||
@@ -270,7 +278,11 @@ func (repository *TaskRepository) runtimeConfigurationClaimConditions(
 			return nil, loadErr
 		}
 	}
-	return []Condition{condition}, nil
+	pins, err := repository.recoverySecretPinClaimConditions(ctx, task)
+	if err != nil {
+		return nil, err
+	}
+	return append([]Condition{condition}, pins...), nil
 }
 
 func prepareRuntimeConfigurationAcknowledgement(
@@ -282,6 +294,9 @@ func prepareRuntimeConfigurationAcknowledgement(
 	condition, present, err := taskConfigurationCondition(task)
 	if err != nil || !present {
 		return taskMaterializationProjectionChange{}, err
+	}
+	if task.Configuration.Prior != nil && task.Configuration.Current == *task.Configuration.Prior {
+		return taskMaterializationProjectionChange{}, nil
 	}
 	encoded, err := runtimeconfiguration.EncodeReference(task.Configuration.Current)
 	if err != nil {

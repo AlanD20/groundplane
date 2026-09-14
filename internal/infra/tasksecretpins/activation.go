@@ -14,6 +14,7 @@ func Activation(prepared Prepared) (Fragment, error) {
 	}
 	root := prepared.record
 	root.Phase = phaseActive
+	root.AttemptID = root.TaskID
 	value, err := encodeSet(root)
 	if err != nil {
 		return Fragment{}, err
@@ -27,6 +28,26 @@ func Activation(prepared Prepared) (Fragment, error) {
 			{Type: MutationPut, Key: RootKey(root.OperationID), Value: value},
 			{Type: MutationDelete, Key: PreparationKey(root.OperationID)},
 		},
+	}, nil
+}
+
+// RetainForRetry transfers live attempt authority in the same transaction as
+// Retry publication. This changes the root revision even if an attempt starts
+// and finishes between an expiry reader's checks and its final compare.
+func RetainForRetry(active ActiveRoot, taskID string) (Fragment, error) {
+	if validateActive(active) != nil || active.record.Phase != phaseActive ||
+		ids.Validate(ids.KindTask, taskID) != nil || taskID == active.record.AttemptID {
+		return Fragment{}, validation("Secret pin Retry authority is invalid")
+	}
+	next := active.record
+	next.AttemptID = taskID
+	value, err := encodeSet(next)
+	if err != nil {
+		return Fragment{}, err
+	}
+	return Fragment{
+		Conditions: []Condition{{Key: RootKey(next.OperationID), ModRevision: active.revision}},
+		Mutations:  []Mutation{{Type: MutationPut, Key: RootKey(next.OperationID), Value: value}},
 	}, nil
 }
 
@@ -76,7 +97,9 @@ func BeginRelease(active ActiveRoot) (Fragment, error) {
 		return Fragment{}, err
 	}
 	return Fragment{
-		Conditions: []Condition{{Key: RootKey(releasing.OperationID), ModRevision: active.revision}},
-		Mutations:  []Mutation{{Type: MutationPut, Key: RootKey(releasing.OperationID), Value: value}},
+		Conditions: []Condition{{Key: RootKey(releasing.OperationID), ModRevision: active.revision},
+			{Key: releaseKey(releasing.OperationID)}},
+		Mutations: []Mutation{{Type: MutationPut, Key: RootKey(releasing.OperationID), Value: value},
+			{Type: MutationPut, Key: releaseKey(releasing.OperationID), Value: []byte(releasing.OperationID)}},
 	}, nil
 }

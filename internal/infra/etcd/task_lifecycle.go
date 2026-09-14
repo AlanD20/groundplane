@@ -621,7 +621,7 @@ func (repository *TaskRepository) retryTask(
 			return environmentBinding.classify(revision, values, baseClassifier)
 		}
 	}
-	plan, err := newTaskIdempotencyMutationPlan(
+	plan, err := repository.newRetryTaskIdempotencyMutationPlan(ctx,
 		retry,
 		initiation,
 		conditions,

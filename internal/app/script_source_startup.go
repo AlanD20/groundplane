@@ -6,13 +6,16 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
 
-// initializeScriptSourceReferences completes private preparation recovery
+// initializeExecutionSourceReferences completes private preparation recovery
 // during construction, before Run starts HTTP, Agent dispatch, or schedulers.
 // The source module owns the durable transitions and bounded release batches.
-func initializeScriptSourceReferences(
+func initializeExecutionSourceReferences(
 	ctx context.Context,
 	store etcd.Store,
 ) (*etcd.ScriptSourceReferenceAuthority, error) {
+	if err := etcd.RecoverTaskSecretPinSources(ctx, store); err != nil {
+		return nil, err
+	}
 	authority, err := etcd.NewScriptSourceReferenceAuthority(store)
 	if err != nil {
 		return nil, err

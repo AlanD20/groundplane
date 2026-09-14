@@ -161,7 +161,7 @@ func (ledger *ReleaseLedger) Stage(ctx context.Context, input ReleaseStage) (Ver
 func (ledger *ReleaseLedger) Publish(
 	ctx context.Context,
 	evidence ReleasePublicationEvidence,
-) (ReleasePublicationResult, error) {
+) (_ ReleasePublicationResult, publicationErr error) {
 	if ctx == nil || ledger == nil || ledger.store == nil || ledger.tasks == nil {
 		return ReleasePublicationResult{}, errs.New(errs.KindInternal, "release publication is not configured")
 	}
@@ -172,6 +172,19 @@ func (ledger *ReleaseLedger) Publish(
 	if err := validateReleasePublicationEvidence(evidence); err != nil {
 		return ReleasePublicationResult{}, err
 	}
+	task, preparedPins, err := prepareRecoverySecretPins(ctx, ledger.store, evidence.Task)
+	if err != nil {
+		return ReleasePublicationResult{}, err
+	}
+	evidence.Task = task
+	if !preparedPins.IsZero() {
+		defer func() { publicationErr = finishRecoverySecretPreparation(ctx, ledger.store, task, publicationErr) }()
+	}
+	pinChange, err := recoverySecretPinActivation(preparedPins)
+	if err != nil {
+		return ReleasePublicationResult{}, err
+	}
+	defer clearTaskMaterializationProjectionChange(pinChange)
 	executedArtifact, err := releasePreparedArtifact(evidence)
 	if err != nil {
 		return ReleasePublicationResult{}, err
@@ -311,12 +324,22 @@ func (ledger *ReleaseLedger) Publish(
 	)
 	if len(conditions) != 11+len(hookFragment.conditions)+configurationConditions ||
 		len(mutations) != len(evidence.Manifest.Record.Members)*2+11+len(hookFragment.mutations) ||
-		len(conditions)+len(mutations) > maximumTransactionOperations {
+		len(
+			conditions,
+		)+len(
+			mutations,
+		)+len(
+			pinChange.conditions,
+		)+len(
+			pinChange.mutations,
+		) > maximumTransactionOperations {
 		return ReleasePublicationResult{}, errs.New(
 			errs.KindInternal,
 			"release publication operation budget is invalid",
 		)
 	}
+	conditions = append(conditions, pinChange.conditions...)
+	mutations = append(mutations, pinChange.mutations...)
 	result, err := ledger.store.Transact(ctx, conditions, mutations)
 	if err != nil {
 		return ReleasePublicationResult{}, err

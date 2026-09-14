@@ -17,6 +17,7 @@ const MaximumPins = 4096
 const (
 	preparationPrefix = "/v1/staging/task-secret-pin-sets/"
 	rootPrefix        = "/v1/records/task-secret-pin-sets/"
+	releasingPrefix   = "/v1/indexes/task-secret-pin-sets/releasing/"
 	taskPrefix        = "/v1/tasks/"
 	activeTaskPrefix  = "/v1/indexes/tasks/active-operation/"
 	releaseBatchSize  = 16
@@ -43,6 +44,7 @@ type setRecord struct {
 	Schema            uint32   `json:"schema"`
 	OperationID       string   `json:"operation_id"`
 	TaskID            string   `json:"task_id"`
+	AttemptID         string   `json:"attempt_id,omitempty"`
 	MembershipCount   uint64   `json:"membership_count"`
 	MembershipSHA256  string   `json:"membership_sha256"`
 	Phase             setPhase `json:"phase"`
@@ -69,6 +71,7 @@ type ActiveRoot struct {
 
 func (root ActiveRoot) OperationID() string      { return root.record.OperationID }
 func (root ActiveRoot) TaskID() string           { return root.record.TaskID }
+func (root ActiveRoot) AttemptID() string        { return root.record.AttemptID }
 func (root ActiveRoot) MembershipCount() uint64  { return root.record.MembershipCount }
 func (root ActiveRoot) MembershipSHA256() string { return root.record.MembershipSHA256 }
 func (root ActiveRoot) Revision() int64          { return root.revision }
@@ -80,6 +83,7 @@ func (prepared Prepared) ActiveRoot(revision int64) (ActiveRoot, error) {
 	}
 	record := prepared.record
 	record.Phase = phaseActive
+	record.AttemptID = record.TaskID
 	return ActiveRoot{record: record, revision: revision}, nil
 }
 
@@ -98,6 +102,7 @@ func (fragment *Fragment) Clear() {
 
 func PreparationKey(operationID string) string { return preparationPrefix + operationID }
 func RootKey(operationID string) string        { return rootPrefix + operationID + "/root" }
+func releaseKey(operationID string) string     { return releasingPrefix + operationID }
 func ReversePrefix(operationID string) string  { return rootPrefix + operationID + "/members/" }
 
 func ReverseKey(operationID string, ordinal uint64) string {

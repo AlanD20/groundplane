@@ -12,6 +12,7 @@ import (
 type taskExpiration interface {
 	ExpireTimedOutTasks(context.Context, time.Time) (int, error)
 	PruneExpiredTasks(context.Context, time.Time) (int, error)
+	ResumeTaskSourceReleases(context.Context) (bool, error)
 }
 
 type idempotencyPruning interface {
@@ -103,6 +104,9 @@ func (sch *Scheduler) tick(ctx context.Context) error {
 		return err
 	}
 	if _, err := sch.agents.ExpireStaleAgentTasks(ctx, now); err != nil {
+		return err
+	}
+	if _, err := sch.tasks.ResumeTaskSourceReleases(ctx); err != nil {
 		return err
 	}
 	if sch.backupSchedules != nil {

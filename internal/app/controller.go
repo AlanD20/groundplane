@@ -463,7 +463,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script artifact service: %w", err)
 	}
-	scriptSourceReferences, err := initializeScriptSourceReferences(ctx, store)
+	scriptSourceReferences, err := initializeExecutionSourceReferences(ctx, store)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script source-reference authority: %w", err)

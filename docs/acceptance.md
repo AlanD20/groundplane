@@ -162,6 +162,20 @@ The first analyzer attempt coincided with a helper extraction and is retained
 separately. No deployment or live recovery pass is claimed. Recovery must still
 bind these retained records to its selected files and execution authority.
 
+H18 extends local SEC-07/SVC-15 support through actual desired publication,
+Agent claim, acknowledgement, failed-attempt Retry and Secret deletion. Tests
+prove atomic pin activation and release authorization, failed/Retry preservation,
+unchanged failed history, restart cleanup, unavailable-source rejection, expired
+source Retry rejection, and newest-attempt expiry including a start/finish race.
+The scheduler test proves cleanup runs before daily pruning. The pin-module
+tests, these regressions and affected configuration/startup checks pass with the
+race detector in `.tmp/recovery-secret-lifecycle-expiry.log`; focused vet and
+pinned Staticcheck pass in `.tmp/recovery-secret-lifecycle-final-{vet,staticcheck}.log`.
+Earlier test-fixture compilation errors and the first actual lifecycle pass are
+retained in `.tmp/recovery-secret-actual-lifecycle-{first,second,third}.log`.
+These are local controlled-store checks, not deployed source protection, file
+restoration or a closing SVC-15/JOURNEY-02 result.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

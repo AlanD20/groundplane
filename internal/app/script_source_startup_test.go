@@ -14,7 +14,7 @@ import (
 func TestInitializeScriptSourceReferencesRequiresRecovery(t *testing.T) {
 	for _, fail := range []bool{false, true} {
 		store := &scriptSourceStartupStore{fail: fail}
-		authority, err := initializeScriptSourceReferences(context.Background(), store)
+		authority, err := initializeExecutionSourceReferences(context.Background(), store)
 		if (err != nil) != fail || (authority == nil) != fail || store.calls != 1 {
 			t.Fatalf("source startup fail=%t: authority=%t calls=%d error=%v", fail, authority != nil, store.calls, err)
 		}

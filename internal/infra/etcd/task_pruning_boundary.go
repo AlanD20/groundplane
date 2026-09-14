@@ -16,6 +16,10 @@ func (repository *TaskRepository) prepareTaskPruneBoundary(
 	readRevision int64,
 	now time.Time,
 ) (bool, error) {
+	if stop, err := repository.prepareRecoverySecretPinExpiry(ctx, task, taskRevision, retentionEntry, now); stop ||
+		err != nil {
+		return stop, err
+	}
 	if task.Type == TaskScript {
 		return repository.prepareManualScriptExpiry(ctx, task, taskRevision, retentionEntry, readRevision, now)
 	}
@@ -31,14 +35,15 @@ func (repository *TaskRepository) prepareTaskPruneBoundary(
 	return changed || !ready, nil
 }
 
-func scriptTaskPruneConditions(task TaskRecord) []Condition {
+func taskSourcePruneConditions(task TaskRecord) []Condition {
+	pins := recoverySecretPinPruneConditions(task)
 	if task.Type != TaskScript {
-		return nil
+		return pins
 	}
-	return []Condition{
+	return append(pins, []Condition{
 		{Key: scriptSourceRootKey(task.OperationID)},
 		{Key: ref.ReversePrefix(task.OperationID), Prefix: true},
-	}
+	}...)
 }
 
 func taskPruneConflict(err error) bool {

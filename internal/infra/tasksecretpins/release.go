@@ -45,7 +45,8 @@ func (repository *Repository) ReleaseBatch(
 		result, err := repository.transact(ctx, []Condition{
 			{Key: RootKey(operationID), ModRevision: read.Values[0].ModRevision},
 			{Key: ReversePrefix(operationID), Prefix: true},
-		}, []Mutation{{Type: MutationDelete, Key: RootKey(operationID)}})
+		}, []Mutation{{Type: MutationDelete, Key: RootKey(operationID)},
+			{Type: MutationDelete, Key: releaseKey(operationID)}})
 		if err != nil {
 			return false, false, err
 		}

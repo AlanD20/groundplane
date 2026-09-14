@@ -397,7 +397,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		{Key: taskOperationIndexKey(task.OperationID, task.ID), ModRevision: companions.Values[2].ModRevision},
 		{Key: taskPruneIntentKey(task.ID)},
 	}
-	conditions = append(conditions, scriptTaskPruneConditions(task)...)
+	conditions = append(conditions, taskSourcePruneConditions(task)...)
 	for index, key := range environmentDeletionFenceKeys {
 		condition := Condition{Key: key}
 		value := companions.Values[environmentDeletionFenceStart+index]

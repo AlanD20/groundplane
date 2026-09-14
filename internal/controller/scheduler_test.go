@@ -13,12 +13,13 @@ import (
 )
 
 type fakeTaskExpiration struct {
-	now        time.Time
-	calls      int
-	err        error
-	pruneNow   time.Time
-	pruneCalls int
-	pruneErr   error
+	now          time.Time
+	calls        int
+	err          error
+	pruneNow     time.Time
+	pruneCalls   int
+	pruneErr     error
+	releaseCalls int
 }
 
 type fakeIdempotencyPruning struct {
@@ -57,6 +58,11 @@ func (expiration *fakeTaskExpiration) PruneExpiredTasks(_ context.Context, now t
 	return 1, expiration.pruneErr
 }
 
+func (expiration *fakeTaskExpiration) ResumeTaskSourceReleases(context.Context) (bool, error) {
+	expiration.releaseCalls++
+	return true, nil
+}
+
 func TestSchedulerTickExpiresOverdueTasks(t *testing.T) {
 	wantNow := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
 	expiration := &fakeTaskExpiration{}
@@ -79,7 +85,9 @@ func TestSchedulerTickExpiresOverdueTasks(t *testing.T) {
 	if err := scheduler.tick(context.Background()); err != nil {
 		t.Fatalf("tick(before daily prune) error = %v", err)
 	}
-	if expiration.calls != 2 || agents.calls != 2 || pruning.calls != 1 || expiration.pruneCalls != 1 {
+	// SEC-07: source release must run before the daily history-pruning deadline.
+	if expiration.calls != 2 || agents.calls != 2 || pruning.calls != 1 || expiration.pruneCalls != 1 ||
+		expiration.releaseCalls != 2 {
 		t.Fatalf(
 			"before daily deadline expiration/stale/pruning calls = %d/%d/%d",
 			expiration.calls,

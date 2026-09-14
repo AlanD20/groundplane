@@ -112,7 +112,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	task TaskRecord,
 	marker IdempotencyMarker,
 	blueprintTransactions environmentBlueprintTransactionStore,
-) (IdempotencyTransactionResult, error) {
+) (_ IdempotencyTransactionResult, publicationErr error) {
 	if err := validateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -291,6 +291,18 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	task, preparedPins, err := prepareRecoverySecretPins(ctx, repository.store, task)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if !preparedPins.IsZero() {
+		defer func() { publicationErr = finishRecoverySecretPreparation(ctx, repository.store, task, publicationErr) }()
+	}
+	pinChange, err := recoverySecretPinActivation(preparedPins)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clearTaskMaterializationProjectionChange(pinChange)
 	taskValue, err := encodeTaskRecord(task)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -531,6 +543,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		mutations = append(mutations, volumeRuntimePublication.mutations...)
 	}
 	conditions, mutations, classified = entryPublication.bind(conditions, mutations, classified)
+	conditions, mutations, classified = bindRecoverySecretPinPublication(pinChange, conditions, mutations, classified)
 	classifier := func(revision int64, values []*KeyValue) error {
 		if conflict := classified(revision, values); conflict != nil {
 			return conflict
@@ -568,32 +581,4 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		return idempotency.applyEnvironmentBlueprint(ctx, marker, plan, blueprintTransactions)
 	}
 	return idempotency.Apply(ctx, marker, plan)
-}
-
-func validateEnvironmentDesiredPublicationBudget(
-	conditions []Condition,
-	mutations []Mutation,
-) error {
-	return validateEnvironmentDesiredPublicationPartitionCounts(
-		len(conditions),
-		len(mutations),
-		len(conditions),
-	)
-}
-
-func validateEnvironmentDesiredPublicationPartitionCounts(
-	comparisons int,
-	successMutations int,
-	failureReads int,
-) error {
-	if comparisons > 32 || successMutations > 32 || failureReads > 32 {
-		return errs.Newf(
-			errs.KindValidationFailed,
-			"Environment desired publication exceeds a 32-operation transaction partition (%d/%d/%d)",
-			comparisons,
-			successMutations,
-			failureReads,
-		)
-	}
-	return nil
 }

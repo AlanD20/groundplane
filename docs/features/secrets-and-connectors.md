@@ -174,6 +174,14 @@ The `infra/tasksecretpins` module stages exact memberships with source/deletion
 fences, supplies a constant-size atomic activation fragment, and releases members
 in bounded batches only after an explicit release transition. Interrupted
 preparation can be abandoned from its durable descriptor, with Task and active
-operation absence checked on every mutation. Local tests cover those races and
-restart paths. Task publication, terminal/retry release and startup callers are
-not yet connected. These modules do not qualify recovery or production hosting.
+operation absence checked on every mutation. Blueprint/Entry desired publication
+and ordinary Release publication now activate the selected exact pins atomically
+with their Task. Failed attempts retain them; Retry transfers the active attempt
+without copying Secret values. Successful completion authorizes bounded cleanup.
+Expiry checks the newest attempt's retention and recovery state, with a root
+revision fence against a retry that starts and finishes during the check.
+Startup abandons unpublished preparation and resumes authorized release; the
+scheduler drains releases before daily history pruning. H18 records actual local
+publication, acknowledgement, Retry, expiry and deletion checks. Remaining file
+writers and live recovery still require qualification; these tests do not qualify
+production hosting.
