@@ -100,19 +100,28 @@ Comparing the saved post-reapply observation instead proves the four Attaches
 preserved the replacement router. This corrects attribution, not the reapply
 failure. Evidence and exact identities are H29 in [acceptance](../acceptance.md).
 
-The existing `RetainEnvironmentComponentRuntime` path is intended to preserve
-equivalent runtime and ignores plan/generation labels when comparing it. The
-specific reason retention was not selected in this sequence remains to be
-isolated; label churn is observed, not a complete upstream causal diagnosis.
-Do not remove ownership labels, relax checks or start latest-wins implementation
-as an inferred repair. No product fix is authorized yet.
+The exact pre-reapply and published artifacts prove the cause: normal Service
+Deploys added native proxy configs. `RetainEnvironmentComponentRuntime` compared
+the whole Environment resource map and declined retention although the router
+did not consume those configs. New plan/generation labels then changed Compose
+identity. Its earlier tests covered whole-map equality, not unrelated resources
+introduced between first Apply and reapply by native Deploy.
+
+The owner-approved correction compares only definitions referenced by the
+unchanged Component. It reuses the existing canonical resource-reference reader;
+changed or missing consumed resources still prevent retention, and desired shared
+resources are preserved. Component configuration, ownership, source validation
+and publication fences are unchanged. H30 records failing-before/passing-after
+regressions and successful replay of the exact QA artifact pair. The affected
+race checks, vet and pinned Staticcheck pass; live closing proof remains required.
 
 Acceptance: repeat the first Apply, normal Service Deploys and exact reapply;
 preserve unchanged router identity/start time and held application connections,
 while still applying genuine router changes correctly. Then resume the saved
 cutover/recovery case without replaying its completed mutations. Application
 baseline is healthy; additional Attaches remain, with no Entry rebind, old Detach
-or failed-candidate fault performed. Owner decision controls the next action.
+or failed-candidate fault performed. Deploy the scoped repair and run that proof;
+do not expand this permission to latest-wins or broader reconciliation work.
 
 ## Recovery after runtime configuration changes
 

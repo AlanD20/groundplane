@@ -68,6 +68,14 @@ then comparing the recipe to a separate expected snapshot.
 
 ### Task-owned Component candidates
 
+An unchanged Component retains its exact acknowledged runtime ownership across
+Blueprint reapply. Equivalence covers its own configuration and only the shared
+networks, volumes, configs and secrets it references. Unrelated resources added
+by normal Service Deploys must not restart it. A changed or missing consumed
+definition prevents retention; desired shared definitions are never replaced by
+historical Component input. The Controller's existing Component-runtime retention
+path enforces this rule without granting Components storage or execution access.
+
 One Agent Task owns one immutable Component candidate set for an Environment.
 The active Component records remain unchanged while that Task is pending or
 running. An Environment-scoped active-intent index rejects another candidate

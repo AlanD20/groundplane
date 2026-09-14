@@ -44,15 +44,6 @@ func RetainEnvironmentComponentRuntime(
 	if err != nil {
 		return nil, err
 	}
-	// Conservatively decline retention when any resource definition changes.
-	for _, section := range []string{"networks", "volumes", "configs", "secrets"} {
-		if !sameComponentRuntimeNode(
-			componentRetentionValue(nextRoot, section),
-			componentRetentionValue(priorRoot, section),
-		) {
-			return current, nil
-		}
-	}
 	nextServices, err := serviceArtifactMapping(nextRoot)
 	if err != nil {
 		return nil, err
@@ -95,6 +86,13 @@ func RetainEnvironmentComponentRuntime(
 		if !matches {
 			continue
 		}
+		matches, err = sameComponentRuntimeResources(nextNode, nextRoot, priorRoot)
+		if err != nil {
+			return nil, err
+		}
+		if !matches {
+			continue
+		}
 		owned.Services[index] = proto.CloneOf(selected)
 		nextServices.Content[mappingIndex(nextServices, service.ComposeName)+1] = priorNode
 		changed = true
@@ -109,6 +107,23 @@ func RetainEnvironmentComponentRuntime(
 	digest := sha256.Sum256(owned.CanonicalYaml)
 	owned.YamlSha256 = digest[:]
 	return owned, nil
+}
+
+func sameComponentRuntimeResources(service, current, prior *yaml.Node) (bool, error) {
+	references := make(map[string]map[string]bool)
+	if err := retainedServiceResourceReferences(service, references); err != nil {
+		return false, err
+	}
+	for section, names := range references {
+		for name := range names {
+			next := componentRetentionValue(componentRetentionValue(current, section), name)
+			previous := componentRetentionValue(componentRetentionValue(prior, section), name)
+			if next == nil || previous == nil || !sameComponentRuntimeNode(next, previous) {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
 }
 
 func componentRetentionDocument(artifact *agentpb.ComposeArtifact) (*yaml.Node, error) {

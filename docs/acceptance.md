@@ -413,6 +413,23 @@ interruption duration was measured. Owner decision is required before repair
 or resuming the paused journey. Exact action receipts and evidence hashes are
 retained in the private run directory.
 
+H30 records the owner-approved local BP-05/H29 repair. Read-only, fixed-revision
+capture in `.tmp/router-retention-20260914-KE6VP5fr/planning-probe-nnf2kmnh/`
+proved that the pre-reapply artifact lacked native proxy configs introduced by
+normal Service Deploys. Whole-map comparison prevented unchanged router retention.
+The owned diagnostic tunnel closed successfully. `red.log` reproduces that cause
+in `TestComponentRetentionScopesResourceChangesToConsumer`; `green.log` passes
+after comparison is scoped to consumed resources. Changed/missing consumed
+definitions, actual Component changes, source validation and input immutability
+remain covered. `real-artifact-replay.log` verifies the captured QA pair locally.
+The full Controller and Blueprint Release package race checks pass in
+`controller-loopback.log` and `packages.log`, respectively. The initial Controller
+attempt could not open sandboxed test listeners; no test workaround was added.
+`vet.log` and `staticcheck-local.log` pass; the initial analyzer attempt's external
+cache denial remains in `staticcheck.log`. `architecture.json` has the same 122
+existing findings and no additions. No limit, dependency, API or execution
+authority changed. These are local results, not a deployed or closing BP-05 pass.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

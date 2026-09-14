@@ -22,9 +22,9 @@ No item below is complete merely because local tests pass.
 Live continuation on clean source `76578c72f` now has a passing private application
 baseline (H28), but BP-05 failed: unchanged Apply recreated the ingress router
 (H29). The journey stopped before Entry cutover, old Detach and failed-candidate
-injection. Owner decision is required before repair; no new implementation is
-authorized by this finding. Restart/upgrade and sustained qualification remain
-unrun on this candidate.
+injection. The owner-approved consumed-resource retention correction has local
+proof in H30; deployed reapply proof remains required. Restart/upgrade and
+sustained qualification remain unrun on this candidate.
 
 The owner deferred GP Backup/Restore and external backup/restore work from this
 immediate scope. JOURNEY-04, D2 and Gate B remain incomplete; this is not data-loss

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"strings"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
+	"gopkg.in/yaml.v3"
 )
 
 // Rationale: the second render used for a native Blueprint candidate must not
@@ -90,7 +92,9 @@ func TestRetainEnvironmentComponentRuntimeOnlyWhenIdentical(t *testing.T) {
 					current.CanonicalYaml,
 					[]byte("    volumes: [\"/different:/config\"]\n")...)
 			case "network":
-				current.CanonicalYaml = append(current.CanonicalYaml, []byte("networks:\n  new: {}\n")...)
+				current.CanonicalYaml = append(
+					current.CanonicalYaml,
+					[]byte("    networks: [new]\nnetworks:\n  new: {}\n")...)
 			case "metadata":
 				current.Services[0].ExpectedReplicas = 2
 			case "native":
@@ -123,6 +127,74 @@ func TestRetainEnvironmentComponentRuntimeOnlyWhenIdentical(t *testing.T) {
 				t.Fatal("retention mutated its input")
 			}
 		})
+	}
+}
+
+// Rationale: BP-05/H29: normal native Deploy adds proxy configs to the mixed
+// artifact. Unreferenced resources must not restart an unchanged Component;
+// changes to a resource it actually consumes must still reconcile.
+func TestComponentRetentionScopesResourceChangesToConsumer(t *testing.T) {
+	for _, section := range []string{"networks", "volumes", "configs", "secrets"} {
+		for _, change := range []string{"unrelated-added", "unrelated-changed", "consumed-changed", "consumed-missing"} {
+			t.Run(section+"/"+change, func(t *testing.T) {
+				prior := componentRetentionArtifact("plan_01ARZ3NDEKTSV4RRFFQ69G5FAV", "1")
+				current := componentRetentionArtifact("plan_01ARZ3NDEKTSV4RRFFQ69G5FAW", "2")
+				reference := "    " + section + ": [used]\n"
+				if section == "volumes" {
+					reference = "    volumes:\n      - type: volume\n        source: used\n        target: /data\n"
+				}
+				for _, artifact := range []*agentpb.ComposeArtifact{prior, current} {
+					artifact.CanonicalYaml = append(artifact.CanonicalYaml,
+						[]byte(reference+section+":\n  used: {name: original}\n  unrelated: {name: original}\n")...)
+				}
+				switch change {
+				case "unrelated-added":
+					current.CanonicalYaml = append(current.CanonicalYaml, []byte("  native-proxy: {name: added}\n")...)
+				case "unrelated-changed":
+					current.CanonicalYaml = []byte(strings.ReplaceAll(string(current.CanonicalYaml),
+						"unrelated: {name: original}", "unrelated: {name: changed}"))
+				case "consumed-changed":
+					current.CanonicalYaml = []byte(strings.ReplaceAll(string(current.CanonicalYaml),
+						"  used: {name: original}", "  used: {name: changed}"))
+				case "consumed-missing":
+					current.CanonicalYaml = []byte(strings.ReplaceAll(string(current.CanonicalYaml),
+						"  used: {name: original}\n", ""))
+				}
+				for _, artifact := range []*agentpb.ComposeArtifact{prior, current} {
+					digest := sha256.Sum256(artifact.CanonicalYaml)
+					artifact.YamlSha256 = digest[:]
+				}
+				before, priorBefore := proto.CloneOf(current), proto.CloneOf(prior)
+				encoded, err := proto.Marshal(prior)
+				if err != nil {
+					t.Fatal(err)
+				}
+				result, err := RetainEnvironmentComponentRuntime(current, encoded)
+				if err != nil {
+					t.Fatal(err)
+				}
+				want := current.Services[0]
+				if strings.HasPrefix(change, "unrelated-") {
+					want = prior.Services[0]
+				}
+				if !proto.Equal(result.Services[0], want) {
+					t.Fatal("resource change selected the wrong Component runtime ownership")
+				}
+				var actual, desired yaml.Node
+				if yaml.Unmarshal(result.CanonicalYaml, &actual) != nil ||
+					yaml.Unmarshal(current.CanonicalYaml, &desired) != nil {
+					t.Fatal("result or desired YAML is invalid")
+				}
+				actualResources, actualErr := yaml.Marshal(componentRetentionValue(actual.Content[0], section))
+				desiredResources, desiredErr := yaml.Marshal(componentRetentionValue(desired.Content[0], section))
+				if actualErr != nil || desiredErr != nil || !bytes.Equal(actualResources, desiredResources) {
+					t.Fatal("Component retention replaced desired shared resources")
+				}
+				if !proto.Equal(current, before) || !proto.Equal(prior, priorBefore) {
+					t.Fatal("retention mutated input authority")
+				}
+			})
+		}
 	}
 }
 
