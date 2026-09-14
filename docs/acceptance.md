@@ -933,6 +933,29 @@ remain for continued testing. No new operational fault, reboot, reset or pressur
 test ran on the replacement. This qualifies restored test hosting, not a rerun
 of H46–H49 or complete production readiness.
 
+H53 records the upgrade-only UP-03 run on H51/H52's unchanged
+`0.0.0-qa.owner20260914.1`, production source `939fd039f`, built from `2676fbae6`.
+The running Controller digest is
+`sha256:8a586e85d911d25afc5e579eb5445b11cada8ce5362244758a72d3c0b77e915c`;
+the full release and Agent identities are captured in `upgrade-edge-baseline.json`.
+The test definition is `upgrade-refusals.py` in
+`.tmp/qa-owner-reset-20260914-hK6Yqeii/`; exact timestamped API/CLI receipts and
+before/after snapshots are retained there. The matrix defines these variants
+before execution. Selected Controller and Agent requests pass with HTTP 422
+`validation.failed` and HTTP 409 `state.conflict` respectively. A canonical absent
+release digest fails with HTTP 500 `internal`, not an input/resource refusal.
+No request creates a Task or changes update history, any container identity,
+image/start time, serving Release or the checked authenticated profile.
+
+`upgrade-refusals-result.json` preserves the failed outcome; its concurrent
+`upgrade-refusals-traffic-result.json` passes 45 seconds, 45 authenticated HTTP
+200 responses, zero request failures/disconnections, nine pongs on the same
+WebSocket and maximum HTTP latency 0.198 seconds. No test resource was created,
+no cleanup is required and no product source changed. The host remains healthy.
+Activation faults were not started after this assertion failure. The
+[missing-candidate finding](issues/runtime-qualification.md#missing-upgrade-candidate-refusal)
+requires a fix/defer decision; these results do not complete UP-03 or upgrade QA.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

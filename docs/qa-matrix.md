@@ -575,11 +575,20 @@ running through API disconnects. Record failures, reconnects and latency, not
 only the final healthy state. Controller/API reconnection is distinct from
 application interruption. A machine reboot is not an interruption-free GP update.
 
+The selected 2026-09-14 continuation is upgrade-only. UP-03 first exercises
+the currently selected Controller and Agent, and a canonical digest with no
+staged release. Each request must refuse before Task publication or replacement;
+the missing-candidate response must identify an invalid or unavailable input,
+not an internal server failure. Compare all runtime identities/start times,
+Task history, serving Releases and the authenticated profile, with HTTP traffic
+and a held WebSocket across the requests. Retain failures before further faults.
+No host reboot/reset, pressure test or provider change is selected.
+
 | Case | Setup and action | Pass condition | Record |
 | --- | --- | --- | --- |
 | UP-01 | Install a valid staged Controller/Agent release through the normal protected update action. | Exact candidate identities selected; same update Task survives API reconnect; application containers/data/routing remain intact with no observed request failure or held-WebSocket reconnect during the recorded window. | PASS H47/H49 normal CLI/private-ingress variant |
 | UP-02 | Perform standalone idle Agent update and subsequent enrollment using the qualified native selection. | Correct desired Agent image/generation; application containers and traffic remain unchanged; no self-owned Agent replacement. | U |
-| UP-03 | Request an already selected image or invalid/incompatible/corrupt/missing release candidate. | Documented refusal before replacement; same serving versions/history/data and no restart or new application effect. | PARTIAL H6 |
+| UP-03 | Request an already selected image or invalid/incompatible/corrupt/missing release candidate. | Documented refusal before replacement; same serving versions/history/data and no restart or new application effect. | FAIL H53 missing candidate returns Internal; selected Controller/Agent and no-effect assertions pass. Earlier invalid-input proof: H6. |
 | UP-04 | Start update with active work and race assignment admission against drain. | Busy refusal or bounded drain; active work not aborted; no new admitted send crosses the pause and no Script/migration replay. | U |
 | UP-05 | Abort or fail preparation before activation; race with permanent removal/revocation. | Release only the operation-owned pause; no replacement or revival of a removed/stale generation. | U |
 | UP-06 | Abort after activation is committed or uncertain. | Refuse unsafe cancellation; preserve recovery and dispatch hold until exact commit outcome is resolved. | U |
