@@ -544,6 +544,36 @@ Fresh complete background-job and sustained-traffic qualification remain open.
 The approved failed-candidate probe then starts from this healthy baseline; its
 separate terminal and recovery outcome must be recorded before SVC-15 can pass.
 
+H36 records the subsequent SVC-15/JOURNEY-02 attempt on the same candidate.
+`candidate-fault-proof.log` and `failed-rollout-fault.json` prove only the new,
+identity-selected candidate was stopped before promotion. The original serving
+slot was untouched. The run stops after its 600-second observation limit with
+the original Task still nonterminal; no additional fault, manual repair, healthy
+Deploy, hook removal or Abort ran.
+
+`failed-rollout-events.log` captures the public Task stream under an eight-second
+reader timeout (exit 124 expected). The Service proxy recovery-probe step has at
+least 271 alternating running/failed attempts. That identification comes from the
+sealed ordinary Release step mapping, not from generic completed-step counts.
+Controller and Agent warning logs contain no observed report-rejection error.
+`during-failed-rollout.log` verifies all 11 application Services, authenticated
+profile and original serving Releases during the failure wait. The Agent is
+healthy with one claim. Recovery is BLOCKED, not successful merely because the
+application still serves. Exact probe failure diagnosis and any repair require
+owner decision; the active Task, owned hook and evidence remain preserved.
+
+The final check then catches deterioration: `recovery-bound-expired.log` fails
+its 20-second health observation because the Agent is degraded and all Service
+observations are unavailable. `recovery-final-controller.log` identifies the
+secondary cause: retries reach the maximum 1,000 durable Task events, so Controller
+rejects subsequent Agent progress. `recovery-bound-result.json` records the Task
+still running with one claim. Earlier healthy/no-rejection observations do not
+describe this later state. No event limit, runtime file or history was modified.
+`recovery-final-profile.log` records normal token refresh and authenticated HTTP
+200 with the original profile preserved; `recovery-final-result.json` separates
+that application pass from the stuck Task and degraded Agent. This does not prove
+uninterrupted traffic throughout the fault or successful automatic recovery.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

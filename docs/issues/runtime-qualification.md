@@ -180,6 +180,20 @@ SVC-06 traffic variants remain unqualified.
 
 ## Recovery after runtime configuration changes
 
+Current H36 result on `18e936fa9`: the repaired backing cutover passes, but stopping
+only the next candidate exposes repeated failure of its Service proxy recovery
+probe. The public event stream records at least 271 failed/running attempts for
+that step. The Task remains active beyond the 600-second QA observation bound;
+the Agent initially remains healthy with one claim. Repeated attempts then exhaust
+the 1,000-event Task journal limit. Controller rejects further progress at that
+limit; the Agent becomes degraded and Service observations become unavailable.
+Earlier profile, serving Release and Service health checks passed during the wait,
+but automatic recovery and a later healthy Deploy are unproved.
+The exact probe failure cause is not yet established. This is not permission to
+increase timeouts, weaken the probe, abort the Task or repair runtime files.
+Further diagnosis/repair requires owner decision. The historical incident below
+remains evidence, not the asserted cause of H36.
+
 Owner: Services and Releases delivery owner. Severity: high. This is an active
 recovery blocker, not deferred qualification. The failed-candidate QA sequence on
 2026-09-13 first completed Attach creation, Entry rebinding and old Attach removal,

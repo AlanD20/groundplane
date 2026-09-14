@@ -26,7 +26,11 @@ configured first Deploy passes. The saved Attach/Entry/Detach cutover also passe
 actual password-only clients during the overlapping-network window and afterward
 (ATT-12), preserving serving Releases, proxies and the checked application profile.
 Short protected-update traffic windows pass, not full upgrade or sustained
-qualification. Failed-rollout recovery is now in progress; normal-restart and
+qualification. Failed-rollout recovery is BLOCKED H36: its proxy probe repeats
+failed attempts and the Task remains active beyond the 600-second observation
+bound. Repeated attempts then exhaust the 1,000-event limit; Controller progress
+rejection degrades the Agent and makes Service observations unavailable. Earlier
+application checks passed; that does not prove recovery. Normal-restart and
 sustained cases remain open. H29/H31/H33 failures remain dated evidence.
 
 The owner deferred GP Backup/Restore and external backup/restore work from this
@@ -314,7 +318,7 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 | SVC-12 | Abort, time out or lose Agent acknowledgement after a rollout effect. | Recorded effects and exact predecessor authority govern recovery; no false no-effect result, duplicate switch or silent success. | U |
 | SVC-13 | Submit altered/missing/foreign predecessor evidence or stale source authority at publication, claim and acknowledgement. | Fail closed without selecting latest desired or inventing historical state; preserve last acknowledged runtime and immutable records. | PARTIAL H9 |
 | SVC-14 | Change Attach memberships, then Deploy with existing hooks. | Only current declared memberships reach the new workload; hooks use their captured authored context; detached endpoints stay absent. | PARTIAL H4 |
-| SVC-15 | Change Attach and Entry configuration successfully, then fail the next rollout. | Actual predecessor uses the last successfully applied bindings and serves authenticated requests; original Release input/history is not rewritten. | FAIL H5 |
+| SVC-15 | Change Attach and Entry configuration successfully, then fail the next rollout. | Actual predecessor uses the last successfully applied bindings and serves authenticated requests; original Release input/history is not rewritten. | BLOCKED H36: repeated recovery-probe failures; prior FAIL H5 |
 | SVC-16 | Prune the earlier configuration Task, restart Controller, then perform supported rollout/recovery. | Required acknowledged inputs remain available independent of pruned Task history; no fallback to obsolete Release configuration. | PARTIAL H9 |
 | SVC-17 | Fail persistence between runtime acknowledgement and serving projection publication; replay the report. | Runtime receipt, serving state and Task outcome are atomic and exact; no promotion from failed, skipped, compensated or merely staged work. | PARTIAL H9 |
 
