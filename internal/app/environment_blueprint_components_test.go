@@ -17,8 +17,11 @@ import (
 )
 
 type environmentBlueprintMaterializationResolverFake struct {
-	content []byte
-	source  etcd.TaskMaterializationSource
+	content            []byte
+	source             etcd.TaskMaterializationSource
+	retained           []byte
+	retainedGeneration uint64
+	retainedRecord     etcd.TaskMaterializationRecord
 }
 
 func (resolver *environmentBlueprintMaterializationResolverFake) PinSecretValue(
@@ -39,6 +42,18 @@ func (resolver *environmentBlueprintMaterializationResolverFake) ResolveTaskMate
 ) ([]byte, error) {
 	resolver.source = source
 	return append([]byte(nil), resolver.content...), nil
+}
+
+func (resolver *environmentBlueprintMaterializationResolverFake) RetainComponentFile(
+	_ context.Context,
+	record etcd.TaskMaterializationRecord,
+	generation uint64,
+	content []byte,
+) error {
+	resolver.retainedRecord = record
+	resolver.retainedGeneration = generation
+	resolver.retained = append([]byte(nil), content...)
+	return nil
 }
 
 // Rationale: Component output bytes must produce authenticated Task metadata
@@ -69,7 +84,7 @@ func TestEnvironmentComponentMaterializationsBuildMetadataOnlyTaskInputs(t *test
 		}},
 	}
 	references, steps, err := service.environmentComponentMaterializations(
-		context.Background(), environmentID, projectID, revisionID, artifactID,
+		context.Background(), environmentID, projectID, revisionID, artifactID, 7,
 		func(kind ids.Kind, _ string) string { return ids.New(kind) },
 		nil, projection, nil, nil,
 	)
@@ -89,6 +104,15 @@ func TestEnvironmentComponentMaterializationsBuildMetadataOnlyTaskInputs(t *test
 		plain.Source.ComponentFile.RevisionID != revisionID || plain.Mode != 0o444 ||
 		plain.SHA256 != hex.EncodeToString(plainDigest[:]) {
 		t.Fatalf("plain Component materialization = %#v", plain)
+	}
+	if resolver.retainedGeneration != 7 || resolver.retainedRecord.MaterializationID != plain.MaterializationID ||
+		!bytes.Equal(resolver.retained, projection.PlainFiles[0].Content) {
+		t.Fatalf(
+			"retained Component materialization = %#v/%d/%q",
+			resolver.retainedRecord,
+			resolver.retainedGeneration,
+			resolver.retained,
+		)
 	}
 	generated := byKind[etcd.TaskMaterializationOutputGeneratedEnvironment]
 	secretDigest := sha256.Sum256(secretContent)
@@ -126,7 +150,7 @@ func TestEnvironmentComponentMaterializationsBuildBlueprintFileInput(t *testing.
 	content := []byte("example.test { reverse_proxy app:8080 }\n")
 	service := &environmentBlueprintService{}
 	references, steps, err := service.environmentComponentMaterializations(
-		context.Background(), environmentID, projectID, revisionID, artifactID,
+		context.Background(), environmentID, projectID, revisionID, artifactID, 1,
 		func(kind ids.Kind, _ string) string { return ids.New(kind) },
 		[]core.BlueprintFile{{Path: "config/Caddyfile", Content: content}},
 		controller.EnvironmentComponentComposeProjection{}, nil, nil,

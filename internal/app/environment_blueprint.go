@@ -136,14 +136,6 @@ type environmentBlueprintService struct {
 	random            io.Reader
 	now               func() time.Time
 }
-type environmentBlueprintMaterializationResolver interface {
-	PinSecretValue(context.Context, string, string) (etcd.TaskSecretValueReference, error)
-	ResolveTaskMaterializationSource(
-		context.Context,
-		string,
-		etcd.TaskMaterializationSource,
-	) ([]byte, error)
-}
 type durableEnvironmentBlueprintRepository struct {
 	*etcd.EnvironmentBlueprintRepository
 	desired    *desiredrevisionstore.Repository
@@ -927,6 +919,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		project.Record.ID,
 		taskID,
 		artifactID,
+		generation,
 		allocator.Named,
 		runtimeFiles,
 		componentProjection,
@@ -1606,6 +1599,7 @@ func (service *environmentBlueprintService) environmentComponentMaterializations
 	projectID string,
 	revisionID string,
 	artifactID string,
+	generation uint64,
 	allocate func(ids.Kind, string) string,
 	runtimeFiles []core.BlueprintFile,
 	projection controller.EnvironmentComponentComposeProjection,
@@ -1703,7 +1697,13 @@ func (service *environmentBlueprintService) environmentComponentMaterializations
 			OutputKind: input.outputKind, UID: input.uid, GID: input.gid, Mode: uint32(input.mode),
 			Length: uint64(len(content)), SHA256: hex.EncodeToString(digest[:]), Source: input.source,
 		}
+		if input.source.Kind == etcd.TaskMaterializationSourceComponentFile {
+			err = service.materials.RetainComponentFile(ctx, reference, generation, content)
+		}
 		clear(content)
+		if err != nil {
+			return nil, nil, err
+		}
 		step, err := controller.BuildTaskMaterializationStep(
 			reference,
 			artifactID,

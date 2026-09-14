@@ -106,20 +106,9 @@ type TaskPlanResolver struct {
 	releases           *etcd.ReleaseLedger
 	backupRuns         backupRunPlanReader
 	componentPlans     ComponentTaskPlanResolver
+	materializations   componentMaterializationContentRepository
 	scriptPlans        ScriptExecutionPlanReader
 	volumeRemovalPlans volumeRemovalPlanReader
-}
-
-type ComponentTaskPlanResolver interface {
-	ResolveComponentExecutionPlan(context.Context, etcd.TaskRecord) (*agentpb.ExecutionPlan, error)
-}
-
-func (resolver *TaskPlanResolver) EnableComponentPlans(componentPlans ComponentTaskPlanResolver) error {
-	if resolver == nil || componentPlans == nil {
-		return errs.New(errs.KindInternal, "Component Task plan resolver is required")
-	}
-	resolver.componentPlans = componentPlans
-	return nil
 }
 
 type blueprintPlanStateReader interface {

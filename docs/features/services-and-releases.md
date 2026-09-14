@@ -186,9 +186,16 @@ in the same terminal transaction. Task encoding, cloning and Retry preserve this
 authority. An already-applied Environment without it fails closed, without guessing
 from historical Release input. Local regression evidence is H16.
 
-These writers are not an enabled recovery source. Generated Component bytes,
-other file writers, Secret source lifetime and recovery execution still need the
-same authority. The current snapshots retain metadata only, not resolved Secrets.
+`infra/materializationcontent` now retains exact non-secret generated Component
+file bytes in bounded immutable chunks. Blueprint and Route producers stage them
+before clearing their transient buffers. Delivery and Route replay load the full
+record's retained bytes, not output from a later renderer. Secret-derived outputs
+are rejected at this store's boundary; their sources stay in the Secret/Entry
+stores. Missing or corrupt content fails closed. H17 records the local proof.
+
+These writers are not an enabled recovery source. Other file writers, Secret
+source lifetime and recovery execution still need the same authority. The current
+configuration snapshots retain source metadata, not resolved Secrets.
 Readers must not use a partially maintained record, backfill it from old Release
 input, or infer a missing acknowledgement. Consumer cutover and any clean QA
 rebuild follow only after those writers and source-retention checks are closed.

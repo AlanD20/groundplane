@@ -57,6 +57,15 @@ func (blueprintPreflightMaterials) PinSecretValue(
 	return etcd.TaskSecretValueReference{}, errors.New("unexpected secret pin before image preflight")
 }
 
+func (blueprintPreflightMaterials) RetainComponentFile(
+	context.Context,
+	etcd.TaskMaterializationRecord,
+	uint64,
+	[]byte,
+) error {
+	return errors.New("unexpected materialization retention before image preflight")
+}
+
 // The hierarchy read seam supplies a coherent existing Environment; every other
 // read and all claim/staging/publication methods are real persistence wrappers.
 type blueprintPreflightRepository struct {

@@ -451,16 +451,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backup plan resolver: %w", err)
 	}
-	materializationResolver, err := controller.NewTaskMaterializationResolver(
-		hierarchyRecords,
-		entryValues,
-		secretRecords,
-		planResolver,
-		intentProtector,
+	materializationResolver, err := initializeTaskMaterializationResolver(
+		store, hierarchyRecords, entryValues, secretRecords, planResolver, intentProtector,
 	)
 	if err != nil {
 		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize materialization value resolver: %w", err)
+		return nil, err
 	}
 	scriptArtifacts, err := controller.NewScriptArtifactService(scriptRecords, materializationResolver)
 	if err != nil {

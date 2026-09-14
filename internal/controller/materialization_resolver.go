@@ -47,11 +47,12 @@ type materializationSecretValueReader interface {
 // TaskMaterializationResolver resolves only the immutable Controller source
 // named by one durable Task reference and returns one clearing byte stream.
 type TaskMaterializationResolver struct {
-	blueprints materializationBlueprintReader
-	values     materializationEntryValueReader
-	secrets    materializationSecretValueReader
-	components materializationComponentFileReader
-	protector  *secretvalue.Protector
+	blueprints       materializationBlueprintReader
+	values           materializationEntryValueReader
+	secrets          materializationSecretValueReader
+	components       materializationComponentFileReader
+	materializations componentMaterializationContentRepository
+	protector        *secretvalue.Protector
 }
 
 func NewTaskMaterializationResolver(
@@ -121,7 +122,15 @@ func (resolver *TaskMaterializationResolver) ResolveMaterialization(
 	if !taskMaterializationMetadataMatches(reference, materialization) {
 		return nil, errs.New(errs.KindInternal, "materialization Task and plan metadata are inconsistent")
 	}
-	content, err := resolver.resolveSource(ctx, reference.EnvironmentID, reference.Source)
+	var content []byte
+	if reference.Source.Kind == etcd.TaskMaterializationSourceComponentFile {
+		if resolver.materializations == nil {
+			return nil, errs.New(errs.KindInternal, "Component materialization content repository is unavailable")
+		}
+		content, err = resolver.materializations.Load(ctx, reference, uint64(task.RenderGeneration))
+	} else {
+		content, err = resolver.resolveSource(ctx, reference.EnvironmentID, reference.Source)
+	}
 	if err != nil {
 		clear(content)
 		return nil, err

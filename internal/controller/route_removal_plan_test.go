@@ -152,6 +152,10 @@ func TestTaskPlanResolverRebuildsRouteRemovalProviderProcedure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
 	}
+	retained := &resolverRetainedContent{}
+	if err := resolver.EnableComponentMaterializationContent(retained); err != nil {
+		t.Fatalf("EnableComponentMaterializationContent() error = %v", err)
+	}
 	if err := resolver.EnableRoutePlans(reader); err != nil {
 		t.Fatalf("EnableRoutePlans() error = %v", err)
 	}
@@ -240,6 +244,10 @@ func TestTaskPlanResolverPinsAndRebuildsRouteMutationProviderProcedure(t *testin
 	resolver, err := NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, catalog)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolverWithBlueprints() error = %v", err)
+	}
+	retained := &resolverRetainedContent{}
+	if err := resolver.EnableComponentMaterializationContent(retained); err != nil {
+		t.Fatalf("EnableComponentMaterializationContent() error = %v", err)
 	}
 	if err := resolver.EnableRoutePlans(reader); err != nil {
 		t.Fatalf("EnableRoutePlans() error = %v", err)

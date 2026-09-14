@@ -89,7 +89,6 @@ func (resolver *TaskPlanResolver) PrepareRouteMutationTask(
 	}
 	digest := sha256.Sum256(content)
 	length := len(content)
-	clear(content)
 	reference := etcd.TaskComponentFileValueReference{
 		RevisionID:  candidate.RevisionID,
 		ComponentID: pin.ComponentID,
@@ -111,22 +110,26 @@ func (resolver *TaskPlanResolver) PrepareRouteMutationTask(
 		{Kind: etcd.TaskStepOperation, ID: procedure.ApplyStepID},
 		{Kind: etcd.TaskStepOperation, ID: procedure.ActivateStepID},
 	}
-	task.Materializations = []etcd.TaskMaterializationRecord{
-		{
-			StepID:            procedure.MaterializeStepID,
-			MaterializationID: procedure.MaterializationID,
-			EnvironmentID:     intent.EnvironmentID,
-			Destination:       pin.Destination,
-			OutputKind:        etcd.TaskMaterializationOutputPlainFile,
-			Mode:              uint32(entrymaterialization.ModeReadOnly),
-			Length:            uint64(length),
-			SHA256:            hex.EncodeToString(digest[:]),
-			Source: etcd.TaskMaterializationSource{
-				Kind:          etcd.TaskMaterializationSourceComponentFile,
-				ComponentFile: &reference,
-			},
+	materialization := etcd.TaskMaterializationRecord{
+		StepID:            procedure.MaterializeStepID,
+		MaterializationID: procedure.MaterializationID,
+		EnvironmentID:     intent.EnvironmentID,
+		Destination:       pin.Destination,
+		OutputKind:        etcd.TaskMaterializationOutputPlainFile,
+		Mode:              uint32(entrymaterialization.ModeReadOnly),
+		Length:            uint64(length),
+		SHA256:            hex.EncodeToString(digest[:]),
+		Source: etcd.TaskMaterializationSource{
+			Kind:          etcd.TaskMaterializationSourceComponentFile,
+			ComponentFile: &reference,
 		},
 	}
+	err = resolver.retainComponentMaterialization(ctx, materialization, candidate.RenderGeneration, content)
+	clear(content)
+	if err != nil {
+		return etcd.RouteMutationTaskPreparation{}, err
+	}
+	task.Materializations = []etcd.TaskMaterializationRecord{materialization}
 	plan, err := resolver.buildRouteMutationPlan(ctx, task, intent)
 	if err != nil {
 		return etcd.RouteMutationTaskPreparation{}, err
@@ -216,7 +219,7 @@ func (resolver *TaskPlanResolver) buildRouteMutationPlan(
 		componentFile.Path != pin.Destination {
 		return nil, errs.New(errs.KindInternal, "durable Route mutation materialization is invalid")
 	}
-	content, err := resolver.routeProviderFile(pin, candidate)
+	content, err := resolver.loadComponentMaterialization(ctx, reference, uint64(task.RenderGeneration))
 	if err != nil {
 		return nil, err
 	}

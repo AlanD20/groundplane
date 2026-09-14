@@ -149,6 +149,19 @@ This retains source metadata, not all generated Component bytes. Other file
 writers, exact source lifetime, automatic Secret pins, recovery execution and
 live qualification remain unfinished. H5's live failure is not closed.
 
+H17 is local SVC-15/JOURNEY-02 support for exact generated Component file content.
+The retained-content repository checks immutable replay, partial publication,
+independent Task lifetime, corrupt/missing chunks, exact metadata and byte bounds,
+and rejection of Secret-derived sources before storage access. The Controller
+resolver proves it returns retained bytes without consulting the renderer;
+Blueprint and Route producer/replay checks exercise staging and loading.
+Pinned race tests pass in `.tmp/materialization-content-race-20260914.log`.
+Vet and Staticcheck pass in
+`.tmp/materialization-content-{vet,staticcheck}-final-20260914.log`.
+The first analyzer attempt coincided with a helper extraction and is retained
+separately. No deployment or live recovery pass is claimed. Recovery must still
+bind these retained records to its selected files and execution authority.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

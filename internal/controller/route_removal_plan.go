@@ -70,7 +70,6 @@ func (resolver *TaskPlanResolver) PrepareRouteRemovalTask(
 	}
 	digest := sha256.Sum256(content)
 	length := len(content)
-	clear(content)
 	reference := etcd.TaskComponentFileValueReference{
 		RevisionID:  intent.CandidateProjection.RevisionID,
 		ComponentID: pin.ComponentID,
@@ -90,22 +89,28 @@ func (resolver *TaskPlanResolver) PrepareRouteRemovalTask(
 		{Kind: etcd.TaskStepOperation, ID: procedure.ComposeApplyStepID},
 		{Kind: etcd.TaskStepOperation, ID: procedure.ActivateStepID},
 	}
-	task.Materializations = []etcd.TaskMaterializationRecord{
-		{
-			StepID:            procedure.MaterializeStepID,
-			MaterializationID: procedure.MaterializationID,
-			EnvironmentID:     intent.EnvironmentID,
-			Destination:       pin.Destination,
-			OutputKind:        etcd.TaskMaterializationOutputPlainFile,
-			Mode:              uint32(entrymaterialization.ModeReadOnly),
-			Length:            uint64(length),
-			SHA256:            hex.EncodeToString(digest[:]),
-			Source: etcd.TaskMaterializationSource{
-				Kind:          etcd.TaskMaterializationSourceComponentFile,
-				ComponentFile: &reference,
-			},
+	materialization := etcd.TaskMaterializationRecord{
+		StepID:            procedure.MaterializeStepID,
+		MaterializationID: procedure.MaterializationID,
+		EnvironmentID:     intent.EnvironmentID,
+		Destination:       pin.Destination,
+		OutputKind:        etcd.TaskMaterializationOutputPlainFile,
+		Mode:              uint32(entrymaterialization.ModeReadOnly),
+		Length:            uint64(length),
+		SHA256:            hex.EncodeToString(digest[:]),
+		Source: etcd.TaskMaterializationSource{
+			Kind:          etcd.TaskMaterializationSourceComponentFile,
+			ComponentFile: &reference,
 		},
 	}
+	err = resolver.retainComponentMaterialization(
+		ctx, materialization, intent.CandidateProjection.RenderGeneration, content,
+	)
+	clear(content)
+	if err != nil {
+		return etcd.RouteRemovalTaskPreparation{}, err
+	}
+	task.Materializations = []etcd.TaskMaterializationRecord{materialization}
 	plan, err := resolver.buildRouteRemovalPlan(ctx, task, intent)
 	if err != nil {
 		return etcd.RouteRemovalTaskPreparation{}, err
@@ -187,7 +192,7 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 		componentFile.RouteTaskID != task.ID {
 		return nil, errs.New(errs.KindInternal, "durable Route removal materialization is invalid")
 	}
-	content, err := resolver.routeProviderFile(pin, candidate)
+	content, err := resolver.loadComponentMaterialization(ctx, reference, uint64(task.RenderGeneration))
 	if err != nil {
 		return nil, err
 	}
