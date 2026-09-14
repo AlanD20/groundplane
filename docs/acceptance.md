@@ -120,6 +120,17 @@ the first attempt could not write its external default cache. This is deletion-s
 automatic reservation/release, restored configuration, deployment or a live
 SVC-15/JOURNEY-02 pass.
 
+H15 extends local SEC-07 support with `internal/infra/tasksecretpins` lifecycle
+tests. Preparation compares exact Secret source revisions and deletion fences;
+activation joins a caller-owned Task transaction with two compares and two writes.
+Tests cover interrupted preparation, changed replay, fixed bounds, activation CAS
+loss, explicit release, restart/resume, unrelated operation preservation and
+abandonment racing Task publication. Restart cleanup uses the durable descriptor,
+not the lost process-local input list. Race, vet and pinned Staticcheck pass in
+`.tmp/recovery-secret-pin-lifecycle-{tests,vet,staticcheck}.log`.
+These are local module tests with a controlled store. The actual Task lifecycle
+and startup callers, deployed Secret protection and recovery journey remain unrun.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

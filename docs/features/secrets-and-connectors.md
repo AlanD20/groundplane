@@ -170,5 +170,10 @@ Those execution and provider gates remain part of the Backup recovery gap.
 
 The deletion-side recovery-pin guard has local regression coverage for initial
 admission, direct and hierarchy finalization, Retry and malformed membership.
-Automatic pin reservation/release and configuration recovery are not yet
-connected. The guard alone does not qualify recovery or production hosting.
+The `infra/tasksecretpins` module stages exact memberships with source/deletion
+fences, supplies a constant-size atomic activation fragment, and releases members
+in bounded batches only after an explicit release transition. Interrupted
+preparation can be abandoned from its durable descriptor, with Task and active
+operation absence checked on every mutation. Local tests cover those races and
+restart paths. Task publication, terminal/retry release and startup callers are
+not yet connected. These modules do not qualify recovery or production hosting.
