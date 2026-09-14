@@ -52,6 +52,15 @@ removes only the tombstone and restores visibility; retry reacquires the fence.
 Desired-state references do not block deletion. Later resolution uses the
 remaining normal fallback or fails when no value remains.
 
+Exact execution pins are different from desired references. Existing Script
+source guards remain in force. Under [ADR 0079](../decisions/0079-pinned-task-configuration-recovery.md),
+a recoverable Task also blocks deletion of its exact Secret value with
+`resource.in_use` until recovery/retry authority releases it. Reservation,
+deletion admission, Retry and finalization must fence the same membership.
+A recovery pin identifies the operation, Secret metadata revision and ciphertext
+digest; it contains no value bytes and creates no artificial Script reference.
+Successful deletion must leave no retained value copy.
+
 ### S3-compatible Connectors
 
 A Connector belongs to exactly one Environment. Names are unique within that
@@ -158,3 +167,8 @@ The [capability index](../capabilities.md) records qualification for reusable
 Secret lifecycle and Environment S3-compatible Connector lifecycle. That does
 not prove credential use in an actual Backup, Restore, or production recovery.
 Those execution and provider gates remain part of the Backup recovery gap.
+
+The deletion-side recovery-pin guard has local regression coverage for initial
+admission, direct and hierarchy finalization, Retry and malformed membership.
+Automatic pin reservation/release and configuration recovery are not yet
+connected. The guard alone does not qualify recovery or production hosting.

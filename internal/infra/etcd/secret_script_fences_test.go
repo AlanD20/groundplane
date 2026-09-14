@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -17,7 +18,9 @@ func TestSecretScriptAbsenceRequiresBothCountAndMembership(t *testing.T) {
 			store := newMemoryHierarchyStore()
 			source := secretScriptSource(ids.New(ids.KindSecret))
 			reference := ScriptSourceReference{
-				OperationID: ids.New(ids.KindOperation), ScriptExecutionID: ids.NewULID(), Source: source,
+				OperationID: ids.New(
+					ids.KindOperation,
+				), ScriptExecutionID: ids.NewULID(), Source: source,
 				SourceOwnerID: scriptSourcePlatformOwner, SourceModRevision: 1,
 			}
 			count := ScriptSourceCount{Source: source, ReferencedExecutionCount: 1}
@@ -36,7 +39,11 @@ func TestSecretScriptAbsenceRequiresBothCountAndMembership(t *testing.T) {
 			if state != "absent" && state != "membership-only" {
 				mutations = append(
 					mutations,
-					Mutation{Type: MutationPut, Key: scriptSourceCountKey(source), Value: countBytes},
+					Mutation{
+						Type:  MutationPut,
+						Key:   scriptSourceCountKey(source),
+						Value: countBytes,
+					},
 				)
 			}
 			if state != "absent" && state != "count-only" {
@@ -54,8 +61,11 @@ func TestSecretScriptAbsenceRequiresBothCountAndMembership(t *testing.T) {
 			}
 			switch state {
 			case "absent":
-				if err != nil || len(conditions) != 2 || conditions[0].Key != scriptSourceCountKey(source) ||
-					!conditions[1].Prefix || conditions[0].ModRevision != 0 || conditions[1].ModRevision != 0 {
+				if err != nil || len(conditions) != 3 || conditions[0].Key != scriptSourceCountKey(source) ||
+					!conditions[1].Prefix || conditions[0].ModRevision != 0 || conditions[1].ModRevision != 0 ||
+					conditions[2].Key != tasksecretpinrecord.SecretPrefix(source.SecretID) ||
+					!conditions[2].Prefix ||
+					conditions[2].ModRevision != 0 {
 					t.Fatalf("absence did not retain both transactional fences: %v", err)
 				}
 			case "referenced":

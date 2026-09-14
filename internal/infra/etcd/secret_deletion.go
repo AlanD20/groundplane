@@ -30,7 +30,9 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 	if tombstone.TargetKind != DeletionTargetSecret || tombstone.TargetID != secretID ||
 		tombstone.TargetRevision != current.Revision || tombstone.TaskID != task.ID ||
 		tombstone.Phase != DeletionPhaseFinalizing || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
-		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) || task.Executor != TaskExecutorController ||
+		!tombstone.UpdatedAt.Equal(
+			tombstone.CreatedAt,
+		) || task.Executor != TaskExecutorController ||
 		task.Type != TaskRemove || task.Target != secretID || task.Status != TaskStatusPending ||
 		len(task.Params) != 1 || task.Params[TaskResourceKindParam] != TaskResourceSecret {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -64,7 +66,9 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 	}
 	if dependencies == nil || len(dependencies.Values) != 3 || dependencies.Values[0] == nil ||
 		dependencies.Values[1] == nil || dependencies.Values[2] == nil ||
-		string(dependencies.Values[0].Value) != secretID || string(dependencies.Values[1].Value) != secretID {
+		string(
+			dependencies.Values[0].Value,
+		) != secretID || string(dependencies.Values[1].Value) != secretID {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindInternal,
 			"Secret deletion indexes or encrypted value are corrupt",
@@ -110,19 +114,34 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
 		{Key: secretRecordKey(secretID), ModRevision: current.Revision},
-		{Key: secretOwnerKey(current.Record.Secret), ModRevision: dependencies.Values[0].ModRevision},
-		{Key: secretScopedKey(current.Record.Secret), ModRevision: dependencies.Values[1].ModRevision},
+		{
+			Key:         secretOwnerKey(current.Record.Secret),
+			ModRevision: dependencies.Values[0].ModRevision,
+		},
+		{
+			Key:         secretScopedKey(current.Record.Secret),
+			ModRevision: dependencies.Values[1].ModRevision,
+		},
 		{Key: secretValueKey(secretID), ModRevision: dependencies.Values[2].ModRevision},
 		{Key: deletionTombstoneKey(string(DeletionTargetSecret), secretID)},
 	}
 	if owner.Project != nil {
-		conditions = append(conditions,
-			Condition{Key: projectKey(owner.Project.Record.ID), ModRevision: owner.Project.Revision},
-			Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), owner.Project.Record.ID)},
+		conditions = append(
+			conditions,
+			Condition{
+				Key:         projectKey(owner.Project.Record.ID),
+				ModRevision: owner.Project.Revision,
+			},
+			Condition{
+				Key: deletionTombstoneKey(string(DeletionTargetProject), owner.Project.Record.ID),
+			},
 		)
 		if owner.Project.Record.TenantID != "" {
 			conditions = append(conditions, Condition{
-				Key: deletionTombstoneKey(string(DeletionTargetTenant), owner.Project.Record.TenantID),
+				Key: deletionTombstoneKey(
+					string(DeletionTargetTenant),
+					owner.Project.Record.TenantID,
+				),
 			})
 		}
 	}
@@ -132,7 +151,11 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 	conditions = append(conditions, secretScriptAbsenceConditions(secretID)...)
 	mutations := []Mutation{
 		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{
+			Type:  MutationPut,
+			Key:   taskOperationIndexKey(task.OperationID, task.ID),
+			Value: reference,
+		},
 		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 		{
@@ -183,7 +206,8 @@ func classifySecretDeletionStartConflict(
 	operationID string,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		expected := 12
+		guardCount := len(secretScriptAbsenceConditions(current.Record.Secret.ID))
+		expected := 10 + guardCount
 		if owner.Project != nil {
 			expected += 2
 			if owner.Project.Record.TenantID != "" {
@@ -193,10 +217,11 @@ func classifySecretDeletionStartConflict(
 		if len(values) != expected {
 			return errs.New(errs.KindInternal, "Secret deletion compare evidence is incomplete")
 		}
-		if err := classifySecretScriptReferences(current.Record.Secret.ID, values[len(values)-2:]); err != nil {
+		guardPosition := len(values) - guardCount
+		if err := classifySecretScriptReferences(current.Record.Secret.ID, values[guardPosition:]); err != nil {
 			return err
 		}
-		referencePosition := len(values) - 3
+		referencePosition := guardPosition - 1
 		if values[referencePosition] != nil {
 			return errs.New(errs.KindResourceInUse, "Secret is referenced by a Component")
 		}
@@ -214,7 +239,10 @@ func classifySecretDeletionStartConflict(
 		}
 		for _, index := range []int{0, 1, 3} {
 			if values[index] != nil {
-				return errs.New(errs.KindInternal, "Secret deletion collided with durable Task state")
+				return errs.New(
+					errs.KindInternal,
+					"Secret deletion collided with durable Task state",
+				)
 			}
 		}
 		if values[4] == nil {

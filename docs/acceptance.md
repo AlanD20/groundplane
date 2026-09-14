@@ -107,6 +107,19 @@ traffic run or data check ran in this slice. The complete existing
 `make verifier-helper-check` also passes in
 `.tmp/etcd-controller-restart-helper-check.log`.
 
+H14 is local SEC-07 support for the approved recovery Secret pin policy.
+`TestSecretRecoveryPinBlocksDeletionAdmissionDirectFinalizationAndHierarchy`,
+`TestSecretRecoveryPinBlocksDeletionRetry` and
+`TestMalformedSecretRecoveryPinsFailClosed` exercise the actual deletion
+boundaries with seeded, value-free pin records. They preserve the existing
+Script checks and reject malformed or ambiguous memberships without deletion.
+The focused run is `.tmp/secret-recovery-deletion-final.log`; vet evidence is
+`.tmp/secret-recovery-deletion-vet.log`. Pinned Staticcheck passes with the
+repository-local cache in `.tmp/secret-recovery-deletion-staticcheck-local.log`;
+the first attempt could not write its external default cache. This is deletion-side proof only, not
+automatic reservation/release, restored configuration, deployment or a live
+SVC-15/JOURNEY-02 pass.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing
