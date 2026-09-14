@@ -180,6 +180,28 @@ SVC-06 traffic variants remain unqualified.
 
 ## Recovery after runtime configuration changes
 
+H41's clean rerun on `7322d2806` / `0.0.0-qa.prodops20260914.5` fails its
+600-second bound. This is not the previously corrected Volume-scope failure.
+The preceding healthy blue-green Deploy kept the proxy container, including its
+original plan and render-generation labels, while `PrepareCandidateRuntimes`
+projected the new candidate proxy into the acknowledged runtime record. It updated
+proxy configuration bytes but did not retain the unchanged container's ownership
+identity. The next Deploy sealed those incorrect labels as its predecessor.
+`inspectServingInventory` rejects the actual preserved proxy before compensation.
+The producer fixture checks workload and switched configuration, but does not
+distinguish preserved proxy ownership from candidate ownership.
+
+Private `clean-recovery-failed-runtime.json` and
+`planning-probe-l9bn_1lt/diagnostic.log` show the exact label mismatch;
+`clean-recovery-initial-agent.log` shows the first compensation rejection before
+repeated probes. The original Task remains active, Agent healthy with one claim;
+the saved authenticated profile still passes. The observed proxy is not permission
+to rewrite the Task's sealed authority. Correct the writer from acknowledged
+proxy authority, preserving fresh first-Deploy behavior and exact config-switch
+proof, then test repeated Deploy → failed Deploy beside a preserved proxy.
+The owner approved the writer repair and a disposable QA rebuild retaining evidence.
+No production fix, reset, history rewrite or additional fault ran for H41.
+
 Current H36 result on `18e936fa9`: the repaired backing cutover passes, but stopping
 only the next candidate exposes repeated failure of its Service proxy recovery
 probe. The public event stream records at least 271 failed/running attempts for

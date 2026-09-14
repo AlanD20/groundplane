@@ -676,6 +676,52 @@ has no failure. `repaired-controller-restart-traffic-result.json` records 45 HTT
 traffic processes exited; the application and evidence remain. This is not a
 host-reboot, pressure, sustained-load or native-upgrade pass.
 
+H41 is the clean SVC-15/JOURNEY-02 rerun on `7322d2806`, deployed as
+`0.0.0-qa.prodops20260914.5`, on 2026-09-14. The prior baseline passed all 11
+Service observations and the saved authenticated profile. A new owned sleep hook
+held the pre-promotion window; the test stopped only the exact new candidate.
+The primary forward health step timed out at 13:49:25 UTC. Compensation immediately
+returned `candidate restoration proof failed`, followed by repeated failed probes.
+The observer stopped after 600 seconds without a terminal Task. This is FAIL, not
+a successful automatic recovery or another passing H39 run.
+
+The read-only immutable-input probe and actual runtime snapshot identify the cause:
+the saved predecessor proxy expects the last Deploy's plan and render generation,
+but that successful Deploy preserved the original proxy container and its old
+labels. `PrepareCandidateRuntimes` copies candidate proxy ownership when constructing
+the post-switch receipt; its fixture verifies switched config but not distinct old
+proxy labels. The helper's exact inventory check rejects that mismatch before
+compensation. Do not weaken ownership validation or rewrite the sealed Task to
+turn this run green. The producer needs to preserve the acknowledged proxy identity
+separately from newly applied proxy configuration.
+
+Evidence is private `clean-candidate-fault-proof.log`,
+`clean-failed-rollout-{accepted,fault}.json`, `clean-recovery-initial-agent.log`,
+`clean-recovery-failed-runtime.json` and `planning-probe-l9bn_1lt/diagnostic.log`.
+The read-only tunnel closed successfully. `clean-failure-profile-result.json`
+confirms the saved profile remains usable and unchanged after normal token refresh.
+The Agent remains healthy with one in-flight claim; the Task, hook and stopped
+candidate remain. No second fault, abort, manual workload repair or reset ran.
+The owner approved correcting the writer and rebuilding the disposable QA state
+with incident evidence retained. Normal upgrades, sustained traffic and interruption/reboot
+remain paused, not attempted passes.
+
+H42 records the owner-approved capacity cleanup during this continuation. The QA
+filesystem had 721–722 million available bytes, reported as 97 percent used.
+Two obsolete reset archives occupied about 2 GiB. Both were streamed into ignored
+local `prior-qa-reset-archives.tar`; its SHA-256 matched an independent second
+remote tar stream before removing only the two remote source directories.
+`archive-relocation-{verified,result}.json` records exact paths, size and hash;
+`archive-relocation.log` shows available space increasing to 2,815,567,872 bytes.
+The removed copies are recoverable from that local archive. Application data,
+etcd, images and the current repair archive were unchanged.
+
+Version `0.0.0-qa.prodops20260914.6` then built and staged successfully, with its
+immutable identities in `normal-upgrade-stage.log`. It was not activated and still
+contains H41's defect. The ignored 30-minute mixed-workload probe is prepared,
+not run: no fixture users, load traffic or queued jobs were created. Preparation
+does not count as REL-04 or upgrade evidence.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing
