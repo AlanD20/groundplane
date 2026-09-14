@@ -969,6 +969,43 @@ formatting and diff checks pass. This is local proof, not closure of H53's live
 failure. Next is normal native deployment and the original request rerun, then
 the remaining upgrade-only cases. No broader implementation is included.
 
+H55 closes H53's missing-candidate defect on the fresh QA host and qualifies the
+selected UP-04/05/11 preparation variants. The owner-approved repair is signed
+on `main` as `64b2056dd`; normal staging builds `0.0.0-qa.owner20260914.2`.
+The architecture check retains the same 122 finding identities with no additions;
+`.tmp/upgrade-missing-release-architecture.json` is not a full-CI pass.
+
+Before activation, an observed 160-second sleep-only Script remains running while
+native Task `task_01M2GF3JAC0VKNZE4QW4ER5W0W` fails its 120-second drain
+(122.341 seconds measured from submission). A second 60-second Script remains
+running while native Task `task_01M2GF8PBWJ6N9MHNAFYPM5XP2` is aborted before
+activation (1.976 seconds). Both Scripts later complete, each with exactly one
+physical start in live Docker events. Exact protected-key replay returns each
+original native Task both while running and after settlement. Following work
+proves dispatch resumed; both owned Scripts and their runners are removed through
+normal operations. All runtime identities/start times and checked application
+data remain unchanged. These cases ran on `.1`, not the subsequently activated fix.
+
+Normal update Task `task_01M2GFBCNCYT1KBXWCP9YP91PC` then completes `.2`:
+release `sha256:6baaecc017178b5fb65e11bb6eac05c8e6e244d32b66c4588f617fadec22505a`,
+Controller `sha256:87f18553ad7096e696d6099e110693cb797859d33ef08eae537504cb97bf8011`,
+Agent `localhost:5000/groundplane-agent@sha256:cacb870d06b56087882a06ced5ad738ac5d94237939b875a19cd2ea194341a29`.
+All non-Agent runtime identities/start times, including etcd, and serving Releases
+and checked profile survive. The original missing-digest request now returns
+422 `validation.failed`; selected Controller/Agent refusals also pass. No refusal
+adds a Task or changes runtime/history. The shared 360-second traffic run passes
+360 authenticated HTTP 200 responses, zero failures/disconnections, 65 pongs on
+one WebSocket and maximum HTTP latency 0.201 seconds.
+
+Evidence in `.tmp/qa-owner-reset-20260914-hK6Yqeii/` is
+`upgrade-preparation-result.json`, both per-variant event streams and exact Task
+receipts, `upgrade-fix-stage.log`, `upgrade-fix-result.json`,
+`upgrade-refusals-fixed-result.json` and `upgrade-preparation-traffic-result.json`.
+The original failed evidence is retained unchanged. This closes the reproduced
+error-classification defect, not every UP-03 variant, all concurrency races or
+Console lost-response qualification. No application deploy, reset or manual
+installation repair was used.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

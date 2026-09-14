@@ -25,7 +25,9 @@ which wraps unclassified filesystem errors as Internal. The approved repair now
 classifies only an absent requested digest leaf as `validation.failed` (422).
 The regression fails before the fix and passes afterward; missing parent,
 manifest/binary and closed-store errors remain Internal. H54 records local proof;
-the deployed H53 failure remains open until its live rerun.
+H55 closes the live failure through normal native upgrade and the original request
+rerun: HTTP 422, no new Task or runtime/data change, uninterrupted authenticated
+HTTP and the held WebSocket. The failing H53 evidence remains retained.
 Owner: native update/release-store boundary. Acceptance: classify absence as
 an operator input/resource refusal before publication, while retaining genuine
 storage errors and all existing path/digest/ownership checks; verify unchanged

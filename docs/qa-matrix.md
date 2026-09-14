@@ -586,20 +586,37 @@ No host reboot/reset, pressure test or provider change is selected.
 The approved UP-03 regression distinguishes an absent digest leaf from a missing
 store parent, missing manifest/binary and a closed store. Only the absent requested
 leaf becomes `validation.failed`; storage/integrity failures remain Internal.
+The next UP-04/05/11 variants use owned sleep-only manual Scripts: first a
+160-second runner must outlive the native update's 120-second busy drain;
+then Abort must cancel a second update during a 60-second runner without
+stopping that runner. Live Docker events must show one start per Script,
+exact update-key replays must return the original Tasks, and a following Script
+must prove dispatch resumed. Neither preparation may replace any runtime.
+After owned Script removal, normally activate the staged repair and rerun UP-03.
+Run authenticated traffic and held-WebSocket checks across these operations.
+UP-06/08/10/11 then use the retained compatible predecessor Controller with
+an immutable sleep-only Agent image. Observe the real `starting` journal phase
+and selected unready Agent before checking write/Run/Abort refusal, readable
+state and exact-key replay. Allow automatic coordinated recovery without manual
+repair; require the original failed Task, last qualified Controller/Agent, all
+application/etcd runtime and profile to survive. Verify writes resume afterward
+using only an owned manual Script. A separate UP-09 variant kills that exact
+candidate inode through a pidfd while its own journal is `starting`, then requires
+the same recovery proof. No journal mutation or host reboot is permitted.
 
 | Case | Setup and action | Pass condition | Record |
 | --- | --- | --- | --- |
 | UP-01 | Install a valid staged Controller/Agent release through the normal protected update action. | Exact candidate identities selected; same update Task survives API reconnect; application containers/data/routing remain intact with no observed request failure or held-WebSocket reconnect during the recorded window. | PASS H47/H49 normal CLI/private-ingress variant |
 | UP-02 | Perform standalone idle Agent update and subsequent enrollment using the qualified native selection. | Correct desired Agent image/generation; application containers and traffic remain unchanged; no self-owned Agent replacement. | U |
-| UP-03 | Request an already selected image or invalid/incompatible/corrupt/missing release candidate. | Documented refusal before replacement; same serving versions/history/data and no restart or new application effect. | FAIL H53 missing candidate returns Internal; selected Controller/Agent and no-effect assertions pass. Earlier invalid-input proof: H6. |
-| UP-04 | Start update with active work and race assignment admission against drain. | Busy refusal or bounded drain; active work not aborted; no new admitted send crosses the pause and no Script/migration replay. | U |
-| UP-05 | Abort or fail preparation before activation; race with permanent removal/revocation. | Release only the operation-owned pause; no replacement or revival of a removed/stale generation. | U |
+| UP-03 | Request an already selected image or invalid/incompatible/corrupt/missing release candidate. | Documented refusal before replacement; same serving versions/history/data and no restart or new application effect. | PARTIAL H55: selected Controller/Agent and missing candidate pass; H53 defect closed. Earlier invalid-input proof: H6; incompatible/corrupt variants remain distinct. |
+| UP-04 | Start update with active work and race assignment admission against drain. | Busy refusal or bounded drain; active work not aborted; no new admitted send crosses the pause and no Script/migration replay. | PARTIAL H55: live 120-second busy-drain refusal, original runner and resumed dispatch pass; admission-race proof remains local. |
+| UP-05 | Abort or fail preparation before activation; race with permanent removal/revocation. | Release only the operation-owned pause; no replacement or revival of a removed/stale generation. | PARTIAL H55: live pre-activation Abort and unchanged runner/runtime pass; permanent-lifecycle races remain local. |
 | UP-06 | Abort after activation is committed or uncertain. | Refuse unsafe cancellation; preserve recovery and dispatch hold until exact commit outcome is resolved. | U |
 | UP-07 | Activate a Controller candidate that cannot run at all. | Product-owned predecessor recovery works without the failed binary; exact same Task remains failed/recovered; real application data/traffic/identities survive. | PASS H47/H49 private-ingress variant |
 | UP-08 | Fail candidate readiness or coordinated Agent startup after native activation. | Restore compatible predecessor binary/Agent identities, preserve selected qualified release and application state; recovery failure is explicit. | U |
 | UP-09 | Restart/kill Controller at each declared activation-journal phase, including lost commit response. | Durable original Task and holds restored before dispatch; finish or recover exact candidate once without reopening an obsolete generation. | U |
 | UP-10 | Attempt ordinary writes and scheduled work during an unfinished native trial. | Guarded writes refuse; permitted reads, exact acceptance replay and pre-activation Abort still work; mere HTTP readiness grants no write authority. | U |
-| UP-11 | Reload Console or lose update acceptance response and retry with the same key. | One retained protected request and original Task; no duplicate native update; visible running digest/candidate/result match actual executable. | U |
+| UP-11 | Reload Console or lose update acceptance response and retry with the same key. | One retained protected request and original Task; no duplicate native update; visible running digest/candidate/result match actual executable. | PARTIAL H55: live API replay while active and terminal returns original Task; Console reload/lost-response proof remains separate. |
 | UP-12 | Exercise successful and failed update through every selected ingress, with ongoing worker jobs and held connections. | Private/router/provider path and background work each meet recorded continuity assertions; no route is inferred from another path's success. | PARTIAL H2; PARTIAL H7 |
 | UP-13 | Perform two successive qualified upgrades and a failed third candidate, then restart normally. | Latest successful selection remains authoritative; predecessor recovery and future Agent selection use correct retained release, not bootstrap or failed trial values. | U |
 
