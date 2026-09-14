@@ -610,10 +610,22 @@ it; never alter a prior release or journal. Require 422 before Task publication,
 unchanged installed runtimes/data and restoration of the verified healthy staging
 selection. Include malformed digest input and retain every refusal receipt.
 
+The owner supplied a separate disposable host for UP-02. Bootstrap it without
+native qualified history and deploy one managed HTTP/WebSocket canary with a
+client-written sentinel on a managed Volume. Use revision-fenced Controller
+configuration and normal restart to select a different compatible Agent image;
+never edit the durable Agent record. A preparatory downgrade may establish the
+older image, followed by the measured standalone upgrade. Require exact selected
+image, new runtime/generation, authenticated Ready, same-key replay, unchanged
+application/etcd runtime and sentinel, continuous HTTP and held WebSocket. Then
+qualify native selection and remove/re-enroll only this disposable Agent to prove
+enrollment uses the qualified image rather than bootstrap input. The existing
+hosting QA machine is not part of this fixture and must remain untouched.
+
 | Case | Setup and action | Pass condition | Record |
 | --- | --- | --- | --- |
 | UP-01 | Install a valid staged Controller/Agent release through the normal protected update action. | Exact candidate identities selected; same update Task survives API reconnect; application containers/data/routing remain intact with no observed request failure or held-WebSocket reconnect during the recorded window. | PASS H47/H49 normal CLI/private-ingress variant |
-| UP-02 | Perform standalone idle Agent update and subsequent enrollment using the qualified native selection. | Correct desired Agent image/generation; application containers and traffic remain unchanged; no self-owned Agent replacement. | U |
+| UP-02 | Perform standalone idle Agent update and subsequent enrollment using the qualified native selection. | Correct desired Agent image/generation; application containers and traffic remain unchanged; no self-owned Agent replacement. | PARTIAL H59: live standalone replacement, exact image/generation, Ready, replay and canary continuity pass; qualified re-enrollment remains pending. |
 | UP-03 | Request an already selected image or invalid/incompatible/corrupt/missing release candidate. | Documented refusal before replacement; same serving versions/history/data and no restart or new application effect. | PASS H55/H58: selected Controller/Agent, missing/malformed digest, incompatible storage/channel and corrupt binary; private ingress. H53 defect closed. |
 | UP-04 | Start update with active work and race assignment admission against drain. | Busy refusal or bounded drain; active work not aborted; no new admitted send crosses the pause and no Script/migration replay. | PARTIAL H55: live 120-second busy-drain refusal, original runner and resumed dispatch pass; admission-race proof remains local. |
 | UP-05 | Abort or fail preparation before activation; race with permanent removal/revocation. | Release only the operation-owned pause; no replacement or revival of a removed/stale generation. | PARTIAL H55: live pre-activation Abort and unchanged runner/runtime pass; permanent-lifecycle races remain local. |

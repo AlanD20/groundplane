@@ -1069,6 +1069,30 @@ its traffic result in H55's directory. The host remains healthy with zero active
 Agent work. H55–H58 do not qualify successful standalone Agent replacement,
 re-enrollment, Console lost-response behavior or every phase/race in the matrix.
 
+H59 passes UP-02's standalone replacement on the separately authorized clean
+disposable host. Evidence is `.tmp/qa-standalone-agent-20260914-PsuapVs5/`.
+GP-managed routing fronts a Python HTTP/WebSocket canary with a client-written,
+fsynced sentinel on a managed Volume. Revision-fenced Controller config changes
+and normal restarts establish the mismatch without changing stored Agent history.
+The preparatory downgrade Task `task_01M2GHSB4B63N4V5BTYEY3BB28` and measured
+upgrade Task `task_01M2GHV1SPWGRNSYHWMCJFDXBT` each complete with a new container,
+exact desired image, one generation increment and healthy authenticated Ready.
+Active and terminal protected-key replay return the original Tasks, with no
+second replacement. Non-Agent containers, including etcd, retain exact ids,
+images and start times; Service state and sentinel bytes survive.
+
+The initial probe stops after the successful downgrade because it compares
+refreshed `observed_at`/`expires_at` fields. The corrected comparison excludes only
+those timestamps and finishes proof against the original Task; no downgrade is
+repeated. `standalone.log` retains that failed assertion, and
+`resume-standalone.log` records the continuation. The two held-connection windows
+pass eight HTTP requests/two pongs and ten requests/three pongs, zero errors or
+disconnections, maximum latencies 0.0032 and 0.0051 seconds. These short upgrade
+windows are not a new sustained-load pass. Exact receipts are
+`preparatory-downgrade-result.json`, `standalone-upgrade-result.json`, and both
+traffic results. Native-selection re-enrollment remains pending; the hosting QA
+machine is untouched. No product code changed.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing
