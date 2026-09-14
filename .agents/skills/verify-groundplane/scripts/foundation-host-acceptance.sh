@@ -18,7 +18,7 @@ Actions:
   config AGENT_ID         set the accepted runtime config on the exact Agent
   update-exact AGENT_ID   update the exact Agent and wait for its Task
   update-all              update the singleton Agent through --all
-  restart AGENT_ID        restart Controller and prove Agent/container continuity
+  restart AGENT_ID        restart Controller; allow Agent restart, preserve etcd
   task TASK_ID            print platform list, detail, and bounded events
   abort TASK_ID           abort an in-flight Task and wait for its terminal state
   retry TASK_ID           retry a terminal Task and wait for the new Task
@@ -186,6 +186,8 @@ agent_id=$1
 before_pid=$(systemctl show groundplane-controller.service -p MainPID --value)
 before_inode=$(stat -c %i /run/groundplane/controller)
 before_container=$(docker inspect groundplane-agent --format '{{.Id}}|{{.State.StartedAt}}|{{index .Config.Labels "com.groundplane.agent-generation"}}')
+before_etcd=$(docker inspect groundplane-etcd --format '{{.Id}}|{{.State.StartedAt}}|{{.RestartCount}}|{{.State.Running}}')
+[[ ${before_etcd##*|} == true ]]
 systemctl restart groundplane-controller.service
 ready=0
 for _ in $(seq 1 60); do
@@ -200,11 +202,14 @@ done
 after_pid=$(systemctl show groundplane-controller.service -p MainPID --value)
 after_inode=$(stat -c %i /run/groundplane/controller)
 after_container=$(docker inspect groundplane-agent --format '{{.Id}}|{{.State.StartedAt}}|{{index .Config.Labels "com.groundplane.agent-generation"}}')
+after_etcd=$(docker inspect groundplane-etcd --format '{{.Id}}|{{.State.StartedAt}}|{{.RestartCount}}|{{.State.Running}}')
 [[ $before_pid != "$after_pid" ]]
 [[ $before_inode == "$after_inode" ]]
-[[ $before_container == "$after_container" ]]
-printf 'before_pid=%s\nafter_pid=%s\nruntime_dir_inode=%s\ncontainer=%s\nagent_status=healthy\n' \
-  "$before_pid" "$after_pid" "$after_inode" "$after_container"
+[[ ${before_container%%|*} == "${after_container%%|*}" ]]
+[[ ${before_container##*|} == "${after_container##*|}" ]]
+[[ $before_etcd == "$after_etcd" ]]
+printf 'before_pid=%s\nafter_pid=%s\nruntime_dir_inode=%s\nbefore_agent=%s\nafter_agent=%s\netcd=%s\nagent_status=healthy\n' \
+  "$before_pid" "$after_pid" "$after_inode" "$before_container" "$after_container" "$after_etcd"
 REMOTE
 }
 

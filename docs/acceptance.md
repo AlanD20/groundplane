@@ -92,6 +92,21 @@ retention and recovery-reader integration were blocked on Secret deletion policy
 at this run. The owner subsequently approved exact recoverable-Task pins; that
 decision resumes implementation, not qualification by these tests.
 
+H13 is local REL-01 support for the owner's 2026-09-14 restart boundary.
+`TestClosePreservesEtcdRuntime` fails against the old stop-on-close implementation
+in `.tmp/etcd-controller-restart-red.log`. The corrected manager and Controller
+shutdown checks pass with Go 1.26.7 and race detection in
+`.tmp/etcd-controller-restart-final-tests.log`; focused vet and Staticcheck pass.
+`test_foundation_restart.py` executes the real remote probe body with fake
+commands: Agent restart succeeds, while etcd restart/stop and changed Agent
+identity fail. The old probe fails this regression in
+`.tmp/etcd-controller-restart-verifier-red.log`; the corrected run passes in
+`.tmp/etcd-controller-restart-verifier-final.log`. These verifier checks are
+delivery safety, not host or application passes. No live restart, deployment,
+traffic run or data check ran in this slice. The complete existing
+`make verifier-helper-check` also passes in
+`.tmp/etcd-controller-restart-helper-check.log`.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

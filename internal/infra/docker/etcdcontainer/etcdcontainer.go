@@ -53,7 +53,6 @@ type engineClient interface {
 	ContainerInspect(context.Context, string, client.ContainerInspectOptions) (client.ContainerInspectResult, error)
 	ContainerCreate(context.Context, client.ContainerCreateOptions) (client.ContainerCreateResult, error)
 	ContainerStart(context.Context, string, client.ContainerStartOptions) (client.ContainerStartResult, error)
-	ContainerStop(context.Context, string, client.ContainerStopOptions) (client.ContainerStopResult, error)
 	ContainerRemove(context.Context, string, client.ContainerRemoveOptions) (client.ContainerRemoveResult, error)
 	ImagePull(context.Context, string, client.ImagePullOptions) (client.ImagePullResponse, error)
 	Close() error
@@ -152,26 +151,12 @@ func (m *Manager) Run(ctx context.Context) error {
 }
 
 func (m *Manager) Close() error {
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	var stopErr error
-	inspected, exists, err := m.inspect(shutdownCtx)
-	if err != nil {
-		stopErr = err
-	} else if exists && !owned(inspected) {
-		stopErr = errs.Newf(errs.KindInternal, "etcd container: refusing to stop unowned container %q", ContainerName)
-	} else if exists && inspected.State != nil && inspected.State.Running {
-		timeout := 10
-		if _, err := m.client.ContainerStop(shutdownCtx, inspected.ID, client.ContainerStopOptions{Timeout: &timeout}); err != nil && !containerderrdefs.IsNotFound(err) {
-			stopErr = operationError(shutdownCtx, "stop container", err)
-		}
+	// The state store outlives a Controller shutdown. Closing our client is
+	// not authority to stop or replace its independently running container.
+	if err := m.client.Close(); err != nil {
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("etcd container: close Docker client: %w", err))
 	}
-	closeErr := m.client.Close()
-	if closeErr != nil {
-		closeErr = errs.Wrap(errs.KindInternal, fmt.Errorf("etcd container: close Docker client: %w", closeErr))
-	}
-	return errors.Join(stopErr, closeErr)
+	return nil
 }
 
 func (m *Manager) inspect(ctx context.Context) (container.InspectResponse, bool, error) {

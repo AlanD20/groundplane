@@ -198,6 +198,7 @@ verifier-helper-check:
 	bash .agents/skills/verify-groundplane/scripts/test_known_hosts_initialization.sh
 	bash .agents/skills/verify-groundplane/scripts/test_supervisor_wait.sh
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s .agents/skills/verify-groundplane/scripts -p 'test_ssh_tunnel_supervisor.py'
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s .agents/skills/verify-groundplane/scripts -p 'test_foundation_restart.py'
 
 ci: console | $(BIN_DIR)
 	$(MAKE) deployment-check

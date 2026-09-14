@@ -52,11 +52,11 @@ from restoring its databases or files from a backup.
   [DNS finding](issues/runtime-qualification.md#same-name-backing-endpoints).
 - [ ] **Keep etcd independent of normal Controller restart** — REL-01, D3.
   The owner permits the Agent to restart with the Controller, but not etcd.
-  Current stop-on-close violates that boundary. Repair and qualify that exact
-  lifecycle path; update the verifier to permit Agent restart while requiring
+  The local stop-on-close correction and verifier regression pass (H13).
+  Qualify that exact lifecycle path live, permitting Agent restart while requiring
   unchanged etcd runtime and preserved application requests, held connections,
   durable Tasks and data. GP upgrades still require uninterrupted application
-  service. The requirement decision is resolved; implementation/live proof are not.
+  service. The requirement decision and local correction are complete; live proof is not.
 - [ ] **Select one clean, identified release candidate and pass release gates.**
   `main` is clean after the test-audit commits, but no current candidate has complete
   qualification. Record source and Controller/Agent digests; run required
@@ -540,7 +540,7 @@ application interruption. A machine reboot is not an interruption-free GP update
 | JOURNEY-03 | Deploy a second independent application and operate on the first. | Unselected runtime identities, data and working requests remain unchanged; declared shared dependencies are recorded rather than assumed isolated. | PARTIAL H4 |
 | JOURNEY-04 | Write known data → backup selected sources → mutate data → restore exact point/key era. | Original surviving targets match the selected recovery point; unrelated data unchanged; an application-level query proves usability, not just file/object presence. | BLOCKED D2 |
 | JOURNEY-05 | Application traffic and background work → GP update → rejected/broken GP update → later successful update. | Original application functionality and data survive the complete sequence; same operation outcomes and measured continuity, no manual runtime repairs. | PARTIAL H2 |
-| REL-01 | Restart Controller normally under an application workload. | Agent restart allowed; etcd container identity/start time unchanged. Preserve application requests, held connections, data, serving Releases and correct recovered Task state. | BLOCKED D3 repair; decision resolved |
+| REL-01 | Restart Controller normally under an application workload. | Agent restart allowed; etcd container identity/start time unchanged. Preserve application requests, held connections, data, serving Releases and correct recovered Task state. | Local repair H13; live NOT RUN, D4 |
 | REL-02 | Reboot the authorized QA machine under known state and unfinished work. | Bounded recovery of owned runtimes, data and safely resumable work; no duplicate effects or lost acknowledged state. Record reboot downtime, never claim single-host HA. | NOT RUN; D4 |
 | REL-03 | Interrupt an actually running Task by Agent/process/channel loss at an identified effect boundary. | Exact operation resumes/terminates safely; unknown effects are fenced; no duplicate Script, data mutation or detached claim. | NOT RUN; D4 |
 | REL-04 | Run the approved 30-minute mixed workload at 5 authenticated HTTP requests/second, with held WebSockets and background jobs. | Zero unexpected errors/disconnections; HTTP p95 below 1 second; correct job/results and preserved data. Record achieved rate and resource/restart measurements. | NOT RUN; baseline/recovery gate D4 |
@@ -556,7 +556,7 @@ application interruption. A machine reboot is not an interruption-free GP update
 | --- | --- | --- |
 | D1 | Latest-wins is accepted but not connected to production publication/execution. | Record its required cases; do not implement or enable it as an incidental QA task. |
 | D2 | End-to-end Backup/Restore is incomplete; Valkey's safe recovery source remains undecided. | No recovery-readiness pass. Preserve the required rejection case separately from unsupported successful capture/Restore. User decides any implementation or external recovery plan. |
-| D3 | Owner resolved the rule: Agent may restart with Controller; etcd must not. Current etcd stop-on-close violates it. | Correct the lifecycle and verifier against that boundary, then prove application/etcd continuity. Decision resolved; repair and live qualification pending. |
+| D3 | Owner resolved the rule: Agent may restart with Controller; etcd must not. Local stop-on-close and verifier corrections pass (H13). | Live application/etcd continuity remains unqualified. Do not infer it from local manager or verifier tests. |
 | D4 | Failed application-rollout recovery after runtime configuration changes remains unresolved. | Do not resume dependent interrupted-Task/reboot faults until baseline and required recovery are qualified and current permission allows them. |
 | D5 | First sustained target is approved: 30 minutes, 5 authenticated HTTP requests/second, held WebSockets/jobs, zero unexpected errors/disconnections and p95 below 1 second. Numeric pressure stops and separate fault recovery deadlines remain unspecified. | Run REL-04 only on the valid candidate/baseline. Record pressure thresholds before REL-05; neither this target nor the old 600-second run establishes production capacity. |
 | D6 | The Task stream discarded queued compaction errors when a closed event channel won selection. | Owner-approved repair passes the local regressions below. Both watches now consume terminal errors after event-channel closure. The local failure is closed; real etcd/SSE and full TASK-06 qualification remain unverified. Nothing was deployed. |

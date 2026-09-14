@@ -123,7 +123,10 @@ Host health, Agent lifecycle and settings have recorded qualification. Native
 updates retain the [Safe updates](upgrade-safety.md#current-status) limits.
 Current work and the live-mutation pause are in [head.md](../head.md); a dated
 health result never establishes present host health or operational permission.
-Normal shutdown currently calls the etcd manager's stop-on-close path. This
-violates the owner's 2026-09-14 restart boundary; the lifecycle correction and
-REL-01 live proof remain pending. Allowing an Agent restart does not waive etcd
-continuity or any hosted-application assertion.
+Normal shutdown previously stopped etcd through its manager's `Close`. The local
+correction closes only the Docker client, leaving the store running. Its regression
+proves no inspect/stop call even when client closure fails; Controller shutdown
+still closes owned clients and preserves errors. The foundation verifier permits
+an Agent start-time change but requires unchanged etcd identity, start time,
+restart count and running state. Local fixture proof passes; REL-01 application
+continuity and deployed lifecycle proof remain unrun.
