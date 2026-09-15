@@ -142,7 +142,7 @@ func TestObservedRecreateSetRequiresExactSealedReplicas(t *testing.T) {
 				test.mutate(ownedArtifact, observed)
 			}
 			evidence := observedRecreateSetEvidence(
-				ownedArtifact, observed, "svc_api", "candidate-release", "singleton", false,
+				ownedArtifact, observed, "svc_api", "candidate-release", "singleton", false, nil,
 			)
 			if (evidence != nil) != test.want {
 				t.Fatalf("observedRecreateSetEvidence() = %#v, want evidence %t", evidence, test.want)
@@ -239,7 +239,7 @@ func TestObservedRecreateSetScopesLifecycleCollisions(t *testing.T) {
 			observed := proto.Clone(valid).(*agentpb.ObservedProject)
 			observed.Collisions = test.collisions
 			evidence := observedRecreateSetEvidence(
-				artifact, observed, serviceID, "candidate-release", "singleton", false,
+				artifact, observed, serviceID, "candidate-release", "singleton", false, nil,
 			)
 			if (evidence != nil) != test.want {
 				t.Fatalf("observedRecreateSetEvidence() = %#v, want evidence %t", evidence, test.want)
@@ -281,7 +281,7 @@ func TestReleaseRestorationRejectsWrongObservedImage(t *testing.T) {
 	observed := recreateTestProject(artifact, "prior-release", 1)
 	observed.Containers[0].ImageReference = "registry.example/api@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	if err := releaseRestorationWorkloadTargetProven(
-		artifact, observed, "svc_api", "singleton", "prior-release",
+		artifact, observed, "svc_api", "singleton", "prior-release", nil,
 	); err == nil {
 		t.Fatal("release restoration accepted a container with the wrong image")
 	}

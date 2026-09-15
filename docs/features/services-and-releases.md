@@ -95,6 +95,15 @@ operation's resource scope; their presence cannot invalidate its workload proof.
 Collisions on required resources, unidentified resources and unknown collision
 kinds still fail closed. Original observation evidence remains unchanged.
 
+Recovery observation also recognizes the selected member's exact candidate
+workload from the sealed plan. A forward failure can leave that container beside
+the predecessor; its presence alone is not foreign ownership. Candidate evidence
+stays in the observation but cannot satisfy predecessor replica or health checks.
+Recognition requires the candidate's exact ownership labels and image identity;
+it never includes a proxy or another member. Ordinary lifecycle observation stays
+strict. Both native-witness and ordinary Release recovery use this distinction,
+without rewriting historical artifacts or granting new mutation authority.
+
 Independent observation opens a concrete read-only descriptor from the validated
 original plan, selected recovery step and canonical native witness. It retains exact
 historical labels and is accepted only by the Moby observer's restoration method,

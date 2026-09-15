@@ -1293,6 +1293,35 @@ also proves switch and compensated configuration survive container restart.
 The fresh host is healthy and idle. No further case, repair, cleanup or broader
 QA is selected; work stops here.
 
+H66 records the scoped SVC-09 recovery-identity implementation on 2026-09-15,
+based on `49f7433ef` plus this repair. Offline incident comparison identifies the
+failed candidate as absent from the captured predecessor artifact; the old
+workload and proxy labels match. Recovery incorrectly classified its own candidate
+as foreign, then stopped before compensation. Existing executor doubles supplied
+already-classified observations and did not exercise that Docker classification.
+
+The integrated Agent/Moby-observer regression traverses a sealed recovery pair:
+healthy predecessor alone, then predecessor plus a created unhealthy candidate,
+then candidate ownership drift. Restoring predecessor-only observation reproduces
+the exact `release restoration observation identity diverges` error at candidate
+creation; the correction passes and still rejects the changed ownership. Native
+recovery's predecessor selection also passes with the candidate present. Separate
+regressions cover blue-green probe/compensation descriptor binding, immutable
+copies, ordinary observation strictness, wrong plan/Release/image, unknown workload,
+proxy impersonation, duplicate identity and absent/unhealthy predecessor.
+
+Affected Agent, execution-plan, Moby-observer and app race suites, vet and pinned
+Staticcheck pass. The first sandboxed Agent run could not create its Unix sockets;
+the socket-enabled local run passes. Formatting and diff checks pass. Architecture
+reports the same 122 pre-existing findings, none on changed files; full CI is not
+claimed. Evidence is
+`.tmp/recovery-identity-Tncp08Qx/`: `integration-red.log`, `integration-green.log`,
+`shared-recovery.log`, `delivery-race.log`, `delivery-vet.log` and
+`delivery-staticcheck.log`. Tests use generic fixtures and no live host. This is
+local implementation proof, not a passing full failed-Deploy operator journey,
+deployment, Controller terminal acknowledgement or production qualification.
+The original failed Task remains archived and unchanged. No live cleanup ran.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing

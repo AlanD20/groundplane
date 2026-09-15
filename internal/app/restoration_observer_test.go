@@ -7,6 +7,12 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
+func (observer *fakeOwnedComposeObserver) ObserveReleaseRestoration(
+	ctx context.Context, plan *agentpb.ExecutionPlan, _ string, artifactID string,
+) (*agentpb.ObservedProject, error) {
+	return observer.Observe(ctx, plan, artifactID)
+}
+
 func (observer *fakeOwnedComposeObserver) ObserveRestoration(
 	ctx context.Context,
 	observation *executionplan.RestorationObservation,

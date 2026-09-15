@@ -105,7 +105,7 @@ func TestReleaseRestorationWorkloadSetRequiresExactHealthyLineage(t *testing.T) 
 			if (err == nil) != test.wantOK {
 				t.Fatalf("releaseRestorationWorkloadSetProven() error = %v, want success %t", err, test.wantOK)
 			}
-			err = releaseRestorationWorkloadTargetProven(artifact, observed, "api", "singleton", "prior-api")
+			err = releaseRestorationWorkloadTargetProven(artifact, observed, "api", "singleton", "prior-api", nil)
 			if (err == nil) != test.wantOK {
 				t.Fatalf("releaseRestorationWorkloadTargetProven() error = %v, want success %t", err, test.wantOK)
 			}

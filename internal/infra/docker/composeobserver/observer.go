@@ -99,7 +99,18 @@ func (observer *Observer) Observe(
 	if artifact == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Compose observation artifact is not in the plan")
 	}
-	return observer.observeArtifact(ctx, artifact)
+	return observer.observeArtifact(ctx, artifact, nil)
+}
+
+// ObserveReleaseRestoration opens the original plan's declared recovery pair.
+func (observer *Observer) ObserveReleaseRestoration(
+	ctx context.Context, plan *agentpb.ExecutionPlan, stepID, artifactID string,
+) (*agentpb.ObservedProject, error) {
+	observation, err := executionplan.NewPlanRestorationObservation(plan, stepID, artifactID)
+	if err != nil {
+		return nil, err
+	}
+	return observer.ObserveRestoration(ctx, observation)
 }
 
 // ObserveRestoration accepts only the immutable read-only witness descriptor,
@@ -118,19 +129,20 @@ func (observer *Observer) ObserveRestoration(
 	if artifact == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Compose restoration observation is empty")
 	}
-	return observer.observeArtifact(ctx, artifact)
+	return observer.observeArtifact(ctx, artifact, observation.CandidateWorkloads())
 }
 
 func (observer *Observer) observeArtifact(
 	ctx context.Context,
 	artifact *agentpb.ComposeArtifact,
+	candidateWorkloads []*agentpb.ComposeService,
 ) (*agentpb.ObservedProject, error) {
 	observedAt := timestamppb.New(observer.now().UTC())
 	if err := observedAt.CheckValid(); err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
 	result := &agentpb.ObservedProject{ProjectName: artifact.ProjectName, ObservedAt: observedAt}
-	if err := observer.observeContainers(ctx, artifact, result); err != nil {
+	if err := observer.observeContainers(ctx, artifact, candidateWorkloads, result); err != nil {
 		return nil, err
 	}
 	if err := observer.observeNetworks(ctx, artifact, result); err != nil {
@@ -158,6 +170,7 @@ func (observer *Observer) observeArtifact(
 func (observer *Observer) observeContainers(
 	ctx context.Context,
 	artifact *agentpb.ComposeArtifact,
+	candidateWorkloads []*agentpb.ComposeService,
 	result *agentpb.ObservedProject,
 ) error {
 	listed, err := observer.engine.ContainerList(ctx, client.ContainerListOptions{All: true})
@@ -185,6 +198,15 @@ func (observer *Observer) observeContainers(
 		}
 		name := strings.TrimPrefix(item.Name, "/")
 		service := expected[item.Config.Labels[composeServiceLabel]]
+		if service == nil || !labelsMatch(item.Config.Labels, service.GetExpectedLabels()) {
+			for _, candidate := range candidateWorkloads {
+				if candidate.GetComposeName() == item.Config.Labels[composeServiceLabel] &&
+					labelsMatch(item.Config.Labels, candidate.GetExpectedLabels()) {
+					service = candidate
+					break
+				}
+			}
+		}
 		if name == "" {
 			return errs.New(errs.KindInternal, "Compose observation container name is empty")
 		}

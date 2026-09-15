@@ -25,6 +25,7 @@ type ComposeHelper interface {
 type ComposeObserver interface {
 	Observe(context.Context, *agentpb.ExecutionPlan, string) (*agentpb.ObservedProject, error)
 	ObserveRestoration(context.Context, *executionplan.RestorationObservation) (*agentpb.ObservedProject, error)
+	ObserveReleaseRestoration(context.Context, *agentpb.ExecutionPlan, string, string) (*agentpb.ObservedProject, error)
 }
 
 type ComposeRuntime struct {

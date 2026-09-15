@@ -35,7 +35,7 @@ func (runtime *ComposeRuntime) observeRecreateRecovery(
 	observed, err := runtime.observer.ObserveRestoration(ctx, observation)
 	if err == nil {
 		evidence := observedRecreateSetEvidence(observation.Artifact(), observed,
-			probe.GetServiceId(), probe.GetPriorReleaseId(), "", true)
+			probe.GetServiceId(), probe.GetPriorReleaseId(), "", true, observation.CandidateWorkloads())
 		if evidence != nil {
 			return composeStepResult{Observed: observed, RecreateEvidence: evidence}, nil
 		}
@@ -68,7 +68,7 @@ func (runtime *ComposeRuntime) observeRecreateSet(
 			}
 			result.RecreateEvidence = observedRecreateSetEvidence(
 				composeArtifact(plan, target.artifactID), observed, serviceID, target.releaseID,
-				target.target, target.compensated,
+				target.target, target.compensated, nil,
 			)
 			if result.RecreateEvidence != nil {
 				return result, nil
@@ -88,6 +88,7 @@ func observedRecreateSetEvidence(
 	observed *agentpb.ObservedProject,
 	serviceID, releaseID, expectedTarget string,
 	compensated bool,
+	candidateWorkloads []*agentpb.ComposeService,
 ) *agentpb.ServiceRecreateEvidence {
 	if artifact == nil || observed == nil || artifact.GetArtifactId() == "" || serviceID == "" || releaseID == "" ||
 		artifact.GetProjectName() == "" || observed.GetProjectName() != artifact.GetProjectName() {
@@ -143,6 +144,10 @@ func observedRecreateSetEvidence(
 			return nil
 		}
 		containerIDs[containerID] = struct{}{}
+		if !containerHasExpectedLabels(container, workload.GetExpectedLabels()) &&
+			matchesKnownRestorationWorkload(container, candidateWorkloads) {
+			continue
+		}
 		if role != observedRecreateRuntimeRole(target) ||
 			!containerHasExpectedLabels(container, workload.GetExpectedLabels()) ||
 			container.GetImageReference() != workload.GetImageReference() ||

@@ -127,11 +127,12 @@ func (runtime *ComposeRuntime) verifyReleaseRestorationPostcondition(
 			observed, err = runtime.observer.ObserveRestoration(ctx, observation)
 		}
 	} else {
-		observed, err = runtime.observer.Observe(ctx, observationPlan, artifact.GetArtifactId())
+		observed, err = runtime.observer.ObserveReleaseRestoration(ctx, observationPlan, step.GetStepId(), artifact.GetArtifactId())
 	}
 	result.Observed = observed
 	if err == nil {
-		err = releaseRestorationWorkloadTargetProven(artifact, observed, serviceID, target, releaseID)
+		err = releaseRestorationWorkloadTargetProven(artifact, observed, serviceID, target, releaseID,
+			executionplan.RestorationCandidateWorkloads(assignment.Plan, serviceID))
 	}
 	if err != nil {
 		result.ReconciliationRequired = true
@@ -305,13 +306,14 @@ func releaseRestorationWorkloadSetProven(
 	observed *agentpb.ObservedProject,
 	serviceID string,
 ) error {
-	return releaseRestorationWorkloadTargetProven(artifact, observed, serviceID, "", "")
+	return releaseRestorationWorkloadTargetProven(artifact, observed, serviceID, "", "", nil)
 }
 
 func releaseRestorationWorkloadTargetProven(
 	artifact *agentpb.ComposeArtifact,
 	observed *agentpb.ObservedProject,
 	serviceID, target, releaseID string,
+	candidateWorkloads []*agentpb.ComposeService,
 ) error {
 	if artifact == nil || observed == nil || artifact.GetProjectName() == "" ||
 		observed.GetProjectName() != artifact.GetProjectName() {
@@ -337,6 +339,7 @@ func releaseRestorationWorkloadTargetProven(
 	if len(expected) == 0 {
 		return errs.New(errs.KindInternal, "agent: sealed predecessor workload is absent")
 	}
+	known = append(known, candidateWorkloads...)
 	if scoped := scopeLifecycleComposeObservation(artifact, observed, known); len(scoped.GetCollisions()) != 0 {
 		return errs.New(errs.KindStateConflict, "agent: release restoration observation identity diverges")
 	}
@@ -371,11 +374,7 @@ func releaseRestorationWorkloadTargetProven(
 			}
 		}
 		if matched == -1 {
-			sealedOther := false
-			for _, service := range known {
-				sealedOther = sealedOther || containerHasExpectedLabels(container, service.GetExpectedLabels())
-			}
-			if sealedOther {
+			if matchesKnownRestorationWorkload(container, known) {
 				continue
 			}
 		}
@@ -393,6 +392,17 @@ func releaseRestorationWorkloadTargetProven(
 		}
 	}
 	return nil
+}
+
+func matchesKnownRestorationWorkload(container *agentpb.ObservedContainer, known []*agentpb.ComposeService) bool {
+	for _, service := range known {
+		if containerHasExpectedLabels(container, service.GetExpectedLabels()) &&
+			workloadimage.LocalIDValid(service.GetImageReference()) &&
+			container.GetImageReference() == service.GetImageReference() && container.GetImageId() == service.GetImageReference() {
+			return true
+		}
+	}
+	return false
 }
 
 func observedLabel(container *agentpb.ObservedContainer, key string) string {
