@@ -32,10 +32,14 @@ Go 1.26 language contract and these immutable upstream inputs:
 | Docker CLI runtime | 29.1.3 | `docker:29.1.3-cli@sha256:4fa0ee1f3a7e4354c4ea34558b6d4ee32859baf4973d4c8ccc8e7fe3dd730c04` |
 | Compose plugin | 2.40.3 | `docker/compose-bin:v2.40.3@sha256:e39da8206cc48c6e2c99ce371935eef9d7eff7db600a993fd357de8b75621edf` |
 
-The Docker CLI runtime currently bundles Compose 5.0.0. That plugin is
-replaced, not retained as a fallback, by the accepted Compose 2.40.3 binary at
-Docker's standard CLI-plugin path. Groundplane therefore has one Compose
-implementation and does not silently cross the ADR 0022 major-version seam.
+The final runtime uses `scratch`, copying only the static Docker CLI and CA
+bundle from the pinned Docker input, the accepted Compose 2.40.3 binary at
+Docker's standard CLI-plugin path and the built Agent. Explicit PATH/HOME and
+empty runtime directories replace inherited base-image defaults. The Docker
+input's Compose 5 plugin, Buildx, shell and package manager are not copied.
+Groundplane therefore has one Compose implementation and does not silently
+cross the ADR 0022 major-version seam. Unlike the earlier incomplete scratch
+image, this image retains the tools required by the closed helper procedure.
 
 The Agent binary is built with `CGO_ENABLED=0`, `-trimpath`, disabled VCS
 probing, and an empty Go build id. `AGENT_VERSION` is embedded into the shared
@@ -50,7 +54,7 @@ The final image contract is:
 - `DOCKER_HOST=unix:///var/run/docker.sock`;
 - entrypoint `/usr/local/bin/groundplane-agent`;
 - no OCI image command (`CMD []`, normalized to `Config.Cmd=null`), so the
-  Docker CLI base's inherited `sh` command cannot become an unsupported Agent
+  an inherited `sh` command cannot become an unsupported Agent
   argument; and
 - Docker CLI and Compose available only as tools invoked by the validated
   Agent helper procedure.
@@ -59,7 +63,10 @@ The persistent Agent and all short-lived Agent helpers use this same image.
 There is no helper tag, host-package copy, bootstrap Compose file, Agent
 systemd unit, or second workload executor.
 
-`make agent-image` builds a local tag. `make agent-image-smoke` additionally
+`scripts/release-agent.sh` requires explicit version/image arguments, runs focused
+runtime checks and publishes only with `--push`; its output then identifies the
+registry digest. `make agent-image` builds a local development tag.
+`make agent-image-smoke` additionally
 asserts the entrypoint, empty command, root user, Docker CLI version, and
 Compose version. `make ci` includes that smoke. A local or registry tag is only
 a build handle: deployment still requires the resulting immutable RepoDigest

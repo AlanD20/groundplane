@@ -1392,6 +1392,43 @@ These tracked working records retain existing private verification context.
 They are not approved public artifacts; sanitize that context before any public
 publication. Consolidation does not authorize publishing private topology.
 
+## Release packaging tooling
+
+H68 records local PKG-01/02 support on 2026-09-19, built from `d0a03f01c` plus
+the release-packaging changes in this commit. Ten tests in
+`scripts/test_release_bundle.py` pass: exact Controller/descriptor and pinned-image
+roundtrip, wrong-version/architecture refusal before extraction, traversal/link/
+duplicate/missing-member refusal, altered bytes, deterministic archive headers,
+no overwrite, fresh/native routing, stage/config refusal, partial-layout and
+capacity refusal without setup/pulls, and help/invalid-input handling without
+root access. Existing bootstrap/staging/update-replay tests are unchanged.
+The complete 83-test deployment suite passes in
+`.tmp/release-packaging-checks.log` with the real filesystem ownership view;
+the sandbox-only attempt hit existing ownership-fixture errors.
+
+Native linux/amd64 Controller and CLI builds pass with Go 1.26.7,
+Node 24.19.0/npm 11.17.0, CGO disabled and stripped binaries. The Controller
+contains production Console assets and matches its generated release descriptor;
+its test version is `0.0.0-qa.packaging20260919.1`. The Console lockfile audit
+reports zero known vulnerabilities in `.tmp/release-packaging-npm-audit.json`.
+No installer ran on a host, no registry push or GitHub Release was performed,
+and no new application/update continuity or arm64 qualification is claimed.
+Archive/header and fake-process checks are not a fresh-host installation pass.
+
+PKG-03 local image checks pass in `.tmp/agent-release-image-proof/result.log`:
+linux/amd64 scratch image `groundplane-agent:release-probe2` is 147,450,780 bytes,
+versus 275,992,667 bytes for `groundplane-agent:size-baseline` (46.6% smaller,
+Docker's uncompressed image-size measure). Entrypoint, empty command and root
+identity are unchanged. Docker 29.1.3, Compose 2.40.3 and a real Compose document
+parse pass; the closed helper dispatch reaches its expected empty-input refusal.
+The image retains the CA bundle and explicit PATH/HOME/temp directories without
+a shell, package manager, Buildx or Compose 5. Three fake-tool tests in
+`scripts/test_release_agent.py` pass for no implicit push, realistic push-output
+parsing and exact newly reported RepoDigest confirmation. This is not a real
+registry publication, valid-frame workload application or complete helper-mode
+qualification. An attempted broader unchanged Go package run encountered the
+sandbox's Unix-socket permission limit; it is not reported as passing.
+
 ## Private data
 
 Groundplane is exercised against a private representative workload, but its

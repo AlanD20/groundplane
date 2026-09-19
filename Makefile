@@ -20,13 +20,13 @@ $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
 
 cli: | $(BIN_DIR)
-	go build -ldflags="-X github.com/AlanD20/groundplane/internal/common/version.Value=$(VERSION)" -o $(BIN_DIR)/groundplane ./cmd/groundplane
+	go build -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X github.com/AlanD20/groundplane/internal/common/version.Value=$(VERSION)" -o $(BIN_DIR)/groundplane ./cmd/groundplane
 
 controller: console
 	$(MAKE) controller-binary
 
 controller-binary: | $(BIN_DIR)
-	go build -tags groundplane_console -ldflags="-X github.com/AlanD20/groundplane/internal/common/version.Value=$(VERSION)" -o $(BIN_DIR)/controller ./cmd/controller
+	go build -trimpath -buildvcs=false -tags groundplane_console -ldflags="-s -w -buildid= -X github.com/AlanD20/groundplane/internal/common/version.Value=$(VERSION)" -o $(BIN_DIR)/controller ./cmd/controller
 	go run ./internal/releasemeta -controller $(BIN_DIR)/controller -version "$(VERSION)" -output $(BIN_DIR)/controller-release.json
 
 controller-dev: | $(BIN_DIR)

@@ -180,9 +180,11 @@ workload-materialization mount.
 The image is produced only by `Dockerfile.agent` from the immutable Go 1.26.6,
 Docker CLI 29.1.3, and Compose 2.40.3 inputs accepted in ADR 0043. Its explicit
 `/usr/local/bin/groundplane-agent` entrypoint and empty command serve both the
-persistent process and the binary's closed helper modes. The Docker CLI base's
-bundled Compose 5 plugin is replaced by the accepted Compose v2 binary; there
-is no host-CLI mount or second helper image.
+persistent process and the binary's closed helper modes. The final layer is
+`scratch`: it copies the pinned static Docker CLI, accepted Compose v2 binary,
+Agent and CA bundle, with explicit PATH/HOME and empty runtime directories.
+It contains no shell, package manager, Buildx or inherited Compose 5 plugin;
+there is no host-CLI mount or second helper image.
 The channel is the UDS `/run/groundplane/controller/agent.sock`; ADR 0011
 defines its accepted token contract. Enrollment requires authenticated
 `Ready` within 120 seconds. Missing `Ready` makes the Agent stale after

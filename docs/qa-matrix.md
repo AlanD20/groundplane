@@ -11,6 +11,17 @@ prerequisites, not passing product cases. A completed Task or healthy process
 alone does not prove that an application works, its data survived, or recovery
 restored the correct configuration.
 
+## Release packaging cases
+
+These cases cover the owner-requested release scripts separately from the older
+hosting evidence. Local tooling checks do not qualify a host installation.
+
+| Case | Required outcome | Evidence/status |
+| --- | --- | --- |
+| PKG-01 | Explicit-version bundles preserve the built Controller identity and pinned Agent/Runner images. Wrong version/platform, altered bytes, incomplete archives, links, duplicate or escaping paths are refused before executing downloaded code. Existing release outputs are not overwritten. | H68: `scripts/test_release_bundle.py`; host-free archive and identity checks pass; public download unrun |
+| PKG-02 | Fresh install provisions prerequisites and enrolls the Agent; an existing guarded host uses native update only. Stage-only never activates. Native update preserves config, keys, CLI, Runner, etcd and applications; failed/uncertain updates retain recovery evidence. | H68: host-free routing checks in `scripts/test_release_bundle.py` and existing deployment tests pass; new installer live journey unrun |
+| PKG-03 | The reduced Agent image executes the pinned Docker/Compose tools and closed helpers with unchanged ownership and entrypoint. Actual Compose validation/application remains functional; measure image size without discarding required runtime files. | H68: amd64 image metadata, tool versions, Compose parsing and closed-helper dispatch pass; image is 46.6% smaller. Real workload apply and arm64 unrun. `scripts/test_release_agent.py` separately proves explicit publication and digest identity with fake tools. |
+
 ## Minimum hosting and upgrade readiness checklist
 
 Owner-approved priority checklist, 2026-09-14. The owner authorized its repairs

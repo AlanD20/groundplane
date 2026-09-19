@@ -4,6 +4,99 @@ This runbook implements ADR0074's machine-bootstrap exception. Normal native
 activation remains the same Console/CLI/API Controller update Task. It does not
 authorize a production target or changes to ingress, host firewall or other hosts.
 
+## Prebuilt releases
+
+Release tooling builds artifacts locally; it does not publish a GitHub Release or
+install on a host. Use an explicit version, never a moving `latest` selection.
+Build from the intended source commit with the repository-pinned toolchains.
+
+### Build the Agent image
+
+```sh
+bash scripts/release-agent.sh --version 1.0.0 \
+  --image ghcr.io/aland20/groundplane-agent:1.0.0
+```
+
+The default only builds. Add `--push` when publication is intended and registry
+credentials are configured on the builder. Use the returned registry digest in
+the bundle command, not the local Docker image id. Runner remains a separate
+release input built with `make runner-image`; publish it explicitly and supply
+its registry digest too. These images contain no installation credentials.
+The final Agent image uses `scratch`, retaining the Agent, static Docker CLI,
+Compose and CA bundle. The measured amd64 image is 147.5 MB uncompressed versus
+276.0 MB before (46.6% smaller); required Docker/Compose binaries account for much
+of the remaining size. This is a measured reduction, not an absolute minimum claim.
+
+### Build the native bundle
+
+```sh
+bash scripts/repo-env.sh python3 scripts/release_bundle.py --version 1.0.0 \
+  --agent-image ghcr.io/aland20/groundplane-agent@sha256:AGENT_DIGEST \
+  --runner-image ghcr.io/aland20/groundplane-runner@sha256:RUNNER_DIGEST
+```
+
+Replace both digest markers with the actual 64-character registry hashes.
+Build natively on each supported Linux architecture. The script builds the
+production Controller with embedded Console, CLI and source-derived compatibility
+descriptor. It bundles the existing bootstrap, release stager, protected update
+client, unit, tmpfiles and startup example; it does not create another updater.
+Image bytes are not in the archive: installation requires access to their registry.
+The supplied image digests must contain the matching platform; the publisher owns
+registry readback and two-platform qualification under ADR0060.
+
+Outputs are `.tmp/releases/groundplane-VERSION-linux-ARCH.tar.gz` and the adjacent
+`.tar.gz.sha256`. Existing archives are never overwritten. Archive headers are
+stable; this is not a claim that independent compiler runs are byte-reproducible.
+After qualification, upload these exact files and the reviewed root `install.sh`
+to GitHub Release `vVERSION`. Nothing is uploaded automatically.
+
+### Install or upgrade on a host
+
+Download the reviewed `install.sh` from the selected release, inspect it, then run:
+
+```sh
+sudo sh install.sh --version 1.0.0
+```
+
+The installer supports Ubuntu 24.04 on native amd64/arm64 and needs root. It
+downloads the architecture-specific bundle from this repository's GitHub Release
+and verifies its SHA256 before executing bundled code. It rejects incorrect
+version/platform, incomplete or altered members, duplicate paths, links and path
+traversal. Downloads use HTTPS only and bounded sizes/timeouts. The trust root is
+the reviewed installer plus GitHub's HTTPS release assets; a checksum from the
+same release is integrity checking, not an independent publisher signature.
+Supply `--sha256 HEX` to pin an independently obtained archive hash.
+
+For a previously downloaded bundle:
+
+```sh
+sudo sh install.sh --version 1.0.0 \
+  --bundle /path/to/groundplane-1.0.0-linux-amd64.tar.gz --sha256 ARCHIVE_SHA256
+```
+
+This avoids the archive download, not registry or package-manager access. A fresh
+host provisions the existing Docker/Compose, registry and Runner prerequisites,
+installs Controller/CLI and the recovery guard, creates the age identity and
+enrolls the Agent. No Go, Node or source checkout is needed on the host. The
+Controller listens on loopback by default; use `--listen-ip PRIVATE_IPV4` for a
+trusted private listener. Use `--config /path/to/controller.yaml` for initial
+startup settings, including address pools appropriate for the host. Bootstrap
+fills the pinned Agent/Runner images into that configuration. Public/wildcard
+listeners, public ingress and firewall changes are not part of this installer.
+
+On an existing guarded installation the same command stages and follows a normal
+Controller update Task. It does not run prerequisite setup, replace CLI/Runner,
+rewrite configuration/keys/units or independently restart etcd/applications.
+`--config` is refused on that path. `--stage-only` requires an existing guarded
+installation and stages without activation; use the Console or the existing CLI
+command below to activate the printed release digest. Legacy and partial
+installations are refused, not silently converted or repaired.
+
+Failures retain the invocation's private files when recovery needs them. Follow
+the printed resume instructions; never delete the update journal to retry.
+The new entrypoint's real fresh-host and native-update journeys remain unrun;
+host-free safety checks and earlier `deploy.py` QA do not qualify them.
+
 ## Prerequisites
 
 Use the repository-pinned Go, Node and npm toolchains, local Docker and SSH,
