@@ -11,20 +11,6 @@ operational authority. The owner authorized fresh QA with disposable data on
 2026-09-12, without restoring incident-affected state. That state's integrity
 remains unresolved; the fresh run does not qualify it.
 
-## Failed-candidate recovery qualification
-
-Owner: Release recovery observation. H66 implements recognition of the exact
-failed Task's candidate beside its captured predecessor. Local integrated
-observer/Agent regression reproduces the original identity rejection and passes
-with the repair while preserving foreign-ownership and health rejection.
-
-Remaining acceptance: deploy the repair to the selected disposable QA host and
-fail a new ordinary Deploy after candidate creation. Require automatic recovery
-and terminalization of that same failed Task, preserved serving Release/data,
-working routed application requests, released Agent claim and a subsequent normal
-Deploy. Do not replay or rewrite the archived Task. Local proof does not close
-this live qualification; no new live fault or reset ran for H66.
-
 ## Missing upgrade candidate refusal
 
 H53 reproduces UP-03 on the fresh QA installation: the protected native update

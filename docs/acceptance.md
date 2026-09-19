@@ -1322,6 +1322,49 @@ local implementation proof, not a passing full failed-Deploy operator journey,
 deployment, Controller terminal acknowledgement or production qualification.
 The original failed Task remains archived and unchanged. No live cleanup ran.
 
+H67 PASSES the owner-selected live validation of H66 on 2026-09-19. Source
+`30245a441` is built and staged as `0.0.0-qa.recovery20260919.1`, then activated
+through normal Controller update Task `task_01M2X306M4Z7E1B0KR9JM2RHF7`.
+Controller digest is
+`sha256:c50f8dc65b308e0097c26f4c30dd605c746a1b1d6e67bfbc56de60a6717ab420`;
+Agent image is
+`localhost:5000/groundplane-agent@sha256:b22fb3d3ca2cb888700c7dd0dfec7815f1eaad7787f4fb1ceb298f1d88d76951`.
+The native update preserves every non-Agent container identity, image and start
+time, including etcd, all serving Releases and the existing authenticated profile.
+Forty-four requests and eight pongs on the same WebSocket pass over 44 seconds,
+zero errors/disconnections and maximum HTTP latency 0.199 seconds.
+
+SVC-09 injects exactly one failure through a temporary post-deploy Script:
+`sleep 20; exit 23`. The new candidate is observed running before the hook exits;
+the hook runs after candidate creation and before readiness/promotion. Agent logs
+confirm exit 23, not an unrelated failure. Task
+`task_01M2X31S1V8ZNXEXH1SY1ND4ZW` automatically closes as failed in 26.463 seconds
+including that deliberate delay. Its failure remains recorded and the candidate
+does not become the serving Release. The previous serving Release,
+all pre-existing running container identities/images/start times and the checked
+application profile survive. All 11 Services are healthy and the Agent releases
+its claim. No manual container start, configuration repair or reset is needed.
+
+The fault Script is removed through its normal operation, preserving all original
+hooks exactly. Subsequent ordinary Deploy `task_01M2X32Q3GK56Z86CJ240MNX3Z`
+completes and removes the replaced failed candidate; unrelated serving Releases
+and the profile remain unchanged. API and CLI agree on the original failed Task
+and subsequent completed Task. Across recovery and that follow-up, 96 authenticated
+requests and 18 pongs on the same WebSocket pass over 96 seconds, zero errors or
+disconnects, maximum HTTP latency 0.287 seconds. The socket belongs to the unchanged
+separate WebSocket Service, not the selected API proxy.
+
+Evidence is `.tmp/qa-recovery-live-20260919-4oXbEvK0/`: `stage.log`,
+`upgrade-result.json`, `failure.log`, `created-candidate.json`,
+`failed-task-terminal.json`, `agent-final.stderr`, `final-result.json`,
+`upgrade-traffic-result.json`, `recovery-traffic-result.json` and the private
+API/CLI receipts. Owned traffic children exit and their two control files and
+unique empty remote directory are removed. Local evidence and the original
+archived incident are retained. The selected journey is complete; no production,
+broader QA, Backup/Restore or new Console journey ran. This proves the exercised
+post-creation hook-failure path, not every interruption/timeout variant or full
+production readiness. H66's foreign-identity/health negatives remain local proof.
+
 The repair evidence directory for H1–H5 is
 `.tmp/qa-recovery-repair-20260913-63vxXPTf/`. Older referenced run directories and
 their exact build history remain in the operational checkpoint and existing
