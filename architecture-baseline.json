@@ -9,7 +9,6 @@
     {"path": "console/src/features/environment/environment-page.tsx", "lines": 4005},
     {"path": "console/src/lib/mock-data.ts", "lines": 1316},
     {"path": "console/src/lib/store.tsx", "lines": 3251},
-    {"path": "console/src/lib/types.ts", "lines": 608},
     {"path": "internal/app/attach_mutations.go", "lines": 1178},
     {"path": "internal/app/controller.go", "lines": 1223},
     {"path": "internal/app/environment_blueprint.go", "lines": 1333},
@@ -56,17 +55,14 @@
     {"path": "internal/infra/etcd/hierarchy.go", "lines": 899},
     {"path": "internal/infra/etcd/hierarchy_keys.go", "lines": 950},
     {"path": "internal/infra/etcd/idempotency.go", "lines": 1509},
-    {"path": "internal/infra/etcd/idempotency_test.go", "lines": 1089},
     {"path": "internal/infra/etcd/local_agent.go", "lines": 1050},
     {"path": "internal/infra/etcd/runner_repository.go", "lines": 1132},
     {"path": "internal/infra/etcd/runner_repository_test.go", "lines": 1167},
     {"path": "internal/infra/etcd/runner_task_lifecycle.go", "lines": 1059},
-    {"path": "internal/infra/etcd/service_repository.go", "lines": 904},
     {"path": "internal/infra/etcd/store.go", "lines": 773},
     {"path": "internal/infra/etcd/task_journal.go", "lines": 1157},
     {"path": "internal/infra/etcd/task_lifecycle.go", "lines": 3124},
     {"path": "internal/infra/etcd/task_pruning.go", "lines": 844},
-    {"path": "internal/infra/etcd/task_repository.go", "lines": 637},
     {"path": "internal/infra/s3compatible/adapter.go", "lines": 782},
     {"path": "internal/operationmanifest/manifest.go", "lines": 637},
     {"path": "pkg/api/types.go", "lines": 836}
@@ -80,12 +76,6 @@
     "path": "internal/agent/adapter_runtime.go",
     "rule": "layer-import",
     "subject": "internal/adapters",
-    "reason": "Pre-Q0 dependency edge pending relocation to its owning layer."
-  },
-  {
-    "path": "internal/agent/adapter_runtime_test.go",
-    "rule": "layer-import",
-    "subject": "internal/adapters/postgres16",
     "reason": "Pre-Q0 dependency edge pending relocation to its owning layer."
   },
   {
@@ -239,18 +229,6 @@
     "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
   },
   {
-    "path": "internal/core/envelope.go",
-    "rule": "open-model-field",
-    "subject": "ComponentSpec.Config",
-    "reason": "Pre-Q0 open model pending a closed per-kind configuration type."
-  },
-  {
-    "path": "internal/core/model.go",
-    "rule": "open-model-field",
-    "subject": "Component.Config",
-    "reason": "Pre-Q0 open model pending a closed per-kind configuration type."
-  },
-  {
     "path": "internal/infra/age/secret_limit_test.go",
     "rule": "layer-import",
     "subject": "pkg/api",
@@ -291,36 +269,6 @@
     "rule": "reflect-import",
     "subject": "reflect",
     "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/infra/etcd/route_removal_intent.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/infra/etcd/service_lifecycle.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/infra/etcd/store.go",
-    "rule": "interface-constructor",
-    "subject": "New",
-    "reason": "Pre-Q0 producer-owned side-effect seam pending migration to a consumer-owned contract."
-  },
-  {
-    "path": "pkg/api/types.go",
-    "rule": "open-model-field",
-    "subject": "Component.Config",
-    "reason": "Pre-Q0 open model pending a closed per-kind configuration type."
-  },
-  {
-    "path": "pkg/api/types.go",
-    "rule": "open-model-field",
-    "subject": "ComponentEnableRequest.Config",
-    "reason": "Pre-Q0 open model pending a closed per-kind configuration type."
   }
 ]
 

@@ -10,7 +10,6 @@ import (
 	"os"
 	pathpkg "path"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -96,64 +95,7 @@ func checkGoRules(ctx context.Context, root string, files []*sourceFile) []Findi
 		if unit.ast == nil {
 			continue
 		}
-		for _, importSpec := range unit.ast.Imports {
-			importPath, err := strconv.Unquote(importSpec.Path.Value)
-			if err != nil {
-				continue
-			}
-			position := unit.fset.Position(importSpec.Pos())
-			if importPath == "unsafe" {
-				findings = append(
-					findings,
-					Finding{
-						Path:    unit.file.rel,
-						Line:    position.Line,
-						Column:  position.Column,
-						Rule:    "unsafe-import",
-						Message: "unsafe imports are forbidden",
-					},
-				)
-			}
-			if importPath == "reflect" && !unit.file.isTest {
-				findings = append(
-					findings,
-					Finding{
-						Path:    unit.file.rel,
-						Line:    position.Line,
-						Column:  position.Column,
-						Rule:    "reflect-import",
-						Subject: "reflect",
-						Message: "reflection is a forbidden conversion dependency",
-					},
-				)
-			}
-			if subject, reason := forbiddenLayerImport(unit.file.rel, importPath, module); reason != "" {
-				findings = append(
-					findings,
-					Finding{
-						Path:    unit.file.rel,
-						Line:    position.Line,
-						Column:  position.Column,
-						Rule:    "layer-import",
-						Subject: subject,
-						Message: reason,
-					},
-				)
-			}
-			if subject, reason := forbiddenComponentModuleImport(unit.file.rel, importPath); reason != "" {
-				findings = append(
-					findings,
-					Finding{
-						Path:    unit.file.rel,
-						Line:    position.Line,
-						Column:  position.Column,
-						Rule:    "component-module-import",
-						Subject: subject,
-						Message: reason,
-					},
-				)
-			}
-		}
+		findings = append(findings, checkGoImports(unit, module)...)
 		if unit.file.isTest || unit.ast.Name == nil {
 			continue
 		}

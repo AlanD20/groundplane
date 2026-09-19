@@ -1,7 +1,7 @@
 # Deferred architecture cleanup snapshot
 
-- Status: deferred; fresh user authorization is required
-- Owner: future architecture-cleanup owner, assigned only after fresh user authorization
+- Status: authorized on 2026-09-19 to unblock full local CI before release
+- Owner: primary agent; bounded delegates have explicit file ownership in docs/head.md
 - Severity: low for architecture-only structure; reclassify any demonstrated runtime or safety defect
 - MVP-required: no under the current deployment-first authority
 - Snapshot: `787ab7a95` (`f6c52530` tree), before the six landed correction commits
@@ -10,6 +10,14 @@
   raising file allowances or frozen totals, then pass the architecture gate from a clean worktree
 
 ## Authority and safety boundary
+
+The owner selected this cleanup after the release's local CI stopped on 122
+findings. Product behavior and architecture limits remain unchanged. The first
+slice removes 12 stale exceptions and separates Go import diagnostics from AST
+orchestration. Its existing checker race tests pass; current evidence is
+`.tmp/ci-architecture-first.json` with 109 findings. No release or push has run.
+The historical snapshots below remain evidence of the original deferral, not
+the current authorization or current counts.
 
 Unrelated refactoring and architecture cleanup remain deferred until the user
 authorizes that work. The architecture gate may remain red solely for this deferred
