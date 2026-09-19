@@ -284,7 +284,7 @@ make architecture-release-check
 go tool staticcheck -tags groundplane_console ./...
 go vet -tags groundplane_console ./...
 go test -tags groundplane_console ./... -count=1 -race -coverprofile=coverage.out -covermode=atomic
-make backupstage-host-acceptance
+make backupstage-host-acceptance-compile
 go build -tags groundplane_console -o bin/controller ./cmd/controller
 make console-release-smoke
 make agent-image-smoke

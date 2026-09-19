@@ -91,6 +91,14 @@ to every recipe and recursive invocation. The CI Go-cache path matches it.
 `make tooling-check` is the focused, host-free path and helper-safety gate;
 full CI runs those checks once through deployment and verifier-helper targets.
 
+Default `make ci` does not invoke sudo or execute privileged host tests. It runs
+`make backupstage-host-acceptance-compile` to compile the mount acceptance test
+without executing it. The real mount and root-ownership checks remain available
+through the explicit `make backupstage-host-acceptance` command, for a separately
+authorized disposable, root-capable Linux test machine. These checks are not
+silently skipped or reported as passing. Privileged Backup qualification remains
+deferred with Backup/Restore and does not block the current release.
+
 `make ci` is the local mirror of GitHub Actions. It includes `make deployment-check`
 for the private bootstrap/staging/protected-update client and verifies exact Node
 `24.19.0` and npm `11.17.0`, runs `npm ci`, builds and verifies the Vite output,

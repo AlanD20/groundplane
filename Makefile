@@ -219,7 +219,7 @@ ci: console | $(BIN_DIR)
 	GOTOOLCHAIN=go1.26.0 go tool staticcheck -tags groundplane_console ./...
 	go vet -tags groundplane_console ./...
 	go test -tags groundplane_console ./... -count=1 -race -coverprofile="$$GROUNDPLANE_COVERAGE_FILE" -covermode=atomic
-	$(MAKE) backupstage-host-acceptance
+	$(MAKE) backupstage-host-acceptance-compile
 	$(MAKE) controller-binary
 	$(MAKE) console-release-smoke
 	$(MAKE) agent-image-smoke
