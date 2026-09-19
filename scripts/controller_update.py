@@ -8,6 +8,7 @@ import os
 import re
 import secrets
 import stat
+import subprocess
 import sys
 import time
 
@@ -17,6 +18,68 @@ TASK_ID = re.compile(r"task_[0-7][0-9A-HJKMNP-TV-Z]{25}")
 KEY = re.compile(r"[A-Za-z0-9._:-]{16,128}")
 TERMINAL = {"completed", "failed", "aborted", "timed_out", "rejected"}
 DEFINITIVE = {400, 401, 403, 404, 405, 409, 422}
+
+
+def installed_controller_digest():
+    from pathlib import Path
+    from controller_release import MAX_BINARY, digest_stream
+    parent = directory(Path("/usr/local/libexec/groundplane"), 0)
+    try:
+        with regular(parent, "controller", 0, MAX_BINARY) as source:
+            return digest_stream(source)
+    finally:
+        os.close(parent)
+
+
+def inspect_agent(image):
+    # Read only the singleton and the exact image already pulled by distribution.
+    runtime = json.loads(subprocess.check_output(
+        ["docker", "container", "inspect", "groundplane-agent"], timeout=30))[0]
+    expected = subprocess.check_output(
+        ["docker", "image", "inspect", image, "--format", "{{.Id}}"], text=True, timeout=30).strip()
+    return runtime, expected
+
+
+def already_installed(transport, release, installed=installed_controller_digest, inspect=inspect_agent):
+    status, host = transport.request("GET", "/host")
+    if status != 200 or not isinstance(host, dict):
+        raise ValueError("cannot verify current installation; no update submitted")
+    controller = host.get("controller", {})
+    state = controller.get("update", {})
+    candidate = state.get("candidate")
+    if (state.get("available") is not True or state.get("error") or
+            not isinstance(candidate, dict) or candidate.get("release") != release):
+        raise ValueError("staged release is unavailable or changed; no update submitted")
+    digest = candidate.get("controller_sha256")
+    if not isinstance(digest, str) or not DIGEST.fullmatch(digest):
+        raise ValueError("candidate Controller digest is invalid")
+    if state.get("running_sha256") != digest:
+        return False
+    last = state.get("last_update")
+    if last is not None and (not isinstance(last, dict) or last.get("status") not in TERMINAL or
+                             last.get("phase") not in {"", "healthy", "recovered", "cancelled"}):
+        raise ValueError("current release has unsettled update/recovery; preserve its evidence")
+    if (controller.get("status") != "healthy" or host.get("agent", {}).get("status") != "healthy"
+            or host.get("etcd", {}).get("status") != "healthy" or installed() != digest):
+        raise ValueError("matching release is not healthy or installed bytes differ; no repair attempted")
+    status, agents = transport.request("GET", "/agents")
+    items = agents.get("items") if isinstance(agents, dict) else None
+    if (status != 200 or not isinstance(items, list) or len(items) != 1 or not isinstance(items[0], dict)
+            or items[0].get("status") != "healthy" or not isinstance(items[0].get("id"), str) or not items[0]["id"]):
+        raise ValueError("cannot verify the healthy enrolled Agent")
+    image = candidate.get("agent_image")
+    if not isinstance(image, str) or not re.fullmatch(r"[a-z0-9][a-z0-9._:/\[\]-]*@sha256:[0-9a-f]{64}", image):
+        raise ValueError("candidate Agent image is invalid")
+    runtime, expected_image = inspect(image)
+    config = runtime.get("Config", {})
+    labels = config.get("Labels") or {}
+    if (runtime.get("State", {}).get("Running") is not True or config.get("Image") != image
+            or runtime.get("Image") != expected_image or not DIGEST.fullmatch(expected_image)
+            or labels.get("com.groundplane.managed") != "true"
+            or labels.get("com.groundplane.kind") != "agent"
+            or labels.get("com.groundplane.agent-id") != items[0].get("id")):
+        raise ValueError("running Agent differs from the release; no repair attempted")
+    return True
 
 
 class Receipt:
@@ -112,6 +175,16 @@ class Client:
         value = self.receipt.begin(release, key)
         return self.follow(value, timeout)
 
+    def ensure(self, release, key, timeout):
+        current = self.receipt.read()
+        # Never replace or skip an uncertain acceptance merely because bytes match.
+        if current is not None and current["status"] not in TERMINAL:
+            return self.run(release, key, timeout)
+        if already_installed(self.transport, release):
+            print(f"Groundplane release {release} is already installed and healthy; skipped.")
+            return 0
+        return self.run(release, key, timeout)
+
     def follow(self, value, timeout):
         deadline = self.now() + timeout
         while self.now() < deadline:
@@ -169,10 +242,11 @@ def main():
     parser.add_argument("release", nargs="?")
     parser.add_argument("key", nargs="?")
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--ensure", action="store_true", help="skip a verified already-running release")
     args = parser.parse_args()
     if os.geteuid() != 0:
         raise ValueError("deployment requires root")
-    if args.resume == bool(args.release or args.key) or (not args.resume and not args.key):
+    if args.resume == bool(args.release or args.key) or (not args.resume and not args.key) or (args.resume and args.ensure):
         parser.error("supply release and key, or --resume alone")
     receipt = Receipt(RELEASE_ROOT, 0)
     try:
@@ -185,7 +259,7 @@ def main():
                 print(f"Retained deployment: {value['task_id']} {value['status']}")
                 return 0 if value["status"] == "completed" else 1
             return client.follow(value, 720)
-        return client.run(args.release, args.key, 720)
+        return (client.ensure if args.ensure else client.run)(args.release, args.key, 720)
     finally:
         receipt.close()
 
@@ -193,6 +267,6 @@ def main():
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except (OSError, ValueError, http.client.HTTPException) as error:
+    except (OSError, ValueError, http.client.HTTPException, subprocess.SubprocessError) as error:
         print(f"controller-update: {error}; deployment receipt retained", file=sys.stderr)
         sys.exit(2)

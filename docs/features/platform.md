@@ -7,6 +7,9 @@ Controller owns product decisions and bootstrap; its local Agent executes typed
 workload procedures. Host health is a read-only snapshot, not another durable
 resource, metrics store or settings authority. The MVP supports `linux/amd64`
 and `linux/arm64`, not multi-host scheduling or emulation.
+The installation tooling targets Ubuntu 24.04/26.04 and Debian 13. Each OS and
+architecture needs its own host qualification; accepting an OS in the installer
+does not establish that qualification. See [deployment](../deployment.md).
 
 ## Functional requirements
 

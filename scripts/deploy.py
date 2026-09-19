@@ -51,10 +51,18 @@ if test "$(id -u)" -ne 0; then
 fi
 
 . /etc/os-release
-if test "${{ID:-}}" != ubuntu || test "${{VERSION_ID:-}}" != 24.04; then
-    echo "--setup supports only Ubuntu 24.04" >&2
-    exit 1
-fi
+case "${{ID:-}}:${{VERSION_ID:-}}" in
+    ubuntu:24.04|ubuntu:26.04)
+        docker_packages="docker.io docker-compose-v2"
+        ;;
+    debian:13)
+        docker_packages="docker.io docker-cli docker-compose"
+        ;;
+    *)
+        echo "--setup supports only Ubuntu 24.04/26.04 or Debian 13" >&2
+        exit 1
+        ;;
+esac
 
 docker_fresh=0
 if command -v docker >/dev/null &&
@@ -63,7 +71,7 @@ if command -v docker >/dev/null &&
     :
 elif ! command -v docker >/dev/null &&
     ! systemctl cat docker.service >/dev/null 2>&1 &&
-    ! dpkg-query -W -f='${{Status}}' docker.io docker-ce docker-ce-cli \
+    ! dpkg-query -W -f='${{Status}}' docker.io docker-cli docker-ce docker-ce-cli \
         docker-compose docker-compose-v2 docker-compose-plugin 2>/dev/null |
         grep -q '^install ok installed$'; then
     docker_fresh=1
@@ -93,7 +101,7 @@ if ! command -v rootlesskit >/dev/null ||
     packages="$packages rootlesskit uidmap slirp4netns fuse-overlayfs socat nftables"
 fi
 if test "$docker_fresh" -eq 1; then
-    packages="$packages docker.io docker-compose-v2"
+    packages="$packages $docker_packages"
 fi
 if test -n "$packages"; then
     export DEBIAN_FRONTEND=noninteractive
@@ -336,7 +344,7 @@ class Deployment:
 
 def parse_arguments() -> Deployment:
     parser = argparse.ArgumentParser(
-        description="Build and deploy Groundplane to an existing Ubuntu 24 host.",
+        description="Build and deploy Groundplane to an existing Ubuntu 24.04/26.04 or Debian 13 host.",
     )
     parser.add_argument("--key", required=True, type=Path, help="SSH private key for root")
     parser.add_argument(

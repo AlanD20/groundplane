@@ -58,7 +58,8 @@ Download the reviewed `install.sh` from the selected release, inspect it, then r
 sudo sh install.sh --version 1.0.0
 ```
 
-The installer supports Ubuntu 24.04 on native amd64/arm64 and needs root. It
+The installer targets Ubuntu 24.04/26.04 and Debian 13 on native amd64/arm64
+and needs root. Ubuntu 22.04 and other distribution versions are rejected. It
 downloads the architecture-specific bundle from this repository's GitHub Release
 and verifies its SHA256 before executing bundled code. It rejects incorrect
 version/platform, incomplete or altered members, duplicate paths, links and path
@@ -97,10 +98,43 @@ the printed resume instructions; never delete the update journal to retry.
 The new entrypoint's real fresh-host and native-update journeys remain unrun;
 host-free safety checks and earlier `deploy.py` QA do not qualify them.
 
+### Repeating installation
+
+Repeating installation is safe for an already completed healthy release. After
+staging, the installer checks the running and installed Controller digest, native
+recovery availability, platform health and the enrolled Agent's actual container
+ownership, pinned image and image bytes. An exact match prints `already installed
+and healthy; skipped` without another update Task or process restart. A changed
+version follows the normal protected update. Downloads and staging may repeat;
+this guarantee concerns installed runtime, not an absence of file reads/writes.
+
+An unresolved deployment receipt takes precedence over that shortcut: the client
+resumes its original acceptance key or Task instead of submitting another update.
+A failed update stays failed in history. Matching binary bytes alone never hide
+an unhealthy Agent, active recovery, changed disk bytes or foreign container.
+
+Prerequisite setup reuses a complete working Docker installation and an existing
+matching registry; it does not reinstall/restart them on a successful repeat.
+Ubuntu uses `docker.io` plus `docker-compose-v2`; Debian 13 explicitly installs
+`docker.io`, `docker-cli` and `docker-compose` (Compose v2), since the daemon's
+client dependency is only a recommendation. Package sources:
+[Ubuntu 24.04](https://packages.ubuntu.com/noble/docker-compose-v2),
+[Ubuntu 26.04](https://packages.ubuntu.com/resolute/docker.io), and
+[Debian 13](https://packages.debian.org/trixie/docker.io).
+Partial/mixed Docker
+installations are refused rather than replaced. No upstream Docker APT repository
+or convenience installer is added.
+
+This is not an automatic repair tool for every interrupted bootstrap. Partial
+recovery layouts and an unfinished initial Agent enrollment require the retained
+diagnostic/recovery instructions. Existing configuration is preserved; `--config`
+remains initial-install-only and is refused on a native installation. Repeating
+an install must not become an implicit configuration change or destructive reset.
+
 ## Prerequisites
 
 Use the repository-pinned Go, Node and npm toolchains, local Docker and SSH,
-an existing supported Ubuntu24.04 host of the same architecture, a private root
+an existing Ubuntu 24.04/26.04 or Debian 13 host of the same architecture, a private root
 SSH identity and an independently verified, pre-populated known-hosts file.
 The target needs Docker/Compose, the loopback registry, curl, Python3, flock and
 systemd. Optional `--setup` provisions the documented host prerequisites; use

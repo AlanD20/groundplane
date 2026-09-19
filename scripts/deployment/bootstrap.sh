@@ -252,7 +252,7 @@ if test "$deployment_mode" = native; then
         exit 0
     fi
     retain_recovery=1
-    python3 "$deploy_dir/controller_update.py" "$release" "groundplane-deploy-$deploy_id"
+    python3 "$deploy_dir/controller_update.py" "$release" "groundplane-deploy-$deploy_id" --ensure
     retain_recovery=0
     exit 0
 fi

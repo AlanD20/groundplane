@@ -6,7 +6,8 @@ usage() {
     printf '%s\n' \
         'Usage: sh install.sh --version VERSION [--listen-ip PRIVATE_IPV4]' \
         '       [--bundle FILE --sha256 HEX] [--config FILE] [--stage-only]' \
-        'Ubuntu 24.04, native amd64/arm64, root. No source checkout or compiler needed.' \
+        'Ubuntu 24.04/26.04 or Debian 13, native amd64/arm64, root.' \
+        'No source checkout or compiler needed.' \
         'Fresh host: provision prerequisites and install. Existing host: guarded update.' \
         '--stage-only stages an existing installation without activating it.' \
         '--config supplies initial startup YAML only; existing configuration is preserved.'
@@ -43,9 +44,13 @@ fi
 test "$(id -u)" -eq 0 || { echo 'Run this installer as root.' >&2; exit 1; }
 # shellcheck source=/dev/null
 . /etc/os-release
-test "${ID:-}" = ubuntu && test "${VERSION_ID:-}" = 24.04 || {
-    echo 'Supported installation host: Ubuntu 24.04.' >&2; exit 1;
-}
+case "${ID:-}:${VERSION_ID:-}" in
+    ubuntu:24.04|ubuntu:26.04|debian:13) ;;
+    *)
+        echo 'Supported installation hosts: Ubuntu 24.04/26.04 or Debian 13.' >&2
+        exit 1
+        ;;
+esac
 case "$(uname -m)" in
     x86_64) arch=amd64 ;;
     aarch64|arm64) arch=arm64 ;;
@@ -84,7 +89,7 @@ test "${available_kib:-0}" -ge 2097152 || {
     echo 'Installation requires at least 2 GiB free before downloading.' >&2; exit 1;
 }
 
-# Ubuntu minimal images may omit the downloader or Python. No Go/Node is installed.
+# Supported minimal images may omit the downloader or Python. No Go/Node is installed.
 packages=''
 command -v python3 >/dev/null || packages="$packages python3"
 if test -z "$bundle"; then

@@ -125,8 +125,10 @@ an `arm64` host cannot run the `amd64` child. Emulation is outside the MVP.
 
 ### Prove both platforms
 
-A release must prove the same operator journey on minimal Ubuntu 24.04 for
-both `linux/amd64` and `linux/arm64`. Platform-specific image checks must prove
+A release must prove the same operator journey on both `linux/amd64` and
+`linux/arm64`. The owner-selected installation targets are Ubuntu 24.04/26.04
+and Debian 13; each OS/architecture combination requires its own host evidence.
+Platform-specific image checks must prove
 the child descriptor, config, helper ELF identity, file metadata, inherited
 runtime configuration, and runtime probes. The product capability is not
 accepted from evidence for only one architecture.

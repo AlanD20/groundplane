@@ -1429,6 +1429,30 @@ registry publication, valid-frame workload application or complete helper-mode
 qualification. An attempted broader unchanged Go package run encountered the
 sandbox's Unix-socket permission limit; it is not reported as passing.
 
+H69 records local PKG-04 support on 2026-09-19, from `a4ada89ed` plus the
+installer OS/idempotency changes in this commit. The original completed-install
+rerun staged the same binary and submitted an update that the Controller rejects;
+the correction is in private deployment tooling, not a new Controller operation.
+`scripts/test_install_idempotency.py` has eight passing tests for fresh/previously
+updated identity proof, pre-activation cancellation without a journal, changed
+release activation, unavailable-host refusal without POST, same-release skip
+without a new receipt, unresolved original-Task resume, and health/recovery/disk/
+Agent-image/ownership drift refusal. These use fake HTTP/runtime evidence and do
+not qualify process continuity on a host.
+
+`scripts/test_deploy_distros.py` has five passing checks for all three allowed
+OS releases, unsupported-release refusal in both entrypoints, distro package
+selection, partial-Docker refusal and repeated healthy prerequisite reuse without
+reinstall/restart/registry recreation. A fake package manager and daemon record
+effects; the linked official package indexes in the deployment runbook support
+package selection, not whole-host qualification. The complete 99-test deployment
+gate passes in `.tmp/install-distros-idempotency-checks.log` with real filesystem
+ownership; ShellCheck and diff checks pass. The sandbox-only gate hit 14 known
+directory-trust fixture errors. No host, apt installation, image push or release
+publication ran. All six OS/architecture fresh-install, rerun and native-update
+journeys remain unrun for this installer. Partial-bootstrap repair and automatic
+configuration replacement are not implemented or claimed.
+
 ## Private data
 
 Groundplane is exercised against a private representative workload, but its
