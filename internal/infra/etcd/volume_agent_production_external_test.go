@@ -40,6 +40,15 @@ func (volumeAgentObserver) Observe(context.Context, *agentpb.ExecutionPlan, stri
 	return nil, errs.New(errs.KindInternal, "unexpected Compose observation")
 }
 
+func (volumeAgentObserver) ObserveReleaseRestoration(
+	context.Context,
+	*agentpb.ExecutionPlan,
+	string,
+	string,
+) (*agentpb.ObservedProject, error) {
+	return nil, errs.New(errs.KindInternal, "unexpected release-restoration observation")
+}
+
 func (volumeAgentObserver) ObserveRestoration(
 	context.Context,
 	*executionplan.RestorationObservation,

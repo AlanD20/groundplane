@@ -130,6 +130,16 @@ func (runtime *mixedRecoveryRuntime) Observe(
 	return nil, nil
 }
 
+func (runtime *mixedRecoveryRuntime) ObserveReleaseRestoration(
+	context.Context,
+	*agentpb.ExecutionPlan,
+	string,
+	string,
+) (*agentpb.ObservedProject, error) {
+	runtime.t.Fatal("historical recovery used forward release-restoration observation")
+	return nil, nil
+}
+
 func (runtime *mixedRecoveryRuntime) ObserveRestoration(
 	ctx context.Context,
 	observation *executionplan.RestorationObservation,
