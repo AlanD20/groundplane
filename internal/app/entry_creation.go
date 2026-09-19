@@ -12,6 +12,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -258,7 +259,7 @@ func (service *entryCreationService) createEntryOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	defer ClearEntryValueGeneration(&generation)
+	defer entrygeneration.ClearEntryValueGeneration(&generation)
 	persisted := entry
 	if persisted.Secret && persisted.Source.Kind == core.SourceLiteral {
 		persisted.Source.Literal = ""

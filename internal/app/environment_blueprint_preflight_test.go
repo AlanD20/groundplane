@@ -12,6 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
+	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -213,7 +214,7 @@ func TestApplyBlueprintImageFailurePrecedesEveryDurableWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	entryGeneration, err := NewEntryGenerationService(secretRecords, facts, protector)
+	entryGeneration, err := entrygeneration.NewEntryGenerationService(secretRecords, facts, protector)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -182,7 +182,7 @@ func TestSealedCandidateSelectsRunningChangedSingletonsInDependencyOrder(t *test
 	selected, err := selectCandidates(
 		projection,
 		changes,
-		map[string]struct{}{workerID: {}},
+		map[string]core.ReleaseGroupSpec{"selected": {Services: []string{"worker"}}},
 		memberships,
 	)
 	if err != nil {

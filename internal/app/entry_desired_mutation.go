@@ -15,6 +15,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
+	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -790,14 +791,13 @@ func (service *entryDesiredMutationService) prepareEntryGeneration(
 	}
 	if !found {
 		desired.ID = record.Entry.ID
-		generation, err := service.generator.Generate(
-			ctx, projectID, environmentID, desired, record.CurrentValueGenerationID, createdAt,
-		)
+		generation, err := service.generator.Generate(ctx, projectID, environmentID, desired,
+			record.CurrentValueGenerationID, createdAt)
 		if err != nil {
 			return err
 		}
 		createErr := service.repository.CreateBlueprintEntryValueGeneration(ctx, generation)
-		ClearEntryValueGeneration(&generation)
+		entrygeneration.ClearEntryValueGeneration(&generation)
 		if createErr != nil {
 			return createErr
 		}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/controller"
+	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -14,7 +15,7 @@ import (
 
 func (service *environmentBlueprintService) prepareBlueprintEntryValues(
 	ctx context.Context,
-	generationService *EntryGenerationService,
+	generationService *entrygeneration.EntryGenerationService,
 	projectID string,
 	environmentID string,
 	reconciliation controller.BlueprintEntryReconciliation,
@@ -34,7 +35,7 @@ func (service *environmentBlueprintService) prepareBlueprintEntryValues(
 				return err
 			}
 			createErr := service.repository.CreateBlueprintEntryValueGeneration(ctx, generation)
-			ClearEntryValueGeneration(&generation)
+			entrygeneration.ClearEntryValueGeneration(&generation)
 			if createErr != nil {
 				return createErr
 			}

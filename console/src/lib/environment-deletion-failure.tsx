@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import type { EnvironmentDeletionFailure } from './environment-lifecycle'
+import type { EnvironmentDeletionFailure } from '@/features/environment/environment-removal-model'
 
 type EnvironmentDeletionFailureNoticeProps = {
   failure: EnvironmentDeletionFailure

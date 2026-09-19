@@ -36,7 +36,7 @@ func TestSelectCandidatesIncludesReplicatedService(t *testing.T) {
 	selected, err = selectCandidates(
 		etcd.EnvironmentComposeProjection{},
 		[]etcd.EnvironmentBlueprintServiceChange{change},
-		map[string]struct{}{"service": {}},
+		map[string]core.ReleaseGroupSpec{"selected": {Services: []string{"api"}}},
 		memberships,
 	)
 	if err != nil || len(selected) != 0 {

@@ -22,6 +22,7 @@ import (
 	componentcapability "github.com/AlanD20/groundplane/internal/controller/component"
 	desiredrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	controllerdns "github.com/AlanD20/groundplane/internal/controller/dnsresolver"
+	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
 	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
 	hierarchycontroller "github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
@@ -777,7 +778,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Script deletion service: %w", err)
 	}
 	scriptMutations.deletions = scriptDeletions
-	entryGeneration, err := NewEntryGenerationService(secretRecords, attachFactValues, intentProtector)
+	entryGeneration, err := entrygeneration.NewEntryGenerationService(secretRecords, attachFactValues, intentProtector)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry generation: %w", err)
@@ -974,16 +975,9 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Release Group Blueprint planner: %w", err)
 	}
 	environmentBlueprints, err := newEnvironmentBlueprintService(
-		cfg.Storage.VolumeRoot,
-		cfg.EnvironmentPool,
-		environmentBlueprintRepository,
-		environmentBlueprintIdempotency,
-		materializationResolver,
-		releaseGroupBlueprints,
-		blueprintReleases,
-		entryGeneration,
-		attachFactValues,
-		componentCatalog,
+		cfg.Storage.VolumeRoot, cfg.EnvironmentPool,
+		environmentBlueprintRepository, environmentBlueprintIdempotency, materializationResolver,
+		releaseGroupBlueprints, blueprintReleases, entryGeneration, attachFactValues, componentCatalog,
 	)
 	if err != nil {
 		_ = store.Close()

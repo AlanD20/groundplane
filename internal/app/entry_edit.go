@@ -10,6 +10,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
+	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -351,17 +352,12 @@ func (service *entryEditService) editEntryOnce(
 	now := service.now().UTC()
 	generationID := ids.New(ids.KindConfig)
 	generation, err := service.generator.Generate(
-		ctx,
-		project.Record.ID,
-		environment.Record.ID,
-		desired,
-		generationID,
-		now,
+		ctx, project.Record.ID, environment.Record.ID, desired, generationID, now,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	defer ClearEntryValueGeneration(&generation)
+	defer entrygeneration.ClearEntryValueGeneration(&generation)
 	persisted := desired
 	if persisted.Secret && persisted.Source.Kind == core.SourceLiteral {
 		persisted.Source.Literal = ""

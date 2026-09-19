@@ -3,7 +3,12 @@ import { scriptFromAPI, scriptCreateToAPI, scriptPatchToAPI, type ScriptCreateRe
 import type { ScriptInput, ScriptPatch } from './script-types'
 import { entryFromAPI } from './entry-api'
 import { taskTypeFromAPI } from '@/lib/task-read-model'
-import { assertOptionalBackupPolicyKeep } from '@/lib/backup-policy-contract'
+import { useBackupStore } from '@/features/backup/use-backup-store'
+import {
+  ControllerRequestError,
+  ControllerTransportError,
+  controllerResponseError,
+} from './controller-request-errors'
 import { applyServiceObservations } from '@/features/service/service-observation'
 import {
   releaseFromAPI,
@@ -24,9 +29,6 @@ import type {
   HealthState,
   ActivityEntry,
   Attach,
-  BackupPolicyDocument,
-  BackupPolicyReplacement,
-  BackupPolicyState,
   Connector,
   ConnectorCreateInput,
   ConnectorCredential,
@@ -38,8 +40,6 @@ import type {
   EnvironmentComponent,
   Project,
   ReleaseGroup,
-  RecoveryPoint,
-  RecoveryPointState,
   Route,
   Runner,
   Script,
@@ -67,7 +67,11 @@ import {
 } from './mock-data'
 import { createEnvironmentComponents, routerProjection } from './components'
 import { applyAuthoritativeEnvironmentScalars } from './environment-authoritative'
-import { useEnvironmentLifecycle, type EnvironmentDeletionFailure, type TaskResponse } from './environment-lifecycle'
+import { useEnvironmentLifecycle } from './environment-lifecycle'
+import type {
+  EnvironmentDeletionFailure,
+  TaskResponse,
+} from '@/features/environment/environment-removal-model'
 import {
   environmentMutationKey,
   loadEnvironmentMutationIntents,
@@ -119,12 +123,6 @@ type EnvironmentEditResponse = operations['environment.edit']['responses'][200][
 type EnvironmentRenameRequest = operations['environment.rename']['requestBody']['content']['application/json']
 type EnvironmentRenameResponse = operations['environment.rename']['responses'][200]['content']['application/json']
 type EnvironmentDeleteResponse = operations['environment.delete']['responses'][202]['content']['application/json']
-type BackupPolicyShowResponse = operations['backup.policy.show']['responses'][200]['content']['application/json']
-type BackupPolicySetRequest = operations['backup.policy.set']['requestBody']['content']['application/json']
-type BackupPolicySetResponse = operations['backup.policy.set']['responses'][200]['content']['application/json']
-type RecoveryPointPageResponse = operations['backup.points.list']['responses'][200]['content']['application/json']
-type RecoveryPointPageItem = NonNullable<RecoveryPointPageResponse['items']>[number]
-type BackupRunTaskAccepted = operations['backup.run']['responses'][202]['content']['application/json']
 type BackupKeyRotateResponse = operations['backup.key.rotate']['responses'][202]['content']['application/json']
 type TaskRetryResponse = operations['task.retry']['responses'][202]['content']['application/json']
 type TaskAbortResponse = operations['task.abort']['responses'][202]['content']['application/json']
@@ -459,28 +457,6 @@ function parseTaskEvent(data: string): TaskEventResponse {
   }
 }
 
-class ControllerRequestError extends Error {
-  readonly responseReceived = true
-
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly code?: string,
-  ) {
-    super(message)
-    this.name = 'ControllerRequestError'
-  }
-}
-
-class ControllerTransportError extends Error {
-  readonly responseReceived = false
-
-  constructor(message: string, readonly cause: unknown) {
-    super(message)
-    this.name = 'ControllerTransportError'
-  }
-}
-
 export function isNoResponseTransportUncertainty(error: unknown): boolean {
   return error instanceof ControllerTransportError && !error.responseReceived
 }
@@ -493,19 +469,6 @@ function isTaskNotFoundError(error: unknown): boolean {
   return error instanceof ControllerRequestError && (
     error.status === 404 || error.code === 'not_found'
   )
-}
-
-async function controllerResponseError(response: Response, method: string, path: string) {
-  let detail = `${method} ${path} returned ${response.status}`
-  let code: string | undefined
-  try {
-    const problem = (await response.json()) as { code?: string; detail?: string }
-    if (problem.detail) detail = problem.detail
-    code = problem.code
-  } catch {
-    // The status remains actionable even when a proxy returned a non-JSON body.
-  }
-  return new ControllerRequestError(detail, response.status, code)
 }
 
 async function tenantRequest<Response>(
@@ -1152,135 +1115,6 @@ async function listAllConnectors(environmentIds: string[], signal: AbortSignal):
   return (await Promise.all(environmentIds.map((id) => listEnvironmentConnectors(id, signal)))).flat()
 }
 
-function backupPolicyFromAPI(policy: BackupPolicyShowResponse | BackupPolicySetResponse): BackupPolicyDocument {
-  assertOptionalBackupPolicyKeep(policy.keep, 'Backup policy response keep')
-  if (policy.encryption !== undefined && policy.encryption !== 'age' && policy.encryption !== 'none') {
-    throw new Error(`Controller returned unknown Backup Policy encryption ${policy.encryption}`)
-  }
-  return {
-    enabled: policy.enabled,
-    nextRunAt: policy.next_run_at,
-    frequency: policy.frequency,
-    keep: policy.keep,
-    encryption: policy.encryption,
-    connectorId: policy.connector_id,
-    sources: (policy.sources ?? []).map((source) => {
-      if (source.kind !== 'attach' && source.kind !== 'volume' && source.kind !== 'config') {
-        throw new Error(`Controller returned unknown Backup Policy source kind ${source.kind}`)
-      }
-      return { id: source.id, kind: source.kind, targetId: source.target_id }
-    }),
-    ageRecipient: policy.age_recipient,
-    keyEra: policy.key_era,
-    keyCreatedAt: policy.key_created_at,
-    keyRotatedAt: policy.key_rotated_at,
-  }
-}
-
-function backupPolicyRequest(input: BackupPolicyReplacement): BackupPolicySetRequest {
-  assertOptionalBackupPolicyKeep(input.keep, 'Backup policy request keep')
-  return {
-    enabled: input.enabled,
-    frequency: input.frequency,
-    keep: input.keep,
-    encryption: input.encryption,
-    connector_id: input.connectorId,
-    sources: input.sources.map((source) => ({ kind: source.kind, target_id: source.targetId })),
-  }
-}
-
-function emptyBackupPolicyState(): BackupPolicyState {
-  return {
-    policy: { enabled: false, nextRunAt: null, sources: [] },
-    attaches: [],
-    volumes: [],
-    loaded: false,
-    loading: false,
-    saving: false,
-    loadError: null,
-    saveError: null,
-    recoveryPoints: emptyRecoveryPointState(),
-  }
-}
-
-function emptyRecoveryPointState(): RecoveryPointState {
-  return {
-    items: [],
-    nextCursor: null,
-    loaded: false,
-    loading: false,
-    loadingMore: false,
-    loadError: null,
-    failedCursor: null,
-  }
-}
-
-function recoveryPointFromAPI(point: RecoveryPointPageItem): RecoveryPoint {
-  if (point.status !== 'verified') throw new Error(`Controller returned unknown Recovery Point status ${point.status}`)
-  if (!point.id || !point.source_id || !point.target_id || Number.isNaN(Date.parse(point.created_at))) {
-    throw new Error('Controller returned an invalid Recovery Point identity')
-  }
-  if (!Number.isSafeInteger(point.size_bytes) || point.size_bytes <= 0) {
-    throw new Error('Controller returned an invalid Recovery Point size')
-  }
-  if (point.encrypted) {
-    const keyEra = point.key_era ?? 0
-    if (!Number.isSafeInteger(keyEra) || keyEra < 1) {
-      throw new Error('Controller returned an invalid encrypted Recovery Point era')
-    }
-    return {
-      id: point.id,
-      sourceId: point.source_id,
-      sourceKind: point.source_kind,
-      targetId: point.target_id,
-      createdAt: point.created_at,
-      sizeBytes: point.size_bytes,
-      encrypted: true,
-      keyEra,
-      status: 'verified',
-    }
-  }
-  if (point.key_era !== undefined) throw new Error('Controller returned an era for an unencrypted Recovery Point')
-  return {
-    id: point.id,
-    sourceId: point.source_id,
-    sourceKind: point.source_kind,
-    targetId: point.target_id,
-    createdAt: point.created_at,
-    sizeBytes: point.size_bytes,
-    encrypted: false,
-    status: 'verified',
-  }
-}
-
-async function listBackupPolicyAttaches(environmentId: string): Promise<BackupPolicyState['attaches']> {
-  const attaches: BackupPolicyState['attaches'] = []
-  let cursor = ''
-  do {
-    const query = new URLSearchParams({ environment: environmentId, limit: '200' })
-    if (cursor) query.set('cursor', cursor)
-    const page = await tenantRequest<AttachPageResponse>(`/attaches?${query}`, 200)
-    attaches.push(...(page.items ?? []).map((attach) => ({
-      id: attach.id,
-      name: attach.name,
-      backingProjectId: attach.backing_project_id,
-      backingServiceId: attach.backing_service_id,
-    })))
-    cursor = page.next_cursor ?? ''
-  } while (cursor)
-  return attaches
-}
-
-async function listBackupPolicyVolumes(environmentId: string): Promise<BackupPolicyState['volumes']> {
-  const volumes = await listAllVolumes(tenantRequest, environmentId)
-  return volumes.map((volume) => ({ id: volume.id, slug: volume.slug, key: volume.key }))
-}
-
-function mutableBackupPolicyState(state: State, environmentId: string): BackupPolicyState {
-  state.backupPolicies[environmentId] ??= emptyBackupPolicyState()
-  return state.backupPolicies[environmentId]
-}
-
 function refreshReleaseGroupTags(environment: Environment) {
   for (const group of environment.releaseGroups) {
     const activeTags = group.order.map(
@@ -1312,7 +1146,6 @@ type State = {
   connectors: Connector[]
   connectorsLoading: boolean
   connectorError: string | null
-  backupPolicies: Record<string, BackupPolicyState>
   reusableSecrets: ReusableSecret[]
   reusableSecretsLoading: boolean
   secretError: string | null
@@ -1356,7 +1189,6 @@ function seed(): State {
     connectors: [],
     connectorsLoading: true,
     connectorError: null,
-    backupPolicies: {},
     reusableSecrets: [],
     reusableSecretsLoading: true,
     secretError: null,
@@ -1376,7 +1208,7 @@ function seed(): State {
   })
 }
 
-type StoreContext = State & ReturnType<typeof useControllerPlatform> & {
+type StoreContext = State & ReturnType<typeof useControllerPlatform> & ReturnType<typeof useBackupStore> & {
   adapters: typeof seedAdapters
   platform: typeof seedPlatform
   watchLogs: (target: LogTarget, options: { tail: number; follow: boolean; signal: AbortSignal }, onEvent: (event: TransientLogEvent) => void) => Promise<void>
@@ -1397,13 +1229,6 @@ type StoreContext = State & ReturnType<typeof useControllerPlatform> & {
   getProjectById: (id: string) => Project | undefined
   getBackingProject: (id: string) => Project | undefined
   getEnvironment: (tenantSlug: string, projectSlug: string, envName: string) => Environment | undefined
-  getBackupPolicyState: (environmentId: string) => BackupPolicyState
-  loadBackupPolicy: (environmentId: string) => Promise<void>
-  loadRecoveryPoints: (environmentId: string, cursor?: string) => Promise<void>
-  replaceBackupPolicy: (environmentId: string, policy: BackupPolicyReplacement) => Promise<BackupPolicyDocument>
-  runBackup: (environmentId: string) => Promise<string>
-  rotateBackupKey: (environmentId: string) => Promise<string>
-  exportBackupKey: (environmentId: string, signal?: AbortSignal) => Promise<void>
   getTaskJournal: (scope: TaskJournalScope) => TaskJournalState
   loadTaskJournal: (surface: TaskJournalSurface, scope: TaskJournalScope, cursor?: string) => Promise<void>
   getTaskJournalDetail: (taskId: string, signal?: AbortSignal) => Promise<ActivityEntry>
@@ -1525,14 +1350,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const connectorRemovalRequests = useRef(new Map<string, Promise<string>>())
   const connectorFullLoadGeneration = useRef(0)
   const connectorEnvironmentGenerations = useRef(new Map<string, number>())
-  const backupPolicyGenerations = useRef(new Map<string, number>())
-  const backupPolicyLoads = useRef(new Map<string, Promise<void>>())
-  const backupPointGenerations = useRef(new Map<string, number>())
-  const backupPointLoads = useRef(new Map<string, Promise<void>>())
-  const backupPolicySaves = useRef(
-    new Map<string, { fingerprint: string; promise: Promise<BackupPolicyDocument> }>(),
-  )
-  const backupPolicyReplayKeys = useRef(new Map<string, { fingerprint: string; key: string }>())
 	const connectorRemovalPollBackoff = useRef(
 		new Map<string, { failures: number; nextAttemptAt: number }>(),
 	)
@@ -1731,6 +1548,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       throw new Error(`Environment ${environmentId} deletion is in progress; ${action} is disabled`)
     }
   }, [isEnvironmentDeletionPending, state.backingProjects, state.tenantProjects])
+
+  const requestBackupKeyRotation = useCallback((environmentId: string) => tenantRequest<BackupKeyRotateResponse>(
+    `/environments/${encodeURIComponent(environmentId)}/rotate-key`,
+    202,
+    { method: 'POST' },
+  ), [])
+  const backupStore = useBackupStore({
+    active: providerActive,
+    request: tenantRequest,
+    requestKeyRotation: requestBackupKeyRotation,
+    assertEnvironmentMutable,
+  })
 
   useEffect(() => () => {
     for (const source of taskEventSources.current) source.close()
@@ -2257,257 +2086,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     void loadTaskJournal('tasks', { kind: 'all' }).catch(() => undefined)
   }, [loadTaskJournal])
 
-  const loadBackupPolicy = useCallback(async (environmentId: string) => {
-    const saving = backupPolicySaves.current.get(environmentId)
-    if (saving) return saving.promise.then(() => undefined)
-    const current = backupPolicyLoads.current.get(environmentId)
-    if (current) return current
-    const generation = (backupPolicyGenerations.current.get(environmentId) ?? 0) + 1
-    backupPolicyGenerations.current.set(environmentId, generation)
-    update((draft) => {
-      const policy = mutableBackupPolicyState(draft, environmentId)
-      policy.loading = true
-      policy.loadError = null
-    })
-    const request = (async () => {
-      try {
-        const [response, attaches, volumes] = await Promise.all([
-          tenantRequest<BackupPolicyShowResponse>(
-            `/environments/${encodeURIComponent(environmentId)}/backup-policy`,
-            200,
-          ),
-          listBackupPolicyAttaches(environmentId),
-          listBackupPolicyVolumes(environmentId),
-        ])
-        if (backupPolicyGenerations.current.get(environmentId) !== generation) return
-        update((draft) => {
-          const policy = mutableBackupPolicyState(draft, environmentId)
-          policy.policy = backupPolicyFromAPI(response)
-          policy.attaches = attaches
-          policy.volumes = volumes
-          policy.loaded = true
-          policy.loading = false
-          policy.loadError = null
-          policy.saveError = null
-        })
-      } catch (error) {
-        if (backupPolicyGenerations.current.get(environmentId) === generation) {
-          update((draft) => {
-            const policy = mutableBackupPolicyState(draft, environmentId)
-            policy.loading = false
-            policy.loadError = error instanceof Error ? error.message : 'Unable to load Backup Policy'
-          })
-        }
-        throw error
-      }
-    })()
-    backupPolicyLoads.current.set(environmentId, request)
-    try {
-      await request
-    } finally {
-      if (backupPolicyLoads.current.get(environmentId) === request) backupPolicyLoads.current.delete(environmentId)
-    }
-  }, [update])
-
-  const loadRecoveryPoints = useCallback(async (environmentId: string, cursor?: string) => {
-    const loadKey = `${environmentId}:${cursor ?? ''}`
-    const current = backupPointLoads.current.get(loadKey)
-    if (current) return current
-    const generation = (backupPointGenerations.current.get(environmentId) ?? 0) + 1
-    backupPointGenerations.current.set(environmentId, generation)
-    update((draft) => {
-      const policy = mutableBackupPolicyState(draft, environmentId)
-      const points = policy.recoveryPoints
-      if (cursor) points.loadingMore = true
-      else points.loading = true
-      points.loadError = null
-      points.failedCursor = null
-    })
-    const request = (async () => {
-      try {
-        const query = new URLSearchParams()
-        if (cursor) query.set('cursor', cursor)
-        const suffix = query.size === 0 ? '' : `?${query}`
-        const response = await tenantRequest<RecoveryPointPageResponse>(
-          `/environments/${encodeURIComponent(environmentId)}/recovery-points${suffix}`,
-          200,
-        )
-        if (backupPointGenerations.current.get(environmentId) !== generation) return
-        const items = (response.items ?? []).map(recoveryPointFromAPI)
-        update((draft) => {
-          const points = mutableBackupPolicyState(draft, environmentId).recoveryPoints
-          points.items = cursor ? [...points.items, ...items] : items
-          points.nextCursor = response.next_cursor ?? null
-          points.loaded = true
-          points.loading = false
-          points.loadingMore = false
-          points.loadError = null
-          points.failedCursor = null
-        })
-      } catch (error) {
-        if (backupPointGenerations.current.get(environmentId) === generation) {
-          update((draft) => {
-            const points = mutableBackupPolicyState(draft, environmentId).recoveryPoints
-            points.loaded = true
-            points.loading = false
-            points.loadingMore = false
-            points.loadError = error instanceof Error ? error.message : 'Unable to load Recovery Points'
-            points.failedCursor = cursor ?? null
-          })
-        }
-        throw error
-      }
-    })()
-    backupPointLoads.current.set(loadKey, request)
-    try {
-      await request
-    } finally {
-      if (backupPointLoads.current.get(loadKey) === request) backupPointLoads.current.delete(loadKey)
-    }
-  }, [update])
-
-  const replaceBackupPolicy = useCallback(async (
-    environmentId: string,
-    input: BackupPolicyReplacement,
-  ): Promise<BackupPolicyDocument> => {
-    assertEnvironmentMutable(environmentId, 'Backup Policy mutation')
-    const body = backupPolicyRequest(input)
-    const fingerprint = JSON.stringify(body)
-    const inFlight = backupPolicySaves.current.get(environmentId)
-    if (inFlight) {
-      if (inFlight.fingerprint === fingerprint) return inFlight.promise
-      throw new Error('A different Backup Policy replacement is already in progress')
-    }
-    const priorReplay = backupPolicyReplayKeys.current.get(environmentId)
-    const replay = priorReplay?.fingerprint === fingerprint
-      ? priorReplay
-      : { fingerprint, key: newULID() }
-    backupPolicyReplayKeys.current.set(environmentId, replay)
-    backupPolicyGenerations.current.set(
-      environmentId,
-      (backupPolicyGenerations.current.get(environmentId) ?? 0) + 1,
-    )
-    update((draft) => {
-      const policy = mutableBackupPolicyState(draft, environmentId)
-      policy.saving = true
-      policy.saveError = null
-    })
-    const request = (async () => {
-      try {
-        const response = await tenantRequest<BackupPolicySetResponse>(
-          `/environments/${encodeURIComponent(environmentId)}/backup-policy`,
-          200,
-          { method: 'PUT', body, idempotencyKey: replay.key },
-        )
-        const policy = backupPolicyFromAPI(response)
-        if (backupPolicyReplayKeys.current.get(environmentId)?.key === replay.key) {
-          backupPolicyReplayKeys.current.delete(environmentId)
-        }
-        update((draft) => {
-          const current = mutableBackupPolicyState(draft, environmentId)
-          current.policy = policy
-          current.loaded = true
-          current.saving = false
-          current.loadError = null
-          current.saveError = null
-        })
-        return policy
-      } catch (error) {
-        update((draft) => {
-          const policy = mutableBackupPolicyState(draft, environmentId)
-          policy.saving = false
-          policy.saveError = error instanceof Error ? error.message : 'Unable to save Backup Policy'
-        })
-        throw error
-      }
-    })()
-    backupPolicySaves.current.set(environmentId, { fingerprint, promise: request })
-    try {
-      return await request
-    } finally {
-      if (backupPolicySaves.current.get(environmentId)?.promise === request) {
-        backupPolicySaves.current.delete(environmentId)
-      }
-    }
-  }, [assertEnvironmentMutable, update])
-
-  const runBackup = useCallback(async (environmentId: string): Promise<string> => {
-    assertEnvironmentMutable(environmentId, 'Backup run')
-    const response = await tenantRequest<BackupRunTaskAccepted>(
-      `/environments/${encodeURIComponent(environmentId)}/backup-run`,
-      202,
-      { method: 'POST' },
-    )
-    return requireTaskId(response, 'Backup run')
-  }, [assertEnvironmentMutable])
-
-  const rotateBackupKey = useCallback(async (environmentId: string): Promise<string> => {
-    assertEnvironmentMutable(environmentId, 'Backup key rotation')
-    const response = await tenantRequest<BackupKeyRotateResponse>(
-      `/environments/${encodeURIComponent(environmentId)}/rotate-key`,
-      202,
-      { method: 'POST' },
-    )
-    if (!response.task_id) throw new Error('Controller returned an empty backup key rotation task id')
-    return response.task_id
-  }, [assertEnvironmentMutable])
-
-  const exportBackupKey = useCallback(async (environmentId: string, signal?: AbortSignal): Promise<void> => {
-    const path = `/environments/${encodeURIComponent(environmentId)}/export-key`
-    let response: globalThis.Response | null = null
-    let blob: Blob | null = null
-    let objectURL: string | null = null
-    let anchor: HTMLAnchorElement | null = null
-    try {
-      try {
-        response = await fetch(`/api/v1${path}`, {
-          method: "POST",
-          headers: { Accept: "text/plain" },
-          cache: "no-store",
-          signal,
-        })
-      } catch (error) {
-        throw new ControllerTransportError(
-          `POST ${path}: ${error instanceof Error ? error.message : "request failed before an HTTP response"}`,
-          error,
-        )
-      }
-      if (response.status !== 200) throw await controllerResponseError(response, "POST", path)
-      if (response.headers.get("Cache-Control")?.toLowerCase() !== "no-store") {
-        throw new Error("Controller backup key export response is not marked no-store")
-      }
-      if (response.headers.get("Content-Type")?.toLowerCase() !== "text/plain; charset=utf-8") {
-        throw new Error("Controller backup key export response has an invalid content type")
-      }
-      const disposition = response.headers.get("Content-Disposition") ?? ""
-      const filenamePattern = new RegExp(
-        '^attachment; filename="(groundplane-' + environmentId + '-age-era-[1-9][0-9]*-identity\\.txt)"$',
-      )
-      const filename = disposition.match(filenamePattern)?.[1]
-      if (!filename) throw new Error("Controller backup key export response has an invalid attachment name")
-      blob = await response.blob()
-      objectURL = URL.createObjectURL(blob)
-      anchor = document.createElement("a")
-      anchor.href = objectURL
-      anchor.download = filename
-      anchor.click()
-    } finally {
-      if (anchor) {
-        anchor.removeAttribute("href")
-        anchor.remove()
-      }
-      if (objectURL) URL.revokeObjectURL(objectURL)
-      anchor = null
-      objectURL = null
-      blob = null
-      response = null
-    }
-  }, [])
-
   const value = useMemo<StoreContext>(() => {
     return {
       ...state,
       ...controllerPlatform,
+      ...backupStore,
       adapters: seedAdapters,
       platform: state.platform,
       watchLogs: watchTransientLogs,
@@ -2572,13 +2155,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           .find((project) => project.tenantId === tenantId && project.slug === projectSlug)
           ?.environments?.find((environment) => environment.name === envName)
       },
-      getBackupPolicyState: (environmentId) => state.backupPolicies[environmentId] ?? emptyBackupPolicyState(),
-      loadBackupPolicy,
-      loadRecoveryPoints,
-      replaceBackupPolicy,
-      runBackup,
-      rotateBackupKey,
-      exportBackupKey,
       getTaskJournal: (scope) => state.taskJournals[taskJournalKey(scope)] ?? emptyTaskJournal(),
       loadTaskJournal,
       getTaskJournalDetail: async (taskId, signal) =>
@@ -3552,7 +3128,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return result.reconcile_task_id
       },
     }
-	}, [state, controllerPlatform, update, loadTaskJournal, loadBackupPolicy, replaceBackupPolicy, runBackup, rotateBackupKey, exportBackupKey, refreshPlatformComponents, refreshComponentConfig, refreshEnvironmentComponents, refreshEnvironmentReleases, refreshEnvironmentServices, refreshAgents, dispatchResourceRemoval, monitorResourceRemoval, reconcileResourceRemoval, requestResourceRemovalTask, nextEnvironmentGeneration, settleEnvironmentMutation, shouldPreserveEnvironmentOnLoad, getEnvironmentDeletionFailure, refreshEnvironmentDeletion, isEnvironmentDeletionPending, waitForResourceRemoval, retryResourceRemoval, observeEnvironmentDeletionTasks, environmentGenerations, assertEnvironmentMutable])
+	}, [state, controllerPlatform, backupStore, update, loadTaskJournal, refreshPlatformComponents, refreshComponentConfig, refreshEnvironmentComponents, refreshEnvironmentReleases, refreshEnvironmentServices, refreshAgents, dispatchResourceRemoval, monitorResourceRemoval, reconcileResourceRemoval, requestResourceRemovalTask, nextEnvironmentGeneration, settleEnvironmentMutation, shouldPreserveEnvironmentOnLoad, getEnvironmentDeletionFailure, refreshEnvironmentDeletion, isEnvironmentDeletionPending, waitForResourceRemoval, retryResourceRemoval, observeEnvironmentDeletionTasks, environmentGenerations, assertEnvironmentMutable])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

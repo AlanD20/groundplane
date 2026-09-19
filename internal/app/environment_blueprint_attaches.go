@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/backingendpoint"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
+	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -469,12 +470,12 @@ type blueprintAttachFactValue struct {
 }
 
 type blueprintAttachFactOverlay struct {
-	fallback EntryFactResolver
+	fallback entrygeneration.EntryFactResolver
 	aliases  map[string]string
 	sets     map[string]map[string]map[string]blueprintAttachFactValue
 }
 
-func newBlueprintAttachFactOverlay(fallback EntryFactResolver) *blueprintAttachFactOverlay {
+func newBlueprintAttachFactOverlay(fallback entrygeneration.EntryFactResolver) *blueprintAttachFactOverlay {
 	return &blueprintAttachFactOverlay{
 		fallback: fallback, aliases: map[string]string{},
 		sets: map[string]map[string]map[string]blueprintAttachFactValue{},

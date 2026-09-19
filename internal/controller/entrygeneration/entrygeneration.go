@@ -1,4 +1,4 @@
-package app
+package entrygeneration
 
 import (
 	"context"
@@ -43,6 +43,16 @@ func NewEntryGenerationService(
 		return nil, errs.New(errs.KindValidationFailed, "Entry source repositories and protector are required")
 	}
 	return &EntryGenerationService{secrets: secrets, facts: facts, protector: protector}, nil
+}
+
+// WithFactResolver returns an otherwise identical generator that resolves
+// facts through the supplied operation-local view.
+func (service *EntryGenerationService) WithFactResolver(
+	facts EntryFactResolver,
+) *EntryGenerationService {
+	configured := *service
+	configured.facts = facts
+	return &configured
 }
 
 // Generate resolves one live desired source and freezes its exact bytes into
@@ -112,7 +122,7 @@ func (service *EntryGenerationService) Generate(
 			return sealErr
 		}
 		ciphertext := envelope.Ciphertext()
-		defer clearAttachBytes(ciphertext)
+		defer clear(ciphertext)
 		if len(ciphertext) == 0 || len(ciphertext) > etcd.MaximumEntryValueBytes {
 			return errs.New(errs.KindValidationFailed, "Encrypted Entry generation exceeds the maximum size")
 		}
@@ -147,7 +157,7 @@ func (service *EntryGenerationService) withResolvedEntrySource(
 	switch entry.Source.Kind {
 	case core.SourceLiteral:
 		value := []byte(entry.Source.Literal)
-		defer clearAttachBytes(value)
+		defer clear(value)
 		return consume(value)
 	case core.SourceSecretRef:
 		if !entry.Secret {
@@ -164,7 +174,7 @@ func (service *EntryGenerationService) withResolvedEntrySource(
 		if err != nil {
 			return err
 		}
-		defer clearAttachBytes(stored.Ciphertext)
+		defer clear(stored.Ciphertext)
 		envelope, err := secretvalue.Restore(secretvalue.Metadata{
 			Version: secretvalue.EnvelopeVersion(stored.EnvelopeVersion),
 			Cipher:  secretvalue.CipherSuite(stored.Cipher),
@@ -194,11 +204,11 @@ func ClearEntryValueGeneration(generation *etcd.EntryValueGeneration) {
 		return
 	}
 	if generation.Plain != nil {
-		clearAttachBytes(generation.Plain.Content)
+		clear(generation.Plain.Content)
 		generation.Plain.Content = nil
 	}
 	if generation.Secret != nil {
-		clearAttachBytes(generation.Secret.Ciphertext)
+		clear(generation.Secret.Ciphertext)
 		generation.Secret.Ciphertext = nil
 	}
 	generation.Plain = nil

@@ -101,9 +101,9 @@ func TestNativeComposeChangesSelectRunningBlueprintCandidates(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					groups := map[string]struct{}{}
+					groups := map[string]core.ReleaseGroupSpec{}
 					if grouped {
-						groups[current.Desired.ID] = struct{}{}
+						groups["selected"] = core.ReleaseGroupSpec{Services: []string{current.Desired.Name}}
 					}
 					selected, err := selectCandidates(etcd.EnvironmentComposeProjection{}, changes, groups, memberships)
 					if err != nil {

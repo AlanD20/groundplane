@@ -1,4 +1,4 @@
-package app
+package entrygeneration
 
 import (
 	"context"
@@ -193,7 +193,7 @@ func (resolver *entryGenerationTestFactResolver) ResolveFact(
 		return errs.New(errs.KindValidationFailed, "Secret fact requires a secret destination")
 	}
 	value := append([]byte(nil), resolver.value...)
-	defer clearAttachBytes(value)
+	defer clear(value)
 	return consume(value)
 }
 

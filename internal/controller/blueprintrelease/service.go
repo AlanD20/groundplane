@@ -1,7 +1,6 @@
 package blueprintrelease
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -106,8 +105,7 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 		!input.CreatedAt.Equal(input.CreatedAt.UTC()) {
 		return Prepared{}, errs.New(errs.KindValidationFailed, "Blueprint Release preparation is invalid")
 	}
-	groupMembers := releaseGroupMembers(input.ReleaseGroups, input.ServiceChanges)
-	candidates, err := selectCandidates(input.Projection, input.ServiceChanges, groupMembers, input.Memberships)
+	candidates, err := selectCandidates(input.Projection, input.ServiceChanges, input.ReleaseGroups, input.Memberships)
 	if err != nil {
 		return Prepared{}, err
 	}
@@ -514,97 +512,6 @@ func validateDeployHookBounds(executions int, bodyBytes uint64) error {
 		)
 	}
 	return nil
-}
-
-func selectCandidates(
-	projection etcd.EnvironmentComposeProjection,
-	changes []etcd.EnvironmentBlueprintServiceChange,
-	groupMembers map[string]struct{},
-	memberships NormalizedServiceMemberships,
-) ([]etcd.EnvironmentBlueprintServiceChange, error) {
-	if !memberships.initialized {
-		return nil, errs.New(errs.KindInternal, "Blueprint normalized Service memberships are absent")
-	}
-	selected := make(map[string]etcd.EnvironmentBlueprintServiceChange)
-	for _, change := range changes {
-		service := change.Record.Desired
-		candidateMembership, candidateExists := memberships.candidate[service.Name]
-		if !candidateExists ||
-			(candidateMembership != blueprintServiceActive && candidateMembership != blueprintServiceProfileDisabled) {
-			return nil, errs.New(errs.KindInternal, "Blueprint candidate Service is absent from its sealed projection")
-		}
-		previousMembership, previousExists := memberships.previous[service.Name]
-		if change.Current == nil && previousExists {
-			return nil, errs.New(errs.KindInternal, "Blueprint new Service exists in its predecessor projection")
-		}
-		if change.Current != nil && (!previousExists ||
-			(previousMembership != blueprintServiceActive && previousMembership != blueprintServiceProfileDisabled)) {
-			return nil, errs.New(
-				errs.KindInternal,
-				"Blueprint existing Service is absent from its predecessor projection",
-			)
-		}
-		if candidateMembership == blueprintServiceProfileDisabled {
-			continue
-		}
-		if _, grouped := groupMembers[service.ID]; grouped {
-			continue
-		}
-		if change.Record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentRunning {
-			continue
-		}
-		material := change.Current == nil
-		if change.Current != nil {
-			before, beforeErr := json.Marshal(change.Current.Record.Desired)
-			after, afterErr := json.Marshal(change.Record.Desired)
-			if beforeErr != nil || afterErr != nil {
-				return nil, errs.New(errs.KindInternal, "Blueprint Service material comparison failed")
-			}
-			material = previousMembership != candidateMembership || !bytes.Equal(before, after) ||
-				memberships.previousNative[service.Name] != memberships.candidateNative[service.Name]
-		}
-		if material {
-			selected[service.Name] = change
-		}
-	}
-	ordered := make([]etcd.EnvironmentBlueprintServiceChange, 0, len(selected))
-	seen := make(map[string]struct{}, len(selected))
-	for _, name := range projection.DeployDependencyPlan.OrderedServices {
-		if change, exists := selected[name]; exists {
-			ordered = append(ordered, change)
-			seen[name] = struct{}{}
-		}
-	}
-	remaining := make([]string, 0, len(selected)-len(seen))
-	for name := range selected {
-		if _, exists := seen[name]; !exists {
-			remaining = append(remaining, name)
-		}
-	}
-	sort.Strings(remaining)
-	for _, name := range remaining {
-		ordered = append(ordered, selected[name])
-	}
-	return ordered, nil
-}
-
-func releaseGroupMembers(
-	groups map[string]core.ReleaseGroupSpec,
-	changes []etcd.EnvironmentBlueprintServiceChange,
-) map[string]struct{} {
-	byName := make(map[string]string, len(changes))
-	for _, change := range changes {
-		byName[change.Record.Desired.Name] = change.Record.Desired.ID
-	}
-	result := make(map[string]struct{})
-	for _, group := range groups {
-		for _, name := range group.Services {
-			if serviceID := byName[name]; serviceID != "" {
-				result[serviceID] = struct{}{}
-			}
-		}
-	}
-	return result
 }
 
 func releaseImage(value string) (string, string, string, error) {

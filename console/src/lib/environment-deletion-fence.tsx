@@ -1,4 +1,4 @@
-import type { EnvironmentDeletionFailure } from './environment-lifecycle'
+import type { EnvironmentDeletionFailure } from '@/features/environment/environment-removal-model'
 import { EnvironmentDeletionFailureNotice } from './environment-deletion-failure'
 
 type EnvironmentDeletionFenceProps = {

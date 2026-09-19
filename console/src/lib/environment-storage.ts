@@ -1,4 +1,7 @@
-import type { EnvironmentDeletionFailure, PendingResourceRemoval } from './environment-lifecycle'
+import type {
+  EnvironmentDeletionFailure,
+  PendingResourceRemoval,
+} from '@/features/environment/environment-removal-model'
 
 export type PendingResourceRemovalIntent = {
   removal: PendingResourceRemoval

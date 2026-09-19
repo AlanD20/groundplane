@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useRef, type MutableRefObject } from 'react'
-import type { operations } from './api.generated'
 import type { Environment, EnvironmentEntry, Project, Route, Script, Service } from './types'
+import {
+  environmentDeletionTaskError,
+  findEnvironment,
+  terminalTaskStatuses,
+  type EnvironmentDeletionFailure,
+  type EnvironmentMutationKind,
+  type EnvironmentRemovalDraft,
+  type PendingResourceRemoval,
+  type TaskResponse,
+} from '@/features/environment/environment-removal-model'
 import {
   loadEnvironmentDeletionFailures,
   loadPendingResourceRemovalIntents,
@@ -18,25 +27,9 @@ import {
 import { newULID } from './utils'
 import { isAuthoritativeTaskUnavailable, isDefinitiveRemovalRequestRejection } from './environment-removal-state'
 
-export type TaskResponse = operations['task.show']['responses'][200]['content']['application/json']
 export type EnvironmentDeletionResponse = { task_id: string }
 
-export type PendingResourceRemoval =
-  | { kind: 'environment'; projectId: string; resourceId: string; generation: number }
-  | { kind: 'service' | 'route' | 'entry' | 'script'; environmentId: string; resourceId: string; generation?: number }
-
-export type EnvironmentMutationKind = 'create' | 'edit' | 'rename' | 'delete' | 'child'
-
-export type EnvironmentDeletionFailure = {
-  taskId: string
-  projectId: string
-  message: string
-  kind: 'task' | 'refresh'
-}
-
-type EnvironmentLifecycleDraft = {
-  tenantProjects: Project[]
-  backingProjects: Project[]
+type EnvironmentLifecycleDraft = EnvironmentRemovalDraft & {
   projectError: string | null
   environmentDeletionRevision: number
 }
@@ -77,24 +70,6 @@ export type EnvironmentLifecycle<State extends EnvironmentLifecycleDraft> = {
 }
 
 const resourceRemovalObservationFreshMs = 1_500
-const terminalTaskStatuses = new Set(['completed', 'failed', 'timed_out', 'aborted'])
-function findEnvironment(draft: EnvironmentLifecycleDraft, environmentId: string) {
-  for (const project of [...draft.tenantProjects, ...draft.backingProjects]) {
-    const environment = project.environments?.find((candidate) => candidate.id === environmentId)
-    if (environment) return environment
-  }
-  return undefined
-}
-
-function environmentDeletionTaskError(taskId: string, task: TaskResponse, removal: PendingResourceRemoval) {
-  if (task.id !== taskId) return `Controller returned Task ${task.id} while observing ${taskId}`
-  if (task.type !== 'remove') return `Controller returned ${task.type} Task ${taskId} for Environment deletion`
-  if (task.target !== removal.resourceId) return `Controller returned deletion Task ${taskId} for a different Environment`
-  if (removal.kind === 'environment' && task.project_id !== removal.projectId) return `Controller returned deletion Task ${taskId} for a different Project`
-  const environmentId = removal.kind === 'environment' ? removal.resourceId : removal.environmentId
-  if (task.environment_id && task.environment_id !== environmentId) return `Controller returned deletion Task ${taskId} for a different Environment`
-  return undefined
-}
 export function useEnvironmentLifecycle<State extends EnvironmentLifecycleDraft>(options: EnvironmentLifecycleOptions<State>): EnvironmentLifecycle<State> {
   const { active, update, requestTask, deleteResource, retryResource, listEnvironments, listServices, listRoutes, listEntries, listScripts } = options
   const pendingResourceRemovals = useRef(loadPendingResourceRemovals())

@@ -22,6 +22,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/entry"
+	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -128,7 +129,7 @@ type environmentBlueprintService struct {
 	materials         environmentBlueprintMaterializationResolver
 	releaseGroups     *controller.ReleaseGroupBlueprintPlanner
 	blueprintReleases *blueprintrelease.Service
-	entryGeneration   *EntryGenerationService
+	entryGeneration   *entrygeneration.EntryGenerationService
 	attachFacts       *AttachFactService
 	componentCatalog  []controller.EnvironmentComponentRegistration
 	backups           environmentBlueprintBackupRepository
@@ -346,7 +347,7 @@ func newEnvironmentBlueprintService(
 	materials environmentBlueprintMaterializationResolver,
 	releaseGroups *controller.ReleaseGroupBlueprintPlanner,
 	blueprintReleases *blueprintrelease.Service,
-	entryGeneration *EntryGenerationService,
+	entryGeneration *entrygeneration.EntryGenerationService,
 	attachFacts *AttachFactService,
 	componentCatalog []controller.EnvironmentComponentRegistration,
 ) (*environmentBlueprintService, error) {
@@ -906,10 +907,9 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
-	entryGeneration := *service.entryGeneration
-	entryGeneration.facts = preparedAttaches.facts
+	entryGeneration := service.entryGeneration.WithFactResolver(preparedAttaches.facts)
 	if err := service.prepareBlueprintEntryValues(
-		ctx, &entryGeneration, project.Record.ID, environmentID, reconciledEntries, now,
+		ctx, entryGeneration, project.Record.ID, environmentID, reconciledEntries, now,
 	); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}

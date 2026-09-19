@@ -30,7 +30,7 @@ func (service *Service) Preflight(
 	candidates, err := selectCandidates(
 		etcd.EnvironmentComposeProjection{},
 		changes,
-		releaseGroupMembers(groups, changes),
+		groups,
 		memberships,
 	)
 	if err != nil {
