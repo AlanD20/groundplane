@@ -6,9 +6,38 @@ authorize a production target or changes to ingress, host firewall or other host
 
 ## Prebuilt releases
 
-Release tooling builds artifacts locally; it does not publish a GitHub Release or
-install on a host. Use an explicit version, never a moving `latest` selection.
+Local release scripts build artifacts without implicitly publishing or installing.
+The tagged GitHub workflow below publishes them. Use an explicit version, never a moving `latest` selection.
 Build from the intended source commit with the repository-pinned toolchains.
+
+### Publish through GitHub Actions
+
+`.github/workflows/release.yml` runs on a pushed `vMAJOR.MINOR.PATCH` tag whose
+commit belongs to `main`. All external Actions use version tags, not commit hashes.
+The first selected release is `0.0.1`. After local `make ci` passes, commit the
+reviewed changes on `main`, push that commit, then create and push `v0.0.1`.
+
+The workflow reuses the full CI gate before publication. It builds and smoke-tests
+Agent and Runner images on native amd64/arm64 GitHub runners, pushes those children
+to `ghcr.io/aland20/groundplane-agent` and `ghcr.io/aland20/groundplane-runner`,
+then publishes and reads back their two-platform indexes. It builds native bundles
+with those immutable index digests and publishes both archives, both checksums and
+`install.sh` to the tagged GitHub Release. Runtime image digests and file checksums
+remain required; using Action tags does not remove artifact integrity checks.
+
+GitHub's workflow token needs package-write and release-write permissions, scoped
+to the relevant jobs. The packages must allow public anonymous pulls: newly created
+GHCR packages may need their visibility changed in GitHub package settings. The
+workflow checks anonymous access and stops before publishing installer assets if
+either image is private. No personal access token is embedded or required by the
+workflow. The repository's release assets must also be publicly downloadable for
+the installer, which does not accept GitHub credentials.
+
+Failed jobs do not deploy to hosts. Already pushed image children can remain after
+a later failure. Rerun failed jobs for the same unchanged tag; do not move a release
+tag or overwrite an existing GitHub Release. Manual dispatch is available against
+an existing release tag, not an arbitrary branch. Publishing is not proof of the
+still-unrun fresh-install OS/architecture or uninterrupted-upgrade journeys.
 
 ### Build the Agent image
 
@@ -48,7 +77,8 @@ Outputs are `.tmp/releases/groundplane-VERSION-linux-ARCH.tar.gz` and the adjace
 `.tar.gz.sha256`. Existing archives are never overwritten. Archive headers are
 stable; this is not a claim that independent compiler runs are byte-reproducible.
 After qualification, upload these exact files and the reviewed root `install.sh`
-to GitHub Release `vVERSION`. Nothing is uploaded automatically.
+to GitHub Release `vVERSION`, or use the tagged workflow above. The local bundle
+command itself uploads nothing.
 
 ### Install or upgrade on a host
 
