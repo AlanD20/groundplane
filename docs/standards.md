@@ -280,7 +280,7 @@ make generate
 git diff --exit-code openapi.json internal/cli/apiclient/generated/client.gen.go console/src/lib/api.generated.ts proto/agentpb
 go mod tidy && git diff --exit-code
 make format-check
-make architecture-check
+make architecture-release-check
 go tool staticcheck -tags groundplane_console ./...
 go vet -tags groundplane_console ./...
 go test -tags groundplane_console ./... -count=1 -race -coverprofile=coverage.out -covermode=atomic
@@ -295,6 +295,11 @@ matching CI. Bounded changes follow the scoped proof and completion definitions 
 `delivery.md`; an implementation commit alone is not qualification. Generated
 contracts (proto Go, OpenAPI clients) are regenerated when their sources change,
 never hand-edited.
+
+For 0.0.1, the owner-approved [release deferral](delivery.md#approved-architecture-debt-for-001)
+permits an exact snapshot of existing structural findings, not new violations.
+`make architecture-check` remains available for strict compliance; neither its
+baseline nor the architecture requirements are relaxed.
 
 ## 15. Verification checklist (before declaring code complete)
 
@@ -323,4 +328,5 @@ never hand-edited.
       JSON-round-trip, untyped-map, or double-cast conversion was added
 - [ ] `internal/app` contains composition only; capability behavior lives in
       its owning module
-- [ ] `make architecture-check` and pinned Staticcheck pass
+- [ ] Architecture release gate and pinned Staticcheck pass; any approved
+      structural deferral is reported separately from strict compliance

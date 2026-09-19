@@ -97,7 +97,7 @@ for the private bootstrap/staging/protected-update client and verifies exact Nod
 then runs tidy, `make format-check` across repository Go source roots (excluding
 ignored scratch and caches), using `gofmt` and module-pinned `golines` with an
 explicit `gofmt` base formatter rather than an ambient editor's `goimports`,
-`make architecture-check`, module-pinned Staticcheck 2026.1, tagged vet and
+`make architecture-release-check`, module-pinned Staticcheck 2026.1, tagged vet and
 race tests, and the tagged production
 Controller build. The architecture gate enforces ADR 0056's import direction,
 module placement, interface and conversion rules, generated provenance, and
@@ -110,6 +110,24 @@ Docker CLI 29.1.3, and Compose 2.40.3 runtime. `make generate` regenerates proto
 the committed OpenAPI document, and both generated clients before compilation;
 CI fails on any drift. `make controller-dev` is the explicitly assetless
 development build; release automation uses `make controller` only.
+
+### Approved architecture debt for 0.0.1
+
+The owner deferred structural cleanup on 2026-09-19. Release CI runs the strict
+checker, prints every finding, and permits only the 105 existing findings in
+`architecture-deferred.json`: 55 file-size findings, two frozen-total findings,
+and 48 test-only import findings. Matching uses path, rule, subject and exact
+message, not source line positions. New or changed findings, extra occurrences,
+invalid reports and checker failures block CI. Resolved findings need not remain.
+The snapshot must not be regenerated to accept new debt without owner approval.
+
+`make architecture-check` remains the unmodified strict check; its original
+baseline and architecture requirements are unchanged. A passing release gate
+does not mean this debt is fixed or architecture compliance is qualified.
+This exception is for the 0.0.1 release; revisit it before qualifying a later
+release. Build, tests, race detection, vet, Staticcheck, security, generated-file
+parity and artifact checks remain mandatory. See the
+[deferred cleanup record](issues/deferred-architecture-cleanup.md).
 
 `make agent-image` builds `groundplane-agent:dev` by default. Release
 automation supplies both `AGENT_VERSION` and `AGENT_IMAGE`, pushes that build,

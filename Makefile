@@ -1,6 +1,8 @@
 .PHONY: build cli controller controller-binary controller-dev agent agent-image agent-image-smoke runner-image runner-image-smoke proto api generate console console-toolchain console-verify console-release-smoke backupstage-host-acceptance backupstage-host-acceptance-compile c15-connector-acceptance s3compatible-minio-acceptance s3compatible-minio-acceptance-compile architecture-check component-modules-verify deployment-check tooling-check verifier-helper-check format-check clean test tidy ci
 
 # Initialize validated repo-local paths before each recipe and recursive make.
+.PHONY: architecture-release-check
+
 SHELL := /bin/bash
 .SHELLFLAGS := $(CURDIR)/scripts/repo-env.sh /bin/sh -c
 
@@ -179,6 +181,10 @@ architecture-check:
 	go test ./internal/architecturecheck -count=1
 	go run ./cmd/architecture-check -root . -baseline architecture-baseline.json
 
+architecture-release-check:
+	go test ./internal/architecturecheck -count=1
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/architecture_release_check.py
+
 deployment-check:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts -p 'test_*.py'
 
@@ -208,7 +214,7 @@ ci: console | $(BIN_DIR)
 	$(MAKE) tidy
 	git diff --exit-code go.mod go.sum go.work component-sdk/go.mod registered-components/go.mod
 	$(MAKE) format-check
-	$(MAKE) architecture-check
+	$(MAKE) architecture-release-check
 	$(MAKE) component-modules-verify
 	GOTOOLCHAIN=go1.26.0 go tool staticcheck -tags groundplane_console ./...
 	go vet -tags groundplane_console ./...

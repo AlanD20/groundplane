@@ -1,0 +1,575 @@
+[
+  {
+    "path": "internal/agent/worker.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 1325 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/app",
+    "rule": "frozen-total-drift",
+    "message": "frozen total is 16804 lines but current direct production Go total is 24491"
+  },
+  {
+    "path": "internal/app/backing_service_creation.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 692 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/app/controller.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 1223 lines but file has 1343"
+  },
+  {
+    "path": "internal/app/entry_bulk_upsert.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 625 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/app/entry_desired_mutation.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 931 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/app/entry_edit.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 601 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/app/environment_blueprint.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 1333 lines but file has 2182"
+  },
+  {
+    "path": "internal/app/service_mutations.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 861 lines but file has 1148"
+  },
+  {
+    "path": "internal/common/executionplan/plan.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 1186 lines but file has 1535"
+  },
+  {
+    "path": "internal/controller/agentchannel/registry.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 602 lines but file has 749"
+  },
+  {
+    "path": "internal/controller/agentchannel/server.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 1000 lines but file has 1066"
+  },
+  {
+    "path": "internal/controller/agentchannel/server_test.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 1581 lines, over the 1000-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/controller/blueprintparser/namespace.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 904 lines but file has 1047"
+  },
+  {
+    "path": "internal/controller/dnsresolver/platform_component_render_planner.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 621 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/controller/entry_removal_plan.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 678 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/controller/entry_routes.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 679 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/controller/localagent/localagent_test.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 1236 lines but file has 1476"
+  },
+  {
+    "path": "internal/controller/network/route_mutations.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 659 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/controller/plan.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 1080 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/controller/release_plan.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 704 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/infra/docker/runner/host.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 959 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/infra/docker/scriptrunner/runner.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 886 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/infra/etcd",
+    "rule": "frozen-total-drift",
+    "message": "frozen total is 60604 lines but current direct production Go total is 104167"
+  },
+  {
+    "path": "internal/infra/etcd/attach_repository.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 1521 lines but file has 1662"
+  },
+  {
+    "path": "internal/infra/etcd/attach_repository_test.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 1203 lines but file has 1292"
+  },
+  {
+    "path": "internal/infra/etcd/backing_service_creation.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 650 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/infra/etcd/backup_artifact_repository.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 2813 lines but file has 2912"
+  },
+  {
+    "path": "internal/infra/etcd/backup_key_rotation.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 735 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/infra/etcd/backup_policy_preparation.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 695 lines but file has 790"
+  },
+  {
+    "path": "internal/infra/etcd/backup_policy_replacement.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 799 lines but file has 815"
+  },
+  {
+    "path": "internal/infra/etcd/backup_policy_replacement_test.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 1164 lines, over the 1000-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/infra/etcd/backup_runtime_record_test.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 1025 lines but file has 1051"
+  },
+  {
+    "path": "internal/infra/etcd/backup_runtime_repository.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 2058 lines but file has 2133"
+  },
+  {
+    "path": "internal/infra/etcd/backup_runtime_repository_test.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 5337 lines but file has 5379"
+  },
+  {
+    "path": "internal/infra/etcd/backup_secret_resolution.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 992 lines but file has 998"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_executed_artifact_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_mixed_observer_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/agent",
+    "message": "internal/infra/etcd must not import internal/agent"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_mixed_producer_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_mixed_producer_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/blueprintrelease",
+    "message": "internal/infra/etcd must not import internal/controller/blueprintrelease"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_mixed_producer_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskcontract",
+    "message": "internal/infra/etcd must not import internal/controller/taskcontract"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_mixed_runtime_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_mixed_runtime_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/servicelifecycle",
+    "message": "internal/infra/etcd must not import internal/controller/servicelifecycle"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_mixed_runtime_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskcontract",
+    "message": "internal/infra/etcd must not import internal/controller/taskcontract"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_mixed_worker_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/agent",
+    "message": "internal/infra/etcd must not import internal/agent"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_mixed_worker_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_native_predecessor_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_native_predecessor_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/blueprintrelease",
+    "message": "internal/infra/etcd must not import internal/controller/blueprintrelease"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_native_predecessor_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskcontract",
+    "message": "internal/infra/etcd must not import internal/controller/taskcontract"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_publication_assignment_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/agent",
+    "message": "internal/infra/etcd must not import internal/agent"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_publication_size_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_publication_size_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/blueprintrelease",
+    "message": "internal/infra/etcd must not import internal/controller/blueprintrelease"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_publication_size_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskcontract",
+    "message": "internal/infra/etcd must not import internal/controller/taskcontract"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_retained_producer_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_retained_producer_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/blueprintrelease",
+    "message": "internal/infra/etcd must not import internal/controller/blueprintrelease"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_retained_producer_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskcontract",
+    "message": "internal/infra/etcd must not import internal/controller/taskcontract"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_retained_rollback_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_retained_rollback_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/blueprintrelease",
+    "message": "internal/infra/etcd must not import internal/controller/blueprintrelease"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_terminal_budget_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/component_task_lifecycle.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 805 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/infra/etcd/connector_deletion_test.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 1713 lines but file has 1737"
+  },
+  {
+    "path": "internal/infra/etcd/deletion_tombstone.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 671 lines but file has 680"
+  },
+  {
+    "path": "internal/infra/etcd/entry_removal_agent_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/agent",
+    "message": "internal/infra/etcd must not import internal/agent"
+  },
+  {
+    "path": "internal/infra/etcd/entry_removal_agent_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/entry_removal_publication_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/entry_repository.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 699 lines but file has 706"
+  },
+  {
+    "path": "internal/infra/etcd/entry_runtime_publication_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/entry_serving_runtime_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/environment_blueprint_staging.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 860 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/infra/etcd/environment_compose_projection.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 877 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/infra/etcd/environment_deletion_lock_test.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 1375 lines but file has 1508"
+  },
+  {
+    "path": "internal/infra/etcd/hierarchy.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 899 lines but file has 955"
+  },
+  {
+    "path": "internal/infra/etcd/hierarchy_deletion_controller_finalizer.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 643 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/infra/etcd/hierarchy_deletion_membership.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 723 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/infra/etcd/hierarchy_deletion_root_ack.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 642 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/infra/etcd/host_resolution_reconciliation.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 1342 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/infra/etcd/release_task_terminal.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 673 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/infra/etcd/route_task_lifecycle.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 735 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/infra/etcd/runner_repository.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 1132 lines but file has 1164"
+  },
+  {
+    "path": "internal/infra/etcd/runner_task_lifecycle.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 1059 lines but file has 1060"
+  },
+  {
+    "path": "internal/infra/etcd/script_context_publication_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/script_execution.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 762 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/infra/etcd/script_explicit_producer_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/script_manual_admission_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/script_manual_entry_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/script_manual_entry_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/secretvalue",
+    "message": "internal/infra/etcd must not import internal/controller/secretvalue"
+  },
+  {
+    "path": "internal/infra/etcd/script_manual_journey_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/script_manual_journey_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/secretvalue",
+    "message": "internal/infra/etcd must not import internal/controller/secretvalue"
+  },
+  {
+    "path": "internal/infra/etcd/script_repository.go",
+    "rule": "missing-oversized-baseline",
+    "message": "file has 669 lines, over the 600-line limit, but is not in oversized_files"
+  },
+  {
+    "path": "internal/infra/etcd/store.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 773 lines but file has 778"
+  },
+  {
+    "path": "internal/infra/etcd/task_lifecycle.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 3124 lines but file has 3874"
+  },
+  {
+    "path": "internal/infra/etcd/task_pruning.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 844 lines but file has 917"
+  },
+  {
+    "path": "internal/infra/etcd/volume_agent_production_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/agent",
+    "message": "internal/infra/etcd must not import internal/agent"
+  },
+  {
+    "path": "internal/infra/etcd/volume_agent_production_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/volume_agent_production_external_test.go",
+    "rule": "layer-import",
+    "subject": "pkg/api",
+    "message": "internal/infra/etcd must not import pkg/api"
+  },
+  {
+    "path": "internal/infra/etcd/volume_checkpoint_production_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/volume_checkpoint_production_external_test.go",
+    "rule": "layer-import",
+    "subject": "pkg/api",
+    "message": "internal/infra/etcd must not import pkg/api"
+  },
+  {
+    "path": "internal/infra/etcd/volume_removal_production_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/volume_removal_production_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/idempotentintent",
+    "message": "internal/infra/etcd must not import internal/controller/idempotentintent"
+  },
+  {
+    "path": "internal/infra/etcd/volume_removal_production_external_test.go",
+    "rule": "layer-import",
+    "subject": "pkg/api",
+    "message": "internal/infra/etcd must not import pkg/api"
+  },
+  {
+    "path": "internal/infra/etcd/volume_resource_agent_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/agent",
+    "message": "internal/infra/etcd must not import internal/agent"
+  },
+  {
+    "path": "internal/infra/etcd/volume_resource_agent_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/volume_resource_agent_external_test.go",
+    "rule": "layer-import",
+    "subject": "pkg/api",
+    "message": "internal/infra/etcd must not import pkg/api"
+  },
+  {
+    "path": "internal/infra/etcd/volume_retained_publication_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller",
+    "message": "internal/infra/etcd must not import internal/controller"
+  },
+  {
+    "path": "internal/infra/etcd/volume_retained_publication_external_test.go",
+    "rule": "layer-import",
+    "subject": "pkg/api",
+    "message": "internal/infra/etcd must not import pkg/api"
+  }
+]

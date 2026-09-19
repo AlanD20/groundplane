@@ -1,7 +1,7 @@
 # Deferred architecture cleanup snapshot
 
-- Status: authorized on 2026-09-19 to unblock full local CI before release
-- Owner: primary agent; bounded delegates have explicit file ownership in docs/head.md
+- Status: cleanup paused; exact existing findings deferred for release 0.0.1 on 2026-09-19
+- Owner: primary agent; further cleanup requires fresh owner authorization
 - Severity: low for architecture-only structure; reclassify any demonstrated runtime or safety defect
 - MVP-required: no under the current deployment-first authority
 - Snapshot: `787ab7a95` (`f6c52530` tree), before the six landed correction commits
@@ -11,22 +11,22 @@
 
 ## Authority and safety boundary
 
-The owner selected this cleanup after the release's local CI stopped on 122
-findings. Product behavior and architecture limits remain unchanged. The first
-slice removes 12 stale exceptions and separates Go import diagnostics from AST
-orchestration. Its existing checker race tests pass; current evidence is
-`.tmp/ci-architecture-first.json` with 109 findings. No release or push has run.
-The historical snapshots below remain evidence of the original deferral, not
-the current authorization or current counts.
+The owner paused cleanup and approved the
+[0.0.1 release deferral](../delivery.md#approved-architecture-debt-for-001).
+The current exact snapshot is `architecture-deferred.json`: 105 findings, including
+55 file-size findings, two frozen-total findings and 48 test-only imports.
+Already-tested bounded extractions are retained; no further extraction is authorized.
+The strict checker and its baseline remain unchanged. New or changed findings
+still block CI, and non-structural release gates remain mandatory.
+The historical snapshots below explain earlier debt, not current counts.
 
 Unrelated refactoring and architecture cleanup remain deferred until the user
 authorizes that work. The architecture gate may remain red solely for this deferred
 cleanup. This is not permission to ignore compile/build failures, security defects, data-safety
 risks, or runtime-correctness defects; those remain deployment blockers.
 
-The 108 count below is a frozen historical snapshot. The architecture gate has not been rerun on
-current `main`, so this document makes no claim about a current count or a green gate. Baseline
-allowances must not be weakened to hide findings.
+The 108 count below is a frozen historical snapshot, superseded by the current
+release snapshot above. Baseline allowances must not be weakened to hide findings.
 
 ## Snapshot accounting
 
