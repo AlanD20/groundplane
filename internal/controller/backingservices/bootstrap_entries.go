@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
+	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"sort"
@@ -15,7 +16,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
+
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -241,7 +242,7 @@ func backingEnvironmentMaterialization(
 			},
 		},
 	}
-	step, err := controller.BuildTaskMaterializationStep(record, artifactID, uint32(desiredrevision.TaskTimeoutSeconds))
+	step, err := taskmaterialization.BuildTaskMaterializationStep(record, artifactID, uint32(desiredrevision.TaskTimeoutSeconds))
 	if err != nil {
 		return etcd.TaskMaterializationRecord{}, nil, err
 	}

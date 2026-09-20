@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
+	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"math"
@@ -337,7 +338,7 @@ func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 		if !found || !sameEntryRemovalMaterializationTemplate(reference, templates[index]) {
 			return nil, errs.New(errs.KindInternal, "durable Entry removal materialization changed")
 		}
-		steps[index], err = BuildTaskMaterializationStep(reference, artifactID, uint32(task.TimeoutSeconds))
+		steps[index], err = taskmaterialization.BuildTaskMaterializationStep(reference, artifactID, uint32(task.TimeoutSeconds))
 		if err != nil {
 			return nil, err
 		}

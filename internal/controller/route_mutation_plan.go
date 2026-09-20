@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
+	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"math"
@@ -266,7 +267,7 @@ func (resolver *TaskPlanResolver) buildRouteMutationPlan(
 	if err != nil {
 		return nil, err
 	}
-	materializationStep, err := BuildTaskMaterializationStep(reference, artifactID, uint32(task.TimeoutSeconds))
+	materializationStep, err := taskmaterialization.BuildTaskMaterializationStep(reference, artifactID, uint32(task.TimeoutSeconds))
 	if err != nil {
 		return nil, err
 	}

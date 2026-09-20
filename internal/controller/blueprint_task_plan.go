@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
+	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -192,7 +193,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		if !exists {
 			return nil, errs.New(errs.KindInternal, "durable Blueprint materialization order is invalid")
 		}
-		step, stepErr := BuildTaskMaterializationStep(reference, artifactID, uint32(task.TimeoutSeconds))
+		step, stepErr := taskmaterialization.BuildTaskMaterializationStep(reference, artifactID, uint32(task.TimeoutSeconds))
 		if stepErr != nil {
 			return nil, stepErr
 		}

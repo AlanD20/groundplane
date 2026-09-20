@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/hex"
+	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"math"
@@ -220,7 +221,7 @@ func buildEntryMutationPlan(
 		if !found {
 			return nil, errs.New(errs.KindInternal, "Entry mutation materialization is absent")
 		}
-		step, err := BuildTaskMaterializationStep(reference, newArtifact.ArtifactId, uint32(task.TimeoutSeconds))
+		step, err := taskmaterialization.BuildTaskMaterializationStep(reference, newArtifact.ArtifactId, uint32(task.TimeoutSeconds))
 		if err != nil {
 			return nil, err
 		}

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
+	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"math"
@@ -246,7 +247,7 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 	if err != nil {
 		return nil, err
 	}
-	materializationStep, err := BuildTaskMaterializationStep(reference, artifactID, uint32(task.TimeoutSeconds))
+	materializationStep, err := taskmaterialization.BuildTaskMaterializationStep(reference, artifactID, uint32(task.TimeoutSeconds))
 	if err != nil {
 		return nil, err
 	}

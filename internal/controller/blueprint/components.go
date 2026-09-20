@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
+	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -293,7 +294,7 @@ func (service *Service) environmentComponentMaterializations(
 		if err != nil {
 			return nil, nil, err
 		}
-		step, err := controller.BuildTaskMaterializationStep(
+		step, err := taskmaterialization.BuildTaskMaterializationStep(
 			reference,
 			artifactID,
 			uint32(desiredrevision.TaskTimeoutSeconds),
