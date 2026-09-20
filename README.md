@@ -34,6 +34,8 @@ module boundaries and [`docs/mvp.md`](docs/mvp.md) for the product model.
 
 ## Product and feature documentation
 
+See the [changelog](CHANGELOG.md) for release features and known limits.
+
 The [feature index](docs/README.md#features) explains each feature's purpose,
 requirements, implementation and acceptance. The shared contracts define product
 scope, Compose/Blueprint grammar, API surfaces and module boundaries.

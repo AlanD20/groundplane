@@ -18,6 +18,7 @@ Git preserves previous versions. Start with the document that owns the question.
 | [qa-matrix.md](qa-matrix.md) | Product cases, independent expected outcomes, coverage gaps and links to execution evidence |
 | [head.md](head.md) | Current work, authority limits, blockers and next actions |
 | [capabilities.md](capabilities.md) | Product-wide implementation and qualification gaps |
+| [Changelog](../CHANGELOG.md) | Release features and known limits; not product or qualification authority |
 
 Read relevant sections, not every linked document. Read `head.md` in full after
 context recovery. Requirements describe what must be true; implementation and
@@ -86,6 +87,10 @@ Remove filler, repeated rules, unexplained abbreviations and claims such as
 Clarity and complete meaning matter more than an arbitrary word limit.
 
 ## Maintenance and deletion
+
+Update the root changelog with user-visible changes and release limits before
+publishing a version. Mark an unpublished version clearly. Do not list planned
+or partial capabilities as completed features or copy test transcripts into it.
 
 - Update the owning document when behavior or design changes. Update only
   affected references and dependent contracts; do not copy the same rule into

@@ -16,6 +16,8 @@ Build from the intended source commit with the repository-pinned toolchains.
 commit belongs to `main`. All external Actions use version tags, not commit hashes.
 The first selected release is `0.0.1`. After local `make ci` passes, commit the
 reviewed changes on `main`, push that commit, then create and push `v0.0.1`.
+Review the matching [changelog entry](../CHANGELOG.md) before publication;
+replace its pending-publication label with the actual release date when published.
 
 The workflow reuses the full CI gate before publication. It builds and smoke-tests
 Agent and Runner images on native amd64/arm64 GitHub runners, pushes those children
@@ -32,6 +34,15 @@ workflow checks anonymous access and stops before publishing installer assets if
 either image is private. No personal access token is embedded or required by the
 workflow. The repository's release assets must also be publicly downloadable for
 the installer, which does not accept GitHub credentials.
+
+The owner approved public visibility for `groundplane-agent` and
+`groundplane-runner` on 2026-09-20. This does not authorize changing repository
+visibility. Approval is not proof that the remote package settings have changed.
+After the packages exist, an account with package-admin access must select
+**Package settings → Change visibility → Public** for each package. Follow
+[GitHub's package visibility instructions](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility).
+Rerun the failed anonymous-access job after that change. Do not remove its check
+or claim public distribution before anonymous pulls succeed.
 
 Failed jobs do not deploy to hosts. Already pushed image children can remain after
 a later failure. Rerun failed jobs for the same unchanged tag; do not move a release
