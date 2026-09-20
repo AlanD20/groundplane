@@ -2,15 +2,8 @@ package blueprintrelease
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"sort"
-	"strconv"
-	"strings"
-	"time"
-
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	controller "github.com/AlanD20/groundplane/internal/controller"
@@ -21,7 +14,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	"github.com/distribution/reference"
+	"strings"
+	"time"
 )
 
 type Service struct {
@@ -86,15 +80,6 @@ type Prepared struct {
 	Task        etcd.TaskRecord
 	Plan        *agentpb.ExecutionPlan
 	Publication etcd.BlueprintReleasePublication
-}
-
-type preparedHooks struct {
-	preStepIDs  [][]string
-	task        etcd.TaskRecord
-	members     []etcd.ReleaseTaskRenderMember
-	postStepIDs [][]string
-	sources     map[string]etcd.ScriptExecutionSources
-	executions  int
 }
 
 func (prepared Prepared) Abandon(ctx context.Context) error { return prepared.Publication.Abandon(ctx) }
@@ -353,188 +338,10 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 	return Prepared{Task: task, Plan: plan, Publication: retainedPublication}, nil
 }
 
-func (service *Service) prepareDeployHooks(
-	ctx context.Context,
-	input PrepareInput,
-	manifest etcd.VersionedReleaseManifest,
-	task etcd.TaskRecord,
-	members []etcd.ReleaseTaskRenderMember,
-) (preparedHooks, error) {
-	result := preparedHooks{
-		task: task, members: members, preStepIDs: make([][]string, len(members)), postStepIDs: make([][]string, len(members)),
-		sources: make(map[string]etcd.ScriptExecutionSources),
-	}
-	candidateByService := make(map[string]etcd.EnvironmentBlueprintServiceChange, len(input.ServiceChanges))
-	for _, change := range input.ServiceChanges {
-		candidateByService[change.Record.Desired.ID] = change
-	}
-	scriptsByService := deployScriptsByService(input.Scripts)
-	projectionValue, err := etcd.EncodeEnvironmentComposeProjectionStorage(input.Projection)
-	if err != nil {
-		return preparedHooks{}, err
-	}
-	projectionDigest := sha256.Sum256(projectionValue)
-	clear(projectionValue)
-	var bodyBytes uint64
-	for memberIndex := range result.members {
-		member := &result.members[memberIndex]
-		candidate, exists := candidateByService[member.Render.ServiceID]
-		if !exists {
-			return preparedHooks{}, errs.New(
-				errs.KindInternal,
-				"Blueprint candidate Service source is missing",
-			)
-		}
-		serviceValue, err := etcd.EncodeServiceRuntimeRecordStorage(candidate.Record)
-		if err != nil {
-			return preparedHooks{}, err
-		}
-		serviceDigest := sha256.Sum256(serviceValue)
-		clear(serviceValue)
-		for _, script := range scriptsByService[member.Render.ServiceID] {
-			sources, err := service.scripts.LoadBlueprintReleaseHookExecutionSources(
-				ctx,
-				manifest.Record.PublicationID,
-				script,
-				candidate.Record,
-				*member,
-				input.Tenant,
-				input.Project,
-				input.Environment,
-				input.Projection,
-				input.IntendedAttaches,
-				manifest.ReadRevision,
-			)
-			if err != nil {
-				return preparedHooks{}, err
-			}
-			prepared, err := service.preparation.Prepare(ctx, sources)
-			if err != nil {
-				return preparedHooks{}, err
-			}
-			stepID := input.AllocateNamed(
-				ids.KindStep,
-				fmt.Sprintf(
-					"blueprint-%s/%s/%s",
-					script.Desired.When,
-					member.Render.ServiceID,
-					sources.Script.Record.Desired.Slug,
-				),
-			)
-			executionID, idErr := allocatedRawULID(
-				input.AllocateNamed,
-				"blueprint-script-execution/"+member.Render.ServiceID+"/"+sources.Script.Record.Desired.ID,
-			)
-			if idErr != nil {
-				return preparedHooks{}, idErr
-			}
-			snapshotID, idErr := allocatedRawULID(
-				input.AllocateNamed,
-				"blueprint-script-snapshot/"+member.Render.ServiceID+"/"+sources.Script.Record.Desired.ID,
-			)
-			if idErr != nil {
-				return preparedHooks{}, idErr
-			}
-			hook, err := controller.BuildReleaseHookRenderInput(ctx, controller.ManualScriptPlanInput{
-				TaskID: task.ID, OperationID: task.OperationID, PlanID: task.PlanID,
-				StepID: stepID, ExecutionID: executionID, SnapshotID: snapshotID,
-				Sources: sources, Preparation: prepared,
-				Candidate: &controller.BlueprintScriptCandidateSources{
-					EnvironmentID:     input.Environment.Record.ID,
-					RevisionID:        input.Projection.RevisionID,
-					RenderGeneration:  input.Projection.RenderGeneration,
-					FixedReadRevision: manifest.ReadRevision,
-					ServiceSHA256:     serviceDigest,
-					ProjectionSHA256:  projectionDigest,
-				},
-			})
-			if err != nil {
-				return preparedHooks{}, err
-			}
-			member.Render.Hooks = append(member.Render.Hooks, hook)
-			if script.Desired.When == core.ScriptPreDeploy {
-				result.preStepIDs[memberIndex] = append(result.preStepIDs[memberIndex], stepID)
-			} else {
-				result.postStepIDs[memberIndex] = append(result.postStepIDs[memberIndex], stepID)
-			}
-			result.sources[executionID] = sources
-			result.task.Params[etcd.ReleaseHookStepMemberParam(stepID)] = strconv.Itoa(memberIndex + 1)
-			result.task.Params[etcd.ReleaseHookStepExecutionParam(stepID)] = executionID
-			result.executions++
-			bodyBytes += uint64(hook.BodySize)
-			if err := validateDeployHookBounds(result.executions, bodyBytes); err != nil {
-				return preparedHooks{}, err
-			}
-		}
-	}
-	return result, nil
-}
-
 func blueprintPublicationOutcomeUnknown(err error) bool {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return true
 	}
 	kind, ok := errs.KindOf(err)
 	return ok && kind == errs.KindStorageUnavailable
-}
-
-func allocatedRawULID(allocate func(ids.Kind, string) string, name string) (string, error) {
-	value := strings.TrimPrefix(allocate(ids.KindTask, name), string(ids.KindTask)+"_")
-	if len(value) != 26 {
-		return "", errs.New(errs.KindInternal, "Blueprint Script identity allocator is invalid")
-	}
-	return value, nil
-}
-
-func deployScriptsByService(
-	scripts []etcd.ScriptRecord,
-) map[string][]etcd.ScriptRecord {
-	result := make(map[string][]etcd.ScriptRecord)
-	for _, script := range scripts {
-		if script.Desired.When != core.ScriptPostDeploy && script.Desired.When != core.ScriptPreDeploy {
-			continue
-		}
-		result[script.ServiceID] = append(result[script.ServiceID], script)
-	}
-	for serviceID := range result {
-		sort.Slice(result[serviceID], func(left, right int) bool {
-			return core.ScriptBefore(result[serviceID][left].Desired, result[serviceID][right].Desired)
-		})
-	}
-	return result
-}
-
-func validateDeployHookBounds(executions int, bodyBytes uint64) error {
-	if executions > taskcontract.MaximumBlueprintPostDeployHooks || bodyBytes > 1<<20 {
-		return errs.New(
-			errs.KindValidationFailed,
-			"Blueprint deploy Script selection exceeds its operation bounds",
-		)
-	}
-	return nil
-}
-
-func releaseImage(value string) (string, string, string, error) {
-	named, err := reference.ParseNormalizedNamed(value)
-	if err != nil {
-		return "", "", "", errs.New(errs.KindValidationFailed, "Blueprint candidate image reference is invalid")
-	}
-	tag := "blueprint"
-	if tagged, ok := named.(reference.NamedTagged); ok {
-		tag = tagged.Tag()
-	}
-	digest := ""
-	if digested, ok := named.(reference.Digested); ok {
-		digest = digested.Digest().Encoded()
-	}
-	return named.String(), tag, digest, nil
-}
-
-func bytesToHex(value []byte) string {
-	const digits = "0123456789abcdef"
-	result := make([]byte, len(value)*2)
-	for index, item := range value {
-		result[index*2], result[index*2+1] = digits[item>>4], digits[item&15]
-	}
-	return string(result)
 }
