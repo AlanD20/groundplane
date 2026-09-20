@@ -11,6 +11,22 @@ The owner authorized fresh QA with disposable data on
 2026-09-12, without restoring incident-affected state. That state's integrity
 remains unresolved; the fresh run does not qualify it.
 
+## Proxy cancellation CI failure
+
+Owner: service observation adapter. On 2026-09-20, the independent-release CI
+run failed `TestProxyProbeCancellationUnblocksAttachedRead`; a bounded ten-run
+focused invocation reproduced it. The fake `ExecAttach` signals attachment before
+returning `ctx.Err()`, so cancellation can produce both a connection and an error.
+The observer returns on the error before installing its deferred connection close.
+This establishes the failing fixture sequence, not the real Docker client's
+ownership contract for an error response. The adapter and fixture are unchanged
+by the release work. Full CI and push remain blocked; no workaround or test
+removal was applied. Local evidence: `.tmp/split-release-ci.log`.
+
+Acceptance: establish ownership for an attachment returned with an error, correct
+the responsible adapter or fixture, and prove cancellation releases every owned
+connection without leaving the observation blocked. Then rerun the affected gate.
+
 ## Missing upgrade candidate refusal
 
 H53 reproduces UP-03 on the fresh QA installation: the protected native update

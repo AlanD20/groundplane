@@ -13,6 +13,13 @@ the shared process boundaries. Application Scripts do not perform self-update.
 
 ## Functional requirements
 
+- Agent-only updates select an explicit immutable Agent image independently of
+  the Controller release. Its digest is part of the protected request identity
+  and frozen Task; a changed digest with the same idempotency key conflicts.
+- Tagged fresh installations use combined `vX.Y.Z` releases. Updates select only
+  `controller/` and `agent/` releases. A combined tag publishes those component
+  tags at the same commit, reusing its artifacts. See [deployment](../deployment.md#independent-release-scopes).
+
 - Before activation, identify the current and candidate releases, check their
   compatibility, and validate private staging and recovery state.
 - An unstaged requested release returns `validation.failed` before Task publication.

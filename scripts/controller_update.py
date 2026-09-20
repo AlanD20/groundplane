@@ -59,12 +59,17 @@ def already_installed(transport, release, installed=installed_controller_digest,
     if last is not None and (not isinstance(last, dict) or last.get("status") not in TERMINAL or
                              last.get("phase") not in {"", "healthy", "recovered", "cancelled"}):
         raise ValueError("current release has unsettled update/recovery; preserve its evidence")
-    if (controller.get("status") != "healthy" or host.get("agent", {}).get("status") != "healthy"
+    if (controller.get("status") != "healthy"
             or host.get("etcd", {}).get("status") != "healthy" or installed() != digest):
         raise ValueError("matching release is not healthy or installed bytes differ; no repair attempted")
     status, agents = transport.request("GET", "/agents")
     items = agents.get("items") if isinstance(agents, dict) else None
+    if status == 200 and items == []:
+        # No Agent exists: run guarded activation to qualify the selected release
+        # before the installer enrolls its pinned image. This is not a healthy skip.
+        return False
     if (status != 200 or not isinstance(items, list) or len(items) != 1 or not isinstance(items[0], dict)
+            or host.get("agent", {}).get("status") != "healthy"
             or items[0].get("status") != "healthy" or not isinstance(items[0].get("id"), str) or not items[0]["id"]):
         raise ValueError("cannot verify the healthy enrolled Agent")
     image = candidate.get("agent_image")

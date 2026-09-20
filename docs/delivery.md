@@ -176,8 +176,11 @@ and uses only the registry-reported RepoDigest. Initial bootstrap records it in
 `controller.yaml`; routine native deployment pins it in the release manifest.
 Neither a mutable tag nor the local image id is a valid runtime identity.
 
-The public packaging entrypoints are `scripts/release-agent.sh`,
-`scripts/release_bundle.py` and root `install.sh`; their exact build/install
+The shared build entrypoint is `scripts/release.py`, with `--agent-only` and
+`--controller-only` scopes. The underlying packaging entrypoints are
+`scripts/release-agent.sh`, `scripts/release_bundle.py` and
+`scripts/release_agent_bundle.py`; root `install.sh` selects and installs artifacts.
+Their exact build/install
 commands and trust boundary are in [deployment.md](deployment.md#prebuilt-releases).
 Host-free archive and branch-routing checks run in `make deployment-check`.
 Publishing artifacts and executing an installer require their own selected target

@@ -26,7 +26,7 @@ type AgentReader interface {
 
 type AgentMutator interface {
 	EnrollAgent(context.Context, string) (etcd.IdempotencyResponse, error)
-	UpdateAgent(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	UpdateAgent(context.Context, string, string, string) (etcd.IdempotencyResponse, error)
 	RemoveAgent(context.Context, string, string) (etcd.IdempotencyResponse, error)
 }
 
@@ -55,6 +55,7 @@ type agentRemoveInput struct {
 type agentUpdateInput struct {
 	ID             string `path:"id" pattern:"^agt_[0-9A-HJKMNP-TV-Z]{26}$"`
 	IdempotencyKey string `header:"Idempotency-Key" required:"true" minLength:"16" maxLength:"128" pattern:"^[A-Za-z0-9._:-]+$"`
+	Body           apiTypes.AgentUpdate
 }
 
 type agentConfigReplacement struct {
@@ -129,7 +130,7 @@ func (s *Server) registerAgents() {
 	huma.Register(s.API, huma.Operation{
 		OperationID: "agent.update", Method: http.MethodPost, Path: "/agents/{id}/update",
 		Summary: "Update the local Agent", Tags: []string{"Agent"}, DefaultStatus: http.StatusAccepted,
-		Middlewares: huma.Middlewares{s.rejectAgentMutationBody, s.rejectAgentQuery},
+		Middlewares: huma.Middlewares{s.rejectAgentQuery},
 		Responses:   attachMutationResponses(taskAcceptedSchema),
 	}, s.updateAgent)
 	huma.Register(s.API, huma.Operation{
@@ -139,6 +140,7 @@ func (s *Server) registerAgents() {
 		Responses:   attachMutationResponses(taskAcceptedSchema),
 	}, s.removeAgent)
 	s.setRoutePolicy("PUT /api/v1/agents/{id}/config", routePolicy{body: jsonBody})
+	s.setRoutePolicy("POST /api/v1/agents/{id}/update", routePolicy{body: jsonBody})
 }
 
 func (s *Server) listAgents(ctx context.Context, request *agentListInput) (*agentPageOutput, error) {
@@ -210,7 +212,7 @@ func (s *Server) updateAgent(ctx context.Context, request *agentUpdateInput) (*a
 	if s.agentMutations == nil {
 		return nil, errs.New(errs.KindInternal, "Agent mutation service is not configured")
 	}
-	response, err := s.agentMutations.UpdateAgent(ctx, request.ID, request.IdempotencyKey)
+	response, err := s.agentMutations.UpdateAgent(ctx, request.ID, request.Body.Image, request.IdempotencyKey)
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}
@@ -274,14 +276,6 @@ func (s *Server) writeAgentRequestProblem(ctx huma.Context, detail string) {
 	if err := huma.WriteErr(s.API, ctx, http.StatusBadRequest, detail); err != nil && s.Logger != nil {
 		s.Logger.Error("controller: write Agent request problem", slog.Any("error", err))
 	}
-}
-
-func validateBodylessAgentMutation(r *http.Request) error {
-	if r == nil || r.ContentLength > 0 || len(r.TransferEncoding) != 0 ||
-		(r.Body != nil && r.Body != http.NoBody) {
-		return errs.New(errs.KindMalformedRequest, "Agent mutation body is not allowed")
-	}
-	return nil
 }
 
 func (s *Server) rejectAgentMutationBody(ctx huma.Context, next func(huma.Context)) {

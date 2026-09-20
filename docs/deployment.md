@@ -41,6 +41,46 @@ release, pushes an image or publishes per-commit artifacts.
 
 ## Prebuilt releases
 
+### Independent release scopes
+
+- `vX.Y.Z` publishes a fresh-install release and automatically creates
+  `controller/vX.Y.Z` and `agent/vX.Y.Z` at the same commit. Component releases
+  reuse the qualified artifacts from that build; generated tags do not start
+  duplicate workflows. Existing tags or published assets are never overwritten.
+- `controller/vX.Y.Z` publishes the Controller/Console/CLI installation bundle
+  and its Runner dependency, without building an Agent image.
+- `agent/vX.Y.Z` publishes only the Agent image, image metadata and small Agent
+  installer archives. Its embedded version is `agent/vX.Y.Z`, with no commit suffix.
+
+`scripts/release.py --version X.Y.Z` builds both; `--agent-only` and
+`--controller-only` select one component. These flags are mutually exclusive.
+Agent builds take `--image REPOSITORY:TAG`; bundles take a published
+`--runner-image REPOSITORY@sha256:DIGEST`. A combined build requires `--push`
+so the bundle can pin its built Agent's registry digest. GitHub publication is
+separate from these build commands.
+
+The same scope flags apply to `install.sh`, including `--ref` builds. A fresh
+default tagged installation selects only `vX.Y.Z`. Existing tagged installations
+select Controller releases only from `controller/` and Agent releases only from
+`agent/`; plain `v` releases are never upgrade candidates. Without an explicit
+version, each selected component independently uses the highest published stable
+version in its namespace. Drafts and prereleases are excluded. Resolution happens
+once before activation and all runtime images are digest-pinned.
+
+Controller-only updates keep the existing Agent. A Controller-only fresh install
+gets the latest Agent release if no Agent exists. Agent-only updates require the
+Controller and enrolled Agent, use the normal protected Agent update Task and do
+not restart or replace the Controller. Updating both performs the guarded
+Controller update first, preserving the Agent, then its independent Agent update.
+If the second operation fails, the completed Controller update is not undone;
+the Agent Task retains its own result and rollback evidence.
+
+The Controller's displayed tagged version is `controller/vX.Y.Z`. OCI tag syntax
+does not permit `/`, so component repositories use `vX.Y.Z` image tags while the
+embedded version retains the Git release namespace. Installation uses digests,
+not mutable image tags. Source branch/commit builds remain local and do not publish
+release tags.
+
 Local release scripts build artifacts without implicitly publishing or installing.
 The tagged GitHub workflow below publishes them. Builds use explicit versions;
 the installer may resolve the latest stable release once before downloading.
@@ -48,7 +88,8 @@ Build from the intended source commit with the repository-pinned toolchains.
 
 ### Publish through GitHub Actions
 
-`.github/workflows/release.yml` runs on a pushed `vMAJOR.MINOR.PATCH` tag whose
+`.github/workflows/release.yml` runs on a pushed `vMAJOR.MINOR.PATCH`,
+`controller/vMAJOR.MINOR.PATCH` or `agent/vMAJOR.MINOR.PATCH` tag whose
 commit belongs to `main`. All external Actions use supported major-version tags
 (such as `@v7`), not patch-version pins or commit hashes. Check upstream releases
 and migration requirements when adopting a new major.
@@ -82,8 +123,9 @@ pushes, publishes or changes package visibility. Review and commit the changes,
 pass CI, then create and push the matching `vVERSION` tag separately.
 
 Default CI checks metadata consistency and nonempty release notes. The release
-workflow also checks that its tag matches `VERSION`, and publishes only that
-version's changelog body as GitHub release notes. Existing 0.0.1 architecture
+workflow checks that combined and Controller tags match `VERSION`, and publishes
+that version's changelog body as their release notes. Agent tags have independent
+versions and Agent release notes. Existing 0.0.1 architecture
 deferrals do not automatically authorize debt exceptions for a later release.
 
 ### Published artifacts
@@ -170,9 +212,11 @@ sha256sum --check install.sh.sha256
 sudo sh install.sh --version 0.0.1
 ```
 
-Without `--version`, the installer resolves GitHub's `releases/latest` URL once,
-requires a stable `vMAJOR.MINOR.PATCH` tag in this repository, then pins all
-downloads and manifest validation to that version. Resolution errors stop before
+Without `--version`, the installer selects the highest published stable version
+in the required namespace from GitHub's release list, excluding drafts and
+prereleases. Fresh installs use `v*`; updates use `controller/v*` and `agent/v*`.
+Each selected component's downloads and manifest validation are pinned to its
+resolved version. Resolution errors stop before
 bundle download; prerequisite packages may already have been installed. Explicit
 versions bypass discovery. Local `--bundle` use still requires `--version` and
 `--sha256`. Archive integrity and guarded native-upgrade checks are unchanged.
@@ -187,8 +231,8 @@ exact installer bytes, working public downloads and path-preserving redirect che
 ### Build the Agent image
 
 ```sh
-bash scripts/release-agent.sh --version 1.0.0 \
-  --image ghcr.io/aland20/groundplane-agent:1.0.0
+bash scripts/release-agent.sh --version agent/v1.0.0 \
+  --image ghcr.io/aland20/groundplane-agent:v1.0.0
 ```
 
 The default only builds. Add `--push` when publication is intended and registry

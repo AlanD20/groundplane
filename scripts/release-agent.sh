@@ -43,7 +43,7 @@ while (($# > 0)); do
 	esac
 done
 
-[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]] || {
+[[ "$version" =~ ^agent/v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
 	printf 'release Agent version must be an explicit release version: %s\n' "$version" >&2
 	exit 2
 }

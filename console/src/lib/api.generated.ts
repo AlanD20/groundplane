@@ -1536,6 +1536,15 @@ export interface components {
             /** Format: int64 */
             pull_interval_seconds: number;
         };
+        AgentUpdate: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/AgentUpdate.json
+             */
+            readonly $schema?: string;
+            image: string;
+        };
         Attach: {
             /**
              * Format: uri
@@ -3605,7 +3614,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentUpdate"];
+            };
+        };
         responses: {
             /** @description Accepted */
             202: {

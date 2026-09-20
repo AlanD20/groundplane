@@ -10,8 +10,8 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// Rationale: both bodyless operator actions must select at request time. A
-// qualified native release cannot leave startup-captured enrollment/update pins.
+// Rationale: enrollment uses its qualified bootstrap selection, but independent
+// Agent updates must pin the operator's image instead of the Controller release.
 func TestAgentActionsSelectCurrentReleaseImage(t *testing.T) {
 	images := &mutableAgentImage{image: testAgentUpdatePreviousImage}
 	enrollTasks, updateTasks := &fakeAgentEnrollmentTasks{}, &fakeAgentUpdateTasks{}
@@ -27,7 +27,6 @@ func TestAgentActionsSelectCurrentReleaseImage(t *testing.T) {
 		t.Fatal(err)
 	}
 	update, err := newAgentUpdateService(
-		images,
 		&fakeAgentUpdateTargets{health: localagent.Health{Agent: localagent.Agent{
 			ID: testAgentUpdateID, Image: testAgentUpdatePreviousImage, Generation: 1, Phase: localagent.PhaseReady,
 		}}},
@@ -41,7 +40,7 @@ func TestAgentActionsSelectCurrentReleaseImage(t *testing.T) {
 	if _, err := enroll.EnrollAgent(context.Background(), "release-enrollment-0001"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := update.UpdateAgent(context.Background(), testAgentUpdateID, "release-agent-update-0001"); err != nil {
+	if _, err := update.UpdateAgent(context.Background(), testAgentUpdateID, testAgentUpdateDesiredImage, "release-agent-update-0001"); err != nil {
 		t.Fatal(err)
 	}
 	if enrollTasks.task.Params[agentTaskImageKey] != images.image ||
@@ -52,11 +51,8 @@ func TestAgentActionsSelectCurrentReleaseImage(t *testing.T) {
 	if _, err := enroll.EnrollAgent(context.Background(), "release-enrollment-0002"); !errors.Is(err, images.err) {
 		t.Fatalf("blocked enrollment = %v", err)
 	}
-	if _, err := update.UpdateAgent(context.Background(), testAgentUpdateID, "release-agent-update-0002"); !errors.Is(
-		err,
-		images.err,
-	) {
-		t.Fatalf("blocked update = %v", err)
+	if _, err := update.UpdateAgent(context.Background(), testAgentUpdateID, testAgentUpdateDesiredImage, "release-agent-update-0002"); err != nil {
+		t.Fatalf("independent Agent selection = %v", err)
 	}
 }
 

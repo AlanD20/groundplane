@@ -189,7 +189,7 @@ func (c *Client) RemoveAgent(ctx context.Context, id string) (apiTypes.TaskAccep
 	return generatedTaskAccepted(http.MethodDelete, path, response.Body, response.JSON202)
 }
 
-func (c *Client) UpdateAgent(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
+func (c *Client) UpdateAgent(ctx context.Context, id, image string) (apiTypes.TaskAccepted, error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
@@ -199,6 +199,7 @@ func (c *Client) UpdateAgent(ctx context.Context, id string) (apiTypes.TaskAccep
 		ctx,
 		id,
 		&generated.AgentUpdateParams{IdempotencyKey: ids.NewULID()},
+		generated.AgentUpdateJSONRequestBody{Image: image},
 	)
 	if err != nil {
 		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPost, path, err)

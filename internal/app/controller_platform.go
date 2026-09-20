@@ -175,7 +175,7 @@ func newControllerPlatform(
 	if err != nil {
 		return nil, err
 	}
-	updates, err := newAgentUpdateService(platform.upgrades, platform.agents, dependencies.Tasks, updateIdempotency)
+	updates, err := newAgentUpdateService(platform.agents, dependencies.Tasks, updateIdempotency)
 	if err != nil {
 		return nil, err
 	}

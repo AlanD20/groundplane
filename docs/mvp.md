@@ -157,11 +157,16 @@ Abort is supported before activation; committed activation returns
 `resource.in_use` so cancellation cannot kill recovery. Release staging and
 guard installation are closed deployment/bootstrap tooling, not file-upload APIs.
 The last qualified native manifest supplies the desired Agent image for later
-bodyless enrollment/update requests, overriding bootstrap `agent.image` without
+bodyless enrollment requests, overriding bootstrap `agent.image` without
 rewriting Controller YAML. An unfinished native update blocks new image
 selection. A failed later trial retains the last successful selection. Native
 update acceptance replays the same Task for an equal idempotency key, including
 while active; ordinary Task Retry is unavailable for this host operation.
+Independent Agent updates instead accept an explicit digest-pinned image, frozen
+in their request identity and Task; they do not inherit the Controller release's
+image. Published fresh installation uses `vX.Y.Z`; published updates use the
+independent `controller/vX.Y.Z` and `agent/vX.Y.Z` releases. A combined release
+also publishes those two component releases from the same artifacts and commit.
 An unfinished activation journal pauses ordinary API mutations and scheduled
 maintenance/publication with`resource.in_use`for operator writes. HTTP readiness
 alone does not authorize a trial to write new metadata. Reads, read-only POSTs,
@@ -680,10 +685,10 @@ Semantics bound to the channel:
   release their own reversible pause without reopening deletion/revocation;
   uncertain replacement publication stays fenced for recovery. The native Controller rotates the
   token and generation, replaces the container at the selected immutable image
-  (qualified native release, otherwise bootstrap `agent.image`),
+  supplied explicitly by the update request,
   requires authenticated Ready within 120 seconds, and otherwise rotates again
   and rolls back the previous digest. The Agent never receives a self-update
-  command and never recreates itself. The bodyless Task has a 300-second
+  command and never recreates itself. The update Task has a 300-second
   deadline. Restart restores admission from the same durable Task before the
   Agent channel opens. Expiry never discards unresolved replacement authority:
   bounded recovery continues with admission held until authenticated readiness.

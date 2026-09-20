@@ -84,10 +84,11 @@ update transport.
 
 The Controller configuration key `agent.image` is the bootstrap desired release
 input. ADR0074's last qualified native manifest overrides it for later enrollment
-and updates without rewriting Controller YAML. Unfinished native recovery blocks
+without rewriting Controller YAML. Independent updates take their own explicit
+image digest. Unfinished native recovery blocks
 new image selection; a failed later trial preserves the last successful release.
-The selected image must remain an OCI digest reference. An update request is bodyless:
-there is no bundle, uploaded archive, tag, URL, version field, release trust
+The selected image must remain an OCI digest reference, included in the update
+request and its protected idempotency identity. There is no bundle, uploaded archive, tag, URL, version field, release trust
 root, or Agent-side image-update message in the MVP. Distribution and
 authenticity of the selected image are deployment concerns; the Controller
 enforces immutable digest identity at its runtime boundary.
@@ -147,10 +148,10 @@ an accepted pre-qualification Abort restores the predecessor before finishing.
 
 The one-for-one operator surfaces are:
 
-- Console: Update on the selected Agent;
-- CLI: exactly one of `groundplane agent update <id>` or
-  `groundplane agent update --all`; and
-- API: bodyless `POST /api/v1/agents/{id}/update`, returning
+- Console: Update on the selected Agent with an immutable image reference;
+- CLI: exactly one of `groundplane agent update <id> --image DIGEST_REF` or
+  `groundplane agent update --all --image DIGEST_REF`; and
+- API: `POST /api/v1/agents/{id}/update` with `{image:"repository@sha256:digest"}`, returning
   `202 {"task_id":"..."}`.
 
 `--all` is explicit target selection for the singleton MVP. The CLI resolves

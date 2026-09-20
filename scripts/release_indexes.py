@@ -28,14 +28,17 @@ def output(*args: str) -> str:
 
 def main() -> None:
     root, version = os.environ["IMAGE_ROOT"], os.environ["VERSION"]
-    for kind in ("agent", "runner"):
+    scope = os.environ.get("RELEASE_SCOPE", "both")
+    if scope not in {"agent", "controller", "both"}:
+        raise ValueError("invalid release scope")
+    for kind in (("agent",) if scope == "agent" else ("runner",) if scope == "controller" else ("agent", "runner")):
         repository = f"{root}-{kind}"
         children = {arch: Path(f".tmp/release-images/{kind}-{arch}").read_text().strip()
                     for arch in ("amd64", "arm64")}
         if any(not re.fullmatch(re.escape(repository) + r"@sha256:[0-9a-f]{64}", ref)
                for ref in children.values()) or len(set(children.values())) != 2:
             raise ValueError("native build did not supply two distinct repository digests")
-        tag = f"{repository}:{version}"
+        tag = f"{repository}:v{version}"
         subprocess.run(["docker", "manifest", "create", tag, *children.values()],
                        check=True, timeout=120)
         digest = output("docker", "manifest", "push", tag).splitlines()[-1]

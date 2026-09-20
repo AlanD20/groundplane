@@ -564,7 +564,7 @@ class DeployAgentIdlePreflightTest(unittest.TestCase):
                 "        esac\n"
                 '        printf \'%s\\n\' "$((count + 1))" > "$AGENT_LIST_COUNT"\n'
                 "        ;;\n"
-                '    *"agent update --all")\n'
+                '    *"agent update --all --image "*)\n'
                 '        printf \'update\\n\' >> "$AGENT_UPDATE_LOG"\n'
                 '        printf \'{\\n  "task_id": "task_1"\\n}\\n\'\n'
                 "        ;;\n"
@@ -593,6 +593,7 @@ class DeployAgentIdlePreflightTest(unittest.TestCase):
                 f"{dispatch_agent_update}\n"
                 "if ! load_agent_list; then exit 1; fi\n"
                 "selected_agent_id=$agent_id\n"
+                "agent_ref=registry.example/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
                 "dispatch_agent_update\n"
             )
             environment = os.environ.copy()

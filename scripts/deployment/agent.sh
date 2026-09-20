@@ -182,7 +182,7 @@ dispatch_agent_update() {
             if update_output=$(/usr/local/bin/groundplane \
                 --host http://127.0.0.1:8080 \
                 --output json \
-                agent update --all 2>&1); then
+                agent update --all --image "$agent_ref" 2>&1); then
                 retain_recovery=1
                 unresolved_task_state=dispatched
                 printf '%s\n' "$update_output"

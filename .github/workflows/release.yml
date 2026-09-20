@@ -2,14 +2,14 @@ name: Release
 
 on:
   push:
-    tags: ['v*']
+    tags: ['v*', 'agent/v*', 'controller/v*']
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: groundplane-release-publication
   cancel-in-progress: false
 
 jobs:
@@ -19,6 +19,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       repository: ${{ steps.version.outputs.repository }}
+      scope: ${{ steps.version.outputs.scope }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -29,11 +30,21 @@ jobs:
           RELEASE_REF: ${{ github.ref }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          [[ "$RELEASE_REF" =~ ^refs/tags/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          tag=${RELEASE_REF#refs/tags/}
+          [[ "$tag" =~ ^((agent|controller)/)?v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          scope=both
+          [[ "$tag" != agent/* ]] || scope=agent
+          [[ "$tag" != controller/* ]] || scope=controller
+          version=${tag##*/}
+          version=${version#v}
           git merge-base --is-ancestor HEAD origin/main
-          python3 scripts/bump_version.py "${RELEASE_REF#refs/tags/v}" --check
-          echo "version=${RELEASE_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
-          echo "repository=${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          python3 scripts/release_publish.py "$tag" --check
+          if [[ "$scope" != agent ]]; then python3 scripts/bump_version.py "$version" --check; fi
+          {
+            echo "version=$version"
+            echo "scope=$scope"
+            echo "repository=${REPOSITORY,,}"
+          } >> "$GITHUB_OUTPUT"
 
   checks:
     needs: version
@@ -58,6 +69,7 @@ jobs:
       VERSION: ${{ needs.version.outputs.version }}
       IMAGE_ROOT: ghcr.io/${{ needs.version.outputs.repository }}
       ARCH: ${{ matrix.arch }}
+      SCOPE: ${{ needs.version.outputs.scope }}
     steps:
       - uses: actions/checkout@v7
       - uses: docker/login-action@v4
@@ -68,12 +80,16 @@ jobs:
       - name: Build, smoke-test and push native images
         run: |
           mkdir -p .tmp/release-images
-          bash scripts/release-agent.sh --version "$VERSION" \
-            --image "$IMAGE_ROOT-agent:$VERSION-$ARCH" --push > ".tmp/release-images/agent-$ARCH"
-          make runner-image-smoke RUNNER_IMAGE="$IMAGE_ROOT-runner:$VERSION-$ARCH"
-          docker push "$IMAGE_ROOT-runner:$VERSION-$ARCH"
-          docker image inspect "$IMAGE_ROOT-runner:$VERSION-$ARCH" \
-            --format '{{index .RepoDigests 0}}' > ".tmp/release-images/runner-$ARCH"
+          if [[ "$SCOPE" != controller ]]; then
+            bash scripts/release-agent.sh --version "agent/v$VERSION" \
+              --image "$IMAGE_ROOT-agent:v$VERSION-$ARCH" --push > ".tmp/release-images/agent-$ARCH"
+          fi
+          if [[ "$SCOPE" != agent ]]; then
+            make runner-image-smoke RUNNER_IMAGE="$IMAGE_ROOT-runner:v$VERSION-$ARCH"
+            docker push "$IMAGE_ROOT-runner:v$VERSION-$ARCH"
+            docker image inspect "$IMAGE_ROOT-runner:v$VERSION-$ARCH" \
+              --format '{{index .RepoDigests 0}}' > ".tmp/release-images/runner-$ARCH"
+          fi
       - uses: actions/upload-artifact@v7
         with:
           name: images-${{ matrix.arch }}
@@ -109,6 +125,7 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.version }}
           IMAGE_ROOT: ghcr.io/${{ needs.version.outputs.repository }}
+          RELEASE_SCOPE: ${{ needs.version.outputs.scope }}
         run: bash scripts/repo-env.sh python3 scripts/release_indexes.py
       - name: Require anonymous image access for the installer
         env:
@@ -116,10 +133,25 @@ jobs:
           RUNNER_IMAGE: ${{ steps.indexes.outputs.runner }}
         run: |
           docker logout ghcr.io
-          docker manifest inspect "$AGENT_IMAGE" > /dev/null
-          docker manifest inspect "$RUNNER_IMAGE" > /dev/null
+          if [[ -n "$AGENT_IMAGE" ]]; then docker manifest inspect "$AGENT_IMAGE" > /dev/null; fi
+          if [[ -n "$RUNNER_IMAGE" ]]; then docker manifest inspect "$RUNNER_IMAGE" > /dev/null; fi
+      - name: Package Agent-only installation artifacts
+        if: needs.version.outputs.scope != 'controller'
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          AGENT_IMAGE: ${{ steps.indexes.outputs.agent }}
+        run: bash scripts/repo-env.sh python3 scripts/release_agent_bundle.py --version "$VERSION" --image "$AGENT_IMAGE"
+      - uses: actions/upload-artifact@v7
+        if: needs.version.outputs.scope != 'controller'
+        with:
+          name: agent-bundles
+          path: .tmp/releases/*
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
 
   bundles:
+    if: needs.version.outputs.scope != 'agent'
     needs: [version, indexes]
     strategy:
       fail-fast: false
@@ -147,8 +179,9 @@ jobs:
       - name: Build native bundle with the pinned npm version
         run: |
           bash scripts/repo-env.sh npm install --global "$(node -p 'require("./console/package.json").packageManager')"
-          bash scripts/repo-env.sh python3 scripts/release_bundle.py --version "$VERSION" \
-            --agent-image "$AGENT_IMAGE" --runner-image "$RUNNER_IMAGE"
+          args=(--version "$VERSION" --runner-image "$RUNNER_IMAGE")
+          if [[ -n "$AGENT_IMAGE" ]]; then args+=(--agent-image "$AGENT_IMAGE"); else args+=(--controller-only); fi
+          bash scripts/repo-env.sh python3 scripts/release_bundle.py "${args[@]}"
           cd .tmp/releases
           sha256sum --check -- *.sha256
       - uses: actions/upload-artifact@v7
@@ -160,7 +193,8 @@ jobs:
           retention-days: 7
 
   publish:
-    needs: [version, bundles]
+    needs: [version, indexes, bundles]
+    if: always() && needs.indexes.result == 'success' && (needs.bundles.result == 'success' || needs.bundles.result == 'skipped')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -169,7 +203,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
-          pattern: bundle-*
+          pattern: '*bundle*'
           merge-multiple: true
           path: .tmp/releases
       - name: Publish complete assets without overwriting a release
@@ -177,12 +211,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           VERSION: ${{ needs.version.outputs.version }}
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          python3 scripts/bump_version.py "$VERSION" --notes > .tmp/release-notes.md
           cd .tmp/releases
           sha256sum --check -- *.sha256
-          gh release create "v$VERSION" --verify-tag --title "Groundplane $VERSION" \
-            --notes-file ../release-notes.md \
-            "groundplane-$VERSION-linux-amd64.tar.gz" "groundplane-$VERSION-linux-amd64.tar.gz.sha256" \
-            "groundplane-$VERSION-linux-arm64.tar.gz" "groundplane-$VERSION-linux-arm64.tar.gz.sha256" \
-            ../../install.sh
+          cd ../..
+          bash scripts/repo-env.sh python3 scripts/release_publish.py "$RELEASE_TAG"

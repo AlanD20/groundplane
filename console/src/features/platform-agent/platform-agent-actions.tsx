@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { RefreshCw, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { TaskRunnerDialog } from '@/components/common/task-runner-dialog'
 import { useStore } from '@/lib/store'
 import type { PlatformAgent } from '@/lib/types'
@@ -18,6 +20,7 @@ export function PlatformAgentActions({
 }) {
   const { agentsLoading, refreshAgents, updateAgent, removeAgent } = useStore()
   const [updating, setUpdating] = useState(false)
+  const [image, setImage] = useState('')
   const [removing, setRemoving] = useState(false)
   const updateDisabled = agentsLoading || agent.inFlight > 0
 
@@ -56,7 +59,19 @@ export function PlatformAgentActions({
           if (!open) void refreshAgents()
         }}
         title={`Update Agent · ${agent.host}`}
-        description="Replaces this idle Agent with the last qualified Controller release's pinned Agent image, or bootstrap agent.image before any qualified release. The Controller restores the previous digest if the replacement does not become Ready."
+        description="Select the immutable image from an Agent release. Only the Agent is replaced; failed readiness restores its previous image."
+        review={
+          <div className="space-y-2">
+            <Label htmlFor={`agent-image-${agent.id}`}>Agent image digest</Label>
+            <Input
+              id={`agent-image-${agent.id}`}
+              value={image}
+              onChange={(event) => setImage(event.target.value)}
+              placeholder="ghcr.io/aland20/groundplane-agent@sha256:…"
+            />
+          </div>
+        }
+        startDisabled={!image.trim()}
         type="update"
         target={agent.id}
         workspace="platform"
@@ -68,7 +83,7 @@ export function PlatformAgentActions({
           { label: 'Replace the container and wait for authenticated Ready', state: 'pending' },
           { label: 'Restore the previous digest if readiness fails', state: 'pending' },
         ]}
-        onDispatch={async () => (await updateAgent(agent.id)).task_id}
+        onDispatch={async () => (await updateAgent(agent.id, image.trim())).task_id}
       />
 
       <TaskRunnerDialog

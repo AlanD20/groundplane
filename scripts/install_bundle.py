@@ -14,7 +14,9 @@ import shutil
 import subprocess
 
 from controller_bootstrap import GUARD, UNIT, Layout
-from controller_release import RELEASE_ROOT, build_manifest
+from controller_release import RELEASE_ROOT, build_metadata
+import install_agent
+import release_selection
 
 
 def validate(bundle: Path, version: str, arch: str) -> dict:
@@ -29,10 +31,12 @@ def validate(bundle: Path, version: str, arch: str) -> dict:
         if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
             raise ValueError(f"bundle member checksum mismatch: {name}")
     for role in ("agent_image", "runner_image"):
+        if role == "agent_image" and manifest[role] is None:
+            continue
         if not re.fullmatch(r"[a-z0-9][a-z0-9._:/-]*@sha256:[0-9a-f]{64}", manifest[role]):
             raise ValueError(f"{role} must be a registry digest")
-    metadata = build_manifest((bundle / "controller-release.json").read_bytes(), manifest["agent_image"])
-    if (metadata["controller_version"] != version or metadata["controller_sha256"] !=
+    metadata = build_metadata((bundle / "controller-release.json").read_bytes())
+    if (metadata["controller_version"] != f"controller/v{version}" or metadata["controller_sha256"] !=
             "sha256:" + hashlib.sha256((bundle / "controller").read_bytes()).hexdigest()):
         raise ValueError("Controller does not match its release descriptor")
     return manifest
@@ -49,6 +53,16 @@ def install(bundle: Path, args, manifest: dict, layout: Layout) -> None:
         raise ValueError("--config is initial-install only; normal updates preserve configuration")
     if shutil.disk_usage(bundle).free < 2 * 1024**3:
         raise ValueError("installation requires at least 2 GiB free; nothing was deleted")
+    next_agent = None
+    missing_agent = False
+    if mode == "native":
+        current = install_agent.installed_image()
+        missing_agent = current is None
+        if not args.controller_only and not args.stage_only or missing_agent:
+            next_agent = release_selection.agent_image(args.agent_tag)
+        manifest["agent_image"] = current or next_agent
+    elif args.controller_only or manifest["agent_image"] is None:
+        manifest["agent_image"] = release_selection.agent_image()
     if args.config:
         configuration = Path(args.config)
         if not configuration.is_file() or configuration.is_symlink():
@@ -60,9 +74,11 @@ def install(bundle: Path, args, manifest: dict, layout: Layout) -> None:
     roles = ("agent_image",) if mode == "native" else ("agent_image", "runner_image")
     for role in roles:
         subprocess.run(["docker", "pull", manifest[role]], check=True)
-    os.execvp("sh", ["sh", str(bundle / "install-runtime.sh"), str(bundle), args.version,
+    subprocess.run(["sh", str(bundle / "install-runtime.sh"), str(bundle), args.version,
                      manifest["agent_image"], manifest["runner_image"], args.listen_ip,
-                     "1" if args.stage_only else "0", "0"])
+                     "1" if args.stage_only else "0", "0"], check=True)
+    if next_agent is not None and not args.stage_only:
+        install_agent.install(next_agent, allow_enroll=missing_agent)
 
 
 def main() -> None:
@@ -71,6 +87,8 @@ def main() -> None:
     parser.add_argument("--listen-ip", default="127.0.0.1")
     parser.add_argument("--stage-only", action="store_true")
     parser.add_argument("--config")
+    parser.add_argument("--controller-only", action="store_true")
+    parser.add_argument("--agent-tag")
     args = parser.parse_args()
     address = ipaddress.ip_address(args.listen_ip)
     if address.is_unspecified or address.is_multicast or not (address.is_private or address.is_loopback):

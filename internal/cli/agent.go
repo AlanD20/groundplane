@@ -124,10 +124,14 @@ func newAgentCmd() *cobra.Command {
 	cmd.AddCommand(config)
 
 	var updateAll bool
+	var updateImage string
 	update := &cobra.Command{
 		Use:   "update [id]",
 		Short: "Update an agent through the Controller-owned container lifecycle",
 		Args: func(_ *cobra.Command, args []string) error {
+			if updateImage == "" {
+				return errs.New(errs.KindValidationFailed, "agent update requires --image with a release digest")
+			}
 			if updateAll {
 				if len(args) != 0 {
 					return errs.New(errs.KindValidationFailed, "agent update accepts either one id or --all, not both")
@@ -157,7 +161,7 @@ func newAgentCmd() *cobra.Command {
 			} else {
 				agentID = target(app, args[0])
 			}
-			accepted, err := app.Client.UpdateAgent(cmd.Context(), agentID)
+			accepted, err := app.Client.UpdateAgent(cmd.Context(), agentID, updateImage)
 			if err != nil {
 				return err
 			}
@@ -165,6 +169,7 @@ func newAgentCmd() *cobra.Command {
 		},
 	}
 	update.Flags().BoolVar(&updateAll, "all", false, "update the singleton local Agent")
+	update.Flags().StringVar(&updateImage, "image", "", "digest-pinned Agent release image")
 	cmd.AddCommand(update)
 
 	cmd.AddCommand(&cobra.Command{

@@ -30,13 +30,18 @@ func TestAgentUpdateServiceCreatesPinnedControllerTask(t *testing.T) {
 	idempotency := &fakeAgentUpdateIdempotency{
 		resolution: idempotentintent.Resolution{Kind: idempotentintent.ResolutionApplied},
 	}
-	service, err := newAgentUpdateService(fixedAgentImage(testAgentUpdateDesiredImage), targets, tasks, idempotency)
+	service, err := newAgentUpdateService(targets, tasks, idempotency)
 	if err != nil {
 		t.Fatalf("newAgentUpdateService() error = %v", err)
 	}
 	service.now = func() time.Time { return now }
 
-	response, err := service.UpdateAgent(context.Background(), testAgentUpdateID, "agent-update-key-0001")
+	response, err := service.UpdateAgent(
+		context.Background(),
+		testAgentUpdateID,
+		testAgentUpdateDesiredImage,
+		"agent-update-key-0001",
+	)
 	if err != nil {
 		t.Fatalf("UpdateAgent() error = %v", err)
 	}
@@ -67,7 +72,6 @@ func TestAgentUpdateServiceReplaysBeforeTargetLookup(t *testing.T) {
 	}
 	targets := &fakeAgentUpdateTargets{}
 	service, err := newAgentUpdateService(
-		fixedAgentImage(testAgentUpdateDesiredImage),
 		targets,
 		&fakeAgentUpdateTasks{},
 		&fakeAgentUpdateIdempotency{
@@ -80,7 +84,12 @@ func TestAgentUpdateServiceReplaysBeforeTargetLookup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newAgentUpdateService() error = %v", err)
 	}
-	got, err := service.UpdateAgent(context.Background(), testAgentUpdateID, "agent-update-key-0002")
+	got, err := service.UpdateAgent(
+		context.Background(),
+		testAgentUpdateID,
+		testAgentUpdateDesiredImage,
+		"agent-update-key-0002",
+	)
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("UpdateAgent(replay) = %#v, %v", got, err)
 	}
@@ -122,6 +131,7 @@ type fakeAgentUpdateIdempotency struct {
 
 func (idempotency *fakeAgentUpdateIdempotency) Prepare(
 	context.Context,
+	string,
 	string,
 ) (agentUpdateEvidence, error) {
 	return agentUpdateEvidence{}, nil

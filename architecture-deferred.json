@@ -7,7 +7,7 @@
   {
     "path": "internal/app",
     "rule": "frozen-total-drift",
-    "message": "frozen total is 16804 lines but current direct production Go total is 24491"
+    "message": "frozen total is 16804 lines but current direct production Go total is 24490"
   },
   {
     "path": "internal/app/backing_service_creation.go",

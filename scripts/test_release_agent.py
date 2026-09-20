@@ -85,7 +85,7 @@ class ReleaseAgentTest(unittest.TestCase):
             "FAKE_REPO_DIGESTS": repo_digests or "",
         })
         command = [
-            "bash", str(SCRIPT), "--version", "1.2.3", "--image", IMAGE,
+            "bash", str(SCRIPT), "--version", "agent/v1.2.3", "--image", IMAGE,
         ]
         if push:
             command.append("--push")

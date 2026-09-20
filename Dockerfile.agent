@@ -4,7 +4,7 @@ FROM golang:1.26.6-alpine3.23@sha256:e57c41c1d5864341031181b0db34b9a537bb5773eb6
 ARG AGENT_VERSION
 WORKDIR /src
 COPY . .
-RUN printf '%s\n' "${AGENT_VERSION}" | grep -Eq '^(dev|[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?)$' \
+RUN printf '%s\n' "${AGENT_VERSION}" | grep -Eq '^(dev|(agent/)?v?[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?)$' \
     && CGO_ENABLED=0 GOOS=linux GOAMD64=v1 GOARM64=v8.0 GOMAXPROCS=2 go build -p=2 -trimpath -buildvcs=false \
         -ldflags="-s -w -buildid= -X github.com/AlanD20/groundplane/internal/common/version.Value=${AGENT_VERSION}" \
         -o /out/groundplane-agent ./cmd/agent

@@ -16,7 +16,7 @@ type agentRemovalMutation interface {
 }
 
 type agentUpdateMutation interface {
-	UpdateAgent(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	UpdateAgent(context.Context, string, string, string) (etcd.IdempotencyResponse, error)
 }
 
 type agentMutationService struct {
@@ -54,7 +54,8 @@ func (service *agentMutationService) RemoveAgent(
 func (service *agentMutationService) UpdateAgent(
 	ctx context.Context,
 	agentID string,
+	image string,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
-	return service.updates.UpdateAgent(ctx, agentID, idempotencyKey)
+	return service.updates.UpdateAgent(ctx, agentID, image, idempotencyKey)
 }

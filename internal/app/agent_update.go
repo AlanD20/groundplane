@@ -36,7 +36,7 @@ type agentUpdateEvidence struct {
 }
 
 type agentUpdateIdempotency interface {
-	Prepare(context.Context, string) (agentUpdateEvidence, error)
+	Prepare(context.Context, string, string) (agentUpdateEvidence, error)
 	ResolveExisting(
 		context.Context,
 		etcd.IdempotencyLocator,
@@ -73,6 +73,7 @@ func newDurableAgentUpdateIdempotency(
 func (service *durableAgentUpdateIdempotency) Prepare(
 	ctx context.Context,
 	agentID string,
+	image string,
 ) (agentUpdateEvidence, error) {
 	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
 		Method: http.MethodPost,
@@ -80,7 +81,9 @@ func (service *durableAgentUpdateIdempotency) Prepare(
 		Scope:  idempotentintent.Scope{Kind: idempotentintent.ScopePlatform},
 		Path:   []idempotentintent.PathBinding{{Name: "id", Value: agentID}},
 		Query:  idempotentintent.Object(),
-		Body:   idempotentintent.NoBody(),
+		Body: idempotentintent.JSONBody(idempotentintent.Object(
+			idempotentintent.Field{Name: "image", Value: idempotentintent.String(image)},
+		)),
 	})
 	if err != nil {
 		return agentUpdateEvidence{}, err
@@ -123,7 +126,6 @@ func (service *durableAgentUpdateIdempotency) ResolveUnknown(
 }
 
 type agentUpdateService struct {
-	images      agentImageSource
 	targets     agentUpdateTargets
 	tasks       agentEnrollmentTaskRepository
 	idempotency agentUpdateIdempotency
@@ -131,22 +133,22 @@ type agentUpdateService struct {
 }
 
 func newAgentUpdateService(
-	images agentImageSource,
 	targets agentUpdateTargets,
 	tasks agentEnrollmentTaskRepository,
 	idempotency agentUpdateIdempotency,
 ) (*agentUpdateService, error) {
-	if images == nil || targets == nil || tasks == nil || idempotency == nil {
+	if targets == nil || tasks == nil || idempotency == nil {
 		return nil, errs.New(errs.KindInternal, "Agent update service dependencies are invalid")
 	}
 	return &agentUpdateService{
-		images: images, targets: targets, tasks: tasks, idempotency: idempotency, now: time.Now,
+		targets: targets, tasks: tasks, idempotency: idempotency, now: time.Now,
 	}, nil
 }
 
 func (service *agentUpdateService) UpdateAgent(
 	ctx context.Context,
 	agentID string,
+	image string,
 	idempotencyKey string,
 ) (etcd.IdempotencyResponse, error) {
 	if ctx == nil {
@@ -155,7 +157,13 @@ func (service *agentUpdateService) UpdateAgent(
 	if err := ids.Validate(ids.KindAgent, agentID); err != nil {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Agent id is invalid")
 	}
-	evidence, err := service.idempotency.Prepare(ctx, agentID)
+	if !imageref.IsDigestPinned(image) {
+		return etcd.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"Agent update requires a digest-pinned image",
+		)
+	}
+	evidence, err := service.idempotency.Prepare(ctx, agentID, image)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -173,16 +181,6 @@ func (service *agentUpdateService) UpdateAgent(
 			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent update replay resolution is invalid")
 		}
 		return cloneIdempotencyResponse(existing.Response), nil
-	}
-	image, err := service.images.DesiredAgentImage(ctx)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	if !imageref.IsDigestPinned(image) {
-		return etcd.IdempotencyResponse{}, errs.New(
-			errs.KindValidationFailed,
-			"Agent update requires a selected digest-pinned image",
-		)
 	}
 	health, err := service.targets.Health(ctx, agentID)
 	if err != nil {

@@ -35,7 +35,7 @@ activation may be active. Retry is a fresh explicit update after recovery, not
 blind host-effect replay.
 
 The last qualified manifest supplies desired Agent image selection for subsequent
-bodyless enrollment/update actions, overriding bootstrap `agent.image` without
+bodyless enrollment actions, overriding bootstrap `agent.image` without
 editing YAML. New selections fail with `resource.in_use` during unfinished native
 recovery. Before replacing a Healthy journal, the store fsyncs its validated
 release into private `selected.json`; a crash on either side retains the same
@@ -43,6 +43,14 @@ successful selection. Healthy journal content is authoritative until replacement
 Failed/cancelled later trials never promote their manifest or fall back past the
 last successful release. Deployment's private canonical `candidate.json` selects
 one staged release digest for display; reads verify its manifest and binary.
+
+Independent Agent update requests pin their own explicit image digest and include
+it in protected idempotency identity; they do not read the native release's Agent
+selection. Controller-only installation stages the currently running Agent digest
+so native qualification preserves that Agent. Combined published upgrades run the
+Controller operation first and the independently selected Agent operation second.
+Each operation keeps its own recovery authority and outcome; a failed second
+operation does not undo a completed first operation.
 
 ### Handoff and recovery
 

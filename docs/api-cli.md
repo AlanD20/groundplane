@@ -675,12 +675,13 @@ attachment on every authorized request.
 | task | `GET /tasks` (zero or one of `?environment=<env-id>`, `?project=<prj-id>`, or `?workspace=platform\|<tenant-id>`), `GET /tasks/{id}`, and `GET /tasks/{id}/events` (SSE) → `200`; the activity journal IS this record set; `POST /tasks/{id}/retry\|abort` → `202 {task_id}` |
 | activity | `GET /activity` accepts the exact Task-list query and returns the exact same fixed-revision page; Task and Activity cursors are interchangeable |
 | host | `GET /host` → `200` (includes etcd status; etcd is host-level, not a component) |
-| agent | `POST /agents` → `202 {task_id}` creates the local Agent and Controller-managed container without returning credentials and requires authenticated `Ready` within 120 seconds · `GET /agents`, `GET /agents/{id}`, and `GET /agents/{id}/config` → `200` · `PUT /agents/{id}/config` → `200` · bodyless `POST /agents/{id}/update` → `202 {task_id}` uses the last qualified native release's Agent image, otherwise bootstrap `agent.image`, requires an idle Agent, rotates generation/token, waits 120 seconds for Ready, and rolls back the prior digest inside a 300-second Task · `DELETE /agents/{id}` → `202 {task_id}` has a 120-second Controller Task deadline, stops assignments, aborts active tasks with `agent_removed`, revokes the token, waits for offline, then removes the container and record; Agent is not a Component and has no Component projection |
+| agent | `POST /agents` → `202 {task_id}` creates the local Agent and Controller-managed container without returning credentials and requires authenticated `Ready` within 120 seconds · `GET /agents`, `GET /agents/{id}`, and `GET /agents/{id}/config` → `200` · `PUT /agents/{id}/config` → `200` · `POST /agents/{id}/update` with `{image:"repository@sha256:digest"}` → `202 {task_id}` pins an independent Agent image, requires an idle Agent, rotates generation/token, waits 120 seconds for Ready, and rolls back the prior digest inside a 300-second Task. CLI: `agent update <id> --image DIGEST_REF` or `agent update --all --image DIGEST_REF`; Console Update takes the same image input. Changed image with the same idempotency key conflicts. · `DELETE /agents/{id}` → `202 {task_id}` has a 120-second Controller Task deadline, stops assignments, aborts active tasks with `agent_removed`, revokes the token, waits for offline, then removes the container and record; Agent is not a Component and has no Component projection |
 
 Agent update preparation is a reversible dispatch pause. Busy or failed
 preparation leaves active work untouched and resumes ordinary dispatch; an
 uncertain replacement publication stays fenced until durable recovery. This
-does not add a public pause/resume action or change the bodyless update request.
+does not add a public pause/resume action. Independent image selection changes
+the update request body, not its admission, fencing or rollback protocol.
 On Controller restart, the same update Task restores admission before the Agent
 channel starts. An expired unresolved replacement still recovers its predecessor
 before terminal acknowledgement; failed recovery retains the claim and hold for

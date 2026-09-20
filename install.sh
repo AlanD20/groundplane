@@ -6,6 +6,7 @@ usage() {
     printf '%s\n' \
         'Usage: sh install.sh [--version VERSION | --ref REF] [--listen-ip PRIVATE_IPV4]' \
         '       [--bundle FILE --sha256 HEX] [--config FILE] [--stage-only]' \
+        '       [--agent-only | --controller-only]' \
         'Ubuntu 24.04/26.04 or Debian 13, native amd64/arm64, root.' \
         'No source checkout or compiler needed.' \
         'Defaults to the latest published stable release; --version pins a release.' \
@@ -18,26 +19,36 @@ usage() {
 
 resolve_version() {
     if test -n "$version"; then
+        release_tag="${release_component:+$release_component/}v$version"
         return
     fi
-    release_url=$(curl --fail --silent --show-error --head --location \
-        --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 60 \
-        --output /dev/null --write-out '%{url_effective}' \
-        https://github.com/AlanD20/groundplane/releases/latest) || {
-        echo 'Cannot resolve latest stable release; no bundle downloaded.' >&2; return 1;
-    }
-    case "$release_url" in
-        https://github.com/AlanD20/groundplane/releases/tag/v*)
-            version=${release_url#https://github.com/AlanD20/groundplane/releases/tag/v} ;;
-        *) echo 'No valid latest stable release is available.' >&2; return 1 ;;
-    esac
-    printf '%s\n' "$version" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' &&
-        test "${#version}" -le 100 || {
-        echo 'Latest release does not have a stable vMAJOR.MINOR.PATCH tag.' >&2; return 1;
-    }
+    release_tag=$(python3 -c '
+import json,re,sys,urllib.request
+prefix = (sys.argv[1] + "/" if sys.argv[1] else "") + "v"
+matches = []
+for page in range(1,101):
+    request = urllib.request.Request(f"https://api.github.com/repos/AlanD20/groundplane/releases?per_page=100&page={page}",headers={"User-Agent":"groundplane-installer"})
+    with urllib.request.urlopen(request,timeout=30) as response:
+        if not response.url.startswith("https://"): raise SystemExit("Release lookup left HTTPS")
+        raw = response.read(2097153)
+    if len(raw)>2097152: raise SystemExit("Release metadata exceeds size limit")
+    releases=json.loads(raw)
+    if not isinstance(releases,list): raise SystemExit("Invalid release catalog")
+    for item in releases:
+        tag=item.get("tag_name","")
+        if not item.get("draft") and not item.get("prerelease") and re.fullmatch(re.escape(prefix)+r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)",tag):
+            matches.append((tuple(map(int,tag[len(prefix):].split("."))),tag))
+    if len(releases)<100:
+        if not matches: raise SystemExit("No stable release exists in the selected namespace")
+        print(max(matches)[1]); break
+else: raise SystemExit("Release catalog too large; select an explicit version")
+' "$release_component")
+    version=${release_tag##*/}
+    version=${version#v}
 }
 
 version='' ref='' bundle='' checksum='' listen_ip=127.0.0.1 config='' stage_only=0
+scope=both
 while test "$#" -gt 0; do
     case "$1" in
         --version|--ref|--bundle|--sha256|--listen-ip|--config)
@@ -52,10 +63,23 @@ while test "$#" -gt 0; do
             esac
             shift 2 ;;
         --stage-only) stage_only=1; shift ;;
+        --agent-only|--controller-only)
+            test "$scope" = both || { echo 'Component flags are mutually exclusive.' >&2; exit 2; }
+            scope=${1#--}; scope=${scope%-only}; shift ;;
         --help|-h) usage; exit 0 ;;
         *) usage >&2; exit 2 ;;
     esac
 done
+requested_version=$version
+release_component=$scope
+if test "$scope" = both; then
+    release_component=''
+    test ! -f /usr/local/libexec/groundplane/controller || release_component=controller
+fi
+if test "$scope" = agent; then
+    test -z "$config" && test "$stage_only" -eq 0 || { echo 'Agent-only does not accept --config or --stage-only.' >&2; exit 2; }
+    test -f /usr/local/libexec/groundplane/controller || { echo 'Agent-only requires an existing Controller installation.' >&2; exit 1; }
+fi
 if test -n "$ref"; then
     test -z "$version$bundle$checksum" || {
         echo '--ref cannot be combined with --version, --bundle or --sha256.' >&2; exit 2;
@@ -209,6 +233,8 @@ with tarfile.open(root.parent / "source.tar.gz", "r:gz") as archive:
         echo 'Selected commit predates --ref installation support.' >&2; exit 1;
     }
     set -- --deploy-dir "$deploy_dir" --commit "$commit" --listen-ip "$listen_ip"
+    test "$scope" = both || set -- "$@" "--$scope-only"
+    set -- "$@" --ref-name "$ref"
     test "$stage_only" -eq 0 || set -- "$@" --stage-only
     test -z "$config" || set -- "$@" --config "$config"
     export PYTHONDONTWRITEBYTECODE=1
@@ -218,13 +244,15 @@ fi
 resolve_version
 echo "Selected Groundplane $version ($arch)." >&2
 asset=groundplane-$version-linux-$arch.tar.gz
+test "$scope" != agent || asset=groundplane-agent-$version-linux-$arch.tar.gz
 if test -n "$bundle"; then
     test "$(stat -c '%s' "$bundle")" -le 536870912 || {
         echo 'Local archive exceeds 512 MiB limit.' >&2; exit 1;
     }
     cp -- "$bundle" "$deploy_dir/bundle.tar.gz"
 else
-    base=https://github.com/AlanD20/groundplane/releases/download/v$version
+    encoded_tag=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1],safe=""))' "$release_tag")
+    base=https://github.com/AlanD20/groundplane/releases/download/$encoded_tag
     curl --fail --location --proto '=https' --proto-redir '=https' --connect-timeout 15 \
         --max-time 600 --max-filesize 536870912 --output "$deploy_dir/bundle.tar.gz" "$base/$asset"
     if test -z "$checksum"; then
@@ -245,7 +273,9 @@ root = pathlib.Path(sys.argv[1])
 allowed = {"controller", "groundplane", "controller-release.json", "controller_release.py",
            "controller_bootstrap.py", "controller_update.py", "groundplane-controller.service",
            "groundplane.conf", "controller.yaml.example", "install_bundle.py",
-           "install-runtime.sh", "setup-host.sh", "bundle.json"}
+           "install-runtime.sh", "setup-host.sh", "bundle.json", "install_agent.py", "release_selection.py"}
+if sys.argv[4] == "agent":
+    allowed = {"install_agent.py", "controller_update.py", "controller_release.py", "bundle.json"}
 with tarfile.open(root / "bundle.tar.gz", "r:gz") as archive:
     members = []
     names = set()
@@ -274,9 +304,17 @@ with tarfile.open(root / "bundle.tar.gz", "r:gz") as archive:
             raise SystemExit("Bundle checksum mismatch")
         with (root / item.name).open("xb") as output:
             output.write(data)
-' "$deploy_dir" "$version" "$arch"
+' "$deploy_dir" "$version" "$arch" "$scope"
+if test "$scope" = agent; then
+    image=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["agent_image"])' "$deploy_dir/bundle.json")
+    python3 "$deploy_dir/install_agent.py" --image "$image"
+    rm -rf -- "$deploy_dir"
+    exit 0
+fi
 chmod 0700 "$deploy_dir/controller" "$deploy_dir/groundplane"
 set -- --version "$version" --listen-ip "$listen_ip"
+test "$scope" != controller || set -- "$@" --controller-only
+test -z "$requested_version" || set -- "$@" --agent-tag "agent/v$requested_version"
 test "$stage_only" -eq 0 || set -- "$@" --stage-only
 test -z "$config" || set -- "$@" --config "$config"
 export PYTHONDONTWRITEBYTECODE=1

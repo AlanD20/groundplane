@@ -814,6 +814,15 @@ type AgentConfigReplacement struct {
 	PullIntervalSeconds int64             `json:"pull_interval_seconds"`
 }
 
+// AgentUpdate defines model for AgentUpdate.
+type AgentUpdate struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/AgentUpdate.json
+	Schema *string `json:"$schema,omitempty"`
+	Image  string  `json:"image"`
+}
+
 // Attach defines model for Attach.
 type Attach struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -3364,6 +3373,9 @@ type ZoneRemoveParams struct {
 // AgentConfigSetJSONRequestBody defines body for AgentConfigSet for application/json ContentType.
 type AgentConfigSetJSONRequestBody = AgentConfigReplacement
 
+// AgentUpdateJSONRequestBody defines body for AgentUpdate for application/json ContentType.
+type AgentUpdateJSONRequestBody = AgentUpdate
+
 // AttachCreateJSONRequestBody defines body for AttachCreate for application/json ContentType.
 type AttachCreateJSONRequestBody = AttachRequest
 
@@ -4562,10 +4574,19 @@ type ClientInterface interface {
 	// Corresponds with PUT /agents/{id}/config (the `AgentConfigSet` operationId).
 	AgentConfigSet(ctx context.Context, id string, params *AgentConfigSetParams, body AgentConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// AgentUpdate Update the local Agent
+	// AgentUpdateWithBody Update the local Agent
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /agents/{id}/update (the `AgentUpdate` operationId).
-	AgentUpdate(ctx context.Context, id string, params *AgentUpdateParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	AgentUpdateWithBody(ctx context.Context, id string, params *AgentUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AgentUpdate Update the local Agent
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /agents/{id}/update (the `AgentUpdate` operationId).
+	AgentUpdate(ctx context.Context, id string, params *AgentUpdateParams, body AgentUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AttachList List attaches
 	//
@@ -5663,11 +5684,30 @@ func (c *Client) AgentConfigSet(ctx context.Context, id string, params *AgentCon
 	return c.Client.Do(req)
 }
 
-// AgentUpdate Update the local Agent
+// AgentUpdateWithBody Update the local Agent
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with POST /agents/{id}/update (the `AgentUpdate` operationId).
-func (c *Client) AgentUpdate(ctx context.Context, id string, params *AgentUpdateParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewAgentUpdateRequest(c.Server, id, params)
+func (c *Client) AgentUpdateWithBody(ctx context.Context, id string, params *AgentUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAgentUpdateRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AgentUpdate Update the local Agent
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /agents/{id}/update (the `AgentUpdate` operationId).
+func (c *Client) AgentUpdate(ctx context.Context, id string, params *AgentUpdateParams, body AgentUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAgentUpdateRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -8642,8 +8682,19 @@ func NewAgentConfigSetRequestWithBody(server string, id string, params *AgentCon
 	return req, nil
 }
 
-// NewAgentUpdateRequest constructs an http.Request for the AgentUpdate method
-func NewAgentUpdateRequest(server string, id string, params *AgentUpdateParams) (*http.Request, error) {
+// NewAgentUpdateRequest calls the generic AgentUpdate builder with application/json body
+func NewAgentUpdateRequest(server string, id string, params *AgentUpdateParams, body AgentUpdateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAgentUpdateRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewAgentUpdateRequestWithBody constructs an http.Request for the AgentUpdate method, with any body, and a specified content type
+func NewAgentUpdateRequestWithBody(server string, id string, params *AgentUpdateParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -8668,10 +8719,12 @@ func NewAgentUpdateRequest(server string, id string, params *AgentUpdateParams) 
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -15314,12 +15367,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /agents/{id}/config (the `AgentConfigSet` operationId).
 	AgentConfigSetWithResponse(ctx context.Context, id string, params *AgentConfigSetParams, body AgentConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*AgentConfigSetResponse, error)
 
-	// AgentUpdateWithResponse Update the local Agent
+	// AgentUpdateWithBodyWithResponse Update the local Agent
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /agents/{id}/update (the `AgentUpdate` operationId).
-	AgentUpdateWithResponse(ctx context.Context, id string, params *AgentUpdateParams, reqEditors ...RequestEditorFn) (*AgentUpdateResponse, error)
+	AgentUpdateWithBodyWithResponse(ctx context.Context, id string, params *AgentUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AgentUpdateResponse, error)
+
+	// AgentUpdateWithResponse Update the local Agent
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /agents/{id}/update (the `AgentUpdate` operationId).
+	AgentUpdateWithResponse(ctx context.Context, id string, params *AgentUpdateParams, body AgentUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*AgentUpdateResponse, error)
 
 	// AttachListWithResponse List attaches
 	//
@@ -23220,13 +23280,26 @@ func (c *ClientWithResponses) AgentConfigSetWithResponse(ctx context.Context, id
 	return ParseAgentConfigSetResponse(rsp)
 }
 
-// AgentUpdateWithResponse Update the local Agent
+// AgentUpdateWithBodyWithResponse Update the local Agent
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /agents/{id}/update (the `AgentUpdate` operationId).
-func (c *ClientWithResponses) AgentUpdateWithResponse(ctx context.Context, id string, params *AgentUpdateParams, reqEditors ...RequestEditorFn) (*AgentUpdateResponse, error) {
-	rsp, err := c.AgentUpdate(ctx, id, params, reqEditors...)
+func (c *ClientWithResponses) AgentUpdateWithBodyWithResponse(ctx context.Context, id string, params *AgentUpdateParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AgentUpdateResponse, error) {
+	rsp, err := c.AgentUpdateWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAgentUpdateResponse(rsp)
+}
+
+// AgentUpdateWithResponse Update the local Agent
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /agents/{id}/update (the `AgentUpdate` operationId).
+func (c *ClientWithResponses) AgentUpdateWithResponse(ctx context.Context, id string, params *AgentUpdateParams, body AgentUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*AgentUpdateResponse, error) {
+	rsp, err := c.AgentUpdate(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}

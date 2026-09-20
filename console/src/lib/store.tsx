@@ -1221,7 +1221,7 @@ type StoreContext = State & ReturnType<typeof useControllerPlatform> & ReturnTyp
   refreshAgents: (signal?: AbortSignal) => Promise<PlatformInfra['agents']>
   setAgentConfig: (agentId: string, config: AgentConfigRequest) => Promise<AgentConfigResponse>
   joinAgent: () => Promise<AgentTaskAccepted>
-  updateAgent: (agentId: string) => Promise<AgentTaskAccepted>
+  updateAgent: (agentId: string, image: string) => Promise<AgentTaskAccepted>
   removeAgent: (agentId: string) => Promise<AgentTaskAccepted>
   // selectors
   getTenant: (slug: string) => Tenant | undefined
@@ -2124,11 +2124,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         await refreshAgents()
         return accepted
       },
-      updateAgent: async (agentId) => {
+      updateAgent: async (agentId, image) => {
         const accepted = await tenantRequest<AgentTaskAccepted>(
           `/agents/${encodeURIComponent(agentId)}/update`,
           202,
-          { method: 'POST' },
+          { method: 'POST', body: { image } },
         )
         await refreshAgents()
         return accepted

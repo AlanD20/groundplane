@@ -5,6 +5,10 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Independent Agent and Controller release tags and installer/build scope flags.
+  Combined releases also publish the matching component releases from the same
+  artifacts. Agent updates pin their own image without replacing Controller.
+
 - Install a branch, tag or commit with `install.sh --ref`, without a published
   Groundplane release. Build toolchains run in disposable Docker containers;
   installation retains the existing guarded upgrade and recovery checks.

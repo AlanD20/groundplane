@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -164,7 +165,14 @@ func TestAgentUpdateReturnsExactTaskResponse(t *testing.T) {
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Options{AgentMutations: mutator},
 	)
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/agents/"+testAgentReadID+"/update", nil)
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/agents/"+testAgentReadID+"/update",
+		strings.NewReader(
+			`{"image":"registry.example/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`,
+		),
+	)
+	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set(idempotencyKeyHeader, "agent-update-key-0001")
 	response := httptest.NewRecorder()
 	server.requestHandler().ServeHTTP(response, request)
@@ -182,7 +190,6 @@ func TestAgentMutationsRejectBodiesBeforeDispatch(t *testing.T) {
 
 	for name, test := range map[string][2]string{
 		"enroll": {http.MethodPost, "/api/v1/agents"},
-		"update": {http.MethodPost, "/api/v1/agents/" + testAgentReadID + "/update"},
 		"remove": {http.MethodDelete, "/api/v1/agents/" + testAgentReadID},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -243,6 +250,7 @@ func (mutator *fakeAgentMutator) RemoveAgent(
 func (mutator *fakeAgentMutator) UpdateAgent(
 	_ context.Context,
 	agentID string,
+	_ string,
 	key string,
 ) (etcd.IdempotencyResponse, error) {
 	mutator.updatedAgentID = agentID

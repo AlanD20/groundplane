@@ -44,6 +44,12 @@ class InstalledProofTest(unittest.TestCase):
         document["controller"]["update"]["running_sha256"] = "sha256:" + "e" * 64
         self.assertFalse(self.check(document))
 
+    def test_absent_agent_requires_guarded_activation_before_enrollment(self):
+        document = host()
+        document["agent"]["status"] = "unknown"
+        transport = Transport([(200, document), (200, {"items": []})])
+        self.assertFalse(update.already_installed(transport, RELEASE, lambda: DIGEST))
+
     def test_health_recovery_selection_and_disk_drift_cannot_be_skipped(self):
         variants = []
         unhealthy = host()

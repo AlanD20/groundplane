@@ -71,13 +71,22 @@ func TestAgentUpdateDispatchesSelectedAgentTask(t *testing.T) {
 		t,
 		http.MethodPost,
 		"/api/v1/agents/agt_1/update",
-		"",
+		`{"image":"registry.example/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`,
 		http.StatusAccepted,
 		`{"task_id":"task_update"}`,
 	)
 	defer server.Close()
 
-	output := executeNoun(t, newAgentCmd(), server.URL, Scope{}, "update", "agt_1")
+	output := executeNoun(
+		t,
+		newAgentCmd(),
+		server.URL,
+		Scope{},
+		"update",
+		"agt_1",
+		"--image",
+		"registry.example/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	)
 	want := "{\n  \"task_id\": \"task_update\"\n}\n"
 	if output != want {
 		t.Fatalf("output = %q, want %q", output, want)
@@ -116,7 +125,16 @@ func TestAgentUpdateAllResolvesSingletonThenUsesPerIDEndpoint(t *testing.T) {
 	}))
 	defer server.Close()
 
-	output := executeNoun(t, newAgentCmd(), server.URL, Scope{}, "update", "--all")
+	output := executeNoun(
+		t,
+		newAgentCmd(),
+		server.URL,
+		Scope{},
+		"update",
+		"--all",
+		"--image",
+		"registry.example/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	)
 	want := "{\n  \"task_id\": \"task_update_all\"\n}\n"
 	if output != want || requests != 2 {
 		t.Fatalf("output/requests = %q/%d", output, requests)

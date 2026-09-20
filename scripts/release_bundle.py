@@ -14,7 +14,7 @@ import subprocess
 import tarfile
 
 import deploy
-from controller_release import build_manifest
+from controller_release import build_metadata
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-.][0-9A-Za-z.-]+)?")
@@ -22,14 +22,15 @@ IMAGE = re.compile(r"[a-z0-9][a-z0-9._:/-]*@sha256:[0-9a-f]{64}")
 ARCHES = {"x86_64": "amd64", "aarch64": "arm64", "arm64": "arm64"}
 
 
-def payload(version: str, agent: str, runner: str, arch: str) -> dict[str, bytes]:
+def payload(version: str, agent: str | None, runner: str, arch: str) -> dict[str, bytes]:
     sources = [deploy.CONTROLLER, deploy.CONTROLLER_METADATA, deploy.CLI,
                deploy.RELEASE_STAGER, deploy.BOOTSTRAP_HELPER, deploy.UPDATE_CLIENT,
                deploy.CONTROLLER_UNIT, deploy.TMPFILES, deploy.CONFIG_EXAMPLE,
-               ROOT / "scripts" / "install_bundle.py"]
+               ROOT / "scripts" / "install_bundle.py", ROOT / "scripts" / "install_agent.py",
+               ROOT / "scripts" / "release_selection.py"]
     files = {source.name: source.read_bytes() for source in sources}
-    metadata = build_manifest(files["controller-release.json"], agent)
-    if metadata["controller_version"] != version:
+    metadata = build_metadata(files["controller-release.json"])
+    if metadata["controller_version"] != f"controller/v{version}":
         raise ValueError("Controller metadata version differs from requested release")
     if metadata["controller_sha256"] != "sha256:" + hashlib.sha256(files["controller"]).hexdigest():
         raise ValueError("Controller bytes differ from build metadata")
@@ -57,13 +58,16 @@ def write_archive(destination: Path, files: dict[str, bytes]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", required=True)
-    parser.add_argument("--agent-image", required=True, help="published repository@sha256:digest")
+    parser.add_argument("--agent-image", help="published repository@sha256:digest; omitted for Controller-only")
+    parser.add_argument("--controller-only", action="store_true")
     parser.add_argument("--runner-image", required=True, help="published repository@sha256:digest")
     parser.add_argument("--output", default=".tmp/releases", help="new artifacts below repository .tmp")
     args = parser.parse_args()
     if not VERSION.fullmatch(args.version) or len(args.version) > 100:
         parser.error("version must be an explicit numeric release, not dev/latest")
-    if any(not IMAGE.fullmatch(ref) for ref in (args.agent_image, args.runner_image)):
+    if bool(args.agent_image) == args.controller_only:
+        parser.error("supply --agent-image for both components, or --controller-only without it")
+    if any(not IMAGE.fullmatch(ref) for ref in (args.agent_image, args.runner_image) if ref is not None):
         parser.error("Agent and Runner images must be immutable registry references")
     if platform.system() != "Linux" or platform.machine() not in ARCHES:
         parser.error("build natively on Linux amd64 or arm64; emulation is not qualification")
@@ -80,7 +84,7 @@ def main() -> None:
         "GOMAXPROCS": "2", "CGO_ENABLED": "0", "GOFLAGS": "-p=2 -trimpath",
         "GOOS": "linux", "GOARCH": ARCHES[platform.machine()], "GOAMD64": "v1", "GOARM64": "v8.0",
     }
-    subprocess.run(["bash", "scripts/repo-env.sh", "make", "controller", "cli", f"VERSION={args.version}"],
+    subprocess.run(["bash", "scripts/repo-env.sh", "make", "controller", "cli", f"VERSION=controller/v{args.version}"],
                    cwd=ROOT, env=environment, check=True)
     files = payload(args.version, args.agent_image, args.runner_image, ARCHES[platform.machine()])
     write_archive(destination, files)

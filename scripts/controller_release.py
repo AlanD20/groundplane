@@ -83,7 +83,7 @@ def canonical(value: dict) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("ascii")
 
 
-def build_manifest(raw: bytes, agent_image: str) -> dict:
+def build_metadata(raw: bytes) -> dict:
     metadata = json.loads(raw, object_pairs_hook=unique_object)
     if not isinstance(metadata, dict) or set(metadata) != BUILD_FIELDS:
         raise ValueError("release build metadata fields are invalid")
@@ -93,8 +93,13 @@ def build_manifest(raw: bytes, agent_image: str) -> dict:
     if not isinstance(metadata["controller_sha256"], str) or not DIGEST.fullmatch(metadata["controller_sha256"]):
         raise ValueError("release Controller digest is invalid")
     version = metadata["controller_version"]
-    if not isinstance(version, str) or not re.fullmatch(r"[A-Za-z0-9._+-]{1,128}", version):
+    if not isinstance(version, str) or not re.fullmatch(r"[A-Za-z0-9._+/-]{1,128}", version):
         raise ValueError("release Controller version is invalid")
+    return metadata
+
+
+def build_manifest(raw: bytes, agent_image: str) -> dict:
+    metadata = build_metadata(raw)
     if len(agent_image) > 1024 or not re.fullmatch(r"[a-z0-9][a-z0-9._:/\[\]-]*@sha256:[0-9a-f]{64}", agent_image):
         raise ValueError("release Agent image must be digest-pinned")
     return {**metadata, "agent_image": agent_image}

@@ -30,7 +30,7 @@ class BundleTests(unittest.TestCase):
         self.sources.mkdir()
         binary = b"test controller bytes"
         metadata = {"schema": 1, "controller_sha256": "sha256:" + hashlib.sha256(binary).hexdigest(),
-                    "controller_version": "1.2.3", "storage_epoch": 1, "channel_schema": 1}
+                    "controller_version": "controller/v1.2.3", "storage_epoch": 1, "channel_schema": 1}
         for name, data in (("controller", binary), ("groundplane", b"test CLI"),
                            ("controller-release.json", json.dumps(metadata).encode())):
             (self.sources / name).write_bytes(data)
@@ -55,7 +55,7 @@ class BundleTests(unittest.TestCase):
                 out.addfile(entry, io.BytesIO(data))
             if extra is not None:
                 out.addfile(extra, io.BytesIO(b"x" * extra.size))
-        result = subprocess.run(["python3", "-c", self.extractor, str(target), version, arch],
+        result = subprocess.run(["python3", "-c", self.extractor, str(target), version, arch, "both"],
                                 capture_output=True, text=True)
         return target, result
 
@@ -106,12 +106,14 @@ class BundleTests(unittest.TestCase):
             release_bundle.write_archive(first, self.files)
 
     def invoke(self, mode, stage=False, config=None):
-        args = argparse.Namespace(version="1.2.3", stage_only=stage, config=config, listen_ip="127.0.0.1")
+        args = argparse.Namespace(version="1.2.3", stage_only=stage, config=config, listen_ip="127.0.0.1",
+                                  controller_only=mode == "native", agent_tag=None)
         layout = mock.Mock()
         layout.mode.return_value = mode
         manifest = {"agent_image": self.agent, "runner_image": self.runner}
         with mock.patch.object(install_bundle.subprocess, "run") as run, \
                 mock.patch.object(install_bundle.os, "execvp") as execute, \
+                mock.patch.object(install_bundle.install_agent, "installed_image", return_value=self.agent), \
                 mock.patch.object(install_bundle.shutil, "disk_usage") as capacity:
             capacity.return_value.free = 3 * 1024**3
             install_bundle.install(self.root, args, manifest, layout)
@@ -120,15 +122,16 @@ class BundleTests(unittest.TestCase):
     def test_native_update_only_pulls_agent_and_uses_guarded_activation(self):
         for stage in (False, True):
             run, execute = self.invoke("native", stage)
-            run.assert_called_once_with(["docker", "pull", self.agent], check=True)
-            argv = execute.call_args.args[1]
+            run.assert_any_call(["docker", "pull", self.agent], check=True)
+            self.assertEqual(run.call_count, 2)
+            argv = run.call_args.args[0]
             self.assertEqual(argv[1], str(self.root / "install-runtime.sh"))
             self.assertEqual(argv[-2:], ["1" if stage else "0", "0"])
 
     def test_fresh_install_provisions_and_pulls_both_images(self):
         with mock.patch.object(install_bundle.Path, "exists", return_value=False):
             run, _ = self.invoke("bootstrap")
-        self.assertEqual(run.call_args_list, [
+        self.assertEqual(run.call_args_list[:3], [
             mock.call(["sh", str(self.root / "setup-host.sh")], check=True),
             mock.call(["docker", "pull", self.agent], check=True),
             mock.call(["docker", "pull", self.runner], check=True)])
@@ -140,7 +143,8 @@ class BundleTests(unittest.TestCase):
             self.invoke("native", config="unused.yaml")
 
     def test_partial_layout_and_low_capacity_have_no_setup_or_pull_effects(self):
-        args = argparse.Namespace(version="1.2.3", stage_only=False, config=None, listen_ip="127.0.0.1")
+        args = argparse.Namespace(version="1.2.3", stage_only=False, config=None, listen_ip="127.0.0.1",
+                                  controller_only=True, agent_tag=None)
         layout = mock.Mock()
         manifest = {"agent_image": self.agent, "runner_image": self.runner}
         with mock.patch.object(install_bundle.subprocess, "run") as run, \
