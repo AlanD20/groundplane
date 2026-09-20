@@ -7,7 +7,8 @@ authorize a production target or changes to ingress, host firewall or other host
 ## Prebuilt releases
 
 Local release scripts build artifacts without implicitly publishing or installing.
-The tagged GitHub workflow below publishes them. Use an explicit version, never a moving `latest` selection.
+The tagged GitHub workflow below publishes them. Builds use explicit versions;
+the installer may resolve the latest stable release once before downloading.
 Build from the intended source commit with the repository-pinned toolchains.
 
 ### Publish through GitHub Actions
@@ -97,8 +98,9 @@ manually on `main`. It validates version metadata and
 publishes the exact installer from that commit with its checksum.
 Only the landing page, installer, installer checksum and `.nojekyll` are uploaded;
 the repository, private evidence and internal docs are not exported to Pages.
-The displayed version comes from `VERSION`; site deployment does not prove that
-its release assets are published. Installation requires those public assets.
+The page offers latest-stable installation, independent of the unreleased source
+version. Site deployment does not prove that release assets are published.
+Installation requires a published stable release and its public assets.
 
 One-time setup, performed by an account with GitHub and DNS administration access:
 
@@ -117,7 +119,14 @@ See [GitHub's custom-domain instructions](https://docs.github.com/en/pages/confi
 and [multiple-domain limits](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/troubleshooting-custom-domains-and-github-pages).
 With an Actions deployment, a tracked CNAME file does not configure the custom domain.
 
-After successful publication, download and inspect the installer before running:
+After a stable release is published, install with:
+
+```sh
+curl -fsSL https://gp.aland20.com/install.sh | sudo bash
+```
+
+This executes the HTTPS-delivered script as root. To inspect it first and pin a
+specific release instead:
 
 ```sh
 curl -fsSLO https://gp.aland20.com/install.sh
@@ -125,6 +134,13 @@ curl -fsSLO https://gp.aland20.com/install.sh.sha256
 sha256sum --check install.sh.sha256
 sudo sh install.sh --version 0.0.1
 ```
+
+Without `--version`, the installer resolves GitHub's `releases/latest` URL once,
+requires a stable `vMAJOR.MINOR.PATCH` tag in this repository, then pins all
+downloads and manifest validation to that version. Resolution errors stop before
+bundle download; prerequisite packages may already have been installed. Explicit
+versions bypass discovery. Local `--bundle` use still requires `--version` and
+`--sha256`. Archive integrity and guarded native-upgrade checks are unchanged.
 
 The release builder already generates bundle SHA256 files. The installer computes
 the downloaded bundle's checksum and compares it with the expected checksum before

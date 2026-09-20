@@ -1,34 +1,173 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Install Groundplane on your Linux host.">
-  <title>Install Groundplane</title>
-  <link rel="canonical" href="https://gp.aland20.com/">
-  <style>
-    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #101814; color: #eaf1ec; }
-    * { box-sizing: border-box; }
-    body { margin: 0; }
-    main { max-width: 900px; margin: 12vh auto; padding: 24px; }
-    a { color: #a8e6be; text-underline-offset: .25em; }
-    :focus-visible { outline: 3px solid #e6d492; outline-offset: 5px; }
-    h1 { font-size: clamp(2rem, 7vw, 3rem); letter-spacing: -.05em; margin-bottom: 12px; }
-    p { color: #c0cec5; line-height: 1.65; }
-    pre { padding: 22px; border: 1px solid #34483b; background: #18251d; border-radius: 10px; overflow-x: auto; line-height: 1.7; }
-    code { font-size: .9rem; }
-    .details { font-size: .9rem; }
-  </style>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Groundplane — your projects, your machine</title>
+<meta name="description" content="A self-hosted control plane for your applications. Install Groundplane on Ubuntu or Debian with one command.">
+<link rel="canonical" href="https://gp.aland20.com/">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0b1010;color:#f1f5ef;font:16px/1.55 system-ui,-apple-system,sans-serif}
+body:before{content:'';position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 80% 40%,#215a4528,transparent 55%)}
+a{color:inherit;text-decoration:none}
+button{font:inherit;cursor:pointer}
+main{position:relative;width:min(1280px,100%);margin:auto;padding:30px 48px 60px}
+header{display:flex;align-items:center;justify-content:space-between;padding-bottom:80px}
+.brand{font-size:22px;font-weight:650;letter-spacing:-1px;display:flex;gap:11px;align-items:center}
+.mark{width:28px;height:28px;color:#adf2cd}
+header nav{display:flex;gap:30px;font-size:13px;color:#b0bdb7}
+header a:hover{color:#b5f7cd}
+.layout{display:grid;grid-template-columns:1.05fr 1fr;align-items:center;gap:32px}
+.eyebrow{display:flex;align-items:center;gap:9px;color:#bbd1c5;font-size:12px}
+.dot{width:6px;height:6px;border-radius:50%;background:#acf3c8;box-shadow:0 0 13px #94efb6}
+h1{font-size:clamp(48px,5.5vw,76px);font-weight:550;line-height:1.04;letter-spacing:-4px;margin:26px 0}
+h1 em{font-style:normal;color:#a5edc3}
+.lede{font-size:17px;color:#a1b2a9;max-width:430px;margin:0 0 35px;line-height:1.7}
+.install{border:1px solid #32403a;border-radius:15px;background:linear-gradient(135deg,#1e2a23,#131b18);box-shadow:0 15px 45px #0003;overflow:hidden}
+.install-top{display:flex;align-items:center;justify-content:space-between;padding:14px 17px;font-size:12px;color:#cfdfd4;border-bottom:1px solid #ffffff0b}
+.install-top span:last-child{color:#a8c4b3;font:10px monospace;letter-spacing:1px}
+.command{padding:18px 17px;position:relative}
+pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.9 ui-monospace,monospace;color:#d3ebdc}
+.prompt{color:#91bf9f;user-select:none}
+code .url{color:#a8e7c1}
+.install-bottom{display:flex;justify-content:space-between;align-items:center;padding:0 17px 14px;color:#8fa99a;font-size:11px}
+.copy{border:1px solid #47624f;background:#284432;color:#ceebd7;border-radius:7px;padding:6px 11px;font-size:11px;transition:background .2s}
+.copy:hover{background:#3b5b47}
+.platforms{display:flex;flex-wrap:wrap;gap:7px 18px;margin-top:18px;font-size:11px;color:#8a9f93}
+.platforms b{font-weight:400;color:#bdd1c3}
+.art{position:relative;min-width:0}
+.art:before{content:'';position:absolute;inset:14% 2%;background:radial-gradient(ellipse,#84e2b023,transparent 68%);filter:blur(35px)}
+svg.network{width:100%;height:auto;display:block;position:relative;overflow:visible}
+.wire{fill:none;stroke:#456953;stroke-width:1.2}
+.signal{fill:none;stroke:#b9ffd4;stroke-width:2;stroke-dasharray:7 140;animation:flow 7s linear infinite;opacity:.7}
+.signal.reverse{animation-direction:reverse;animation-delay:-3s}
+.network text{font-family:system-ui,sans-serif;fill:#c6d7cc}
+.network .small{font-family:monospace;font-size:10px;fill:#839e8d;letter-spacing:1.3px}
+.network .label{font-size:13px}
+.network .core{font-size:21px;font-weight:550;letter-spacing:-.5px}
+.diagram-caption{text-align:center;color:#82998c;font-size:11px;margin-top:-10px;position:relative}
+.strip{margin-top:68px;border-top:1px solid #26342c;display:grid;grid-template-columns:repeat(3,1fr);gap:40px;padding-top:25px}
+.strip b{font-weight:500;font-size:14px}
+.strip span{display:block;color:#8fa297;font-size:12px;margin-top:7px}
+footer{margin-top:48px;display:flex;justify-content:space-between;color:#6e8778;font:10px monospace;gap:20px}
+a:focus-visible,button:focus-visible,pre:focus-visible{outline:2px solid #b9f8ce;outline-offset:5px}
+@keyframes flow{to{stroke-dashoffset:-294}
+}
+@media(prefers-reduced-motion:reduce){.signal{animation:none}
+.copy{transition:none}
+}
+@media(max-width:800px){main{padding:24px 24px 75px}
+header{padding-bottom:50px}
+header nav{gap:18px}
+.layout{grid-template-columns:1fr;gap:10px}
+h1{font-size:60px}
+.lede{max-width:500px}
+.art{max-width:520px;width:100%;margin:auto}
+.strip{margin-top:25px;gap:18px}
+.strip span{font-size:11px}
+}
+@media(max-width:420px){main{padding:22px 18px 75px}
+.brand{font-size:19px}
+header nav{font-size:11px;gap:12px}
+h1{font-size:49px;letter-spacing:-2.5px}
+.lede{font-size:15px}
+.strip{grid-template-columns:1fr;gap:20px}
+.strip span{margin-top:3px}
+.install-bottom{align-items:flex-start;gap:12px}
+footer{flex-direction:column;gap:5px}
+}
+
+h1{font-size:clamp(48px,4.6vw,66px)}
+
+.copy-status{min-height:1.5em;margin:8px 0 0;font-size:12px;color:#cfb8e4}
+
+/* Violet palette. */
+body{background:#100d17;color:#f3effa}
+
+body:before{background:radial-gradient(ellipse at 80% 40%,#713bbd28,transparent 55%)}
+
+.mark,h1 em{color:#c4a3ff}
+
+header nav{color:#bcb1cb}
+header a:hover{color:#dcc8ff}
+
+.eyebrow{color:#cebedf}
+.dot{background:#c5a4ff;box-shadow:0 0 13px #b78aff}
+
+.lede{color:#b1a4c0}
+
+.install{border-color:#44354f;background:linear-gradient(135deg,#292035,#191321)}
+
+.install-top{color:#e0d2ef}
+.install-top span:last-child{color:#c1a8dc}
+
+pre{color:#e5d8f5}
+.prompt{color:#b795d5}
+code .url{color:#cfadff}
+
+.install-bottom{color:#b7a0ca}
+.copy{border-color:#70518a;background:#48305f;color:#ebd9ff}
+.copy:hover{background:#5e4079}
+
+.platforms{color:#ac98bb}
+.platforms b{color:#d4c0e3}
+
+.art:before{background:radial-gradient(ellipse,#ab70f52b,transparent 68%)}
+
+.network{filter:hue-rotate(125deg)}
+
+.diagram-caption{color:#ab94be}
+.strip{border-color:#382a43}
+.strip span{color:#b09bbe}
+
+footer{color:#ac93bf}
+
+a:focus-visible,button:focus-visible,pre:focus-visible{outline-color:#d5b6ff}
+
+</style>
 </head>
-<body>
-  <main>
-    <h1>Groundplane</h1>
-    <p>Install version __VERSION__ on your host.</p>
-    <pre tabindex="0" aria-label="Groundplane installation command"><code>curl -fsSL https://gp.aland20.com/install.sh -o install.sh &amp;&amp;
-sudo sh install.sh --version __VERSION__</code></pre>
-    <p class="details">Ubuntu 24.04 / 26.04 or Debian 13 · amd64 / arm64</p>
-    <p class="details">Review the <a href="install.sh">installer</a> before running it. It verifies release bundle checksums.</p>
-    <p class="details"><a href="https://github.com/AlanD20/groundplane/releases/tag/v__VERSION__">Release notes and known limits</a> · <a href="install.sh.sha256">Installer checksum</a></p>
-  </main>
-</body>
-</html>
+<body><main>
+<header><a class="brand" href="/" aria-label="Groundplane home"><svg class="mark" viewBox="0 0 30 30" fill="none" aria-hidden="true"><path d="m3 12 12-7 12 7-12 7Z" stroke="currentColor" stroke-width="1.7"/><path d="m3 18 12 7 12-7M3 15l12 7 12-7" stroke="currentColor" stroke-width="1.2" opacity=".55"/></svg>Groundplane</a><nav><a href="https://github.com/AlanD20/groundplane/releases">Releases ↗</a><a href="https://github.com/AlanD20/groundplane">GitHub ↗</a></nav></header>
+<div class="layout"><section>
+<div class="eyebrow"><span class="dot"></span>Self-hosted. On your terms.</div>
+<h1>Your projects.<br>Your machine.<br><em>One Groundplane.</em></h1>
+<p class="lede">A control plane for the applications you run.<br>Bring your projects together on one host.</p>
+<div class="install"><div class="install-top"><span>Install Groundplane</span><span>LATEST STABLE</span></div><div class="command"><pre tabindex="0" aria-label="Installation command"><span class="prompt">$ </span><code id="command">curl -fsSL <span class="url">https://gp.aland20.com/install.sh</span> | sudo bash</code></pre></div><div class="install-bottom"><span><a href="install.sh">Review installer ↗</a></span><button class="copy" id="copy" type="button">Copy command</button></div></div>
+<p id="copy-status" role="status" class="copy-status"></p>
+<div class="platforms"><span><b>Ubuntu</b> 24.04 / 26.04</span><span><b>Debian</b> 13</span><span>amd64 / arm64</span></div>
+</section><section class="art" aria-label="Illustrative architecture, not live host status">
+<svg class="network" viewBox="0 0 560 560" role="img" aria-labelledby="diagram-title diagram-description"><title id="diagram-title">One control plane, many applications</title><desc id="diagram-description">Console, CLI and API connect to the Groundplane Controller. The Agent manages web applications, API services and workers on your host. Animated paths illustrate communication, not live activity.</desc>
+<defs><pattern id="grid" width="25" height="25" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r=".7" fill="#426b50" opacity=".3"/></pattern><linearGradient id="panel" x2="1" y2="1"><stop stop-color="#263c2d"/><stop offset="1" stop-color="#14251c"/></linearGradient><linearGradient id="edge"><stop stop-color="#41664d"/><stop offset=".5" stop-color="#9bd9b1"/><stop offset="1" stop-color="#41664d"/></linearGradient></defs>
+<rect x="10" y="35" width="540" height="500" fill="url(#grid)"/>
+<rect x="40" y="150" width="480" height="364" rx="28" fill="#132319" fill-opacity=".32" stroke="#41624d" stroke-dasharray="3 7"/>
+<text x="63" y="178" class="small">YOUR HOST</text><text x="390" y="178" class="small">ILLUSTRATION</text>
+<path class="wire" d="M130 99v43q0 17 18 17h112q20 0 20 20v49M280 99v129M430 99v43q0 17-18 17H300q-20 0-20 20v49"/>
+<path class="signal" d="M130 99v43q0 17 18 17h112q20 0 20 20v49"/><path class="signal reverse" d="M430 99v43q0 17-18 17H300q-20 0-20 20v49"/>
+<g fill="#16261c" stroke="#45624d"><rect x="76" y="61" width="108" height="39" rx="19"/><rect x="226" y="61" width="108" height="39" rx="19"/><rect x="376" y="61" width="108" height="39" rx="19"/></g>
+<g class="label" text-anchor="middle"><text x="130" y="86">Console</text><text x="280" y="86">CLI</text><text x="430" y="86">API</text></g>
+<rect x="147" y="213" width="266" height="88" rx="20" fill="#85cda2" fill-opacity=".06" stroke="#77bd91" stroke-opacity=".2"/>
+<rect x="157" y="223" width="246" height="68" rx="14" fill="url(#panel)" stroke="url(#edge)"/>
+<text x="280" y="250" text-anchor="middle" class="small">GROUNDPLANE</text><text x="280" y="274" text-anchor="middle" class="core">Controller</text>
+<path class="wire" d="M280 291v44"/><path class="signal" d="M280 291v44"/>
+<rect x="222" y="335" width="116" height="39" rx="19" fill="#233d2c" stroke="#659375"/><text x="280" y="360" text-anchor="middle" class="label">Agent</text>
+<path class="wire" d="M280 374v19q0 15-20 15H143q-15 0-15 15v18M280 374v67M280 374v19q0 15 20 15h117q15 0 15 15v18"/>
+<path class="signal" d="M280 374v19q0 15-20 15H143q-15 0-15 15v18"/><path class="signal reverse" d="M280 374v19q0 15 20 15h117q15 0 15 15v18"/>
+<g fill="#17281e" stroke="#425e4b"><rect x="75" y="441" width="106" height="45" rx="10"/><rect x="227" y="441" width="106" height="45" rx="10"/><rect x="379" y="441" width="106" height="45" rx="10"/></g>
+<g class="label" text-anchor="middle"><text x="128" y="469">Web app</text><text x="280" y="469">API service</text><text x="432" y="469">Worker</text></g>
+</svg><p class="diagram-caption">Many projects. One place to manage them.</p></section></div>
+<section class="strip"><div><b>One place to operate.</b><span>Console, CLI and API. Choose your interface.</span></div><div><b>Your infrastructure.</b><span>Run on a machine you control.</span></div><div><b>Start with one command.</b><span>Selects the latest stable release.</span></div></section>
+<footer><span>GROUNDPLANE / SELF-HOSTED CONTROL PLANE</span><a href="install.sh.sha256">Installer checksum ↗</a></footer>
+</main>
+<script>
+const copyButton = document.getElementById('copy');
+const copyStatus = document.getElementById('copy-status');
+copyButton.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(document.getElementById('command').textContent);
+    copyStatus.textContent = 'Installation command copied.';
+  } catch {
+    copyStatus.textContent = 'Copy unavailable. Select the command above and copy it manually.';
+  }
+});
+</script>
+</body></html>

@@ -39,12 +39,13 @@ Initial single-host release.
   Console, CLI, installation helpers, systemd configuration and manifests.
 - One `install.sh` handles initial installation and guarded upgrades on
   Ubuntu 24.04/26.04 and Debian 13. Rerunning an already healthy, matching
-  installation does not start another update.
+  installation does not start another update. With no version specified, it
+  resolves the latest stable release once; `--version` pins a chosen release.
 - Agent and Runner container images are distributed through GHCR. Release
   bundles pin image digests and include file checksums.
 - Tagged GitHub releases publish both platform bundles, checksums and installer.
-- GitHub Pages publishing serves a lightweight installation page, the exact
-  released installer and its SHA256 checksum after public download checks pass.
+- GitHub Pages deploys independently on every push to `main`, serving a dark
+  violet installation page, the source installer and its SHA256 checksum.
 
 ### Limits and deferred work
 

@@ -4,13 +4,36 @@ set -eu
 
 usage() {
     printf '%s\n' \
-        'Usage: sh install.sh --version VERSION [--listen-ip PRIVATE_IPV4]' \
+        'Usage: sh install.sh [--version VERSION] [--listen-ip PRIVATE_IPV4]' \
         '       [--bundle FILE --sha256 HEX] [--config FILE] [--stage-only]' \
         'Ubuntu 24.04/26.04 or Debian 13, native amd64/arm64, root.' \
         'No source checkout or compiler needed.' \
+        'Defaults to the latest published stable release; --version pins a release.' \
+        'Local --bundle installation requires --version and --sha256.' \
         'Fresh host: provision prerequisites and install. Existing host: guarded update.' \
         '--stage-only stages an existing installation without activating it.' \
         '--config supplies initial startup YAML only; existing configuration is preserved.'
+}
+
+resolve_version() {
+    if test -n "$version"; then
+        return
+    fi
+    release_url=$(curl --fail --silent --show-error --head --location \
+        --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 60 \
+        --output /dev/null --write-out '%{url_effective}' \
+        https://github.com/AlanD20/groundplane/releases/latest) || {
+        echo 'Cannot resolve latest stable release; no bundle downloaded.' >&2; return 1;
+    }
+    case "$release_url" in
+        https://github.com/AlanD20/groundplane/releases/tag/v*)
+            version=${release_url#https://github.com/AlanD20/groundplane/releases/tag/v} ;;
+        *) echo 'No valid latest stable release is available.' >&2; return 1 ;;
+    esac
+    printf '%s\n' "$version" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' &&
+        test "${#version}" -le 100 || {
+        echo 'Latest release does not have a stable vMAJOR.MINOR.PATCH tag.' >&2; return 1;
+    }
 }
 
 version='' bundle='' checksum='' listen_ip=127.0.0.1 config='' stage_only=0
@@ -31,12 +54,15 @@ while test "$#" -gt 0; do
         *) usage >&2; exit 2 ;;
     esac
 done
-printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$' &&
-    test "${#version}" -le 100 || { echo 'An explicit release version is required.' >&2; exit 2; }
+if test -n "$version"; then
+    printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$' &&
+        test "${#version}" -le 100 || { echo 'Invalid release version.' >&2; exit 2; }
+fi
 if test -n "$checksum"; then
     printf '%s\n' "$checksum" | grep -Eq '^[0-9a-f]{64}$' || { echo 'Invalid SHA256.' >&2; exit 2; }
 fi
 if test -n "$bundle"; then
+    test -n "$version" || { echo '--bundle requires --version.' >&2; exit 2; }
     test -f "$bundle" && test ! -L "$bundle" && test -n "$checksum" || {
         echo '--bundle requires a regular archive and its trusted --sha256.' >&2; exit 2;
     }
@@ -103,6 +129,8 @@ if test -n "$packages"; then
     # shellcheck disable=SC2086
     apt-get install -y $packages </dev/null
 fi
+resolve_version
+echo "Selected Groundplane $version ($arch)." >&2
 asset=groundplane-$version-linux-$arch.tar.gz
 if test -n "$bundle"; then
     test "$(stat -c '%s' "$bundle")" -le 536870912 || {

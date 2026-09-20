@@ -10,13 +10,10 @@ from bump_version import ROOT, release_notes
 
 def build(root, destination):
     release_notes(root)  # Require consistent release metadata and meaningful notes.
-    version = (root / "VERSION").read_text().strip()
     page = (root / "site/index.html").read_text()
-    if "__VERSION__" not in page:
-        raise ValueError("landing page is missing its version marker")
     installer = (root / "install.sh").read_bytes()
     destination.mkdir()  # Refuse a stale destination, including symlinks.
-    (destination / "index.html").write_text(page.replace("__VERSION__", version))
+    (destination / "index.html").write_text(page)
     (destination / "install.sh").write_bytes(installer)
     (destination / "install.sh.sha256").write_text(hashlib.sha256(installer).hexdigest() + "  install.sh\n")
     (destination / ".nojekyll").touch()
