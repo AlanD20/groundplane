@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -10,7 +11,7 @@ import (
 )
 
 type ScriptAttachSources struct {
-	Networks []Versioned[ZoneRecord]
+	Networks []Versioned[zonerecord.Record]
 	Heads    []Versioned[EnvironmentBlueprintHead]
 	Attaches []Versioned[AttachRecord]
 }
@@ -49,7 +50,7 @@ func resolveScriptAttachNetworks(
 	revision int64,
 ) (ScriptAttachSources, error) {
 	result := ScriptAttachSources{}
-	resolved := make(map[string]Versioned[ZoneRecord])
+	resolved := make(map[string]Versioned[zonerecord.Record])
 	heads := make(map[string]Versioned[EnvironmentBlueprintHead])
 	for _, value := range attaches {
 		attach := value.Record

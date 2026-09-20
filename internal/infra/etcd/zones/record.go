@@ -1,4 +1,4 @@
-package etcd
+package zones
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/composekey"
@@ -9,39 +9,23 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// ZoneRecord is the joined public view for one Environment-scoped network
+// Record is the joined public view for one Environment-scoped network
 // Zone. It is derived from the selected immutable Environment projection and
 // is not a durable desired-state authority.
-type ZoneRecord struct {
+type Record struct {
 	EnvironmentID string    `json:"environment_id"`
 	Desired       core.Zone `json:"desired"`
 }
 
-func joinEnvironmentZone(
-	projection Versioned[EnvironmentComposeProjection],
-	desired EnvironmentZoneProjection,
-) (Versioned[ZoneRecord], error) {
-	if desired.EnvironmentID != projection.Record.EnvironmentID {
-		return Versioned[ZoneRecord]{}, corruptEnvironmentComposeProjection()
-	}
-	record, err := NewZoneRecord(desired.EnvironmentID, desired.Desired)
-	if err != nil {
-		return Versioned[ZoneRecord]{}, corruptEnvironmentComposeProjection()
-	}
-	return Versioned[ZoneRecord]{
-		Record: record, Revision: projection.Revision, ReadRevision: projection.ReadRevision,
-	}, nil
-}
-
-func NewZoneRecord(environmentID string, desired core.Zone) (ZoneRecord, error) {
-	record := ZoneRecord{EnvironmentID: environmentID, Desired: desired}
-	if err := validateZoneRecord(record); err != nil {
-		return ZoneRecord{}, err
+func NewRecord(environmentID string, desired core.Zone) (Record, error) {
+	record := Record{EnvironmentID: environmentID, Desired: desired}
+	if err := ValidateRecord(record); err != nil {
+		return Record{}, err
 	}
 	return record, nil
 }
 
-func validateZoneRecord(record ZoneRecord) error {
+func ValidateRecord(record Record) error {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
 		return err
 	}

@@ -109,7 +109,7 @@ func routeOwnerKey(environmentID string, routeID string) string {
 
 func routeMatchKey(environmentID string, host string, path string) string {
 	return "/v1/indexes/routes/by-match/environment/" + environmentID + "/" +
-		encodeDynamicSegment(host) + "/" + encodeDynamicSegment(path)
+		recordcodec.EncodeKeySegment(host) + "/" + recordcodec.EncodeKeySegment(path)
 }
 
 func validateRouteRecord(record RouteRecord) error {

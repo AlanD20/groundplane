@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -18,7 +19,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 	ctx context.Context,
 	environment Versioned[EnvironmentRecord],
 	project Versioned[ProjectRecord],
-	zone Versioned[ZoneRecord],
+	zone Versioned[zonerecord.Record],
 	authorities EnvironmentZoneRemovalAuthorities,
 	tombstone DeletionTombstoneRecord,
 	intent ZoneRemovalIntent,
@@ -316,7 +317,7 @@ func classifyZoneDeletionStartConflict(
 // its running Controller parent to the normal Agent network-removal Task.
 func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	ctx context.Context,
-	zone Versioned[ZoneRecord],
+	zone Versioned[zonerecord.Record],
 	parentTaskID string,
 	tombstone Versioned[DeletionTombstoneRecord],
 	intent ZoneRemovalIntent,
@@ -536,29 +537,29 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 
 func selectedZoneDeletionRecord(
 	projection Versioned[EnvironmentComposeProjection],
-	supplied Versioned[ZoneRecord],
+	supplied Versioned[zonerecord.Record],
 	zoneID string,
-) (Versioned[ZoneRecord], error) {
+) (Versioned[zonerecord.Record], error) {
 	if projection.Revision <= 0 || projection.ReadRevision < projection.Revision ||
 		supplied.Revision != projection.Revision || supplied.ReadRevision < supplied.Revision {
-		return Versioned[ZoneRecord]{}, errs.New(errs.KindValidationFailed, "Zone deletion projection is invalid")
+		return Versioned[zonerecord.Record]{}, errs.New(errs.KindValidationFailed, "Zone deletion projection is invalid")
 	}
-	var selected *Versioned[ZoneRecord]
+	var selected *Versioned[zonerecord.Record]
 	for _, desired := range projection.Record.DesiredZones {
 		if desired.Desired.ID != zoneID {
 			continue
 		}
 		if selected != nil {
-			return Versioned[ZoneRecord]{}, corruptEnvironmentComposeProjection()
+			return Versioned[zonerecord.Record]{}, corruptEnvironmentComposeProjection()
 		}
 		joined, err := joinEnvironmentZone(projection, desired)
 		if err != nil {
-			return Versioned[ZoneRecord]{}, err
+			return Versioned[zonerecord.Record]{}, err
 		}
 		selected = &joined
 	}
 	if selected == nil || selected.Record != supplied.Record {
-		return Versioned[ZoneRecord]{}, errs.New(
+		return Versioned[zonerecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Zone does not match the selected projection",
 		)
@@ -570,7 +571,7 @@ func validateZoneDeletionHierarchy(
 	ctx context.Context,
 	environment Versioned[EnvironmentRecord],
 	project Versioned[ProjectRecord],
-	zone Versioned[ZoneRecord],
+	zone Versioned[zonerecord.Record],
 ) error {
 	if err := validateContext(ctx); err != nil {
 		return err

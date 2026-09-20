@@ -17,7 +17,7 @@ const componentObservationPrefix = "/v1/observed/platform/components/"
 
 func platformComponentOwnerKey(id string) string { return platformComponentOwnerPrefix + id }
 func platformComponentKindKey(kind core.ComponentKind) string {
-	return "/v1/indexes/components/by-kind/platform/" + encodeDynamicSegment(string(kind))
+	return "/v1/indexes/components/by-kind/platform/" + recordcodec.EncodeKeySegment(string(kind))
 }
 func componentObservationKey(id string) string { return componentObservationPrefix + id }
 

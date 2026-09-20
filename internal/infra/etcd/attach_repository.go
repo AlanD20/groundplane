@@ -1633,7 +1633,7 @@ func attachOwnerKey(environmentID string, attachID string) string {
 }
 
 func attachNameKey(environmentID string, name string) string {
-	return "/v1/indexes/attaches/by-name/environment/" + environmentID + "/" + encodeDynamicSegment(name)
+	return "/v1/indexes/attaches/by-name/environment/" + environmentID + "/" + recordcodec.EncodeKeySegment(name)
 }
 
 func attachServiceKey(serviceID string, attachID string) string {

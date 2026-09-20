@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -323,7 +324,7 @@ func newServiceRepository(store hierarchyStore) (*ServiceRepository, error) {
 // ServiceMutationReferences are the live desired resources used to construct
 // one complete candidate Environment revision.
 type ServiceMutationReferences struct {
-	Zones        []Versioned[ZoneRecord]
+	Zones        []Versioned[zonerecord.Record]
 	Dependencies []Versioned[ServiceRecord]
 }
 
@@ -340,7 +341,7 @@ func serviceMutationReferenceConditions(
 	}
 	conditions := make([]etcdstore.Condition, 0, len(references.Zones)+2*len(references.Dependencies))
 	for _, zone := range references.Zones {
-		if err := validateZoneRecord(zone.Record); err != nil || zone.Revision <= 0 ||
+		if err := zonerecord.ValidateRecord(zone.Record); err != nil || zone.Revision <= 0 ||
 			zone.ReadRevision < zone.Revision || zone.Record.EnvironmentID != record.EnvironmentID {
 			return nil, errs.New(errs.KindValidationFailed, "Service Zone reference is invalid")
 		}

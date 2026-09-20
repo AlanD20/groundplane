@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -110,7 +111,7 @@ func (repository *Repository) ClaimEnvironmentBlueprintStage(
 	if err != nil {
 		return etcd.EnvironmentBlueprintStageClaim{}, err
 	}
-	existingKey := etcd.EnvironmentBlueprintDescriptorPrefix + etcd.EncodeCapabilityKeySegment(existingID)
+	existingKey := etcd.EnvironmentBlueprintDescriptorPrefix + recordcodec.EncodeKeySegment(existingID)
 	existing, err := repository.store.GetMany(
 		ctx,
 		etcdstore.GetManyRequest{Keys: []string{existingKey}, Revision: result.Revision},

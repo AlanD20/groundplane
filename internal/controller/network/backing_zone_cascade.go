@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/http"
 	"slices"
 	"strings"
@@ -23,7 +24,7 @@ import (
 const backingZoneCascadePollInterval = 250 * time.Millisecond
 
 type backingZoneCascadeRepository interface {
-	GetZone(context.Context, string) (etcd.Versioned[etcd.ZoneRecord], error)
+	GetZone(context.Context, string) (etcd.Versioned[zonerecord.Record], error)
 	GetDeletionTombstone(
 		context.Context,
 		etcd.DeletionTargetKind,
@@ -40,7 +41,7 @@ type backingZoneCascadeRepository interface {
 	GetZoneRemovalIntent(context.Context, string) (etcd.Versioned[etcd.ZoneRemovalIntent], bool, error)
 	HandoffBackingZoneDeletion(
 		context.Context,
-		etcd.Versioned[etcd.ZoneRecord],
+		etcd.Versioned[zonerecord.Record],
 		string,
 		etcd.Versioned[etcd.DeletionTombstoneRecord],
 		etcd.ZoneRemovalIntent,
@@ -213,7 +214,7 @@ func (service *backingZoneCascadeService) advanceAttach(
 func (service *backingZoneCascadeService) finish(
 	ctx context.Context,
 	parent etcd.TaskRecord,
-	zone etcd.Versioned[etcd.ZoneRecord],
+	zone etcd.Versioned[zonerecord.Record],
 ) error {
 	tombstone, found, err := service.repository.GetDeletionTombstone(
 		ctx,
@@ -260,7 +261,7 @@ func (service *backingZoneCascadeService) finish(
 func (service *backingZoneCascadeService) publishFinalRemoval(
 	ctx context.Context,
 	parent etcd.TaskRecord,
-	zone etcd.Versioned[etcd.ZoneRecord],
+	zone etcd.Versioned[zonerecord.Record],
 	tombstone etcd.Versioned[etcd.DeletionTombstoneRecord],
 ) (string, error) {
 	now := service.now().UTC()

@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"reflect"
 	"sort"
 	"time"
@@ -36,7 +37,7 @@ type ComponentTaskPreparation struct {
 }
 
 type componentTaskAddressPreparation struct {
-	Zone    Versioned[ZoneRecord]
+	Zone    Versioned[zonerecord.Record]
 	Current Versioned[componentAddressRegistry]
 	Next    componentAddressRegistry
 	Mutates bool
@@ -167,9 +168,9 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 		selected.Record = projection
 		selected.Revision = appliedValue.ModRevision
 	}
-	selectedZones := make(map[string]Versioned[ZoneRecord])
+	selectedZones := make(map[string]Versioned[zonerecord.Record])
 	if found {
-		selectedZones = make(map[string]Versioned[ZoneRecord], len(selected.Record.DesiredZones))
+		selectedZones = make(map[string]Versioned[zonerecord.Record], len(selected.Record.DesiredZones))
 		for _, desired := range selected.Record.DesiredZones {
 			zone, joinErr := joinEnvironmentZone(selected, desired)
 			if joinErr != nil {
@@ -186,7 +187,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 	if err != nil {
 		return ComponentTaskPreparation{}, err
 	}
-	desiredZones := make(map[string]Versioned[ZoneRecord], len(desired.Record.DesiredZones))
+	desiredZones := make(map[string]Versioned[zonerecord.Record], len(desired.Record.DesiredZones))
 	for _, item := range desired.Record.DesiredZones {
 		zone, joinErr := joinEnvironmentZone(desired, item)
 		if joinErr != nil {
@@ -300,7 +301,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 		}
 		registries[zoneID] = cloneComponentAddressRegistry(currentRegistry)
 		addresses[index] = componentTaskAddressPreparation{
-			Zone: Versioned[ZoneRecord]{
+			Zone: Versioned[zonerecord.Record]{
 				Record: zoneChange.Record, Revision: zoneRevision, ReadRevision: fixedRevision,
 			},
 			Current: Versioned[componentAddressRegistry]{
@@ -368,8 +369,8 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 }
 
 func componentCandidateSelectedZoneIdentityMatches(
-	current ZoneRecord,
-	selected ZoneRecord,
+	current zonerecord.Record,
+	selected zonerecord.Record,
 	selectedPresent bool,
 ) bool {
 	if !selectedPresent {
@@ -393,7 +394,7 @@ func componentCandidateZones(
 		if _, needed := wantedSet[zoneID]; !needed {
 			continue
 		}
-		if _, duplicate := result[zoneID]; duplicate || validateZoneRecord(change.Record) != nil ||
+		if _, duplicate := result[zoneID]; duplicate || zonerecord.ValidateRecord(change.Record) != nil ||
 			change.Record.EnvironmentID != environmentID {
 			return nil, errs.New(errs.KindValidationFailed, "Component candidate Zone input is invalid")
 		}
@@ -473,7 +474,7 @@ func validateComponentTaskPreparation(preparation ComponentTaskPreparation) erro
 		if zoneID <= previousZoneID || address.Zone.Revision < 0 ||
 			address.Zone.ReadRevision < address.Zone.Revision || address.Current.Revision < 0 ||
 			address.Current.ReadRevision < address.Current.Revision ||
-			validateZoneRecord(address.Zone.Record) != nil ||
+			zonerecord.ValidateRecord(address.Zone.Record) != nil ||
 			validateComponentAddressRegistry(address.Zone.Record, address.Current.Record) != nil ||
 			validateComponentAddressRegistry(address.Zone.Record, address.Next) != nil {
 			return errs.New(errs.KindValidationFailed, "Component candidate address evidence is invalid")

@@ -3,15 +3,16 @@ package blueprint
 import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func prepareEnvironmentBlueprintZoneChanges(
 	environmentID string,
 	desired []core.Zone,
-	current []etcd.Versioned[etcd.ZoneRecord],
+	current []etcd.Versioned[zonerecord.Record],
 ) ([]etcd.EnvironmentBlueprintZoneChange, error) {
-	currentByID := make(map[string]etcd.Versioned[etcd.ZoneRecord], len(current))
+	currentByID := make(map[string]etcd.Versioned[zonerecord.Record], len(current))
 	for _, zone := range current {
 		if zone.Record.EnvironmentID != environmentID || zone.Record.Desired.ID == "" {
 			return nil, errs.New(errs.KindInternal, "durable Blueprint Zone state is inconsistent")
@@ -38,7 +39,7 @@ func prepareEnvironmentBlueprintZoneChanges(
 			delete(currentByID, next.ID)
 			continue
 		}
-		record, err := etcd.NewZoneRecord(environmentID, next)
+		record, err := zonerecord.NewRecord(environmentID, next)
 		if err != nil {
 			return nil, err
 		}

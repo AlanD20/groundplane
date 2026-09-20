@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/http"
 	"net/netip"
 	"time"
@@ -241,7 +242,7 @@ func (service *CreationService) createBackingServiceFromStage(
 		return etcd.IdempotencyResponse{}, err
 	}
 
-	zone, err := etcd.NewZoneRecord(environment.ID, core.Zone{
+	zone, err := zonerecord.NewRecord(environment.ID, core.Zone{
 		ID: allocator.New(ids.KindNetwork), Name: input.Zone.Name, Subnet: input.Zone.Subnet,
 		Internal: input.Zone.Internal, OwnerKind: core.ZoneOwnerBackingProject, OwnerID: project.ID,
 	})

@@ -22,7 +22,6 @@ func ValidateCapabilityTaskResult(result TaskResultRecord, steps []TaskStepRecor
 }
 func IsCapabilityTerminalTaskStatus(status TaskStatus) bool        { return isTerminalTaskStatus(status) }
 func ValidateCapabilityVolumeComposeKey(key string) error          { return volumeidentity.ValidateKey(key) }
-func EncodeCapabilityKeySegment(value string) string               { return encodeDynamicSegment(value) }
 func EncodeCapabilityTaskRecord(record TaskRecord) ([]byte, error) { return encodeTaskRecord(record) }
 func DecodeCapabilityTaskRecord(value []byte) (TaskRecord, error)  { return decodeTaskRecord(value) }
 func EncodeCapabilityTaskReference(taskID string) ([]byte, error)  { return encodeTaskReference(taskID) }

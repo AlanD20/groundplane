@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"path"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
@@ -13,7 +14,7 @@ import (
 
 type managedConfigTopology interface {
 	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
-	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ZoneRecord], error)
+	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[zonerecord.Record], error)
 	ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.RouteRecord], error)
 }
 

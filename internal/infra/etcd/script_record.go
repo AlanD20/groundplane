@@ -151,7 +151,7 @@ func scriptSetOwnerKey(environmentID, generationID, scriptID string) string {
 }
 
 func scriptSetSlugKey(environmentID, generationID, slug string) string {
-	return scriptSetGenerationPrefix(environmentID, generationID) + "slugs/" + encodeDynamicSegment(slug)
+	return scriptSetGenerationPrefix(environmentID, generationID) + "slugs/" + recordcodec.EncodeKeySegment(slug)
 }
 
 func validateScriptRecord(record ScriptRecord) error {

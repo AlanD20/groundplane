@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -18,7 +19,7 @@ type serviceMutationRepository interface {
 	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
 	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
 	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
-	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ZoneRecord], error)
+	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[zonerecord.Record], error)
 	ClaimEnvironmentBlueprintStage(
 		context.Context,
 		etcd.EnvironmentBlueprintStageClaimRequest,
@@ -117,7 +118,7 @@ func (repository *durableServiceMutationRepository) ListZones(
 	ctx context.Context,
 	environmentID string,
 	request etcd.PageRequest,
-) (etcd.Page[etcd.ZoneRecord], error) {
+) (etcd.Page[zonerecord.Record], error) {
 	return repository.zones.ListZones(ctx, environmentID, request)
 }
 

@@ -2,6 +2,7 @@ package network
 
 import (
 	"context"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -10,8 +11,8 @@ import (
 
 type zoneReadRepository interface {
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
-	GetZone(context.Context, string) (etcd.Versioned[etcd.ZoneRecord], error)
-	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ZoneRecord], error)
+	GetZone(context.Context, string) (etcd.Versioned[zonerecord.Record], error)
+	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[zonerecord.Record], error)
 }
 
 type zoneReadService struct {
@@ -29,24 +30,24 @@ func (service *zoneReadService) ListZones(
 	ctx context.Context,
 	environmentID string,
 	request etcd.PageRequest,
-) (etcd.Page[etcd.ZoneRecord], error) {
+) (etcd.Page[zonerecord.Record], error) {
 	if ctx == nil {
-		return etcd.Page[etcd.ZoneRecord]{}, errs.New(errs.KindInternal, "Zone list context is required")
+		return etcd.Page[zonerecord.Record]{}, errs.New(errs.KindInternal, "Zone list context is required")
 	}
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return etcd.Page[etcd.ZoneRecord]{}, errs.New(
+		return etcd.Page[zonerecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Zone list requires a stable Environment id",
 		)
 	}
 	if request.Limit < 0 {
-		return etcd.Page[etcd.ZoneRecord]{}, errs.New(
+		return etcd.Page[zonerecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Zone list limit must be a positive integer",
 		)
 	}
 	if _, err := service.repository.GetEnvironment(ctx, environmentID); err != nil {
-		return etcd.Page[etcd.ZoneRecord]{}, err
+		return etcd.Page[zonerecord.Record]{}, err
 	}
 	return service.repository.ListZones(ctx, environmentID, request)
 }
@@ -54,12 +55,12 @@ func (service *zoneReadService) ListZones(
 func (service *zoneReadService) GetZone(
 	ctx context.Context,
 	zoneID string,
-) (etcd.Versioned[etcd.ZoneRecord], error) {
+) (etcd.Versioned[zonerecord.Record], error) {
 	if ctx == nil {
-		return etcd.Versioned[etcd.ZoneRecord]{}, errs.New(errs.KindInternal, "Zone read context is required")
+		return etcd.Versioned[zonerecord.Record]{}, errs.New(errs.KindInternal, "Zone read context is required")
 	}
 	if ids.Validate(ids.KindNetwork, zoneID) != nil {
-		return etcd.Versioned[etcd.ZoneRecord]{}, errs.New(
+		return etcd.Versioned[zonerecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Zone read requires a stable Zone id",
 		)

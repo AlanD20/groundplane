@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"slices"
 	"sort"
 	"time"
@@ -39,7 +40,7 @@ type ZoneRemovalIntent struct {
 func NewZoneRemovalIntent(
 	operationID string,
 	taskID string,
-	zone Versioned[ZoneRecord],
+	zone Versioned[zonerecord.Record],
 	authorities EnvironmentZoneRemovalAuthorities,
 	claim EnvironmentBlueprintStageClaim,
 	candidate EnvironmentComposeProjection,

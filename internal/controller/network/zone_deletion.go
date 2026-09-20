@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"math"
 	"net/http"
 	"time"
@@ -28,7 +29,7 @@ const (
 )
 
 type zoneDeletionRepository interface {
-	GetZone(context.Context, string) (etcd.Versioned[etcd.ZoneRecord], error)
+	GetZone(context.Context, string) (etcd.Versioned[zonerecord.Record], error)
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
 	GetEnvironmentZoneRemovalAuthorities(context.Context, string) (etcd.EnvironmentZoneRemovalAuthorities, bool, error)
@@ -44,7 +45,7 @@ type zoneDeletionRepository interface {
 		context.Context,
 		etcd.Versioned[etcd.EnvironmentRecord],
 		etcd.Versioned[etcd.ProjectRecord],
-		etcd.Versioned[etcd.ZoneRecord],
+		etcd.Versioned[zonerecord.Record],
 		etcd.EnvironmentZoneRemovalAuthorities,
 		etcd.DeletionTombstoneRecord,
 		etcd.ZoneRemovalIntent,

@@ -9,6 +9,8 @@ import (
 	"fmt"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -284,7 +286,7 @@ const (
 )
 
 func environmentBlueprintDescriptorKeyByID(descriptorID string) string {
-	return EnvironmentBlueprintDescriptorPrefix + encodeDynamicSegment(descriptorID)
+	return EnvironmentBlueprintDescriptorPrefix + recordcodec.EncodeKeySegment(descriptorID)
 }
 
 func environmentBlueprintRootKey(environmentID string, revisionID string) string {
@@ -311,8 +313,8 @@ func environmentBlueprintChunkKey(environmentID, revisionID, family string, inde
 }
 
 func environmentBlueprintRevisionPrefixFinal(environmentID, revisionID string) string {
-	return environmentBlueprintRevisionRoot + encodeDynamicSegment(environmentID) + "/" +
-		encodeDynamicSegment(revisionID) + "/"
+	return environmentBlueprintRevisionRoot + recordcodec.EncodeKeySegment(environmentID) + "/" +
+		recordcodec.EncodeKeySegment(revisionID) + "/"
 }
 
 func environmentBlueprintLocatorKey(locator IdempotencyLocator) (string, [sha256.Size]byte, error) {
@@ -706,7 +708,7 @@ func validateEnvironmentZoneMutationAudit(value EnvironmentZoneMutationAudit) er
 		return errs.New(errs.KindValidationFailed, "Zone desired mutation audit action is invalid")
 	}
 	request := value.Request
-	if validateZoneRecord(ZoneRecord{EnvironmentID: request.EnvironmentID, Desired: core.Zone{
+	if zonerecord.ValidateRecord(zonerecord.Record{EnvironmentID: request.EnvironmentID, Desired: core.Zone{
 		ID: value.ZoneID, Name: request.Name, Subnet: request.Subnet, Internal: request.Internal,
 		OwnerKind: core.ZoneOwnerEnvironment, OwnerID: request.EnvironmentID,
 	}}) != nil {

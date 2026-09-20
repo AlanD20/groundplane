@@ -555,7 +555,7 @@ func secretOwnerKey(secret core.Secret) string {
 
 func secretKeyIndexKey(scope core.SecretScope, projectID string, key string) string {
 	kind, id := secretScopeKey(scope, projectID)
-	return secretKeyIndexPrefix + kind + "/" + id + "/" + encodeDynamicSegment(key)
+	return secretKeyIndexPrefix + kind + "/" + id + "/" + recordcodec.EncodeKeySegment(key)
 }
 
 func secretScopedKey(secret core.Secret) string {

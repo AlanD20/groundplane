@@ -7,6 +7,7 @@ import (
 	"fmt"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/netip"
 	"path"
 	"regexp"
@@ -53,8 +54,8 @@ type EnvironmentBlueprintHead struct {
 // EnvironmentBlueprintZoneChange is one immutable existing Zone fence or one
 // new Zone and subnet reservation committed with the Blueprint head.
 type EnvironmentBlueprintZoneChange struct {
-	Current *Versioned[ZoneRecord]
-	Record  ZoneRecord
+	Current *Versioned[zonerecord.Record]
+	Record  zonerecord.Record
 }
 
 // EnvironmentBlueprintServiceChange is one desired-only Service replacement
@@ -371,7 +372,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintZonePoolAtRevi
 	}
 	next := zonePoolRegistry{Reservations: make(map[string]string, len(desired))}
 	for _, projection := range desired {
-		zone := ZoneRecord(projection)
+		zone := zonerecord.Record(projection)
 		if projection.EnvironmentID != environment.ID {
 			return preparedEnvironmentBlueprintZonePool{}, errs.New(
 				errs.KindValidationFailed, "Blueprint Zone does not belong to its Environment",

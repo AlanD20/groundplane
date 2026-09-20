@@ -5,6 +5,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"reflect"
 	"sort"
 	"time"
@@ -224,7 +225,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 		})
 	}
 
-	zoneRecords := make(map[string]ZoneRecord, len(zones))
+	zoneRecords := make(map[string]zonerecord.Record, len(zones))
 	registries := make(map[string]componentAddressRegistry, len(zones))
 	registryOffset := 4 + len(intent.Candidates)
 	tombstoneOffset := registryOffset + len(zones)
@@ -532,7 +533,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		})
 	}
 
-	zoneRecords := make(map[string]ZoneRecord, len(zones))
+	zoneRecords := make(map[string]zonerecord.Record, len(zones))
 	registries := make(map[string]componentAddressRegistry, len(zones))
 	registryValues := make(map[string]*etcdstore.KeyValue, len(zones))
 	registryOffset := 3 + len(intent.Candidates)
@@ -735,7 +736,7 @@ func componentTaskDesiredProjectionZones(
 	task TaskRecord,
 	intent ComponentTaskIntent,
 	zones []string,
-) (string, map[string]ZoneRecord, error) {
+) (string, map[string]zonerecord.Record, error) {
 	desiredRevisionID := task.Params[EnvironmentDesiredRevisionParam]
 	if ids.Validate(ids.KindTask, desiredRevisionID) != nil {
 		return "", nil, errs.New(errs.KindStateConflict, "Component Task desired revision is invalid")
@@ -755,7 +756,7 @@ func componentTaskDesiredProjectionZones(
 			"Component Task desired projection changed",
 		)
 	}
-	projected := make(map[string]ZoneRecord, len(projection.Record.DesiredZones))
+	projected := make(map[string]zonerecord.Record, len(projection.Record.DesiredZones))
 	for _, desired := range projection.Record.DesiredZones {
 		zone, joinErr := joinEnvironmentZone(projection, desired)
 		if joinErr != nil {
@@ -763,7 +764,7 @@ func componentTaskDesiredProjectionZones(
 		}
 		projected[zone.Record.Desired.ID] = zone.Record
 	}
-	result := make(map[string]ZoneRecord, len(zones))
+	result := make(map[string]zonerecord.Record, len(zones))
 	for _, zoneID := range zones {
 		zone, ok := projected[zoneID]
 		if !ok {

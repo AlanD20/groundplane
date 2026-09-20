@@ -5,6 +5,7 @@ package network
 
 import (
 	"context"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
 	"github.com/AlanD20/groundplane/internal/controller"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
@@ -260,7 +261,7 @@ func (service *Service) RemoveRoute(
 	return projectMutationResponse(response), err
 }
 
-func projectZone(record etcd.ZoneRecord) corenetwork.Zone {
+func projectZone(record zonerecord.Record) corenetwork.Zone {
 	return corenetwork.Zone{
 		ID: record.Desired.ID, EnvironmentID: record.EnvironmentID, Name: record.Desired.Name,
 		Subnet: record.Desired.Subnet, Internal: record.Desired.Internal,

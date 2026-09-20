@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/netip"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -64,7 +65,7 @@ func (r *ZoneRepository) getZonePoolRegistryAtRevision(
 	}, nil
 }
 
-func (registry zonePoolRegistry) reserve(environment EnvironmentRecord, zone ZoneRecord) (zonePoolRegistry, error) {
+func (registry zonePoolRegistry) reserve(environment EnvironmentRecord, zone zonerecord.Record) (zonePoolRegistry, error) {
 	parent, err := ipam.ParseIPv4Prefix(environment.NetworkPool)
 	if err != nil || parent.String() != environment.NetworkPool {
 		return zonePoolRegistry{}, errs.New(errs.KindValidationFailed, "Environment network pool is invalid")
@@ -95,11 +96,11 @@ func (registry zonePoolRegistry) reserve(environment EnvironmentRecord, zone Zon
 	return next, nil
 }
 
-func (registry zonePoolRegistry) release(zone ZoneRecord) (zonePoolRegistry, error) {
+func (registry zonePoolRegistry) release(zone zonerecord.Record) (zonePoolRegistry, error) {
 	if err := validateZonePoolRegistry(registry); err != nil {
 		return zonePoolRegistry{}, err
 	}
-	if err := validateZoneRecord(zone); err != nil {
+	if err := zonerecord.ValidateRecord(zone); err != nil {
 		return zonePoolRegistry{}, err
 	}
 	if registry.Reservations[zone.Desired.ID] != zone.Desired.Subnet {

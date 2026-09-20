@@ -8,6 +8,7 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
@@ -233,12 +234,12 @@ func (service *serviceMutationService) resolveServiceReferences(
 	if err != nil {
 		return etcd.ServiceMutationReferences{}, err
 	}
-	zoneByName := make(map[string]etcd.Versioned[etcd.ZoneRecord], len(zones))
+	zoneByName := make(map[string]etcd.Versioned[zonerecord.Record], len(zones))
 	for _, zone := range zones {
 		zoneByName[zone.Record.Desired.Name] = zone
 	}
 	references := etcd.ServiceMutationReferences{
-		Zones: make([]etcd.Versioned[etcd.ZoneRecord], 0, len(record.Desired.Zones)),
+		Zones: make([]etcd.Versioned[zonerecord.Record], 0, len(record.Desired.Zones)),
 	}
 	for _, name := range record.Desired.Zones {
 		zone, ok := zoneByName[name]
@@ -281,8 +282,8 @@ func (service *serviceMutationService) resolveServiceReferences(
 func (service *serviceMutationService) listAllZones(
 	ctx context.Context,
 	environmentID string,
-) ([]etcd.Versioned[etcd.ZoneRecord], error) {
-	items := []etcd.Versioned[etcd.ZoneRecord]{}
+) ([]etcd.Versioned[zonerecord.Record], error) {
+	items := []etcd.Versioned[zonerecord.Record]{}
 	cursor := ""
 	for {
 		page, err := service.repository.ListZones(ctx, environmentID, etcd.PageRequest{Limit: 200, Cursor: cursor})

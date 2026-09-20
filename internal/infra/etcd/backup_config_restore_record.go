@@ -147,7 +147,7 @@ func backupConfigRestoreDestinationKey(restoreGenerationID string, destination s
 	if err != nil {
 		return "", err
 	}
-	return prefix + encodeDynamicSegment(destination), nil
+	return prefix + recordcodec.EncodeKeySegment(destination), nil
 }
 
 func encodeBackupConfigRestoreEntryRecord(record BackupConfigRestoreEntryRecord) ([]byte, error) {

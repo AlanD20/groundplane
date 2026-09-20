@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -27,7 +28,7 @@ type ScriptExecutionSources struct {
 	RenderInput       Versioned[ReleaseRenderInput]
 	DesiredHead       Versioned[EnvironmentBlueprintHead]
 	DesiredProjection Versioned[EnvironmentComposeProjection]
-	Networks          []Versioned[ZoneRecord]
+	Networks          []Versioned[zonerecord.Record]
 	AttachSources     ScriptAttachSources
 }
 
@@ -455,8 +456,8 @@ func loadScriptExecutionDesiredProjection(
 
 func resolveScriptExecutionNetworks(
 	projection Versioned[EnvironmentComposeProjection],
-) ([]Versioned[ZoneRecord], error) {
-	networks := make([]Versioned[ZoneRecord], len(projection.Record.DesiredZones))
+) ([]Versioned[zonerecord.Record], error) {
+	networks := make([]Versioned[zonerecord.Record], len(projection.Record.DesiredZones))
 	for index, desired := range projection.Record.DesiredZones {
 		joined, err := joinEnvironmentZone(projection, desired)
 		if err != nil {

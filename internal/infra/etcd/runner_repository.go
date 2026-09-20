@@ -118,7 +118,7 @@ func runnerOwnerKey(kind RunnerOwnerKind, ownerID string, runnerID string) strin
 }
 
 func runnerTenantSlugKey(tenantID string, slug string) string {
-	return "/v1/indexes/runners/by-slug/tenant/" + tenantID + "/" + encodeDynamicSegment(slug)
+	return "/v1/indexes/runners/by-slug/tenant/" + tenantID + "/" + recordcodec.EncodeKeySegment(slug)
 }
 
 func runnerTenantCursorPrefix(tenantID string) string {

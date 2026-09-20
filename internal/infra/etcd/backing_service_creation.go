@@ -6,6 +6,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -22,7 +23,7 @@ type BackingServiceCreation struct {
 	Project      ProjectRecord
 	Environment  EnvironmentRecord
 	Components   []ComponentRecord
-	Zone         ZoneRecord
+	Zone         zonerecord.Record
 	Service      ServiceRecord
 	Secrets      []secretrecord.Record
 	SecretValues []secretrecord.EncryptedValue
@@ -375,7 +376,7 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 	if err := validateEnvironmentPoolRegistry(creation.PoolRegistry.Record); err != nil {
 		return err
 	}
-	if err := validateZoneRecord(creation.Zone); err != nil {
+	if err := zonerecord.ValidateRecord(creation.Zone); err != nil {
 		return err
 	}
 	if creation.Zone.EnvironmentID != creation.Environment.ID ||

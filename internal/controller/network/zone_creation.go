@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/http"
 	"time"
 
@@ -299,7 +300,7 @@ func (service *zoneCreationService) createZoneOnce(
 		ownerKind = core.ZoneOwnerBackingProject
 		ownerID = project.Record.ID
 	}
-	record, err := etcd.NewZoneRecord(environment.Record.ID, core.Zone{
+	record, err := zonerecord.NewRecord(environment.Record.ID, core.Zone{
 		ID: allocator.Named(ids.KindNetwork, "zone/create"), Name: input.Name, Subnet: input.Subnet,
 		Internal: input.Internal, OwnerKind: ownerKind, OwnerID: ownerID,
 	})

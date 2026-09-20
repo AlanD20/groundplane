@@ -312,7 +312,7 @@ func connectorEnvironmentKey(environmentID string, connectorID string) string {
 }
 
 func connectorNameKey(environmentID string, name string) string {
-	return connectorNameIndexPrefix + environmentID + "/" + encodeDynamicSegment(name)
+	return connectorNameIndexPrefix + environmentID + "/" + recordcodec.EncodeKeySegment(name)
 }
 
 func connectorCreateConditions(

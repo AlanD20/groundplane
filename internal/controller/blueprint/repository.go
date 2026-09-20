@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/netip"
 	"time"
@@ -28,7 +29,7 @@ type environmentBlueprintRepository interface {
 		context.Context,
 		string,
 	) (etcd.Versioned[etcd.EnvironmentComposeProjection], etcd.EnvironmentVolumeIdentity, error)
-	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ZoneRecord], error)
+	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[zonerecord.Record], error)
 	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
 	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
 	ResolveBackingProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
@@ -224,7 +225,7 @@ func (repository *durableRepository) ListZones(
 	ctx context.Context,
 	environmentID string,
 	request etcd.PageRequest,
-) (etcd.Page[etcd.ZoneRecord], error) {
+) (etcd.Page[zonerecord.Record], error) {
 	return repository.zones.ListZones(ctx, environmentID, request)
 }
 

@@ -3,6 +3,7 @@ package desiredrevision
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -436,7 +437,7 @@ func parseEnvironmentBlueprintDescriptorKey(key string) (string, error) {
 	}
 	descriptorID := string(decoded)
 	if ids.Validate(ids.KindTask, "task_"+descriptorID) != nil ||
-		etcd.EnvironmentBlueprintDescriptorPrefix+etcd.EncodeCapabilityKeySegment(descriptorID) != key {
+		etcd.EnvironmentBlueprintDescriptorPrefix+recordcodec.EncodeKeySegment(descriptorID) != key {
 		return "", etcd.CorruptDesiredRevisionStage()
 	}
 	return descriptorID, nil

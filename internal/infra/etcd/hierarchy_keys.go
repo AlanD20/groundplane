@@ -1,8 +1,6 @@
 package etcd
 
-import (
-	"encoding/base64"
-)
+import recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 const (
 	tenantPrefix                   = "/v1/records/tenants/"
@@ -26,15 +24,15 @@ func environmentOperationLockKey(environmentID string) string {
 }
 
 func tenantSlugKey(slug string) string {
-	return "/v1/indexes/tenants/by-slug/global/-/" + encodeDynamicSegment(slug)
+	return "/v1/indexes/tenants/by-slug/global/-/" + recordcodec.EncodeKeySegment(slug)
 }
 
 func projectTenantSlugKey(tenantID string, slug string) string {
-	return "/v1/indexes/projects/by-slug/tenant/" + tenantID + "/" + encodeDynamicSegment(slug)
+	return "/v1/indexes/projects/by-slug/tenant/" + tenantID + "/" + recordcodec.EncodeKeySegment(slug)
 }
 
 func projectPlatformSlugKey(slug string) string {
-	return "/v1/indexes/projects/by-slug/platform/-/" + encodeDynamicSegment(slug)
+	return "/v1/indexes/projects/by-slug/platform/-/" + recordcodec.EncodeKeySegment(slug)
 }
 
 func projectSlugKey(record ProjectRecord) string {
@@ -45,7 +43,7 @@ func projectSlugKey(record ProjectRecord) string {
 }
 
 func environmentNameKey(projectID string, name string) string {
-	return "/v1/indexes/environments/by-name/project/" + projectID + "/" + encodeDynamicSegment(name)
+	return "/v1/indexes/environments/by-name/project/" + projectID + "/" + recordcodec.EncodeKeySegment(name)
 }
 
 func projectTenantOwnerPrefix(tenantID string) string {
@@ -65,8 +63,4 @@ func environmentOwnerPrefix(projectID string) string {
 
 func environmentOwnerKey(projectID string, environmentID string) string {
 	return environmentOwnerPrefix(projectID) + environmentID
-}
-
-func encodeDynamicSegment(value string) string {
-	return "~" + base64.RawURLEncoding.EncodeToString([]byte(value))
 }

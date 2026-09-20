@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/netip"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -21,12 +22,12 @@ func componentAddressRegistryKey(zoneID string) string {
 func getComponentAddressRegistry(
 	ctx context.Context,
 	store hierarchyStore,
-	zone ZoneRecord,
+	zone zonerecord.Record,
 ) (Versioned[componentAddressRegistry], error) {
 	if err := validateContext(ctx); err != nil {
 		return Versioned[componentAddressRegistry]{}, err
 	}
-	if err := validateZoneRecord(zone); err != nil {
+	if err := zonerecord.ValidateRecord(zone); err != nil {
 		return Versioned[componentAddressRegistry]{}, err
 	}
 	result, err := store.Get(ctx, componentAddressRegistryKey(zone.Desired.ID))
@@ -49,7 +50,7 @@ func getComponentAddressRegistry(
 }
 
 func (registry componentAddressRegistry) reserve(
-	zone ZoneRecord,
+	zone zonerecord.Record,
 	componentID string,
 ) (componentAddressRegistry, string, error) {
 	if err := validateComponentAddressRegistry(zone, registry); err != nil {
@@ -79,7 +80,7 @@ func (registry componentAddressRegistry) reserve(
 }
 
 func (registry componentAddressRegistry) reserveExact(
-	zone ZoneRecord,
+	zone zonerecord.Record,
 	componentID string,
 	rawAddress string,
 ) (componentAddressRegistry, error) {
@@ -120,7 +121,7 @@ func (registry componentAddressRegistry) reserveExact(
 }
 
 func (registry componentAddressRegistry) release(
-	zone ZoneRecord,
+	zone zonerecord.Record,
 	componentID string,
 ) (componentAddressRegistry, string, bool, error) {
 	if err := validateComponentAddressRegistry(zone, registry); err != nil {
@@ -152,8 +153,8 @@ func (registry componentAddressRegistry) addresses(prefix netip.Prefix) ([]netip
 	return addresses, nil
 }
 
-func validateComponentAddressRegistry(zone ZoneRecord, registry componentAddressRegistry) error {
-	if err := validateZoneRecord(zone); err != nil {
+func validateComponentAddressRegistry(zone zonerecord.Record, registry componentAddressRegistry) error {
+	if err := zonerecord.ValidateRecord(zone); err != nil {
 		return err
 	}
 	prefix, err := ipam.ParseIPv4Prefix(zone.Desired.Subnet)
@@ -174,7 +175,7 @@ func validateComponentAddressRegistry(zone ZoneRecord, registry componentAddress
 	return nil
 }
 
-func encodeComponentAddressRegistry(zone ZoneRecord, registry componentAddressRegistry) ([]byte, error) {
+func encodeComponentAddressRegistry(zone zonerecord.Record, registry componentAddressRegistry) ([]byte, error) {
 	if err := validateComponentAddressRegistry(zone, registry); err != nil {
 		return nil, err
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
 	"github.com/AlanD20/groundplane/internal/common/networkname"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -23,7 +24,7 @@ type EnvironmentZoneDesiredPublication struct {
 	Claim                EnvironmentBlueprintStageClaim
 	Revision             EnvironmentDesiredRevisionIdentity
 	Projection           EnvironmentComposeProjection
-	Zone                 ZoneRecord
+	Zone                 zonerecord.Record
 	Marker               IdempotencyMarker
 }
 
@@ -168,7 +169,7 @@ func validateDirectZoneDesiredPublicationInput(input EnvironmentZoneDesiredPubli
 	if err := validateEnvironment(input.Environment.Record); err != nil {
 		return err
 	}
-	if err := validateZoneRecord(input.Zone); err != nil {
+	if err := zonerecord.ValidateRecord(input.Zone); err != nil {
 		return err
 	}
 	if input.Project.Revision <= 0 || input.Environment.Revision <= 0 ||
@@ -271,7 +272,7 @@ func sameDirectZoneFinalProjection(left EnvironmentComposeProjection, right Envi
 		sameServiceRemovalDependencyPlans(left.ServiceDependencyPlans, right.ServiceDependencyPlans)
 }
 
-func validateZoneArtifactAddition(currentValue []byte, candidateValue []byte, zone ZoneRecord) error {
+func validateZoneArtifactAddition(currentValue []byte, candidateValue []byte, zone zonerecord.Record) error {
 	current := &agentpb.ComposeArtifact{}
 	candidate := &agentpb.ComposeArtifact{}
 	options := proto.UnmarshalOptions{DiscardUnknown: false}

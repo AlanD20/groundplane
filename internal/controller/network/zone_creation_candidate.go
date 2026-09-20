@@ -1,6 +1,7 @@
 package network
 
 import (
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -17,7 +18,7 @@ import (
 func buildZoneCreationProjection(
 	current etcd.EnvironmentComposeProjection,
 	project etcd.ProjectRecord,
-	zone etcd.ZoneRecord,
+	zone zonerecord.Record,
 	revisionID string,
 	generation uint64,
 ) (etcd.EnvironmentComposeProjection, error) {

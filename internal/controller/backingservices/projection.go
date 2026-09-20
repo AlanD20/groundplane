@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 )
 
 func buildBackingServiceCreationProjection(
@@ -15,7 +16,7 @@ func buildBackingServiceCreationProjection(
 	volumeMounts []etcd.EnvironmentServiceVolumeMount,
 	artifact []byte,
 	normalizedCompose []byte,
-	zone etcd.ZoneRecord,
+	zone zonerecord.Record,
 	service etcd.ServiceRecord,
 	entries []entryrecord.Record,
 ) etcd.EnvironmentComposeProjection {

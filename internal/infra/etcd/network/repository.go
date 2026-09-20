@@ -6,6 +6,7 @@ package network
 
 import (
 	"context"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
@@ -144,7 +145,7 @@ func (repository *Repository) ListServices(
 func (repository *Repository) GetZone(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.ZoneRecord], error) {
+) (etcd.Versioned[zonerecord.Record], error) {
 	return repository.zones.GetZone(ctx, id)
 }
 
@@ -152,7 +153,7 @@ func (repository *Repository) ListZones(
 	ctx context.Context,
 	environmentID string,
 	request etcd.PageRequest,
-) (etcd.Page[etcd.ZoneRecord], error) {
+) (etcd.Page[zonerecord.Record], error) {
 	return repository.zones.ListZones(ctx, environmentID, request)
 }
 
@@ -160,7 +161,7 @@ func (repository *Repository) BeginZoneDeletionWithTask(
 	ctx context.Context,
 	environment etcd.Versioned[etcd.EnvironmentRecord],
 	project etcd.Versioned[etcd.ProjectRecord],
-	zone etcd.Versioned[etcd.ZoneRecord],
+	zone etcd.Versioned[zonerecord.Record],
 	authorities etcd.EnvironmentZoneRemovalAuthorities,
 	tombstone etcd.DeletionTombstoneRecord,
 	intent etcd.ZoneRemovalIntent,
@@ -301,7 +302,7 @@ func (repository *Repository) GetZoneRemovalIntent(
 
 func (repository *Repository) HandoffBackingZoneDeletion(
 	ctx context.Context,
-	zone etcd.Versioned[etcd.ZoneRecord],
+	zone etcd.Versioned[zonerecord.Record],
 	parentTaskID string,
 	tombstone etcd.Versioned[etcd.DeletionTombstoneRecord],
 	intent etcd.ZoneRemovalIntent,

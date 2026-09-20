@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -37,7 +38,7 @@ func newHierarchyDeletionZoneEvidence(
 
 func validateHierarchyDeletionZoneEvidence(evidence hierarchyDeletionZoneEvidence) error {
 	if evidence.ProjectionRevision <= 0 || evidence.ZoneID != evidence.Desired.ID ||
-		validateZoneRecord(ZoneRecord{EnvironmentID: evidence.EnvironmentID, Desired: evidence.Desired}) != nil {
+		zonerecord.ValidateRecord(zonerecord.Record{EnvironmentID: evidence.EnvironmentID, Desired: evidence.Desired}) != nil {
 		return corruptHierarchyDeletion()
 	}
 	return nil

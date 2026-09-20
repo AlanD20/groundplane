@@ -8,6 +8,7 @@ import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"sort"
 	"strings"
 
@@ -508,7 +509,7 @@ func validateEnvironmentZoneProjections(
 	seenIDs := make(map[string]struct{}, len(values))
 	for _, value := range values {
 		if value.EnvironmentID != environmentID || value.Desired.Name <= previousName ||
-			validateZoneRecord(ZoneRecord(value)) != nil {
+			zonerecord.ValidateRecord(zonerecord.Record(value)) != nil {
 			return errs.New(errs.KindValidationFailed, "Environment desired Zone projection is invalid or unsorted")
 		}
 		if _, duplicate := seenIDs[value.Desired.ID]; duplicate {

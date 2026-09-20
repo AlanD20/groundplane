@@ -215,8 +215,8 @@ func idempotencyMarkerKey(locator IdempotencyLocator) (string, error) {
 		return "", err
 	}
 	key := idempotencyMarkerPrefix + string(locator.ScopeKind) + "/" + locator.ScopeID + "/" +
-		encodeDynamicSegment(locator.Method) + "/" + encodeDynamicSegment(locator.Route) + "/" +
-		encodeDynamicSegment(locator.Key)
+		recordcodec.EncodeKeySegment(locator.Method) + "/" + recordcodec.EncodeKeySegment(locator.Route) + "/" +
+		recordcodec.EncodeKeySegment(locator.Key)
 	if len(key) > maximumMarkerKeyBytes {
 		return "", errs.New(errs.KindValidationFailed, "idempotency lookup exceeds key limit")
 	}
@@ -341,7 +341,7 @@ func idempotencyReplayTargetKey(
 		return "", err
 	}
 	value := idempotencyReplayTargetPrefix + string(target.Kind) + "/" + target.ID + "/" +
-		encodeDynamicSegment(method) + "/" + encodeDynamicSegment(route) + "/" + encodeDynamicSegment(key)
+		recordcodec.EncodeKeySegment(method) + "/" + recordcodec.EncodeKeySegment(route) + "/" + recordcodec.EncodeKeySegment(key)
 	if len(value) > maximumMarkerKeyBytes {
 		return "", errs.New(errs.KindValidationFailed, "idempotency replay target lookup exceeds key limit")
 	}
@@ -633,7 +633,7 @@ func decodeDynamicIdempotencySegment(segment string) (string, error) {
 		return "", corruptIdempotencyMarker()
 	}
 	decoded, err := decodeRawBase64(strings.TrimPrefix(segment, "~"))
-	if err != nil || !utf8.Valid(decoded) || encodeDynamicSegment(string(decoded)) != segment {
+	if err != nil || !utf8.Valid(decoded) || recordcodec.EncodeKeySegment(string(decoded)) != segment {
 		return "", corruptIdempotencyMarker()
 	}
 	return string(decoded), nil
@@ -675,7 +675,7 @@ func idempotencyRetentionKey(markerKey string, retainUntil time.Time) (string, e
 		return "", corruptIdempotencyMarker()
 	}
 	return idempotencyRetentionPrefix + fmt.Sprintf("%020d", retainUntil.UnixNano()) + "/" +
-		encodeDynamicSegment(markerKey), nil
+		recordcodec.EncodeKeySegment(markerKey), nil
 }
 
 func validateIdempotencyRetentionKey(key string, markerKey string, retainUntil time.Time) error {
@@ -693,7 +693,7 @@ func validateIdempotencyRetentionKey(key string, markerKey string, retainUntil t
 		return corruptIdempotencyMarker()
 	}
 	decoded, err := decodeRawBase64(strings.TrimPrefix(segment[separator+1:], "~"))
-	if err != nil || string(decoded) != markerKey || encodeDynamicSegment(string(decoded)) != segment[separator+1:] {
+	if err != nil || string(decoded) != markerKey || recordcodec.EncodeKeySegment(string(decoded)) != segment[separator+1:] {
 		return corruptIdempotencyMarker()
 	}
 	return nil

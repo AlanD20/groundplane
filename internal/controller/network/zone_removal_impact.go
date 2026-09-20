@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"slices"
 	"strings"
 
@@ -16,7 +17,7 @@ import (
 )
 
 type zoneRemovalImpactZones interface {
-	GetZone(context.Context, string) (etcd.Versioned[etcd.ZoneRecord], error)
+	GetZone(context.Context, string) (etcd.Versioned[zonerecord.Record], error)
 }
 
 type zoneRemovalImpactAttaches interface {
@@ -96,7 +97,7 @@ func (service *zoneRemovalImpactService) GetZoneRemovalImpact(
 
 func (service *zoneRemovalImpactService) populateBackingImpact(
 	ctx context.Context,
-	zone etcd.Versioned[etcd.ZoneRecord],
+	zone etcd.Versioned[zonerecord.Record],
 	impact *apiTypes.ZoneRemovalImpact,
 	canonical *zoneRemovalImpactCanonical,
 ) error {
@@ -151,7 +152,7 @@ func (service *zoneRemovalImpactService) populateBackingImpact(
 
 func (service *zoneRemovalImpactService) populateOrdinaryImpact(
 	ctx context.Context,
-	zone etcd.Versioned[etcd.ZoneRecord],
+	zone etcd.Versioned[zonerecord.Record],
 	impact *apiTypes.ZoneRemovalImpact,
 	canonical *zoneRemovalImpactCanonical,
 ) error {

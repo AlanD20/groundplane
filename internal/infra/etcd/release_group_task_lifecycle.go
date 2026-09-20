@@ -38,7 +38,7 @@ func releaseGroupOwnerKey(environmentID, id string) string {
 	return releaseGroupOwnerPrefix + environmentID + "/" + id
 }
 func releaseGroupNameKey(environmentID, name string) string {
-	return releaseGroupNamePrefix + environmentID + "/" + encodeDynamicSegment(name)
+	return releaseGroupNamePrefix + environmentID + "/" + recordcodec.EncodeKeySegment(name)
 }
 
 func decodeReleaseGroupStored(value []byte) (domain.Group, error) {

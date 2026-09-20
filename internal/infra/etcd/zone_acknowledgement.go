@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -228,27 +229,27 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 	return nil
 }
 
-func projectedZoneRemovalTarget(intent ZoneRemovalIntent, readRevision int64) (ZoneRecord, error) {
+func projectedZoneRemovalTarget(intent ZoneRemovalIntent, readRevision int64) (zonerecord.Record, error) {
 	projection := Versioned[EnvironmentComposeProjection]{
 		Record: intent.DesiredProjection, Revision: intent.DesiredHeadRevision, ReadRevision: readRevision,
 	}
-	var matched *ZoneRecord
+	var matched *zonerecord.Record
 	for _, desired := range intent.DesiredProjection.DesiredZones {
 		if desired.Desired.ID != intent.ZoneID {
 			continue
 		}
 		if matched != nil {
-			return ZoneRecord{}, errs.New(errs.KindInternal, "Zone removal projection has duplicate target")
+			return zonerecord.Record{}, errs.New(errs.KindInternal, "Zone removal projection has duplicate target")
 		}
 		joined, err := joinEnvironmentZone(projection, desired)
 		if err != nil {
-			return ZoneRecord{}, err
+			return zonerecord.Record{}, err
 		}
 		matched = &joined.Record
 	}
 	if matched == nil || matched.EnvironmentID != intent.EnvironmentID || matched.Desired.Name != intent.ZoneName ||
 		intent.ZoneRevision != intent.DesiredHeadRevision {
-		return ZoneRecord{}, errs.New(errs.KindStateConflict, "Zone removal projected target changed")
+		return zonerecord.Record{}, errs.New(errs.KindStateConflict, "Zone removal projected target changed")
 	}
 	return *matched, nil
 }
