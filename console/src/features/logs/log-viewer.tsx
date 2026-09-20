@@ -13,10 +13,11 @@ export function LogViewer({ target, label = 'Logs' }: { target: LogTarget; label
   const store = useStore()
   const [open, setOpen] = useState(false)
   const [tail, setTail] = useState(200)
-  const [follow, setFollow] = useState(false)
+  const [follow, setFollow] = useState(true)
   const [events, setEvents] = useState<TransientLogEvent[]>([])
   const [error, setError] = useState<string | null>(null)
   const [streaming, setStreaming] = useState(false)
+  const [started, setStarted] = useState(false)
   const outputRef = useRef<HTMLDivElement>(null)
   const pinnedToEnd = useRef(true)
   const abortRef = useRef<AbortController | null>(null)
@@ -32,6 +33,7 @@ export function LogViewer({ target, label = 'Logs' }: { target: LogTarget; label
     const controller = new AbortController()
     abortRef.current = controller
     setEvents([])
+    setStarted(true)
     pinnedToEnd.current = true
     setError(null)
     setStreaming(true)
@@ -61,26 +63,26 @@ export function LogViewer({ target, label = 'Logs' }: { target: LogTarget; label
         <DialogContent className="max-w-5xl">
           <DialogHeader>
             <DialogTitle>{label}</DialogTitle>
-            <DialogDescription>Transient workload output. Reconnects create a new fixed-source stream.</DialogDescription>
+            <DialogDescription>Read output from deployed containers. Reopen the stream after a deployment to select the new containers.</DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap items-end gap-3 border-y border-border py-3">
             <label className="grid gap-1 text-xs font-medium">
               Tail per container
-              <Input className="w-32" type="number" min={0} max={1000} value={tail} onChange={(event) => setTail(Number(event.target.value))} />
+              <Input className="w-32" type="number" min={0} max={1000} value={tail} disabled={streaming} onChange={(event) => setTail(Number(event.target.value))} />
             </label>
             <label className="flex h-9 items-center gap-2 text-sm">
-              <Checkbox checked={follow} onChange={(event) => setFollow(event.target.checked)} /> Follow
+              <Checkbox checked={follow} disabled={streaming} onChange={(event) => setFollow(event.target.checked)} /> Follow new output
             </label>
             <Button onClick={start} disabled={streaming || !Number.isSafeInteger(tail) || tail < 0 || tail > 1000}>
-              {streaming ? 'Streaming' : 'Open stream'}
+              {streaming ? 'Reading logs' : follow ? 'Open stream' : 'Read recent logs'}
             </Button>
             {streaming ? <Button variant="outline" onClick={stop}>Stop</Button> : null}
           </div>
           {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-          <div className="flex items-center justify-between text-xs text-muted-foreground"><span role="status">{streaming ? 'Streaming' : error ? 'Disconnected' : 'Stopped'}</span><span>{events.length} / 1,000 buffered lines</span></div>
+          <div className="flex items-center justify-between text-xs text-muted-foreground"><span role="status">{streaming ? 'Streaming' : error ? 'Disconnected' : started ? 'Stream closed' : 'Ready'}</span><span>{events.length} / 1,000 buffered lines</span></div>
           <div ref={outputRef} tabIndex={0} aria-label="Log output" onScroll={(event) => { const el = event.currentTarget; pinnedToEnd.current = el.scrollHeight - el.clientHeight - el.scrollTop < 32 }}
             className="h-[55vh] overflow-auto rounded-xl border border-border bg-background p-4 font-mono text-xs text-foreground">
-            {events.length === 0 ? <p className="text-muted-foreground">No log lines received.</p> : events.map((event) => (
+            {events.length === 0 ? <p className="text-muted-foreground">{!started ? 'Open a stream to read container output.' : streaming ? 'Waiting for container output…' : 'No log lines returned. There may be no deployed workload, or its containers have not written output.'}</p> : events.map((event) => (
               <div key={event.sequence} className="grid grid-cols-[5rem_6rem_4rem_minmax(12rem,1fr)] gap-3 border-b border-border py-1">
                 <span className="text-muted-foreground">{new Date(event.timestamp).toLocaleTimeString()}</span>
                 <span className="truncate text-primary">{event.service_name}</span>

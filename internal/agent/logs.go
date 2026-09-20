@@ -110,7 +110,6 @@ func (manager *logManager) run(ctx context.Context, request *agentpb.LogSubscrib
 	defer cancelRun()
 	incoming := make(chan *agentpb.LogEvent)
 	events := make(chan *agentpb.LogEvent, maxQueuedLogEvents)
-	slots := make(chan struct{}, maxQueuedLogEvents)
 	sourceDone := make(chan error, 1)
 	go func() {
 		err := sources.Run(runContext, incoming)
@@ -118,16 +117,14 @@ func (manager *logManager) run(ctx context.Context, request *agentpb.LogSubscrib
 		sourceDone <- err
 	}()
 	done := make(chan error, 1)
-	go collectLogEvents(cancelRun, incoming, events, slots, sourceDone, done)
+	go collectLogEvents(runContext, incoming, events, sourceDone, done)
 
 	for event := range events {
 		if event != nil && !manager.send(runContext, &agentpb.AgentMessage{
 			Payload: &agentpb.AgentMessage_LogEvent{LogEvent: event},
 		}) {
-			<-slots
 			break
 		}
-		<-slots
 	}
 	runErr := <-done
 	cancelRun()
@@ -149,31 +146,39 @@ func (manager *logManager) run(ctx context.Context, request *agentpb.LogSubscrib
 }
 
 func collectLogEvents(
-	cancel context.CancelFunc,
+	ctx context.Context,
 	incoming <-chan *agentpb.LogEvent,
 	events chan<- *agentpb.LogEvent,
-	slots chan<- struct{},
 	sourceDone <-chan error,
 	done chan<- error,
 ) {
+	defer close(events)
 	var result error
-	for event := range incoming {
-		if result != nil {
-			continue
-		}
+	cancelled := ctx.Done()
+	for {
 		select {
-		case slots <- struct{}{}:
-			events <- event
-		default:
-			result = errs.New(errs.KindInternal, "Agent log event queue overflow")
-			cancel()
+		case <-cancelled:
+			result = ctx.Err()
+			cancelled = nil
+		case event, open := <-incoming:
+			if !open {
+				if sourceErr := <-sourceDone; result == nil {
+					result = sourceErr
+				}
+				done <- result
+				return
+			}
+			if result != nil {
+				continue
+			}
+			select {
+			case events <- event:
+			case <-ctx.Done():
+				result = ctx.Err()
+				cancelled = nil
+			}
 		}
 	}
-	if sourceErr := <-sourceDone; result == nil {
-		result = sourceErr
-	}
-	close(events)
-	done <- result
 }
 
 func (manager *logManager) release(requestID string) {

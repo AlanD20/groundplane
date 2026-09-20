@@ -67,14 +67,18 @@ func TestLogManagerReadiesAndCompletesZeroSources(t *testing.T) {
 	}
 }
 
-// QA: LOG-02, TASK-07; local queue overflow and cleanup only, not client reconnect or process memory measurement.
-// Rationale: the 129th undrained record must overflow the exact 128-record
-// ownership bound, cancel and join the producer, close sources, and free the Agent slot.
-func TestLogManagerTerminatesUndrainedQueueOverflow(t *testing.T) {
+// QA: LOG-01, LOG-02; bounded Agent backpressure and cancellation only, not
+// public HTTP/SSE or a real Docker source.
+// Rationale: a valid tail may exceed the internal queue bound. The Agent must
+// backpressure that burst without turning normal replay into a source failure,
+// while cancellation must still join the producer, close sources, and free its slot.
+func TestLogManagerBackpressuresReplayLargerThanQueueUntilCancellation(t *testing.T) {
 	t.Parallel()
 
-	const expectedMaximumQueuedLogEvents = 128
-	sources := &burstLogSources{exited: make(chan struct{}), records: expectedMaximumQueuedLogEvents + 1}
+	const records = maxQueuedLogEvents + 72
+	sources := &burstLogSources{
+		exited: make(chan struct{}), allSent: make(chan struct{}), records: records,
+	}
 	manager := newLogManager(logReaderStub{sources: sources})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -87,39 +91,59 @@ func TestLogManagerTerminatesUndrainedQueueOverflow(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("log manager did not become ready")
 	}
+	producerDeadline := time.Now().Add(time.Second)
+	for sources.sent.Load() <= maxQueuedLogEvents {
+		if time.Now().After(producerDeadline) {
+			t.Fatalf(
+				"producer submitted %d records before output drain, want more than %d",
+				sources.sent.Load(), maxQueuedLogEvents,
+			)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	for sequence := range records {
+		select {
+		case message := <-manager.Outputs():
+			event := message.GetLogEvent()
+			if event == nil || event.GetLine() != string(rune(sequence)) {
+				t.Fatalf("message %d = %#v, want matching LogEvent", sequence+1, message)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("log manager stopped after %d/%d replay records", sequence, records)
+		}
+	}
+	select {
+	case <-sources.allSent:
+	case <-time.After(time.Second):
+		t.Fatal("producer did not finish the bounded replay")
+	}
+	if sources.sent.Load() != records {
+		t.Fatalf("producer sent %d records, want %d", sources.sent.Load(), records)
+	}
+	select {
+	case message := <-manager.Outputs():
+		t.Fatalf("follow stream ended after replay: %#v", message)
+	case <-time.After(25 * time.Millisecond):
+	}
+
+	cancel()
 	select {
 	case <-sources.exited:
 	case <-time.After(time.Second):
-		t.Fatal("129-record producer remained blocked after queue overflow")
+		t.Fatal("cancelled producer did not exit")
 	}
-	if sources.sent.Load() != expectedMaximumQueuedLogEvents+1 {
-		t.Fatalf("producer sent %d records, want %d", sources.sent.Load(), expectedMaximumQueuedLogEvents+1)
-	}
-
-	deadline := time.After(time.Second)
+	deadline := time.Now().Add(time.Second)
 	for {
-		select {
-		case message := <-manager.Outputs():
-			end := message.GetLogEnd()
-			if end == nil {
-				continue
-			}
-			if end.GetReason() != agentpb.LogEndReason_LOG_END_REASON_SOURCE_FAILED {
-				t.Fatalf("LogEnd reason = %s, want source failed", end.GetReason())
-			}
-			if sources.closes.Load() != 1 {
-				t.Fatalf("source Close() calls = %d, want 1", sources.closes.Load())
-			}
-			manager.mu.Lock()
-			active := len(manager.active)
-			manager.mu.Unlock()
-			if active != 0 {
-				t.Fatalf("active Agent log slots = %d, want 0", active)
-			}
-			return
-		case <-deadline:
-			t.Fatal("queue overflow did not terminate the subscription")
+		manager.mu.Lock()
+		active := len(manager.active)
+		manager.mu.Unlock()
+		if active == 0 && sources.closes.Load() == 1 {
+			break
 		}
+		if time.Now().After(deadline) {
+			t.Fatalf("cancel cleanup: active=%d close calls=%d", active, sources.closes.Load())
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 
@@ -143,6 +167,7 @@ func validAgentLogSubscribe() *agentpb.LogSubscribe {
 
 type burstLogSources struct {
 	exited  chan struct{}
+	allSent chan struct{}
 	records int
 	sent    atomic.Int32
 	closes  atomic.Int32
@@ -158,8 +183,7 @@ func (sources *burstLogSources) Run(ctx context.Context, output chan<- *agentpb.
 			return ctx.Err()
 		}
 	}
-	// The final send only hands off the record. Wait for overflow cancellation
-	// so the test cannot drain output before the collector checks that record.
+	close(sources.allSent)
 	<-ctx.Done()
 	return ctx.Err()
 }
