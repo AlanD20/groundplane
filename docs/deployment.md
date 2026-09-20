@@ -19,6 +19,37 @@ reviewed changes on `main`, push that commit, then create and push `v0.0.1`.
 Review the matching [changelog entry](../CHANGELOG.md) before publication;
 replace its pending-publication label with the actual release date when published.
 
+### Prepare a version
+
+`VERSION` records the intended GP release. Console package and root lockfile
+versions mirror it. Development Go builds still report `dev`; release binaries
+receive their explicit version through the existing build flags. `.runner-version`
+is the upstream GitHub Actions Runner dependency version, not the GP version.
+
+Record changes under `## [Unreleased]` in the root changelog. Then prepare the
+next chosen stable version, for example:
+
+```sh
+bash scripts/repo-env.sh python3 scripts/bump_version.py 0.0.2 --dry-run
+bash scripts/repo-env.sh python3 scripts/bump_version.py 0.0.2
+bash scripts/repo-env.sh python3 scripts/bump_version.py --check
+```
+
+The script updates all four metadata files and moves Unreleased notes into a
+new pending-publication section, retaining earlier sections. With no notes it
+creates empty Added/Changed/Fixed headings; fill them before validation passes.
+It rejects malformed, repeated or older versions and inconsistent metadata before
+writing. Dry-run prints the proposed diff without edits. It never commits, tags,
+pushes, publishes or changes package visibility. Review and commit the changes,
+pass CI, then create and push the matching `vVERSION` tag separately.
+
+Default CI checks metadata consistency and nonempty release notes. The release
+workflow also checks that its tag matches `VERSION`, and publishes only that
+version's changelog body as GitHub release notes. Existing 0.0.1 architecture
+deferrals do not automatically authorize debt exceptions for a later release.
+
+### Published artifacts
+
 The workflow reuses the full CI gate before publication. It builds and smoke-tests
 Agent and Runner images on native amd64/arm64 GitHub runners, pushes those children
 to `ghcr.io/aland20/groundplane-agent` and `ghcr.io/aland20/groundplane-runner`,

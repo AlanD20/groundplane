@@ -186,6 +186,7 @@ architecture-release-check:
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/architecture_release_check.py
 
 deployment-check:
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/bump_version.py --check
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts -p 'test_*.py'
 
 tooling-check:

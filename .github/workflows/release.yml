@@ -31,6 +31,7 @@ jobs:
         run: |
           [[ "$RELEASE_REF" =~ ^refs/tags/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
           git merge-base --is-ancestor HEAD origin/main
+          python3 scripts/bump_version.py "${RELEASE_REF#refs/tags/v}" --check
           echo "version=${RELEASE_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
           echo "repository=${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
@@ -177,10 +178,11 @@ jobs:
           GH_REPO: ${{ github.repository }}
           VERSION: ${{ needs.version.outputs.version }}
         run: |
+          python3 scripts/bump_version.py "$VERSION" --notes > .tmp/release-notes.md
           cd .tmp/releases
           sha256sum --check -- *.sha256
           gh release create "v$VERSION" --verify-tag --title "Groundplane $VERSION" \
-            --notes 'Prebuilt Linux amd64/arm64 bundles and host installer. See docs/deployment.md for installation, upgrade and qualification limits.' \
+            --notes-file ../release-notes.md \
             "groundplane-$VERSION-linux-amd64.tar.gz" "groundplane-$VERSION-linux-amd64.tar.gz.sha256" \
             "groundplane-$VERSION-linux-arm64.tar.gz" "groundplane-$VERSION-linux-arm64.tar.gz.sha256" \
             ../../install.sh

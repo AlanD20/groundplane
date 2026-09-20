@@ -35,6 +35,8 @@ module boundaries and [`docs/mvp.md`](docs/mvp.md) for the product model.
 ## Product and feature documentation
 
 See the [changelog](CHANGELOG.md) for release features and known limits.
+Use the [version preparation command](docs/deployment.md#prepare-a-version)
+to update release metadata and create the next changelog section together.
 
 The [feature index](docs/README.md#features) explains each feature's purpose,
 requirements, implementation and acceptance. The shared contracts define product

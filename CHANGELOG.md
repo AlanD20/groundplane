@@ -3,6 +3,8 @@
 Release entries describe implemented features and known limits, not a guarantee
 that every deployment or failure scenario has been qualified.
 
+## [Unreleased]
+
 ## 0.0.1 — pending publication
 
 Initial single-host release.
