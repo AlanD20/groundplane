@@ -284,7 +284,7 @@ func validatebackupPolicyReplacementCandidate(
 			),
 			candidate.Replacement.ConnectorID,
 		) {
-			return corruptRecord()
+			return recordcodec.CorruptRecord()
 		}
 	} else if candidate.Connector != nil || candidate.ConnectorOwnerIndex != nil {
 		return errs.New(errs.KindValidationFailed, "disabled backup policy cannot carry connector evidence")
@@ -369,7 +369,7 @@ func validatebackupPolicySourceEvidence(
 		backupSourceIdentityKey(environmentID, evidence.Source.Record.Kind, evidence.Source.Record.TargetID),
 		evidence.Source.Record.ID,
 	) {
-		return corruptRecord()
+		return recordcodec.CorruptRecord()
 	}
 	switch string(evidence.Source.Record.Kind) {
 	case "config":
@@ -483,10 +483,10 @@ func validateBackupPolicyConnectorReferences(candidate backupPolicyReplacementCa
 				want.connectorID,
 				environmentID,
 			) || evidence.Entry.ModRevision <= 0 || string(evidence.Entry.Value) != environmentID {
-				return corruptRecord()
+				return recordcodec.CorruptRecord()
 			}
 		} else if evidence.Entry != nil {
-			return corruptRecord()
+			return recordcodec.CorruptRecord()
 		}
 	}
 	return nil
@@ -799,7 +799,7 @@ func classifyBackupPolicyReplacementConflict(
 			backupPolicyCompareSourceIdentityIndex,
 			backupPolicyCompareTargetOwnerIndex,
 			backupPolicyCompareConnectorOwnerIndex:
-			return corruptRecord()
+			return recordcodec.CorruptRecord()
 		case backupPolicyCompareHierarchyTombstone,
 			backupPolicyCompareTargetTombstone,
 			backupPolicyCompareConnectorTombstone:

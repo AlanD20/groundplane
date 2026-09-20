@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"math"
 	"net/http"
 	"time"
@@ -29,7 +30,7 @@ type routeRemovalRepository interface {
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
 	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
-	GetRoute(context.Context, string) (etcd.Versioned[etcd.RouteRecord], error)
+	GetRoute(context.Context, string) (etcd.Versioned[routerecord.Record], error)
 	GetEnvironmentComposeProjection(context.Context, string) (
 		etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error,
 	)
@@ -38,7 +39,7 @@ type routeRemovalRepository interface {
 		etcd.Versioned[etcd.EnvironmentRecord],
 		etcd.Versioned[etcd.ProjectRecord],
 		etcd.Versioned[etcd.ServiceRecord],
-		etcd.Versioned[etcd.RouteRecord],
+		etcd.Versioned[routerecord.Record],
 		*etcd.Versioned[etcd.EnvironmentComposeProjection],
 		etcd.DeletionTombstoneRecord,
 		etcd.RouteRemovalIntent,

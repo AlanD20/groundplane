@@ -161,7 +161,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicy(
 	}
 	record, err := decodeBackupPolicyRecord(result.Entry.Value)
 	if err != nil || record.EnvironmentID != environmentID {
-		return Versioned[BackupPolicyRecord]{}, false, corruptRecord()
+		return Versioned[BackupPolicyRecord]{}, false, recordcodec.CorruptRecord()
 	}
 	return Versioned[BackupPolicyRecord]{
 		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
@@ -271,7 +271,7 @@ func (repository *BackupPolicyRepository) loadBackupSourceCreationEvidence(
 	currentEnvironment, err := decodeEnvironment(result.Values[1].Value)
 	if err != nil || currentEnvironment.ID != environment.Record.ID ||
 		currentEnvironment.ProjectID != project.Record.ID {
-		return backupSourceCreationEvidence{}, corruptRecord()
+		return backupSourceCreationEvidence{}, recordcodec.CorruptRecord()
 	}
 	if result.Values[2] == nil {
 		return backupSourceCreationEvidence{}, errs.New(errs.KindProjectNotFound, "project was not found")
@@ -279,7 +279,7 @@ func (repository *BackupPolicyRepository) loadBackupSourceCreationEvidence(
 	currentProject, err := decodeProject(result.Values[2].Value)
 	if err != nil || currentProject.ID != project.Record.ID || currentProject.TenantID != project.Record.TenantID ||
 		currentProject.Kind != ProjectKindTenant {
-		return backupSourceCreationEvidence{}, corruptRecord()
+		return backupSourceCreationEvidence{}, recordcodec.CorruptRecord()
 	}
 	for _, index := range []int{3, 4, 5} {
 		if result.Values[index] != nil {
@@ -342,7 +342,7 @@ func (repository *BackupPolicyRepository) getBackupSourceByIdentity(
 	}
 	sourceID := string(index.Entry.Value)
 	if err := recordcodec.ValidateID(ids.KindBackupSource, sourceID); err != nil {
-		return Versioned[BackupSourceRecord]{}, false, corruptRecord()
+		return Versioned[BackupSourceRecord]{}, false, recordcodec.CorruptRecord()
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
@@ -356,12 +356,12 @@ func (repository *BackupPolicyRepository) getBackupSourceByIdentity(
 	}
 	if stored == nil || len(stored.Values) != 2 || stored.Values[0] == nil || stored.Values[1] == nil ||
 		string(stored.Values[1].Value) != sourceID {
-		return Versioned[BackupSourceRecord]{}, false, corruptRecord()
+		return Versioned[BackupSourceRecord]{}, false, recordcodec.CorruptRecord()
 	}
 	record, err := decodeBackupSourceRecord(stored.Values[0].Value)
 	if err != nil || record.ID != sourceID || record.EnvironmentID != environmentID ||
 		record.Kind != kind || record.TargetID != targetID {
-		return Versioned[BackupSourceRecord]{}, false, corruptRecord()
+		return Versioned[BackupSourceRecord]{}, false, recordcodec.CorruptRecord()
 	}
 	return Versioned[BackupSourceRecord]{
 		Record: record, Revision: stored.Values[0].ModRevision, ReadRevision: stored.ReadRevision,

@@ -4,6 +4,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 )
 
 func (service *Service) prepareRoutePublication(componentEnvironment core.Environment, pinnedComponents []etcd.ComponentRecord, componentPreparation etcd.ComponentTaskPreparation, generation uint64, routeChanges []etcd.EnvironmentBlueprintRouteChange) (etcd.ComponentTaskPreparation, []etcd.EnvironmentBlueprintRouteChange, error) {
@@ -20,7 +21,7 @@ func (service *Service) prepareRoutePublication(componentEnvironment core.Enviro
 	}
 	if routeProjection {
 		if routeProvider != nil {
-			provider := etcd.RouteProviderObservation{
+			provider := routerecord.ProviderObservation{
 				ComponentID:      routeProvider.ComponentID,
 				DefinitionDigest: routeProvider.DefinitionDigest,
 				CatalogDigest:    routeProvider.CatalogDigest,
@@ -28,8 +29,8 @@ func (service *Service) prepareRoutePublication(componentEnvironment core.Enviro
 				InputGeneration:  routeProvider.InputGeneration,
 			}
 			for index, change := range routeChanges {
-				change.Record, err = etcd.SetRouteObservation(change.Record, etcd.RouteObservation{
-					Status:            etcd.RouteObservedPending,
+				change.Record, err = routerecord.SetObservation(change.Record, routerecord.Observation{
+					Status:            routerecord.ObservedPending,
 					DesiredGeneration: change.Record.DesiredGeneration,
 					Provider:          provider,
 				})
@@ -39,7 +40,7 @@ func (service *Service) prepareRoutePublication(componentEnvironment core.Enviro
 				routeChanges[index] = change
 			}
 		}
-		routeRecords := make([]etcd.RouteRecord, len(routeChanges))
+		routeRecords := make([]routerecord.Record, len(routeChanges))
 		for index, change := range routeChanges {
 			routeRecords[index] = change.Record
 		}

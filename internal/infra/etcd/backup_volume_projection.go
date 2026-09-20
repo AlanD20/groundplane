@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"hash"
 	"sort"
 	"time"
@@ -282,13 +283,13 @@ func loadBackupVolumeProjectionEvidence(
 	}
 	defer clearKeyValues(headRead.Values)
 	if fixedRevision > 0 && headRead.ReadRevision != fixedRevision {
-		return backupVolumeProjectionEvidence{}, corruptRecord()
+		return backupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
 	}
 	environment, err := decodeEnvironment(headRead.Values[0].Value)
 	revisionID, headErr := decodeTaskReference(headRead.Values[1].Value)
 	if err != nil || headErr != nil || environment.ID != environmentID ||
 		ids.Validate(ids.KindTask, revisionID) != nil {
-		return backupVolumeProjectionEvidence{}, corruptRecord()
+		return backupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
 	}
 	fixedRevision = headRead.ReadRevision
 	rootKey := environmentBlueprintRootKey(environmentID, revisionID)
@@ -298,12 +299,12 @@ func loadBackupVolumeProjectionEvidence(
 	}
 	if rootRead == nil || rootRead.ReadRevision != fixedRevision || len(rootRead.Values) != 1 ||
 		rootRead.Values[0] == nil {
-		return backupVolumeProjectionEvidence{}, corruptRecord()
+		return backupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
 	}
 	defer clearKeyValues(rootRead.Values)
 	seal, err := decodeEnvironmentBlueprintSeal(rootRead.Values[0].Value)
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
-		return backupVolumeProjectionEvidence{}, corruptRecord()
+		return backupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
 	}
 	hierarchy, err := newHierarchyRepository(store)
 	if err != nil {
@@ -315,15 +316,15 @@ func loadBackupVolumeProjectionEvidence(
 	}
 	if !found || projection.Revision != rootRead.Values[0].ModRevision ||
 		projection.Record.RenderGeneration != seal.RenderGeneration {
-		return backupVolumeProjectionEvidence{}, corruptRecord()
+		return backupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
 	}
 	projectionDigest, _, err := EnvironmentBlueprintProjectionEvidence(projection.Record)
 	if err != nil || projectionDigest != seal.ProjectionSHA256 {
-		return backupVolumeProjectionEvidence{}, corruptRecord()
+		return backupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
 	}
 	dependencyDigest, err := EnvironmentBlueprintDependencyDigest(projection.Record)
 	if err != nil || dependencyDigest != seal.DependencyDigest {
-		return backupVolumeProjectionEvidence{}, corruptRecord()
+		return backupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
 	}
 	identity := EnvironmentVolumeIdentity{}
 	for _, candidate := range projection.Record.Volumes {

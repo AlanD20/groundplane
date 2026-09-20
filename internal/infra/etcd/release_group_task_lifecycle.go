@@ -51,7 +51,7 @@ func decodeReleaseGroupStored(value []byte) (domain.Group, error) {
 		ServiceIDs: record.ServiceIDs, Order: record.Order, DefaultTag: record.DefaultTag, OnFailure: record.OnFailure,
 	})
 	if err != nil {
-		return domain.Group{}, corruptRecord()
+		return domain.Group{}, recordcodec.CorruptRecord()
 	}
 	return group, nil
 }
@@ -83,7 +83,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskRetry(
 	}
 	group, err := decodeReleaseGroupStored(stored.Values[0].Value)
 	if err != nil || group.ID != source.Target {
-		return releaseGroupTaskChange{}, corruptRecord()
+		return releaseGroupTaskChange{}, recordcodec.CorruptRecord()
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		releaseGroupOwnerKey(group.EnvironmentID, group.ID), releaseGroupNameKey(group.EnvironmentID, group.Name),
@@ -103,7 +103,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskRetry(
 	}
 	epoch, err := decodeEnvironmentMutationEpochRecord(indexes.Values[3].Value)
 	if err != nil || epoch.EnvironmentID != group.EnvironmentID {
-		return releaseGroupTaskChange{}, corruptRecord()
+		return releaseGroupTaskChange{}, recordcodec.CorruptRecord()
 	}
 	tombstone := DeletionTombstoneRecord{
 		TargetKind: DeletionTargetReleaseGroup, TargetID: group.ID, TargetRevision: stored.Values[0].ModRevision,
@@ -154,7 +154,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
 	}
 	group, err := decodeReleaseGroupStored(stored.Values[0].Value)
 	if err != nil || group.ID != task.Target {
-		return releaseGroupTaskChange{}, corruptRecord()
+		return releaseGroupTaskChange{}, recordcodec.CorruptRecord()
 	}
 	tombstone, err := decodeDeletionTombstone(stored.Values[1].Value)
 	if err != nil || tombstone.TargetKind != DeletionTargetReleaseGroup || tombstone.TargetID != task.Target ||
@@ -187,7 +187,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
 	}
 	epoch, err := decodeEnvironmentMutationEpochRecord(indexes.Values[2].Value)
 	if err != nil || epoch.EnvironmentID != group.EnvironmentID {
-		return releaseGroupTaskChange{}, corruptRecord()
+		return releaseGroupTaskChange{}, recordcodec.CorruptRecord()
 	}
 	epochValue, err := encodeEnvironmentMutationEpochRecord(epoch)
 	if err != nil {

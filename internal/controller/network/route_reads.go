@@ -2,6 +2,7 @@ package network
 
 import (
 	"context"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -10,8 +11,8 @@ import (
 
 type routeReadRepository interface {
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
-	GetRoute(context.Context, string) (etcd.Versioned[etcd.RouteRecord], error)
-	ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.RouteRecord], error)
+	GetRoute(context.Context, string) (etcd.Versioned[routerecord.Record], error)
+	ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[routerecord.Record], error)
 }
 
 type routeReadService struct {
@@ -29,24 +30,24 @@ func (service *routeReadService) ListRoutes(
 	ctx context.Context,
 	environmentID string,
 	request etcd.PageRequest,
-) (etcd.Page[etcd.RouteRecord], error) {
+) (etcd.Page[routerecord.Record], error) {
 	if ctx == nil {
-		return etcd.Page[etcd.RouteRecord]{}, errs.New(errs.KindInternal, "Route list context is required")
+		return etcd.Page[routerecord.Record]{}, errs.New(errs.KindInternal, "Route list context is required")
 	}
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return etcd.Page[etcd.RouteRecord]{}, errs.New(
+		return etcd.Page[routerecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Route list requires a stable Environment id",
 		)
 	}
 	if request.Limit < 0 {
-		return etcd.Page[etcd.RouteRecord]{}, errs.New(
+		return etcd.Page[routerecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Route list limit must be a positive integer",
 		)
 	}
 	if _, err := service.repository.GetEnvironment(ctx, environmentID); err != nil {
-		return etcd.Page[etcd.RouteRecord]{}, err
+		return etcd.Page[routerecord.Record]{}, err
 	}
 	return service.repository.ListRoutes(ctx, environmentID, request)
 }
@@ -54,12 +55,12 @@ func (service *routeReadService) ListRoutes(
 func (service *routeReadService) GetRoute(
 	ctx context.Context,
 	routeID string,
-) (etcd.Versioned[etcd.RouteRecord], error) {
+) (etcd.Versioned[routerecord.Record], error) {
 	if ctx == nil {
-		return etcd.Versioned[etcd.RouteRecord]{}, errs.New(errs.KindInternal, "Route read context is required")
+		return etcd.Versioned[routerecord.Record]{}, errs.New(errs.KindInternal, "Route read context is required")
 	}
 	if ids.Validate(ids.KindRoute, routeID) != nil {
-		return etcd.Versioned[etcd.RouteRecord]{}, errs.New(
+		return etcd.Versioned[routerecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Route read requires a stable Route id",
 		)

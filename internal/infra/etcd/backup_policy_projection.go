@@ -67,14 +67,14 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 	}
 	environment, err := decodeEnvironment(base.Values[0].Value)
 	if err != nil || environment.ID != environmentID {
-		return BackupPolicyProjection{}, corruptRecord()
+		return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 	}
 
 	var policy *BackupPolicyRecord
 	if base.Values[1] != nil {
 		decoded, decodeErr := decodeBackupPolicyRecord(base.Values[1].Value)
 		if decodeErr != nil || decoded.EnvironmentID != environmentID {
-			return BackupPolicyProjection{}, corruptRecord()
+			return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 		}
 		policy = &decoded
 	}
@@ -121,11 +121,11 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 	}
 	if support == nil || support.ReadRevision != base.ReadRevision || len(support.Values) != len(keys) ||
 		support.Values[0] == nil {
-		return BackupPolicyProjection{}, corruptRecord()
+		return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 	}
 	project, err := decodeProject(support.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID {
-		return BackupPolicyProjection{}, corruptRecord()
+		return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 	}
 	if project.Kind != ProjectKindTenant || project.TenantID == "" {
 		return BackupPolicyProjection{}, errs.New(
@@ -141,7 +141,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 	}
 	if policy.Frequency != "" {
 		if err := validateBackupPolicyFrequency(policy.Frequency); err != nil {
-			return BackupPolicyProjection{}, corruptRecord()
+			return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 		}
 	}
 
@@ -189,23 +189,23 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 		offset += 2
 		if primary == nil || owner == nil || owner.Key != backupSourceEnvironmentKey(environmentID, sourceID) ||
 			string(owner.Value) != sourceID {
-			return BackupPolicyProjection{}, corruptRecord()
+			return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 		}
 		source, decodeErr := decodeBackupSourceRecord(primary.Value)
 		if decodeErr != nil || source.ID != sourceID || source.EnvironmentID != environmentID {
-			return BackupPolicyProjection{}, corruptRecord()
+			return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 		}
 		identity := struct {
 			kind     core.BackupSourceKind
 			targetID string
 		}{kind: source.Kind, targetID: source.TargetID}
 		if _, duplicate := seen[identity]; duplicate {
-			return BackupPolicyProjection{}, corruptRecord()
+			return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 		}
 		seen[identity] = struct{}{}
 		identityKeys = append(identityKeys, backupSourceIdentityKey(environmentID, source.Kind, source.TargetID))
 		if source.Kind == core.BackupSourceConfig && policy.Encryption != "age" {
-			return BackupPolicyProjection{}, corruptRecord()
+			return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 		}
 		projection.Sources = append(projection.Sources, BackupPolicySourceProjection{
 			ID: source.ID, Kind: source.Kind, TargetID: source.TargetID,
@@ -220,13 +220,13 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 		}
 		if identityIndexes == nil || identityIndexes.ReadRevision != base.ReadRevision ||
 			len(identityIndexes.Values) != len(identityKeys) {
-			return BackupPolicyProjection{}, corruptRecord()
+			return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 		}
 		for index, source := range projection.Sources {
 			identityIndex := identityIndexes.Values[index]
 			if identityIndex == nil || identityIndex.Key != identityKeys[index] ||
 				string(identityIndex.Value) != source.ID {
-				return BackupPolicyProjection{}, corruptRecord()
+				return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 			}
 		}
 	}
@@ -255,7 +255,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 		}
 	} else if policy.ConnectorID != "" {
 		if reference := support.Values[offset]; reference != nil {
-			return BackupPolicyProjection{}, corruptRecord()
+			return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 		}
 	}
 	if key != nil {

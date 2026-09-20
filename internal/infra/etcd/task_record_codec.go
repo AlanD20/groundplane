@@ -73,7 +73,7 @@ func decodeTaskRecord(value []byte) (TaskRecord, error) {
 		return TaskRecord{}, errs.New(errs.KindInternal, "task record has invalid timestamps")
 	}
 	if err := validateTaskRecord(record); err != nil {
-		return TaskRecord{}, corruptRecord()
+		return TaskRecord{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
 }

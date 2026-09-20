@@ -255,7 +255,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 	}
 	environment, err := decodeEnvironment(result.Values[0].Value)
 	if err != nil || environment.ID != input.EnvironmentID || environment.ProjectID != projectID {
-		return backupPolicyReplacementCandidate{}, false, corruptRecord()
+		return backupPolicyReplacementCandidate{}, false, recordcodec.CorruptRecord()
 	}
 	if environment.ProvisioningState != EnvironmentProvisioningReady {
 		return backupPolicyReplacementCandidate{}, false, errs.New(
@@ -268,7 +268,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 	}
 	project, err := decodeProject(result.Values[1].Value)
 	if err != nil || project.ID != projectID || project.TenantID != tenantID || project.Kind != ProjectKindTenant {
-		return backupPolicyReplacementCandidate{}, false, corruptRecord()
+		return backupPolicyReplacementCandidate{}, false, recordcodec.CorruptRecord()
 	}
 	for _, index := range []int{7, 8, 9} {
 		if result.Values[index] != nil {
@@ -322,7 +322,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 	if result.Values[2] != nil {
 		current, decodeErr := decodeBackupPolicyRecord(result.Values[2].Value)
 		if decodeErr != nil || current.EnvironmentID != input.EnvironmentID {
-			return backupPolicyReplacementCandidate{}, false, corruptRecord()
+			return backupPolicyReplacementCandidate{}, false, recordcodec.CorruptRecord()
 		}
 		candidate.Current = &Versioned[BackupPolicyRecord]{
 			Record: current, Revision: result.Values[2].ModRevision, ReadRevision: result.ReadRevision,
@@ -550,7 +550,7 @@ func (repository *BackupPolicyRepository) validateBackupPolicySelectionTarget(
 	if selection.Kind == core.BackupSourceAttach {
 		record, decodeErr := decodeAttachRecord(result.Values[0].Value)
 		if decodeErr != nil || record.ID != selection.TargetID {
-			return corruptRecord()
+			return recordcodec.CorruptRecord()
 		}
 		if !record.OwnsCredential() {
 			return errs.New(errs.KindValidationFailed, "backup policy requires a credential-owning Attach")
@@ -562,7 +562,7 @@ func (repository *BackupPolicyRepository) validateBackupPolicySelectionTarget(
 	}
 	if result.Values[1] == nil || result.Values[1].Key != ownerKey ||
 		string(result.Values[1].Value) != selection.TargetID {
-		return corruptRecord()
+		return recordcodec.CorruptRecord()
 	}
 	if result.Values[2] != nil {
 		return errs.New(errs.KindResourceInUse, "backup policy source deletion is in progress")
@@ -590,13 +590,13 @@ func (repository *BackupPolicyRepository) loadbackupPolicySourceEvidence(
 	}
 	if result == nil || result.ReadRevision != revision || len(result.Values) != len(keys) || result.Values[0] == nil ||
 		result.Values[1] == nil || result.Values[2] == nil {
-		return backupPolicySourceEvidence{}, corruptRecord()
+		return backupPolicySourceEvidence{}, recordcodec.CorruptRecord()
 	}
 	current, err := decodeBackupSourceRecord(result.Values[0].Value)
 	if err != nil || current.ID != record.ID || current.EnvironmentID != record.EnvironmentID ||
 		current.Kind != record.Kind || current.TargetID != record.TargetID ||
 		string(result.Values[1].Value) != record.ID || string(result.Values[2].Value) != record.ID {
-		return backupPolicySourceEvidence{}, corruptRecord()
+		return backupPolicySourceEvidence{}, recordcodec.CorruptRecord()
 	}
 	evidence := backupPolicySourceEvidence{
 		Source: Versioned[BackupSourceRecord]{
@@ -620,13 +620,13 @@ func (repository *BackupPolicyRepository) loadbackupPolicySourceEvidence(
 	}
 	if result.Values[3] == nil || result.Values[4] == nil ||
 		string(result.Values[4].Value) != record.TargetID {
-		return backupPolicySourceEvidence{}, corruptRecord()
+		return backupPolicySourceEvidence{}, recordcodec.CorruptRecord()
 	}
 	evidence.TargetOwnerIndex = cloneBackupPolicyEvidenceKeyValue(result.Values[4])
 	if record.Kind == core.BackupSourceAttach {
 		attach, decodeErr := decodeAttachRecord(result.Values[3].Value)
 		if decodeErr != nil || attach.ID != record.TargetID || attach.EnvironmentID != record.EnvironmentID {
-			return backupPolicySourceEvidence{}, corruptRecord()
+			return backupPolicySourceEvidence{}, recordcodec.CorruptRecord()
 		}
 		evidence.Attach = &Versioned[AttachRecord]{
 			Record: attach, Revision: result.Values[3].ModRevision, ReadRevision: result.ReadRevision,

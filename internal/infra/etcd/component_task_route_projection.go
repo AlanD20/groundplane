@@ -3,6 +3,8 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -29,7 +31,7 @@ type ComponentTaskRouteProjection struct {
 // to an otherwise complete Component Task preparation without publishing it.
 func WithComponentTaskRouteProjection(
 	preparation ComponentTaskPreparation,
-	routes []RouteRecord,
+	routes []routerecord.Record,
 	provider *RouteProviderPin,
 ) (ComponentTaskPreparation, error) {
 	if componentTaskPreparationIsZero(preparation) {
@@ -43,7 +45,7 @@ func WithComponentTaskRouteProjection(
 		projection.Provider = &cloned
 	}
 	for index, route := range routes {
-		if validateRouteRecord(route) != nil ||
+		if routerecord.ValidateRecord(route) != nil ||
 			route.EnvironmentID != preparation.Intent.EnvironmentID {
 			return ComponentTaskPreparation{}, errs.New(
 				errs.KindInternal,
@@ -124,11 +126,11 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationAcknowledg
 		projection.Provider == nil && terminalStatus != TaskStatusCompleted {
 		return componentTaskRouteObservationChange{}, nil
 	}
-	status := RouteObservedUnserved
+	status := routerecord.ObservedUnserved
 	if projection.Provider != nil {
-		status = RouteObservedDegraded
+		status = routerecord.ObservedDegraded
 		if terminalStatus == TaskStatusCompleted {
-			status = RouteObservedServed
+			status = routerecord.ObservedServed
 		}
 	}
 	return repository.prepareComponentTaskRouteObservationStatus(ctx, intent, status, revision)
@@ -144,14 +146,14 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationRetry(
 		return componentTaskRouteObservationChange{}, nil
 	}
 	return repository.prepareComponentTaskRouteObservationStatus(
-		ctx, intent, RouteObservedPending, revision,
+		ctx, intent, routerecord.ObservedPending, revision,
 	)
 }
 
 func (repository *TaskRepository) prepareComponentTaskRouteObservationStatus(
 	ctx context.Context,
 	intent ComponentTaskIntent,
-	status RouteObservedStatus,
+	status routerecord.ObservedStatus,
 	revision int64,
 ) (componentTaskRouteObservationChange, error) {
 	projection := intent.RouteProjection
@@ -184,9 +186,9 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationStatus(
 				"Component Route desired state changed during reconciliation",
 			)
 		}
-		observation := RouteObservation{Status: status, DesiredGeneration: candidate.DesiredGeneration}
+		observation := routerecord.Observation{Status: status, DesiredGeneration: candidate.DesiredGeneration}
 		if projection.Provider != nil {
-			observation.Provider = RouteProviderObservation{
+			observation.Provider = routerecord.ProviderObservation{
 				ComponentID:      projection.Provider.ComponentID,
 				DefinitionDigest: projection.Provider.DefinitionDigest,
 				CatalogDigest:    projection.Provider.CatalogDigest,
@@ -194,17 +196,17 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationStatus(
 				InputGeneration:  projection.Provider.InputGeneration,
 			}
 		}
-		observationRecord, recordErr := NewRouteObservationRecord(
+		observationRecord, recordErr := routerecord.NewObservationRecord(
 			intent.EnvironmentID, candidate.Desired.ID, candidate.DesiredGeneration, observation,
 		)
 		if recordErr != nil {
 			return componentTaskRouteObservationChange{}, recordErr
 		}
-		encoded, encodeErr := encodeRouteObservation(observationRecord)
+		encoded, encodeErr := routerecord.EncodeObservation(observationRecord)
 		if encodeErr != nil {
 			return componentTaskRouteObservationChange{}, encodeErr
 		}
-		key := routeObservationKey(candidate.Desired.ID)
+		key := routerecord.ObservationKey(candidate.Desired.ID)
 		read, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 		if readErr != nil {
 			clear(encoded)
@@ -219,11 +221,11 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationStatus(
 		}
 		condition := etcdstore.Condition{Key: key}
 		if read.Values[0] != nil {
-			prior, decodeErr := decodeRouteObservation(read.Values[0].Value)
+			prior, decodeErr := routerecord.DecodeObservation(read.Values[0].Value)
 			if decodeErr != nil || prior.EnvironmentID != intent.EnvironmentID ||
 				prior.RouteID != candidate.Desired.ID {
 				clear(encoded)
-				return componentTaskRouteObservationChange{}, corruptRecord()
+				return componentTaskRouteObservationChange{}, recordcodec.CorruptRecord()
 			}
 			condition.ModRevision = read.Values[0].ModRevision
 		}

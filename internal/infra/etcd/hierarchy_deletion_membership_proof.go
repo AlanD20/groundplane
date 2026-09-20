@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"sort"
 
@@ -113,7 +114,7 @@ func validateHierarchyDeletionEntryOwner(value []byte, id, owner string) error {
 }
 
 func validateHierarchyDeletionRouteOwner(value []byte, id, owner string) error {
-	record, err := decodeRouteObservation(value)
+	record, err := routerecord.DecodeObservation(value)
 	if err != nil || record.RouteID != id || record.EnvironmentID != owner {
 		return corruptHierarchyDeletion()
 	}

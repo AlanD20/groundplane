@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -15,7 +16,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	environment Versioned[EnvironmentRecord],
 	project Versioned[ProjectRecord],
 	target Versioned[ServiceRecord],
-	route Versioned[RouteRecord],
+	route Versioned[routerecord.Record],
 	projection *Versioned[EnvironmentComposeProjection],
 	tombstone DeletionTombstoneRecord,
 	intent RouteRemovalIntent,
@@ -227,7 +228,7 @@ func classifyRouteDeletionStartConflict(
 	environment Versioned[EnvironmentRecord],
 	project Versioned[ProjectRecord],
 	target Versioned[ServiceRecord],
-	route Versioned[RouteRecord],
+	route Versioned[routerecord.Record],
 	projection *Versioned[EnvironmentComposeProjection],
 	indexes []*etcdstore.KeyValue,
 	operationID string,

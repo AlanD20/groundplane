@@ -54,7 +54,7 @@ func decodeEnvironment(value []byte) (EnvironmentRecord, error) {
 		CreateTaskID: data.CreateTaskID, CreatedAt: createdAt,
 	}
 	if err := validateEnvironment(record); err != nil {
-		return EnvironmentRecord{}, corruptRecord()
+		return EnvironmentRecord{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
 }

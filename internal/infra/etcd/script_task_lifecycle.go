@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -71,10 +72,10 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 	}
 	environment, err := decodeEnvironment(dependencies.Values[2].Value)
 	if err != nil || environment.ID != record.EnvironmentID {
-		return scriptTaskChange{}, corruptRecord()
+		return scriptTaskChange{}, recordcodec.CorruptRecord()
 	}
 	if dependencies.Values[3].ModRevision != service.Revision {
-		return scriptTaskChange{}, corruptRecord()
+		return scriptTaskChange{}, recordcodec.CorruptRecord()
 	}
 	parents, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
@@ -94,7 +95,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 	}
 	project, err := decodeProject(parents.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID {
-		return scriptTaskChange{}, corruptRecord()
+		return scriptTaskChange{}, recordcodec.CorruptRecord()
 	}
 	change := scriptTaskChange{
 		applies: true,

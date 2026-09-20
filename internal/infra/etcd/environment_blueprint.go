@@ -7,6 +7,7 @@ import (
 	"fmt"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/netip"
 	"path"
@@ -69,8 +70,8 @@ type EnvironmentBlueprintServiceChange struct {
 // EnvironmentBlueprintRouteChange is one exposure-only Route replacement or
 // one new stable Route committed with its target Service desired state.
 type EnvironmentBlueprintRouteChange struct {
-	Current *Versioned[RouteRecord]
-	Record  RouteRecord
+	Current *Versioned[routerecord.Record]
+	Record  routerecord.Record
 }
 type environmentBlueprintManifest struct {
 	EnvironmentID  string                             `json:"environment_id"`
@@ -459,12 +460,12 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintRouteChangesAt
 	seenMatches := make(map[string]struct{}, len(changes))
 	prepared := make([]preparedEnvironmentBlueprintRoute, 0, len(changes))
 	for _, change := range changes {
-		if err := validateRouteRecord(change.Record); err != nil {
+		if err := routerecord.ValidateRecord(change.Record); err != nil {
 			clearPreparedEnvironmentBlueprintRoutes(prepared)
 			return nil, err
 		}
 		routeID := change.Record.Desired.ID
-		matchKey := routeMatchKey(
+		matchKey := routerecord.MatchKey(
 			change.Record.EnvironmentID,
 			change.Record.Desired.Host,
 			change.Record.Desired.Path,
@@ -488,7 +489,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintRouteChangesAt
 				clearPreparedEnvironmentBlueprintRoutes(prepared)
 				return nil, err
 			}
-			replacement, err := ReplaceRouteDesired(change.Current.Record, change.Record.Desired)
+			replacement, err := routerecord.ReplaceDesired(change.Current.Record, change.Record.Desired)
 			if err != nil || replacement != change.Record {
 				clearPreparedEnvironmentBlueprintRoutes(prepared)
 				return nil, errs.New(

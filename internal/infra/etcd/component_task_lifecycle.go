@@ -323,7 +323,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	environment, err := decodeEnvironment(environmentState.Values[0].Value)
 	if err != nil || environment.ID != intent.EnvironmentID {
 		clearComponentTaskChange(change)
-		return componentTaskChange{}, corruptRecord()
+		return componentTaskChange{}, recordcodec.CorruptRecord()
 	}
 	_, secretConditions, secretMutations, err := prepareComponentTaskSecretReferences(
 		ctx,

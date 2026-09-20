@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 
 	"github.com/AlanD20/groundplane/internal/core"
@@ -156,7 +157,7 @@ func (adapter recoverySecretPinStore) VerifySecret(
 	defer clearKeyValues(owners.Values)
 	project, err := decodeProject(owners.Values[0].Value)
 	if err != nil || project.ID != adapter.projectID || owners.Values[0].Key != ownerKey {
-		return tasksecretpins.SecretAuthority{}, corruptRecord()
+		return tasksecretpins.SecretAuthority{}, recordcodec.CorruptRecord()
 	}
 	authority.ProjectID, authority.TenantID = project.ID, project.TenantID
 	return authority, nil

@@ -826,13 +826,13 @@ func decodeLocalAgentPrimary(value []byte) (LocalAgentRecord, error) {
 	}
 	createdAt, err := parseCanonicalTimestamp(data.CreatedAt)
 	if err != nil {
-		return LocalAgentRecord{}, corruptRecord()
+		return LocalAgentRecord{}, recordcodec.CorruptRecord()
 	}
 	var readyAt time.Time
 	if data.ReadyAt != "" {
 		readyAt, err = parseCanonicalTimestamp(data.ReadyAt)
 		if err != nil {
-			return LocalAgentRecord{}, corruptRecord()
+			return LocalAgentRecord{}, recordcodec.CorruptRecord()
 		}
 	}
 	record := LocalAgentRecord{
@@ -841,7 +841,7 @@ func decodeLocalAgentPrimary(value []byte) (LocalAgentRecord, error) {
 		Phase: data.Phase, CreatedAt: createdAt, ReadyAt: readyAt,
 	}
 	if err := validateLocalAgentPrimary(record); err != nil {
-		return LocalAgentRecord{}, corruptRecord()
+		return LocalAgentRecord{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
 }
@@ -858,7 +858,7 @@ func decodeLocalAgentConfig(value []byte) (decodedLocalAgentConfig, error) {
 	}
 	if ids.Validate(ids.KindAgent, data.AgentID) != nil || data.Generation == 0 ||
 		validateLocalAgentConfig(config) != nil {
-		return decodedLocalAgentConfig{}, corruptRecord()
+		return decodedLocalAgentConfig{}, recordcodec.CorruptRecord()
 	}
 	return decodedLocalAgentConfig{AgentID: data.AgentID, Generation: data.Generation, Config: config}, nil
 }
@@ -871,18 +871,18 @@ func decodeLocalAgentToken(value []byte) (decodedLocalAgentToken, error) {
 	ciphertext, err := base64.RawURLEncoding.Strict().DecodeString(data.Ciphertext)
 	if err != nil || len(ciphertext) == 0 ||
 		base64.RawURLEncoding.EncodeToString(ciphertext) != data.Ciphertext {
-		return decodedLocalAgentToken{}, corruptRecord()
+		return decodedLocalAgentToken{}, recordcodec.CorruptRecord()
 	}
 	createdAt, err := parseCanonicalTimestamp(data.CreatedAt)
 	if err != nil {
-		return decodedLocalAgentToken{}, corruptRecord()
+		return decodedLocalAgentToken{}, recordcodec.CorruptRecord()
 	}
 	updatedAt, err := parseCanonicalTimestamp(data.UpdatedAt)
 	if err != nil || updatedAt.Before(createdAt) {
-		return decodedLocalAgentToken{}, corruptRecord()
+		return decodedLocalAgentToken{}, recordcodec.CorruptRecord()
 	}
 	if ids.Validate(ids.KindAgent, data.AgentID) != nil || data.Generation == 0 {
-		return decodedLocalAgentToken{}, corruptRecord()
+		return decodedLocalAgentToken{}, recordcodec.CorruptRecord()
 	}
 	return decodedLocalAgentToken{
 		AgentID: data.AgentID, Generation: data.Generation, EncryptedToken: ciphertext,
@@ -899,14 +899,14 @@ func encodeLocalAgentReference(agentID string) ([]byte, error) {
 
 func decodeLocalAgentReference(value []byte) (string, error) {
 	if recordcodec.RejectDuplicateFields(value) != nil {
-		return "", corruptRecord()
+		return "", recordcodec.CorruptRecord()
 	}
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	decoder.DisallowUnknownFields()
 	var reference localAgentReference
 	if err := decoder.Decode(&reference); err != nil || recordcodec.RequireEOF(decoder) != nil ||
 		reference.Schema != 1 || ids.Validate(ids.KindAgent, reference.RecordID) != nil {
-		return "", corruptRecord()
+		return "", recordcodec.CorruptRecord()
 	}
 	return reference.RecordID, nil
 }
@@ -1009,11 +1009,11 @@ func localAgentDigestKey(digest string) string   { return localAgentDigestPrefix
 
 func localAgentDigestFromKey(key string) (string, error) {
 	if !strings.HasPrefix(key, localAgentDigestPrefix+"~") {
-		return "", corruptRecord()
+		return "", recordcodec.CorruptRecord()
 	}
 	digest := strings.TrimPrefix(key, localAgentDigestPrefix+"~")
 	if !validLocalAgentDigest(digest) {
-		return "", corruptRecord()
+		return "", recordcodec.CorruptRecord()
 	}
 	return digest, nil
 }

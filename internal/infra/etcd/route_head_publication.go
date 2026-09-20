@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -323,7 +324,7 @@ func validateCompletedRouteHeadReplay(
 		environmentBlueprintHeadKey(environmentID),
 		deletionTombstoneKey(string(DeletionTargetRoute), task.Target),
 		componentTaskActiveEnvironmentKey(environmentID),
-		routeObservationKey(task.Target),
+		routerecord.ObservationKey(task.Target),
 	}
 	state, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {

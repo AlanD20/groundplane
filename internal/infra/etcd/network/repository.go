@@ -6,6 +6,7 @@ package network
 
 import (
 	"context"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -184,7 +185,7 @@ func (repository *Repository) BeginZoneDeletionWithTask(
 func (repository *Repository) GetRoute(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.RouteRecord], error) {
+) (etcd.Versioned[routerecord.Record], error) {
 	return repository.routes.GetRoute(ctx, id)
 }
 
@@ -192,7 +193,7 @@ func (repository *Repository) ListRoutes(
 	ctx context.Context,
 	environmentID string,
 	request etcd.PageRequest,
-) (etcd.Page[etcd.RouteRecord], error) {
+) (etcd.Page[routerecord.Record], error) {
 	return repository.routes.ListRoutes(ctx, environmentID, request)
 }
 
@@ -205,8 +206,8 @@ func (repository *Repository) BeginRouteMutationWithTask(
 	environment etcd.Versioned[etcd.EnvironmentRecord],
 	project etcd.Versioned[etcd.ProjectRecord],
 	target etcd.Versioned[etcd.ServiceRecord],
-	current *etcd.Versioned[etcd.RouteRecord],
-	record etcd.RouteRecord,
+	current *etcd.Versioned[routerecord.Record],
+	record routerecord.Record,
 	intent etcd.RouteMutationIntent,
 	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,
@@ -242,7 +243,7 @@ func (repository *Repository) BeginRouteDeletionWithTask(
 	environment etcd.Versioned[etcd.EnvironmentRecord],
 	project etcd.Versioned[etcd.ProjectRecord],
 	target etcd.Versioned[etcd.ServiceRecord],
-	route etcd.Versioned[etcd.RouteRecord],
+	route etcd.Versioned[routerecord.Record],
 	projection *etcd.Versioned[etcd.EnvironmentComposeProjection],
 	tombstone etcd.DeletionTombstoneRecord,
 	intent etcd.RouteRemovalIntent,

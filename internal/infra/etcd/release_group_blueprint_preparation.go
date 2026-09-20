@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -114,7 +115,7 @@ func (repository *HierarchyRepository) PrepareReleaseGroupBlueprintMutation(
 			indexes.Values[1] == nil || indexes.Values[2] != nil ||
 			!bytes.Equal(indexes.Values[0].Value, []byte(id)) ||
 			!bytes.Equal(indexes.Values[1].Value, []byte(id)) {
-			return ReleaseGroupBlueprintPreparedMutation{}, corruptRecord()
+			return ReleaseGroupBlueprintPreparedMutation{}, recordcodec.CorruptRecord()
 		}
 		conditions = append(
 			conditions,
@@ -173,7 +174,7 @@ func (repository *HierarchyRepository) PrepareReleaseGroupBlueprintMutation(
 		}
 		if absent == nil || absent.ReadRevision != readRevision ||
 			len(absent.Values) != len(keys) {
-			return ReleaseGroupBlueprintPreparedMutation{}, corruptRecord()
+			return ReleaseGroupBlueprintPreparedMutation{}, recordcodec.CorruptRecord()
 		}
 		for _, value := range absent.Values {
 			if value != nil {

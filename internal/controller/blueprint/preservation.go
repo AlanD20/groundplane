@@ -4,6 +4,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
@@ -146,7 +147,7 @@ func preserveEnvironmentBlueprintResources(
 func preserveEnvironmentBlueprintRoutes(
 	specs []core.RouteSpec,
 	services []core.Service,
-	current []etcd.Versioned[etcd.RouteRecord],
+	current []etcd.Versioned[routerecord.Record],
 ) ([]core.RouteSpec, error) {
 	serviceByID := make(map[string]string, len(services))
 	for _, service := range services {

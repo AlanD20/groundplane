@@ -65,7 +65,7 @@ func EncodeServiceRuntimeRecordStorage(record ServiceRecord) ([]byte, error) {
 func decodeServiceRuntimeRecord(value []byte) (ServiceRuntimeRecord, error) {
 	record, err := recordcodec.Decode[ServiceRuntimeRecord](value, "service_runtime")
 	if err != nil || validateServiceRuntimeRecord(record) != nil {
-		return ServiceRuntimeRecord{}, corruptRecord()
+		return ServiceRuntimeRecord{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
 }

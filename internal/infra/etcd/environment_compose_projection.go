@@ -8,6 +8,7 @@ import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"sort"
 	"strings"
@@ -418,12 +419,12 @@ func validateEnvironmentComposeProjection(projection EnvironmentComposeProjectio
 // ApplyEnvironmentRoute replaces the lossless desired Route and advances generation.
 func ApplyEnvironmentRoute(
 	current EnvironmentComposeProjection,
-	route RouteRecord,
+	route routerecord.Record,
 ) (EnvironmentComposeProjection, error) {
 	if err := validateEnvironmentComposeProjection(current); err != nil {
 		return EnvironmentComposeProjection{}, err
 	}
-	if err := validateRouteRecord(route); err != nil || route.EnvironmentID != current.EnvironmentID {
+	if err := routerecord.ValidateRecord(route); err != nil || route.EnvironmentID != current.EnvironmentID {
 		return EnvironmentComposeProjection{}, errs.New(
 			errs.KindValidationFailed,
 			"applied Environment Route is invalid",
@@ -555,11 +556,11 @@ func validateEnvironmentRouteProjections(
 	seenIDs := make(map[string]struct{}, len(values))
 	for _, value := range values {
 		match := value.Desired.Host + "\x00" + value.Desired.Path
-		record := RouteRecord{
+		record := routerecord.Record{
 			EnvironmentID: value.EnvironmentID, Desired: value.Desired, DesiredGeneration: value.DesiredGeneration,
-			Observed: RouteObservation{Status: RouteObservedUnserved, DesiredGeneration: value.DesiredGeneration},
+			Observed: routerecord.Observation{Status: routerecord.ObservedUnserved, DesiredGeneration: value.DesiredGeneration},
 		}
-		if value.EnvironmentID != environmentID || match <= previousMatch || validateRouteRecord(record) != nil {
+		if value.EnvironmentID != environmentID || match <= previousMatch || routerecord.ValidateRecord(record) != nil {
 			return errs.New(errs.KindValidationFailed, "Environment desired Route projection is invalid or unsorted")
 		}
 		if _, duplicate := seenIDs[value.Desired.ID]; duplicate {

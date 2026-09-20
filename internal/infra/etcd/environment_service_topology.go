@@ -269,7 +269,7 @@ func joinEnvironmentService(
 		sidecar, decodeErr := decodeServiceRuntimeRecord(read.Values[0].Value)
 		if decodeErr != nil || sidecar.EnvironmentID != desired.EnvironmentID || sidecar.ServiceID != serviceID ||
 			sidecar.BackingNetworkID != desired.BackingNetworkID {
-			return Versioned[ServiceRecord]{}, corruptRecord()
+			return Versioned[ServiceRecord]{}, recordcodec.CorruptRecord()
 		}
 		runtime = sidecar.Runtime
 		runtimeRevision = read.Values[0].ModRevision
@@ -280,7 +280,7 @@ func joinEnvironmentService(
 		desiredFenceKey: desiredFenceKey, runtimeRevision: runtimeRevision,
 	}
 	if err := validateServiceRecord(record); err != nil {
-		return Versioned[ServiceRecord]{}, corruptRecord()
+		return Versioned[ServiceRecord]{}, recordcodec.CorruptRecord()
 	}
 	return Versioned[ServiceRecord]{
 		Record:       record,

@@ -4,6 +4,7 @@ import (
 	"context"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -50,7 +51,7 @@ func (repository *BackupPolicyRepository) GetEnvironmentBlueprintBackupPolicySna
 	}
 	policy, err := decodeBackupPolicyRecord(base.Values[0].Value)
 	if err != nil || policy.EnvironmentID != environmentID {
-		return EnvironmentBlueprintBackupPolicySnapshot{}, corruptRecord()
+		return EnvironmentBlueprintBackupPolicySnapshot{}, recordcodec.CorruptRecord()
 	}
 	keys := make([]string, 0, len(policy.SourceIDs)*3+2)
 	for _, sourceID := range policy.SourceIDs {
@@ -85,11 +86,11 @@ func (repository *BackupPolicyRepository) GetEnvironmentBlueprintBackupPolicySna
 		primary, owner := support.Values[offset], support.Values[offset+1]
 		offset += 2
 		if primary == nil || owner == nil || string(owner.Value) != sourceID {
-			return EnvironmentBlueprintBackupPolicySnapshot{}, corruptRecord()
+			return EnvironmentBlueprintBackupPolicySnapshot{}, recordcodec.CorruptRecord()
 		}
 		source, decodeErr := decodeBackupSourceRecord(primary.Value)
 		if decodeErr != nil || source.ID != sourceID || source.EnvironmentID != environmentID {
-			return EnvironmentBlueprintBackupPolicySnapshot{}, corruptRecord()
+			return EnvironmentBlueprintBackupPolicySnapshot{}, recordcodec.CorruptRecord()
 		}
 		snapshot.Sources[index] = source
 		selections[index] = BackupPolicySourceSelection{Kind: source.Kind, TargetID: source.TargetID}
@@ -99,7 +100,7 @@ func (repository *BackupPolicyRepository) GetEnvironmentBlueprintBackupPolicySna
 		Keep: policy.Keep, Encryption: policy.Encryption, ConnectorID: policy.ConnectorID,
 		Sources: selections,
 	}); err != nil {
-		return EnvironmentBlueprintBackupPolicySnapshot{}, corruptRecord()
+		return EnvironmentBlueprintBackupPolicySnapshot{}, recordcodec.CorruptRecord()
 	}
 	if policy.ConnectorID == "" {
 		return snapshot, nil

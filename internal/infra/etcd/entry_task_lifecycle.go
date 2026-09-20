@@ -167,7 +167,7 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 	}
 	environment, err := decodeEnvironment(base.Values[1].Value)
 	if err != nil || environment.ID != entry.EnvironmentID {
-		return nil, nil, corruptRecord()
+		return nil, nil, recordcodec.CorruptRecord()
 	}
 	extraKeys := []string{
 		projectKey(environment.ProjectID),
@@ -182,7 +182,7 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 	}
 	project, err := decodeProject(projectRead.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID {
-		return nil, nil, corruptRecord()
+		return nil, nil, recordcodec.CorruptRecord()
 	}
 	keys := append(baseKeys, extraKeys...)
 	values := append(base.Values, projectRead.Values...)

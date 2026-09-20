@@ -140,7 +140,7 @@ func decodeBackingHookEncryptedInputs(value []byte) (BackingHookEncryptedInputs,
 	record, err := recordcodec.Decode[BackingHookEncryptedInputs](value, "backing-hook-task-inputs")
 	if err != nil || validateBackingHookEncryptedInputs(record) != nil {
 		clear(record.Ciphertext)
-		return BackingHookEncryptedInputs{}, corruptRecord()
+		return BackingHookEncryptedInputs{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
 }

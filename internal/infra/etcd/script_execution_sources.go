@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -95,12 +96,12 @@ func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
 	if err != nil || storedScript.Desired.ID != script.Desired.ID ||
 		storedScript.ScriptSetGeneration != projection.RevisionID ||
 		storedScript.ActiveGeneration != script.ActiveGeneration {
-		return ScriptExecutionSources{}, corruptRecord()
+		return ScriptExecutionSources{}, recordcodec.CorruptRecord()
 	}
 	body, err := decodeScriptBodyGeneration(read.Values[1].Value)
 	if err != nil || body.ScriptID != script.Desired.ID ||
 		body.Generation != script.ActiveGeneration {
-		return ScriptExecutionSources{}, corruptRecord()
+		return ScriptExecutionSources{}, recordcodec.CorruptRecord()
 	}
 	intent, err := decodeReleaseRecord[domain.Intent](
 		read.Values[2].Value,
@@ -249,11 +250,11 @@ func (repository *ScriptRepository) loadExecutionSources(
 	}
 	body, err := decodeScriptBodyGeneration(bodyValue.Value)
 	if err != nil || body.ScriptID != scriptID || body.Generation != metadata.ActiveGeneration {
-		return ScriptExecutionSources{}, corruptRecord()
+		return ScriptExecutionSources{}, recordcodec.CorruptRecord()
 	}
 	metadata.Desired.Body = body.Body
 	if err := metadata.Desired.Validate(); err != nil {
-		return ScriptExecutionSources{}, corruptRecord()
+		return ScriptExecutionSources{}, recordcodec.CorruptRecord()
 	}
 
 	environmentValue, err := scriptExecutionValueAt(

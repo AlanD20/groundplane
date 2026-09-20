@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/releasegroup"
@@ -24,12 +25,12 @@ func (repository *TaskRepository) prepareReleaseGroupProjectEvidence(
 	}
 	if projectResult == nil || len(projectResult.Values) != 3 ||
 		projectResult.Values[0] == nil || projectResult.Values[1] == nil {
-		return nil, corruptRecord()
+		return nil, recordcodec.CorruptRecord()
 	}
 	project, err := decodeProject(projectResult.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID ||
 		!bytes.Equal(projectResult.Values[1].Value, []byte(environment.ID)) {
-		return nil, corruptRecord()
+		return nil, recordcodec.CorruptRecord()
 	}
 	if projectResult.Values[2] != nil {
 		return nil, errs.New(
@@ -57,18 +58,18 @@ func (repository *TaskRepository) prepareReleaseGroupProjectEvidence(
 	if ownerResult == nil || len(ownerResult.Values) != len(ownerKeys) ||
 		ownerResult.Values[0] == nil ||
 		!bytes.Equal(ownerResult.Values[0].Value, []byte(project.ID)) {
-		return nil, corruptRecord()
+		return nil, recordcodec.CorruptRecord()
 	}
 	conditions = append(conditions,
 		etcdstore.Condition{Key: ownerIndex, ModRevision: ownerResult.Values[0].ModRevision},
 	)
 	if project.Kind == ProjectKindTenant {
 		if ownerResult.Values[1] == nil {
-			return nil, corruptRecord()
+			return nil, recordcodec.CorruptRecord()
 		}
 		tenant, tenantErr := decodeTenant(ownerResult.Values[1].Value)
 		if tenantErr != nil || tenant.ID != project.TenantID {
-			return nil, corruptRecord()
+			return nil, recordcodec.CorruptRecord()
 		}
 		if ownerResult.Values[2] != nil {
 			return nil, errs.New(
@@ -92,10 +93,10 @@ func (repository *TaskRepository) prepareReleaseGroupMemberEvidence(
 	desiredMembers := make(map[string]EnvironmentServiceProjection, len(projection.DesiredServices))
 	for _, desired := range projection.DesiredServices {
 		if ids.Validate(ids.KindService, desired.Desired.ID) != nil {
-			return nil, corruptRecord()
+			return nil, recordcodec.CorruptRecord()
 		}
 		if _, duplicate := desiredMembers[desired.Desired.ID]; duplicate {
-			return nil, corruptRecord()
+			return nil, recordcodec.CorruptRecord()
 		}
 		desiredMembers[desired.Desired.ID] = desired
 	}
@@ -108,7 +109,7 @@ func (repository *TaskRepository) prepareReleaseGroupMemberEvidence(
 		return nil, err
 	}
 	if result == nil || len(result.Values) != len(keys) {
-		return nil, corruptRecord()
+		return nil, recordcodec.CorruptRecord()
 	}
 	conditions := make([]etcdstore.Condition, 0, len(group.ServiceIDs))
 	for index, serviceID := range group.ServiceIDs {

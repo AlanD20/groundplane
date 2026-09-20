@@ -218,7 +218,7 @@ func decodeScriptRecord(value []byte) (ScriptRecord, error) {
 		},
 	}
 	if err := validateScriptMetadataRecord(record); err != nil {
-		return ScriptRecord{}, corruptRecord()
+		return ScriptRecord{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
 }
@@ -241,7 +241,7 @@ func encodeScriptSetGeneration(record ScriptSetGenerationRecord) ([]byte, error)
 func decodeScriptSetGeneration(value []byte) (ScriptSetGenerationRecord, error) {
 	record, err := recordcodec.Decode[ScriptSetGenerationRecord](value, "script_set_generation")
 	if err != nil || validateScriptSetGeneration(record) != nil {
-		return ScriptSetGenerationRecord{}, corruptRecord()
+		return ScriptSetGenerationRecord{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
 }
@@ -258,7 +258,7 @@ func decodeScriptLocator(value []byte) (scriptLocatorRecord, error) {
 	record, err := recordcodec.Decode[scriptLocatorRecord](value, "script_locator")
 	if err != nil || recordcodec.ValidateID(ids.KindScript, record.ScriptID) != nil ||
 		recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil {
-		return scriptLocatorRecord{}, corruptRecord()
+		return scriptLocatorRecord{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
 }
@@ -284,7 +284,7 @@ func readActiveScriptSet(
 	}
 	record, err := decodeScriptSetGeneration(read.Values[0].Value)
 	if err != nil || record.EnvironmentID != environmentID {
-		return Versioned[ScriptSetGenerationRecord]{}, corruptRecord()
+		return Versioned[ScriptSetGenerationRecord]{}, recordcodec.CorruptRecord()
 	}
 	return Versioned[ScriptSetGenerationRecord]{
 		Record: record, Revision: read.Values[0].ModRevision, ReadRevision: read.ReadRevision,
@@ -316,7 +316,7 @@ func readActiveScriptStorage(
 	}
 	locator, err := decodeScriptLocator(locatorRead.Values[0].Value)
 	if err != nil || locator.ScriptID != scriptID {
-		return activeScriptStorage{}, corruptRecord()
+		return activeScriptStorage{}, recordcodec.CorruptRecord()
 	}
 	environmentLocatorRead, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
@@ -347,7 +347,7 @@ func readActiveScriptStorage(
 	record, err := decodeScriptRecord(primary.Values[0].Value)
 	if err != nil || record.Desired.ID != scriptID || record.EnvironmentID != locator.EnvironmentID ||
 		record.ScriptSetGeneration != active.Record.GenerationID {
-		return activeScriptStorage{}, corruptRecord()
+		return activeScriptStorage{}, recordcodec.CorruptRecord()
 	}
 	return activeScriptStorage{
 		Script: Versioned[ScriptRecord]{
@@ -412,7 +412,7 @@ func decodeScriptBodyGeneration(value []byte) (ScriptBodyGenerationRecord, error
 		return ScriptBodyGenerationRecord{}, err
 	}
 	if err := validateScriptBodyGeneration(generation); err != nil {
-		return ScriptBodyGenerationRecord{}, corruptRecord()
+		return ScriptBodyGenerationRecord{}, recordcodec.CorruptRecord()
 	}
 	return generation, nil
 }

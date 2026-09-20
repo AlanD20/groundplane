@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"net/http"
 	"time"
 
@@ -27,14 +28,14 @@ type routeMutationRepository interface {
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
 	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
-	GetRoute(context.Context, string) (etcd.Versioned[etcd.RouteRecord], error)
+	GetRoute(context.Context, string) (etcd.Versioned[routerecord.Record], error)
 	BeginRouteMutationWithTask(
 		context.Context,
 		etcd.Versioned[etcd.EnvironmentRecord],
 		etcd.Versioned[etcd.ProjectRecord],
 		etcd.Versioned[etcd.ServiceRecord],
-		*etcd.Versioned[etcd.RouteRecord],
-		etcd.RouteRecord,
+		*etcd.Versioned[routerecord.Record],
+		routerecord.Record,
 		etcd.RouteMutationIntent,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
@@ -274,7 +275,7 @@ func (service *routeMutationService) createRouteOnce(
 			"Route target Service does not expose the requested TCP port",
 		)
 	}
-	record, err := etcd.NewRouteRecord(input.EnvironmentID, core.Route{
+	record, err := routerecord.NewRecord(input.EnvironmentID, core.Route{
 		ID: ids.New(ids.KindRoute), Host: input.Host, Path: input.Path,
 		Exposure: input.Exposure, TargetServiceID: input.TargetServiceID,
 		TargetPort: input.TargetPort,
@@ -364,7 +365,7 @@ func (service *routeMutationService) editRouteOnce(
 	}
 	desired := current.Record.Desired
 	desired.Exposure = input.Exposure
-	replacement, err := etcd.ReplaceRouteDesired(current.Record, desired)
+	replacement, err := routerecord.ReplaceDesired(current.Record, desired)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -391,8 +392,8 @@ func (service *routeMutationService) prepareRouteMutationTask(
 	ctx context.Context,
 	environment etcd.Versioned[etcd.EnvironmentRecord],
 	project etcd.Versioned[etcd.ProjectRecord],
-	record etcd.RouteRecord,
-	previous *etcd.Versioned[etcd.RouteRecord],
+	record routerecord.Record,
+	previous *etcd.Versioned[routerecord.Record],
 	idempotencyKey string,
 ) (etcd.RouteMutationTaskPreparation, error) {
 	var applied *etcd.Versioned[etcd.EnvironmentComposeProjection]
@@ -526,7 +527,7 @@ func (service *routeMutationService) routeHierarchy(
 func (service *routeMutationService) routeResponseMarker(
 	locator etcd.IdempotencyLocator,
 	evidence routeMutationEvidence,
-	record etcd.RouteRecord,
+	record routerecord.Record,
 	taskID string,
 ) (etcd.IdempotencyResponse, etcd.IdempotencyMarker, error) {
 	body, err := json.Marshal(apiTypes.RouteTaskAccepted{Route: routeAPIResponse(record), TaskID: taskID})
@@ -611,7 +612,7 @@ func validateRouteCreationInput(input apiTypes.RouteCreate) error {
 	return nil
 }
 
-func routeAPIResponse(record etcd.RouteRecord) apiTypes.Route {
+func routeAPIResponse(record routerecord.Record) apiTypes.Route {
 	return apiTypes.Route{
 		ID: record.Desired.ID, EnvironmentID: record.EnvironmentID, Host: record.Desired.Host,
 		Path: record.Desired.Path, Exposure: string(record.Desired.Exposure),

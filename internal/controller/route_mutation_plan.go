@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"math"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
@@ -54,17 +55,17 @@ func (resolver *TaskPlanResolver) PrepareRouteMutationTask(
 	}
 	intent.CandidateProjection = &candidate
 	intent.Provider = pin
-	observation := etcd.RouteProviderObservation{
+	observation := routerecord.ProviderObservation{
 		ComponentID:      pin.ComponentID,
 		DefinitionDigest: pin.DefinitionDigest,
 		CatalogDigest:    pin.CatalogDigest,
 		InputRevision:    pin.InputRevision,
 		InputGeneration:  pin.InputGeneration,
 	}
-	intent.Route, err = etcd.SetRouteObservation(
+	intent.Route, err = routerecord.SetObservation(
 		intent.Route,
-		etcd.RouteObservation{
-			Status:            etcd.RouteObservedPending,
+		routerecord.Observation{
+			Status:            routerecord.ObservedPending,
 			DesiredGeneration: intent.Route.DesiredGeneration,
 			Provider:          observation,
 		},

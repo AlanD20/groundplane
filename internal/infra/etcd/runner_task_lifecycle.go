@@ -787,7 +787,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 	}
 	tenant, err := decodeTenant(parents.Values[0].Value)
 	if err != nil || tenant.ID != record.Desired.TenantID {
-		return runnerTaskChange{}, corruptRecord()
+		return runnerTaskChange{}, recordcodec.CorruptRecord()
 	}
 	if record.Desired.OwnerKind == RunnerOwnerProject {
 		if parents.Values[2] == nil {
@@ -799,7 +799,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 		project, decodeErr := decodeProject(parents.Values[2].Value)
 		if decodeErr != nil || project.ID != record.Desired.OwnerID || project.TenantID != tenant.ID ||
 			project.Kind != ProjectKindTenant {
-			return runnerTaskChange{}, corruptRecord()
+			return runnerTaskChange{}, recordcodec.CorruptRecord()
 		}
 	}
 	tombstone := DeletionTombstoneRecord{

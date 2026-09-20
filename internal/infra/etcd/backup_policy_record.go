@@ -215,7 +215,7 @@ func decodeBackupPolicyRecord(value []byte) (BackupPolicyRecord, error) {
 		return BackupPolicyRecord{}, err
 	}
 	if err := validateBackupPolicyRecord(record); err != nil {
-		return BackupPolicyRecord{}, corruptRecord()
+		return BackupPolicyRecord{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
 }
@@ -233,7 +233,7 @@ func decodeBackupSourceRecord(value []byte) (BackupSourceRecord, error) {
 		return BackupSourceRecord{}, err
 	}
 	if err := validateBackupSourceRecord(record); err != nil {
-		return BackupSourceRecord{}, corruptRecord()
+		return BackupSourceRecord{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
 }
@@ -251,7 +251,7 @@ func decodeBackupKeyRecord(value []byte) (BackupKeyRecord, error) {
 		return BackupKeyRecord{}, err
 	}
 	if err := validateBackupKeyRecord(record); err != nil {
-		return BackupKeyRecord{}, corruptRecord()
+		return BackupKeyRecord{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
 }
@@ -270,7 +270,7 @@ func decodeBackupKeyEncryptedValue(value []byte) (BackupKeyEncryptedValue, error
 	}
 	if err := validateBackupKeyEncryptedValue(record); err != nil {
 		clear(record.Ciphertext)
-		return BackupKeyEncryptedValue{}, corruptRecord()
+		return BackupKeyEncryptedValue{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
 }

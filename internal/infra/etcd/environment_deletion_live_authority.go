@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -103,7 +104,7 @@ func environmentDeletionLiveAuthorityKeys(environmentID string) []string {
 func environmentDeletionLiveAuthorityPrefixes(environmentID string, operationID string) []string {
 	return []string{
 		environmentBlueprintRevisionsPrefix(environmentID),
-		routeOwnerPrefix(environmentID),
+		routerecord.OwnerPrefix(environmentID),
 		entryOwnerCollectionPrefix(environmentID),
 		attachOwnerPrefix(environmentID),
 		componentEnvironmentOwnerPrefix(environmentID),

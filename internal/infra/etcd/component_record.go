@@ -210,7 +210,7 @@ func decodeComponentRecord(value []byte) (ComponentRecord, error) {
 		return ComponentRecord{}, err
 	}
 	if err := validateComponentRecord(record); err != nil {
-		return ComponentRecord{}, corruptRecord()
+		return ComponentRecord{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
 }

@@ -5,6 +5,7 @@ package network
 
 import (
 	"context"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
 	"github.com/AlanD20/groundplane/internal/controller"
@@ -269,7 +270,7 @@ func projectZone(record zonerecord.Record) corenetwork.Zone {
 	}
 }
 
-func projectRoute(record etcd.RouteRecord) corenetwork.Route {
+func projectRoute(record routerecord.Record) corenetwork.Route {
 	return corenetwork.Route{
 		ID: record.Desired.ID, EnvironmentID: record.EnvironmentID, Host: record.Desired.Host,
 		Path: record.Desired.Path, Exposure: corenetwork.RouteExposure(record.Desired.Exposure),

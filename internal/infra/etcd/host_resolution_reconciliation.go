@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"net/netip"
 	"sort"
 	"strings"
@@ -842,12 +843,12 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 	}
 	providerIDs := make(map[string]struct{})
 	for _, scanned := range routes {
-		if scanned.record.Observed.Status == RouteObservedServed {
+		if scanned.record.Observed.Status == routerecord.ObservedServed {
 			providerIDs[scanned.record.Observed.Provider.ComponentID] = struct{}{}
 		}
 	}
 	for _, route := range routeOverride {
-		if route.Observed.Status == RouteObservedServed {
+		if route.Observed.Status == routerecord.ObservedServed {
 			providerIDs[route.Observed.Provider.ComponentID] = struct{}{}
 		}
 	}
@@ -871,7 +872,7 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 		if replacement, found := routeOverride[route.Desired.ID]; found {
 			route = replacement
 		}
-		if route.Desired.Host == "" || route.Observed.Status != RouteObservedServed {
+		if route.Desired.Host == "" || route.Observed.Status != routerecord.ObservedServed {
 			continue
 		}
 		provider := components[route.Observed.Provider.ComponentID]
@@ -1072,7 +1073,7 @@ func preserveHostResolutionDesiredRevisionIDs(
 }
 
 type scannedRoute struct {
-	record RouteRecord
+	record routerecord.Record
 }
 
 func (repository *TaskRepository) scanRoutesAtRevision(ctx context.Context, revision int64) ([]scannedRoute, error) {
@@ -1097,7 +1098,7 @@ func (repository *TaskRepository) scanRoutesAtRevision(ctx context.Context, revi
 			environmentID := strings.TrimPrefix(value.Key, environmentComposeProjectionPrefix)
 			if strings.Contains(environmentID, "/") || recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil {
 				clearRangeKeyValues(page.Values)
-				return nil, corruptRecord()
+				return nil, recordcodec.CorruptRecord()
 			}
 			projection, decodeErr := decodeEnvironmentComposeProjection(value.Value)
 			if decodeErr != nil || projection.EnvironmentID != environmentID {
@@ -1164,7 +1165,7 @@ func (repository *TaskRepository) hostResolutionComponents(
 		}
 		id := strings.TrimPrefix(keys[index], componentPrefix)
 		if record.Desired.ID != id {
-			return nil, nil, corruptRecord()
+			return nil, nil, recordcodec.CorruptRecord()
 		}
 		result[id] = record
 	}
@@ -1199,9 +1200,9 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 	task TaskRecord,
 	terminalStatus TaskStatus,
 	revision int64,
-) (string, map[string]RouteRecord, map[string]ComponentRecord, error) {
+) (string, map[string]routerecord.Record, map[string]ComponentRecord, error) {
 	removal := ""
-	routeOverride := make(map[string]RouteRecord)
+	routeOverride := make(map[string]routerecord.Record)
 	componentOverride := make(map[string]ComponentRecord)
 	switch task.Params[TaskResourceKindParam] {
 	case TaskResourceRoute:
@@ -1244,12 +1245,12 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 			if terminalStatus == TaskStatusCompleted {
 				route := intent.Route
 				if intent.Provider != nil {
-					route.Observed.Provider = RouteProviderObservation{
+					route.Observed.Provider = routerecord.ProviderObservation{
 						ComponentID: intent.Provider.ComponentID, DefinitionDigest: intent.Provider.DefinitionDigest,
 						CatalogDigest: intent.Provider.CatalogDigest, InputRevision: intent.Provider.InputRevision,
 						InputGeneration: intent.Provider.InputGeneration,
 					}
-					route.Observed.Status = RouteObservedServed
+					route.Observed.Status = routerecord.ObservedServed
 				}
 				routeOverride[route.Desired.ID] = route
 			}
@@ -1298,21 +1299,21 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 					if intent.RouteProjection.Provider == nil && terminalStatus != TaskStatusCompleted {
 						continue
 					}
-					status := RouteObservedUnserved
-					provider := RouteProviderObservation{}
+					status := routerecord.ObservedUnserved
+					provider := routerecord.ProviderObservation{}
 					if intent.RouteProjection.Provider != nil {
-						status = RouteObservedDegraded
+						status = routerecord.ObservedDegraded
 						if terminalStatus == TaskStatusCompleted {
-							status = RouteObservedServed
+							status = routerecord.ObservedServed
 						}
 						pin := intent.RouteProjection.Provider
-						provider = RouteProviderObservation{
+						provider = routerecord.ProviderObservation{
 							ComponentID: pin.ComponentID, DefinitionDigest: pin.DefinitionDigest,
 							CatalogDigest: pin.CatalogDigest, InputRevision: pin.InputRevision,
 							InputGeneration: pin.InputGeneration,
 						}
 					}
-					replacement, replaceErr := SetRouteObservation(route, RouteObservation{
+					replacement, replaceErr := routerecord.SetObservation(route, routerecord.Observation{
 						Status: status, DesiredGeneration: route.DesiredGeneration, Provider: provider,
 					})
 					if replaceErr != nil {
@@ -1330,15 +1331,15 @@ func (repository *TaskRepository) routeAtRevision(
 	ctx context.Context,
 	routeID string,
 	revision int64,
-) (RouteRecord, error) {
+) (routerecord.Record, error) {
 	routes, err := repository.scanRoutesAtRevision(ctx, revision)
 	if err != nil {
-		return RouteRecord{}, err
+		return routerecord.Record{}, err
 	}
 	for _, route := range routes {
 		if route.record.Desired.ID == routeID {
 			return route.record, nil
 		}
 	}
-	return RouteRecord{}, errs.New(errs.KindStateConflict, "host-resolution Route changed during reconciliation")
+	return routerecord.Record{}, errs.New(errs.KindStateConflict, "host-resolution Route changed during reconciliation")
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -18,8 +19,8 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 	environment Versioned[EnvironmentRecord],
 	project Versioned[ProjectRecord],
 	target Versioned[ServiceRecord],
-	current *Versioned[RouteRecord],
-	record RouteRecord,
+	current *Versioned[routerecord.Record],
+	record routerecord.Record,
 	intent RouteMutationIntent,
 	task TaskRecord,
 	directMarker IdempotencyMarker,

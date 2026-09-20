@@ -164,11 +164,11 @@ func (repository *TaskRepository) prepareReleaseGroupMutationEvidence(
 	}
 	environment, err := decodeEnvironment(result.Values[0].Value)
 	if err != nil || environment.ID != group.EnvironmentID || result.Values[1] == nil {
-		return releaseGroupMutationEvidence{}, corruptRecord()
+		return releaseGroupMutationEvidence{}, recordcodec.CorruptRecord()
 	}
 	epoch, err := decodeEnvironmentMutationEpochRecord(result.Values[1].Value)
 	if err != nil || epoch.EnvironmentID != group.EnvironmentID {
-		return releaseGroupMutationEvidence{}, corruptRecord()
+		return releaseGroupMutationEvidence{}, recordcodec.CorruptRecord()
 	}
 	epochValue, err := encodeEnvironmentMutationEpochRecord(epoch)
 	if err != nil {
@@ -191,7 +191,7 @@ func (repository *TaskRepository) prepareReleaseGroupMutationEvidence(
 	projection, err := decodeEnvironmentComposeProjection(result.Values[7].Value)
 	if err != nil || projection.EnvironmentID != group.EnvironmentID {
 		clear(epochValue)
-		return releaseGroupMutationEvidence{}, corruptRecord()
+		return releaseGroupMutationEvidence{}, recordcodec.CorruptRecord()
 	}
 	if result.Values[8] != nil {
 		clear(epochValue)
@@ -246,7 +246,7 @@ func (repository *TaskRepository) prepareReleaseGroupMutationEvidence(
 		if decodeErr != nil || stored.ID != group.ID ||
 			stored.EnvironmentID != group.EnvironmentID || stored.Name != oldName ||
 			!bytes.Equal(result.Values[5].Value, []byte(group.ID)) {
-			return releaseGroupMutationEvidence{}, corruptRecord()
+			return releaseGroupMutationEvidence{}, recordcodec.CorruptRecord()
 		}
 		conditions = append(conditions,
 			etcdstore.Condition{Key: baseKeys[4], ModRevision: revision},
@@ -261,7 +261,7 @@ func (repository *TaskRepository) prepareReleaseGroupMutationEvidence(
 			}
 			oldNameIndex := result.Values[9]
 			if oldNameIndex == nil || !bytes.Equal(oldNameIndex.Value, []byte(group.ID)) {
-				return releaseGroupMutationEvidence{}, corruptRecord()
+				return releaseGroupMutationEvidence{}, recordcodec.CorruptRecord()
 			}
 			conditions = append(conditions,
 				etcdstore.Condition{Key: baseKeys[6]},
@@ -269,7 +269,7 @@ func (repository *TaskRepository) prepareReleaseGroupMutationEvidence(
 			)
 		} else {
 			if result.Values[6] == nil || !bytes.Equal(result.Values[6].Value, []byte(group.ID)) {
-				return releaseGroupMutationEvidence{}, corruptRecord()
+				return releaseGroupMutationEvidence{}, recordcodec.CorruptRecord()
 			}
 			conditions = append(conditions,
 				etcdstore.Condition{Key: baseKeys[6], ModRevision: result.Values[6].ModRevision},

@@ -117,7 +117,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	}
 	environment, err := decodeEnvironment(dependencies.Values[3].Value)
 	if err != nil || environment.ID != connector.EnvironmentID {
-		return connectorTaskChange{}, corruptRecord()
+		return connectorTaskChange{}, recordcodec.CorruptRecord()
 	}
 	parents, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
@@ -140,7 +140,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	}
 	project, err := decodeProject(parents.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID {
-		return connectorTaskChange{}, corruptRecord()
+		return connectorTaskChange{}, recordcodec.CorruptRecord()
 	}
 	change := connectorTaskChange{
 		applies: true,

@@ -918,10 +918,10 @@ func decodeTaskEventRecord(value []byte) (TaskEventRecord, error) {
 		Payload: data.Payload, PayloadSHA256: data.PayloadSHA256, ReceivedAt: receivedAt,
 	}
 	if err := validateTaskEventRecord(record); err != nil {
-		return TaskEventRecord{}, corruptRecord()
+		return TaskEventRecord{}, recordcodec.CorruptRecord()
 	}
 	if len(value) > MaximumTaskEventBytes {
-		return TaskEventRecord{}, corruptRecord()
+		return TaskEventRecord{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
 }
@@ -939,7 +939,7 @@ func decodeTaskEventDedupRecord(value []byte) (TaskEventDedupRecord, error) {
 		return TaskEventDedupRecord{}, err
 	}
 	if err := validateTaskEventDedupRecord(record); err != nil {
-		return TaskEventDedupRecord{}, corruptRecord()
+		return TaskEventDedupRecord{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
 }

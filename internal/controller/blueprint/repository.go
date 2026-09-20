@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/netip"
@@ -34,7 +35,7 @@ type environmentBlueprintRepository interface {
 	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
 	ResolveBackingProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
 	ResolveEnvironment(context.Context, string, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
-	ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.RouteRecord], error)
+	ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[routerecord.Record], error)
 	ListEntries(context.Context, string, etcd.PageRequest) (etcd.Page[entryrecord.Record], error)
 	BlueprintEntryValueGenerationExists(context.Context, entryrecord.Record) (bool, error)
 	CreateBlueprintEntryValueGeneration(context.Context, etcd.EntryValueGeneration) error
@@ -241,7 +242,7 @@ func (repository *durableRepository) ListRoutes(
 	ctx context.Context,
 	environmentID string,
 	request etcd.PageRequest,
-) (etcd.Page[etcd.RouteRecord], error) {
+) (etcd.Page[routerecord.Record], error) {
 	return repository.routes.ListRoutes(ctx, environmentID, request)
 }
 

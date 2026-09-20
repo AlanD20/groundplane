@@ -3,6 +3,8 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"maps"
 	"time"
 
@@ -204,7 +206,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskRetry(
 
 func (repository *TaskRepository) readRouteRetryDependencies(
 	ctx context.Context,
-	route RouteRecord,
+	route routerecord.Record,
 	intent RouteRemovalIntent,
 	revision int64,
 ) (*etcdstore.GetManyResult, []string, error) {
@@ -228,10 +230,10 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 	}
 	environment, err := decodeEnvironment(base.Values[0].Value)
 	if err != nil || environment.ID != route.EnvironmentID {
-		return nil, nil, corruptRecord()
+		return nil, nil, recordcodec.CorruptRecord()
 	}
 	if base.Values[1].ModRevision != service.Revision {
-		return nil, nil, corruptRecord()
+		return nil, nil, recordcodec.CorruptRecord()
 	}
 	extraKeys := []string{
 		projectKey(environment.ProjectID),
@@ -247,7 +249,7 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 	}
 	project, err := decodeProject(projectRead.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID {
-		return nil, nil, corruptRecord()
+		return nil, nil, recordcodec.CorruptRecord()
 	}
 	keys := append(baseKeys, extraKeys...)
 	values := append(base.Values, projectRead.Values...)
@@ -393,7 +395,7 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 		change.mutations = append(change.mutations, promotion.mutations...)
 		change.values = append(change.values, promotion.values...)
 		observation, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys: []string{routeObservationKey(intent.RouteID)}, Revision: revision,
+			Keys: []string{routerecord.ObservationKey(intent.RouteID)}, Revision: revision,
 		})
 		if readErr != nil {
 			clearRouteTaskChange(change)
@@ -404,21 +406,21 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 			return routeTaskChange{}, errs.New(errs.KindInternal, "Route observation read is incomplete")
 		}
 		if observation.Values[0] != nil {
-			if _, decodeErr := decodeRouteObservation(observation.Values[0].Value); decodeErr != nil {
+			if _, decodeErr := routerecord.DecodeObservation(observation.Values[0].Value); decodeErr != nil {
 				clearRouteTaskChange(change)
 				return routeTaskChange{}, decodeErr
 			}
 			change.conditions = append(
 				change.conditions,
-				etcdstore.Condition{Key: routeObservationKey(intent.RouteID), ModRevision: observation.Values[0].ModRevision},
+				etcdstore.Condition{Key: routerecord.ObservationKey(intent.RouteID), ModRevision: observation.Values[0].ModRevision},
 			)
 			change.mutations = append(
 				change.mutations,
-				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: routeObservationKey(intent.RouteID)},
+				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: routerecord.ObservationKey(intent.RouteID)},
 			)
 			clear(observation.Values[0].Value)
 		} else {
-			change.conditions = append(change.conditions, etcdstore.Condition{Key: routeObservationKey(intent.RouteID)})
+			change.conditions = append(change.conditions, etcdstore.Condition{Key: routerecord.ObservationKey(intent.RouteID)})
 		}
 	}
 	return change, nil
@@ -455,7 +457,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 	}
 	stateKeys := []string{
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
-		routeObservationKey(intent.RouteID),
+		routerecord.ObservationKey(intent.RouteID),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: stateKeys, Revision: revision})
 	if err != nil {
@@ -485,14 +487,14 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 		!routeDesiredEqual(desired.Desired, intent.Route.Desired) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation desired state changed")
 	}
-	status := RouteObservedUnserved
-	var provider RouteProviderObservation
+	status := routerecord.ObservedUnserved
+	var provider routerecord.ProviderObservation
 	if intent.Provider != nil {
-		status = RouteObservedDegraded
+		status = routerecord.ObservedDegraded
 		if terminalStatus == TaskStatusCompleted {
-			status = RouteObservedServed
+			status = routerecord.ObservedServed
 		}
-		provider = RouteProviderObservation{
+		provider = routerecord.ProviderObservation{
 			ComponentID:      intent.Provider.ComponentID,
 			DefinitionDigest: intent.Provider.DefinitionDigest,
 			CatalogDigest:    intent.Provider.CatalogDigest,
@@ -500,9 +502,9 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 			InputGeneration:  intent.Provider.InputGeneration,
 		}
 	}
-	observationRecord, err := NewRouteObservationRecord(
+	observationRecord, err := routerecord.NewObservationRecord(
 		intent.EnvironmentID, intent.RouteID, intent.Route.DesiredGeneration,
-		RouteObservation{Status: status, DesiredGeneration: intent.Route.DesiredGeneration, Provider: provider},
+		routerecord.Observation{Status: status, DesiredGeneration: intent.Route.DesiredGeneration, Provider: provider},
 	)
 	if err != nil {
 		return routeTaskChange{}, err
@@ -511,7 +513,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	routeValue, err := encodeRouteObservation(observationRecord)
+	routeValue, err := routerecord.EncodeObservation(observationRecord)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
@@ -520,13 +522,13 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 		clear(routeValue)
 		return routeTaskChange{}, err
 	}
-	observationCondition := etcdstore.Condition{Key: routeObservationKey(intent.RouteID)}
+	observationCondition := etcdstore.Condition{Key: routerecord.ObservationKey(intent.RouteID)}
 	if state.Values[1] != nil {
-		prior, decodeErr := decodeRouteObservation(state.Values[1].Value)
+		prior, decodeErr := routerecord.DecodeObservation(state.Values[1].Value)
 		if decodeErr != nil || prior.EnvironmentID != intent.EnvironmentID || prior.RouteID != intent.RouteID {
 			clear(routeValue)
 			clear(intentValue)
-			return routeTaskChange{}, corruptRecord()
+			return routeTaskChange{}, recordcodec.CorruptRecord()
 		}
 		observationCondition.ModRevision = state.Values[1].ModRevision
 	}
@@ -539,7 +541,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 		},
 		mutations: []etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: routeMutationIntentKey(task.ID), Value: intentValue},
-			{Type: etcdstore.MutationPut, Key: routeObservationKey(intent.RouteID), Value: routeValue},
+			{Type: etcdstore.MutationPut, Key: routerecord.ObservationKey(intent.RouteID), Value: routeValue},
 			{Type: etcdstore.MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 		},
 		values: [][]byte{routeValue, intentValue},
@@ -699,7 +701,7 @@ func validateRouteMutationTaskOwner(task TaskRecord, intent RouteMutationIntent)
 	return nil
 }
 
-func sameRouteDesiredVersion(left RouteRecord, right RouteRecord) bool {
+func sameRouteDesiredVersion(left routerecord.Record, right routerecord.Record) bool {
 	return left.EnvironmentID == right.EnvironmentID && left.Desired == right.Desired &&
 		left.DesiredGeneration == right.DesiredGeneration
 }

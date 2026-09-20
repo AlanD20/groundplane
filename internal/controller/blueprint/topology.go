@@ -3,6 +3,7 @@ package blueprint
 import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -87,9 +88,9 @@ func environmentBlueprintTopologyProjection(
 func prepareEnvironmentBlueprintRouteChanges(
 	environmentID string,
 	desired []core.Route,
-	current []etcd.Versioned[etcd.RouteRecord],
+	current []etcd.Versioned[routerecord.Record],
 ) ([]etcd.EnvironmentBlueprintRouteChange, error) {
-	currentByID := make(map[string]etcd.Versioned[etcd.RouteRecord], len(current))
+	currentByID := make(map[string]etcd.Versioned[routerecord.Record], len(current))
 	for _, route := range current {
 		if route.Record.EnvironmentID != environmentID || route.Record.Desired.ID == "" {
 			return nil, errs.New(errs.KindInternal, "durable Blueprint Route state is inconsistent")
@@ -102,7 +103,7 @@ func prepareEnvironmentBlueprintRouteChanges(
 	changes := make([]etcd.EnvironmentBlueprintRouteChange, 0, len(desired))
 	for _, next := range desired {
 		if existing, found := currentByID[next.ID]; found {
-			replacement, err := etcd.ReplaceRouteDesired(existing.Record, next)
+			replacement, err := routerecord.ReplaceDesired(existing.Record, next)
 			if err != nil {
 				return nil, err
 			}
@@ -114,7 +115,7 @@ func prepareEnvironmentBlueprintRouteChanges(
 			delete(currentByID, next.ID)
 			continue
 		}
-		record, err := etcd.NewRouteRecord(environmentID, next)
+		record, err := routerecord.NewRecord(environmentID, next)
 		if err != nil {
 			return nil, err
 		}

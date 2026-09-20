@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -236,15 +237,15 @@ func validateRouteRemovalDesiredProjection(projection EnvironmentComposeProjecti
 	seen := make(map[string]struct{}, len(projection.DesiredRoutes))
 	for _, desired := range projection.DesiredRoutes {
 		match := desired.Desired.Host + "\x00" + desired.Desired.Path
-		record := RouteRecord{
+		record := routerecord.Record{
 			EnvironmentID: desired.EnvironmentID, Desired: desired.Desired,
 			DesiredGeneration: desired.DesiredGeneration,
-			Observed: RouteObservation{
-				Status: RouteObservedUnserved, DesiredGeneration: desired.DesiredGeneration,
+			Observed: routerecord.Observation{
+				Status: routerecord.ObservedUnserved, DesiredGeneration: desired.DesiredGeneration,
 			},
 		}
 		if desired.EnvironmentID != projection.EnvironmentID || match <= previousMatch ||
-			validateRouteRecord(record) != nil {
+			routerecord.ValidateRecord(record) != nil {
 			return errs.New(errs.KindValidationFailed, "Route removal desired projection is invalid")
 		}
 		if _, duplicate := seen[desired.Desired.ID]; duplicate {

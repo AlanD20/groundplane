@@ -5,6 +5,7 @@ import (
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"time"
 
@@ -155,28 +156,28 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRouteFina
 	ctx context.Context,
 	action HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
-	result, err := repository.store.Get(ctx, routeObservationKey(action.TargetID))
+	result, err := repository.store.Get(ctx, routerecord.ObservationKey(action.TargetID))
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
 	if result == nil || result.ReadRevision <= 0 {
 		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
 	}
-	conditions := []etcdstore.Condition{{Key: routeObservationKey(action.TargetID)}}
+	conditions := []etcdstore.Condition{{Key: routerecord.ObservationKey(action.TargetID)}}
 	mutations := []etcdstore.Mutation{}
 	digest := hierarchyDeletionBytesDigest([]byte(action.TargetID))
 	if result.Entry != nil {
-		if result.Entry.Key != routeObservationKey(action.TargetID) {
+		if result.Entry.Key != routerecord.ObservationKey(action.TargetID) {
 			clear(result.Entry.Value)
 			return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
 		}
-		if _, decodeErr := decodeRouteObservation(result.Entry.Value); decodeErr != nil {
+		if _, decodeErr := routerecord.DecodeObservation(result.Entry.Value); decodeErr != nil {
 			clear(result.Entry.Value)
 			return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
 		}
 		conditions[0].ModRevision = result.Entry.ModRevision
 		digest = hierarchyDeletionBytesDigest(result.Entry.Value)
-		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: routeObservationKey(action.TargetID)})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: routerecord.ObservationKey(action.TargetID)})
 		clear(result.Entry.Value)
 	}
 	return hierarchyDeletionControllerEffects{

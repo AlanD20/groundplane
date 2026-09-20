@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
@@ -15,7 +16,7 @@ import (
 
 type routeProviderStateReader interface {
 	SnapshotRevision(context.Context) (int64, error)
-	ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.RouteRecord], error)
+	ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[routerecord.Record], error)
 	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
 	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[zonerecord.Record], error)
 }
@@ -88,7 +89,7 @@ func (resolver *TaskPlanResolver) pinRouteProvider(
 	environmentID string,
 	projectionRevision int64,
 	projection etcd.EnvironmentComposeProjection,
-	desired *etcd.RouteRecord,
+	desired *routerecord.Record,
 	removedRouteID string,
 	inputGeneration uint64,
 ) (*etcd.RouteProviderPin, error) {
@@ -180,7 +181,7 @@ func (resolver *TaskPlanResolver) routeProviderEnvironment(
 	environmentID string,
 	projectionRevision int64,
 	projection etcd.EnvironmentComposeProjection,
-	desired *etcd.RouteRecord,
+	desired *routerecord.Record,
 	removedRouteID string,
 ) (core.Environment, int64, error) {
 	if projection.EnvironmentID != environmentID || projectionRevision <= 0 {

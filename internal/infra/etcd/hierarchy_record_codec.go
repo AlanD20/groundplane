@@ -2,7 +2,6 @@ package etcd
 
 import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func encodeTenant(record TenantRecord) ([]byte, error) { return recordcodec.Encode("tenant", record) }
@@ -15,7 +14,7 @@ func decodeTenant(value []byte) (TenantRecord, error) {
 		return TenantRecord{}, err
 	}
 	if err := validateTenant(record); err != nil {
-		return TenantRecord{}, corruptRecord()
+		return TenantRecord{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
 }
@@ -26,11 +25,7 @@ func decodeProject(value []byte) (ProjectRecord, error) {
 		return ProjectRecord{}, err
 	}
 	if err := validateProject(record); err != nil {
-		return ProjectRecord{}, corruptRecord()
+		return ProjectRecord{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
-}
-
-func corruptRecord() error {
-	return errs.New(errs.KindInternal, "durable record violates its repository schema")
 }

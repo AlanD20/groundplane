@@ -44,7 +44,7 @@ func taskCheckpointAssignmentMatches(checkpoint TaskEventCheckpoint, assignment 
 
 func validateTaskEventCheckpoints(task TaskRecord) error {
 	if len(task.EventCheckpoints) > len(task.Steps) {
-		return corruptRecord()
+		return recordcodec.CorruptRecord()
 	}
 	previous := ""
 	for _, checkpoint := range task.EventCheckpoints {
@@ -56,7 +56,7 @@ func validateTaskEventCheckpoints(task TaskRecord) error {
 			checkpoint.State == TaskEventStateRunning && !checkpoint.Running ||
 			checkpoint.State == TaskEventStateCompleted && !checkpoint.Completed ||
 			checkpoint.State != TaskEventStatePending && !checkpoint.EffectPossible {
-			return corruptRecord()
+			return recordcodec.CorruptRecord()
 		}
 		previous = checkpoint.Identity.StepID
 	}
@@ -101,12 +101,12 @@ func (repository *TaskRepository) prepareTaskEventTrim(
 		return nil, nil, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-		return nil, nil, corruptRecord()
+		return nil, nil, recordcodec.CorruptRecord()
 	}
 	defer clearKeyValues(read.Values)
 	event, err := decodeTaskEventRecord(read.Values[0].Value)
 	if err != nil || event.Sequence != oldest || event.Identity.TaskID != task.ID {
-		return nil, nil, corruptRecord()
+		return nil, nil, recordcodec.CorruptRecord()
 	}
 	dedupKey := taskEventDedupKey(event.Identity)
 	dedupRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{dedupKey}, Revision: revision})
@@ -115,13 +115,13 @@ func (repository *TaskRepository) prepareTaskEventTrim(
 	}
 	if dedupRead == nil || dedupRead.ReadRevision != revision || len(dedupRead.Values) != 1 ||
 		dedupRead.Values[0] == nil {
-		return nil, nil, corruptRecord()
+		return nil, nil, recordcodec.CorruptRecord()
 	}
 	defer clearKeyValues(dedupRead.Values)
 	dedup, err := decodeTaskEventDedupRecord(dedupRead.Values[0].Value)
 	if err != nil || dedup.Identity != event.Identity || dedup.Sequence != event.Sequence ||
 		dedup.PayloadSHA256 != event.PayloadSHA256 {
-		return nil, nil, corruptRecord()
+		return nil, nil, recordcodec.CorruptRecord()
 	}
 	checkpoint := TaskEventCheckpoint{Identity: event.Identity, Sequence: event.Sequence,
 		PayloadSHA256: event.PayloadSHA256, State: event.State,

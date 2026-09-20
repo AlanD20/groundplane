@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -97,7 +98,7 @@ func (repository *TaskRepository) prepareSecretTaskRetry(
 		}
 		project, err := decodeProject(parents.Values[0].Value)
 		if err != nil || project.ID != record.Secret.ProjectID {
-			return secretTaskChange{}, corruptRecord()
+			return secretTaskChange{}, recordcodec.CorruptRecord()
 		}
 		change.conditions = append(change.conditions,
 			etcdstore.Condition{Key: projectKey(project.ID), ModRevision: parents.Values[0].ModRevision},

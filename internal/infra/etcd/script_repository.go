@@ -201,7 +201,7 @@ func (repository *ScriptRepository) GetScript(ctx context.Context, id string) (V
 	}
 	locator, err := decodeScriptLocator(locatorRead.Entry.Value)
 	if err != nil || locator.ScriptID != id {
-		return Versioned[ScriptRecord]{}, corruptRecord()
+		return Versioned[ScriptRecord]{}, recordcodec.CorruptRecord()
 	}
 	active, err := readActiveScriptSet(ctx, repository.store, locator.EnvironmentID, locatorRead.ReadRevision)
 	if err != nil {
@@ -221,7 +221,7 @@ func (repository *ScriptRepository) GetScript(ctx context.Context, id string) (V
 	record, err := decodeScriptRecord(primary.Values[0].Value)
 	if err != nil || record.Desired.ID != id || record.EnvironmentID != locator.EnvironmentID ||
 		record.ScriptSetGeneration != active.Record.GenerationID {
-		return Versioned[ScriptRecord]{}, corruptRecord()
+		return Versioned[ScriptRecord]{}, recordcodec.CorruptRecord()
 	}
 	return repository.hydrateScriptBody(ctx, Versioned[ScriptRecord]{
 		Record: record, Revision: primary.Values[0].ModRevision, ReadRevision: active.ReadRevision,

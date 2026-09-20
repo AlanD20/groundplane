@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"time"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
@@ -25,21 +26,21 @@ const (
 // create/edit Task. Route and target data are copied here so restart/retry
 // never rebases rendering on mutable desired state.
 type RouteMutationIntent struct {
-	TaskID                    string                        `json:"task_id"`
-	OperationID               string                        `json:"operation_id"`
-	EnvironmentID             string                        `json:"environment_id"`
-	RouteID                   string                        `json:"route_id"`
-	Kind                      RouteMutationKind             `json:"kind"`
-	RouteRevision             int64                         `json:"route_revision,omitempty"`
-	Route                     RouteRecord                   `json:"route"`
-	Previous                  *Versioned[RouteRecord]       `json:"previous,omitempty"`
-	CurrentProjectionRevision int64                         `json:"current_projection_revision,omitempty"`
-	CurrentProjection         *EnvironmentComposeProjection `json:"current_projection,omitempty"`
-	CandidateProjection       *EnvironmentComposeProjection `json:"candidate_projection,omitempty"`
-	Provider                  *RouteProviderPin             `json:"provider,omitempty"`
-	Status                    TaskStatus                    `json:"status"`
-	CreatedAt                 time.Time                     `json:"created_at"`
-	TerminalAt                *time.Time                    `json:"terminal_at,omitempty"`
+	TaskID                    string                         `json:"task_id"`
+	OperationID               string                         `json:"operation_id"`
+	EnvironmentID             string                         `json:"environment_id"`
+	RouteID                   string                         `json:"route_id"`
+	Kind                      RouteMutationKind              `json:"kind"`
+	RouteRevision             int64                          `json:"route_revision,omitempty"`
+	Route                     routerecord.Record             `json:"route"`
+	Previous                  *Versioned[routerecord.Record] `json:"previous,omitempty"`
+	CurrentProjectionRevision int64                          `json:"current_projection_revision,omitempty"`
+	CurrentProjection         *EnvironmentComposeProjection  `json:"current_projection,omitempty"`
+	CandidateProjection       *EnvironmentComposeProjection  `json:"candidate_projection,omitempty"`
+	Provider                  *RouteProviderPin              `json:"provider,omitempty"`
+	Status                    TaskStatus                     `json:"status"`
+	CreatedAt                 time.Time                      `json:"created_at"`
+	TerminalAt                *time.Time                     `json:"terminal_at,omitempty"`
 }
 
 type RouteProviderPin struct {
@@ -73,8 +74,8 @@ func NewRouteMutationIntent(
 	taskID string,
 	operationID string,
 	environmentID string,
-	route RouteRecord,
-	previous *Versioned[RouteRecord],
+	route routerecord.Record,
+	previous *Versioned[routerecord.Record],
 	projection *Versioned[EnvironmentComposeProjection],
 	createdAt time.Time,
 ) (RouteMutationIntent, error) {
@@ -86,8 +87,8 @@ func NewRouteMutationIntent(
 	if previous != nil {
 		intent.Kind = RouteMutationEdit
 		intent.RouteRevision = previous.Revision
-		prior := Versioned[RouteRecord]{
-			Record: cloneRouteRecord(previous.Record), Revision: previous.Revision, ReadRevision: previous.ReadRevision,
+		prior := Versioned[routerecord.Record]{
+			Record: routerecord.CloneRecord(previous.Record), Revision: previous.Revision, ReadRevision: previous.ReadRevision,
 		}
 		intent.Previous = &prior
 	}
@@ -192,7 +193,7 @@ func validateRouteMutationIntent(intent RouteMutationIntent) error {
 		intent.Route.EnvironmentID != intent.EnvironmentID || intent.Route.Desired.ID != intent.RouteID {
 		return errs.New(errs.KindValidationFailed, "Route mutation intent identity is invalid")
 	}
-	if err := validateRouteRecord(intent.Route); err != nil {
+	if err := routerecord.ValidateRecord(intent.Route); err != nil {
 		return err
 	}
 	if err := recordcodec.ValidateTimestamp("Route mutation intent created_at", intent.CreatedAt); err != nil {
@@ -210,7 +211,7 @@ func validateRouteMutationIntent(intent RouteMutationIntent) error {
 			intent.Previous.Revision != intent.RouteRevision {
 			return errs.New(errs.KindValidationFailed, "Route edit intent has incomplete prior state")
 		}
-		if err := validateRouteRecord(intent.Previous.Record); err != nil {
+		if err := routerecord.ValidateRecord(intent.Previous.Record); err != nil {
 			return err
 		}
 		if intent.Previous.Record.Desired.Host != intent.Route.Desired.Host ||
@@ -252,7 +253,7 @@ func validateRouteProviderPin(provider *RouteProviderPin) error {
 	if provider == nil {
 		return errs.New(errs.KindValidationFailed, "Route provider pin is missing")
 	}
-	if validateRouteProviderObservation(&RouteProviderObservation{
+	if routerecord.ValidateProviderObservation(&routerecord.ProviderObservation{
 		ComponentID: provider.ComponentID, DefinitionDigest: provider.DefinitionDigest,
 		CatalogDigest: provider.CatalogDigest, InputRevision: provider.InputRevision,
 		InputGeneration: provider.InputGeneration,
@@ -274,10 +275,10 @@ func cloneRouteProviderPin(source RouteProviderPin) RouteProviderPin {
 
 func cloneRouteMutationIntent(source RouteMutationIntent) RouteMutationIntent {
 	clone := source
-	clone.Route = cloneRouteRecord(source.Route)
+	clone.Route = routerecord.CloneRecord(source.Route)
 	if source.Previous != nil {
-		previous := Versioned[RouteRecord]{
-			Record:       cloneRouteRecord(source.Previous.Record),
+		previous := Versioned[routerecord.Record]{
+			Record:       routerecord.CloneRecord(source.Previous.Record),
 			Revision:     source.Previous.Revision,
 			ReadRevision: source.Previous.ReadRevision,
 		}
@@ -297,10 +298,6 @@ func cloneRouteMutationIntent(source RouteMutationIntent) RouteMutationIntent {
 	}
 	clone.TerminalAt = cloneTimePointer(source.TerminalAt)
 	return clone
-}
-
-func cloneRouteRecord(source RouteRecord) RouteRecord {
-	return source
 }
 
 func corruptRouteMutationIntent() error {

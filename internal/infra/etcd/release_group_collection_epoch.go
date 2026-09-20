@@ -39,7 +39,7 @@ func validateReleaseGroupCollectionEpoch(value []byte, environmentID string) err
 		"release-group-collection-epoch",
 	)
 	if err != nil || record.EnvironmentID != environmentID {
-		return corruptRecord()
+		return recordcodec.CorruptRecord()
 	}
 	return nil
 }
@@ -59,7 +59,7 @@ func loadReleaseGroupCollectionEpoch(
 	}
 	if result == nil || len(result.Values) != 1 ||
 		(revision > 0 && result.ReadRevision != revision) {
-		return etcdstore.Condition{}, etcdstore.Mutation{}, corruptRecord()
+		return etcdstore.Condition{}, etcdstore.Mutation{}, recordcodec.CorruptRecord()
 	}
 	condition := etcdstore.Condition{Key: releaseGroupCollectionEpochKey(environmentID)}
 	if result.Values[0] != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"sort"
 	"strings"
 
@@ -16,20 +17,20 @@ func findRouteAtRevision(
 	store hierarchyStore,
 	routeID string,
 	revision int64,
-) (Versioned[RouteRecord], error) {
+) (Versioned[routerecord.Record], error) {
 	start := ""
 	fixedRevision := revision
-	var matched *Versioned[RouteRecord]
+	var matched *Versioned[routerecord.Record]
 	for {
 		page, err := store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: environmentDesiredHeadScanPrefix, StartExclusive: start,
 			Limit: 200, Revision: fixedRevision,
 		})
 		if err != nil {
-			return Versioned[RouteRecord]{}, err
+			return Versioned[routerecord.Record]{}, err
 		}
 		if page == nil || page.ReadRevision <= 0 {
-			return Versioned[RouteRecord]{}, errs.New(errs.KindInternal, "Environment desired head scan is invalid")
+			return Versioned[routerecord.Record]{}, errs.New(errs.KindInternal, "Environment desired head scan is invalid")
 		}
 		if fixedRevision == 0 {
 			fixedRevision = page.ReadRevision
@@ -45,7 +46,7 @@ func findRouteAtRevision(
 				"/current",
 			)
 			if strings.Contains(environmentID, "/") || ids.Validate(ids.KindEnvironment, environmentID) != nil {
-				return Versioned[RouteRecord]{}, corruptEnvironmentComposeProjection()
+				return Versioned[routerecord.Record]{}, corruptEnvironmentComposeProjection()
 			}
 			projection, found, projectionErr := currentEnvironmentProjectionAtRevision(
 				ctx,
@@ -54,7 +55,7 @@ func findRouteAtRevision(
 				fixedRevision,
 			)
 			if projectionErr != nil {
-				return Versioned[RouteRecord]{}, projectionErr
+				return Versioned[routerecord.Record]{}, projectionErr
 			}
 			if !found {
 				continue
@@ -64,11 +65,11 @@ func findRouteAtRevision(
 					continue
 				}
 				if matched != nil {
-					return Versioned[RouteRecord]{}, corruptEnvironmentComposeProjection()
+					return Versioned[routerecord.Record]{}, corruptEnvironmentComposeProjection()
 				}
 				joined, joinErr := routeRecordFromDesiredProjection(ctx, store, projection, desired)
 				if joinErr != nil {
-					return Versioned[RouteRecord]{}, joinErr
+					return Versioned[routerecord.Record]{}, joinErr
 				}
 				matched = &joined
 			}
@@ -77,14 +78,14 @@ func findRouteAtRevision(
 			break
 		}
 		if len(page.Values) == 0 {
-			return Versioned[RouteRecord]{}, errs.New(
+			return Versioned[routerecord.Record]{}, errs.New(
 				errs.KindInternal,
 				"Environment desired head scan did not advance",
 			)
 		}
 	}
 	if matched == nil {
-		return Versioned[RouteRecord]{}, errs.New(errs.KindRouteNotFound, "Route was not found")
+		return Versioned[routerecord.Record]{}, errs.New(errs.KindRouteNotFound, "Route was not found")
 	}
 	return *matched, nil
 }
@@ -94,35 +95,35 @@ func listRoutesFromDesiredHead(
 	store hierarchyStore,
 	environmentID string,
 	request PageRequest,
-) (Page[RouteRecord], error) {
+) (Page[routerecord.Record], error) {
 	if err := validateContext(ctx); err != nil {
-		return Page[RouteRecord]{}, err
+		return Page[routerecord.Record]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return Page[RouteRecord]{}, err
+		return Page[routerecord.Record]{}, err
 	}
 	limit, revision, lastID, query, err := normalizePageRequest(
 		request, "routes", "environment", environmentID, "", ids.KindRoute,
 	)
 	if err != nil {
-		return Page[RouteRecord]{}, err
+		return Page[routerecord.Record]{}, err
 	}
 	projection, found, err := currentEnvironmentProjectionAtRevision(ctx, store, environmentID, revision)
 	if err != nil {
-		return Page[RouteRecord]{}, err
+		return Page[routerecord.Record]{}, err
 	}
 	if !found {
-		return Page[RouteRecord]{Items: []Versioned[RouteRecord]{}, Revision: projection.ReadRevision}, nil
+		return Page[routerecord.Record]{Items: []Versioned[routerecord.Record]{}, Revision: projection.ReadRevision}, nil
 	}
 	desired := append([]EnvironmentRouteProjection(nil), projection.Record.DesiredRoutes...)
 	sort.Slice(desired, func(left, right int) bool { return desired[left].Desired.ID < desired[right].Desired.ID })
 	start := sort.Search(len(desired), func(index int) bool { return desired[index].Desired.ID > lastID })
 	end := min(start+limit, len(desired))
-	items := make([]Versioned[RouteRecord], 0, end-start)
+	items := make([]Versioned[routerecord.Record], 0, end-start)
 	for _, route := range desired[start:end] {
 		joined, joinErr := routeRecordFromDesiredProjection(ctx, store, projection, route)
 		if joinErr != nil {
-			return Page[RouteRecord]{}, joinErr
+			return Page[routerecord.Record]{}, joinErr
 		}
 		items = append(items, joined)
 	}
@@ -133,10 +134,10 @@ func listRoutesFromDesiredHead(
 			LastID: desired[end-1].Desired.ID, Query: query,
 		})
 		if err != nil {
-			return Page[RouteRecord]{}, err
+			return Page[routerecord.Record]{}, err
 		}
 	}
-	return Page[RouteRecord]{Items: items, NextCursor: next, Revision: projection.ReadRevision}, nil
+	return Page[routerecord.Record]{Items: items, NextCursor: next, Revision: projection.ReadRevision}, nil
 }
 
 func routeAtProjection(
@@ -146,7 +147,7 @@ func routeAtProjection(
 	projectionRevision int64,
 	readRevision int64,
 	routeID string,
-) (RouteRecord, error) {
+) (routerecord.Record, error) {
 	versioned := Versioned[EnvironmentComposeProjection]{
 		Record: projection, Revision: projectionRevision, ReadRevision: readRevision,
 	}
@@ -154,10 +155,10 @@ func routeAtProjection(
 		if desired.Desired.ID == routeID {
 			joined, err := routeRecordFromDesiredProjection(ctx, store, versioned, desired)
 			if err != nil {
-				return RouteRecord{}, err
+				return routerecord.Record{}, err
 			}
 			return joined.Record, nil
 		}
 	}
-	return RouteRecord{}, errs.New(errs.KindRouteNotFound, "Route was not found")
+	return routerecord.Record{}, errs.New(errs.KindRouteNotFound, "Route was not found")
 }

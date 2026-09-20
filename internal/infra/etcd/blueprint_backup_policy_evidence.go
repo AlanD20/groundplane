@@ -4,6 +4,7 @@ import (
 	"context"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -34,7 +35,7 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupBase(
 	if result.Values[0] != nil {
 		record, decodeErr := decodeBackupPolicyRecord(result.Values[0].Value)
 		if decodeErr != nil || record.EnvironmentID != environmentID {
-			return nil, Versioned[EnvironmentCoordinationRecord]{}, nil, corruptRecord()
+			return nil, Versioned[EnvironmentCoordinationRecord]{}, nil, recordcodec.CorruptRecord()
 		}
 		value := Versioned[BackupPolicyRecord]{
 			Record: record, Revision: result.Values[0].ModRevision, ReadRevision: revision,
@@ -68,7 +69,7 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupBase(
 		return nil, coordination, nil, corruptEnvironmentCoordination()
 	}
 	if (result.Values[2] == nil) != (result.Values[3] == nil) {
-		return nil, coordination, nil, corruptRecord()
+		return nil, coordination, nil, recordcodec.CorruptRecord()
 	}
 	var key *VersionedBackupKey
 	if result.Values[2] != nil {
@@ -77,7 +78,7 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupBase(
 		if recordErr != nil || encryptedErr != nil || record.EnvironmentID != environmentID ||
 			encrypted.EnvironmentID != environmentID || record.KeyEra != encrypted.KeyEra {
 			clear(encrypted.Ciphertext)
-			return nil, coordination, nil, corruptRecord()
+			return nil, coordination, nil, recordcodec.CorruptRecord()
 		}
 		key = &VersionedBackupKey{
 			Record: record, Encrypted: encrypted, RecordRevision: result.Values[2].ModRevision,
@@ -147,13 +148,13 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupSources(
 		}
 		if values == nil || values.ReadRevision != revision || len(values.Values) != 2 ||
 			values.Values[0] == nil || values.Values[1] == nil {
-			return nil, corruptRecord()
+			return nil, recordcodec.CorruptRecord()
 		}
 		source, decodeErr := decodeBackupSourceRecord(values.Values[0].Value)
 		if decodeErr != nil || source.ID != sourceID || source.EnvironmentID != policy.EnvironmentID ||
 			string(values.Values[1].Value) != sourceID {
 			clearKeyValues(values.Values)
-			return nil, corruptRecord()
+			return nil, recordcodec.CorruptRecord()
 		}
 		identity, identityErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 			backupSourceIdentityKey(policy.EnvironmentID, source.Kind, source.TargetID),
@@ -167,7 +168,7 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupSources(
 			if identityErr != nil {
 				return nil, identityErr
 			}
-			return nil, corruptRecord()
+			return nil, recordcodec.CorruptRecord()
 		}
 		result[index] = blueprintBackupPolicySourceEvidence{
 			record: source, primary: cloneBackupPolicyEvidenceKeyValue(values.Values[0]),
@@ -269,13 +270,13 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupSources(
 			}
 			if triples == nil || triples.ReadRevision != revision || len(triples.Values) != 2 ||
 				triples.Values[0] == nil || triples.Values[1] == nil {
-				return nil, corruptRecord()
+				return nil, recordcodec.CorruptRecord()
 			}
 			stored, decodeErr := decodeBackupSourceRecord(triples.Values[0].Value)
 			if decodeErr != nil || stored.ID != sourceID || stored.EnvironmentID != input.EnvironmentID ||
 				stored.Kind != selection.Kind || stored.TargetID != selection.TargetID ||
 				string(triples.Values[1].Value) != sourceID {
-				return nil, corruptRecord()
+				return nil, recordcodec.CorruptRecord()
 			}
 			item.record = stored
 			item.primary = cloneBackupPolicyEvidenceKeyValue(triples.Values[0])
