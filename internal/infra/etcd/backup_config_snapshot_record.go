@@ -312,9 +312,9 @@ func decodeBackupConfigSnapshotValueChunkRecord(value []byte) (BackupConfigSnaps
 }
 
 func validateBackupConfigSnapshotRecord(record BackupConfigSnapshotRecord) error {
-	if validateStableID(ids.KindTask, record.SnapshotID) != nil ||
-		validateStableID(ids.KindEnvironment, record.EnvironmentID) != nil ||
-		validateStableID(ids.KindBackupSource, record.SourceID) != nil {
+	if recordcodec.ValidateID(ids.KindTask, record.SnapshotID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil ||
+		recordcodec.ValidateID(ids.KindBackupSource, record.SourceID) != nil {
 		return errs.New(errs.KindValidationFailed, "backup config snapshot identity is invalid")
 	}
 	if !validBackupConfigTimestamp(record.CreatedAt) || !validBackupConfigTimestamp(record.UpdatedAt) ||
@@ -355,9 +355,9 @@ func validateBackupConfigSnapshotRecord(record BackupConfigSnapshotRecord) error
 }
 
 func validateBackupConfigSnapshotEntryRecord(record BackupConfigSnapshotEntryRecord) error {
-	if validateStableID(ids.KindTask, record.SnapshotID) != nil ||
-		validateStableID(ids.KindEnvEntry, record.EntryID) != nil ||
-		validateStableID(ids.KindConfig, record.ValueGenerationID) != nil || record.EntryRevision <= 0 ||
+	if recordcodec.ValidateID(ids.KindTask, record.SnapshotID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvEntry, record.EntryID) != nil ||
+		recordcodec.ValidateID(ids.KindConfig, record.ValueGenerationID) != nil || record.EntryRevision <= 0 ||
 		record.ValueGenerationRevision <= 0 {
 		return errs.New(errs.KindValidationFailed, "backup config snapshot Entry identity is invalid")
 	}
@@ -375,9 +375,9 @@ func validateBackupConfigSnapshotEntryRecord(record BackupConfigSnapshotEntryRec
 func validateBackupConfigSnapshotDescriptorChunkRecord(
 	record BackupConfigSnapshotDescriptorChunkRecord,
 ) error {
-	if validateStableID(ids.KindTask, record.SnapshotID) != nil ||
-		validateStableID(ids.KindEnvEntry, record.EntryID) != nil ||
-		validateStableID(ids.KindConfig, record.ValueGenerationID) != nil {
+	if recordcodec.ValidateID(ids.KindTask, record.SnapshotID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvEntry, record.EntryID) != nil ||
+		recordcodec.ValidateID(ids.KindConfig, record.ValueGenerationID) != nil {
 		return errs.New(errs.KindValidationFailed, "backup config snapshot descriptor identity is invalid")
 	}
 	return validateBackupConfigDescriptorChunk(
@@ -390,9 +390,9 @@ func validateBackupConfigSnapshotDescriptorChunkRecord(
 }
 
 func validateBackupConfigSnapshotValueChunkRecord(record BackupConfigSnapshotValueChunkRecord) error {
-	if validateStableID(ids.KindTask, record.SnapshotID) != nil ||
-		validateStableID(ids.KindEnvEntry, record.EntryID) != nil ||
-		validateStableID(ids.KindConfig, record.ValueGenerationID) != nil {
+	if recordcodec.ValidateID(ids.KindTask, record.SnapshotID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvEntry, record.EntryID) != nil ||
+		recordcodec.ValidateID(ids.KindConfig, record.ValueGenerationID) != nil {
 		return errs.New(errs.KindValidationFailed, "backup config snapshot value identity is invalid")
 	}
 	return validateBackupConfigValueChunkShape(

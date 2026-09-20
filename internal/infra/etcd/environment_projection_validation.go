@@ -3,6 +3,7 @@ package etcd
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -18,8 +19,8 @@ const (
 // publication still requires a complete fresh topology. Both paths validate the
 // same metadata, resource ownership and artifact integrity.
 func validateEnvironmentProjection(projection EnvironmentComposeProjection, kind environmentArtifactKind) error {
-	if validateStableID(ids.KindEnvironment, projection.EnvironmentID) != nil ||
-		validateStableID(ids.KindTask, projection.RevisionID) != nil || projection.RenderGeneration == 0 {
+	if recordcodec.ValidateID(ids.KindEnvironment, projection.EnvironmentID) != nil ||
+		recordcodec.ValidateID(ids.KindTask, projection.RevisionID) != nil || projection.RenderGeneration == 0 {
 		return errs.New(errs.KindValidationFailed, "Environment Compose projection identity is invalid")
 	}
 	if err := validateEnvironmentServiceProjections(projection.EnvironmentID, projection.DesiredServices); err != nil {

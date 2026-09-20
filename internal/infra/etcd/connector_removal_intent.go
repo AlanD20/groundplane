@@ -49,7 +49,7 @@ func (repository *ConnectorRepository) GetConnectorRemovalIntent(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[ConnectorRemovalIntent]{}, false, err
 	}
-	if validateStableID(ids.KindTask, taskID) != nil {
+	if recordcodec.ValidateID(ids.KindTask, taskID) != nil {
 		return Versioned[ConnectorRemovalIntent]{}, false, errs.New(
 			errs.KindValidationFailed,
 			"connector removal intent task id is invalid",
@@ -93,13 +93,13 @@ func decodeConnectorRemovalIntent(value []byte) (ConnectorRemovalIntent, error) 
 }
 
 func validateConnectorRemovalIntent(intent ConnectorRemovalIntent) error {
-	if validateStableID(ids.KindTask, intent.TaskID) != nil ||
-		validateStableID(ids.KindEnvironment, intent.EnvironmentID) != nil ||
-		validateStableID(ids.KindConnector, intent.ConnectorID) != nil ||
+	if recordcodec.ValidateID(ids.KindTask, intent.TaskID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvironment, intent.EnvironmentID) != nil ||
+		recordcodec.ValidateID(ids.KindConnector, intent.ConnectorID) != nil ||
 		intent.ConnectorRevision <= 0 {
 		return errs.New(errs.KindValidationFailed, "connector removal intent identity is invalid")
 	}
-	return validateTimestamp("connector removal intent created_at", intent.CreatedAt)
+	return recordcodec.ValidateTimestamp("connector removal intent created_at", intent.CreatedAt)
 }
 
 func corruptConnectorRemovalIntent() error {

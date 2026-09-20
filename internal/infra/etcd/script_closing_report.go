@@ -74,7 +74,7 @@ func (report scriptClosingReport) validate(current TaskAssignment) error {
 		validateTaskResult(report.Result, task.Steps, report.Status) != nil ||
 		!isTerminalTaskStatus(
 			report.Status,
-		) || validateTimestamp("Blueprint closing report observed_at", report.ObservedAt) != nil ||
+		) || recordcodec.ValidateTimestamp("Blueprint closing report observed_at", report.ObservedAt) != nil ||
 		report.ObservedAt.Before(task.UpdatedAt) {
 		return errs.New(errs.KindInternal, "Blueprint closing report authority is corrupt")
 	}

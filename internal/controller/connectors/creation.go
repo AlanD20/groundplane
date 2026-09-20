@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"net/http"
 	"sort"
 	"time"
@@ -20,7 +21,7 @@ import (
 type connectorCreationRepository interface {
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
-	ResolveSecret(context.Context, string, string) (etcd.Versioned[etcd.SecretRecord], error)
+	ResolveSecret(context.Context, string, string) (etcd.Versioned[secretrecord.Record], error)
 	CreateConnectorIdempotent(
 		context.Context,
 		etcd.Versioned[etcd.EnvironmentRecord],
@@ -386,7 +387,7 @@ func (repository *durableConnectorCreationRepository) ResolveSecret(
 	ctx context.Context,
 	projectID string,
 	reference string,
-) (etcd.Versioned[etcd.SecretRecord], error) {
+) (etcd.Versioned[secretrecord.Record], error) {
 	return repository.secrets.ResolveSecret(ctx, projectID, reference)
 }
 

@@ -165,13 +165,13 @@ func validateScriptRecord(record ScriptRecord) error {
 }
 
 func validateScriptMetadataRecord(record ScriptRecord) error {
-	if err := validateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
 		return err
 	}
-	if err := validateID(ids.KindService, record.ServiceID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindService, record.ServiceID); err != nil {
 		return err
 	}
-	if err := validateID(ids.KindScript, record.Desired.ID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindScript, record.Desired.ID); err != nil {
 		return err
 	}
 	if err := record.Desired.ValidateMetadata(); err != nil {
@@ -224,7 +224,7 @@ func decodeScriptRecord(value []byte) (ScriptRecord, error) {
 }
 
 func validateScriptSetGeneration(record ScriptSetGenerationRecord) error {
-	if validateID(ids.KindEnvironment, record.EnvironmentID) != nil || record.GenerationID == "" ||
+	if recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil || record.GenerationID == "" ||
 		len(record.GenerationID) > 128 || strings.Contains(record.GenerationID, "/") {
 		return errs.New(errs.KindValidationFailed, "Script-set generation is invalid")
 	}
@@ -247,8 +247,8 @@ func decodeScriptSetGeneration(value []byte) (ScriptSetGenerationRecord, error) 
 }
 
 func encodeScriptLocator(record scriptLocatorRecord) ([]byte, error) {
-	if validateID(ids.KindScript, record.ScriptID) != nil ||
-		validateID(ids.KindEnvironment, record.EnvironmentID) != nil {
+	if recordcodec.ValidateID(ids.KindScript, record.ScriptID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil {
 		return nil, errs.New(errs.KindValidationFailed, "Script locator is invalid")
 	}
 	return recordcodec.Encode("script_locator", record)
@@ -256,8 +256,8 @@ func encodeScriptLocator(record scriptLocatorRecord) ([]byte, error) {
 
 func decodeScriptLocator(value []byte) (scriptLocatorRecord, error) {
 	record, err := recordcodec.Decode[scriptLocatorRecord](value, "script_locator")
-	if err != nil || validateID(ids.KindScript, record.ScriptID) != nil ||
-		validateID(ids.KindEnvironment, record.EnvironmentID) != nil {
+	if err != nil || recordcodec.ValidateID(ids.KindScript, record.ScriptID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil {
 		return scriptLocatorRecord{}, corruptRecord()
 	}
 	return record, nil
@@ -383,7 +383,7 @@ func newScriptBodyGeneration(record ScriptRecord) (ScriptBodyGenerationRecord, e
 }
 
 func validateScriptBodyGeneration(generation ScriptBodyGenerationRecord) error {
-	if err := validateID(ids.KindScript, generation.ScriptID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindScript, generation.ScriptID); err != nil {
 		return err
 	}
 	if generation.Generation == 0 || generation.BodySize != uint32(len(generation.Body)) {

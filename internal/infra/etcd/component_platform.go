@@ -245,7 +245,7 @@ func validateComponentObservation(record ComponentObservationRecord) error {
 		return errs.New(errs.KindValidationFailed, "Component observation identity or generation is invalid")
 	}
 	if record.Enabled {
-		if !validSHA256(record.CorefileSHA256) || !validSHA256(record.InputSHA256) ||
+		if !recordcodec.ValidSHA256(record.CorefileSHA256) || !recordcodec.ValidSHA256(record.InputSHA256) ||
 			record.DNSResolverProof == nil || validateTaskResult(TaskResultRecord{
 			Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
 			DNSResolverCandidateObservation: record.DNSResolverProof,
@@ -261,7 +261,7 @@ func validateComponentObservation(record ComponentObservationRecord) error {
 		) {
 			return errs.New(errs.KindValidationFailed, "enabled Component observation digests are invalid")
 		}
-	} else if record.CorefileSHA256 != "" && !validSHA256(record.CorefileSHA256) ||
+	} else if record.CorefileSHA256 != "" && !recordcodec.ValidSHA256(record.CorefileSHA256) ||
 		record.InputSHA256 != "" || record.DNSResolverProof != nil || record.ComposeArtifact != nil {
 		return errs.New(errs.KindValidationFailed, "disabled Component observation carries rendered digests")
 	}

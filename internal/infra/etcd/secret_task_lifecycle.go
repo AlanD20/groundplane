@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -32,7 +33,7 @@ func (repository *TaskRepository) prepareSecretTaskRetry(
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			secretRecordKey(source.Target),
+			secretrecord.RecordKey(source.Target),
 			deletionTombstoneKey(string(DeletionTargetSecret), source.Target),
 		},
 		Revision: revision,
@@ -46,9 +47,9 @@ func (repository *TaskRepository) prepareSecretTaskRetry(
 			"Secret is not available for deletion retry",
 		)
 	}
-	record, err := decodeSecretRecord(stored.Values[0].Value)
+	record, err := secretrecord.DecodeRecord(stored.Values[0].Value)
 	if err != nil || record.Secret.ID != source.Target {
-		return secretTaskChange{}, corruptSecretRecord()
+		return secretTaskChange{}, secretrecord.CorruptRecord()
 	}
 	fences, err := prepareSecretScriptAbsence(ctx, repository.store, source.Target)
 	if err != nil {
@@ -56,7 +57,7 @@ func (repository *TaskRepository) prepareSecretTaskRetry(
 	}
 	dependencies, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			secretOwnerKey(record.Secret), secretScopedKey(record.Secret), secretValueKey(record.Secret.ID),
+			secretOwnerKey(record.Secret), secretScopedKey(record.Secret), secretrecord.ValueKey(record.Secret.ID),
 		},
 		Revision: revision,
 	})
@@ -72,10 +73,10 @@ func (repository *TaskRepository) prepareSecretTaskRetry(
 	change := secretTaskChange{
 		applies: true,
 		conditions: []etcdstore.Condition{
-			{Key: secretRecordKey(record.Secret.ID), ModRevision: stored.Values[0].ModRevision},
+			{Key: secretrecord.RecordKey(record.Secret.ID), ModRevision: stored.Values[0].ModRevision},
 			{Key: secretOwnerKey(record.Secret), ModRevision: dependencies.Values[0].ModRevision},
 			{Key: secretScopedKey(record.Secret), ModRevision: dependencies.Values[1].ModRevision},
-			{Key: secretValueKey(record.Secret.ID), ModRevision: dependencies.Values[2].ModRevision},
+			{Key: secretrecord.ValueKey(record.Secret.ID), ModRevision: dependencies.Values[2].ModRevision},
 			{Key: deletionTombstoneKey(string(DeletionTargetSecret), record.Secret.ID)},
 		},
 	}
@@ -146,7 +147,7 @@ func (repository *TaskRepository) prepareSecretTaskAcknowledgement(
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			secretRecordKey(task.Target),
+			secretrecord.RecordKey(task.Target),
 			deletionTombstoneKey(string(DeletionTargetSecret), task.Target),
 		},
 		Revision: revision,
@@ -157,9 +158,9 @@ func (repository *TaskRepository) prepareSecretTaskAcknowledgement(
 	if stored == nil || len(stored.Values) != 2 || stored.Values[0] == nil || stored.Values[1] == nil {
 		return secretTaskChange{}, errs.New(errs.KindInternal, "Secret deletion state is inconsistent")
 	}
-	record, err := decodeSecretRecord(stored.Values[0].Value)
+	record, err := secretrecord.DecodeRecord(stored.Values[0].Value)
 	if err != nil || record.Secret.ID != task.Target {
-		return secretTaskChange{}, corruptSecretRecord()
+		return secretTaskChange{}, secretrecord.CorruptRecord()
 	}
 	tombstone, err := decodeDeletionTombstone(stored.Values[1].Value)
 	if err != nil || tombstone.TargetKind != DeletionTargetSecret || tombstone.TargetID != task.Target ||
@@ -172,7 +173,7 @@ func (repository *TaskRepository) prepareSecretTaskAcknowledgement(
 	}
 	dependencies, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			secretOwnerKey(record.Secret), secretScopedKey(record.Secret), secretValueKey(record.Secret.ID),
+			secretOwnerKey(record.Secret), secretScopedKey(record.Secret), secretrecord.ValueKey(record.Secret.ID),
 		},
 		Revision: revision,
 	})
@@ -185,23 +186,23 @@ func (repository *TaskRepository) prepareSecretTaskAcknowledgement(
 		string(dependencies.Values[1].Value) != record.Secret.ID {
 		return secretTaskChange{}, errs.New(errs.KindInternal, "Secret deletion dependencies are corrupt")
 	}
-	encrypted, err := decodeSecretEncryptedValue(dependencies.Values[2].Value)
+	encrypted, err := secretrecord.DecodeEncryptedValue(dependencies.Values[2].Value)
 	if err != nil || encrypted.SecretID != task.Target {
 		clear(encrypted.Ciphertext)
-		return secretTaskChange{}, corruptSecretRecord()
+		return secretTaskChange{}, secretrecord.CorruptRecord()
 	}
 	clear(encrypted.Ciphertext)
 	change := secretTaskChange{
 		applies: true,
 		conditions: []etcdstore.Condition{
-			{Key: secretRecordKey(task.Target), ModRevision: stored.Values[0].ModRevision},
+			{Key: secretrecord.RecordKey(task.Target), ModRevision: stored.Values[0].ModRevision},
 			{
 				Key:         deletionTombstoneKey(string(DeletionTargetSecret), task.Target),
 				ModRevision: stored.Values[1].ModRevision,
 			},
 			{Key: secretOwnerKey(record.Secret), ModRevision: dependencies.Values[0].ModRevision},
 			{Key: secretScopedKey(record.Secret), ModRevision: dependencies.Values[1].ModRevision},
-			{Key: secretValueKey(task.Target), ModRevision: dependencies.Values[2].ModRevision},
+			{Key: secretrecord.ValueKey(task.Target), ModRevision: dependencies.Values[2].ModRevision},
 		},
 		mutations: []etcdstore.Mutation{{
 			Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetSecret), task.Target),
@@ -216,8 +217,8 @@ func (repository *TaskRepository) prepareSecretTaskAcknowledgement(
 		change.mutations = append(change.mutations,
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: secretOwnerKey(record.Secret)},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: secretScopedKey(record.Secret)},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: secretValueKey(task.Target)},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: secretRecordKey(task.Target)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: secretrecord.ValueKey(task.Target)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: secretrecord.RecordKey(task.Target)},
 		)
 	}
 	return change, nil
@@ -235,7 +236,7 @@ func (repository *TaskRepository) validateSecretTaskAcknowledgementReplay(
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			secretRecordKey(task.Target),
+			secretrecord.RecordKey(task.Target),
 			deletionTombstoneKey(string(DeletionTargetSecret), task.Target),
 		},
 		Revision: revision,
@@ -255,7 +256,7 @@ func (repository *TaskRepository) validateSecretTaskAcknowledgementReplay(
 	if stored.Values[0] == nil {
 		return errs.New(errs.KindStateConflict, "failed Secret deletion lost its target")
 	}
-	record, err := decodeSecretRecord(stored.Values[0].Value)
+	record, err := secretrecord.DecodeRecord(stored.Values[0].Value)
 	if err != nil || record.Secret.ID != task.Target {
 		return errs.New(errs.KindStateConflict, "failed Secret deletion retained another target")
 	}

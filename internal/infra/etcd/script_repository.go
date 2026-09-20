@@ -189,7 +189,7 @@ func (repository *ScriptRepository) GetScript(ctx context.Context, id string) (V
 	if err := validateContext(ctx); err != nil {
 		return Versioned[ScriptRecord]{}, err
 	}
-	if err := validateID(ids.KindScript, id); err != nil {
+	if err := recordcodec.ValidateID(ids.KindScript, id); err != nil {
 		return Versioned[ScriptRecord]{}, err
 	}
 	locatorRead, err := repository.store.Get(ctx, scriptLocatorKey(id))
@@ -233,7 +233,7 @@ func (repository *ScriptRepository) ListScripts(
 	environmentID string,
 	request PageRequest,
 ) (Page[ScriptRecord], error) {
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return Page[ScriptRecord]{}, err
 	}
 	revision := int64(0)

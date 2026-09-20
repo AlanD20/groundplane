@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 	"strings"
 
@@ -23,8 +24,8 @@ func (repository *AttachRepository) ListAttachesByBackingNetworkAtRevision(
 	if err := validateContext(ctx); err != nil {
 		return nil, err
 	}
-	if repository == nil || repository.store == nil || validateID(ids.KindProject, backingProjectID) != nil ||
-		validateID(ids.KindNetwork, networkID) != nil || revision <= 0 {
+	if repository == nil || repository.store == nil || recordcodec.ValidateID(ids.KindProject, backingProjectID) != nil ||
+		recordcodec.ValidateID(ids.KindNetwork, networkID) != nil || revision <= 0 {
 		return nil, errs.New(errs.KindValidationFailed, "backing Zone impact scope is invalid")
 	}
 	prefix := attachBackingProjectPrefix(backingProjectID)
@@ -56,7 +57,7 @@ func (repository *AttachRepository) ListAttachesByBackingNetworkAtRevision(
 	idsByIndex := make([]string, len(indexes))
 	for index, value := range indexes {
 		attachID := strings.TrimPrefix(value.Key, prefix)
-		if attachID == value.Key || strings.Contains(attachID, "/") || validateID(ids.KindAttach, attachID) != nil ||
+		if attachID == value.Key || strings.Contains(attachID, "/") || recordcodec.ValidateID(ids.KindAttach, attachID) != nil ||
 			string(value.Value) != attachID {
 			return nil, errs.New(errs.KindInternal, "backing Zone Attach index is corrupt")
 		}

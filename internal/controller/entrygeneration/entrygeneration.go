@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -14,8 +16,8 @@ import (
 )
 
 type EntrySecretRepository interface {
-	ResolveSecret(context.Context, string, string) (etcd.Versioned[etcd.SecretRecord], error)
-	GetSecretValue(context.Context, etcd.Versioned[etcd.SecretRecord]) (etcd.SecretEncryptedValue, error)
+	ResolveSecret(context.Context, string, string) (etcd.Versioned[secretrecord.Record], error)
+	GetSecretValue(context.Context, etcd.Versioned[secretrecord.Record]) (secretrecord.EncryptedValue, error)
 }
 
 type EntryFactResolver interface {
@@ -102,7 +104,7 @@ func (service *EntryGenerationService) Generate(
 
 	var generation etcd.EntryValueGeneration
 	err := service.withResolvedEntrySource(ctx, projectID, environmentID, entry, func(value []byte) error {
-		if len(value) > etcd.MaximumEntryValueBytes {
+		if len(value) > recordcodec.MaximumValueBytes {
 			return errs.New(errs.KindValidationFailed, "Resolved Entry value exceeds the maximum size")
 		}
 		if !entry.Secret {
@@ -123,7 +125,7 @@ func (service *EntryGenerationService) Generate(
 		}
 		ciphertext := envelope.Ciphertext()
 		defer clear(ciphertext)
-		if len(ciphertext) == 0 || len(ciphertext) > etcd.MaximumEntryValueBytes {
+		if len(ciphertext) == 0 || len(ciphertext) > recordcodec.MaximumValueBytes {
 			return errs.New(errs.KindValidationFailed, "Encrypted Entry generation exceeds the maximum size")
 		}
 		metadata := envelope.Metadata()

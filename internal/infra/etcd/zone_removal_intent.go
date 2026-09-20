@@ -159,9 +159,9 @@ func validateZoneRemovalIntent(intent ZoneRemovalIntent) error {
 		validateEnvironmentComposeProjection(intent.DesiredProjection) != nil ||
 		validateEnvironmentComposeProjection(intent.AppliedProjection) != nil ||
 		validateEnvironmentComposeProjection(intent.CandidateProjection) != nil ||
-		validateTimestamp("Zone removal created_at", intent.CreatedAt) != nil ||
-		validateTimestamp("Zone removal active Task created_at", intent.ActiveTaskCreatedAt) != nil ||
-		validateTimestamp("Zone removal updated_at", intent.UpdatedAt) != nil ||
+		recordcodec.ValidateTimestamp("Zone removal created_at", intent.CreatedAt) != nil ||
+		recordcodec.ValidateTimestamp("Zone removal active Task created_at", intent.ActiveTaskCreatedAt) != nil ||
+		recordcodec.ValidateTimestamp("Zone removal updated_at", intent.UpdatedAt) != nil ||
 		intent.ActiveTaskCreatedAt.Before(intent.CreatedAt) ||
 		intent.UpdatedAt.Before(intent.ActiveTaskCreatedAt) {
 		return errs.New(errs.KindValidationFailed, "Zone removal intent identity is invalid")
@@ -171,7 +171,7 @@ func validateZoneRemovalIntent(intent ZoneRemovalIntent) error {
 			return errs.New(errs.KindValidationFailed, "pending Zone removal intent has terminal time")
 		}
 	} else if !isTerminalTaskStatus(intent.Status) || intent.TerminalAt == nil ||
-		!intent.TerminalAt.Equal(intent.UpdatedAt) || validateTimestamp("Zone removal terminal_at", *intent.TerminalAt) != nil {
+		!intent.TerminalAt.Equal(intent.UpdatedAt) || recordcodec.ValidateTimestamp("Zone removal terminal_at", *intent.TerminalAt) != nil {
 		return errs.New(errs.KindValidationFailed, "Zone removal terminal state is invalid")
 	}
 	expected := cloneEnvironmentComposeProjection(intent.DesiredProjection)
@@ -256,7 +256,7 @@ func validateZoneRemovalTaskOwner(task TaskRecord, intent ZoneRemovalIntent) err
 		return nil
 	}
 	if task.Executor != TaskExecutorController || len(task.Params) != 5 ||
-		task.Params[TaskResourceKindParam] != TaskResourceBackingZone || !validSHA256(task.Params[TaskZoneImpactTokenParam]) {
+		task.Params[TaskResourceKindParam] != TaskResourceBackingZone || !recordcodec.ValidSHA256(task.Params[TaskZoneImpactTokenParam]) {
 		return errs.New(errs.KindStateConflict, "Zone removal Controller Task input changed")
 	}
 	return nil

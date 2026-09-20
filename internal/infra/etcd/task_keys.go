@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"fmt"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strconv"
 	"strings"
 	"time"
@@ -95,7 +96,7 @@ func taskIDFromQueueKey(executor TaskExecutor, key string) (string, error) {
 		return "", errs.New(errs.KindInternal, "task queue key is outside the queue")
 	}
 	taskID := strings.TrimPrefix(key, prefix)
-	if strings.Contains(taskID, "/") || validateStableID(ids.KindTask, taskID) != nil {
+	if strings.Contains(taskID, "/") || recordcodec.ValidateID(ids.KindTask, taskID) != nil {
 		return "", errs.New(errs.KindInternal, "task queue key has an invalid task id")
 	}
 	return taskID, nil
@@ -150,7 +151,7 @@ func parseTaskRetentionIndexKey(key string) (string, time.Time, error) {
 	}
 	segments := strings.Split(strings.TrimPrefix(key, taskRetentionIndexPrefix), "/")
 	if len(segments) != 2 || len(segments[0]) != taskEventSequenceWidth ||
-		validateStableID(ids.KindTask, segments[1]) != nil {
+		recordcodec.ValidateID(ids.KindTask, segments[1]) != nil {
 		return "", time.Time{}, errs.New(errs.KindInternal, "Task retention key is invalid")
 	}
 	nanoseconds, err := strconv.ParseInt(segments[0], 10, 64)
@@ -166,7 +167,7 @@ func parseTaskTimeoutIndexKey(key string) (string, time.Time, error) {
 	}
 	segments := strings.Split(strings.TrimPrefix(key, taskTimeoutIndexPrefix), "/")
 	if len(segments) != 2 || len(segments[0]) != taskEventSequenceWidth ||
-		validateStableID(ids.KindTask, segments[1]) != nil {
+		recordcodec.ValidateID(ids.KindTask, segments[1]) != nil {
 		return "", time.Time{}, errs.New(errs.KindInternal, "task timeout key is invalid")
 	}
 	nanoseconds, err := strconv.ParseInt(segments[0], 10, 64)
@@ -182,7 +183,7 @@ func taskIDFromAssignmentKey(agentID string, key string) (string, error) {
 		return "", errs.New(errs.KindInternal, "task assignment key is outside its Agent")
 	}
 	taskID := strings.TrimPrefix(key, prefix)
-	if strings.Contains(taskID, "/") || validateStableID(ids.KindTask, taskID) != nil {
+	if strings.Contains(taskID, "/") || recordcodec.ValidateID(ids.KindTask, taskID) != nil {
 		return "", errs.New(errs.KindInternal, "task assignment key has an invalid task id")
 	}
 	return taskID, nil
@@ -193,10 +194,10 @@ func deletionTombstoneKey(targetKind string, targetID string) string {
 }
 
 func validateTaskRepositoryIdentity(taskID string, operationID string) error {
-	if err := validateStableID(ids.KindTask, taskID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindTask, taskID); err != nil {
 		return err
 	}
-	if err := validateStableID(ids.KindOperation, operationID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindOperation, operationID); err != nil {
 		return err
 	}
 	return nil

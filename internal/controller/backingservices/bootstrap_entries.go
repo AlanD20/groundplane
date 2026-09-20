@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"sort"
 	"time"
 
@@ -28,11 +29,11 @@ func (service *CreationService) backingCreationEntries(
 	spec adapters.CreationSpec,
 	allocator *desiredrevision.BlueprintIdentityAllocator,
 	createdAt time.Time,
-) ([]etcd.EntryRecord, []etcd.EntryValueGeneration, []etcd.SecretRecord, []etcd.SecretEncryptedValue, map[string]string, error) {
+) ([]etcd.EntryRecord, []etcd.EntryValueGeneration, []secretrecord.Record, []secretrecord.EncryptedValue, map[string]string, error) {
 	bootstrapValues := make(map[string][]byte)
 	bootstrapSecrets := make(map[string]string)
-	var secrets []etcd.SecretRecord
-	var secretValues []etcd.SecretEncryptedValue
+	var secrets []secretrecord.Record
+	var secretValues []secretrecord.EncryptedValue
 	for _, declaration := range spec.Environment {
 		if declaration.BootstrapKey == "" {
 			continue
@@ -46,7 +47,7 @@ func (service *CreationService) backingCreationEntries(
 		}
 		bootstrapValues[declaration.BootstrapKey] = value
 		secretID := allocator.Named(ids.KindSecret, "bootstrap-secret-"+declaration.BootstrapKey)
-		secret, err := etcd.NewProjectSecretRecord(
+		secret, err := secretrecord.NewProjectRecord(
 			secretID,
 			projectID,
 			declaration.Name,
@@ -153,14 +154,14 @@ func sealBackingSecret(
 	protector *secretvalue.Protector,
 	secretID string,
 	value []byte,
-) (etcd.SecretEncryptedValue, error) {
+) (secretrecord.EncryptedValue, error) {
 	envelope, err := protector.Seal(ctx, value)
 	if err != nil {
-		return etcd.SecretEncryptedValue{}, err
+		return secretrecord.EncryptedValue{}, err
 	}
 	defer envelope.Clear()
 	metadata := envelope.Metadata()
-	return etcd.SecretEncryptedValue{
+	return secretrecord.EncryptedValue{
 		SecretID: secretID, EnvelopeVersion: uint8(metadata.Version), Cipher: string(metadata.Cipher),
 		DigestAlgorithm: string(metadata.Digest.Algorithm), CiphertextSHA256: metadata.Digest.Value,
 		Ciphertext: envelope.Ciphertext(),

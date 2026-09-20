@@ -74,7 +74,7 @@ func (repository *AttachRepository) GetAttachTaskRenderInput(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[AttachTaskRenderInput]{}, err
 	}
-	if err := validateID(ids.KindPlan, planID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindPlan, planID); err != nil {
 		return Versioned[AttachTaskRenderInput]{}, err
 	}
 	return getRecord(
@@ -124,16 +124,16 @@ func validateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 			return err
 		}
 	}
-	if validateStableID(ids.KindPlan, input.PlanID) != nil ||
-		validateStableID(ids.KindAttach, input.AttachID) != nil ||
-		validateLabel("Attach name", input.AttachName) != nil ||
-		validateStableID(ids.KindTenant, input.TenantID) != nil ||
-		validateStableID(ids.KindProject, input.ProjectID) != nil ||
-		validateStableID(ids.KindEnvironment, input.EnvironmentID) != nil ||
-		validateStableID(ids.KindService, input.BackingServiceID) != nil ||
-		validateStableID(ids.KindProject, input.BackingProjectID) != nil ||
-		validateStableID(ids.KindTask, input.DesiredRevisionID) != nil ||
-		validateStableID(ids.KindConfig, input.ArtifactID) != nil || input.RenderGeneration == 0 ||
+	if recordcodec.ValidateID(ids.KindPlan, input.PlanID) != nil ||
+		recordcodec.ValidateID(ids.KindAttach, input.AttachID) != nil ||
+		recordcodec.ValidateLabel("Attach name", input.AttachName) != nil ||
+		recordcodec.ValidateID(ids.KindTenant, input.TenantID) != nil ||
+		recordcodec.ValidateID(ids.KindProject, input.ProjectID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvironment, input.EnvironmentID) != nil ||
+		recordcodec.ValidateID(ids.KindService, input.BackingServiceID) != nil ||
+		recordcodec.ValidateID(ids.KindProject, input.BackingProjectID) != nil ||
+		recordcodec.ValidateID(ids.KindTask, input.DesiredRevisionID) != nil ||
+		recordcodec.ValidateID(ids.KindConfig, input.ArtifactID) != nil || input.RenderGeneration == 0 ||
 		input.EnvironmentEpochRevision <= 0 {
 		return errs.New(errs.KindValidationFailed, "Attach Task render input identity is invalid")
 	}
@@ -214,7 +214,7 @@ func validateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 	}
 	previousNetworkID := ""
 	for _, join := range input.NetworkJoins {
-		if validateStableID(ids.KindNetwork, join.NetworkID) != nil || join.NetworkID <= previousNetworkID ||
+		if recordcodec.ValidateID(ids.KindNetwork, join.NetworkID) != nil || join.NetworkID <= previousNetworkID ||
 			len(join.ServiceIDs) == 0 {
 			return errs.New(errs.KindValidationFailed, "Attach Task network joins are invalid or unsorted")
 		}
@@ -226,7 +226,7 @@ func validateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 		}
 		previousServiceID := ""
 		for _, serviceID := range join.ServiceIDs {
-			if validateStableID(ids.KindService, serviceID) != nil || serviceID <= previousServiceID {
+			if recordcodec.ValidateID(ids.KindService, serviceID) != nil || serviceID <= previousServiceID {
 				return errs.New(errs.KindValidationFailed, "Attach Task network Service ids are invalid or unsorted")
 			}
 			if _, exists := serviceIDs[serviceID]; !exists {
@@ -325,7 +325,7 @@ func validateAttachTaskServiceSnapshots(values []AttachTaskServiceSnapshot) erro
 	previousName := ""
 	idsSeen := make(map[string]struct{}, len(values))
 	for _, value := range values {
-		if validateStableID(ids.KindService, value.ID) != nil || value.Name <= previousName ||
+		if recordcodec.ValidateID(ids.KindService, value.ID) != nil || value.Name <= previousName ||
 			!core.ValidEnvironmentComposeName(value.Name) {
 			return errs.New(errs.KindValidationFailed, "Attach Task Service snapshots are invalid or unsorted")
 		}
@@ -342,7 +342,7 @@ func validateAttachTaskOwnedNetworkSnapshots(values []AttachTaskOwnedNetworkSnap
 	previousName := ""
 	idsSeen := make(map[string]struct{}, len(values))
 	for _, value := range values {
-		if validateStableID(ids.KindNetwork, value.ID) != nil || value.Name <= previousName ||
+		if recordcodec.ValidateID(ids.KindNetwork, value.ID) != nil || value.Name <= previousName ||
 			!core.ValidEnvironmentComposeName(value.Name) {
 			return errs.New(errs.KindValidationFailed, "Attach Task owned Network snapshots are invalid or unsorted")
 		}
@@ -367,8 +367,8 @@ func validateAttachTaskVolumeMounts(input AttachTaskRenderInput) error {
 	previous := ""
 	for _, mount := range input.VolumeMounts {
 		ordering := mount.ServiceID + "\x00" + mount.Target
-		if ordering <= previous || validateStableID(ids.KindService, mount.ServiceID) != nil ||
-			validateStableID(ids.KindVolume, mount.VolumeID) != nil || mount.Target == "" ||
+		if ordering <= previous || recordcodec.ValidateID(ids.KindService, mount.ServiceID) != nil ||
+			recordcodec.ValidateID(ids.KindVolume, mount.VolumeID) != nil || mount.Target == "" ||
 			!strings.HasPrefix(mount.Target, "/") || !utf8.ValidString(mount.Target) ||
 			strings.IndexByte(mount.Target, 0) >= 0 {
 			return errs.New(errs.KindValidationFailed, "Attach Task Volume mounts are invalid or unsorted")

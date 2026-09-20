@@ -204,7 +204,7 @@ func (repository *LocalAgentRepository) MarkReady(
 	revision int64,
 	readyAt time.Time,
 ) (Versioned[LocalAgentRecord], error) {
-	if err := validateTimestamp("local Agent ready_at", readyAt); err != nil {
+	if err := recordcodec.ValidateTimestamp("local Agent ready_at", readyAt); err != nil {
 		return Versioned[LocalAgentRecord]{}, err
 	}
 	return repository.transitionPhase(
@@ -241,7 +241,7 @@ func (repository *LocalAgentRepository) ReplaceGeneration(
 			"local Agent replacement identity is invalid",
 		)
 	}
-	if err := validateTimestamp("local Agent token updated_at", updatedAt); err != nil {
+	if err := recordcodec.ValidateTimestamp("local Agent token updated_at", updatedAt); err != nil {
 		return Versioned[LocalAgentRecord]{}, err
 	}
 	evidence, err := repository.readSingleton(ctx)
@@ -928,7 +928,7 @@ func validateLocalAgentRecord(record LocalAgentRecord) error {
 	} else if !validLocalAgentDigest(record.TokenDigest) {
 		return errs.New(errs.KindValidationFailed, "local Agent token digest is invalid")
 	}
-	if err := validateTimestamp("local Agent token updated_at", record.TokenUpdatedAt); err != nil {
+	if err := recordcodec.ValidateTimestamp("local Agent token updated_at", record.TokenUpdatedAt); err != nil {
 		return err
 	}
 	if record.TokenUpdatedAt.Before(record.CreatedAt) {
@@ -938,10 +938,10 @@ func validateLocalAgentRecord(record LocalAgentRecord) error {
 }
 
 func validateLocalAgentPrimary(record LocalAgentRecord) error {
-	if err := validateStableID(ids.KindAgent, record.ID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindAgent, record.ID); err != nil {
 		return err
 	}
-	if err := validateStableID(ids.KindTask, record.EnrollmentTaskID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindTask, record.EnrollmentTaskID); err != nil {
 		return err
 	}
 	if !imageref.IsDigestPinned(record.Image) {
@@ -950,7 +950,7 @@ func validateLocalAgentPrimary(record LocalAgentRecord) error {
 	if record.Generation == 0 {
 		return errs.New(errs.KindValidationFailed, "local Agent generation must be positive")
 	}
-	if err := validateTimestamp("local Agent created_at", record.CreatedAt); err != nil {
+	if err := recordcodec.ValidateTimestamp("local Agent created_at", record.CreatedAt); err != nil {
 		return err
 	}
 	switch record.Phase {
@@ -959,7 +959,7 @@ func validateLocalAgentPrimary(record LocalAgentRecord) error {
 			return errs.New(errs.KindValidationFailed, "provisioning local Agent ready_at must be empty")
 		}
 	case LocalAgentPhaseReady, LocalAgentPhaseUpdating, LocalAgentPhaseDeleting:
-		if err := validateTimestamp("local Agent ready_at", record.ReadyAt); err != nil {
+		if err := recordcodec.ValidateTimestamp("local Agent ready_at", record.ReadyAt); err != nil {
 			return err
 		}
 		if record.ReadyAt.Before(record.CreatedAt) {

@@ -97,9 +97,9 @@ func decodeEntryRecord(value []byte) (EntryRecord, error) {
 }
 
 func validateEntryRecord(record EntryRecord) error {
-	if validateStableID(ids.KindEnvironment, record.EnvironmentID) != nil ||
-		validateStableID(ids.KindEnvEntry, record.Entry.ID) != nil ||
-		validateStableID(ids.KindConfig, record.CurrentValueGenerationID) != nil {
+	if recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvEntry, record.Entry.ID) != nil ||
+		recordcodec.ValidateID(ids.KindConfig, record.CurrentValueGenerationID) != nil {
 		return errs.New(errs.KindValidationFailed, "Entry record identity is invalid")
 	}
 	if err := record.Entry.Validate(); err != nil {

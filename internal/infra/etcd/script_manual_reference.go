@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/core"
@@ -206,11 +207,11 @@ func (repository *ScriptRepository) manualScriptSecretSourceMember(
 	}
 	record := resolved.Record
 	secretID := record.Secret.ID
-	value, err := scriptExecutionValueAt(ctx, repository.store, secretValueKey(secretID), sources.Revision)
+	value, err := scriptExecutionValueAt(ctx, repository.store, secretrecord.ValueKey(secretID), sources.Revision)
 	if err != nil {
 		return ScriptSourcePreparationMember{}, err
 	}
-	secret, err := decodeSecretEncryptedValue(value.Value)
+	secret, err := secretrecord.DecodeEncryptedValue(value.Value)
 	if err != nil {
 		return ScriptSourcePreparationMember{}, err
 	}
@@ -226,7 +227,7 @@ func (repository *ScriptRepository) manualScriptSecretSourceMember(
 		member.SourceOwnerID = record.Secret.ProjectID
 	}
 	member.SourceModRevision, member.SourceDigest = value.ModRevision, secret.CiphertextSHA256
-	return manualScriptExistingMember(member, secretValueKey(secretID)), nil
+	return manualScriptExistingMember(member, secretrecord.ValueKey(secretID)), nil
 }
 
 func manualScriptExistingMember(reference ScriptSourceReference, key string) ScriptSourcePreparationMember {

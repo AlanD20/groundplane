@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -558,7 +559,7 @@ func (authority *ScriptSourceReferenceAuthority) validateExistingSource(ctx cont
 		return nil
 	}
 	metadata, err := authority.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{secretRecordKey(member.Reference.Source.SecretID)}, Revision: member.Reference.SourceModRevision,
+		Keys: []string{secretrecord.RecordKey(member.Reference.Source.SecretID)}, Revision: member.Reference.SourceModRevision,
 	})
 	if err != nil {
 		return err
@@ -566,7 +567,7 @@ func (authority *ScriptSourceReferenceAuthority) validateExistingSource(ctx cont
 	if metadata == nil || len(metadata.Values) != 1 || metadata.Values[0] == nil {
 		return errs.New(errs.KindValidationFailed, "Script Secret source owner evidence is missing")
 	}
-	record, err := decodeSecretRecord(metadata.Values[0].Value)
+	record, err := secretrecord.DecodeRecord(metadata.Values[0].Value)
 	if err != nil {
 		return errs.New(errs.KindValidationFailed, "Script Secret source owner evidence is invalid")
 	}

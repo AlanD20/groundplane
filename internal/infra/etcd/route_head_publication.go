@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -292,7 +293,7 @@ func validateCompletedRouteHeadReplay(
 ) error {
 	environmentID := task.Params[TaskRouteEnvironmentParam]
 	if task.Type != TaskRemove || task.Params[TaskResourceKindParam] != TaskResourceRoute ||
-		validateStableID(ids.KindEnvironment, environmentID) != nil {
+		recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil {
 		return nil
 	}
 	candidateRevisionID := task.ID

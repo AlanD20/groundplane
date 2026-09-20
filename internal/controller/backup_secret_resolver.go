@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"context"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"unicode/utf16"
 	"unicode/utf8"
 
@@ -211,7 +212,7 @@ func (resolver *BackupSecretResolver) openDirectCredentials(
 
 func (resolver *BackupSecretResolver) openSecretValue(
 	ctx context.Context,
-	value *etcd.SecretEncryptedValue,
+	value *secretrecord.EncryptedValue,
 ) ([]byte, error) {
 	metadata := secretvalue.Metadata{
 		Version: secretvalue.EnvelopeVersion(value.EnvelopeVersion),

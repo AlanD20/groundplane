@@ -79,9 +79,9 @@ func decodeEnvironmentDeletionIntent(value []byte) (EnvironmentDeletionIntentRec
 }
 
 func validateEnvironmentDeletionIntent(record EnvironmentDeletionIntentRecord) error {
-	if validateStableID(ids.KindEnvironment, record.EnvironmentID) != nil ||
-		validateStableID(ids.KindOperation, record.OperationID) != nil ||
-		validateStableID(ids.KindTask, record.TaskID) != nil || record.TargetRevision <= 0 ||
+	if recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil ||
+		recordcodec.ValidateID(ids.KindOperation, record.OperationID) != nil ||
+		recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil || record.TargetRevision <= 0 ||
 		(record.CleanupPhase != EnvironmentDeletionCleanupEnumerating &&
 			record.CleanupPhase != EnvironmentDeletionCleanupComplete) {
 		return errs.New(
@@ -89,7 +89,7 @@ func validateEnvironmentDeletionIntent(record EnvironmentDeletionIntentRecord) e
 			"environment deletion intent identity is invalid",
 		)
 	}
-	return validateTimestamp("environment deletion intent created_at", record.CreatedAt)
+	return recordcodec.ValidateTimestamp("environment deletion intent created_at", record.CreatedAt)
 }
 
 func corruptEnvironmentDeletionIntent() error {
@@ -179,7 +179,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 	revision int64,
 ) (environmentTaskChange, error) {
 	if source.Executor != TaskExecutorAgent || source.Type != TaskRemove ||
-		validateStableID(ids.KindEnvironment, source.Target) != nil {
+		recordcodec.ValidateID(ids.KindEnvironment, source.Target) != nil {
 		return environmentTaskChange{}, nil
 	}
 	if retry.Executor != source.Executor || retry.Type != source.Type ||
@@ -490,7 +490,7 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 		return Versioned[EnvironmentDeletionIntentRecord]{}, err
 	}
 	if task.Executor != TaskExecutorAgent || task.Type != TaskRemove ||
-		validateStableID(ids.KindEnvironment, task.Target) != nil {
+		recordcodec.ValidateID(ids.KindEnvironment, task.Target) != nil {
 		return Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"environment deletion cleanup task is invalid",

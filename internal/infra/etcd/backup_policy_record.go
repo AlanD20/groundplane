@@ -103,7 +103,7 @@ func backupKeyValueKey(environmentID string) string {
 }
 
 func validateBackupPolicyRecord(record BackupPolicyRecord) error {
-	if err := validateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
 		return err
 	}
 	if !validUTCInstant(record.UpdatedAt) {
@@ -119,13 +119,13 @@ func validateBackupPolicyRecord(record BackupPolicyRecord) error {
 		return errs.New(errs.KindValidationFailed, "backup policy encryption is invalid")
 	}
 	if record.ConnectorID != "" {
-		if err := validateID(ids.KindConnector, record.ConnectorID); err != nil {
+		if err := recordcodec.ValidateID(ids.KindConnector, record.ConnectorID); err != nil {
 			return err
 		}
 	}
 	seen := make(map[string]struct{}, len(record.SourceIDs))
 	for _, sourceID := range record.SourceIDs {
-		if err := validateID(ids.KindBackupSource, sourceID); err != nil {
+		if err := recordcodec.ValidateID(ids.KindBackupSource, sourceID); err != nil {
 			return err
 		}
 		if _, duplicate := seen[sourceID]; duplicate {
@@ -145,19 +145,19 @@ func validateBackupPolicyRecord(record BackupPolicyRecord) error {
 }
 
 func validateBackupSourceRecord(record BackupSourceRecord) error {
-	if err := validateID(ids.KindBackupSource, record.ID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindBackupSource, record.ID); err != nil {
 		return err
 	}
-	if err := validateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
 		return err
 	}
 	switch record.Kind {
 	case core.BackupSourceAttach:
-		if err := validateID(ids.KindAttach, record.TargetID); err != nil {
+		if err := recordcodec.ValidateID(ids.KindAttach, record.TargetID); err != nil {
 			return err
 		}
 	case core.BackupSourceVolume:
-		if err := validateID(ids.KindVolume, record.TargetID); err != nil {
+		if err := recordcodec.ValidateID(ids.KindVolume, record.TargetID); err != nil {
 			return err
 		}
 	case core.BackupSourceConfig:
@@ -174,7 +174,7 @@ func validateBackupSourceRecord(record BackupSourceRecord) error {
 }
 
 func validateBackupKeyRecord(record BackupKeyRecord) error {
-	if err := validateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
 		return err
 	}
 	recipient, err := age.ParseX25519Recipient(record.Recipient)
@@ -189,7 +189,7 @@ func validateBackupKeyRecord(record BackupKeyRecord) error {
 }
 
 func validateBackupKeyEncryptedValue(value BackupKeyEncryptedValue) error {
-	if err := validateID(ids.KindEnvironment, value.EnvironmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, value.EnvironmentID); err != nil {
 		return err
 	}
 	if value.KeyEra <= 0 || len(value.Ciphertext) == 0 || len(value.Ciphertext) > maximumBackupKeyCiphertextLen {

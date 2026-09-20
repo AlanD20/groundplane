@@ -113,13 +113,13 @@ func routeMatchKey(environmentID string, host string, path string) string {
 }
 
 func validateRouteRecord(record RouteRecord) error {
-	if err := validateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
 		return err
 	}
-	if err := validateID(ids.KindRoute, record.Desired.ID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindRoute, record.Desired.ID); err != nil {
 		return err
 	}
-	if err := validateID(ids.KindService, record.Desired.TargetServiceID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindService, record.Desired.TargetServiceID); err != nil {
 		return err
 	}
 	if err := record.Desired.Validate(); err != nil {
@@ -144,7 +144,7 @@ func validateRouteRecord(record RouteRecord) error {
 }
 
 func validateRouteProviderObservation(provider *RouteProviderObservation) error {
-	if provider == nil || validateStableID(ids.KindComponent, provider.ComponentID) != nil ||
+	if provider == nil || recordcodec.ValidateID(ids.KindComponent, provider.ComponentID) != nil ||
 		provider.InputRevision <= 0 || provider.InputGeneration == 0 {
 		return errs.New(errs.KindValidationFailed, "Route provider observation is invalid")
 	}

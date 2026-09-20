@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -449,7 +450,7 @@ func validateBackupPolicyReplacementInput(
 	if err := validateContext(ctx); err != nil {
 		return err
 	}
-	if err := validateID(ids.KindEnvironment, input.EnvironmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, input.EnvironmentID); err != nil {
 		return err
 	}
 	if len(input.Sources) > MaximumBackupPolicySources {
@@ -469,7 +470,7 @@ func validateBackupPolicyReplacementInput(
 		if err := validateBackupPolicyFrequency(input.Frequency); err != nil {
 			return err
 		}
-		if err := validateID(ids.KindConnector, input.ConnectorID); err != nil {
+		if err := recordcodec.ValidateID(ids.KindConnector, input.ConnectorID); err != nil {
 			return err
 		}
 	}

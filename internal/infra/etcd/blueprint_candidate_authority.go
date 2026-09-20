@@ -60,8 +60,8 @@ func validateBlueprintCandidateManifest(
 	for _, member := range manifest.Members {
 		if ids.Validate(ids.KindDeployment, member.ReleaseID) != nil ||
 			ids.Validate(ids.KindService, member.ServiceID) != nil ||
-			!validSHA256(member.IntentDigest) || !validSHA256(member.RenderDigest) ||
-			!validSHA256(member.CheckpointDigest) {
+			!recordcodec.ValidSHA256(member.IntentDigest) || !recordcodec.ValidSHA256(member.RenderDigest) ||
+			!recordcodec.ValidSHA256(member.CheckpointDigest) {
 			return corruptReleaseRecord()
 		}
 		if _, duplicate := releases[member.ReleaseID]; duplicate {

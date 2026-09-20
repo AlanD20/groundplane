@@ -104,7 +104,7 @@ func releaseRestorationAuthoritySHA256(authority ReleaseRestorationAuthority) (s
 
 func validateReleaseRestorationAuthority(authority ReleaseRestorationAuthority) error {
 	if authority.Schema != 1 || ids.Validate(ids.KindTask, authority.TaskID) != nil ||
-		ids.Validate(ids.KindOperation, authority.OperationID) != nil || !validSHA256(authority.PlanHash) ||
+		ids.Validate(ids.KindOperation, authority.OperationID) != nil || !recordcodec.ValidSHA256(authority.PlanHash) ||
 		ids.Validate(ids.KindEnvironment, authority.EnvironmentID) != nil ||
 		ids.Validate(ids.KindConfig, authority.CandidateArtifactID) != nil || len(authority.Candidates) == 0 {
 		return corruptTaskAssignment()
@@ -125,7 +125,7 @@ func validateReleaseRestorationAuthority(authority ReleaseRestorationAuthority) 
 	}
 	if predecessor := authority.AppliedPredecessor; predecessor != nil {
 		if predecessor.KeyRevision <= 0 || ids.Validate(ids.KindTask, predecessor.RevisionID) != nil ||
-			predecessor.RenderGeneration == 0 || !validSHA256(predecessor.ComposeArtifactSHA256) ||
+			predecessor.RenderGeneration == 0 || !recordcodec.ValidSHA256(predecessor.ComposeArtifactSHA256) ||
 			len(predecessor.ComposeArtifact) == 0 || len(predecessor.ComposeArtifact) > MaximumTaskRecordBytes {
 			return corruptTaskAssignment()
 		}
@@ -143,8 +143,8 @@ func validateReleaseRecoveryRecord(record releaseRecoveryRecord) error {
 			ids.KindAssignment,
 			record.AssignmentID,
 		) != nil || ids.Validate(ids.KindOperation, record.OperationID) != nil ||
-		!validSHA256(record.PlanHash) || !validSHA256(record.RestorationAuthoritySHA256) ||
-		!validSHA256(record.PrimaryReportSHA256) || record.PrimaryStatus == TaskStatusCompleted ||
+		!recordcodec.ValidSHA256(record.PlanHash) || !recordcodec.ValidSHA256(record.RestorationAuthoritySHA256) ||
+		!recordcodec.ValidSHA256(record.PrimaryReportSHA256) || record.PrimaryStatus == TaskStatusCompleted ||
 		!validTerminalTaskStatus(record.PrimaryStatus) || len(record.RecoveryStepIDs) == 0 ||
 		!record.RecoveryDeadline.Equal(record.RecoveryDeadline.UTC()) || record.RecoveryDeadline.IsZero() ||
 		int(record.Cursor) > len(record.RecoveryStepIDs) || record.EvidenceRevision <= 0 {
@@ -342,7 +342,7 @@ func (repository *TaskRepository) releaseRecoveryDirectiveAtRevision(
 	revision int64,
 ) (*ReleaseRecoveryDirective, error) {
 	if assignment.ExecutionMode != TaskExecutionModeRecoveryOnly ||
-		!validSHA256(assignment.ReleaseRecoveryRecordSHA256) {
+		!recordcodec.ValidSHA256(assignment.ReleaseRecoveryRecordSHA256) {
 		return nil, corruptTaskAssignment()
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{

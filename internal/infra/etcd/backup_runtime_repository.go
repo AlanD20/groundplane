@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 	"time"
 
@@ -226,7 +227,7 @@ func (repository *BackupRuntimeRepository) GetBackupRun(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[BackupRunRecord]{}, err
 	}
-	if err := validateID(ids.KindTask, taskID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindTask, taskID); err != nil {
 		return Versioned[BackupRunRecord]{}, err
 	}
 	primaryKey := backupRunKey(taskID)

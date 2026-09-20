@@ -133,7 +133,7 @@ func (repository *RunnerRepository) ResolveRunner(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[RunnerRecord]{}, err
 	}
-	if err := validateID(ids.KindTenant, tenantID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindTenant, tenantID); err != nil {
 		return Versioned[RunnerRecord]{}, err
 	}
 	if ids.Validate(ids.KindRunner, reference) == nil {
@@ -742,7 +742,7 @@ func (repository *RunnerRepository) GetRunner(ctx context.Context, id string) (V
 	if err := validateContext(ctx); err != nil {
 		return Versioned[RunnerRecord]{}, err
 	}
-	if err := validateID(ids.KindRunner, id); err != nil {
+	if err := recordcodec.ValidateID(ids.KindRunner, id); err != nil {
 		return Versioned[RunnerRecord]{}, err
 	}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -802,7 +802,7 @@ func (repository *RunnerRepository) ListRunners(
 		)
 	}
 	if filter.ProjectID != "" {
-		if err := validateID(ids.KindProject, filter.ProjectID); err != nil {
+		if err := recordcodec.ValidateID(ids.KindProject, filter.ProjectID); err != nil {
 			return Page[RunnerRecord]{}, err
 		}
 		page, err := listIndexPage(
@@ -827,7 +827,7 @@ func (repository *RunnerRepository) listTenantRunners(
 	tenantID string,
 	request PageRequest,
 ) (Page[RunnerRecord], error) {
-	if err := validateID(ids.KindTenant, tenantID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindTenant, tenantID); err != nil {
 		return Page[RunnerRecord]{}, err
 	}
 	prefix := runnerTenantCursorPrefix(tenantID)
@@ -1004,7 +1004,7 @@ func (repository *RunnerRepository) GetRunnerObservation(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[RunnerObservationRecord]{}, false, err
 	}
-	if err := validateID(ids.KindRunner, runnerID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindRunner, runnerID); err != nil {
 		return Versioned[RunnerObservationRecord]{}, false, err
 	}
 	result, err := repository.store.Get(ctx, runnerObservationKey(runnerID))

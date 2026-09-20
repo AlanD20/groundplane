@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -35,8 +36,8 @@ func (repository *EntryRepository) BindBlueprintEntryEnvironment(
 	if err := validateContext(ctx); err != nil {
 		return err
 	}
-	if validateStableID(ids.KindEnvironment, environmentID) != nil ||
-		validateStableID(ids.KindEnvEntry, entryID) != nil {
+	if recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvEntry, entryID) != nil {
 		return errs.New(errs.KindValidationFailed, "Blueprint Entry lookup identity is invalid")
 	}
 	key := blueprintEntryEnvironmentPrefix + entryID
@@ -68,7 +69,7 @@ func (repository *EntryRepository) ResolveBlueprintEntryEnvironment(
 	if err := validateContext(ctx); err != nil {
 		return "", false, err
 	}
-	if validateStableID(ids.KindEnvEntry, entryID) != nil {
+	if recordcodec.ValidateID(ids.KindEnvEntry, entryID) != nil {
 		return "", false, errs.New(errs.KindValidationFailed, "Blueprint Entry lookup id is invalid")
 	}
 	result, err := repository.store.Get(ctx, blueprintEntryEnvironmentPrefix+entryID)
@@ -82,7 +83,7 @@ func (repository *EntryRepository) ResolveBlueprintEntryEnvironment(
 		return "", false, nil
 	}
 	environmentID := string(result.Entry.Value)
-	if validateStableID(ids.KindEnvironment, environmentID) != nil {
+	if recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil {
 		return "", false, errs.New(errs.KindInternal, "Blueprint Entry lookup is corrupt")
 	}
 	return environmentID, true, nil
@@ -255,7 +256,7 @@ func (repository *EntryRepository) GetEntry(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[EntryRecord]{}, err
 	}
-	if err := validateID(ids.KindEnvEntry, id); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvEntry, id); err != nil {
 		return Versioned[EntryRecord]{}, err
 	}
 	return getRecord(
@@ -274,7 +275,7 @@ func (repository *EntryRepository) ListEntries(
 	environmentID string,
 	request PageRequest,
 ) (Page[EntryRecord], error) {
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return Page[EntryRecord]{}, err
 	}
 	return listIndexPage(

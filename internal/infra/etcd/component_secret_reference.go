@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -73,7 +74,7 @@ func prepareComponentTaskSecretReferences(
 	for _, reference := range references {
 		keys = append(
 			keys,
-			secretRecordKey(reference.secretID),
+			secretrecord.RecordKey(reference.secretID),
 			deletionTombstoneKey(string(DeletionTargetSecret), reference.secretID),
 		)
 	}
@@ -92,7 +93,7 @@ func prepareComponentTaskSecretReferences(
 		if recordValue == nil {
 			return nil, nil, nil, errs.New(errs.KindSecretNotFound, "Component Secret was not found")
 		}
-		record, decodeErr := decodeSecretRecord(recordValue.Value)
+		record, decodeErr := secretrecord.DecodeRecord(recordValue.Value)
 		if decodeErr != nil || record.Secret.ID != references[index].secretID ||
 			record.Secret.Kind != core.SecretKindEnvVar ||
 			(record.Secret.Scope == core.SecretScopeProject && record.Secret.ProjectID != projectID) ||
@@ -113,7 +114,7 @@ func prepareComponentTaskSecretReferences(
 		)
 		conditions = append(
 			conditions,
-			etcdstore.Condition{Key: secretRecordKey(references[index].secretID), ModRevision: recordValue.ModRevision},
+			etcdstore.Condition{Key: secretrecord.RecordKey(references[index].secretID), ModRevision: recordValue.ModRevision},
 			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetSecret), references[index].secretID)},
 			etcdstore.Condition{Key: candidateKey},
 		)

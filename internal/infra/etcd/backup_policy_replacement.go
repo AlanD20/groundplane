@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/http"
 	"time"
 
@@ -397,7 +398,7 @@ func validatebackupPolicySourceEvidence(
 			evidence.Volume.Volume.ID != evidence.Source.Record.TargetID ||
 			evidence.Volume.Projection.Record.EnvironmentID != environmentID ||
 			evidence.Volume.Projection.Record.RevisionID == "" ||
-			!validSHA256(evidence.Volume.DependencyDigest) {
+			!recordcodec.ValidSHA256(evidence.Volume.DependencyDigest) {
 			return errs.New(errs.KindValidationFailed, "volume backup source evidence is invalid")
 		}
 	default:

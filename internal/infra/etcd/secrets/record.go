@@ -1,4 +1,4 @@
-package etcd
+package secrets
 
 import (
 	"crypto/sha256"
@@ -21,15 +21,15 @@ const (
 	secretValuePrefix  = "/v1/secret-values/secrets/"
 )
 
-// SecretRecord contains only listable desired metadata. The encrypted value
+// Record contains only listable desired metadata. The encrypted value
 // is stored under secretValuePrefix and committed with this record.
-type SecretRecord struct {
+type Record struct {
 	Secret core.Secret `json:"secret"`
 }
 
-// SecretEncryptedValue is the Controller-key envelope stored for one Secret.
+// EncryptedValue is the Controller-key envelope stored for one Secret.
 // No plaintext length or plaintext digest is persisted.
-type SecretEncryptedValue struct {
+type EncryptedValue struct {
 	SecretID         string `json:"secret_id"`
 	EnvelopeVersion  uint8  `json:"envelope_version"`
 	Cipher           string `json:"cipher"`
@@ -38,24 +38,24 @@ type SecretEncryptedValue struct {
 	Ciphertext       []byte `json:"ciphertext"`
 }
 
-func NewProjectSecretRecord(
+func NewProjectRecord(
 	id string,
 	projectID string,
 	key string,
 	kind core.SecretKind,
 	filePath string,
 	updatedAt time.Time,
-) (SecretRecord, error) {
+) (Record, error) {
 	return newSecretRecord(id, core.SecretScopeProject, projectID, key, kind, filePath, updatedAt)
 }
 
-func NewPlatformSecretRecord(
+func NewPlatformRecord(
 	id string,
 	key string,
 	kind core.SecretKind,
 	filePath string,
 	updatedAt time.Time,
-) (SecretRecord, error) {
+) (Record, error) {
 	return newSecretRecord(id, core.SecretScopePlatform, "", key, kind, filePath, updatedAt)
 }
 
@@ -67,7 +67,7 @@ func newSecretRecord(
 	kind core.SecretKind,
 	filePath string,
 	updatedAt time.Time,
-) (SecretRecord, error) {
+) (Record, error) {
 	reference := filePath
 	if kind == core.SecretKindEnvVar {
 		if scope == core.SecretScopeProject {
@@ -76,36 +76,36 @@ func newSecretRecord(
 			reference = "secrets/.env.edge"
 		}
 	}
-	record := SecretRecord{Secret: core.Secret{
+	record := Record{Secret: core.Secret{
 		ID: id, Scope: scope, ProjectID: projectID, Key: key, Kind: kind,
 		Ref: reference, UpdatedAt: updatedAt,
 	}}
-	if err := validateSecretRecord(record); err != nil {
-		return SecretRecord{}, err
+	if err := ValidateRecord(record); err != nil {
+		return Record{}, err
 	}
 	return record, nil
 }
 
-func secretRecordKey(secretID string) string { return secretRecordPrefix + secretID }
-func secretValueKey(secretID string) string  { return secretValuePrefix + secretID }
+func RecordKey(secretID string) string { return secretRecordPrefix + secretID }
+func ValueKey(secretID string) string  { return secretValuePrefix + secretID }
 
-func encodeSecretRecord(record SecretRecord) ([]byte, error) {
-	if err := validateSecretRecord(record); err != nil {
+func EncodeRecord(record Record) ([]byte, error) {
+	if err := ValidateRecord(record); err != nil {
 		return nil, err
 	}
 	return recordcodec.Encode("secret", record)
 }
 
-func decodeSecretRecord(value []byte) (SecretRecord, error) {
-	record, err := recordcodec.Decode[SecretRecord](value, "secret")
-	if err != nil || validateSecretRecord(record) != nil {
-		return SecretRecord{}, corruptSecretRecord()
+func DecodeRecord(value []byte) (Record, error) {
+	record, err := recordcodec.Decode[Record](value, "secret")
+	if err != nil || ValidateRecord(record) != nil {
+		return Record{}, CorruptRecord()
 	}
 	return record, nil
 }
 
-func encodeSecretEncryptedValue(value SecretEncryptedValue) ([]byte, error) {
-	if err := validateSecretEncryptedValue(value); err != nil {
+func EncodeEncryptedValue(value EncryptedValue) ([]byte, error) {
+	if err := ValidateEncryptedValue(value); err != nil {
 		return nil, err
 	}
 	copyOfValue := value
@@ -113,26 +113,26 @@ func encodeSecretEncryptedValue(value SecretEncryptedValue) ([]byte, error) {
 	return recordcodec.Encode("secret_value", copyOfValue)
 }
 
-func decodeSecretEncryptedValue(value []byte) (SecretEncryptedValue, error) {
-	record, err := recordcodec.Decode[SecretEncryptedValue](value, "secret_value")
-	if err != nil || validateSecretEncryptedValue(record) != nil {
+func DecodeEncryptedValue(value []byte) (EncryptedValue, error) {
+	record, err := recordcodec.Decode[EncryptedValue](value, "secret_value")
+	if err != nil || ValidateEncryptedValue(record) != nil {
 		clear(record.Ciphertext)
-		return SecretEncryptedValue{}, corruptSecretRecord()
+		return EncryptedValue{}, CorruptRecord()
 	}
 	return record, nil
 }
 
-func validateSecretRecord(record SecretRecord) error {
+func ValidateRecord(record Record) error {
 	secret := record.Secret
-	if validateStableID(ids.KindSecret, secret.ID) != nil {
+	if recordcodec.ValidateID(ids.KindSecret, secret.ID) != nil {
 		return errs.New(errs.KindValidationFailed, "Secret stable identity is invalid")
 	}
-	if err := validateLabel("secret key", secret.Key); err != nil {
+	if err := recordcodec.ValidateLabel("secret key", secret.Key); err != nil {
 		return err
 	}
 	switch secret.Scope {
 	case core.SecretScopeProject:
-		if validateStableID(ids.KindProject, secret.ProjectID) != nil {
+		if recordcodec.ValidateID(ids.KindProject, secret.ProjectID) != nil {
 			return errs.New(errs.KindValidationFailed, "Secret project owner is invalid")
 		}
 	case core.SecretScopePlatform:
@@ -144,7 +144,7 @@ func validateSecretRecord(record SecretRecord) error {
 	}
 	switch secret.Kind {
 	case core.SecretKindEnvVar:
-		if !validSecretEnvironmentKey(secret.Key) {
+		if !ValidEnvironmentKey(secret.Key) {
 			return errs.New(errs.KindValidationFailed, "Secret environment key is invalid")
 		}
 		want := "secrets/.env.edge"
@@ -161,14 +161,14 @@ func validateSecretRecord(record SecretRecord) error {
 	default:
 		return errs.New(errs.KindValidationFailed, "Secret kind is invalid")
 	}
-	return validateTimestamp("Secret updated_at", secret.UpdatedAt)
+	return recordcodec.ValidateTimestamp("Secret updated_at", secret.UpdatedAt)
 }
 
-func validateSecretEncryptedValue(value SecretEncryptedValue) error {
-	if validateStableID(ids.KindSecret, value.SecretID) != nil || value.EnvelopeVersion != 1 ||
+func ValidateEncryptedValue(value EncryptedValue) error {
+	if recordcodec.ValidateID(ids.KindSecret, value.SecretID) != nil || value.EnvelopeVersion != 1 ||
 		value.Cipher != "age-x25519" || value.DigestAlgorithm != "sha256" ||
-		len(value.Ciphertext) == 0 || len(value.Ciphertext) > MaximumEntryValueBytes ||
-		!validSHA256(value.CiphertextSHA256) {
+		len(value.Ciphertext) == 0 || len(value.Ciphertext) > recordcodec.MaximumValueBytes ||
+		!recordcodec.ValidSHA256(value.CiphertextSHA256) {
 		return errs.New(errs.KindValidationFailed, "Secret encrypted value envelope is invalid")
 	}
 	digest := sha256.Sum256(value.Ciphertext)
@@ -196,7 +196,7 @@ func validateSecretFilePath(value string) error {
 	return nil
 }
 
-func validSecretEnvironmentKey(value string) bool {
+func ValidEnvironmentKey(value string) bool {
 	if value == "" {
 		return false
 	}
@@ -217,6 +217,6 @@ func validSecretEnvironmentKey(value string) bool {
 	return true
 }
 
-func corruptSecretRecord() error {
+func CorruptRecord() error {
 	return errs.New(errs.KindInternal, "Secret durable record is corrupt")
 }

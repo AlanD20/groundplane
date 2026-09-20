@@ -586,7 +586,7 @@ func (repository *HierarchyRepository) GetTenant(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[TenantRecord]{}, err
 	}
-	if err := validateID(ids.KindTenant, id); err != nil {
+	if err := recordcodec.ValidateID(ids.KindTenant, id); err != nil {
 		return Versioned[TenantRecord]{}, err
 	}
 	return getRecord(
@@ -602,7 +602,7 @@ func (repository *HierarchyRepository) GetProject(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[ProjectRecord]{}, err
 	}
-	if err := validateID(ids.KindProject, id); err != nil {
+	if err := recordcodec.ValidateID(ids.KindProject, id); err != nil {
 		return Versioned[ProjectRecord]{}, err
 	}
 	return getRecord(
@@ -618,7 +618,7 @@ func (repository *HierarchyRepository) GetEnvironment(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[EnvironmentRecord]{}, err
 	}
-	if err := validateID(ids.KindEnvironment, id); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, id); err != nil {
 		return Versioned[EnvironmentRecord]{}, err
 	}
 	return getRecord(
@@ -634,7 +634,7 @@ func (repository *HierarchyRepository) ResolveTenant(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[TenantRecord]{}, err
 	}
-	if err := validateLabel("tenant slug", slug); err != nil {
+	if err := recordcodec.ValidateLabel("tenant slug", slug); err != nil {
 		return Versioned[TenantRecord]{}, err
 	}
 	return resolveRecord(
@@ -658,10 +658,10 @@ func (repository *HierarchyRepository) ResolveTenantProject(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[ProjectRecord]{}, err
 	}
-	if err := validateID(ids.KindTenant, tenantID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindTenant, tenantID); err != nil {
 		return Versioned[ProjectRecord]{}, err
 	}
-	if err := validateLabel("project slug", slug); err != nil {
+	if err := recordcodec.ValidateLabel("project slug", slug); err != nil {
 		return Versioned[ProjectRecord]{}, err
 	}
 	return resolveRecord(
@@ -686,7 +686,7 @@ func (repository *HierarchyRepository) ResolveBackingProject(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[ProjectRecord]{}, err
 	}
-	if err := validateLabel("project slug", slug); err != nil {
+	if err := recordcodec.ValidateLabel("project slug", slug); err != nil {
 		return Versioned[ProjectRecord]{}, err
 	}
 	return resolveRecord(
@@ -712,10 +712,10 @@ func (repository *HierarchyRepository) ResolveEnvironment(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[EnvironmentRecord]{}, err
 	}
-	if err := validateID(ids.KindProject, projectID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindProject, projectID); err != nil {
 		return Versioned[EnvironmentRecord]{}, err
 	}
-	if err := validateLabel("environment name", name); err != nil {
+	if err := recordcodec.ValidateLabel("environment name", name); err != nil {
 		return Versioned[EnvironmentRecord]{}, err
 	}
 	return resolveRecord(
@@ -830,7 +830,7 @@ func (repository *HierarchyRepository) ListTenantProjects(
 	tenantID string,
 	request PageRequest,
 ) (Page[ProjectRecord], error) {
-	if err := validateID(ids.KindTenant, tenantID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindTenant, tenantID); err != nil {
 		return Page[ProjectRecord]{}, err
 	}
 	return listIndexPage(
@@ -860,7 +860,7 @@ func (repository *HierarchyRepository) ListProjects(
 		return Page[ProjectRecord]{}, errs.New(errs.KindValidationFailed, "project kind must be tenant or backing")
 	}
 	if filter.TenantID != "" {
-		if err := validateID(ids.KindTenant, filter.TenantID); err != nil {
+		if err := recordcodec.ValidateID(ids.KindTenant, filter.TenantID); err != nil {
 			return Page[ProjectRecord]{}, err
 		}
 		if filter.Kind == ProjectKindBacking {
@@ -919,7 +919,7 @@ func (repository *HierarchyRepository) ListEnvironments(
 	projectID string,
 	request PageRequest,
 ) (Page[EnvironmentRecord], error) {
-	if err := validateID(ids.KindProject, projectID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindProject, projectID); err != nil {
 		return Page[EnvironmentRecord]{}, err
 	}
 	return listIndexPage(

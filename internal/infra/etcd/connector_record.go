@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -115,13 +116,13 @@ func decodeConnectorEncryptedCredentials(value []byte) (ConnectorEncryptedCreden
 
 func validateConnectorRecord(record ConnectorRecord) error {
 	connector := record.Connector
-	if validateStableID(ids.KindConnector, connector.ID) != nil {
+	if recordcodec.ValidateID(ids.KindConnector, connector.ID) != nil {
 		return errs.New(errs.KindValidationFailed, "Connector stable identity is invalid")
 	}
-	if validateStableID(ids.KindEnvironment, connector.EnvironmentID) != nil {
+	if recordcodec.ValidateID(ids.KindEnvironment, connector.EnvironmentID) != nil {
 		return errs.New(errs.KindConnectorScopeInvalid, "Connector Environment owner is invalid")
 	}
-	if err := validateLabel("Connector name", connector.Name); err != nil {
+	if err := recordcodec.ValidateLabel("Connector name", connector.Name); err != nil {
 		return err
 	}
 	if connector.Kind != core.ConnectorKindS3Compatible {
@@ -157,7 +158,7 @@ func validateConnectorRecord(record ConnectorRecord) error {
 		}
 		switch credential.Kind {
 		case core.ConnectorCredentialSecretRef:
-			if !validSecretEnvironmentKey(credential.SecretRef) {
+			if !secretrecord.ValidEnvironmentKey(credential.SecretRef) {
 				return errs.New(
 					errs.KindValidationFailed,
 					"Connector credential secret_ref is invalid",
@@ -178,11 +179,11 @@ func validateConnectorRecord(record ConnectorRecord) error {
 }
 
 func validateConnectorEncryptedCredentials(value ConnectorEncryptedCredentials) error {
-	if validateStableID(ids.KindConnector, value.ConnectorID) != nil || value.EnvelopeVersion != 1 ||
+	if recordcodec.ValidateID(ids.KindConnector, value.ConnectorID) != nil || value.EnvelopeVersion != 1 ||
 		value.Cipher != "age-x25519" || value.DigestAlgorithm != "sha256" ||
 		len(value.Ciphertext) == 0 ||
-		len(value.Ciphertext) > MaximumEntryValueBytes ||
-		!validSHA256(value.CiphertextSHA256) {
+		len(value.Ciphertext) > recordcodec.MaximumValueBytes ||
+		!recordcodec.ValidSHA256(value.CiphertextSHA256) {
 		return errs.New(
 			errs.KindValidationFailed,
 			"Connector encrypted credential envelope is invalid",

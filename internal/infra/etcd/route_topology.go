@@ -98,7 +98,7 @@ func listRoutesFromDesiredHead(
 	if err := validateContext(ctx); err != nil {
 		return Page[RouteRecord]{}, err
 	}
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return Page[RouteRecord]{}, err
 	}
 	limit, revision, lastID, query, err := normalizePageRequest(

@@ -137,7 +137,7 @@ func validateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 		intent.CandidateProjection.RenderGeneration != intent.Claim.RenderGeneration ||
 		validateEnvironmentComposeProjection(intent.CurrentProjection) != nil ||
 		validateEnvironmentComposeProjection(intent.CandidateProjection) != nil ||
-		validateTimestamp("Service removal created_at", intent.CreatedAt) != nil {
+		recordcodec.ValidateTimestamp("Service removal created_at", intent.CreatedAt) != nil {
 		return errs.New(errs.KindValidationFailed, "Service removal intent identity is invalid")
 	}
 	if intent.Status == TaskStatusPending {
@@ -145,7 +145,7 @@ func validateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 			return errs.New(errs.KindValidationFailed, "pending Service removal intent has terminal time")
 		}
 	} else if !isTerminalTaskStatus(intent.Status) || intent.TerminalAt == nil || intent.TerminalAt.Before(intent.CreatedAt) ||
-		validateTimestamp("Service removal terminal_at", *intent.TerminalAt) != nil {
+		recordcodec.ValidateTimestamp("Service removal terminal_at", *intent.TerminalAt) != nil {
 		return errs.New(errs.KindValidationFailed, "Service removal terminal state is invalid")
 	}
 	expected := cloneEnvironmentComposeProjection(intent.CurrentProjection)

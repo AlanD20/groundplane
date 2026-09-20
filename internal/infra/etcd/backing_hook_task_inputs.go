@@ -96,7 +96,7 @@ func validateTaskBackingHookInputSet(task TaskRecord) error {
 		return nil
 	}
 	binding := task.Configuration.BackingHookInputs
-	if ids.Validate(ids.KindProject, binding.ProjectID) != nil || !validSHA256(binding.CiphertextSHA256) {
+	if ids.Validate(ids.KindProject, binding.ProjectID) != nil || !recordcodec.ValidSHA256(binding.CiphertextSHA256) {
 		return errs.New(errs.KindValidationFailed, "Task backing hook input authority is invalid")
 	}
 	previous := ""
@@ -118,7 +118,7 @@ func sameTaskBackingHookInputSet(left, right *TaskBackingHookInputSet) bool {
 func validateBackingHookEncryptedInputs(record BackingHookEncryptedInputs) error {
 	if ids.Validate(ids.KindOperation, record.OperationID) != nil || record.EnvelopeVersion != 1 ||
 		record.Cipher != "age-x25519" || record.DigestAlgorithm != "sha256" ||
-		!validSHA256(record.CiphertextSHA256) || len(record.Ciphertext) == 0 || len(record.Ciphertext) > 256<<10 {
+		!recordcodec.ValidSHA256(record.CiphertextSHA256) || len(record.Ciphertext) == 0 || len(record.Ciphertext) > 256<<10 {
 		return errs.New(errs.KindValidationFailed, "Backing hook encrypted inputs are invalid")
 	}
 	want, _ := hex.DecodeString(record.CiphertextSHA256)

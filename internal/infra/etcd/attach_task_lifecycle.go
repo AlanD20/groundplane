@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -325,7 +326,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 		}
 		if index == 1 {
 			ownerID := string(value.Value)
-			if validateStableID(ids.KindAttach, ownerID) != nil {
+			if recordcodec.ValidateID(ids.KindAttach, ownerID) != nil {
 				return errs.New(errs.KindInternal, "attach detach replay successor name owner is corrupt")
 			}
 			if ownerID != task.Target {
@@ -408,7 +409,7 @@ func taskOwnsAttachLifecycle(task TaskRecord) (bool, error) {
 	if task.Executor != TaskExecutorAgent || (task.Type != TaskAttach && task.Type != TaskDetach) {
 		return false, nil
 	}
-	if validateStableID(ids.KindAttach, task.Target) != nil {
+	if recordcodec.ValidateID(ids.KindAttach, task.Target) != nil {
 		return false, errs.New(errs.KindInternal, "Attach Task has an invalid durable target")
 	}
 	return true, nil

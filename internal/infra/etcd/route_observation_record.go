@@ -41,10 +41,10 @@ func NewRouteObservationRecord(
 }
 
 func validateRouteObservationRecord(record RouteObservationRecord) error {
-	if err := validateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
 		return err
 	}
-	if err := validateID(ids.KindRoute, record.RouteID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindRoute, record.RouteID); err != nil {
 		return err
 	}
 	if record.DesiredGeneration == 0 || record.Observation.DesiredGeneration != record.DesiredGeneration {

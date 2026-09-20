@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"unicode/utf8"
 )
@@ -15,28 +16,14 @@ func validateContext(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func validateID(kind ids.Kind, id string) error {
-	if err := ids.Validate(kind, id); err != nil {
-		return errs.New(errs.KindValidationFailed, err.Error())
-	}
-	return nil
-}
-
-func validateLabel(field string, value string) error {
-	if value == "" || !utf8.ValidString(value) {
-		return errs.Newf(errs.KindValidationFailed, "%s is required and must be valid UTF-8", field)
-	}
-	return nil
-}
-
 func validateTenant(record TenantRecord) error {
-	if err := validateID(ids.KindTenant, record.ID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindTenant, record.ID); err != nil {
 		return err
 	}
-	if err := validateLabel("tenant slug", record.Slug); err != nil {
+	if err := recordcodec.ValidateLabel("tenant slug", record.Slug); err != nil {
 		return err
 	}
-	if err := validateLabel("tenant name", record.Name); err != nil {
+	if err := recordcodec.ValidateLabel("tenant name", record.Name); err != nil {
 		return err
 	}
 	if record.Description != "" && !utf8.ValidString(record.Description) {
@@ -49,13 +36,13 @@ func validateTenant(record TenantRecord) error {
 }
 
 func validateProject(record ProjectRecord) error {
-	if err := validateID(ids.KindProject, record.ID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindProject, record.ID); err != nil {
 		return err
 	}
-	if err := validateLabel("project slug", record.Slug); err != nil {
+	if err := recordcodec.ValidateLabel("project slug", record.Slug); err != nil {
 		return err
 	}
-	if err := validateLabel("project name", record.Name); err != nil {
+	if err := recordcodec.ValidateLabel("project name", record.Name); err != nil {
 		return err
 	}
 	if record.Description != "" && !utf8.ValidString(record.Description) {
@@ -66,7 +53,7 @@ func validateProject(record ProjectRecord) error {
 	}
 	switch record.Kind {
 	case ProjectKindTenant:
-		return validateID(ids.KindTenant, record.TenantID)
+		return recordcodec.ValidateID(ids.KindTenant, record.TenantID)
 	case ProjectKindBacking:
 		if record.TenantID != "" {
 			return errs.New(errs.KindValidationFailed, "backing projects must not have a tenant id")
@@ -78,20 +65,20 @@ func validateProject(record ProjectRecord) error {
 }
 
 func validateEnvironment(record EnvironmentRecord) error {
-	if err := validateID(ids.KindEnvironment, record.ID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, record.ID); err != nil {
 		return err
 	}
-	if err := validateID(ids.KindProject, record.ProjectID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindProject, record.ProjectID); err != nil {
 		return err
 	}
-	if err := validateLabel("environment name", record.Name); err != nil {
+	if err := recordcodec.ValidateLabel("environment name", record.Name); err != nil {
 		return err
 	}
 	pool, err := ipam.ParseIPv4Prefix(record.NetworkPool)
 	if err != nil || pool.String() != record.NetworkPool {
 		return errs.New(errs.KindValidationFailed, "environment network_pool must be a canonical IPv4 CIDR")
 	}
-	if err := validateLabel("environment volume directory", record.VolumeDir); err != nil {
+	if err := recordcodec.ValidateLabel("environment volume directory", record.VolumeDir); err != nil {
 		return err
 	}
 	if err := validateEnvironmentRecordPath(record); err != nil {

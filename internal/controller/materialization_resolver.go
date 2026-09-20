@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"io"
 	"unicode/utf8"
 
@@ -41,8 +42,8 @@ type materializationComponentFileReader interface {
 }
 
 type materializationSecretValueReader interface {
-	GetSecret(context.Context, string) (etcd.Versioned[etcd.SecretRecord], error)
-	GetSecretValue(context.Context, etcd.Versioned[etcd.SecretRecord]) (etcd.SecretEncryptedValue, error)
+	GetSecret(context.Context, string) (etcd.Versioned[secretrecord.Record], error)
+	GetSecretValue(context.Context, etcd.Versioned[secretrecord.Record]) (secretrecord.EncryptedValue, error)
 }
 
 // TaskMaterializationResolver resolves only the immutable Controller source

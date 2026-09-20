@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"math"
 	"slices"
 	"time"
@@ -278,7 +279,7 @@ func (repository *TaskRepository) normalizeReleaseRecoveryTerminalReplay(
 		return status, nil, false, nil
 	}
 	if status != TaskStatusCompleted || result.ReconciliationRequired ||
-		!validSHA256(result.ReleaseRecoveryRecordSHA256) {
+		!recordcodec.ValidSHA256(result.ReleaseRecoveryRecordSHA256) {
 		return status, nil, true, errs.New(errs.KindStateConflict, "terminal release recovery replay status changed")
 	}
 	if task.Result == nil || !validTerminalTaskStatus(task.Status) || task.TerminalAssignment == nil ||

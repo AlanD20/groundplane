@@ -3,6 +3,7 @@ package etcd
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -11,7 +12,7 @@ func validateTaskSteps(steps []TaskStepRecord) error {
 	seenScriptIDs := make(map[string]struct{}, len(steps))
 	seenScriptSlugs := make(map[string]struct{}, len(steps))
 	for _, step := range steps {
-		if err := validateStableID(ids.KindStep, step.ID); err != nil {
+		if err := recordcodec.ValidateID(ids.KindStep, step.ID); err != nil {
 			return err
 		}
 		if _, exists := seenSteps[step.ID]; exists {
@@ -34,7 +35,7 @@ func validateTaskSteps(steps []TaskStepRecord) error {
 		default:
 			return errs.New(errs.KindValidationFailed, "task step kind is invalid")
 		}
-		if err := validateStableID(ids.KindScript, step.ScriptID); err != nil {
+		if err := recordcodec.ValidateID(ids.KindScript, step.ScriptID); err != nil {
 			return err
 		}
 		if err := core.ValidateScriptLabel("task Script step slug", step.ScriptSlug); err != nil {

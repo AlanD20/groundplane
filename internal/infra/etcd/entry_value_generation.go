@@ -17,7 +17,6 @@ import (
 const (
 	entryPlainValueGenerationPrefix  = "/v1/entry-values/plain/"
 	entrySecretValueGenerationPrefix = "/v1/secret-values/entries/"
-	MaximumEntryValueBytes           = 256 << 10
 )
 
 type PlainEntryValueGeneration struct {
@@ -176,7 +175,7 @@ func (repository *EntryValueGenerationRepository) GetPlain(
 			"Entry value generation repository is not configured",
 		)
 	}
-	if validateStableID(ids.KindEnvEntry, entryID) != nil || validateStableID(ids.KindConfig, generationID) != nil {
+	if recordcodec.ValidateID(ids.KindEnvEntry, entryID) != nil || recordcodec.ValidateID(ids.KindConfig, generationID) != nil {
 		return PlainEntryValueGeneration{}, false, errs.New(
 			errs.KindValidationFailed,
 			"Entry plain value generation identity is invalid",
@@ -214,7 +213,7 @@ func (repository *EntryValueGenerationRepository) GetSecret(
 			"Entry value generation repository is not configured",
 		)
 	}
-	if validateStableID(ids.KindEnvEntry, entryID) != nil || validateStableID(ids.KindConfig, generationID) != nil {
+	if recordcodec.ValidateID(ids.KindEnvEntry, entryID) != nil || recordcodec.ValidateID(ids.KindConfig, generationID) != nil {
 		return SecretEntryValueGeneration{}, false, errs.New(
 			errs.KindValidationFailed,
 			"Entry secret value generation identity is invalid",
@@ -321,7 +320,7 @@ func validatePlainEntryValueGeneration(record PlainEntryValueGeneration) error {
 	); err != nil {
 		return err
 	}
-	if len(record.Content) > MaximumEntryValueBytes || !validSHA256(record.PlaintextSHA256) {
+	if len(record.Content) > recordcodec.MaximumValueBytes || !recordcodec.ValidSHA256(record.PlaintextSHA256) {
 		return errs.New(errs.KindValidationFailed, "Entry plain value generation is invalid")
 	}
 	digest := sha256.Sum256(record.Content)
@@ -342,8 +341,8 @@ func validateSecretEntryValueGeneration(record SecretEntryValueGeneration) error
 		return err
 	}
 	if record.EnvelopeVersion != 1 || record.Cipher != "age-x25519" || record.DigestAlgorithm != "sha256" ||
-		len(record.Ciphertext) == 0 || len(record.Ciphertext) > MaximumEntryValueBytes ||
-		!validSHA256(record.CiphertextSHA256) {
+		len(record.Ciphertext) == 0 || len(record.Ciphertext) > recordcodec.MaximumValueBytes ||
+		!recordcodec.ValidSHA256(record.CiphertextSHA256) {
 		return errs.New(errs.KindValidationFailed, "Entry secret value generation envelope is invalid")
 	}
 	digest := sha256.Sum256(record.Ciphertext)
@@ -360,12 +359,12 @@ func validateEntryValueGenerationIdentity(
 	generationID string,
 	createdAt time.Time,
 ) error {
-	if validateStableID(ids.KindEnvironment, environmentID) != nil ||
-		validateStableID(ids.KindEnvEntry, entryID) != nil ||
-		validateStableID(ids.KindConfig, generationID) != nil {
+	if recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvEntry, entryID) != nil ||
+		recordcodec.ValidateID(ids.KindConfig, generationID) != nil {
 		return errs.New(errs.KindValidationFailed, "Entry value generation identity is invalid")
 	}
-	return validateTimestamp("Entry value generation created_at", createdAt)
+	return recordcodec.ValidateTimestamp("Entry value generation created_at", createdAt)
 }
 
 func equalPlainEntryValueGeneration(left PlainEntryValueGeneration, right PlainEntryValueGeneration) bool {

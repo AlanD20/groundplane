@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -247,7 +248,7 @@ func (repository *HierarchyDeletionRepository) freezeProjectMembership(
 			ownerPrefix: func(owner string) string {
 				return secretOwnerCollectionPrefix(core.SecretScopeProject, owner)
 			},
-			primaryKey: secretRecordKey, stableIDKind: ids.KindSecret, controller: true,
+			primaryKey: secretrecord.RecordKey, stableIDKind: ids.KindSecret, controller: true,
 			validateOwner: validateHierarchyDeletionSecretOwner,
 		})
 	if err != nil {
@@ -702,7 +703,7 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionTargetDigest(
 	case "runner":
 		key = runnerKey(targetID)
 	case "secret":
-		key = secretRecordKey(targetID)
+		key = secretrecord.RecordKey(targetID)
 	default:
 		return "", errs.Newf(
 			errs.KindValidationFailed,

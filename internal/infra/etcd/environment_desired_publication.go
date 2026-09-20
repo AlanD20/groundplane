@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/netip"
 	"time"
 
@@ -134,8 +135,8 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		)
 	}
 	taskEnvironment, ownsDesired, taskEnvironmentErr := desiredRevisionTaskEnvironment(task)
-	if validateStableID(ids.KindEnvironment, revision.EnvironmentID) != nil ||
-		validateStableID(ids.KindTask, revision.RevisionID) != nil ||
+	if recordcodec.ValidateID(ids.KindEnvironment, revision.EnvironmentID) != nil ||
+		recordcodec.ValidateID(ids.KindTask, revision.RevisionID) != nil ||
 		revision.EnvironmentID != environment.Record.ID ||
 		claim.EnvironmentID != revision.EnvironmentID || claim.RevisionID != revision.RevisionID ||
 		claim.TaskID != task.ID || projection.EnvironmentID != revision.EnvironmentID ||

@@ -104,7 +104,7 @@ func (repository *ComponentRepository) EnsureHostResolverBaseline(
 func validateHostResolverBaseline(record HostResolverBaselineRecord) error {
 	if record.Generation != 1 || len(record.Content) == 0 ||
 		len(record.Content) > maximumHostResolverBaselineBytes ||
-		!bytes.HasSuffix(record.Content, []byte("\n")) || !validSHA256(record.SHA256) ||
+		!bytes.HasSuffix(record.Content, []byte("\n")) || !recordcodec.ValidSHA256(record.SHA256) ||
 		!validMarkerTime(record.CapturedAt) {
 		return errs.New(errs.KindValidationFailed, "host resolver baseline is invalid")
 	}

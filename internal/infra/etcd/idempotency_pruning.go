@@ -477,7 +477,7 @@ func (repository *IdempotencyRepository) volumeRemovalRootPruneFences(
 	if originID == task.ID {
 		return nil, false, nil // The candidate's own terminal marker is the root.
 	}
-	if validateStableID(ids.KindTask, originID) != nil {
+	if recordcodec.ValidateID(ids.KindTask, originID) != nil {
 		return nil, false, corruptIdempotencyMarker()
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{taskKey(originID)}, Revision: revision})

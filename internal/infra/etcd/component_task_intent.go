@@ -105,7 +105,7 @@ func validateComponentTaskIntent(intent ComponentTaskIntent) error {
 		ids.Validate(ids.KindEnvironment, intent.EnvironmentID) != nil {
 		return errs.New(errs.KindValidationFailed, "Component candidate identity is invalid")
 	}
-	if err := validateTimestamp("component candidate created_at", intent.CreatedAt); err != nil {
+	if err := recordcodec.ValidateTimestamp("component candidate created_at", intent.CreatedAt); err != nil {
 		return err
 	}
 	if intent.Status == TaskStatusPending {
@@ -116,7 +116,7 @@ func validateComponentTaskIntent(intent ComponentTaskIntent) error {
 		if !isTerminalTaskStatus(intent.Status) || intent.TerminalAt == nil {
 			return errs.New(errs.KindValidationFailed, "Component candidate status is invalid")
 		}
-		if err := validateTimestamp("component candidate terminal_at", *intent.TerminalAt); err != nil {
+		if err := recordcodec.ValidateTimestamp("component candidate terminal_at", *intent.TerminalAt); err != nil {
 			return err
 		}
 		if intent.TerminalAt.Before(intent.CreatedAt) {

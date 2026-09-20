@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -128,7 +129,7 @@ func backupConfigRestoreEntryIdentityKey(restoreGenerationID string, entryID str
 	if err != nil {
 		return "", err
 	}
-	if validateStableID(ids.KindEnvEntry, entryID) != nil {
+	if recordcodec.ValidateID(ids.KindEnvEntry, entryID) != nil {
 		return "", errs.New(errs.KindValidationFailed, "backup config restore Entry id is invalid")
 	}
 	return prefix + entryID, nil
@@ -271,7 +272,7 @@ func validateBackupConfigRestoreValueChunkRecord(record BackupConfigRestoreValue
 }
 
 func validateBackupConfigRestoreGenerationID(restoreGenerationID string) error {
-	if validateStableID(ids.KindConfig, restoreGenerationID) != nil {
+	if recordcodec.ValidateID(ids.KindConfig, restoreGenerationID) != nil {
 		return errs.New(errs.KindValidationFailed, "backup config restore generation id is invalid")
 	}
 	return nil
@@ -332,8 +333,8 @@ func validateBackupConfigRestoreEntryIdentity(
 	valueGenerationID string,
 ) error {
 	if validateBackupConfigRestoreGenerationID(restoreGenerationID) != nil ||
-		validateStableID(ids.KindEnvEntry, entryID) != nil ||
-		validateStableID(ids.KindConfig, valueGenerationID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvEntry, entryID) != nil ||
+		recordcodec.ValidateID(ids.KindConfig, valueGenerationID) != nil ||
 		restoreGenerationID == valueGenerationID {
 		return errs.New(errs.KindValidationFailed, "backup config restore Entry identity is invalid")
 	}

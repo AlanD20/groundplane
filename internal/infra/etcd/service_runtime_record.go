@@ -29,10 +29,10 @@ func newServiceRuntimeRecord(record ServiceRecord) ServiceRuntimeRecord {
 }
 
 func validateServiceRuntimeRecord(record ServiceRuntimeRecord) error {
-	if err := validateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
 		return err
 	}
-	if err := validateID(ids.KindService, record.ServiceID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindService, record.ServiceID); err != nil {
 		return err
 	}
 	if record.Runtime.ServiceID != record.ServiceID {
@@ -42,7 +42,7 @@ func validateServiceRuntimeRecord(record ServiceRuntimeRecord) error {
 		return errs.Wrap(errs.KindValidationFailed, err)
 	}
 	if record.BackingNetworkID != "" {
-		if err := validateID(ids.KindNetwork, record.BackingNetworkID); err != nil {
+		if err := recordcodec.ValidateID(ids.KindNetwork, record.BackingNetworkID); err != nil {
 			return err
 		}
 	}

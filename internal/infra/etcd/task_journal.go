@@ -341,7 +341,7 @@ func transitionTaskStatus(
 			next,
 		)
 	}
-	if err := validateTimestamp("task transition", at); err != nil {
+	if err := recordcodec.ValidateTimestamp("task transition", at); err != nil {
 		return TaskRecord{}, err
 	}
 
@@ -387,7 +387,7 @@ func prepareTaskEvent(
 			"task event step id does not belong to its task",
 		)
 	}
-	if err := validateTimestamp("task event received_at", receivedAt); err != nil {
+	if err := recordcodec.ValidateTimestamp("task event received_at", receivedAt); err != nil {
 		return PreparedTaskEvent{}, err
 	}
 	payload, hash, err := canonicalTaskEventPayload(input.State, input.Payload)
@@ -478,14 +478,14 @@ func validateTaskRecord(record TaskRecord) error {
 	if err := validateTaskEntryRuntime(record); err != nil {
 		return err
 	}
-	if err := validateStableID(ids.KindTask, record.ID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindTask, record.ID); err != nil {
 		return err
 	}
-	if err := validateStableID(ids.KindOperation, record.OperationID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindOperation, record.OperationID); err != nil {
 		return err
 	}
 	if record.RetryOf != "" {
-		if err := validateStableID(ids.KindTask, record.RetryOf); err != nil {
+		if err := recordcodec.ValidateID(ids.KindTask, record.RetryOf); err != nil {
 			return err
 		}
 		if record.RetryOf == record.ID {
@@ -510,10 +510,10 @@ func validateTaskRecord(record TaskRecord) error {
 	if record.Target == "" || !utf8.ValidString(record.Target) {
 		return errs.New(errs.KindValidationFailed, "task target is required and must be valid UTF-8")
 	}
-	if err := validateStableID(ids.KindPlan, record.PlanID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindPlan, record.PlanID); err != nil {
 		return err
 	}
-	if !validSHA256(record.PlanHash) {
+	if !recordcodec.ValidSHA256(record.PlanHash) {
 		return errs.New(errs.KindValidationFailed, "task plan hash must be a lowercase SHA-256 digest")
 	}
 	backupTask := record.Type == TaskBackup || record.Type == TaskBackupPrune
@@ -542,8 +542,8 @@ func validateTaskRecord(record TaskRecord) error {
 	if record.TerminalAssignment != nil {
 		identity := record.TerminalAssignment
 		if record.Executor != TaskExecutorAgent || !isTerminalTaskStatus(record.Status) ||
-			validateStableID(ids.KindAssignment, identity.AssignmentID) != nil ||
-			validateStableID(ids.KindAgent, identity.AgentID) != nil || identity.AgentGeneration == 0 {
+			recordcodec.ValidateID(ids.KindAssignment, identity.AssignmentID) != nil ||
+			recordcodec.ValidateID(ids.KindAgent, identity.AgentID) != nil || identity.AgentGeneration == 0 {
 			return errs.New(errs.KindInternal, "task terminal assignment identity is invalid")
 		}
 	}
@@ -554,10 +554,10 @@ func validateTaskRecord(record TaskRecord) error {
 	if err := validateTaskEventCheckpoints(record); err != nil {
 		return err
 	}
-	if err := validateTimestamp("task created_at", record.CreatedAt); err != nil {
+	if err := recordcodec.ValidateTimestamp("task created_at", record.CreatedAt); err != nil {
 		return err
 	}
-	if err := validateTimestamp("task updated_at", record.UpdatedAt); err != nil {
+	if err := recordcodec.ValidateTimestamp("task updated_at", record.UpdatedAt); err != nil {
 		return err
 	}
 	if record.UpdatedAt.Before(record.CreatedAt) {
@@ -618,7 +618,7 @@ func validateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 		return errs.New(errs.KindValidationFailed, "task result diagnostic is invalid")
 	}
 	if result.FailedStepID != "" {
-		if err := validateStableID(ids.KindStep, result.FailedStepID); err != nil {
+		if err := recordcodec.ValidateID(ids.KindStep, result.FailedStepID); err != nil {
 			return err
 		}
 		found := false
@@ -648,7 +648,7 @@ func validateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 		if index > 0 && result.Projects[index-1].ProjectName >= project.ProjectName {
 			return errs.New(errs.KindValidationFailed, "task result projects are not strictly sorted")
 		}
-		if err := validateTimestamp("task result observed_at", project.ObservedAt); err != nil {
+		if err := recordcodec.ValidateTimestamp("task result observed_at", project.ObservedAt); err != nil {
 			return err
 		}
 		if project.ContainerCount > 4096 || project.NetworkCount > 4096 ||
@@ -662,7 +662,7 @@ func validateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 	for index, evidence := range result.ProxyEvidence {
 		if ids.Validate(ids.KindService, evidence.ServiceID) != nil || !validReleaseEvidenceTarget(evidence.Target) ||
 			evidence.ProxyGeneration == 0 ||
-			!validSHA256(evidence.ConfigSHA256) || evidence.ReleaseID == "" ||
+			!recordcodec.ValidSHA256(evidence.ConfigSHA256) || evidence.ReleaseID == "" ||
 			(index > 0 && result.ProxyEvidence[index-1].ServiceID >= evidence.ServiceID) {
 			return errs.New(errs.KindValidationFailed, "task result proxy evidence is invalid or unsorted")
 		}
@@ -680,7 +680,7 @@ func validateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 	}
 	if evidence := result.CandidateAbsenceEvidence; evidence != nil {
 		if result.Kind != TaskResultCompose || ids.Validate(ids.KindAssignment, evidence.AssignmentID) != nil ||
-			!validSHA256(evidence.PlanHash) || !validSHA256(evidence.AuthoritySHA256) ||
+			!recordcodec.ValidSHA256(evidence.PlanHash) || !recordcodec.ValidSHA256(evidence.AuthoritySHA256) ||
 			evidence.ComposeProjectName == "" || ids.Validate(ids.KindConfig, evidence.CandidateArtifactID) != nil ||
 			len(evidence.Candidates) == 0 || len(evidence.Candidates) > 32 {
 			return errs.New(errs.KindValidationFailed, "task candidate absence evidence is invalid")
@@ -732,7 +732,7 @@ func validReleaseEvidenceTarget(value string) bool {
 
 func validateTaskTimeline(record TaskRecord) error {
 	if record.StartedAt != nil {
-		if err := validateTimestamp("task started_at", *record.StartedAt); err != nil {
+		if err := recordcodec.ValidateTimestamp("task started_at", *record.StartedAt); err != nil {
 			return err
 		}
 		if record.StartedAt.Before(record.CreatedAt) {
@@ -746,10 +746,10 @@ func validateTaskTimeline(record TaskRecord) error {
 		if record.FinishedAt == nil || record.RetainUntil == nil {
 			return errs.New(errs.KindInternal, "terminal task is missing retention timestamps")
 		}
-		if err := validateTimestamp("task finished_at", *record.FinishedAt); err != nil {
+		if err := recordcodec.ValidateTimestamp("task finished_at", *record.FinishedAt); err != nil {
 			return err
 		}
-		if err := validateTimestamp("task retain_until", *record.RetainUntil); err != nil {
+		if err := recordcodec.ValidateTimestamp("task retain_until", *record.RetainUntil); err != nil {
 			return err
 		}
 		if record.FinishedAt.Before(record.CreatedAt) ||
@@ -777,19 +777,19 @@ func validateTaskTimeline(record TaskRecord) error {
 }
 
 func validateTaskEventIdentity(identity TaskEventIdentity) error {
-	if err := validateStableID(ids.KindAssignment, identity.AssignmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindAssignment, identity.AssignmentID); err != nil {
 		return err
 	}
-	if err := validateStableID(ids.KindAgent, identity.AgentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindAgent, identity.AgentID); err != nil {
 		return err
 	}
 	if identity.AgentGeneration == 0 {
 		return errs.New(errs.KindValidationFailed, "task event Agent generation must be positive")
 	}
-	if err := validateStableID(ids.KindTask, identity.TaskID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindTask, identity.TaskID); err != nil {
 		return err
 	}
-	if err := validateStableID(ids.KindStep, identity.StepID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindStep, identity.StepID); err != nil {
 		return err
 	}
 	if identity.Attempt == 0 || identity.Ordinal == 0 {
@@ -808,7 +808,7 @@ func validateTaskEventRecord(record TaskEventRecord) error {
 	if !validTaskEventState(record.State) {
 		return errs.New(errs.KindInternal, "task event status is invalid")
 	}
-	if err := validateTimestamp("task event received_at", record.ReceivedAt); err != nil {
+	if err := recordcodec.ValidateTimestamp("task event received_at", record.ReceivedAt); err != nil {
 		return err
 	}
 	payload, hash, err := canonicalTaskEventPayload(record.State, record.Payload)
@@ -825,7 +825,7 @@ func validateTaskEventDedupRecord(record TaskEventDedupRecord) error {
 	if err := validateTaskEventIdentity(record.Identity); err != nil {
 		return err
 	}
-	if record.Sequence == 0 || !validSHA256(record.PayloadSHA256) {
+	if record.Sequence == 0 || !recordcodec.ValidSHA256(record.PayloadSHA256) {
 		return errs.New(errs.KindInternal, "task event dedupe record is invalid")
 	}
 	return nil
@@ -860,28 +860,6 @@ func validTaskEventState(state TaskEventState) bool {
 	default:
 		return false
 	}
-}
-
-func validateStableID(kind ids.Kind, value string) error {
-	if err := ids.Validate(kind, value); err != nil {
-		return errs.New(errs.KindValidationFailed, err.Error())
-	}
-	return nil
-}
-
-func validSHA256(value string) bool {
-	if len(value) != sha256.Size*2 || value != strings.ToLower(value) {
-		return false
-	}
-	decoded, err := hex.DecodeString(value)
-	return err == nil && len(decoded) == sha256.Size
-}
-
-func validateTimestamp(field string, value time.Time) error {
-	if value.IsZero() || value.Location() != time.UTC {
-		return errs.Newf(errs.KindValidationFailed, "%s must be a non-zero UTC timestamp", field)
-	}
-	return nil
 }
 
 func canonicalTaskEventPayload(state TaskEventState, value json.RawMessage) (json.RawMessage, string, error) {

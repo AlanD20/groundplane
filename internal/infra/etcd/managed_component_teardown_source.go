@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -39,7 +40,7 @@ func ValidateManagedComponentTeardownSources(sources []ManagedComponentRuntimeSo
 			source.ComposeName == "" || !utf8.ValidString(source.ComposeName) ||
 			ids.Validate(ids.KindTask, source.RevisionID) != nil ||
 			ids.Validate(ids.KindConfig, source.ArtifactID) != nil ||
-			!validSHA256(source.ArtifactSHA256) {
+			!recordcodec.ValidSHA256(source.ArtifactSHA256) {
 			return errs.New(errs.KindValidationFailed, "managed Component teardown source is invalid or unsorted")
 		}
 		if _, duplicate := seenComponents[source.ComponentID]; duplicate {

@@ -117,7 +117,7 @@ func (repository *HierarchyRepository) GetEnvironmentBlueprintHead(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[EnvironmentBlueprintHead]{}, false, err
 	}
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return Versioned[EnvironmentBlueprintHead]{}, false, err
 	}
 	result, err := repository.store.Get(ctx, environmentBlueprintHeadKey(environmentID))
@@ -148,10 +148,10 @@ func (repository *HierarchyRepository) GetEnvironmentBlueprintRevision(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[EnvironmentBlueprintRevision]{}, false, err
 	}
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return Versioned[EnvironmentBlueprintRevision]{}, false, err
 	}
-	if err := validateID(ids.KindTask, revisionID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindTask, revisionID); err != nil {
 		return Versioned[EnvironmentBlueprintRevision]{}, false, err
 	}
 	rootResult, err := repository.store.Get(ctx, environmentBlueprintRootKey(environmentID, revisionID))
@@ -549,13 +549,13 @@ func decodeEnvironmentBlueprintManifest(value []byte) (environmentBlueprintManif
 }
 
 func validateEnvironmentBlueprintRevision(revision EnvironmentBlueprintRevision) error {
-	if err := validateID(ids.KindEnvironment, revision.EnvironmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, revision.EnvironmentID); err != nil {
 		return err
 	}
-	if err := validateID(ids.KindTask, revision.RevisionID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindTask, revision.RevisionID); err != nil {
 		return err
 	}
-	if err := validateTimestamp("Blueprint revision created_at", revision.CreatedAt); err != nil {
+	if err := recordcodec.ValidateTimestamp("Blueprint revision created_at", revision.CreatedAt); err != nil {
 		return err
 	}
 	manifest := environmentBlueprintManifest{
@@ -577,8 +577,8 @@ func validateEnvironmentBlueprintRevision(revision EnvironmentBlueprintRevision)
 }
 
 func validateEnvironmentBlueprintManifest(manifest environmentBlueprintManifest) error {
-	if validateID(ids.KindEnvironment, manifest.EnvironmentID) != nil ||
-		validateID(ids.KindTask, manifest.RevisionID) != nil {
+	if recordcodec.ValidateID(ids.KindEnvironment, manifest.EnvironmentID) != nil ||
+		recordcodec.ValidateID(ids.KindTask, manifest.RevisionID) != nil {
 		return errs.New(errs.KindValidationFailed, "Blueprint revision identity is invalid")
 	}
 	if err := validateEnvironmentBlueprintPath(manifest.RootPath); err != nil {

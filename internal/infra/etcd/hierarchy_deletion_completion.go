@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -338,7 +339,7 @@ func validateHierarchyDeletionAgentTerminal(
 	proof HierarchyDeletionAgentTerminalProof,
 	completedAt time.Time,
 ) error {
-	if validateTimestamp("hierarchy deletion completion", completedAt) != nil ||
+	if recordcodec.ValidateTimestamp("hierarchy deletion completion", completedAt) != nil ||
 		action.ProcedureKind != HierarchyDeletionProcedureAgent || action.AgentProcedure == nil ||
 		proof.ChildOperationID != action.AgentProcedure.ChildOperationID || proof.AttemptID == "" ||
 		proof.TaskID == "" || proof.AssignmentID == "" || proof.AttemptGeneration <= 0 ||

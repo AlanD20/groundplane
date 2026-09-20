@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
@@ -96,7 +97,7 @@ func (adapter recoverySecretPinStore) VerifySecret(
 	if err := tasksecretpinrecord.Validate(pin); err != nil {
 		return tasksecretpins.SecretAuthority{}, err
 	}
-	keys := []string{secretRecordKey(pin.SecretID), secretValueKey(pin.SecretID)}
+	keys := []string{secretrecord.RecordKey(pin.SecretID), secretrecord.ValueKey(pin.SecretID)}
 	read, err := adapter.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return tasksecretpins.SecretAuthority{}, err
@@ -116,11 +117,11 @@ func (adapter recoverySecretPinStore) VerifySecret(
 			"pinned recovery Secret is unavailable",
 		)
 	}
-	record, err := decodeSecretRecord(metadata.Value)
+	record, err := secretrecord.DecodeRecord(metadata.Value)
 	if err != nil || record.Secret.ID != pin.SecretID {
-		return tasksecretpins.SecretAuthority{}, corruptSecretRecord()
+		return tasksecretpins.SecretAuthority{}, secretrecord.CorruptRecord()
 	}
-	encrypted, err := decodeSecretEncryptedValue(value.Value)
+	encrypted, err := secretrecord.DecodeEncryptedValue(value.Value)
 	defer clear(encrypted.Ciphertext)
 	if err != nil || encrypted.SecretID != pin.SecretID || encrypted.CiphertextSHA256 != pin.CiphertextSHA256 {
 		return tasksecretpins.SecretAuthority{}, errs.New(

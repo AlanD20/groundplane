@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strconv"
 	"time"
 
@@ -22,7 +23,7 @@ func (repository *HierarchyDeletionRepository) PublishOrResumeAgentAction(
 	if err := validateContext(ctx); err != nil {
 		return HierarchyDeletionChildEntry{}, err
 	}
-	if validateTimestamp("hierarchy deletion child dispatch", now) != nil ||
+	if recordcodec.ValidateTimestamp("hierarchy deletion child dispatch", now) != nil ||
 		action.ProcedureKind != HierarchyDeletionProcedureAgent || action.AgentProcedure == nil {
 		return HierarchyDeletionChildEntry{}, errs.New(
 			errs.KindValidationFailed,

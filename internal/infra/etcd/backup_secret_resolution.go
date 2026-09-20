@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
@@ -21,7 +22,7 @@ import (
 type BackupSecretValueEvidence struct {
 	Name      backupsecret.CredentialName
 	Reference string
-	Value     SecretEncryptedValue
+	Value     secretrecord.EncryptedValue
 }
 
 // BackupSecretResolutionEvidence contains only the durable proof and
@@ -919,11 +920,11 @@ func (reader *BackupSecretResolutionReader) resolveEncryptedCredentialValues(
 				continue
 			}
 			id := string(candidate.Value)
-			dynamic.secretRecords[id] = dynamic.add(secretRecordKey(id))
+			dynamic.secretRecords[id] = dynamic.add(secretrecord.RecordKey(id))
 			dynamic.secretFences[id] = dynamic.add(
 				deletionTombstoneKey(string(DeletionTargetSecret), id),
 			)
-			dynamic.secretValues[id] = dynamic.add(secretValueKey(id))
+			dynamic.secretValues[id] = dynamic.add(secretrecord.ValueKey(id))
 		}
 	}
 	final, err := reader.readFixed(ctx, dynamic.keys, fixedRevision)
@@ -941,7 +942,7 @@ func (reader *BackupSecretResolutionReader) resolveEncryptedCredentialValues(
 		if value == nil {
 			return errs.New(errs.KindInternal, "backup Secret encrypted value is unavailable")
 		}
-		encrypted, decodeErr := decodeSecretEncryptedValue(value.Value)
+		encrypted, decodeErr := secretrecord.DecodeEncryptedValue(value.Value)
 		if decodeErr != nil || encrypted.SecretID != selected.id {
 			return errs.New(errs.KindInternal, "backup Secret encrypted value is corrupt")
 		}
@@ -986,7 +987,7 @@ func selectBackupSecretCandidate(
 		if recordValue == nil {
 			return backupSecretCandidate{}, errs.New(errs.KindInternal, "backup Secret record is unavailable")
 		}
-		record, err := decodeSecretRecord(recordValue.Value)
+		record, err := secretrecord.DecodeRecord(recordValue.Value)
 		if err != nil || record.Secret.ID != id || record.Secret.Key != reference.reference ||
 			record.Secret.Kind != backupsecret.SecretKindEnvVar ||
 			(candidate.project && (record.Secret.Scope != backupsecret.SecretScopeProject || record.Secret.ProjectID != projectID)) ||

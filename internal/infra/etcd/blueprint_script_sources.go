@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -254,7 +255,7 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 			})
 		}
 		for _, secret := range snapshot.SecretValues {
-			key := secretValueKey(secret.ValueGenerationId)
+			key := secretrecord.ValueKey(secret.ValueGenerationId)
 			value, readErr := scriptExecutionValueAt(
 				ctx,
 				ledger.store,

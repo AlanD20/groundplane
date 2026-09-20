@@ -221,7 +221,7 @@ func environmentBlueprintRevisionIDFromKey(prefix string, key string) (string, e
 	remainder := strings.TrimPrefix(key, prefix)
 	separator := strings.IndexByte(remainder, '/')
 	if remainder == key || separator <= 0 ||
-		validateStableID(ids.KindTask, remainder[:separator]) != nil {
+		recordcodec.ValidateID(ids.KindTask, remainder[:separator]) != nil {
 		return "", errs.New(errs.KindInternal, "environment Blueprint revision key is corrupt")
 	}
 	return remainder[:separator], nil

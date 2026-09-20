@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 	"time"
 
@@ -26,7 +27,7 @@ func firstTaskEventSequence(task TaskRecord) uint64 {
 }
 
 func nextTaskControllerTimestamp(previous time.Time, supplied time.Time) (time.Time, error) {
-	if err := validateTimestamp("task controller timestamp", supplied); err != nil {
+	if err := recordcodec.ValidateTimestamp("task controller timestamp", supplied); err != nil {
 		return time.Time{}, err
 	}
 	if supplied.After(previous) {
@@ -50,7 +51,7 @@ func validateTaskEventCheckpoints(task TaskRecord) error {
 		if validateTaskEventIdentity(checkpoint.Identity) != nil || checkpoint.Identity.TaskID != task.ID ||
 			!taskContainsStep(task, checkpoint.Identity.StepID) || checkpoint.Identity.StepID <= previous ||
 			checkpoint.Sequence == 0 || checkpoint.Sequence >= firstTaskEventSequence(task) ||
-			!validSHA256(checkpoint.PayloadSHA256) || !validTaskEventState(checkpoint.State) ||
+			!recordcodec.ValidSHA256(checkpoint.PayloadSHA256) || !validTaskEventState(checkpoint.State) ||
 			checkpoint.Completed && !checkpoint.Running || checkpoint.Running && !checkpoint.EffectPossible ||
 			checkpoint.State == TaskEventStateRunning && !checkpoint.Running ||
 			checkpoint.State == TaskEventStateCompleted && !checkpoint.Completed ||

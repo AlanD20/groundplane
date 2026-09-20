@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -26,7 +27,7 @@ func (repository *BackupPolicyRepository) GetBackupKey(
 	if err := validateContext(ctx); err != nil {
 		return VersionedBackupKey{}, false, err
 	}
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return VersionedBackupKey{}, false, err
 	}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{

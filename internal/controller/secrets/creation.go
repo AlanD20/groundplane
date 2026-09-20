@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"net/http"
 	"time"
 	"unicode/utf8"
@@ -29,8 +30,8 @@ type secretCreationRepository interface {
 	CreateSecretIdempotent(
 		context.Context,
 		etcd.SecretOwner,
-		etcd.SecretRecord,
-		etcd.SecretEncryptedValue,
+		secretrecord.Record,
+		secretrecord.EncryptedValue,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
@@ -230,7 +231,7 @@ func (service *secretCreationService) createSecretOnce(
 	metadata := envelope.Metadata()
 	ciphertext := envelope.Ciphertext()
 	defer clear(ciphertext)
-	value := etcd.SecretEncryptedValue{
+	value := secretrecord.EncryptedValue{
 		SecretID: record.Secret.ID, EnvelopeVersion: uint8(metadata.Version),
 		Cipher: string(metadata.Cipher), DigestAlgorithm: string(metadata.Digest.Algorithm),
 		CiphertextSHA256: metadata.Digest.Value, Ciphertext: ciphertext,
@@ -283,38 +284,38 @@ func (service *secretCreationService) createSecretOnce(
 func prepareSecretCreation(
 	input apiTypes.SecretCreateRequest,
 	updatedAt time.Time,
-) (etcd.SecretRecord, error) {
+) (secretrecord.Record, error) {
 	hasProject := input.ProjectID != ""
 	if hasProject == input.Platform {
-		return etcd.SecretRecord{}, errs.New(
+		return secretrecord.Record{}, errs.New(
 			errs.KindValidationFailed,
 			"Secret creation requires exactly one owner selector",
 		)
 	}
 	if !utf8.ValidString(input.Value) {
-		return etcd.SecretRecord{}, errs.New(
+		return secretrecord.Record{}, errs.New(
 			errs.KindValidationFailed,
 			"Secret value must be valid UTF-8",
 		)
 	}
 	if len(input.Value) > apiTypes.MaximumSecretValueBytes {
-		return etcd.SecretRecord{}, errs.New(
+		return secretrecord.Record{}, errs.New(
 			errs.KindValidationFailed,
 			"Secret value exceeds the 255 KiB limit",
 		)
 	}
 	kind := core.SecretKind(input.Kind)
 	if kind == core.SecretKindEnvVar && input.Path != "" {
-		return etcd.SecretRecord{}, errs.New(
+		return secretrecord.Record{}, errs.New(
 			errs.KindValidationFailed,
 			"Environment-variable Secret must not set path",
 		)
 	}
 	id := ids.New(ids.KindSecret)
 	if input.Platform {
-		return etcd.NewPlatformSecretRecord(id, input.Key, kind, input.Path, updatedAt)
+		return secretrecord.NewPlatformRecord(id, input.Key, kind, input.Path, updatedAt)
 	}
-	return etcd.NewProjectSecretRecord(id, input.ProjectID, input.Key, kind, input.Path, updatedAt)
+	return secretrecord.NewProjectRecord(id, input.ProjectID, input.Key, kind, input.Path, updatedAt)
 }
 
 func secretCreationLocator(input apiTypes.SecretCreateRequest, key string) etcd.IdempotencyLocator {
@@ -330,7 +331,7 @@ func secretCreationLocator(input apiTypes.SecretCreateRequest, key string) etcd.
 	}
 }
 
-func secretCreationResponse(record etcd.SecretRecord) apiTypes.Secret {
+func secretCreationResponse(record secretrecord.Record) apiTypes.Secret {
 	secret := record.Secret
 	return apiTypes.Secret{
 		ID: secret.ID, Scope: string(secret.Scope), ProjectID: secret.ProjectID,

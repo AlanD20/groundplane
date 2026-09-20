@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"math/rand/v2"
 	"time"
 
@@ -145,7 +146,7 @@ func (repository *TaskRepository) GetTask(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[TaskRecord]{}, err
 	}
-	if err := validateStableID(ids.KindTask, taskID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindTask, taskID); err != nil {
 		return Versioned[TaskRecord]{}, err
 	}
 	result, err := repository.store.Get(ctx, taskKey(taskID))
@@ -467,7 +468,7 @@ func (repository *TaskRepository) ListTaskEvents(
 	if err := validateContext(ctx); err != nil {
 		return TaskEventSnapshot{}, err
 	}
-	if err := validateStableID(ids.KindTask, taskID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindTask, taskID); err != nil {
 		return TaskEventSnapshot{}, err
 	}
 	if revision < 0 {

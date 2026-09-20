@@ -605,7 +605,7 @@ func validateDeletionTombstone(record DeletionTombstoneRecord) error {
 	if err := validateDeletionTarget(record.TargetKind, record.TargetID); err != nil {
 		return err
 	}
-	if record.TargetRevision <= 0 || validateStableID(ids.KindTask, record.TaskID) != nil ||
+	if record.TargetRevision <= 0 || recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
 		(record.Phase != DeletionPhaseHostEffects && record.Phase != DeletionPhaseFinalizing) ||
 		record.CreatedAt.IsZero() || !record.CreatedAt.Equal(record.CreatedAt.UTC()) ||
 		record.UpdatedAt.Before(
@@ -654,7 +654,7 @@ func validateDeletionTarget(kind DeletionTargetKind, id string) error {
 	default:
 		return errs.New(errs.KindValidationFailed, "deletion target kind is invalid")
 	}
-	if validateStableID(expected, id) != nil {
+	if recordcodec.ValidateID(expected, id) != nil {
 		return errs.New(errs.KindValidationFailed, "deletion target id is invalid")
 	}
 	return nil

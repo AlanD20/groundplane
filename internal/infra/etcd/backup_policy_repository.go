@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -97,7 +98,7 @@ func (repository *BackupPolicyRepository) GetBackupSource(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[BackupSourceRecord]{}, err
 	}
-	if err := validateID(ids.KindBackupSource, sourceID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindBackupSource, sourceID); err != nil {
 		return Versioned[BackupSourceRecord]{}, err
 	}
 	return getRecord(
@@ -116,7 +117,7 @@ func (repository *BackupPolicyRepository) ListBackupSources(
 	environmentID string,
 	request PageRequest,
 ) (Page[BackupSourceRecord], error) {
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return Page[BackupSourceRecord]{}, err
 	}
 	return listIndexPage(
@@ -142,7 +143,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicy(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[BackupPolicyRecord]{}, false, err
 	}
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return Versioned[BackupPolicyRecord]{}, false, err
 	}
 	result, err := repository.store.Get(ctx, backupPolicyKey(environmentID))
@@ -340,7 +341,7 @@ func (repository *BackupPolicyRepository) getBackupSourceByIdentity(
 		return Versioned[BackupSourceRecord]{ReadRevision: index.ReadRevision}, false, nil
 	}
 	sourceID := string(index.Entry.Value)
-	if err := validateID(ids.KindBackupSource, sourceID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindBackupSource, sourceID); err != nil {
 		return Versioned[BackupSourceRecord]{}, false, corruptRecord()
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{

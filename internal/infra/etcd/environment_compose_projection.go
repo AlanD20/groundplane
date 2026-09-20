@@ -153,7 +153,7 @@ func (repository *HierarchyRepository) GetEnvironmentAppliedComposeProjection(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[EnvironmentComposeProjection]{}, false, err
 	}
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return Versioned[EnvironmentComposeProjection]{}, false, err
 	}
 	result, err := repository.store.Get(ctx, environmentComposeProjectionKey(environmentID))
@@ -213,7 +213,7 @@ func (repository *HierarchyRepository) GetEnvironmentComposeProjection(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[EnvironmentComposeProjection]{}, false, err
 	}
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return Versioned[EnvironmentComposeProjection]{}, false, err
 	}
 	head, err := repository.store.Get(ctx, environmentBlueprintHeadKey(environmentID))
@@ -269,10 +269,10 @@ func (repository *HierarchyRepository) GetEnvironmentComposeProjectionRevision(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[EnvironmentComposeProjection]{}, false, err
 	}
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return Versioned[EnvironmentComposeProjection]{}, false, err
 	}
-	if err := validateID(ids.KindTask, revisionID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindTask, revisionID); err != nil {
 		return Versioned[EnvironmentComposeProjection]{}, false, err
 	}
 	root, err := repository.store.Get(ctx, environmentBlueprintRootKey(environmentID, revisionID))
@@ -314,7 +314,7 @@ func (repository *HierarchyRepository) FindEnvironmentVolume(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, err
 	}
-	if err := validateID(ids.KindVolume, volumeID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindVolume, volumeID); err != nil {
 		return Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, err
 	}
 	const headsPrefix = "/v1/records/environment-blueprints/"
@@ -337,7 +337,7 @@ func (repository *HierarchyRepository) FindEnvironmentVolume(
 				continue
 			}
 			environmentID := strings.TrimSuffix(strings.TrimPrefix(entry.Key, headsPrefix), "/current")
-			if validateStableID(ids.KindEnvironment, environmentID) != nil {
+			if recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil {
 				return Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, corruptEnvironmentComposeProjection()
 			}
 			revisionID, err := decodeTaskReference(entry.Value)
@@ -463,7 +463,7 @@ func RemoveEnvironmentEntry(
 	if err := validateEnvironmentComposeProjection(current); err != nil {
 		return EnvironmentComposeProjection{}, false, err
 	}
-	if validateStableID(ids.KindEnvEntry, entryID) != nil {
+	if recordcodec.ValidateID(ids.KindEnvEntry, entryID) != nil {
 		return EnvironmentComposeProjection{}, false, errs.New(
 			errs.KindValidationFailed,
 			"removed Environment Entry id is invalid",
@@ -734,7 +734,7 @@ func validateEnvironmentProjectionArtifact(
 	if err != nil || !bytes.Equal(canonical, projection.ComposeArtifact) {
 		return errs.New(errs.KindValidationFailed, "Environment normalized Compose artifact is not canonical")
 	}
-	if validateStableID(ids.KindConfig, artifact.GetArtifactId()) != nil ||
+	if recordcodec.ValidateID(ids.KindConfig, artifact.GetArtifactId()) != nil ||
 		artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
 		artifact.GetOwnerId() != projection.EnvironmentID || artifact.GetAuthorizedVolumeDir() == "" ||
 		len(artifact.GetCanonicalYaml()) == 0 || len(artifact.GetYamlSha256()) != sha256.Size {
@@ -813,7 +813,7 @@ func validateEnvironmentComposeProjectionPublicationAdvance(
 	removedVolumeID := ""
 	if task.Type == TaskRemove && task.Params[TaskResourceKindParam] == TaskResourceVolume {
 		removedVolumeID = task.Target
-		if validateStableID(ids.KindVolume, removedVolumeID) != nil {
+		if recordcodec.ValidateID(ids.KindVolume, removedVolumeID) != nil {
 			return errs.New(errs.KindValidationFailed, "Volume removal Task target is invalid")
 		}
 	}

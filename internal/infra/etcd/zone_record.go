@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -41,10 +42,10 @@ func NewZoneRecord(environmentID string, desired core.Zone) (ZoneRecord, error) 
 }
 
 func validateZoneRecord(record ZoneRecord) error {
-	if err := validateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
 		return err
 	}
-	if err := validateID(ids.KindNetwork, record.Desired.ID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindNetwork, record.Desired.ID); err != nil {
 		return err
 	}
 	if err := composekey.Validate(record.Desired.Name); err != nil {
@@ -60,7 +61,7 @@ func validateZoneRecord(record ZoneRecord) error {
 			return errs.New(errs.KindValidationFailed, "Environment-owned Zone owner id is invalid")
 		}
 	case core.ZoneOwnerBackingProject:
-		if err := validateID(ids.KindProject, record.Desired.OwnerID); err != nil {
+		if err := recordcodec.ValidateID(ids.KindProject, record.Desired.OwnerID); err != nil {
 			return err
 		}
 	default:

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -417,7 +418,7 @@ func (repository *TaskRepository) validateConnectorTaskAcknowledgementReplay(
 			}
 			if index == 2 {
 				ownerID := string(value.Value)
-				if validateStableID(ids.KindConnector, ownerID) == nil && ownerID != task.Target {
+				if recordcodec.ValidateID(ids.KindConnector, ownerID) == nil && ownerID != task.Target {
 					continue
 				}
 			}
@@ -452,7 +453,7 @@ func taskOwnsConnectorRemoval(task TaskRecord) (bool, error) {
 	if task.Type != TaskRemove || task.TimeoutSeconds != connectorDeletionTimeoutSeconds ||
 		len(task.Params) != 3 || ids.Validate(ids.KindConnector, task.Target) != nil ||
 		ids.Validate(ids.KindEnvironment, task.Params[TaskConnectorEnvironmentParam]) != nil ||
-		validateLabel("connector name", task.Params[TaskConnectorNameParam]) != nil {
+		recordcodec.ValidateLabel("connector name", task.Params[TaskConnectorNameParam]) != nil {
 		return false, errs.New(errs.KindInternal, "connector deletion task has invalid durable input")
 	}
 	return true, nil

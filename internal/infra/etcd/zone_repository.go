@@ -32,7 +32,7 @@ func (repository *ZoneRepository) GetZone(ctx context.Context, id string) (Versi
 	if err := validateContext(ctx); err != nil {
 		return Versioned[ZoneRecord]{}, err
 	}
-	if err := validateID(ids.KindNetwork, id); err != nil {
+	if err := recordcodec.ValidateID(ids.KindNetwork, id); err != nil {
 		return Versioned[ZoneRecord]{}, err
 	}
 	return findZoneAtRevision(ctx, repository.store, id, 0)
@@ -46,7 +46,7 @@ func (repository *ZoneRepository) ListZones(
 	if err := validateContext(ctx); err != nil {
 		return Page[ZoneRecord]{}, err
 	}
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return Page[ZoneRecord]{}, err
 	}
 	limit, revision, lastID, query, err := normalizePageRequest(

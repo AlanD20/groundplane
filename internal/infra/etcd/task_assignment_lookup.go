@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -18,7 +19,7 @@ func (repository *TaskRepository) GetTaskAssignment(
 	if err := validateContext(ctx); err != nil {
 		return TaskAssignment{}, err
 	}
-	if validateStableID(ids.KindTask, taskID) != nil {
+	if recordcodec.ValidateID(ids.KindTask, taskID) != nil {
 		return TaskAssignment{}, errs.New(errs.KindValidationFailed, "Task assignment id is invalid")
 	}
 	indexed, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{

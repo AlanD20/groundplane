@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -22,8 +23,8 @@ type BackingServiceCreation struct {
 	Components   []ComponentRecord
 	Zone         ZoneRecord
 	Service      ServiceRecord
-	Secrets      []SecretRecord
-	SecretValues []SecretEncryptedValue
+	Secrets      []secretrecord.Record
+	SecretValues []secretrecord.EncryptedValue
 	Entries      []EntryRecord
 	EntryValues  []EntryValueGeneration
 	Claim        EnvironmentBlueprintStageClaim
@@ -173,12 +174,12 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	secretValues := make([][]byte, len(creation.Secrets))
 	secretEncryptedValues := make([][]byte, len(creation.Secrets))
 	for index := range creation.Secrets {
-		secretValues[index], err = encodeSecretRecord(creation.Secrets[index])
+		secretValues[index], err = secretrecord.EncodeRecord(creation.Secrets[index])
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
 		defer clear(secretValues[index])
-		secretEncryptedValues[index], err = encodeSecretEncryptedValue(creation.SecretValues[index])
+		secretEncryptedValues[index], err = secretrecord.EncodeEncryptedValue(creation.SecretValues[index])
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
@@ -266,10 +267,10 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	}
 	for index, secret := range creation.Secrets {
 		mutations = append(mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: secretRecordKey(secret.Secret.ID), Value: secretValues[index]},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: secretrecord.RecordKey(secret.Secret.ID), Value: secretValues[index]},
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: secretOwnerKey(secret.Secret), Value: []byte(secret.Secret.ID)},
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: secretScopedKey(secret.Secret), Value: []byte(secret.Secret.ID)},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: secretValueKey(secret.Secret.ID), Value: secretEncryptedValues[index]},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: secretrecord.ValueKey(secret.Secret.ID), Value: secretEncryptedValues[index]},
 		)
 	}
 	classifier := classifyBackingServiceCreation(creation, publication, len(conditions))
@@ -426,10 +427,10 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 			return errs.New(errs.KindValidationFailed, "Backing-service bootstrap Secret identity is duplicated")
 		}
 		seenSecrets[secret.Secret.ID] = struct{}{}
-		if err := validateSecretRecord(secret); err != nil {
+		if err := secretrecord.ValidateRecord(secret); err != nil {
 			return err
 		}
-		if err := validateSecretEncryptedValue(creation.SecretValues[index]); err != nil {
+		if err := secretrecord.ValidateEncryptedValue(creation.SecretValues[index]); err != nil {
 			return err
 		}
 	}
@@ -531,10 +532,10 @@ func backingServiceCreationConditions(
 	}
 	for _, secret := range creation.Secrets {
 		conditions = append(conditions,
-			etcdstore.Condition{Key: secretRecordKey(secret.Secret.ID)},
+			etcdstore.Condition{Key: secretrecord.RecordKey(secret.Secret.ID)},
 			etcdstore.Condition{Key: secretOwnerKey(secret.Secret)},
 			etcdstore.Condition{Key: secretScopedKey(secret.Secret)},
-			etcdstore.Condition{Key: secretValueKey(secret.Secret.ID)},
+			etcdstore.Condition{Key: secretrecord.ValueKey(secret.Secret.ID)},
 			etcdstore.Condition{Key: deletionTombstoneKey("secret", secret.Secret.ID)},
 		)
 	}

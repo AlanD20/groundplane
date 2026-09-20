@@ -3,6 +3,7 @@ package attachments
 import (
 	"context"
 	"encoding/json"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"slices"
 	"strings"
 
@@ -22,8 +23,8 @@ type backingHookTaskInputRepository interface {
 }
 
 type backingHookSecretRepository interface {
-	ResolveSecret(context.Context, string, string) (etcd.Versioned[etcd.SecretRecord], error)
-	GetSecretValue(context.Context, etcd.Versioned[etcd.SecretRecord]) (etcd.SecretEncryptedValue, error)
+	ResolveSecret(context.Context, string, string) (etcd.Versioned[secretrecord.Record], error)
+	GetSecretValue(context.Context, etcd.Versioned[secretrecord.Record]) (secretrecord.EncryptedValue, error)
 }
 
 func (service *FactService) EnableBackingHookInputs(repository backingHookSecretRepository) error {

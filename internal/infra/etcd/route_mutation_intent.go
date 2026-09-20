@@ -119,7 +119,7 @@ func (repository *HierarchyRepository) GetRouteMutationIntent(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[RouteMutationIntent]{}, false, err
 	}
-	if validateStableID(ids.KindTask, taskID) != nil {
+	if recordcodec.ValidateID(ids.KindTask, taskID) != nil {
 		return Versioned[RouteMutationIntent]{}, false, errs.New(
 			errs.KindValidationFailed,
 			"Route mutation intent Task id is invalid",
@@ -185,17 +185,17 @@ func decodeRouteMutationIntent(value []byte) (RouteMutationIntent, error) {
 }
 
 func validateRouteMutationIntent(intent RouteMutationIntent) error {
-	if validateStableID(ids.KindTask, intent.TaskID) != nil ||
-		validateStableID(ids.KindOperation, intent.OperationID) != nil ||
-		validateStableID(ids.KindEnvironment, intent.EnvironmentID) != nil ||
-		validateStableID(ids.KindRoute, intent.RouteID) != nil ||
+	if recordcodec.ValidateID(ids.KindTask, intent.TaskID) != nil ||
+		recordcodec.ValidateID(ids.KindOperation, intent.OperationID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvironment, intent.EnvironmentID) != nil ||
+		recordcodec.ValidateID(ids.KindRoute, intent.RouteID) != nil ||
 		intent.Route.EnvironmentID != intent.EnvironmentID || intent.Route.Desired.ID != intent.RouteID {
 		return errs.New(errs.KindValidationFailed, "Route mutation intent identity is invalid")
 	}
 	if err := validateRouteRecord(intent.Route); err != nil {
 		return err
 	}
-	if err := validateTimestamp("Route mutation intent created_at", intent.CreatedAt); err != nil {
+	if err := recordcodec.ValidateTimestamp("Route mutation intent created_at", intent.CreatedAt); err != nil {
 		return err
 	}
 	switch intent.Kind {
@@ -257,7 +257,7 @@ func validateRouteProviderPin(provider *RouteProviderPin) error {
 		CatalogDigest: provider.CatalogDigest, InputRevision: provider.InputRevision,
 		InputGeneration: provider.InputGeneration,
 	}) != nil || provider.Destination == "" || provider.ActionID == "" ||
-		validateStableID(ids.KindService, provider.ServiceID) != nil ||
+		recordcodec.ValidateID(ids.KindService, provider.ServiceID) != nil ||
 		provider.Input.ComponentID != provider.ComponentID ||
 		provider.Input.GeneratedServiceID != provider.ServiceID ||
 		componentsdk.ValidateHTTPRouterInput(provider.Input) != nil {

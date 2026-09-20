@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -72,7 +73,7 @@ func (repository *ScriptRepository) PrepareBlueprintScriptPublication(
 	if err := validateContext(ctx); err != nil {
 		return BlueprintScriptPublication{}, err
 	}
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil || readRevision <= 0 {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil || readRevision <= 0 {
 		return BlueprintScriptPublication{}, errs.New(errs.KindValidationFailed, "Blueprint Script snapshot is invalid")
 	}
 	next := ScriptSetGenerationRecord{EnvironmentID: environmentID, GenerationID: nextGenerationID}

@@ -496,7 +496,7 @@ type BackupKeyRotationRecord struct {
 }
 
 func validateBackupScheduleCursorRecord(record BackupScheduleCursorRecord) error {
-	if err := validateStableID(ids.KindEnvironment, record.EnvironmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
 		return err
 	}
 	if record.PolicyRevision <= 0 || validateBackupPolicyFrequency(record.Frequency) != nil ||
@@ -516,14 +516,14 @@ func validateBackupScheduleCursorRecord(record BackupScheduleCursorRecord) error
 }
 
 func validateEnvironmentMutationEpochRecord(record EnvironmentMutationEpochRecord) error {
-	if validateStableID(ids.KindEnvironment, record.EnvironmentID) != nil {
+	if recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil {
 		return invalidBackupRuntimeRecord("environment mutation epoch is invalid")
 	}
 	return nil
 }
 
 func validateBackupDueOutcomeRecord(record BackupDueOutcomeRecord) error {
-	if err := validateStableID(ids.KindEnvironment, record.EnvironmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
 		return err
 	}
 	if record.PolicyRevision <= 0 || !validBackupRuntimeInstant(record.ScheduledAt) ||
@@ -535,7 +535,7 @@ func validateBackupDueOutcomeRecord(record BackupDueOutcomeRecord) error {
 	}
 	switch record.Outcome {
 	case BackupDueDispatched:
-		if validateStableID(ids.KindTask, record.TaskID) != nil {
+		if recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil {
 			return invalidBackupRuntimeRecord("dispatched backup due outcome requires a task id")
 		}
 	case BackupDueSkippedOverlap:
@@ -549,9 +549,9 @@ func validateBackupDueOutcomeRecord(record BackupDueOutcomeRecord) error {
 }
 
 func validateBackupOperationLockRecord(record BackupOperationLockRecord) error {
-	if validateStableID(ids.KindEnvironment, record.EnvironmentID) != nil ||
-		validateStableID(ids.KindOperation, record.OperationID) != nil ||
-		validateStableID(
+	if recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil ||
+		recordcodec.ValidateID(ids.KindOperation, record.OperationID) != nil ||
+		recordcodec.ValidateID(
 			ids.KindTask,
 			record.TaskID,
 		) != nil || !validBackupOperationKind(record.Kind) ||
@@ -562,9 +562,9 @@ func validateBackupOperationLockRecord(record BackupOperationLockRecord) error {
 }
 
 func validateBackupSourceTargetExclusionRecord(record BackupSourceTargetExclusionRecord) error {
-	if validateStableID(ids.KindEnvironment, record.EnvironmentID) != nil ||
-		validateStableID(ids.KindOperation, record.OperationID) != nil ||
-		validateStableID(ids.KindTask, record.TaskID) != nil ||
+	if recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil ||
+		recordcodec.ValidateID(ids.KindOperation, record.OperationID) != nil ||
+		recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
 		(record.OperationKind != BackupOperationBackup && record.OperationKind != BackupOperationRestore) ||
 		validateBackupSourceTargetIdentity(record.TargetKind, record.TargetID) != nil ||
 		!validBackupRuntimeLifecycle(record.CreatedAt, record.UpdatedAt) {
@@ -574,10 +574,10 @@ func validateBackupSourceTargetExclusionRecord(record BackupSourceTargetExclusio
 }
 
 func validateBackupRunRecord(record BackupRunRecord) error {
-	if validateStableID(ids.KindTask, record.TaskID) != nil ||
-		validateStableID(ids.KindOperation, record.OperationID) != nil ||
-		validateStableID(ids.KindEnvironment, record.EnvironmentID) != nil ||
-		validateStableID(
+	if recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
+		recordcodec.ValidateID(ids.KindOperation, record.OperationID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil ||
+		recordcodec.ValidateID(
 			ids.KindConnector,
 			record.ConnectorID,
 		) != nil || record.PolicyRevision <= 0 || record.RetentionKeep <= 0 ||
@@ -596,7 +596,7 @@ func validateBackupRunRecord(record BackupRunRecord) error {
 		return invalidBackupRuntimeRecord("backup run Connector upload authority is incomplete")
 	}
 	if record.RetryOfTaskID != "" {
-		if validateStableID(ids.KindTask, record.RetryOfTaskID) != nil ||
+		if recordcodec.ValidateID(ids.KindTask, record.RetryOfTaskID) != nil ||
 			record.RetryOfTaskID == record.TaskID {
 			return invalidBackupRuntimeRecord("backup run retry task is invalid")
 		}
@@ -745,10 +745,10 @@ func validateBackupRunSourceAttempt(
 	connectorPrefix string,
 	record BackupRunSourceAttemptRecord,
 ) error {
-	if validateStableID(ids.KindBackupSource, record.SourceID) != nil ||
+	if recordcodec.ValidateID(ids.KindBackupSource, record.SourceID) != nil ||
 		record.SourceRevision <= 0 ||
 		record.TargetRevision <= 0 ||
-		validateStableID(ids.KindRecoveryPoint, record.RecoveryPointID) != nil ||
+		recordcodec.ValidateID(ids.KindRecoveryPoint, record.RecoveryPointID) != nil ||
 		!validBackupRuntimeInstant(record.RecoveryPointCreatedAt) ||
 		!recoveryPointIDMatchesInstant(record.RecoveryPointID, record.RecoveryPointCreatedAt) ||
 		!validBackupSourceAttemptState(record.State) ||
@@ -784,7 +784,7 @@ func validateBackupRunSourceAttempt(
 		return err
 	}
 	if (record.SizeBytes == 0) != (record.SHA256 == "") || record.SizeBytes < 0 ||
-		(record.SHA256 != "" && !validSHA256(record.SHA256)) {
+		(record.SHA256 != "" && !recordcodec.ValidSHA256(record.SHA256)) {
 		return invalidBackupRuntimeRecord("backup run source artifact evidence is invalid")
 	}
 	if sourceAttemptRequiresArtifact(record.State, record.Phase) &&
@@ -827,7 +827,7 @@ func validateBackupRunSourceSnapshot(
 			return invalidBackupRuntimeRecord("volume backup source snapshot is invalid")
 		}
 	case BackupRuntimeSourceConfig:
-		if snapshot.Config == nil || validateStableID(
+		if snapshot.Config == nil || recordcodec.ValidateID(
 			ids.KindTask,
 			snapshot.Config.ConfigSnapshotID,
 		) != nil || snapshot.Config.ReadRevision <= 0 {
@@ -840,11 +840,11 @@ func validateBackupRunSourceSnapshot(
 }
 
 func validateBackupRecoveryPointSnapshot(record BackupRecoveryPointSnapshot) error {
-	if validateStableID(ids.KindRecoveryPoint, record.ID) != nil ||
-		validateStableID(ids.KindEnvironment, record.EnvironmentID) != nil ||
-		validateStableID(ids.KindBackupSource, record.SourceID) != nil ||
-		validateStableID(ids.KindConnector, record.ConnectorID) != nil || record.SizeBytes <= 0 ||
-		!validSHA256(record.SHA256) || !validBackupRuntimeInstant(record.CreatedAt) ||
+	if recordcodec.ValidateID(ids.KindRecoveryPoint, record.ID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil ||
+		recordcodec.ValidateID(ids.KindBackupSource, record.SourceID) != nil ||
+		recordcodec.ValidateID(ids.KindConnector, record.ConnectorID) != nil || record.SizeBytes <= 0 ||
+		!recordcodec.ValidSHA256(record.SHA256) || !validBackupRuntimeInstant(record.CreatedAt) ||
 		!recoveryPointIDMatchesInstant(record.ID, record.CreatedAt) ||
 		!validBackupObjectKey(
 			record.ObjectKey,
@@ -907,8 +907,8 @@ func validateBackupOrphanRecord(record BackupOrphanRecord) error {
 	if err := validateBackupRecoveryPointSnapshot(record.Point); err != nil {
 		return err
 	}
-	if validateStableID(ids.KindTask, record.TaskID) != nil ||
-		validateStableID(ids.KindOperation, record.Reconciliation.OperationID) != nil ||
+	if recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
+		recordcodec.ValidateID(ids.KindOperation, record.Reconciliation.OperationID) != nil ||
 		record.Reconciliation.PolicyRevision <= 0 ||
 		record.Reconciliation.RetentionKeep <= 0 ||
 		record.Reconciliation.RetentionKeep > MaximumBackupPolicyKeep ||
@@ -921,8 +921,8 @@ func validateBackupOrphanRecord(record BackupOrphanRecord) error {
 }
 
 func validateBackupRetentionSweepRecord(record BackupRetentionSweepRecord) error {
-	if validateStableID(ids.KindBackupSource, record.SourceID) != nil ||
-		validateStableID(
+	if recordcodec.ValidateID(ids.KindBackupSource, record.SourceID) != nil ||
+		recordcodec.ValidateID(
 			ids.KindRecoveryPoint,
 			record.TriggerRecoveryPointID,
 		) != nil || record.Keep <= 0 || record.Keep > MaximumBackupPolicyKeep ||
@@ -930,7 +930,7 @@ func validateBackupRetentionSweepRecord(record BackupRetentionSweepRecord) error
 		!validBackupRuntimeLifecycle(record.CreatedAt, record.UpdatedAt) {
 		return invalidBackupRuntimeRecord("backup retention sweep is invalid")
 	}
-	if record.Cursor != "" && validateStableID(ids.KindRecoveryPoint, record.Cursor) != nil {
+	if record.Cursor != "" && recordcodec.ValidateID(ids.KindRecoveryPoint, record.Cursor) != nil {
 		return invalidBackupRuntimeRecord("backup retention cursor is invalid")
 	}
 	if record.RetainedCount < 0 || record.RetainedCount > record.Keep {
@@ -942,7 +942,7 @@ func validateBackupRetentionSweepRecord(record BackupRetentionSweepRecord) error
 			return invalidBackupRuntimeRecord("pending backup retention sweep contains progress")
 		}
 	} else if record.SelectionRevision <= 0 ||
-		validateStableID(ids.KindOperation, record.PruneOperationID) != nil {
+		recordcodec.ValidateID(ids.KindOperation, record.PruneOperationID) != nil {
 		return invalidBackupRuntimeRecord(
 			"active backup retention sweep requires a prune operation",
 		)
@@ -955,7 +955,7 @@ func validateBackupRecoveryPointPruneRecord(record BackupRecoveryPointPruneRecor
 		return err
 	}
 	if record.PointRevision <= 0 ||
-		validateStableID(ids.KindOperation, record.OperationID) != nil ||
+		recordcodec.ValidateID(ids.KindOperation, record.OperationID) != nil ||
 		!validBackupRuntimeLifecycle(record.CreatedAt, record.UpdatedAt) ||
 		record.CreatedAt.Before(record.Point.CreatedAt) {
 		return invalidBackupRuntimeRecord("recovery point prune lifecycle is invalid")
@@ -966,7 +966,7 @@ func validateBackupRecoveryPointPruneRecord(record BackupRecoveryPointPruneRecor
 			return invalidBackupRuntimeRecord("pending recovery point prune cannot carry a task id")
 		}
 	case BackupPruneAssigned, BackupPruneVerifiedAbsent:
-		if validateStableID(ids.KindTask, record.TaskID) != nil {
+		if recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil {
 			return invalidBackupRuntimeRecord("assigned recovery point prune requires a task id")
 		}
 	default:
@@ -978,16 +978,16 @@ func validateBackupRecoveryPointPruneRecord(record BackupRecoveryPointPruneRecor
 func validateBackupRecoveryPointPruneDispatchRecord(
 	record BackupRecoveryPointPruneDispatchRecord,
 ) error {
-	if validateStableID(ids.KindTask, record.TaskID) != nil ||
-		validateStableID(ids.KindOperation, record.OperationID) != nil ||
-		validateStableID(ids.KindEnvironment, record.EnvironmentID) != nil ||
+	if recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
+		recordcodec.ValidateID(ids.KindOperation, record.OperationID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil ||
 		!validBackupRuntimeInstant(record.CreatedAt) || len(record.RecoveryPointIDs) == 0 ||
 		len(record.RecoveryPointIDs) > maximumBackupPruneDispatchPoints {
 		return invalidBackupRuntimeRecord("recovery point prune dispatch is invalid")
 	}
 	seen := make(map[string]struct{}, len(record.RecoveryPointIDs))
 	for _, recoveryPointID := range record.RecoveryPointIDs {
-		if validateStableID(ids.KindRecoveryPoint, recoveryPointID) != nil {
+		if recordcodec.ValidateID(ids.KindRecoveryPoint, recoveryPointID) != nil {
 			return invalidBackupRuntimeRecord("recovery point prune dispatch id is invalid")
 		}
 		if _, exists := seen[recoveryPointID]; exists {
@@ -999,9 +999,9 @@ func validateBackupRecoveryPointPruneDispatchRecord(
 }
 
 func validateBackupRestoreRecord(record BackupRestoreRecord) error {
-	if validateStableID(ids.KindTask, record.TaskID) != nil ||
-		validateStableID(ids.KindOperation, record.OperationID) != nil ||
-		validateStableID(ids.KindEnvironment, record.EnvironmentID) != nil ||
+	if recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
+		recordcodec.ValidateID(ids.KindOperation, record.OperationID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil ||
 		record.RecoveryPointRevision <= 0 || record.SourceRevision <= 0 || record.ConnectorRevision <= 0 ||
 		record.ConnectorCredentialsRevision < 0 ||
 		(record.ConnectorHasDirectCredentials != (record.ConnectorCredentialsRevision > 0)) ||
@@ -1020,7 +1020,7 @@ func validateBackupRestoreRecord(record BackupRestoreRecord) error {
 		return err
 	}
 	if record.Point.SourceKind == BackupRuntimeSourceConfig {
-		if validateStableID(ids.KindConfig, record.RestoreGenerationID) != nil {
+		if recordcodec.ValidateID(ids.KindConfig, record.RestoreGenerationID) != nil {
 			return invalidBackupRuntimeRecord("config restore generation id is invalid")
 		}
 	} else if record.RestoreGenerationID != "" {
@@ -1074,7 +1074,7 @@ func validateBackupRestoreTarget(
 		}
 	case BackupRuntimeSourceConfig:
 		if target.Config == nil ||
-			validateStableID(ids.KindEnvironment, target.Config.EnvironmentID) != nil ||
+			recordcodec.ValidateID(ids.KindEnvironment, target.Config.EnvironmentID) != nil ||
 			target.Config.EnvironmentRevision <= 0 ||
 			target.Config.EnvironmentID != point.TargetID {
 			return invalidBackupRuntimeRecord("config restore target is invalid")
@@ -1136,7 +1136,7 @@ func validateBackupRestoreVolumeManifest(record BackupRestoreRecord) error {
 		}
 		return nil
 	}
-	if record.StagedTreeManifestSHA256 != "" && !validSHA256(record.StagedTreeManifestSHA256) {
+	if record.StagedTreeManifestSHA256 != "" && !recordcodec.ValidSHA256(record.StagedTreeManifestSHA256) {
 		return invalidBackupRuntimeRecord("volume restore staged-tree manifest is invalid")
 	}
 	switch record.State {
@@ -1209,11 +1209,11 @@ func validateBackupRestoreConfigProgress(
 			progress.DescriptorChunkCount,
 		) ||
 		!optionalDigestMatchesCount(progress.StoredValueChainSHA256, progress.ValueChunkCount) ||
-		(progress.StoredManifestSHA256 != "" && !validSHA256(progress.StoredManifestSHA256)) {
+		(progress.StoredManifestSHA256 != "" && !recordcodec.ValidSHA256(progress.StoredManifestSHA256)) {
 		return invalidBackupRuntimeRecord("config restore progress digest is invalid")
 	}
 	if progress.DeleteCursor != "" &&
-		validateStableID(ids.KindEnvEntry, progress.DeleteCursor) != nil {
+		recordcodec.ValidateID(ids.KindEnvEntry, progress.DeleteCursor) != nil {
 		return invalidBackupRuntimeRecord("config restore delete cursor is invalid")
 	}
 	if configRestoreStateRequiresManifest(state) && progress.StoredManifestSHA256 == "" {
@@ -1278,8 +1278,8 @@ func validateBackupRestoreVerification(record BackupRestoreRecord) error {
 }
 
 func validateBackupRestoreServiceRecord(record BackupRestoreServiceRecord) error {
-	if validateStableID(ids.KindTask, record.TaskID) != nil ||
-		validateStableID(ids.KindService, record.ServiceID) != nil || record.ServiceRevision <= 0 ||
+	if recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
+		recordcodec.ValidateID(ids.KindService, record.ServiceID) != nil || record.ServiceRevision <= 0 ||
 		!validBackupServiceRuntimeIntent(record.PriorIntent) {
 		return invalidBackupRuntimeRecord("backup restore service is invalid")
 	}
@@ -1287,9 +1287,9 @@ func validateBackupRestoreServiceRecord(record BackupRestoreServiceRecord) error
 }
 
 func validateBackupKeyRotationRecord(record BackupKeyRotationRecord) error {
-	if validateStableID(ids.KindTask, record.TaskID) != nil ||
-		validateStableID(ids.KindOperation, record.OperationID) != nil ||
-		validateStableID(ids.KindEnvironment, record.EnvironmentID) != nil ||
+	if recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
+		recordcodec.ValidateID(ids.KindOperation, record.OperationID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil ||
 		record.ExpectedCurrentRecordRevision <= 0 || record.ExpectedCurrentValueRevision <= 0 ||
 		record.CurrentKeyEra <= 0 || record.NextKeyEra != record.CurrentKeyEra+1 ||
 		!validBackupRecipient(record.NextRecipient) ||
@@ -1310,16 +1310,16 @@ func validateBackupKeyRotationRecord(record BackupKeyRotationRecord) error {
 }
 
 func validateBackupPostgresSnapshot(snapshot BackupPostgresSourceSnapshot) error {
-	if validateStableID(ids.KindEnvironment, snapshot.ConsumerEnvironmentID) != nil ||
-		validateStableID(
+	if recordcodec.ValidateID(ids.KindEnvironment, snapshot.ConsumerEnvironmentID) != nil ||
+		recordcodec.ValidateID(
 			ids.KindAttach,
 			snapshot.AttachID,
 		) != nil || snapshot.AttachRevision <= 0 ||
-		validateStableID(ids.KindProject, snapshot.BackingProjectID) != nil ||
+		recordcodec.ValidateID(ids.KindProject, snapshot.BackingProjectID) != nil ||
 		snapshot.BackingProjectRevision <= 0 ||
-		validateStableID(ids.KindEnvironment, snapshot.BackingEnvironmentID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvironment, snapshot.BackingEnvironmentID) != nil ||
 		snapshot.BackingEnvironmentRevision <= 0 ||
-		validateStableID(ids.KindService, snapshot.BackingServiceID) != nil ||
+		recordcodec.ValidateID(ids.KindService, snapshot.BackingServiceID) != nil ||
 		snapshot.BackingServiceRevision <= 0 || snapshot.AttachFactsRevision <= 0 ||
 		!validBackupPostgresIdentity(snapshot.Database) || !validBackupPostgresIdentity(snapshot.Role) {
 		return invalidBackupRuntimeRecord("postgres source snapshot is invalid")
@@ -1341,23 +1341,23 @@ func validBackupPostgresIdentity(value string) bool {
 }
 
 func validateBackupVolumeSnapshot(snapshot BackupVolumeSourceSnapshot) error {
-	if validateStableID(ids.KindEnvironment, snapshot.EnvironmentID) != nil ||
-		validateStableID(ids.KindVolume, snapshot.VolumeID) != nil ||
-		validateStableID(ids.KindTask, snapshot.DesiredRevisionID) != nil ||
+	if recordcodec.ValidateID(ids.KindEnvironment, snapshot.EnvironmentID) != nil ||
+		recordcodec.ValidateID(ids.KindVolume, snapshot.VolumeID) != nil ||
+		recordcodec.ValidateID(ids.KindTask, snapshot.DesiredRevisionID) != nil ||
 		snapshot.EnvironmentRevision <= 0 || snapshot.ProjectionRoot <= 0 ||
-		!validSHA256(snapshot.DependencyDigest) || snapshot.RenderGeneration == 0 ||
+		!recordcodec.ValidSHA256(snapshot.DependencyDigest) || snapshot.RenderGeneration == 0 ||
 		snapshot.ComposeVolumeKey == "" || snapshot.DockerVolumeName != "gp_vol_"+snapshot.VolumeID ||
 		snapshot.AuthorizedVolumeDir == "" {
 		return invalidBackupRuntimeRecord("volume source snapshot is invalid")
 	}
 	hasArtifactAuthority := snapshot.ArtifactID != "" || snapshot.ArtifactDigest != "" || snapshot.ArtifactRevision != 0
-	if hasArtifactAuthority && (validateStableID(ids.KindConfig, snapshot.ArtifactID) != nil ||
-		!validSHA256(snapshot.ArtifactDigest) || snapshot.ArtifactRevision <= 0) {
+	if hasArtifactAuthority && (recordcodec.ValidateID(ids.KindConfig, snapshot.ArtifactID) != nil ||
+		!recordcodec.ValidSHA256(snapshot.ArtifactDigest) || snapshot.ArtifactRevision <= 0) {
 		return invalidBackupRuntimeRecord("volume artifact authority is incomplete")
 	}
 	previousID := ""
 	for _, service := range snapshot.Services {
-		if validateStableID(ids.KindService, service.ServiceID) != nil ||
+		if recordcodec.ValidateID(ids.KindService, service.ServiceID) != nil ||
 			service.ServiceRevision < 0 ||
 			!validBackupServiceRuntimeIntent(service.PriorIntent) ||
 			(previousID != "" && service.ServiceID <= previousID) {
@@ -1378,17 +1378,17 @@ func validateBackupSourceIdentity(
 ) error {
 	switch kind {
 	case BackupRuntimeSourceAttach:
-		if validateStableID(ids.KindAttach, targetID) != nil ||
+		if recordcodec.ValidateID(ids.KindAttach, targetID) != nil ||
 			format != BackupRuntimeFormatPostgres {
 			return invalidBackupRuntimeRecord("postgres backup source identity is invalid")
 		}
 	case BackupRuntimeSourceVolume:
-		if validateStableID(ids.KindVolume, targetID) != nil ||
+		if recordcodec.ValidateID(ids.KindVolume, targetID) != nil ||
 			format != BackupRuntimeFormatVolume {
 			return invalidBackupRuntimeRecord("volume backup source identity is invalid")
 		}
 	case BackupRuntimeSourceConfig:
-		if validateStableID(ids.KindEnvironment, targetID) != nil ||
+		if recordcodec.ValidateID(ids.KindEnvironment, targetID) != nil ||
 			format != BackupRuntimeFormatConfig {
 			return invalidBackupRuntimeRecord("config backup source identity is invalid")
 		}
@@ -1452,7 +1452,7 @@ func validBackupObjectKey(
 }
 
 func recoveryPointIDMatchesInstant(recoveryPointID string, instant time.Time) bool {
-	if validateStableID(ids.KindRecoveryPoint, recoveryPointID) != nil ||
+	if recordcodec.ValidateID(ids.KindRecoveryPoint, recoveryPointID) != nil ||
 		!validBackupRuntimeInstant(instant) || instant.Nanosecond()%int(time.Millisecond) != 0 {
 		return false
 	}
@@ -1506,7 +1506,7 @@ func backupFailureCodeMatchesPhase(code BackupFailureCode, phase BackupSourceAtt
 }
 
 func validBackupArtifact(value BackupArtifactEvidence) bool {
-	return value.SizeBytes > 0 && validSHA256(value.SHA256)
+	return value.SizeBytes > 0 && recordcodec.ValidSHA256(value.SHA256)
 }
 
 func validBackupRuntimeInstant(value time.Time) bool {
@@ -1539,7 +1539,7 @@ func validateBackupSourceTargetIdentity(kind BackupSourceTargetKind, stableID st
 	default:
 		return invalidBackupRuntimeRecord("backup source-target kind is invalid")
 	}
-	if validateStableID(idKind, stableID) != nil {
+	if recordcodec.ValidateID(idKind, stableID) != nil {
 		return invalidBackupRuntimeRecord("backup source-target identity is invalid")
 	}
 	return nil
@@ -1698,7 +1698,7 @@ func optionalDigestMatchesCount(digest string, count uint32) bool {
 	if count == 0 {
 		return digest == ""
 	}
-	return validSHA256(digest)
+	return recordcodec.ValidSHA256(digest)
 }
 
 func pointerCount(values ...bool) int {

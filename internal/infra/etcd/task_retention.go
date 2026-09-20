@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -49,5 +50,5 @@ func (repository *TaskRepository) validateTaskRetentionReplay(
 }
 
 func validTaskPruneTime(value time.Time) bool {
-	return validateTimestamp("Task prune time", value) == nil
+	return recordcodec.ValidateTimestamp("Task prune time", value) == nil
 }

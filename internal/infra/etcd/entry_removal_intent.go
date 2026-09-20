@@ -103,7 +103,7 @@ func (repository *HierarchyRepository) GetEntryRemovalIntent(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[EntryRemovalIntent]{}, false, err
 	}
-	if validateStableID(ids.KindTask, taskID) != nil {
+	if recordcodec.ValidateID(ids.KindTask, taskID) != nil {
 		return Versioned[EntryRemovalIntent]{}, false, errs.New(
 			errs.KindValidationFailed,
 			"Entry removal intent Task id is invalid",
@@ -167,12 +167,12 @@ func decodeEntryRemovalIntent(value []byte) (EntryRemovalIntent, error) {
 }
 
 func validateEntryRemovalIntent(intent EntryRemovalIntent) error {
-	if validateStableID(ids.KindTask, intent.TaskID) != nil ||
-		validateStableID(ids.KindEnvironment, intent.EnvironmentID) != nil ||
-		validateStableID(ids.KindEnvEntry, intent.EntryID) != nil || intent.EntryRevision <= 0 {
+	if recordcodec.ValidateID(ids.KindTask, intent.TaskID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvironment, intent.EnvironmentID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvEntry, intent.EntryID) != nil || intent.EntryRevision <= 0 {
 		return errs.New(errs.KindValidationFailed, "Entry removal intent identity is invalid")
 	}
-	if err := validateTimestamp("Entry removal intent created_at", intent.CreatedAt); err != nil {
+	if err := recordcodec.ValidateTimestamp("Entry removal intent created_at", intent.CreatedAt); err != nil {
 		return err
 	}
 	if desired := intent.Desired; desired != nil {
@@ -192,7 +192,7 @@ func validateEntryRemovalIntent(intent EntryRemovalIntent) error {
 			intent.TerminalAt.Before(intent.CreatedAt) {
 			return errs.New(errs.KindValidationFailed, "Entry removal intent terminal state is invalid")
 		}
-		if err := validateTimestamp("Entry removal intent terminal_at", *intent.TerminalAt); err != nil {
+		if err := recordcodec.ValidateTimestamp("Entry removal intent terminal_at", *intent.TerminalAt); err != nil {
 			return err
 		}
 	}

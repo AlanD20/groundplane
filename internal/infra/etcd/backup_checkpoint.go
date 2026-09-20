@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -342,7 +343,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 
 func validateBackupCheckpointBinding(binding backupCheckpointBinding) error {
 	if (binding.taskType != TaskBackup && binding.taskType != TaskBackupPrune) ||
-		validateStableID(ids.KindRecoveryPoint, binding.pointID) != nil {
+		recordcodec.ValidateID(ids.KindRecoveryPoint, binding.pointID) != nil {
 		return errs.New(errs.KindValidationFailed, "backup checkpoint binding is invalid")
 	}
 	return nil
@@ -353,12 +354,12 @@ func (repository *BackupRuntimeRepository) loadBackupAssignmentFence(
 	input BackupAssignmentInput,
 	revision int64,
 ) ([]etcdstore.Condition, error) {
-	if validateStableID(ids.KindTask, input.TaskID) != nil ||
-		validateStableID(ids.KindAssignment, input.AssignmentID) != nil ||
-		validateStableID(ids.KindStep, input.StepID) != nil || revision <= 0 ||
+	if recordcodec.ValidateID(ids.KindTask, input.TaskID) != nil ||
+		recordcodec.ValidateID(ids.KindAssignment, input.AssignmentID) != nil ||
+		recordcodec.ValidateID(ids.KindStep, input.StepID) != nil || revision <= 0 ||
 		(input.AgentID == "" && input.AgentGeneration != 0) ||
 		(input.AgentID != "" &&
-			(validateStableID(ids.KindAgent, input.AgentID) != nil || input.AgentGeneration == 0)) {
+			(recordcodec.ValidateID(ids.KindAgent, input.AgentID) != nil || input.AgentGeneration == 0)) {
 		return nil, errs.New(errs.KindValidationFailed, "backup assignment fence is invalid")
 	}
 	taskResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -440,9 +441,9 @@ func (plan *backupCheckpointPlan) clear() {
 }
 
 func validateBackupCheckpointInput(input BackupCheckpointInput) error {
-	if validateStableID(ids.KindTask, input.TaskID) != nil ||
-		validateStableID(ids.KindAssignment, input.AssignmentID) != nil ||
-		validateStableID(ids.KindStep, input.StepID) != nil || input.Sequence == 0 {
+	if recordcodec.ValidateID(ids.KindTask, input.TaskID) != nil ||
+		recordcodec.ValidateID(ids.KindAssignment, input.AssignmentID) != nil ||
+		recordcodec.ValidateID(ids.KindStep, input.StepID) != nil || input.Sequence == 0 {
 		return errs.New(errs.KindValidationFailed, "backup checkpoint identity is invalid")
 	}
 	if input.AgentID == "" {
@@ -452,7 +453,7 @@ func validateBackupCheckpointInput(input BackupCheckpointInput) error {
 				"controller checkpoint agent identity is invalid",
 			)
 		}
-	} else if validateStableID(ids.KindAgent, input.AgentID) != nil || input.AgentGeneration == 0 {
+	} else if recordcodec.ValidateID(ids.KindAgent, input.AgentID) != nil || input.AgentGeneration == 0 {
 		return errs.New(errs.KindValidationFailed, "agent checkpoint identity is invalid")
 	}
 	return nil
@@ -464,7 +465,7 @@ func backupCheckpointDigest(payload BackupCheckpointPayload) (string, error) {
 	remaining.Kind = 0
 	remaining.PointID = ""
 	decodeDigest := func(value string) ([]byte, error) {
-		if !validSHA256(value) {
+		if !recordcodec.ValidSHA256(value) {
 			return nil, errs.New(errs.KindValidationFailed, "backup checkpoint digest field is invalid")
 		}
 		decoded, err := hex.DecodeString(value)
@@ -628,9 +629,9 @@ func decodeBackupCheckpointCursorRecord(value []byte) (backupCheckpointCursorRec
 }
 
 func validateBackupCheckpointCursorRecord(record backupCheckpointCursorRecord) error {
-	if validateStableID(ids.KindTask, record.TaskID) != nil ||
-		validateStableID(ids.KindAssignment, record.AssignmentID) != nil ||
-		validateStableID(ids.KindStep, record.StepID) != nil || record.NextSequence < 2 {
+	if recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
+		recordcodec.ValidateID(ids.KindAssignment, record.AssignmentID) != nil ||
+		recordcodec.ValidateID(ids.KindStep, record.StepID) != nil || record.NextSequence < 2 {
 		return errs.New(errs.KindValidationFailed, "backup checkpoint cursor is invalid")
 	}
 	return nil
@@ -653,11 +654,11 @@ func decodeBackupCheckpointDedupRecord(value []byte) (backupCheckpointDedupRecor
 }
 
 func validateBackupCheckpointDedupRecord(record backupCheckpointDedupRecord) error {
-	if validateStableID(ids.KindTask, record.TaskID) != nil ||
-		validateStableID(ids.KindAssignment, record.AssignmentID) != nil ||
-		validateStableID(ids.KindStep, record.StepID) != nil || record.Sequence == 0 ||
+	if recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
+		recordcodec.ValidateID(ids.KindAssignment, record.AssignmentID) != nil ||
+		recordcodec.ValidateID(ids.KindStep, record.StepID) != nil || record.Sequence == 0 ||
 		record.Kind < BackupCheckpointArtifactPrepared ||
-		record.Kind > BackupCheckpointUploadCompleted || !validSHA256(record.PayloadSHA256) {
+		record.Kind > BackupCheckpointUploadCompleted || !recordcodec.ValidSHA256(record.PayloadSHA256) {
 		return errs.New(
 			errs.KindValidationFailed,
 			"backup checkpoint deduplication record is invalid",

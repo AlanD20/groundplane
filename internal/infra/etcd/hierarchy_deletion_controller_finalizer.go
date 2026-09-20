@@ -26,7 +26,7 @@ func (repository *HierarchyDeletionRepository) CompleteControllerAction(
 	if err := validateContext(ctx); err != nil {
 		return HierarchyDeletionOperation{}, err
 	}
-	if validateTimestamp("hierarchy deletion Controller completion", completedAt) != nil ||
+	if recordcodec.ValidateTimestamp("hierarchy deletion Controller completion", completedAt) != nil ||
 		action.ProcedureKind != HierarchyDeletionProcedureController || action.ControllerProcedure == nil {
 		return HierarchyDeletionOperation{}, errs.New(
 			errs.KindValidationFailed,

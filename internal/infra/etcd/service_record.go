@@ -3,6 +3,7 @@ package etcd
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -69,10 +70,10 @@ func SetServiceRuntimeIntent(
 }
 
 func validateServiceRecord(record ServiceRecord) error {
-	if err := validateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
 		return err
 	}
-	if err := validateID(ids.KindService, record.Desired.ID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindService, record.Desired.ID); err != nil {
 		return err
 	}
 	if err := record.Desired.Validate(); err != nil {
@@ -90,7 +91,7 @@ func validateServiceRecord(record ServiceRecord) error {
 		}
 		return nil
 	}
-	if err := validateID(ids.KindNetwork, record.BackingNetworkID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindNetwork, record.BackingNetworkID); err != nil {
 		return errs.New(errs.KindValidationFailed, "adapter-backed Service requires a stable backing network id")
 	}
 	return nil

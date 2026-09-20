@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -13,7 +14,7 @@ import (
 func (repository *SecretRepository) BeginSecretDeletionWithTask(
 	ctx context.Context,
 	owner SecretOwner,
-	current Versioned[SecretRecord],
+	current Versioned[secretrecord.Record],
 	tombstone DeletionTombstoneRecord,
 	task TaskRecord,
 	marker IdempotencyMarker,
@@ -58,7 +59,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 		Keys: []string{
 			secretOwnerKey(current.Record.Secret),
 			secretScopedKey(current.Record.Secret),
-			secretValueKey(secretID),
+			secretrecord.ValueKey(secretID),
 		},
 		Revision: current.ReadRevision,
 	})
@@ -75,10 +76,10 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 			"Secret deletion indexes or encrypted value are corrupt",
 		)
 	}
-	encrypted, err := decodeSecretEncryptedValue(dependencies.Values[2].Value)
+	encrypted, err := secretrecord.DecodeEncryptedValue(dependencies.Values[2].Value)
 	if err != nil || encrypted.SecretID != secretID {
 		clear(encrypted.Ciphertext)
-		return IdempotencyTransactionResult{}, corruptSecretRecord()
+		return IdempotencyTransactionResult{}, secretrecord.CorruptRecord()
 	}
 	clear(encrypted.Ciphertext)
 
@@ -114,7 +115,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
-		{Key: secretRecordKey(secretID), ModRevision: current.Revision},
+		{Key: secretrecord.RecordKey(secretID), ModRevision: current.Revision},
 		{
 			Key:         secretOwnerKey(current.Record.Secret),
 			ModRevision: dependencies.Values[0].ModRevision,
@@ -123,7 +124,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 			Key:         secretScopedKey(current.Record.Secret),
 			ModRevision: dependencies.Values[1].ModRevision,
 		},
-		{Key: secretValueKey(secretID), ModRevision: dependencies.Values[2].ModRevision},
+		{Key: secretrecord.ValueKey(secretID), ModRevision: dependencies.Values[2].ModRevision},
 		{Key: deletionTombstoneKey(string(DeletionTargetSecret), secretID)},
 	}
 	if owner.Project != nil {
@@ -203,7 +204,7 @@ func secretIdempotencyScope(owner SecretOwner) (IdempotencyScopeKind, string) {
 
 func classifySecretDeletionStartConflict(
 	owner SecretOwner,
-	current Versioned[SecretRecord],
+	current Versioned[secretrecord.Record],
 	operationID string,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*etcdstore.KeyValue) error {

@@ -3,6 +3,7 @@ package component
 import (
 	"context"
 	"encoding/json"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -17,7 +18,7 @@ type credentialHierarchy interface {
 }
 
 type credentialSecrets interface {
-	GetSecret(context.Context, string) (etcd.Versioned[etcd.SecretRecord], error)
+	GetSecret(context.Context, string) (etcd.Versioned[secretrecord.Record], error)
 }
 
 type credentialCreator interface {

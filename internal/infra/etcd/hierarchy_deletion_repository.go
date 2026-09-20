@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
 	"time"
 
@@ -47,7 +48,7 @@ func (repository *HierarchyDeletionRepository) ResolveProjectDeletionTargetKind(
 	if err := validateContext(ctx); err != nil {
 		return "", err
 	}
-	if err := validateID(ids.KindProject, projectID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindProject, projectID); err != nil {
 		return "", err
 	}
 	project, err := getRecord(
@@ -88,7 +89,7 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 	}
 	switch requested {
 	case HierarchyDeletionTargetTenant:
-		if err := validateID(ids.KindTenant, targetID); err != nil {
+		if err := recordcodec.ValidateID(ids.KindTenant, targetID); err != nil {
 			return HierarchyDeletionTargetResolution{}, err
 		}
 		return HierarchyDeletionTargetResolution{
@@ -120,7 +121,7 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 			ScopeID:    project.Record.TenantID,
 		}, nil
 	case HierarchyDeletionTargetBacking:
-		if err := validateID(ids.KindProject, targetID); err != nil {
+		if err := recordcodec.ValidateID(ids.KindProject, targetID); err != nil {
 			return HierarchyDeletionTargetResolution{}, err
 		}
 		project, err := getRecord(ctx, repository.store, projectKey(targetID), targetID, errs.KindProjectNotFound,
@@ -140,7 +141,7 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 			ScopeID:    "-",
 		}, nil
 	case HierarchyDeletionTargetEnvironment:
-		if err := validateID(ids.KindEnvironment, targetID); err != nil {
+		if err := recordcodec.ValidateID(ids.KindEnvironment, targetID); err != nil {
 			return HierarchyDeletionTargetResolution{}, err
 		}
 		environment, err := getRecord(
@@ -155,7 +156,7 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 		if err != nil {
 			return HierarchyDeletionTargetResolution{}, err
 		}
-		if err := validateID(ids.KindProject, environment.Record.ProjectID); err != nil {
+		if err := recordcodec.ValidateID(ids.KindProject, environment.Record.ProjectID); err != nil {
 			return HierarchyDeletionTargetResolution{}, corruptHierarchyDeletion()
 		}
 		return HierarchyDeletionTargetResolution{

@@ -3,6 +3,8 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -234,7 +236,7 @@ func (repository *ConnectorRepository) GetConnector(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[ConnectorRecord]{}, err
 	}
-	if err := validateID(ids.KindConnector, id); err != nil {
+	if err := recordcodec.ValidateID(ids.KindConnector, id); err != nil {
 		return Versioned[ConnectorRecord]{}, err
 	}
 	return getRecord(
@@ -281,7 +283,7 @@ func (repository *ConnectorRepository) ListConnectors(
 	environmentID string,
 	request PageRequest,
 ) (Page[ConnectorRecord], error) {
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return Page[ConnectorRecord]{}, err
 	}
 	return listIndexPage(
@@ -383,9 +385,9 @@ func (repository *ConnectorRepository) loadConnectorSecretReferenceFence(
 			}
 			secretID := string(selected.Value)
 			candidateKeys = append(candidateKeys,
-				secretRecordKey(secretID),
+				secretrecord.RecordKey(secretID),
 				deletionTombstoneKey(string(DeletionTargetSecret), secretID),
-				secretValueKey(secretID),
+				secretrecord.ValueKey(secretID),
 			)
 		}
 	}

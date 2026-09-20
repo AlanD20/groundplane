@@ -625,7 +625,7 @@ func (repository *AttachRepository) GetAttach(ctx context.Context, id string) (V
 	if err := validateContext(ctx); err != nil {
 		return Versioned[AttachRecord]{}, err
 	}
-	if err := validateID(ids.KindAttach, id); err != nil {
+	if err := recordcodec.ValidateID(ids.KindAttach, id); err != nil {
 		return Versioned[AttachRecord]{}, err
 	}
 	return getRecord(
@@ -647,7 +647,7 @@ func (repository *AttachRepository) ResolveAttach(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[AttachRecord]{}, err
 	}
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return Versioned[AttachRecord]{}, err
 	}
 	if ids.Validate(ids.KindAttach, reference) == nil {
@@ -700,7 +700,7 @@ func (repository *AttachRepository) ListAttaches(
 	environmentID string,
 	request PageRequest,
 ) (Page[AttachRecord], error) {
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return Page[AttachRecord]{}, err
 	}
 	return listIndexPage(
@@ -1710,7 +1710,7 @@ func validateAttachDependentGrantRange(
 }
 
 func encodeAttachDependentGrantIndex(attachID string, grantAttachIDs []string) ([]byte, error) {
-	if validateStableID(ids.KindAttach, attachID) != nil ||
+	if recordcodec.ValidateID(ids.KindAttach, attachID) != nil ||
 		validateSortedStableIDs(grantAttachIDs, ids.KindAttach, "Attach dependent grant_attach_ids") != nil {
 		return nil, errs.New(errs.KindValidationFailed, "Attach dependent grant index is invalid")
 	}

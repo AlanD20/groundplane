@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backupschedule"
@@ -44,7 +45,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 	if err := validateContext(ctx); err != nil {
 		return BackupPolicyProjection{}, err
 	}
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return BackupPolicyProjection{}, err
 	}
 	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{

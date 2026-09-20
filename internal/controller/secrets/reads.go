@@ -2,6 +2,7 @@ package secrets
 
 import (
 	"context"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -13,9 +14,9 @@ import (
 
 type secretReadRepository interface {
 	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
-	GetSecret(context.Context, string) (etcd.Versioned[etcd.SecretRecord], error)
-	GetSecretValue(context.Context, etcd.Versioned[etcd.SecretRecord]) (etcd.SecretEncryptedValue, error)
-	ListSecrets(context.Context, core.SecretScope, string, etcd.PageRequest) (etcd.Page[etcd.SecretRecord], error)
+	GetSecret(context.Context, string) (etcd.Versioned[secretrecord.Record], error)
+	GetSecretValue(context.Context, etcd.Versioned[secretrecord.Record]) (secretrecord.EncryptedValue, error)
+	ListSecrets(context.Context, core.SecretScope, string, etcd.PageRequest) (etcd.Page[secretrecord.Record], error)
 }
 
 type secretReadService struct {
@@ -38,12 +39,12 @@ func (service *secretReadService) ListSecrets(
 	scope core.SecretScope,
 	projectID string,
 	request etcd.PageRequest,
-) (etcd.Page[etcd.SecretRecord], error) {
+) (etcd.Page[secretrecord.Record], error) {
 	if ctx == nil {
-		return etcd.Page[etcd.SecretRecord]{}, errs.New(errs.KindInternal, "Secret list context is required")
+		return etcd.Page[secretrecord.Record]{}, errs.New(errs.KindInternal, "Secret list context is required")
 	}
 	if request.Limit < 0 {
-		return etcd.Page[etcd.SecretRecord]{}, errs.New(
+		return etcd.Page[secretrecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Secret list limit must be a positive integer",
 		)
@@ -51,23 +52,23 @@ func (service *secretReadService) ListSecrets(
 	switch scope {
 	case core.SecretScopeProject:
 		if ids.Validate(ids.KindProject, projectID) != nil {
-			return etcd.Page[etcd.SecretRecord]{}, errs.New(
+			return etcd.Page[secretrecord.Record]{}, errs.New(
 				errs.KindValidationFailed,
 				"Secret list requires a stable Project id",
 			)
 		}
 		if _, err := service.repository.GetProject(ctx, projectID); err != nil {
-			return etcd.Page[etcd.SecretRecord]{}, err
+			return etcd.Page[secretrecord.Record]{}, err
 		}
 	case core.SecretScopePlatform:
 		if projectID != "" {
-			return etcd.Page[etcd.SecretRecord]{}, errs.New(
+			return etcd.Page[secretrecord.Record]{}, errs.New(
 				errs.KindValidationFailed,
 				"Platform Secret list must not set a Project id",
 			)
 		}
 	default:
-		return etcd.Page[etcd.SecretRecord]{}, errs.New(
+		return etcd.Page[secretrecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Secret list scope is invalid",
 		)
@@ -78,12 +79,12 @@ func (service *secretReadService) ListSecrets(
 func (service *secretReadService) GetSecret(
 	ctx context.Context,
 	secretID string,
-) (etcd.Versioned[etcd.SecretRecord], error) {
+) (etcd.Versioned[secretrecord.Record], error) {
 	if ctx == nil {
-		return etcd.Versioned[etcd.SecretRecord]{}, errs.New(errs.KindInternal, "Secret read context is required")
+		return etcd.Versioned[secretrecord.Record]{}, errs.New(errs.KindInternal, "Secret read context is required")
 	}
 	if ids.Validate(ids.KindSecret, secretID) != nil {
-		return etcd.Versioned[etcd.SecretRecord]{}, errs.New(
+		return etcd.Versioned[secretrecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Secret read requires a stable Secret id",
 		)
@@ -150,14 +151,14 @@ func (repository *durableSecretReadRepository) GetProject(
 func (repository *durableSecretReadRepository) GetSecret(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.SecretRecord], error) {
+) (etcd.Versioned[secretrecord.Record], error) {
 	return repository.secrets.GetSecret(ctx, id)
 }
 
 func (repository *durableSecretReadRepository) GetSecretValue(
 	ctx context.Context,
-	current etcd.Versioned[etcd.SecretRecord],
-) (etcd.SecretEncryptedValue, error) {
+	current etcd.Versioned[secretrecord.Record],
+) (secretrecord.EncryptedValue, error) {
 	return repository.secrets.GetSecretValue(ctx, current)
 }
 
@@ -166,15 +167,15 @@ func (repository *durableSecretReadRepository) ListSecrets(
 	scope core.SecretScope,
 	projectID string,
 	request etcd.PageRequest,
-) (etcd.Page[etcd.SecretRecord], error) {
+) (etcd.Page[secretrecord.Record], error) {
 	return repository.secrets.ListSecrets(ctx, scope, projectID, request)
 }
 
 func (repository *durableSecretReadRepository) CreateSecretIdempotent(
 	ctx context.Context,
 	owner etcd.SecretOwner,
-	record etcd.SecretRecord,
-	value etcd.SecretEncryptedValue,
+	record secretrecord.Record,
+	value secretrecord.EncryptedValue,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.secrets.CreateSecretIdempotent(ctx, owner, record, value, marker)
@@ -183,7 +184,7 @@ func (repository *durableSecretReadRepository) CreateSecretIdempotent(
 func (repository *durableSecretReadRepository) BeginSecretDeletionWithTask(
 	ctx context.Context,
 	owner etcd.SecretOwner,
-	current etcd.Versioned[etcd.SecretRecord],
+	current etcd.Versioned[secretrecord.Record],
 	tombstone etcd.DeletionTombstoneRecord,
 	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,

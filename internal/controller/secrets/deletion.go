@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"net/http"
 	"time"
 
@@ -25,11 +26,11 @@ const (
 
 type secretDeletionRepository interface {
 	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
-	GetSecret(context.Context, string) (etcd.Versioned[etcd.SecretRecord], error)
+	GetSecret(context.Context, string) (etcd.Versioned[secretrecord.Record], error)
 	BeginSecretDeletionWithTask(
 		context.Context,
 		etcd.SecretOwner,
-		etcd.Versioned[etcd.SecretRecord],
+		etcd.Versioned[secretrecord.Record],
 		etcd.DeletionTombstoneRecord,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,

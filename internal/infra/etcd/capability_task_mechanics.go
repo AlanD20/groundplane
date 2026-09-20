@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/volumeidentity"
@@ -13,7 +14,7 @@ import (
 // migration source package.
 func ValidateCapabilityContext(ctx context.Context) error { return validateContext(ctx) }
 func ValidateCapabilityTimestamp(field string, value time.Time) error {
-	return validateTimestamp(field, value)
+	return recordcodec.ValidateTimestamp(field, value)
 }
 func ValidateCapabilityTaskRecord(record TaskRecord) error { return validateTaskRecord(record) }
 func ValidateCapabilityTaskResult(result TaskResultRecord, steps []TaskStepRecord, status TaskStatus) error {

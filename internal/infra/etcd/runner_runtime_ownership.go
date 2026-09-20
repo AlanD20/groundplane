@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -95,7 +96,7 @@ func (repository *RunnerRepository) GetRunnerRuntimeOwnership(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[RunnerRuntimeOwnershipRecord]{}, false, err
 	}
-	if err := validateID(ids.KindRunner, runnerID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindRunner, runnerID); err != nil {
 		return Versioned[RunnerRuntimeOwnershipRecord]{}, false, err
 	}
 	result, err := repository.store.Get(ctx, runnerRuntimeOwnershipKey(runnerID))

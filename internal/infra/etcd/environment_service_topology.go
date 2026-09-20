@@ -21,7 +21,7 @@ func (repository *ServiceRepository) GetService(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[ServiceRecord]{}, err
 	}
-	if err := validateID(ids.KindService, serviceID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindService, serviceID); err != nil {
 		return Versioned[ServiceRecord]{}, err
 	}
 	return findServiceAtRevision(ctx, repository.store, serviceID, 0)
@@ -78,7 +78,7 @@ func (repository *ServiceRepository) ListServices(
 	if err := validateContext(ctx); err != nil {
 		return Page[ServiceRecord]{}, err
 	}
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return Page[ServiceRecord]{}, err
 	}
 	limit, revision, lastID, query, err := normalizePageRequest(
@@ -126,7 +126,7 @@ func currentEnvironmentProjectionAtRevision(
 	environmentID string,
 	revision int64,
 ) (Versioned[EnvironmentComposeProjection], bool, error) {
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return Versioned[EnvironmentComposeProjection]{}, false, err
 	}
 	hierarchy := &HierarchyRepository{store: store}

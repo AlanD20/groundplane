@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"encoding/hex"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/netip"
 	"time"
 
@@ -59,14 +60,14 @@ func validateTaskDNSResolverObservationEvidence(
 			ids.KindService,
 			evidence.ServiceID,
 		) != nil || ids.Validate(ids.KindConfig, evidence.ArtifactID) != nil ||
-		evidence.RenderGeneration == 0 || !validSHA256(evidence.ArtifactSHA256) ||
-		!imageref.IsDigestPinned(evidence.ImageReference) || !validSHA256(evidence.VerifiedImageDigest) ||
+		evidence.RenderGeneration == 0 || !recordcodec.ValidSHA256(evidence.ArtifactSHA256) ||
+		!imageref.IsDigestPinned(evidence.ImageReference) || !recordcodec.ValidSHA256(evidence.VerifiedImageDigest) ||
 		!validNonZeroSHA256(evidence.ImageConfigDigest) ||
 		hex.EncodeToString(canonical.GetImageConfigDigest()) != evidence.ImageConfigDigest ||
 		evidence.ListenEndpoint != "127.0.0.1:53" || !validSHA512(evidence.ReloadSHA512) ||
-		validateTimestamp("DNS resolver observation observed_at", evidence.ObservedAt) != nil || !staticValid ||
+		recordcodec.ValidateTimestamp("DNS resolver observation observed_at", evidence.ObservedAt) != nil || !staticValid ||
 		!evidence.RecursiveQuerySucceeded || evidence.ForwarderSuccessCount != evidence.ForwarderQueryCount ||
-		evidence.ForwarderQueryCount > 8 || !validSHA256(evidence.ProofSHA256) {
+		evidence.ForwarderQueryCount > 8 || !recordcodec.ValidSHA256(evidence.ProofSHA256) {
 		return errs.New(errs.KindValidationFailed, "task DNS resolver observation evidence is invalid")
 	}
 	return nil

@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -25,7 +26,7 @@ func cloneRetryTask(source TaskRecord, id string, actor TaskActor, createdAt tim
 			source.Status,
 		)
 	}
-	if err := validateStableID(ids.KindTask, id); err != nil {
+	if err := recordcodec.ValidateID(ids.KindTask, id); err != nil {
 		return TaskRecord{}, err
 	}
 	if id == source.ID {

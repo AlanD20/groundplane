@@ -143,19 +143,19 @@ func decodeHostResolutionProjectionRecord(value []byte) (HostResolutionProjectio
 }
 
 func validateHostResolutionProjectionRecord(record HostResolutionProjectionRecord) error {
-	if record.InputRevision <= 0 || !validSHA256(record.InputSHA256) || record.Routes == nil {
+	if record.InputRevision <= 0 || !recordcodec.ValidSHA256(record.InputSHA256) || record.Routes == nil {
 		return errs.New(errs.KindValidationFailed, "host-resolution projection identity is invalid")
 	}
 	previous := ""
 	seenRoutes := make(map[string]struct{}, len(record.Routes))
 	seenHosts := make(map[string]string, len(record.Routes))
 	for _, route := range record.Routes {
-		if validateStableID(ids.KindEnvironment, route.EnvironmentID) != nil ||
-			validateStableID(ids.KindTask, route.DesiredRevisionID) != nil || route.AppliedRevision <= 0 ||
-			validateStableID(
+		if recordcodec.ValidateID(ids.KindEnvironment, route.EnvironmentID) != nil ||
+			recordcodec.ValidateID(ids.KindTask, route.DesiredRevisionID) != nil || route.AppliedRevision <= 0 ||
+			recordcodec.ValidateID(
 				ids.KindRoute,
 				route.RouteID,
-			) != nil || validateStableID(ids.KindService, route.ServiceID) != nil ||
+			) != nil || recordcodec.ValidateID(ids.KindService, route.ServiceID) != nil ||
 			!validHostResolutionName(route.Hostname) || !validHostResolutionAddress(route.IPv4) {
 			return errs.New(errs.KindValidationFailed, "host-resolution Route record is invalid")
 		}

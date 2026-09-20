@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
 	"time"
 
@@ -184,7 +185,7 @@ func (repository *BackupRuntimeRepository) GetBackupOrphan(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[BackupOrphanRecord]{}, false, err
 	}
-	if err := validateID(ids.KindRecoveryPoint, recoveryPointID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindRecoveryPoint, recoveryPointID); err != nil {
 		return Versioned[BackupOrphanRecord]{}, false, err
 	}
 	primaryKey := backupOrphanKey(recoveryPointID)
@@ -980,7 +981,7 @@ func (repository *BackupRuntimeRepository) GetBackupRecoveryPoint(
 	ctx context.Context,
 	recoveryPointID string,
 ) (Versioned[BackupRecoveryPointRecord], error) {
-	if err := validateID(ids.KindRecoveryPoint, recoveryPointID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindRecoveryPoint, recoveryPointID); err != nil {
 		return Versioned[BackupRecoveryPointRecord]{}, err
 	}
 	record, found, err := getOptionalBackupRuntimeRecord(
@@ -1066,7 +1067,7 @@ func (repository *BackupRuntimeRepository) ListBackupRecoveryPointsByEnvironment
 	environmentID string,
 	request BackupRuntimeListRequest,
 ) (BackupRuntimePage[BackupRecoveryPointRecord], error) {
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return BackupRuntimePage[BackupRecoveryPointRecord]{}, err
 	}
 	return repository.listBackupRecoveryPoints(
@@ -1169,7 +1170,7 @@ func (repository *BackupRuntimeRepository) ListBackupRunsByEnvironment(
 	environmentID string,
 	request BackupRuntimeListRequest,
 ) (BackupRuntimePage[BackupRunRecord], error) {
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return BackupRuntimePage[BackupRunRecord]{}, err
 	}
 	prefix := backupRunEnvironmentPrefix + environmentID + "/"
@@ -1193,7 +1194,7 @@ func (repository *BackupRuntimeRepository) ListBackupRunsByEnvironment(
 	keys := make([]string, len(index.Values))
 	for position, item := range index.Values {
 		taskID := string(item.Value)
-		if validateStableID(ids.KindTask, taskID) != nil ||
+		if recordcodec.ValidateID(ids.KindTask, taskID) != nil ||
 			item.Key != prefix+taskID {
 			return BackupRuntimePage[BackupRunRecord]{}, corruptBackupRuntimeRecord()
 		}
@@ -1252,7 +1253,7 @@ func (repository *BackupRuntimeRepository) ListBackupOrphansByEnvironment(
 	environmentID string,
 	request BackupRuntimeListRequest,
 ) (BackupRuntimePage[BackupOrphanRecord], error) {
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return BackupRuntimePage[BackupOrphanRecord]{}, err
 	}
 	prefix := backupOrphanEnvironmentPrefix + environmentID + "/"
@@ -1277,7 +1278,7 @@ func (repository *BackupRuntimeRepository) ListBackupOrphansByEnvironment(
 	pointIDs := make([]string, len(index.Values))
 	for position, item := range index.Values {
 		pointID := string(item.Value)
-		if validateStableID(ids.KindRecoveryPoint, pointID) != nil {
+		if recordcodec.ValidateID(ids.KindRecoveryPoint, pointID) != nil {
 			return BackupRuntimePage[BackupOrphanRecord]{}, corruptBackupRuntimeRecord()
 		}
 		expected, keyErr := backupOrphanEnvironmentIndexKey(environmentID, pointID)
@@ -1369,7 +1370,7 @@ func (repository *BackupRuntimeRepository) ListBackupRecoveryPointsBySource(
 	sourceID string,
 	request BackupRuntimeListRequest,
 ) (BackupRuntimePage[BackupRecoveryPointRecord], error) {
-	if err := validateID(ids.KindBackupSource, sourceID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindBackupSource, sourceID); err != nil {
 		return BackupRuntimePage[BackupRecoveryPointRecord]{}, err
 	}
 	return repository.listBackupRecoveryPoints(
@@ -1388,7 +1389,7 @@ func (repository *BackupRuntimeRepository) ListBackupRecoveryPointsByConnector(
 	connectorID string,
 	request BackupRuntimeListRequest,
 ) (BackupRuntimePage[BackupRecoveryPointRecord], error) {
-	if err := validateID(ids.KindConnector, connectorID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindConnector, connectorID); err != nil {
 		return BackupRuntimePage[BackupRecoveryPointRecord]{}, err
 	}
 	return repository.listBackupRecoveryPoints(
@@ -1430,7 +1431,7 @@ func (repository *BackupRuntimeRepository) listBackupRecoveryPoints(
 	pointIDs := make([]string, len(index.Values))
 	for position, item := range index.Values {
 		pointID := string(item.Value)
-		if validateStableID(ids.KindRecoveryPoint, pointID) != nil {
+		if recordcodec.ValidateID(ids.KindRecoveryPoint, pointID) != nil {
 			return BackupRuntimePage[BackupRecoveryPointRecord]{}, corruptBackupRuntimeRecord()
 		}
 		keys = append(keys, backupRecoveryPointKey(pointID), backupRecoveryPointPruneKey(pointID))
@@ -1582,10 +1583,10 @@ func (repository *BackupRuntimeRepository) GetBackupRetentionSweep(
 	sourceID string,
 	triggerRecoveryPointID string,
 ) (Versioned[BackupRetentionSweepRecord], bool, error) {
-	if err := validateID(ids.KindBackupSource, sourceID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindBackupSource, sourceID); err != nil {
 		return Versioned[BackupRetentionSweepRecord]{}, false, err
 	}
-	if err := validateID(ids.KindRecoveryPoint, triggerRecoveryPointID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindRecoveryPoint, triggerRecoveryPointID); err != nil {
 		return Versioned[BackupRetentionSweepRecord]{}, false, err
 	}
 	record, found, err := getOptionalBackupRuntimeRecord(
@@ -1640,7 +1641,7 @@ func (repository *BackupRuntimeRepository) ListBackupRetentionSweepsBySource(
 	sourceID string,
 	request BackupRuntimeListRequest,
 ) (BackupRuntimePage[BackupRetentionSweepRecord], error) {
-	if err := validateID(ids.KindBackupSource, sourceID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindBackupSource, sourceID); err != nil {
 		return BackupRuntimePage[BackupRetentionSweepRecord]{}, err
 	}
 	prefix := backupRetentionPrefix + sourceID + "/"
@@ -2768,10 +2769,10 @@ func validBackupRuntimeListCursor(prefix string, cursor string) bool {
 	case strings.HasPrefix(prefix, backupRecoveryPointConnectorPrefix),
 		strings.HasPrefix(prefix, backupOrphanEnvironmentPrefix),
 		strings.HasPrefix(prefix, backupRetentionPrefix):
-		return validateStableID(ids.KindRecoveryPoint, suffix) == nil
+		return recordcodec.ValidateID(ids.KindRecoveryPoint, suffix) == nil
 	case strings.HasPrefix(prefix, backupRunEnvironmentPrefix),
 		strings.HasPrefix(prefix, backupRestoreEnvironmentPrefix):
-		return validateStableID(ids.KindTask, suffix) == nil
+		return recordcodec.ValidateID(ids.KindTask, suffix) == nil
 	default:
 		return true
 	}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"io"
 	"log/slog"
 	"net/http"
@@ -22,8 +23,8 @@ import (
 )
 
 type SecretReader interface {
-	GetSecret(context.Context, string) (etcd.Versioned[etcd.SecretRecord], error)
-	ListSecrets(context.Context, core.SecretScope, string, etcd.PageRequest) (etcd.Page[etcd.SecretRecord], error)
+	GetSecret(context.Context, string) (etcd.Versioned[secretrecord.Record], error)
+	ListSecrets(context.Context, core.SecretScope, string, etcd.PageRequest) (etcd.Page[secretrecord.Record], error)
 	RevealSecret(context.Context, string) (string, error)
 }
 
@@ -398,7 +399,7 @@ func secretListRequest(
 	return core.SecretScopeProject, projectID, etcd.PageRequest{Limit: limit, Cursor: cursor}, nil
 }
 
-func secretResponse(record etcd.SecretRecord) apiTypes.Secret {
+func secretResponse(record secretrecord.Record) apiTypes.Secret {
 	secret := record.Secret
 	return apiTypes.Secret{
 		ID: secret.ID, Scope: string(secret.Scope), ProjectID: secret.ProjectID,

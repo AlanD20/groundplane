@@ -63,7 +63,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 			"Component candidate identity is invalid",
 		)
 	}
-	if err := validateTimestamp("Component candidate created_at", createdAt); err != nil {
+	if err := recordcodec.ValidateTimestamp("Component candidate created_at", createdAt); err != nil {
 		return ComponentTaskPreparation{}, err
 	}
 	if len(inputs) == 0 || len(inputs) > 2 {

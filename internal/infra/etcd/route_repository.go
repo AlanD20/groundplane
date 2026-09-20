@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -86,7 +87,7 @@ func (repository *RouteRepository) GetRoute(ctx context.Context, id string) (Ver
 	if err := validateContext(ctx); err != nil {
 		return Versioned[RouteRecord]{}, err
 	}
-	if err := validateID(ids.KindRoute, id); err != nil {
+	if err := recordcodec.ValidateID(ids.KindRoute, id); err != nil {
 		return Versioned[RouteRecord]{}, err
 	}
 	return findRouteAtRevision(ctx, repository.store, id, 0)
@@ -97,7 +98,7 @@ func (repository *RouteRepository) ListRoutes(
 	environmentID string,
 	request PageRequest,
 ) (Page[RouteRecord], error) {
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return Page[RouteRecord]{}, err
 	}
 	return listRoutesFromDesiredHead(ctx, repository.store, environmentID, request)

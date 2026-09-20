@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"maps"
 	"time"
 
@@ -173,7 +174,7 @@ func taskOwnsBackingZoneCascade(task TaskRecord) (bool, error) {
 		ids.Validate(ids.KindEnvironment, task.Params[TaskZoneEnvironmentParam]) != nil ||
 		ids.Validate(ids.KindOperation, task.Params[TaskZoneRemovalOperationParam]) != nil ||
 		ids.Validate(ids.KindTask, task.Params[EnvironmentDesiredRevisionParam]) != nil ||
-		!validSHA256(task.Params[TaskZoneImpactTokenParam]) {
+		!recordcodec.ValidSHA256(task.Params[TaskZoneImpactTokenParam]) {
 		return false, errs.New(errs.KindInternal, "backing Zone cascade Task has invalid durable input")
 	}
 	return true, nil

@@ -141,17 +141,17 @@ func decodeTaskAssignment(value []byte) (TaskAssignmentRecord, error) {
 }
 
 func validateTaskAssignment(record TaskAssignmentRecord) error {
-	if validateStableID(ids.KindAssignment, record.AssignmentID) != nil ||
-		validateStableID(ids.KindTask, record.TaskID) != nil || !validTaskExecutor(record.Executor) ||
+	if recordcodec.ValidateID(ids.KindAssignment, record.AssignmentID) != nil ||
+		recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil || !validTaskExecutor(record.Executor) ||
 		record.ClaimedTaskRevision <= 0 ||
 		record.ExecutionEpoch == 0 ||
-		validateTimestamp("task assignment assigned_at", record.AssignedAt) != nil ||
-		validateTimestamp("task assignment deadline", record.Deadline) != nil ||
+		recordcodec.ValidateTimestamp("task assignment assigned_at", record.AssignedAt) != nil ||
+		recordcodec.ValidateTimestamp("task assignment deadline", record.Deadline) != nil ||
 		!record.Deadline.After(record.AssignedAt) || !record.RecoveryDeadline.After(record.Deadline) {
 		return corruptTaskAssignment()
 	}
 	if record.Executor == TaskExecutorAgent &&
-		(validateStableID(ids.KindAgent, record.AgentID) != nil || record.AgentGeneration == 0) {
+		(recordcodec.ValidateID(ids.KindAgent, record.AgentID) != nil || record.AgentGeneration == 0) {
 		return corruptTaskAssignment()
 	}
 	if record.Executor == TaskExecutorController && (record.AgentID != "" || record.AgentGeneration != 0) {
@@ -163,9 +163,9 @@ func validateTaskAssignment(record TaskAssignmentRecord) error {
 			return corruptTaskAssignment()
 		}
 	case TaskExecutionModeRecoveryOnly:
-		if !validSHA256(record.ReleaseRecoveryRecordSHA256) ||
+		if !recordcodec.ValidSHA256(record.ReleaseRecoveryRecordSHA256) ||
 			(!record.RecoveryExecutionDeadline.IsZero() &&
-				(validateTimestamp("task assignment recovery execution deadline", record.RecoveryExecutionDeadline) != nil ||
+				(recordcodec.ValidateTimestamp("task assignment recovery execution deadline", record.RecoveryExecutionDeadline) != nil ||
 					!record.RecoveryExecutionDeadline.After(record.RecoveryDeadline))) {
 			return corruptTaskAssignment()
 		}
@@ -336,7 +336,7 @@ func (repository *TaskRepository) retryTask(
 	if err := validateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if validateStableID(ids.KindTask, sourceTaskID) != nil {
+	if recordcodec.ValidateID(ids.KindTask, sourceTaskID) != nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "source Task id is invalid")
 	}
 	source, err := repository.GetTask(ctx, sourceTaskID)
@@ -738,11 +738,11 @@ func (repository *TaskRepository) claimNextTask(
 		return TaskAssignment{}, false, err
 	}
 	if !validTaskExecutor(executor) ||
-		(executor == TaskExecutorAgent && (validateStableID(ids.KindAgent, agentID) != nil || agentGeneration == 0)) ||
+		(executor == TaskExecutorAgent && (recordcodec.ValidateID(ids.KindAgent, agentID) != nil || agentGeneration == 0)) ||
 		(executor == TaskExecutorController && (agentID != "" || agentGeneration != 0)) {
 		return TaskAssignment{}, false, errs.New(errs.KindValidationFailed, "task execution claim identity is invalid")
 	}
-	if err := validateTimestamp("task assignment assigned_at", assignedAt); err != nil {
+	if err := recordcodec.ValidateTimestamp("task assignment assigned_at", assignedAt); err != nil {
 		return TaskAssignment{}, false, err
 	}
 
@@ -1106,7 +1106,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 	if err := validateContext(ctx); err != nil {
 		return nil, err
 	}
-	if validateStableID(ids.KindAgent, agentID) != nil || agentGeneration == 0 || maximum <= 0 {
+	if recordcodec.ValidateID(ids.KindAgent, agentID) != nil || agentGeneration == 0 || maximum <= 0 {
 		return nil, errs.New(errs.KindValidationFailed, "agent assignment query is invalid")
 	}
 	assignments, err := repository.store.Range(ctx, etcdstore.RangeRequest{
@@ -1346,7 +1346,7 @@ func (repository *TaskRepository) TimeoutAgentAssignments(
 	if err := validateContext(ctx); err != nil {
 		return 0, err
 	}
-	if err := validateTimestamp("stale Agent task terminal_at", terminalAt); err != nil {
+	if err := recordcodec.ValidateTimestamp("stale Agent task terminal_at", terminalAt); err != nil {
 		return 0, err
 	}
 	assignments, err := repository.ListAgentAssignments(ctx, agentID, agentGeneration, maximum)
@@ -1488,18 +1488,18 @@ func (repository *TaskRepository) acknowledgeTask(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[TaskRecord]{}, err
 	}
-	if !validTaskExecutor(executor) || validateStableID(ids.KindTask, taskID) != nil ||
+	if !validTaskExecutor(executor) || recordcodec.ValidateID(ids.KindTask, taskID) != nil ||
 		!isTerminalTaskStatus(terminalStatus) ||
-		(executor == TaskExecutorAgent && (validateStableID(ids.KindAgent, agentID) != nil || agentGeneration == 0 ||
-			validateStableID(ids.KindAssignment, assignmentID) != nil || result == nil)) ||
+		(executor == TaskExecutorAgent && (recordcodec.ValidateID(ids.KindAgent, agentID) != nil || agentGeneration == 0 ||
+			recordcodec.ValidateID(ids.KindAssignment, assignmentID) != nil || result == nil)) ||
 		(executor == TaskExecutorController &&
 			(agentID != "" || agentGeneration != 0 || assignmentID != "" || result != nil)) {
 		return Versioned[TaskRecord]{}, errs.New(errs.KindValidationFailed, "task acknowledgement is invalid")
 	}
-	if err := validateTimestamp("task terminal_at", terminalAt); err != nil {
+	if err := recordcodec.ValidateTimestamp("task terminal_at", terminalAt); err != nil {
 		return Versioned[TaskRecord]{}, err
 	}
-	if environmentID != "" && validateStableID(ids.KindEnvironment, environmentID) != nil {
+	if environmentID != "" && recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil {
 		return Versioned[TaskRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"environment creation acknowledgement is invalid",
@@ -1568,11 +1568,11 @@ func (repository *TaskRepository) acknowledgeTask(
 		assignmentValue := primaryAndAssignment.Values[1]
 		assignmentIndexValue := primaryAndAssignment.Values[2]
 		environmentCreation := executor == TaskExecutorAgent && task.Type == TaskCreate &&
-			validateStableID(ids.KindEnvironment, task.Target) == nil
+			recordcodec.ValidateID(ids.KindEnvironment, task.Target) == nil
 		environmentRemoval := executor == TaskExecutorAgent && task.Type == TaskRemove &&
-			validateStableID(ids.KindEnvironment, task.Target) == nil
+			recordcodec.ValidateID(ids.KindEnvironment, task.Target) == nil
 		zoneRemoval := executor == TaskExecutorAgent && task.Type == TaskRemove &&
-			validateStableID(ids.KindNetwork, task.Target) == nil && task.Params[TaskZoneRemovalOperationParam] != ""
+			recordcodec.ValidateID(ids.KindNetwork, task.Target) == nil && task.Params[TaskZoneRemovalOperationParam] != ""
 		if environmentCreation != (environmentID != "") || (environmentCreation && task.Target != environmentID) {
 			return Versioned[TaskRecord]{}, errs.New(
 				errs.KindStateConflict,
@@ -2858,7 +2858,7 @@ func (repository *TaskRepository) ExpireTimedOutTasks(ctx context.Context, now t
 	if err := validateContext(ctx); err != nil {
 		return 0, err
 	}
-	if err := validateTimestamp("task timeout collector", now); err != nil {
+	if err := recordcodec.ValidateTimestamp("task timeout collector", now); err != nil {
 		return 0, err
 	}
 	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: taskTimeoutIndexPrefix, Limit: 24})
@@ -2944,10 +2944,10 @@ func (repository *TaskRepository) AbortPendingTask(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[TaskRecord]{}, err
 	}
-	if validateStableID(ids.KindTask, taskID) != nil {
+	if recordcodec.ValidateID(ids.KindTask, taskID) != nil {
 		return Versioned[TaskRecord]{}, errs.New(errs.KindValidationFailed, "task id is invalid")
 	}
-	if err := validateTimestamp("task terminal_at", terminalAt); err != nil {
+	if err := recordcodec.ValidateTimestamp("task terminal_at", terminalAt); err != nil {
 		return Versioned[TaskRecord]{}, err
 	}
 
@@ -2961,11 +2961,11 @@ func (repository *TaskRepository) AbortPendingTask(
 			return repository.abortPendingBackupTask(ctx, taskID, terminalAt)
 		}
 		environmentCreation := current.Record.Executor == TaskExecutorAgent && current.Record.Type == TaskCreate &&
-			validateStableID(ids.KindEnvironment, current.Record.Target) == nil
+			recordcodec.ValidateID(ids.KindEnvironment, current.Record.Target) == nil
 		environmentRemoval := current.Record.Executor == TaskExecutorAgent && current.Record.Type == TaskRemove &&
-			validateStableID(ids.KindEnvironment, current.Record.Target) == nil
+			recordcodec.ValidateID(ids.KindEnvironment, current.Record.Target) == nil
 		zoneRemoval := current.Record.Executor == TaskExecutorAgent && current.Record.Type == TaskRemove &&
-			validateStableID(ids.KindNetwork, current.Record.Target) == nil &&
+			recordcodec.ValidateID(ids.KindNetwork, current.Record.Target) == nil &&
 			current.Record.Params[TaskZoneRemovalOperationParam] != ""
 		if current.Record.Status == TaskStatusAborted {
 			if err := repository.validatePendingScriptAbortReplay(ctx, current); err != nil {

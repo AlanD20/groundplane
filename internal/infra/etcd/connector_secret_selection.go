@@ -2,6 +2,7 @@ package etcd
 
 import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -51,15 +52,15 @@ func selectConnectorCredentialSecret(
 	if index == nil {
 		return false, nil, 0, nil
 	}
-	if len(values) < 3 || values[0] == nil || values[0].Key != secretRecordKey(string(index.Value)) ||
-		values[2] == nil || values[2].Key != secretValueKey(string(index.Value)) {
+	if len(values) < 3 || values[0] == nil || values[0].Key != secretrecord.RecordKey(string(index.Value)) ||
+		values[2] == nil || values[2].Key != secretrecord.ValueKey(string(index.Value)) {
 		return false, nil, 0, errs.New(errs.KindInternal, "Connector credential Secret evidence is corrupt")
 	}
-	record, err := decodeSecretRecord(values[0].Value)
+	record, err := secretrecord.DecodeRecord(values[0].Value)
 	if err != nil || record.Secret.ID != string(index.Value) || record.Secret.Key != reference ||
 		record.Secret.Scope != scope || (scope == core.SecretScopeProject && record.Secret.ProjectID != projectID) ||
 		(scope == core.SecretScopePlatform && record.Secret.ProjectID != "") {
-		return false, nil, 0, corruptSecretRecord()
+		return false, nil, 0, secretrecord.CorruptRecord()
 	}
 	conditions := []etcdstore.Condition{{Key: values[0].Key, ModRevision: values[0].ModRevision}}
 	if values[1] != nil {
@@ -78,13 +79,13 @@ func selectConnectorCredentialSecret(
 	conditions = append(conditions, etcdstore.Condition{
 		Key: deletionTombstoneKey(string(DeletionTargetSecret), record.Secret.ID),
 	})
-	value, err := decodeSecretEncryptedValue(values[2].Value)
+	value, err := secretrecord.DecodeEncryptedValue(values[2].Value)
 	if err != nil {
-		return false, nil, 0, corruptSecretRecord()
+		return false, nil, 0, secretrecord.CorruptRecord()
 	}
 	defer clear(value.Ciphertext)
 	if err := validateSecretValueBinding(record, value); err != nil {
-		return false, nil, 0, corruptSecretRecord()
+		return false, nil, 0, secretrecord.CorruptRecord()
 	}
 	if record.Secret.Kind != core.SecretKindEnvVar {
 		return false, nil, 0, errs.New(

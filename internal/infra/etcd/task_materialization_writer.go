@@ -136,7 +136,7 @@ func taskMaterializationAppliedPredecessorFromValue(
 	}
 	projection, err := decodeEnvironmentComposeProjection(value.Value)
 	if err != nil || projection.EnvironmentID != environmentID ||
-		validateStableID(ids.KindTask, projection.RevisionID) != nil ||
+		recordcodec.ValidateID(ids.KindTask, projection.RevisionID) != nil ||
 		projection.RenderGeneration >= uint64(candidateGeneration) {
 		return taskMaterializationAppliedPredecessor{}, errs.New(
 			errs.KindStateConflict,
@@ -175,15 +175,15 @@ func taskMaterializationEnvironment(record TaskRecord) (string, bool, error) {
 		return "", false, nil
 	}
 	resourceRemoval := record.Type == TaskRemove &&
-		(validateStableID(ids.KindRoute, record.Target) == nil || validateStableID(ids.KindEnvEntry, record.Target) == nil)
+		(recordcodec.ValidateID(ids.KindRoute, record.Target) == nil || recordcodec.ValidateID(ids.KindEnvEntry, record.Target) == nil)
 	volumeMutation := record.Params[TaskResourceKindParam] == TaskResourceVolume &&
-		validateStableID(ids.KindVolume, record.Target) == nil &&
+		recordcodec.ValidateID(ids.KindVolume, record.Target) == nil &&
 		(record.Type == TaskCreate || record.Type == TaskUpdate || record.Type == TaskRemove)
 	routeMutation := record.Params[TaskResourceKindParam] == TaskResourceRoute &&
-		validateStableID(ids.KindRoute, record.Target) == nil &&
+		recordcodec.ValidateID(ids.KindRoute, record.Target) == nil &&
 		(record.Type == TaskCreate || record.Type == TaskUpdate) &&
 		record.Params[TaskRouteEnvironmentParam] == environmentID && record.Owner.EnvironmentID == environmentID
-	if record.Executor != TaskExecutorAgent || validateStableID(ids.KindEnvironment, environmentID) != nil ||
+	if record.Executor != TaskExecutorAgent || recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil ||
 		(record.Target != environmentID && !resourceRemoval && !volumeMutation && !routeMutation) {
 		return "", false, errs.New(errs.KindValidationFailed, "task materialization Environment is invalid")
 	}
@@ -258,7 +258,7 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 	if !materializes || taskHasSpecializedProjectionAcknowledgement(record) {
 		return taskMaterializationProjectionChange{}, nil
 	}
-	if validateStableID(ids.KindTask, revisionID) != nil || record.RenderGeneration <= 0 {
+	if recordcodec.ValidateID(ids.KindTask, revisionID) != nil || record.RenderGeneration <= 0 {
 		return taskMaterializationProjectionChange{}, errs.New(
 			errs.KindStateConflict,
 			"task desired revision identity is invalid",
@@ -392,8 +392,8 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 
 func taskHasSpecializedProjectionAcknowledgement(record TaskRecord) bool {
 	return record.Type == TaskRemove &&
-		(validateStableID(ids.KindRoute, record.Target) == nil ||
-			validateStableID(ids.KindEnvEntry, record.Target) == nil)
+		(recordcodec.ValidateID(ids.KindRoute, record.Target) == nil ||
+			recordcodec.ValidateID(ids.KindEnvEntry, record.Target) == nil)
 }
 
 func clearTaskMaterializationProjectionChange(change taskMaterializationProjectionChange) {
@@ -415,7 +415,7 @@ func taskEnvironmentWriter(record TaskRecord) (string, bool, error) {
 	if !mutates {
 		return "", false, nil
 	}
-	if record.Executor != TaskExecutorAgent || validateStableID(ids.KindEnvironment, mutationEnvironment) != nil ||
+	if record.Executor != TaskExecutorAgent || recordcodec.ValidateID(ids.KindEnvironment, mutationEnvironment) != nil ||
 		(record.Type != TaskAttach && record.Type != TaskDetach) {
 		return "", false, errs.New(errs.KindValidationFailed, "task mutation Environment is invalid")
 	}
@@ -470,8 +470,8 @@ func decodeTaskMaterializationWriter(value []byte) (taskMaterializationWriterRec
 }
 
 func validateTaskMaterializationWriter(record taskMaterializationWriterRecord) error {
-	if validateStableID(ids.KindEnvironment, record.EnvironmentID) != nil ||
-		validateStableID(ids.KindTask, record.TaskID) != nil || record.RenderGeneration <= 0 {
+	if recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil ||
+		recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil || record.RenderGeneration <= 0 {
 		return corruptTaskMaterializationWriter()
 	}
 	if record.BlueprintAppliedPredecessor == nil {
@@ -485,7 +485,7 @@ func validateTaskMaterializationWriter(record taskMaterializationWriterRecord) e
 		return nil
 	}
 	if !predecessor.Present || predecessor.KeyRevision <= 0 ||
-		validateStableID(ids.KindTask, predecessor.RevisionID) != nil ||
+		recordcodec.ValidateID(ids.KindTask, predecessor.RevisionID) != nil ||
 		predecessor.RenderGeneration >= uint64(record.RenderGeneration) {
 		return corruptTaskMaterializationWriter()
 	}

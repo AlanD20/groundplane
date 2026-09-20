@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"maps"
 	"time"
 
@@ -467,7 +468,7 @@ func validateEntryRemovalTaskOwner(task TaskRecord, intent EntryRemovalIntent) e
 			task.Params[TaskEntryEnvironmentParam] == intent.EnvironmentID &&
 			task.Params[TaskMaterializationEnvironmentParam] == intent.EnvironmentID &&
 			task.Params[EnvironmentDesiredRevisionParam] == intent.CandidateProjection.RevisionID &&
-			validateStableID(ids.KindConfig, task.Params[TaskComposeArtifactParam]) == nil &&
+			recordcodec.ValidateID(ids.KindConfig, task.Params[TaskComposeArtifactParam]) == nil &&
 			task.Params[TaskEntryProjectSlugParam] != "" && task.Params[TaskEntryEnvironmentNameParam] != "" &&
 			task.Params[TaskEntryAuthorizedVolumeDirParam] != "" &&
 			(task.Owner.WorkspaceType == TaskWorkspacePlatform && task.Params[TaskEntryTenantSlugParam] == "" ||

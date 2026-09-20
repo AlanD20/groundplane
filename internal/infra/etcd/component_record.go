@@ -156,7 +156,7 @@ func componentEnvironmentKindKey(environmentID string, kind core.ComponentKind) 
 }
 
 func validateComponentRecord(record ComponentRecord) error {
-	if err := validateID(ids.KindComponent, record.Desired.ID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindComponent, record.Desired.ID); err != nil {
 		return err
 	}
 	projected := core.Component{
@@ -171,7 +171,7 @@ func validateComponentRecord(record ComponentRecord) error {
 		return errs.Wrap(errs.KindValidationFailed, err)
 	}
 	if record.Desired.Owner == core.ComponentOwnerEnvironment {
-		if err := validateID(ids.KindEnvironment, record.Desired.OwnerID); err != nil {
+		if err := recordcodec.ValidateID(ids.KindEnvironment, record.Desired.OwnerID); err != nil {
 			return err
 		}
 	}
@@ -180,7 +180,7 @@ func validateComponentRecord(record ComponentRecord) error {
 	}
 	seenServices := make(map[string]struct{}, len(record.Runtime.GeneratedServices))
 	for _, serviceID := range record.Runtime.GeneratedServices {
-		if err := validateID(ids.KindService, serviceID); err != nil {
+		if err := recordcodec.ValidateID(ids.KindService, serviceID); err != nil {
 			return err
 		}
 		if _, duplicate := seenServices[serviceID]; duplicate {

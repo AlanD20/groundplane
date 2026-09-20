@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -323,7 +324,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if tombstone.Revision <= 0 ||
-		validateStableID(ids.KindTask, parentTaskID) != nil {
+		recordcodec.ValidateID(ids.KindTask, parentTaskID) != nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "backing Zone handoff is invalid")
 	}
 	if err := validateZoneRemovalIntent(intent); err != nil {

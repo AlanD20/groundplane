@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -86,7 +87,7 @@ func (repository *ComponentRepository) GetComponent(
 	if err := validateContext(ctx); err != nil {
 		return Versioned[ComponentRecord]{}, err
 	}
-	if err := validateID(ids.KindComponent, id); err != nil {
+	if err := recordcodec.ValidateID(ids.KindComponent, id); err != nil {
 		return Versioned[ComponentRecord]{}, err
 	}
 	return getRecord(
@@ -105,7 +106,7 @@ func (repository *ComponentRepository) ListEnvironmentComponents(
 	environmentID string,
 	request PageRequest,
 ) (Page[ComponentRecord], error) {
-	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return Page[ComponentRecord]{}, err
 	}
 	return listIndexPage(

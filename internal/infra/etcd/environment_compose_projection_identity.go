@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
 	"unicode/utf8"
 
@@ -36,7 +37,7 @@ func validateEnvironmentVolumeIdentities(values []EnvironmentVolumeIdentity) err
 	idsSeen := make(map[string]struct{}, len(values))
 	slugsSeen := make(map[string]struct{}, len(values))
 	for _, value := range values {
-		if validateStableID(ids.KindVolume, value.ID) != nil || value.Key <= previousKey ||
+		if recordcodec.ValidateID(ids.KindVolume, value.ID) != nil || value.Key <= previousKey ||
 			slug.Validate("volume slug", value.Slug) != nil || len(value.Key) > 255 ||
 			volumeidentity.ValidateKey(value.Key) != nil {
 			return errs.New(errs.KindValidationFailed, "Environment Volume identities are invalid or unsorted")
@@ -66,8 +67,8 @@ func validateEnvironmentServiceVolumeMounts(projection EnvironmentComposeProject
 	previous := ""
 	for _, mount := range projection.VolumeMounts {
 		ordering := mount.ServiceID + "\x00" + mount.Target
-		if ordering <= previous || validateStableID(ids.KindService, mount.ServiceID) != nil ||
-			validateStableID(ids.KindVolume, mount.VolumeID) != nil ||
+		if ordering <= previous || recordcodec.ValidateID(ids.KindService, mount.ServiceID) != nil ||
+			recordcodec.ValidateID(ids.KindVolume, mount.VolumeID) != nil ||
 			mount.Target == "" || !strings.HasPrefix(mount.Target, "/") ||
 			!utf8.ValidString(mount.Target) || strings.IndexByte(mount.Target, 0) >= 0 {
 			return errs.New(errs.KindValidationFailed, "Environment Volume mounts are invalid or unsorted")

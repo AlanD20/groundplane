@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -17,7 +18,7 @@ func (repository *HierarchyDeletionRepository) PrepareRootFinalization(
 	if err := validateContext(ctx); err != nil {
 		return HierarchyDeletionOperation{}, err
 	}
-	if validateTimestamp("hierarchy deletion root finalization", preparedAt) != nil {
+	if recordcodec.ValidateTimestamp("hierarchy deletion root finalization", preparedAt) != nil {
 		return HierarchyDeletionOperation{}, errs.New(
 			errs.KindValidationFailed,
 			"hierarchy deletion root finalization time is invalid",

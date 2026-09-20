@@ -138,20 +138,20 @@ func validatePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderI
 		(input.PriorObservationRevision == 0 && input.PredecessorTaskID != "") ||
 		(input.PriorObservationRevision > 0 && input.PredecessorTaskID == "") ||
 		(input.PriorObservationRevision == 0 && input.ExpectedPreviousArtifactSHA256 != "") ||
-		(input.ExpectedPreviousArtifactSHA256 != "" && !validSHA256(input.ExpectedPreviousArtifactSHA256)) ||
+		(input.ExpectedPreviousArtifactSHA256 != "" && !recordcodec.ValidSHA256(input.ExpectedPreviousArtifactSHA256)) ||
 		(input.ExpectedPreviousArtifactSHA256 == "") != (input.ExpectedPreviousArtifactID == "") ||
 		(input.ExpectedPreviousArtifactSHA256 == "") != (input.ExpectedPreviousGeneration == 0) ||
 		(input.ExpectedPreviousArtifactID != "" && ids.Validate(ids.KindConfig, input.ExpectedPreviousArtifactID) != nil) ||
-		!validSHA256(
+		!recordcodec.ValidSHA256(
 			input.DesiredSHA256,
-		) || !validSHA256(input.BaselineSHA256) || !validSHA256(input.HostResolutionSHA256) ||
-		!validSHA256(input.DefinitionSHA256) || !validSHA256(input.CatalogSHA256) ||
-		!validSHA256(input.ArtifactSHA256) || input.ArtifactLength == 0 ||
-		!validSHA256(input.PlanSHA256) || !validSHA256(input.ExecutionPlanSHA256) ||
-		!validSHA256(input.ImageIndexDigest) || !validNonZeroSHA256(input.ImageConfigDigest) ||
+		) || !recordcodec.ValidSHA256(input.BaselineSHA256) || !recordcodec.ValidSHA256(input.HostResolutionSHA256) ||
+		!recordcodec.ValidSHA256(input.DefinitionSHA256) || !recordcodec.ValidSHA256(input.CatalogSHA256) ||
+		!recordcodec.ValidSHA256(input.ArtifactSHA256) || input.ArtifactLength == 0 ||
+		!recordcodec.ValidSHA256(input.PlanSHA256) || !recordcodec.ValidSHA256(input.ExecutionPlanSHA256) ||
+		!recordcodec.ValidSHA256(input.ImageIndexDigest) || !validNonZeroSHA256(input.ImageConfigDigest) ||
 		input.ImageConfigDigest == input.ImageIndexDigest || input.ImageConfigDigest == input.ImageChildDigest ||
 		input.ImageIndexDigest == input.ImageChildDigest ||
-		!validSHA256(input.ImageChildDigest) || !validSelectedPlatform(input) ||
+		!recordcodec.ValidSHA256(input.ImageChildDigest) || !validSelectedPlatform(input) ||
 		input.ArtifactLength > managedconfig.MaximumArtifactBytes || !validComponentActionToken(input.ActionID) ||
 		input.EnsureService && input.DisableService {
 		return errs.New(errs.KindValidationFailed, "platform Component render-input identity is invalid")
@@ -207,7 +207,7 @@ func validatePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderI
 }
 
 func validNonZeroSHA256(value string) bool {
-	return validSHA256(value) && value != strings.Repeat("0", sha256.Size*2)
+	return recordcodec.ValidSHA256(value) && value != strings.Repeat("0", sha256.Size*2)
 }
 
 func validSelectedPlatform(input PlatformComponentTaskRenderInput) bool {

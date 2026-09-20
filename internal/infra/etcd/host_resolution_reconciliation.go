@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/netip"
 	"sort"
 	"strings"
@@ -1094,7 +1095,7 @@ func (repository *TaskRepository) scanRoutesAtRevision(ctx context.Context, revi
 				return nil, errs.New(errs.KindInternal, "Applied Environment projection scan contains an invalid key")
 			}
 			environmentID := strings.TrimPrefix(value.Key, environmentComposeProjectionPrefix)
-			if strings.Contains(environmentID, "/") || validateID(ids.KindEnvironment, environmentID) != nil {
+			if strings.Contains(environmentID, "/") || recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil {
 				clearRangeKeyValues(page.Values)
 				return nil, corruptRecord()
 			}
