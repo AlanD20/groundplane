@@ -129,7 +129,7 @@ func recreateEvidenceExpectation(
 	artifactID, serviceID, releaseID string,
 	compensated bool,
 ) (recreateEvidenceExpectationValue, bool) {
-	artifact := composeArtifact(plan, artifactID)
+	artifact := taskassignment.ComposeArtifact(plan, artifactID)
 	if artifact == nil || artifactID == "" || serviceID == "" || releaseID == "" {
 		return recreateEvidenceExpectationValue{}, false
 	}

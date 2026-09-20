@@ -245,7 +245,7 @@ func (p *WorkerPool) completeReleaseRecoveryNoop(
 	step *agentpb.ExecutionStep,
 	state *releaseExecutionState,
 ) error {
-	planHash := hashForPlan(reservation.assignment.Plan)
+	planHash := taskassignment.PlanDigest(reservation.assignment.Plan)
 	for ordinal, progressState := range []TaskProgressState{TaskProgressRunning, TaskProgressCompleted} {
 		progress := TaskProgress{
 			AssignmentID: reservation.assignment.AssignmentID, TaskID: reservation.assignment.TaskID,

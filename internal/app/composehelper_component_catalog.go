@@ -1,10 +1,10 @@
 package app
 
 import (
+	componentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
 	"github.com/AlanD20/groundplane/internal/componentregistration"
 	"runtime"
 
-	"github.com/AlanD20/groundplane/internal/agent"
 	"github.com/AlanD20/groundplane/internal/infra/docker/composehelper"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -16,7 +16,7 @@ type composeHelperComponentCatalog struct {
 func (catalog composeHelperComponentCatalog) ResolveContainerConfigAction(
 	action *agentpb.ComponentApply,
 ) (composehelper.ComponentActionRecipe, error) {
-	envelope, err := agent.DecodeComponentAction(action)
+	envelope, err := componentaction.DecodeComponentAction(action)
 	if err != nil {
 		return composehelper.ComponentActionRecipe{}, err
 	}

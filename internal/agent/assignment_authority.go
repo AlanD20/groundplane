@@ -160,14 +160,6 @@ func validateAndCopyAssignment(assignment taskassignment.Assignment, volumeRoot 
 	}, nil
 }
 
-func hashForPlan(plan *agentpb.ExecutionPlan) PlanHash {
-	var hash PlanHash
-	if plan != nil {
-		copy(hash[:], plan.PlanHash)
-	}
-	return hash
-}
-
 func usesEnvironmentDirectory(plan *agentpb.ExecutionPlan) bool {
 	return executionplan.UsesEnvironmentDirectoryResult(plan)
 }

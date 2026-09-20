@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	componentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -30,7 +31,7 @@ func (p *WorkerPool) observeComponentRollback(
 	if len(assignment.Plan.GetSteps()) != 0 {
 		step.StepId = assignment.Plan.GetSteps()[0].GetStepId()
 	}
-	result, err := p.componentActions.ExecuteComponentAction(ctx, assignment, step, ManagedConfigPayload{})
+	result, err := p.componentActions.ExecuteComponentAction(ctx, assignment, step, componentaction.ManagedConfigPayload{})
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +89,7 @@ func (p *WorkerPool) observeManagedConfigRollback(
 		ctx,
 		assignment,
 		observationStep,
-		ManagedConfigPayload{},
+		componentaction.ManagedConfigPayload{},
 	)
 	if err != nil {
 		return nil, err

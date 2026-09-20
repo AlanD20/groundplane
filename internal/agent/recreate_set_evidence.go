@@ -69,7 +69,7 @@ func (runtime *ComposeRuntime) observeRecreateSet(
 				continue
 			}
 			result.RecreateEvidence = observedRecreateSetEvidence(
-				composeArtifact(plan, target.artifactID), observed, serviceID, target.releaseID,
+				taskassignment.ComposeArtifact(plan, target.artifactID), observed, serviceID, target.releaseID,
 				target.target, target.compensated, nil,
 			)
 			if result.RecreateEvidence != nil {

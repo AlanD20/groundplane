@@ -279,7 +279,7 @@ func (p *WorkerPool) releaseQueued(runCtx context.Context) {
 		case reservation := <-p.work:
 			result := TaskResult{
 				AssignmentID: reservation.assignment.AssignmentID,
-				TaskID:       reservation.assignment.TaskID, PlanHash: hashForPlan(reservation.assignment.Plan),
+				TaskID:       reservation.assignment.TaskID, PlanHash: taskassignment.PlanDigest(reservation.assignment.Plan),
 				Terminal: TaskTerminalAborted, ExecutionEpoch: reservation.assignment.ExecutionEpoch,
 				ReleaseRecoveryRecordSHA256: append([]byte(nil), reservation.assignment.ReleaseRecoveryRecordSHA256...),
 			}
@@ -398,7 +398,7 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment taskassignment.Assig
 	if existing := p.reservations[owned.TaskID]; existing != nil {
 		if existing.assignment.AssignmentID != owned.AssignmentID ||
 			existing.assignment.ExecutionEpoch != owned.ExecutionEpoch ||
-			hashForPlan(existing.assignment.Plan) != hashForPlan(owned.Plan) {
+			taskassignment.PlanDigest(existing.assignment.Plan) != taskassignment.PlanDigest(owned.Plan) {
 			return errs.New(errs.KindStateConflict, "agent: task id was reused with a different assignment")
 		}
 		return nil

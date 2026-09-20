@@ -9,7 +9,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/agent"
 	"github.com/AlanD20/groundplane/internal/common/managedconfig"
 	"github.com/AlanD20/groundplane/internal/infra/docker/dnsresolverobserver"
 	"github.com/AlanD20/groundplane/internal/infra/docker/managedconfighelpercontainer"
@@ -20,12 +19,16 @@ import (
 type Runtime struct {
 	catalog       Catalog
 	managedHelper managedConfigExecutor
-	composeHelper agent.ComposeHelper
+	composeHelper composeExecutor
 	observer      dnsResolverObserver
 }
 
 type dnsResolverObserver interface {
 	Observe(context.Context, dnsresolverobserver.Request) (*agentpb.DNSResolverObservationEvidence, error)
+}
+
+type composeExecutor interface {
+	Execute(context.Context, *agentpb.ComposeHelperRequest) (*agentpb.ComposeHelperResponse, error)
 }
 
 type managedConfigExecutor interface {
@@ -36,7 +39,7 @@ type managedConfigExecutor interface {
 func New(
 	catalog Catalog,
 	managedHelper managedConfigExecutor,
-	composeHelper agent.ComposeHelper,
+	composeHelper composeExecutor,
 	observer dnsResolverObserver,
 ) (*Runtime, error) {
 	if managedHelper == nil || composeHelper == nil || observer == nil {
@@ -51,8 +54,8 @@ func (runtime *Runtime) ExecuteComponentAction(
 	ctx context.Context,
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
-	payload agent.ManagedConfigPayload,
-) (result *agent.ComponentActionResult, resultErr error) {
+	payload ManagedConfigPayload,
+) (result *ComponentActionResult, resultErr error) {
 	if runtime == nil || runtime.managedHelper == nil || runtime.composeHelper == nil || ctx == nil {
 		return nil, closeComponentArtifact(payload.Source, errs.New(
 			errs.KindInternal,
@@ -60,7 +63,7 @@ func (runtime *Runtime) ExecuteComponentAction(
 		))
 	}
 	action := step.GetComponentApply()
-	envelope, err := agent.DecodeComponentAction(action)
+	envelope, err := DecodeComponentAction(action)
 	if err != nil {
 		return nil, closeComponentArtifact(payload.Source, err)
 	}
@@ -110,7 +113,7 @@ func (runtime *Runtime) ExecuteComponentAction(
 		if observeErr != nil {
 			return nil, observeErr
 		}
-		return &agent.ComponentActionResult{DNSResolverObservation: evidence}, nil
+		return &ComponentActionResult{DNSResolverObservation: evidence}, nil
 	}
 	if payload.Source == nil {
 		return nil, errs.New(errs.KindInternal, "agent: managed Component action content is missing")
@@ -155,7 +158,7 @@ func (runtime *Runtime) ExecuteComponentAction(
 		agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_PUBLISH,
 	)
 	request.Content = content
-	result = &agent.ComponentActionResult{}
+	result = &ComponentActionResult{}
 	state, err := runtime.executeManagedConfig(ctx, request)
 	if err != nil {
 		return result, err
@@ -169,21 +172,21 @@ func (runtime *Runtime) FinalizeManagedConfig(
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	commit bool,
-) (agent.ManagedConfigTransactionState, error) {
+) (ManagedConfigTransactionState, error) {
 	if runtime == nil || runtime.managedHelper == nil || ctx == nil || step == nil {
-		return agent.ManagedConfigTransactionState{}, errs.New(
+		return ManagedConfigTransactionState{}, errs.New(
 			errs.KindInternal,
 			"agent: managed-config finalization runtime is not configured",
 		)
 	}
 	action := step.GetComponentApply()
-	envelope, err := agent.DecodeComponentAction(action)
+	envelope, err := DecodeComponentAction(action)
 	if err != nil {
-		return agent.ManagedConfigTransactionState{}, err
+		return ManagedConfigTransactionState{}, err
 	}
 	_, _, recipe, err := runtime.catalog.ResolveManagedConfigActionEnvelope(envelope)
 	if err != nil {
-		return agent.ManagedConfigTransactionState{}, err
+		return ManagedConfigTransactionState{}, err
 	}
 	operation := agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_ROLLBACK
 	if commit {
@@ -198,7 +201,7 @@ func (runtime *Runtime) FinalizeManagedConfig(
 func (runtime *Runtime) executeManagedConfig(
 	ctx context.Context,
 	request *agentpb.ManagedConfigHelperRequest,
-) (agent.ManagedConfigTransactionState, error) {
+) (ManagedConfigTransactionState, error) {
 	response, firstErr := runtime.managedHelper.Execute(ctx, request)
 	state, stateErr := managedConfigTransactionState(request, response)
 	if firstErr == nil && stateErr == nil {
@@ -212,7 +215,7 @@ func (runtime *Runtime) executeManagedConfig(
 		state, recoveryErr = managedConfigTransactionState(request, response)
 	}
 	if recoveryErr != nil {
-		return agent.ManagedConfigTransactionState{}, errs.Wrap(
+		return ManagedConfigTransactionState{}, errs.Wrap(
 			errs.KindRequestFailed,
 			errors.Join(firstErr, recoveryErr),
 		)

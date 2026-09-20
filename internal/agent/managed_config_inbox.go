@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	componentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"io"
 	"sync"
@@ -28,24 +29,12 @@ type managedConfigTaskInbox struct {
 
 type managedConfigStepInbox struct {
 	expected *agentpb.ComponentApply
-	header   ManagedConfigHeader
+	header   componentaction.ManagedConfigHeader
 	content  []byte
 	chunks   uint32
 	state    managedConfigTransferState
 	err      error
 	ready    chan struct{}
-}
-
-type ManagedConfigHeader struct {
-	ArtifactID string
-	MediaType  string
-	Length     uint64
-	Digest     [sha256.Size]byte
-}
-
-type ManagedConfigPayload struct {
-	Header ManagedConfigHeader
-	Source io.ReadCloser
 }
 
 type managedConfigTransferState uint8
@@ -83,7 +72,7 @@ func (inbox *managedConfigInbox) Register(assignment taskassignment.Assignment) 
 	}
 	task := &managedConfigTaskInbox{
 		assignmentID: assignment.AssignmentID,
-		planHash:     hashForPlan(assignment.Plan),
+		planHash:     taskassignment.PlanDigest(assignment.Plan),
 		steps:        steps,
 	}
 	inbox.mu.Lock()
@@ -142,7 +131,7 @@ func (inbox *managedConfigInbox) acceptHeader(
 	}
 	var digest [sha256.Size]byte
 	copy(digest[:], header.GetSha256())
-	step.header = ManagedConfigHeader{
+	step.header = componentaction.ManagedConfigHeader{
 		ArtifactID: header.GetArtifactId(), MediaType: header.GetMediaType(),
 		Length: header.GetLength(), Digest: digest,
 	}
@@ -186,9 +175,9 @@ func (inbox *managedConfigInbox) Take(
 	ctx context.Context,
 	taskID string,
 	stepID string,
-) (ManagedConfigPayload, error) {
+) (componentaction.ManagedConfigPayload, error) {
 	if ctx == nil || inbox == nil {
-		return ManagedConfigPayload{}, errs.New(errs.KindInternal, "agent: managed-config take is invalid")
+		return componentaction.ManagedConfigPayload{}, errs.New(errs.KindInternal, "agent: managed-config take is invalid")
 	}
 	inbox.mu.Lock()
 	task := inbox.tasks[taskID]
@@ -198,23 +187,23 @@ func (inbox *managedConfigInbox) Take(
 	}
 	if step == nil {
 		inbox.mu.Unlock()
-		return ManagedConfigPayload{}, errs.New(errs.KindInternal, "agent: managed-config payload is unknown")
+		return componentaction.ManagedConfigPayload{}, errs.New(errs.KindInternal, "agent: managed-config payload is unknown")
 	}
 	ready := step.ready
 	inbox.mu.Unlock()
 	select {
 	case <-ctx.Done():
 		inbox.Release(taskID)
-		return ManagedConfigPayload{}, ctx.Err()
+		return componentaction.ManagedConfigPayload{}, ctx.Err()
 	case <-ready:
 	}
 	inbox.mu.Lock()
 	defer inbox.mu.Unlock()
 	if step.err != nil || step.state != managedConfigComplete {
 		if step.err != nil {
-			return ManagedConfigPayload{}, step.err
+			return componentaction.ManagedConfigPayload{}, step.err
 		}
-		return ManagedConfigPayload{}, errs.New(errs.KindInternal, "agent: managed-config payload is incomplete")
+		return componentaction.ManagedConfigPayload{}, errs.New(errs.KindInternal, "agent: managed-config payload is incomplete")
 	}
 	source := &ownedManagedConfigSource{content: step.content, reader: bytes.NewReader(step.content)}
 	step.content = nil
@@ -223,7 +212,7 @@ func (inbox *managedConfigInbox) Take(
 	if len(task.steps) == 0 {
 		delete(inbox.tasks, taskID)
 	}
-	return ManagedConfigPayload{Header: step.header, Source: source}, nil
+	return componentaction.ManagedConfigPayload{Header: step.header, Source: source}, nil
 }
 
 func (inbox *managedConfigInbox) failStep(step *managedConfigStepInbox, message string) error {

@@ -29,7 +29,7 @@ func componentLifecycleComposeAssignment(
 	default:
 		return taskassignment.Assignment{}, nil, errs.New(errs.KindInternal, "agent: Component lifecycle Compose compensation is invalid")
 	}
-	artifact := composeArtifact(assignment.Plan, artifactID)
+	artifact := taskassignment.ComposeArtifact(assignment.Plan, artifactID)
 	planID, renderGeneration, authorityErr := componentComposeArtifactAuthority(artifact)
 	if authorityErr != nil {
 		return taskassignment.Assignment{}, nil, authorityErr

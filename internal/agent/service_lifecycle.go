@@ -82,7 +82,7 @@ func serviceLifecycleStepSource(
 	if plan == nil || plan.GetServiceLifecycleProcedure() == nil {
 		return nil, nil, errs.New(errs.KindInternal, "agent: Service lifecycle procedure is missing")
 	}
-	artifact := composeArtifact(plan, artifactID)
+	artifact := taskassignment.ComposeArtifact(plan, artifactID)
 	for _, source := range plan.GetServiceLifecycleProcedure().GetSources() {
 		if source.GetArtifactId() == artifactID && source.GetStepId() == stepID && artifact != nil {
 			return artifact, source, nil

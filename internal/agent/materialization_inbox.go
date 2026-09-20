@@ -104,7 +104,7 @@ func (inbox *materializationInbox) Register(assignment taskassignment.Assignment
 	}
 	task := &materializationTaskInbox{
 		assignmentID: assignment.AssignmentID,
-		planHash: hashForPlan(
+		planHash: taskassignment.PlanDigest(
 			assignment.Plan,
 		),
 		renderGeneration: assignment.Plan.GetRenderGeneration(),

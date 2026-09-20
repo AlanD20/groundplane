@@ -203,7 +203,7 @@ func planRestorationTarget(
 	plan *agentpb.ExecutionPlan,
 	artifactID, serviceID, target, releaseID string,
 ) (*agentpb.ComposeArtifact, string, string, string, *agentpb.ExecutionPlan, error) {
-	artifact := composeArtifact(plan, artifactID)
+	artifact := taskassignment.ComposeArtifact(plan, artifactID)
 	if artifact == nil {
 		return nil, "", "", "", nil, errs.New(errs.KindInternal, "agent: release restoration artifact is absent")
 	}

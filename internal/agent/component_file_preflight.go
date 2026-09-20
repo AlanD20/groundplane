@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	componentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"io"
 
@@ -54,7 +55,7 @@ func (runtime *MaterializationRuntime) preflightComponentFile(
 			"agent: Component file preflight authority is invalid",
 		)
 	}
-	envelope, err := DecodeComponentAction(action)
+	envelope, err := componentaction.DecodeComponentAction(action)
 	if err != nil {
 		return materializationPayload{}, errs.Wrap(errs.KindValidationFailed, errors.Join(err, payload.Source.Close()))
 	}

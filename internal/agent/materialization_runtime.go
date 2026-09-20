@@ -60,7 +60,7 @@ func (runtime *MaterializationRuntime) runStep(
 		return closeMaterializationSource(payload.Source, "agent: materialization runtime is not configured")
 	}
 	materialization := step.GetMaterializeFile()
-	artifact := composeArtifact(assignment.Plan, materialization.GetArtifactId())
+	artifact := taskassignment.ComposeArtifact(assignment.Plan, materialization.GetArtifactId())
 	if materialization == nil || artifact == nil || payload.Header.TaskID() != assignment.TaskID ||
 		payload.Header.StepID() != step.GetStepId() {
 		return closeMaterializationSource(payload.Source, "agent: materialization runtime input is invalid")

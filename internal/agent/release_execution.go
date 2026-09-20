@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"sort"
 	"time"
 
@@ -111,7 +112,7 @@ func (p *WorkerPool) executeRelease(runCtx context.Context, reservation *taskRes
 	}
 	result := TaskResult{
 		AssignmentID: reservation.assignment.AssignmentID, TaskID: reservation.assignment.TaskID,
-		PlanHash: hashForPlan(reservation.assignment.Plan), Terminal: terminal, ExitCode: state.exitCode,
+		PlanHash: taskassignment.PlanDigest(reservation.assignment.Plan), Terminal: terminal, ExitCode: state.exitCode,
 		ExecutionEpoch:              reservation.assignment.ExecutionEpoch,
 		ReleaseRecoveryRecordSHA256: append([]byte(nil), reservation.assignment.ReleaseRecoveryRecordSHA256...),
 		Compose:                     releaseComposeTaskResult(state),
@@ -251,7 +252,7 @@ func (p *WorkerPool) runReleaseStep(
 	state *releaseExecutionState,
 ) {
 	state.restored = false
-	planHash := hashForPlan(reservation.assignment.Plan)
+	planHash := taskassignment.PlanDigest(reservation.assignment.Plan)
 	running := TaskProgress{AssignmentID: reservation.assignment.AssignmentID,
 		TaskID: reservation.assignment.TaskID, PlanHash: planHash, StepID: step.StepId,
 		ExecutionEpoch: reservation.assignment.ExecutionEpoch, Ordinal: 1, State: TaskProgressRunning}

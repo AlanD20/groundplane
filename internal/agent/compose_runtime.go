@@ -141,7 +141,7 @@ func (runtime *ComposeRuntime) waitWorkloadHealthy(
 	wait *agentpb.WaitWorkloadHealthy,
 ) (composeStepResult, error) {
 	result := composeStepResult{}
-	artifact := composeArtifact(plan, wait.ArtifactId)
+	artifact := taskassignment.ComposeArtifact(plan, wait.ArtifactId)
 	role, slot := agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT, wait.Target
 	if wait.Target == "singleton" {
 		role, slot = agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON, ""
@@ -342,7 +342,7 @@ func (runtime *ComposeRuntime) waitHealthy(
 	wait *agentpb.WaitHealthy,
 ) (composeStepResult, error) {
 	result := composeStepResult{}
-	artifact := composeArtifact(plan, wait.GetArtifactId())
+	artifact := taskassignment.ComposeArtifact(plan, wait.GetArtifactId())
 	if artifact == nil {
 		return result, errs.New(errs.KindInternal, "agent: WaitHealthy artifact is missing from the plan")
 	}
@@ -383,18 +383,6 @@ func (runtime *ComposeRuntime) waitHealthy(
 		case <-ticker.C:
 		}
 	}
-}
-
-func composeArtifact(plan *agentpb.ExecutionPlan, artifactID string) *agentpb.ComposeArtifact {
-	if plan == nil {
-		return nil
-	}
-	for _, artifact := range plan.GetArtifacts() {
-		if artifact != nil && artifact.GetArtifactId() == artifactID {
-			return artifact
-		}
-	}
-	return nil
 }
 
 func composeNamesForServiceIDs(

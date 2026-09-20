@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
-	"github.com/AlanD20/groundplane/internal/agent"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/infra/docker/managedconfighelper"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -15,27 +14,27 @@ import (
 func managedConfigTransactionState(
 	request *agentpb.ManagedConfigHelperRequest,
 	response *agentpb.ManagedConfigHelperResponse,
-) (agent.ManagedConfigTransactionState, error) {
+) (ManagedConfigTransactionState, error) {
 	if request == nil || response == nil || response.GetSchema() != managedconfighelper.SchemaVersion ||
 		response.GetTransactionId() != request.GetTransactionId() ||
 		response.GetOperation() != request.GetOperation() ||
 		response.GetDisposition() == agentpb.ManagedConfigReplayDisposition_MANAGED_CONFIG_REPLAY_DISPOSITION_UNSPECIFIED {
-		return agent.ManagedConfigTransactionState{}, errs.New(
+		return ManagedConfigTransactionState{}, errs.New(
 			errs.KindStateConflict,
 			"agent: managed-config helper response does not match its transaction",
 		)
 	}
 	live, err := managedConfigFileState(response.GetLiveSha256())
 	if err != nil {
-		return agent.ManagedConfigTransactionState{}, err
+		return ManagedConfigTransactionState{}, err
 	}
 	previous, err := managedConfigFileState(response.GetPreviousSha256())
 	if err != nil {
-		return agent.ManagedConfigTransactionState{}, err
+		return ManagedConfigTransactionState{}, err
 	}
-	state := agent.ManagedConfigTransactionState{Live: live, Previous: previous}
+	state := ManagedConfigTransactionState{Live: live, Previous: previous}
 	if !managedConfigStateMatches(previous, request.GetExpectedPreviousSha256()) {
-		return agent.ManagedConfigTransactionState{}, errs.New(
+		return ManagedConfigTransactionState{}, errs.New(
 			errs.KindStateConflict,
 			"agent: managed-config helper predecessor proof changed",
 		)
@@ -45,7 +44,7 @@ func managedConfigTransactionState(
 		expectedLive = request.GetExpectedPreviousSha256()
 	}
 	if !managedConfigStateMatches(live, expectedLive) {
-		return agent.ManagedConfigTransactionState{}, errs.New(
+		return ManagedConfigTransactionState{}, errs.New(
 			errs.KindStateConflict,
 			"agent: managed-config helper live proof changed",
 		)
@@ -53,22 +52,22 @@ func managedConfigTransactionState(
 	return state, nil
 }
 
-func managedConfigFileState(digest []byte) (agent.ManagedConfigFileState, error) {
+func managedConfigFileState(digest []byte) (ManagedConfigFileState, error) {
 	if len(digest) == 0 {
-		return agent.ManagedConfigFileState{}, nil
+		return ManagedConfigFileState{}, nil
 	}
 	if len(digest) != sha256.Size {
-		return agent.ManagedConfigFileState{}, errs.New(
+		return ManagedConfigFileState{}, errs.New(
 			errs.KindStateConflict,
 			"agent: managed-config helper digest proof is invalid",
 		)
 	}
-	state := agent.ManagedConfigFileState{Present: true}
+	state := ManagedConfigFileState{Present: true}
 	copy(state.SHA256[:], digest)
 	return state, nil
 }
 
-func managedConfigStateMatches(state agent.ManagedConfigFileState, digest []byte) bool {
+func managedConfigStateMatches(state ManagedConfigFileState, digest []byte) bool {
 	if len(digest) == 0 {
 		return !state.Present
 	}

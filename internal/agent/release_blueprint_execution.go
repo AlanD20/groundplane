@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	componentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -53,7 +54,7 @@ func (p *WorkerPool) executeBlueprintReleaseComponent(
 		return composeStepResult{}, errs.New(errs.KindInternal, "agent: Component action runtime is not configured")
 	}
 	result := composeStepResult{MutationAttempted: true}
-	observation, err := p.componentActions.ExecuteComponentAction(ctx, assignment, step, ManagedConfigPayload{})
+	observation, err := p.componentActions.ExecuteComponentAction(ctx, assignment, step, componentaction.ManagedConfigPayload{})
 	if observation != nil && (observation.ManagedConfig != nil || observation.DNSResolverObservation != nil) {
 		err = errors.Join(
 			err,

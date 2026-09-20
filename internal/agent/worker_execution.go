@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
+	componentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
 	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -17,7 +19,7 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		return
 	}
 	err := reservation.ctx.Err()
-	planHash := hashForPlan(reservation.assignment.Plan)
+	planHash := taskassignment.PlanDigest(reservation.assignment.Plan)
 	exitCode := int32(0)
 	failedStepID := ""
 	diagnostic := agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE
@@ -88,7 +90,7 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		} else if step.GetBackupArtifactPrune() != nil {
 			err = p.executeBackupArtifactPrune(stepCtx, reservation.assignment, step)
 		} else if step.GetComponentApply() != nil {
-			var payload ManagedConfigPayload
+			var payload componentaction.ManagedConfigPayload
 			if reservation.assignment.Plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY &&
 				step.GetComponentApply().GetManagedConfigContent() {
 				payload, err = p.managedConfigs.Take(stepCtx, reservation.assignment.TaskID, step.GetStepId())
@@ -97,7 +99,7 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 				if p.componentActions == nil {
 					err = closeManagedConfigSource(payload.Source, "agent: Component action runtime is not configured")
 				} else {
-					var actionResult *ComponentActionResult
+					var actionResult *componentaction.ComponentActionResult
 					actionResult, err = p.componentActions.ExecuteComponentAction(
 						stepCtx, reservation.assignment, step, payload,
 					)
@@ -164,7 +166,7 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 	if reservation.assignment.Plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
 		if err == nil && managedConfigStep != nil {
 			finalizeCtx, finalizeCancel := context.WithTimeout(context.Background(), 30*time.Second)
-			var finalization ManagedConfigTransactionState
+			var finalization componentaction.ManagedConfigTransactionState
 			finalization, err = p.componentActions.FinalizeManagedConfig(
 				finalizeCtx, reservation.assignment, managedConfigStep, true,
 			)
