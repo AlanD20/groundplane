@@ -1,4 +1,24 @@
 "use client";
+import {
+  zoneFromAPI,
+  listAllZones,
+  routeFromAPI,
+  listAllRoutes,
+  type ZoneCreateRequest,
+  type ZoneCreateResponse,
+  type ZoneRemoveResponse,
+  type ZoneRemovalImpactResponse,
+  type RouteCreateRequest,
+  type RouteCreateAccepted,
+  type RouteEditRequest,
+  type RouteEditAccepted,
+  type RouteShowResponse,
+  type ZoneShowResponse,
+} from "@/features/environment/network-api";
+import {
+  listAllComponents,
+  listPlatformComponents,
+} from "@/features/component/api";
 import { listAllReleases, projectReleaseSummary } from "@/features/release/api";
 import { listAllAgents } from "@/features/agent/api";
 import {
@@ -198,31 +218,6 @@ type ServiceRuntimeTaskAccepted =
   operations["service.start"]["responses"][202]["content"]["application/json"];
 type BackingRuntimeTaskAccepted =
   operations["backing-service.start"]["responses"][202]["content"]["application/json"];
-type ZonePageResponse =
-  operations["zone.list"]["responses"][200]["content"]["application/json"];
-type ZoneCreateRequest =
-  operations["zone.create"]["requestBody"]["content"]["application/json"];
-type ZoneCreateResponse =
-  operations["zone.create"]["responses"][201]["content"]["application/json"];
-type ZoneRemoveResponse =
-  operations["zone.remove"]["responses"][202]["content"]["application/json"];
-type ZoneRemovalImpactResponse =
-  operations["zone.removal-impact"]["responses"][200]["content"]["application/json"];
-type RoutePageResponse =
-  operations["route.list"]["responses"][200]["content"]["application/json"];
-type RouteCreateRequest =
-  operations["route.create"]["requestBody"]["content"]["application/json"];
-type GeneratedRouteResponse =
-  operations["route.show"]["responses"][200]["content"]["application/json"];
-type RouteCreateResponse = GeneratedRouteResponse & { status: Route["status"] };
-type RouteCreateAccepted = { route: RouteCreateResponse; task_id: string };
-type RouteEditRequest =
-  operations["route.edit"]["requestBody"]["content"]["application/json"];
-type RouteEditResponse = RouteCreateResponse;
-type RouteEditAccepted = { route: RouteEditResponse; task_id: string };
-type RouteShowResponse = RouteCreateResponse;
-type ZoneShowResponse =
-  operations["zone.show"]["responses"][200]["content"]["application/json"];
 type ScriptPageResponse =
   operations["script.list"]["responses"][200]["content"]["application/json"];
 type ScriptRunResponse =
@@ -278,9 +273,6 @@ type AgentConfigResponse =
 type AgentConfigRequest =
   operations["agent.config.set"]["requestBody"]["content"]["application/json"];
 type HierarchyTaskAccepted = { task_id: string };
-type ComponentPageResponse =
-  operations["component.list"]["responses"][200]["content"]["application/json"];
-type ComponentResponse = NonNullable<ComponentPageResponse["items"]>[number];
 type ComponentTaskAccepted =
   operations["component.enable"]["responses"][202]["content"]["application/json"];
 type ComponentConfigResponse =
@@ -386,104 +378,6 @@ async function listAllEntries(
     cursor = page.next_cursor ?? "";
   } while (cursor);
   return entries;
-}
-
-function zoneFromAPI(zone: ZoneCreateResponse | ZoneShowResponse): Zone {
-  if (
-    zone.owner_kind !== "environment" &&
-    zone.owner_kind !== "backing_project"
-  ) {
-    throw new Error(
-      `Controller returned unknown Zone owner kind ${zone.owner_kind}`,
-    );
-  }
-  return {
-    id: zone.id,
-    environmentId: zone.environment_id,
-    name: zone.name,
-    subnet: zone.subnet,
-    internal: zone.internal,
-    ownerKind: zone.owner_kind,
-    ownerId: zone.owner_id,
-  };
-}
-
-async function listAllZones(
-  environmentId: string,
-  signal?: AbortSignal,
-): Promise<Zone[]> {
-  const zones: Zone[] = [];
-  let cursor = "";
-  do {
-    const query = new URLSearchParams({
-      environment: environmentId,
-      limit: "200",
-    });
-    if (cursor) query.set("cursor", cursor);
-    const page = await controllerRequest<ZonePageResponse>(
-      `/zones?${query}`,
-      200,
-      { signal },
-    );
-    zones.push(...(page.items ?? []).map(zoneFromAPI));
-    cursor = page.next_cursor ?? "";
-  } while (cursor);
-  return zones;
-}
-
-function routeFromAPI(
-  route: RouteCreateResponse | RouteEditResponse | RouteShowResponse,
-): Route {
-  if (route.exposure !== "public" && route.exposure !== "internal") {
-    throw new Error(
-      `Controller returned unknown Route exposure ${route.exposure}`,
-    );
-  }
-  if (
-    route.status !== "unserved" &&
-    route.status !== "pending" &&
-    route.status !== "served" &&
-    route.status !== "degraded"
-  ) {
-    throw new Error(`Controller returned unknown Route status ${route.status}`);
-  }
-  return {
-    id: route.id,
-    environmentId: route.environment_id,
-    host: route.host ?? "",
-    path: route.path,
-    exposure: route.exposure,
-    targetServiceId: route.target_service_id,
-    targetPort: route.target_port,
-    status: route.status,
-  };
-}
-
-async function listAllRoutes(
-  environmentId: string,
-  signal?: AbortSignal,
-): Promise<Route[]> {
-  const routes: Route[] = [];
-  let cursor = "";
-  do {
-    const query = new URLSearchParams({
-      environment: environmentId,
-      limit: "200",
-    });
-    if (cursor) query.set("cursor", cursor);
-    const page = await controllerRequest<RoutePageResponse>(
-      `/routes?${query}`,
-      200,
-      { signal },
-    );
-    routes.push(
-      ...(page.items ?? []).map((route) =>
-        routeFromAPI(route as RouteShowResponse),
-      ),
-    );
-    cursor = page.next_cursor ?? "";
-  } while (cursor);
-  return routes;
 }
 
 async function listAllScripts(
@@ -733,137 +627,6 @@ async function listAllEnvironments(
       };
     }),
   );
-}
-
-async function listAllComponents(
-  environmentId: string,
-  signal?: AbortSignal,
-): Promise<EnvironmentComponent[]> {
-  const page = await controllerRequest<ComponentPageResponse>(
-    `/components?environment=${encodeURIComponent(environmentId)}&limit=200`,
-    200,
-    { signal },
-  );
-  return (page.items ?? []).map((item) =>
-    environmentComponentFromAPI(item, environmentId),
-  );
-}
-
-function environmentComponentFromAPI(
-  item: ComponentResponse,
-  environmentId: string,
-): EnvironmentComponent {
-  if (
-    item.owner !== "environment" ||
-    item.owner_id !== environmentId ||
-    item.environment_id !== environmentId
-  ) {
-    throw new Error(
-      "Controller returned a Component outside the Environment owner scope",
-    );
-  }
-  const common = {
-    id: item.id,
-    owner: "environment" as const,
-    ownerRef: environmentId,
-    enabled: item.enabled,
-    status: componentHealthState(item.status),
-    dependencies: [] as string[],
-    generatedServices: item.generated_services ?? [],
-  };
-  const config = item.config;
-  if (item.kind === "caddy") {
-    if (!config) {
-      return {
-        ...common,
-        kind: "caddy",
-        config: null,
-        state: item.pinned_ipv4 ? { pinnedIPv4: item.pinned_ipv4 } : {},
-      };
-    }
-    const zoneIDs = "zone_ids" in config ? config.zone_ids : undefined;
-    const caddyfileTemplate =
-      "caddyfile_template" in config ? config.caddyfile_template : undefined;
-    const alias = "alias" in config ? config.alias : undefined;
-    if (
-      !Array.isArray(zoneIDs) ||
-      zoneIDs.length === 0 ||
-      zoneIDs.some((id) => typeof id !== "string") ||
-      new Set(zoneIDs).size !== zoneIDs.length ||
-      (caddyfileTemplate !== undefined &&
-        typeof caddyfileTemplate !== "string") ||
-      (alias !== undefined && typeof alias !== "string")
-    ) {
-      throw new Error(
-        "Controller returned invalid Caddy Component configuration",
-      );
-    }
-    return {
-      ...common,
-      kind: "caddy",
-      config: {
-        zone_ids: [...zoneIDs],
-        ...(caddyfileTemplate === undefined
-          ? {}
-          : { caddyfile_template: caddyfileTemplate }),
-        ...(typeof alias === "string" ? { alias } : {}),
-      },
-      state: item.pinned_ipv4 ? { pinnedIPv4: item.pinned_ipv4 } : {},
-    };
-  }
-  if (item.kind === "cloudflare-tunnel") {
-    if (!config) {
-      return { ...common, kind: "cloudflare-tunnel", config: null, state: {} };
-    }
-    const secretID = "secret_id" in config ? config.secret_id : undefined;
-    const zoneIDs = "zone_ids" in config ? config.zone_ids : undefined;
-    if (
-      typeof secretID !== "string" ||
-      !Array.isArray(zoneIDs) ||
-      zoneIDs.length === 0 ||
-      zoneIDs.some((id) => typeof id !== "string") ||
-      new Set(zoneIDs).size !== zoneIDs.length
-    ) {
-      throw new Error(
-        "Controller returned invalid Cloudflare Tunnel Component configuration",
-      );
-    }
-    return {
-      ...common,
-      kind: "cloudflare-tunnel",
-      config: { zone_ids: [...zoneIDs], secret_id: secretID },
-      state: {},
-    };
-  }
-  throw new Error(
-    `Controller returned unknown Environment Component kind ${item.kind}`,
-  );
-}
-
-function componentHealthState(status: string | undefined): HealthState {
-  switch (status) {
-    case "disabled":
-      return "stopped";
-    case "pending":
-      return "pending";
-    case "healthy":
-      return "healthy";
-    case "degraded":
-      return "degraded";
-    default:
-      return "unknown";
-  }
-}
-
-async function listPlatformComponents(
-  signal?: AbortSignal,
-): Promise<ComponentResponse[]> {
-  const page = await controllerRequest<ComponentPageResponse>(
-    "/components?platform=true&limit=200",
-    200,
-    { signal },
-  );
-  return page.items ?? [];
 }
 
 async function listAllTenantProjects(signal: AbortSignal): Promise<Project[]> {
