@@ -28,6 +28,12 @@ import {
 import { controllerRequest, waitForRequest } from "./controller-json-request";
 import { useBackupStore } from "@/features/backup/use-backup-store";
 import {
+  createSecretActions,
+  useSecretRefresh,
+  type ReusableSecretState,
+  type ReusableSecretActions,
+} from "@/features/secrets/secret-store";
+import {
   controllerUpdateRejected,
   isTaskNotFoundError,
   controllerResponseError,
@@ -78,8 +84,6 @@ import type {
   Route,
   Runner,
   Script,
-  ReusableSecret,
-  SecretKind,
   Service,
   ServiceRuntimeIntent,
   TaskJournalScope,
@@ -276,16 +280,6 @@ type BackingServicePageResponse =
 type BackingServiceResponse = NonNullable<
   BackingServicePageResponse["items"]
 >[number];
-type SecretPageResponse =
-  operations["secret.list"]["responses"][200]["content"]["application/json"];
-type SecretResponse =
-  operations["secret.create"]["responses"][201]["content"]["application/json"];
-type SecretCreateRequest =
-  operations["secret.create"]["requestBody"]["content"]["application/json"];
-type SecretTaskAccepted =
-  operations["secret.remove"]["responses"][202]["content"]["application/json"];
-type SecretValueResponse =
-  operations["secret.reveal"]["responses"][200]["content"]["application/json"];
 type ConnectorPageResponse =
   operations["connector.list"]["responses"][200]["content"]["application/json"];
 type ConnectorResponse =
@@ -326,15 +320,6 @@ type ReleaseGroupResponse =
   operations["release-group.show"]["responses"][200]["content"]["application/json"];
 export type ReleaseGroupRollbackPreviewResponse =
   operations["release-group.rollback-preview"]["responses"][200]["content"]["application/json"];
-type ReusableSecretCreateInput = {
-  key: string;
-  kind: SecretKind;
-  path?: string;
-  value: string;
-} & (
-  | { projectId: string; platform?: never }
-  | { projectId?: never; platform: true }
-);
 type ComponentConfigInput =
   | { zone_ids: string[]; caddyfile_template?: string; alias?: string }
   | {
@@ -1060,73 +1045,6 @@ async function listAllBackingProjects(
   );
 }
 
-type ExpectedSecretScope = { projectId: string } | { platform: true };
-
-function reusableSecretFromAPI(
-  secret: SecretResponse,
-  expectedScope: ExpectedSecretScope,
-): ReusableSecret {
-  const kind: SecretKind | null =
-    secret.kind === "env_var" ? "env" : secret.kind === "file" ? "file" : null;
-  if (!kind)
-    throw new Error(
-      "Controller returned a reusable Secret with an invalid kind",
-    );
-
-  const base = {
-    id: secret.id,
-    key: secret.key,
-    kind,
-    ref: secret.ref,
-    updatedAt: secret.updated_at,
-  };
-
-  if ("projectId" in expectedScope) {
-    if (
-      secret.scope !== "project" ||
-      secret.project_id !== expectedScope.projectId
-    ) {
-      throw new Error(
-        "Controller returned a reusable Secret for the wrong project owner",
-      );
-    }
-    return { ...base, scope: "project", projectId: expectedScope.projectId };
-  }
-  if (secret.scope !== "platform" || secret.project_id !== undefined) {
-    throw new Error(
-      "Controller returned a reusable Secret for the wrong platform owner",
-    );
-  }
-  return { ...base, scope: "platform" };
-}
-
-async function listReusableSecretScope(
-  expectedScope: ExpectedSecretScope,
-  signal?: AbortSignal,
-): Promise<ReusableSecret[]> {
-  const secrets: ReusableSecret[] = [];
-  let cursor = "";
-  do {
-    const query = new URLSearchParams({ limit: "200" });
-    if ("projectId" in expectedScope)
-      query.set("project", expectedScope.projectId);
-    else query.set("platform", "true");
-    if (cursor) query.set("cursor", cursor);
-    const page = await controllerRequest<SecretPageResponse>(
-      "/secrets?" + query.toString(),
-      200,
-      { signal },
-    );
-    secrets.push(
-      ...(page.items ?? []).map((secret) =>
-        reusableSecretFromAPI(secret, expectedScope),
-      ),
-    );
-    cursor = page.next_cursor ?? "";
-  } while (cursor);
-  return secrets;
-}
-
 function connectorFromAPI(connector: ConnectorResponse): Connector {
   const credential = (
     name: "access_key" | "secret_key",
@@ -1214,7 +1132,7 @@ function refreshReleaseGroupTags(environment: Environment) {
   }
 }
 
-type State = {
+type State = ReusableSecretState & {
   // UI preference: typed confirmation before revealing a secret value
   requireRevealConfirm: boolean;
   tenants: Tenant[];
@@ -1233,9 +1151,6 @@ type State = {
   connectors: Connector[];
   connectorsLoading: boolean;
   connectorError: string | null;
-  reusableSecrets: ReusableSecret[];
-  reusableSecretsLoading: boolean;
-  secretError: string | null;
   activity: ActivityEntry[];
   taskJournals: Record<string, TaskJournalState>;
   platform: PlatformInfra;
@@ -1298,6 +1213,7 @@ function seed(): State {
 }
 
 type StoreContext = State &
+  ReusableSecretActions &
   ReturnType<typeof useControllerPlatform> &
   ReturnType<typeof useBackupStore> & {
     adapters: typeof seedAdapters;
@@ -1544,12 +1460,6 @@ type StoreContext = State &
     ) => Promise<EnvironmentEntry>;
     removeEntry: (envId: string, entryId: string) => Promise<string>;
     revealEntry: (entryId: string) => Promise<string>;
-    createReusableSecret: (
-      input: ReusableSecretCreateInput,
-    ) => Promise<ReusableSecret>;
-    removeReusableSecret: (id: string) => Promise<{ task_id: string }>;
-    refreshReusableSecrets: (signal?: AbortSignal) => Promise<void>;
-    revealReusableSecret: (id: string) => Promise<string>;
     addConnector: (
       c: ConnectorCreateInput,
       intent: ConnectorMutationIntent,
@@ -1616,7 +1526,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     new Map<string, { failures: number; nextAttemptAt: number }>(),
   );
   const taskJournalEpochs = useRef(new Map<string, number>());
-  const reusableSecretLoadGeneration = useRef(0);
 
   const update = useCallback((fn: (draft: State) => void) => {
     if (!providerActive.current) return;
@@ -2171,47 +2080,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [state.tenantProjects],
   );
 
-  const refreshReusableSecrets = useCallback(
-    async (signal?: AbortSignal) => {
-      const loadGeneration = reusableSecretLoadGeneration.current + 1;
-      reusableSecretLoadGeneration.current = loadGeneration;
-      update((draft) => {
-        draft.reusableSecretsLoading = true;
-      });
-      try {
-        const projectIds = reusableSecretProjectIds
-          ? reusableSecretProjectIds.split(",")
-          : [];
-        const scopes: ExpectedSecretScope[] = [
-          { platform: true },
-          ...projectIds.map((projectId) => ({ projectId })),
-        ];
-        const pages = await Promise.all(
-          scopes.map((scope) => listReusableSecretScope(scope, signal)),
-        );
-        if (reusableSecretLoadGeneration.current !== loadGeneration) return;
-        update((draft) => {
-          draft.reusableSecrets = pages.flat();
-          draft.reusableSecretsLoading = false;
-          draft.secretError = null;
-        });
-      } catch (error) {
-        if (
-          signal?.aborted ||
-          reusableSecretLoadGeneration.current !== loadGeneration
-        )
-          return;
-        update((draft) => {
-          draft.reusableSecretsLoading = false;
-          draft.secretError =
-            error instanceof Error
-              ? error.message
-              : "Unable to load reusable Secrets";
-        });
-        throw error;
-      }
-    },
-    [reusableSecretProjectIds, update],
+  const refreshReusableSecrets = useSecretRefresh(
+    reusableSecretProjectIds,
+    update,
   );
 
   const connectorEnvironmentIds = useMemo(
@@ -3809,79 +3680,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         );
         return value.value;
       },
-      createReusableSecret: async (input) => {
-        const body: SecretCreateRequest = {
-          key: input.key,
-          kind: input.kind === "env" ? "env_var" : "file",
-          value: input.value,
-          ...(input.kind === "file" ? { path: input.path } : {}),
-          ...(input.projectId !== undefined
-            ? { project_id: input.projectId }
-            : { platform: true }),
-        };
-        const expectedScope: ExpectedSecretScope =
-          input.projectId !== undefined
-            ? { projectId: input.projectId }
-            : { platform: true };
-        const created = reusableSecretFromAPI(
-          await controllerRequest<SecretResponse>("/secrets", 201, {
-            method: "POST",
-            body,
-          }),
-          expectedScope,
-        );
-        update((draft) => {
-          draft.reusableSecrets = draft.reusableSecrets.filter(
-            (secret) => secret.id !== created.id,
-          );
-          draft.reusableSecrets.push(created);
-          draft.secretError = null;
-        });
-        return created;
-      },
-      removeReusableSecret: async (id) => {
-        const secret = state.reusableSecrets.find(
-          (candidate) => candidate.id === id,
-        );
-        if (!secret) throw new Error("Reusable Secret was not found");
-        if (
-          secret.scope === "project" &&
-          !state.tenantProjects.some(
-            (project) => project.id === secret.projectId,
-          )
-        ) {
-          throw new Error("Reusable Secret project owner was not found");
-        }
-        try {
-          const accepted = await controllerRequest<SecretTaskAccepted>(
-            "/secrets/" + encodeURIComponent(id),
-            202,
-            { method: "DELETE" },
-          );
-          if (!accepted.task_id)
-            throw new Error("Controller response is missing task_id");
-          update((draft) => {
-            draft.secretError = null;
-          });
-          return accepted;
-        } catch (error) {
-          update((draft) => {
-            draft.secretError =
-              error instanceof Error
-                ? error.message
-                : "Unable to remove reusable Secret";
-          });
-          throw error;
-        }
-      },
-      refreshReusableSecrets,
-      revealReusableSecret: async (id) => {
-        const revealed = await controllerRequest<SecretValueResponse>(
-          "/secrets/" + encodeURIComponent(id) + "/value",
-          200,
-        );
-        return revealed.value;
-      },
+      ...createSecretActions(state, update, refreshReusableSecrets),
       addConnector: async (connector, intent) => {
         const toAPI = (credential: ConnectorCredentialInput) =>
           credential.kind === "ref"
