@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -147,8 +148,8 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 		{Key: serviceLifecycleActiveKey(current.Record.Desired.ID)},
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID)},
-		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
 		{Key: deletionTombstoneKey("service", current.Record.Desired.ID)},
 	}
 	if tenant != nil {
@@ -156,7 +157,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 			{Key: hierarchyrecord.TenantKey(tenant.Record.ID), ModRevision: tenant.Revision},
 		}, conditions[9:]...)...)
 		conditions = append(conditions[:12], append([]etcdstore.Condition{
-			{Key: deletionTombstoneKey(string(DeletionTargetTenant), tenant.Record.ID)},
+			{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), tenant.Record.ID)},
 		}, conditions[12:]...)...)
 	}
 	mutations := []etcdstore.Mutation{

@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"sort"
@@ -103,7 +104,7 @@ func (repository *HierarchyRepository) PrepareReleaseGroupBlueprintMutation(
 			Keys: []string{
 				releaseGroupOwnerKey(environmentID, id),
 				releaseGroupNameKey(environmentID, versioned.Group.Name),
-				deletionTombstoneKey(string(DeletionTargetReleaseGroup), id),
+				deletionTombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), id),
 			},
 			Revision: readRevision,
 		})
@@ -125,7 +126,7 @@ func (repository *HierarchyRepository) PrepareReleaseGroupBlueprintMutation(
 				Key:         releaseGroupNameKey(environmentID, versioned.Group.Name),
 				ModRevision: indexes.Values[1].ModRevision,
 			},
-			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetReleaseGroup), id)},
+			etcdstore.Condition{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), id)},
 		)
 		next, retained := desiredByID[id]
 		if retained {
@@ -163,7 +164,7 @@ func (repository *HierarchyRepository) PrepareReleaseGroupBlueprintMutation(
 			releaseGroupRecordKey(id),
 			releaseGroupOwnerKey(environmentID, id),
 			releaseGroupNameKey(environmentID, group.Name),
-			deletionTombstoneKey(string(DeletionTargetReleaseGroup), id),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), id),
 		}
 		absent, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys:     keys,

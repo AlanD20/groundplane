@@ -4,6 +4,7 @@ import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -103,7 +104,7 @@ func corruptEnvironmentDeletionIntent() error {
 func environmentDeletionIntentMatches(
 	record EnvironmentDeletionIntentRecord,
 	task TaskRecord,
-	tombstone DeletionTombstoneRecord,
+	tombstone deletionrecord.DeletionTombstoneRecord,
 ) bool {
 	return record.EnvironmentID == task.Target && record.OperationID == task.OperationID &&
 		record.TaskID == task.ID && record.TargetRevision == tombstone.TargetRevision &&
@@ -114,7 +115,7 @@ func loadEnvironmentDeletionIntent(
 	ctx context.Context,
 	store hierarchyStore,
 	task TaskRecord,
-	tombstone DeletionTombstoneRecord,
+	tombstone deletionrecord.DeletionTombstoneRecord,
 	revision int64,
 ) (etcdstore.Versioned[EnvironmentDeletionIntentRecord], error) {
 	result, err := store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -217,7 +218,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			deletionTombstoneKey(string(DeletionTargetEnvironment), source.Target),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), source.Target),
 			hierarchyrecord.EnvironmentOperationLockKey(source.Target),
 			retentionKey,
 		},
@@ -241,8 +242,8 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 		)
 	}
 	defer clearKeyValues(state.Values)
-	tombstone, err := decodeDeletionTombstone(state.Values[0].Value)
-	if err != nil || tombstone.TargetKind != DeletionTargetEnvironment ||
+	tombstone, err := deletionrecord.DecodeDeletionTombstone(state.Values[0].Value)
+	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetEnvironment ||
 		tombstone.TargetID != source.Target ||
 		tombstone.TaskID != source.ID {
 		return environmentTaskChange{}, errs.New(
@@ -274,7 +275,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 	lock.TaskID = retry.ID
 	lock.UpdatedAt = retry.CreatedAt
 	intent.Record.TaskID = retry.ID
-	tombstoneValue, err := encodeDeletionTombstone(tombstone)
+	tombstoneValue, err := deletionrecord.EncodeDeletionTombstone(tombstone)
 	if err != nil {
 		return environmentTaskChange{}, err
 	}
@@ -317,7 +318,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 		mutations: []etcdstore.Mutation{
 			{
 				Type:  etcdstore.MutationPut,
-				Key:   deletionTombstoneKey(string(DeletionTargetEnvironment), source.Target),
+				Key:   deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), source.Target),
 				Value: tombstoneValue,
 			},
 			{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOperationLockKey(source.Target), Value: lockValue},
@@ -338,7 +339,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 func (repository *TaskRepository) prepareEnvironmentDeletionIntentTerminal(
 	ctx context.Context,
 	task TaskRecord,
-	tombstone DeletionTombstoneRecord,
+	tombstone deletionrecord.DeletionTombstoneRecord,
 	terminalStatus TaskStatus,
 	revision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
@@ -501,7 +502,7 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 		)
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
 		taskKey(task.ID),
 	}})
 	if err != nil {
@@ -534,8 +535,8 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 			"terminal environment deletion task cannot complete cleanup enumeration",
 		)
 	}
-	tombstone, err := decodeDeletionTombstone(state.Values[0].Value)
-	if err != nil || tombstone.TargetKind != DeletionTargetEnvironment ||
+	tombstone, err := deletionrecord.DecodeDeletionTombstone(state.Values[0].Value)
+	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetEnvironment ||
 		tombstone.TargetID != task.Target || tombstone.TaskID != task.ID {
 		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
 			errs.KindStateConflict,
@@ -626,8 +627,8 @@ func environmentDeletionTaskPruneFence(
 	if absent != 0 {
 		return false, "", corruptTaskPruneIntent()
 	}
-	tombstone, err := decodeDeletionTombstone(values[0].Value)
-	if err != nil || tombstone.TargetKind != DeletionTargetEnvironment ||
+	tombstone, err := deletionrecord.DecodeDeletionTombstone(values[0].Value)
+	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetEnvironment ||
 		tombstone.TargetID != task.Target {
 		return false, "", corruptTaskPruneIntent()
 	}
@@ -651,7 +652,7 @@ func environmentDeletionTaskPruneFence(
 func (repository *TaskRepository) validateEnvironmentDeletionIntentReplay(
 	ctx context.Context,
 	task TaskRecord,
-	tombstone *DeletionTombstoneRecord,
+	tombstone *deletionrecord.DeletionTombstoneRecord,
 	terminalStatus TaskStatus,
 	revision int64,
 ) error {

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
@@ -29,7 +30,7 @@ type removalRepository interface {
 	BeginRunnerRemovalWithTask(
 		context.Context,
 		etcdstore.Versioned[runnerrecord.RunnerRecord],
-		etcd.DeletionTombstoneRecord,
+		deletionrecord.DeletionTombstoneRecord,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -129,9 +130,9 @@ func (service *RemovalService) RemoveRunner(
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	tombstone := etcd.DeletionTombstoneRecord{
-		TargetKind: etcd.DeletionTargetRunner, TargetID: runnerID, TargetRevision: current.Revision,
-		TaskID: task.ID, Phase: etcd.DeletionPhaseFinalizing, CreatedAt: now, UpdatedAt: now,
+	tombstone := deletionrecord.DeletionTombstoneRecord{
+		TargetKind: deletionrecord.DeletionTargetRunner, TargetID: runnerID, TargetRevision: current.Revision,
+		TaskID: task.ID, Phase: deletionrecord.DeletionPhaseFinalizing, CreatedAt: now, UpdatedAt: now,
 	}
 	result, mutationErr := service.repository.BeginRunnerRemovalWithTask(ctx, current, tombstone, task, marker)
 	if mutationErr != nil {

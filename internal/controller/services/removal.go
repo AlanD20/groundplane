@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -186,9 +187,9 @@ func (service *serviceMutationService) removeServiceOnce(
 		Locator: locator, ReplayTarget: &target, Intent: claim.Intent, Response: response, TaskID: taskID,
 		CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
-	tombstone := etcd.DeletionTombstoneRecord{
-		TargetKind: etcd.DeletionTargetService, TargetID: serviceID, TargetRevision: current.Revision,
-		TaskID: taskID, Phase: etcd.DeletionPhaseHostEffects, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
+	tombstone := deletionrecord.DeletionTombstoneRecord{
+		TargetKind: deletionrecord.DeletionTargetService, TargetID: serviceID, TargetRevision: current.Revision,
+		TaskID: taskID, Phase: deletionrecord.DeletionPhaseHostEffects, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
 	result, mutationErr := service.repository.BeginServiceRemovalWithTask(
 		ctx, tenant, project, environment, current, projection, tombstone, removalIntent, task, marker,

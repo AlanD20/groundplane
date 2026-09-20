@@ -7,6 +7,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -103,11 +104,11 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 	}
 	dynamic.environment = dynamic.add(hierarchyrecord.EnvironmentKey(environmentID))
 	dynamic.environmentFence = dynamic.add(
-		deletionTombstoneKey(string(DeletionTargetEnvironment), environmentID),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environmentID),
 	)
 	for connectorID := range connectorIDs {
 		dynamic.connectorFences[connectorID] = dynamic.add(
-			deletionTombstoneKey(string(DeletionTargetConnector), connectorID),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connectorID),
 		)
 		dynamic.credentials[connectorID] = dynamic.add(connectorrecord.CredentialValueKey(connectorID))
 	}

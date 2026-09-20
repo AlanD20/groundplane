@@ -4,6 +4,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -81,12 +82,12 @@ func prepareBackupPolicyReplacement(
 		0,
 	)
 	for _, fence := range []struct {
-		kind DeletionTargetKind
+		kind deletionrecord.DeletionTargetKind
 		id   string
 	}{
-		{kind: DeletionTargetEnvironment, id: candidate.Environment.Record.ID},
-		{kind: DeletionTargetProject, id: candidate.Project.Record.ID},
-		{kind: DeletionTargetTenant, id: candidate.Project.Record.TenantID},
+		{kind: deletionrecord.DeletionTargetEnvironment, id: candidate.Environment.Record.ID},
+		{kind: deletionrecord.DeletionTargetProject, id: candidate.Project.Record.ID},
+		{kind: deletionrecord.DeletionTargetTenant, id: candidate.Project.Record.TenantID},
 	} {
 		plan.compare(
 			backupPolicyCompareHierarchyTombstone,
@@ -169,7 +170,7 @@ func prepareBackupPolicyReplacement(
 		plan.compare(
 			backupPolicyCompareConnectorTombstone,
 			connectorID,
-			deletionTombstoneKey(string(DeletionTargetConnector), connectorID),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connectorID),
 			0,
 		)
 	}

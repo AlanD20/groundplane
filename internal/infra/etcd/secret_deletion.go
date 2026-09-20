@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -17,7 +18,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 	ctx context.Context,
 	owner SecretOwner,
 	current etcdstore.Versioned[secretrecord.Record],
-	tombstone DeletionTombstoneRecord,
+	tombstone deletionrecord.DeletionTombstoneRecord,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -27,13 +28,13 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 	if err := validateSecretVersion(current); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateDeletionTombstone(tombstone); err != nil {
+	if err := deletionrecord.ValidateDeletionTombstone(tombstone); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	secretID := current.Record.Secret.ID
-	if tombstone.TargetKind != DeletionTargetSecret || tombstone.TargetID != secretID ||
+	if tombstone.TargetKind != deletionrecord.DeletionTargetSecret || tombstone.TargetID != secretID ||
 		tombstone.TargetRevision != current.Revision || tombstone.TaskID != task.ID ||
-		tombstone.Phase != DeletionPhaseFinalizing || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
+		tombstone.Phase != deletionrecord.DeletionPhaseFinalizing || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
 		!tombstone.UpdatedAt.Equal(
 			tombstone.CreatedAt,
 		) || task.Executor != TaskExecutorController ||
@@ -96,7 +97,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	tombstoneValue, err := encodeDeletionTombstone(tombstone)
+	tombstoneValue, err := deletionrecord.EncodeDeletionTombstone(tombstone)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -127,7 +128,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 			ModRevision: dependencies.Values[1].ModRevision,
 		},
 		{Key: secretrecord.ValueKey(secretID), ModRevision: dependencies.Values[2].ModRevision},
-		{Key: deletionTombstoneKey(string(DeletionTargetSecret), secretID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), secretID)},
 	}
 	if owner.Project != nil {
 		conditions = append(
@@ -137,13 +138,13 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 				ModRevision: owner.Project.Revision,
 			},
 			etcdstore.Condition{
-				Key: deletionTombstoneKey(string(DeletionTargetProject), owner.Project.Record.ID),
+				Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), owner.Project.Record.ID),
 			},
 		)
 		if owner.Project.Record.TenantID != "" {
 			conditions = append(conditions, etcdstore.Condition{
 				Key: deletionTombstoneKey(
-					string(DeletionTargetTenant),
+					string(deletionrecord.DeletionTargetTenant),
 					owner.Project.Record.TenantID,
 				),
 			})
@@ -163,7 +164,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 		{
-			Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(DeletionTargetSecret), secretID),
+			Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), secretID),
 			Value: tombstoneValue,
 		},
 	}

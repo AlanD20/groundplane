@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"crypto/sha256"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -323,7 +324,7 @@ func validateCompletedRouteHeadReplay(
 		descriptorKey,
 		environmentBlueprintRootKey(environmentID, candidateRevisionID),
 		environmentBlueprintHeadKey(environmentID),
-		deletionTombstoneKey(string(DeletionTargetRoute), task.Target),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetRoute), task.Target),
 		componentTaskActiveEnvironmentKey(environmentID),
 		routerecord.ObservationKey(task.Target),
 	}

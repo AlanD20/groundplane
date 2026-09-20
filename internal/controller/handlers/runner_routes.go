@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
@@ -18,7 +19,7 @@ type RunnerReader interface {
 	GetRunner(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerRecord], error)
 	ListRunners(context.Context, etcd.RunnerFilter, etcdstore.PageRequest) (etcdstore.Page[runnerrecord.RunnerRecord], error)
 	GetRunnerObservation(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerObservationRecord], bool, error)
-	GetRunnerDeletionTombstone(context.Context, string) (etcdstore.Versioned[etcd.DeletionTombstoneRecord], bool, error)
+	GetRunnerDeletionTombstone(context.Context, string) (etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord], bool, error)
 }
 
 type RunnerMutator interface {
@@ -127,7 +128,7 @@ func (s *Server) runnerProjection(ctx context.Context, record runnerrecord.Runne
 	if observed {
 		observationRecord = &observation.Record
 	}
-	var tombstoneRecord *etcd.DeletionTombstoneRecord
+	var tombstoneRecord *deletionrecord.DeletionTombstoneRecord
 	if deleting {
 		tombstoneRecord = &tombstone.Record
 	}

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -20,7 +21,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		return nil, nil, err
 	}
 	keys := []string{
-		deletionTombstoneKey(string(DeletionTargetZone), task.Target),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), task.Target),
 		zonePoolRegistryKey(environmentID), componentAddressRegistryKey(task.Target),
 		zoneRemovalIntentKey(operationID), environmentBlueprintHeadKey(environmentID),
 		environmentComposeProjectionKey(environmentID), componentTaskActiveEnvironmentKey(environmentID),
@@ -57,10 +58,10 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 	if err != nil {
 		return nil, nil, err
 	}
-	tombstone, err := decodeDeletionTombstone(state.Values[0].Value)
-	if err != nil || tombstone.TargetKind != DeletionTargetZone || tombstone.TargetID != task.Target ||
+	tombstone, err := deletionrecord.DecodeDeletionTombstone(state.Values[0].Value)
+	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetZone || tombstone.TargetID != task.Target ||
 		tombstone.TargetRevision != intent.ZoneRevision || tombstone.TaskID != task.ID ||
-		(tombstone.Phase != DeletionPhaseHostEffects && tombstone.Phase != DeletionPhaseFinalizing) {
+		(tombstone.Phase != deletionrecord.DeletionPhaseHostEffects && tombstone.Phase != deletionrecord.DeletionPhaseFinalizing) {
 		return nil, nil, errs.New(errs.KindStateConflict, "Zone removal tombstone changed")
 	}
 	pool, err := recordcodec.Decode[zonePoolRegistry](state.Values[1].Value, "zone_pool_registry")
@@ -171,7 +172,7 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 		return err
 	}
 	keys := []string{
-		deletionTombstoneKey(string(DeletionTargetZone), task.Target),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), task.Target),
 		zonePoolRegistryKey(environmentID), zoneRemovalIntentKey(operationID),
 		environmentBlueprintHeadKey(environmentID), environmentComposeProjectionKey(environmentID),
 		componentTaskActiveEnvironmentKey(environmentID),

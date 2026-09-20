@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"errors"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -41,7 +42,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 		return scriptTaskChange{}, err
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{deletionTombstoneKey(string(DeletionTargetScript), source.Target)}, Revision: revision,
+		Keys: []string{deletionTombstoneKey(string(deletionrecord.DeletionTargetScript), source.Target)}, Revision: revision,
 	})
 	if err != nil {
 		return scriptTaskChange{}, err
@@ -82,8 +83,8 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 	parents, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			hierarchyrecord.ProjectKey(environment.ProjectID),
-			deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID),
-			deletionTombstoneKey(string(DeletionTargetProject), environment.ProjectID),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.ID),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), environment.ProjectID),
 			deletionTombstoneKey("service", service.Record.Desired.ID),
 		},
 		Revision: revision,
@@ -114,19 +115,19 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 				Key:         scriptrecord.ScriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
 				ModRevision: dependencies.Values[1].ModRevision,
 			},
-			{Key: deletionTombstoneKey(string(DeletionTargetScript), record.Desired.ID)},
+			{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetScript), record.Desired.ID)},
 			{Key: hierarchyrecord.EnvironmentKey(environment.ID), ModRevision: dependencies.Values[2].ModRevision},
 			serviceDesiredCondition(service),
 			{Key: hierarchyrecord.ProjectKey(project.ID), ModRevision: parents.Values[0].ModRevision},
-			{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID)},
-			{Key: deletionTombstoneKey(string(DeletionTargetProject), project.ID)},
+			{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.ID)},
+			{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.ID)},
 			{Key: deletionTombstoneKey("service", service.Record.Desired.ID)},
 			{Key: scriptrecord.ScriptSetActiveKey(record.EnvironmentID), ModRevision: storage.Active.Revision},
 		},
 	}
 	if project.TenantID != "" {
 		tenantFence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys: []string{deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID)}, Revision: revision,
+			Keys: []string{deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID)}, Revision: revision,
 		})
 		if err != nil {
 			return scriptTaskChange{}, err
@@ -135,15 +136,15 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 			return scriptTaskChange{}, errs.New(errs.KindResourceInUse, "Script owner is unavailable")
 		}
 		change.conditions = append(change.conditions, etcdstore.Condition{
-			Key: deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID),
+			Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID),
 		})
 	}
-	tombstone := DeletionTombstoneRecord{
-		TargetKind: DeletionTargetScript, TargetID: record.Desired.ID,
+	tombstone := deletionrecord.DeletionTombstoneRecord{
+		TargetKind: deletionrecord.DeletionTargetScript, TargetID: record.Desired.ID,
 		TargetRevision: storage.Script.Revision, TaskID: retry.ID,
-		Phase: DeletionPhaseFinalizing, CreatedAt: retry.CreatedAt, UpdatedAt: retry.CreatedAt,
+		Phase: deletionrecord.DeletionPhaseFinalizing, CreatedAt: retry.CreatedAt, UpdatedAt: retry.CreatedAt,
 	}
-	value, err := encodeDeletionTombstone(tombstone)
+	value, err := deletionrecord.EncodeDeletionTombstone(tombstone)
 	if err != nil {
 		return scriptTaskChange{}, err
 	}
@@ -154,7 +155,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 	}
 	change.values = append(change.values, activeValue)
 	change.mutations = append(change.mutations, etcdstore.Mutation{
-		Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(DeletionTargetScript), record.Desired.ID), Value: value,
+		Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetScript), record.Desired.ID), Value: value,
 	}, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptSetActiveKey(record.EnvironmentID), Value: activeValue})
 	return change, nil
 }
@@ -174,7 +175,7 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 		return scriptTaskChange{}, err
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{deletionTombstoneKey(string(DeletionTargetScript), task.Target)}, Revision: revision,
+		Keys: []string{deletionTombstoneKey(string(deletionrecord.DeletionTargetScript), task.Target)}, Revision: revision,
 	})
 	if err != nil {
 		return scriptTaskChange{}, err
@@ -183,10 +184,10 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 		return scriptTaskChange{}, errs.New(errs.KindInternal, "Script deletion state is inconsistent")
 	}
 	record := storage.Script.Record
-	tombstone, err := decodeDeletionTombstone(stored.Values[0].Value)
-	if err != nil || tombstone.TargetKind != DeletionTargetScript || tombstone.TargetID != task.Target ||
+	tombstone, err := deletionrecord.DecodeDeletionTombstone(stored.Values[0].Value)
+	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetScript || tombstone.TargetID != task.Target ||
 		tombstone.TargetRevision != storage.Script.Revision || tombstone.TaskID != task.ID ||
-		tombstone.Phase != DeletionPhaseFinalizing {
+		tombstone.Phase != deletionrecord.DeletionPhaseFinalizing {
 		return scriptTaskChange{}, errs.New(errs.KindStateConflict, "Script deletion tombstone does not match its Task")
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -211,7 +212,7 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 				ModRevision: storage.Script.Revision,
 			},
 			{
-				Key:         deletionTombstoneKey(string(DeletionTargetScript), task.Target),
+				Key:         deletionTombstoneKey(string(deletionrecord.DeletionTargetScript), task.Target),
 				ModRevision: stored.Values[0].ModRevision,
 			},
 			{
@@ -230,7 +231,7 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 			},
 		},
 		mutations: []etcdstore.Mutation{{
-			Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetScript), task.Target),
+			Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetScript), task.Target),
 		}},
 	}
 	if terminalStatus == TaskStatusCompleted {
@@ -280,7 +281,7 @@ func (repository *TaskRepository) validateScriptTaskAcknowledgementReplay(
 		return err
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{deletionTombstoneKey(string(DeletionTargetScript), task.Target)}, Revision: revision,
+		Keys: []string{deletionTombstoneKey(string(deletionrecord.DeletionTargetScript), task.Target)}, Revision: revision,
 	})
 	if err != nil {
 		return err

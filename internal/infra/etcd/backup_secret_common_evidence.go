@@ -3,6 +3,7 @@ package etcd
 import (
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -30,10 +31,10 @@ func (reader *BackupSecretResolutionReader) decodeCommonDynamicEvidence(
 	projectKeyID = environment.ProjectID
 	dynamic.project = dynamic.add(hierarchyrecord.ProjectKey(projectKeyID))
 	dynamic.projectFence = dynamic.add(
-		deletionTombstoneKey(string(DeletionTargetProject), projectKeyID),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), projectKeyID),
 	)
 	if err := requireNoDeletionFence(
-		result.Values[dynamic.environmentFence], DeletionTargetEnvironment, environmentID,
+		result.Values[dynamic.environmentFence], deletionrecord.DeletionTargetEnvironment, environmentID,
 	); err != nil {
 		return err
 	}
@@ -48,7 +49,7 @@ func (reader *BackupSecretResolutionReader) decodeCommonDynamicEvidence(
 			return errs.New(errs.KindInternal, "backup connector evidence is corrupt")
 		}
 		if err := requireNoDeletionFence(
-			result.Values[dynamic.connectorFences[connectorID]], DeletionTargetConnector, connectorID,
+			result.Values[dynamic.connectorFences[connectorID]], deletionrecord.DeletionTargetConnector, connectorID,
 		); err != nil {
 			return err
 		}
@@ -79,11 +80,11 @@ func (reader *BackupSecretResolutionReader) decodeCommonDynamicEvidence(
 	return nil
 }
 
-func requireNoDeletionFence(value *etcdstore.KeyValue, targetKind DeletionTargetKind, stableID string) error {
+func requireNoDeletionFence(value *etcdstore.KeyValue, targetKind deletionrecord.DeletionTargetKind, stableID string) error {
 	if value == nil {
 		return nil
 	}
-	tombstone, err := decodeDeletionTombstone(value.Value)
+	tombstone, err := deletionrecord.DecodeDeletionTombstone(value.Value)
 	if err != nil || tombstone.TargetKind != targetKind || tombstone.TargetID != stableID {
 		return errs.New(errs.KindInternal, "deletion fence evidence is corrupt")
 	}

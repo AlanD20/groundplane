@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
@@ -50,7 +51,7 @@ func (repository *RunnerRepository) AttestRunnerRuntimeOwnership(
 		{Key: runnerKey(ownership.RunnerID), ModRevision: current.Revision},
 		{Key: runnerLifecycleKey(ownership.RunnerID), ModRevision: current.Record.LifecycleRevision},
 		{Key: runnerRuntimeOwnershipKey(ownership.RunnerID)},
-		{Key: deletionTombstoneKey(string(DeletionTargetRunner), ownership.RunnerID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), ownership.RunnerID)},
 	}
 	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: runnerLifecycleKey(ownership.RunnerID), Value: lifecycleValue},
@@ -138,7 +139,7 @@ func (repository *RunnerRepository) BeginFailedRunnerRuntimeCleanup(
 	}
 	evidence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		runnerRuntimeOwnershipKey(current.Record.Desired.ID),
-		deletionTombstoneKey(string(DeletionTargetRunner), current.Record.Desired.ID),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), current.Record.Desired.ID),
 	}, Revision: current.ReadRevision})
 	if err != nil {
 		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, err
@@ -167,7 +168,7 @@ func (repository *RunnerRepository) BeginFailedRunnerRuntimeCleanup(
 		{Key: runnerKey(current.Record.Desired.ID), ModRevision: current.Revision},
 		{Key: runnerLifecycleKey(current.Record.Desired.ID), ModRevision: current.Record.LifecycleRevision},
 		{Key: runnerRuntimeOwnershipKey(current.Record.Desired.ID), ModRevision: evidence.Values[0].ModRevision},
-		{Key: deletionTombstoneKey(string(DeletionTargetRunner), current.Record.Desired.ID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), current.Record.Desired.ID)},
 	}
 	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{{
 		Type: etcdstore.MutationPut, Key: runnerLifecycleKey(current.Record.Desired.ID), Value: lifecycleValue,
@@ -224,7 +225,7 @@ func (repository *RunnerRepository) DeleteRunnerRuntimeOwnershipAfterCleanup(
 	evidence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		runnerLifecycleKey(expected.RunnerID),
 		runnerRuntimeOwnershipKey(expected.RunnerID),
-		deletionTombstoneKey(string(DeletionTargetRunner), expected.RunnerID),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), expected.RunnerID),
 	}, Revision: current.ReadRevision})
 	if err != nil {
 		return 0, err
@@ -248,7 +249,7 @@ func (repository *RunnerRepository) DeleteRunnerRuntimeOwnershipAfterCleanup(
 		{Key: runnerLifecycleKey(expected.RunnerID), ModRevision: current.Record.LifecycleRevision},
 		{Key: runnerRuntimeOwnershipKey(expected.RunnerID), ModRevision: evidence.Values[1].ModRevision},
 		{
-			Key:         deletionTombstoneKey(string(DeletionTargetRunner), expected.RunnerID),
+			Key:         deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), expected.RunnerID),
 			ModRevision: keyValueRevision(evidence.Values[2]),
 		},
 	}, []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: runnerRuntimeOwnershipKey(expected.RunnerID)}})

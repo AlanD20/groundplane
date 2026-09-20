@@ -4,6 +4,7 @@ import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -194,9 +195,9 @@ func (repository *BackupPolicyRepository) createBackupSource(
 		{Key: backuppolicy.BackupSourceIdentityKey(record.EnvironmentID, record.Kind, record.TargetID)},
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID)},
-		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID)},
-		{Key: deletionTombstoneKey(string(DeletionTargetTenant), project.Record.TenantID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID)},
 		{
 			Key:         hierarchyrecord.EnvironmentMutationEpochKey(environment.Record.ID),
 			ModRevision: evidence.mutationEpoch.Revision,
@@ -244,9 +245,9 @@ func (repository *BackupPolicyRepository) loadBackupSourceCreationEvidence(
 			backuppolicy.BackupSourceIdentityKey(environment.Record.ID, kind, targetID),
 			hierarchyrecord.EnvironmentKey(environment.Record.ID),
 			hierarchyrecord.ProjectKey(project.Record.ID),
-			deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID),
-			deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID),
-			deletionTombstoneKey(string(DeletionTargetTenant), project.Record.TenantID),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID),
 			hierarchyrecord.EnvironmentMutationEpochKey(environment.Record.ID),
 			hierarchyrecord.EnvironmentOperationLockKey(environment.Record.ID),
 		},

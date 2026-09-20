@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -34,7 +35,7 @@ type secretDeletionRepository interface {
 		context.Context,
 		etcd.SecretOwner,
 		etcdstore.Versioned[secretrecord.Record],
-		etcd.DeletionTombstoneRecord,
+		deletionrecord.DeletionTombstoneRecord,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -297,9 +298,9 @@ func (service *secretDeletionService) deleteSecretOnce(
 		Locator: locator, ReplayTarget: &target, Intent: evidence.durable, Response: response,
 		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	}
-	tombstone := etcd.DeletionTombstoneRecord{
-		TargetKind: etcd.DeletionTargetSecret, TargetID: secretID,
-		TargetRevision: current.Revision, TaskID: task.ID, Phase: etcd.DeletionPhaseFinalizing,
+	tombstone := deletionrecord.DeletionTombstoneRecord{
+		TargetKind: deletionrecord.DeletionTargetSecret, TargetID: secretID,
+		TargetRevision: current.Revision, TaskID: task.ID, Phase: deletionrecord.DeletionPhaseFinalizing,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	result, deleteErr := service.repository.BeginSecretDeletionWithTask(

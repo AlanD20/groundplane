@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -144,12 +145,12 @@ func (repository *TaskRepository) prepareReleaseGroupMutationEvidence(
 		hierarchyrecord.EnvironmentKey(group.EnvironmentID),
 		hierarchyrecord.EnvironmentMutationEpochKey(group.EnvironmentID),
 		hierarchyrecord.EnvironmentOperationLockKey(group.EnvironmentID),
-		deletionTombstoneKey(string(DeletionTargetEnvironment), group.EnvironmentID),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), group.EnvironmentID),
 		releaseGroupRecordKey(group.ID),
 		releaseGroupOwnerKey(group.EnvironmentID, group.ID),
 		releaseGroupNameKey(group.EnvironmentID, group.Name),
 		environmentComposeProjectionKey(group.EnvironmentID),
-		deletionTombstoneKey(string(DeletionTargetReleaseGroup), group.ID),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), group.ID),
 	}
 	if oldName != "" && oldName != group.Name {
 		baseKeys = append(baseKeys, releaseGroupNameKey(group.EnvironmentID, oldName))

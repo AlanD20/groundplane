@@ -2,6 +2,7 @@ package secrets
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -188,7 +189,7 @@ func (repository *durableSecretReadRepository) BeginSecretDeletionWithTask(
 	ctx context.Context,
 	owner etcd.SecretOwner,
 	current etcdstore.Versioned[secretrecord.Record],
-	tombstone etcd.DeletionTombstoneRecord,
+	tombstone deletionrecord.DeletionTombstoneRecord,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {

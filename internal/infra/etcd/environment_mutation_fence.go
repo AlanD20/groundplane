@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
@@ -106,7 +107,7 @@ func loadEnvironmentMutationFence(
 		hierarchyrecord.EnvironmentKey(environmentID),
 		hierarchyrecord.EnvironmentMutationEpochKey(environmentID),
 		hierarchyrecord.EnvironmentOperationLockKey(environmentID),
-		deletionTombstoneKey(string(DeletionTargetEnvironment), environmentID),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environmentID),
 	}
 	base, err := readEnvironmentMutationFenceKeys(ctx, store, baseKeys, readRevision)
 	if err != nil {
@@ -153,7 +154,7 @@ func loadEnvironmentMutationFence(
 
 	projectKeys := []string{
 		hierarchyrecord.ProjectKey(environment.ProjectID),
-		deletionTombstoneKey(string(DeletionTargetProject), environment.ProjectID),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), environment.ProjectID),
 	}
 	projectRead, err := readEnvironmentMutationFenceKeys(ctx, store, projectKeys, readRevision)
 	if err != nil {
@@ -197,7 +198,7 @@ func loadEnvironmentMutationFence(
 	if project.Kind == hierarchyrecord.ProjectKindTenant {
 		tenantKeys := []string{
 			hierarchyrecord.TenantKey(project.TenantID),
-			deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID),
 		}
 		tenantRead, readErr := readEnvironmentMutationFenceKeys(
 			ctx,
@@ -257,7 +258,7 @@ func loadEnvironmentMutationFence(
 	)
 	if project.Kind == hierarchyrecord.ProjectKindTenant {
 		conditions = append(conditions, environmentMutationFenceCondition{
-			key:  deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID),
+			key:  deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID),
 			kind: environmentMutationFenceTenantTombstone,
 		})
 	}
@@ -372,13 +373,13 @@ func validateOwnedEnvironmentDeletionTombstone(
 	if value == nil {
 		return errs.New(errs.KindStateConflict, "environment deletion tombstone is missing")
 	}
-	tombstone, err := decodeDeletionTombstone(value.Value)
+	tombstone, err := deletionrecord.DecodeDeletionTombstone(value.Value)
 	if err != nil {
 		return errs.New(errs.KindInternal, "environment deletion tombstone is corrupt")
 	}
-	if tombstone.TargetKind != DeletionTargetEnvironment || tombstone.TargetID != environmentID ||
+	if tombstone.TargetKind != deletionrecord.DeletionTargetEnvironment || tombstone.TargetID != environmentID ||
 		tombstone.TargetRevision != environmentRevision || tombstone.TaskID != owner.TaskID ||
-		(tombstone.Phase != DeletionPhaseHostEffects && tombstone.Phase != DeletionPhaseFinalizing) {
+		(tombstone.Phase != deletionrecord.DeletionPhaseHostEffects && tombstone.Phase != deletionrecord.DeletionPhaseFinalizing) {
 		return errs.New(errs.KindStateConflict, "environment deletion tombstone ownership changed")
 	}
 	return nil

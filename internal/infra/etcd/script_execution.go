@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -685,7 +686,7 @@ func scriptExecutionProjectionConditions(sources ScriptExecutionSources) []etcds
 	}
 	for _, network := range sources.Networks {
 		conditions = append(conditions, etcdstore.Condition{
-			Key: deletionTombstoneKey(string(DeletionTargetZone), network.Record.Desired.ID),
+			Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), network.Record.Desired.ID),
 		})
 	}
 	conditions = append(conditions, scriptAttachSourceConditions(sources.AttachSources)...)

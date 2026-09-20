@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -24,12 +25,12 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	zone etcdstore.Versioned[zonerecord.Record],
 	authorities EnvironmentZoneRemovalAuthorities,
-	tombstone DeletionTombstoneRecord,
+	tombstone deletionrecord.DeletionTombstoneRecord,
 	intent ZoneRemovalIntent,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateDeletionTombstone(tombstone); err != nil {
+	if err := deletionrecord.ValidateDeletionTombstone(tombstone); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := validateZoneRemovalIntent(intent); err != nil {
@@ -64,9 +65,9 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 	}
 	ordinaryTask := ordinary && task.Executor == TaskExecutorAgent
 	backingTask := backing && task.Executor == TaskExecutorController
-	if tombstone.TargetKind != DeletionTargetZone || tombstone.TargetID != zone.Record.Desired.ID ||
+	if tombstone.TargetKind != deletionrecord.DeletionTargetZone || tombstone.TargetID != zone.Record.Desired.ID ||
 		tombstone.TargetRevision != zone.Revision || tombstone.TaskID != task.ID ||
-		tombstone.Phase != DeletionPhaseHostEffects || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
+		tombstone.Phase != deletionrecord.DeletionPhaseHostEffects || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
 		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) ||
 		task.Type != TaskRemove || task.Target != zone.Record.Desired.ID || task.Status != TaskStatusPending ||
 		(!ordinaryTask && !backingTask) || intent.ZoneRevision != zone.Revision ||
@@ -136,7 +137,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(publication.publishedDescriptor)
-	tombstoneValue, err := encodeDeletionTombstone(tombstone)
+	tombstoneValue, err := deletionrecord.EncodeDeletionTombstone(tombstone)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -157,7 +158,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 	}
 	defer clear(intentValue)
 
-	tombstoneKey := deletionTombstoneKey(string(DeletionTargetZone), zone.Record.Desired.ID)
+	tombstoneKey := deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), zone.Record.Desired.ID)
 	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
@@ -168,8 +169,8 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		{Key: tombstoneKey},
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID)},
-		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
 		{Key: zoneRemovalIntentKey(intent.OperationID)},
 		{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: intent.DesiredHeadRevision},
 		{Key: environmentComposeProjectionKey(intent.EnvironmentID), ModRevision: intent.AppliedProjectionRevision},
@@ -183,7 +184,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 	}
 	if ordinary {
 		conditions = append(conditions, etcdstore.Condition{
-			Key: deletionTombstoneKey(string(DeletionTargetTenant), project.Record.TenantID),
+			Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID),
 		})
 	}
 	mutations := []etcdstore.Mutation{
@@ -322,7 +323,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	ctx context.Context,
 	zone etcdstore.Versioned[zonerecord.Record],
 	parentTaskID string,
-	tombstone etcdstore.Versioned[DeletionTombstoneRecord],
+	tombstone etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord],
 	intent ZoneRemovalIntent,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
@@ -346,10 +347,10 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "backing Zone handoff is invalid")
 	}
 	currentTombstone := tombstone.Record
-	if currentTombstone.TargetKind != DeletionTargetZone ||
+	if currentTombstone.TargetKind != deletionrecord.DeletionTargetZone ||
 		currentTombstone.TargetID != zone.Record.Desired.ID ||
 		currentTombstone.TargetRevision != zone.Revision || currentTombstone.TaskID != parentTaskID ||
-		currentTombstone.Phase != DeletionPhaseHostEffects || currentTombstone.Checkpoint != (DeletionCheckpoint{}) {
+		currentTombstone.Phase != deletionrecord.DeletionPhaseHostEffects || currentTombstone.Checkpoint != (deletionrecord.DeletionCheckpoint{}) {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "backing Zone cascade fence changed")
 	}
 	if err := validateZoneRemovalTaskOwner(task, intent); err != nil {
@@ -446,7 +447,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	}
 	currentTombstone.TaskID = task.ID
 	currentTombstone.UpdatedAt = task.CreatedAt
-	tombstoneValue, err := encodeDeletionTombstone(currentTombstone)
+	tombstoneValue, err := deletionrecord.EncodeDeletionTombstone(currentTombstone)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -472,7 +473,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
 		{
-			Key:         deletionTombstoneKey(string(DeletionTargetZone), zone.Record.Desired.ID),
+			Key:         deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), zone.Record.Desired.ID),
 			ModRevision: tombstone.Revision,
 		},
 		{Key: taskKey(parentTaskID), ModRevision: parentResult.Values[0].ModRevision},
@@ -485,8 +486,8 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: parentResult.Values[2].ModRevision},
 		{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: parentResult.Values[3].ModRevision},
 		{Key: environmentComposeProjectionKey(intent.EnvironmentID), ModRevision: parentResult.Values[4].ModRevision},
-		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), intent.EnvironmentID)},
-		{Key: deletionTombstoneKey(string(DeletionTargetProject), zone.Record.Desired.OwnerID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), intent.EnvironmentID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), zone.Record.Desired.OwnerID)},
 		{
 			Key:         environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
 			ModRevision: publication.rootRevision,
@@ -501,7 +502,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   deletionTombstoneKey(string(DeletionTargetZone), zone.Record.Desired.ID),
+			Key:   deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), zone.Record.Desired.ID),
 			Value: tombstoneValue,
 		},
 		{Type: etcdstore.MutationPut, Key: zoneRemovalIntentKey(intent.OperationID), Value: intentValue},

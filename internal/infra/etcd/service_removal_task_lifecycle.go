@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
@@ -65,7 +66,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	}
 	keys := []string{
 		serviceRuntimeKey(intent.ServiceID),
-		deletionTombstoneKey(string(DeletionTargetService), intent.ServiceID),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetService), intent.ServiceID),
 		environmentBlueprintHeadKey(intent.EnvironmentID),
 		environmentComposeProjectionKey(intent.EnvironmentID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
@@ -93,10 +94,10 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	if !foundDesired {
 		return routeTaskChange{}, corruptServiceRemovalIntent()
 	}
-	tombstone, err := decodeDeletionTombstone(state.Values[1].Value)
-	if err != nil || tombstone.TargetKind != DeletionTargetService || tombstone.TargetID != intent.ServiceID ||
+	tombstone, err := deletionrecord.DecodeDeletionTombstone(state.Values[1].Value)
+	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetService || tombstone.TargetID != intent.ServiceID ||
 		tombstone.TargetRevision != intent.ServiceRevision || tombstone.TaskID != task.ID ||
-		tombstone.Phase != DeletionPhaseHostEffects {
+		tombstone.Phase != deletionrecord.DeletionPhaseHostEffects {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Service removal tombstone changed")
 	}
 	projection, err := decodeEnvironmentComposeProjection(state.Values[3].Value)
@@ -214,7 +215,7 @@ func (repository *TaskRepository) validateServiceRemovalTaskAcknowledgementRepla
 		return errs.New(errs.KindStateConflict, "Service removal intent does not match terminal Task")
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		serviceRuntimeKey(intent.ServiceID), deletionTombstoneKey(string(DeletionTargetService), intent.ServiceID),
+		serviceRuntimeKey(intent.ServiceID), deletionTombstoneKey(string(deletionrecord.DeletionTargetService), intent.ServiceID),
 		environmentBlueprintHeadKey(intent.EnvironmentID), environmentComposeProjectionKey(intent.EnvironmentID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 	}, Revision: revision})

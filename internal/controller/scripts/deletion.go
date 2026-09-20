@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -37,7 +38,7 @@ type scriptDeletionRepository interface {
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		etcdstore.Versioned[etcd.ServiceRecord],
 		etcdstore.Versioned[scriptrecord.Record],
-		etcd.DeletionTombstoneRecord,
+		deletionrecord.DeletionTombstoneRecord,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -49,7 +50,7 @@ func (repository *durableScriptMutationRepository) BeginScriptDeletionWithTask(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	target etcdstore.Versioned[etcd.ServiceRecord],
 	current etcdstore.Versioned[scriptrecord.Record],
-	tombstone etcd.DeletionTombstoneRecord,
+	tombstone deletionrecord.DeletionTombstoneRecord,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
@@ -313,9 +314,9 @@ func (service *scriptDeletionService) deleteScriptOnce(
 		Locator: locator, ReplayTarget: &target, Intent: evidence.durable, Response: response,
 		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	}
-	tombstone := etcd.DeletionTombstoneRecord{
-		TargetKind: etcd.DeletionTargetScript, TargetID: scriptID,
-		TargetRevision: current.Revision, TaskID: task.ID, Phase: etcd.DeletionPhaseFinalizing,
+	tombstone := deletionrecord.DeletionTombstoneRecord{
+		TargetKind: deletionrecord.DeletionTargetScript, TargetID: scriptID,
+		TargetRevision: current.Revision, TaskID: task.ID, Phase: deletionrecord.DeletionPhaseFinalizing,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	result, deleteErr := service.repository.BeginScriptDeletionWithTask(

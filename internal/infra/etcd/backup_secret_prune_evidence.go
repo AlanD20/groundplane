@@ -5,6 +5,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -93,7 +94,7 @@ func (reader *BackupSecretResolutionReader) decodePruneDynamicEvidence(
 			return errs.New(errs.KindStateConflict, "backup prune Connector authority changed")
 		}
 		if err := requireNoDeletionFence(
-			result.Values[dynamic.connectorFences[point.ConnectorID]], DeletionTargetConnector, point.ConnectorID,
+			result.Values[dynamic.connectorFences[point.ConnectorID]], deletionrecord.DeletionTargetConnector, point.ConnectorID,
 		); err != nil {
 			return err
 		}

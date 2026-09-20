@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -158,13 +159,13 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		{Key: runnerHostSlotKey(current.Record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
 		{Key: systemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
 		{Key: hierarchyrecord.TenantKey(current.Record.Desired.TenantID), ModRevision: parents.tenant.Revision},
-		{Key: deletionTombstoneKey(string(DeletionTargetRunner), current.Record.Desired.ID)},
-		{Key: deletionTombstoneKey(string(DeletionTargetTenant), current.Record.Desired.TenantID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), current.Record.Desired.ID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), current.Record.Desired.TenantID)},
 	}
 	if current.Record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
 		conditions = append(conditions,
 			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(current.Record.Desired.OwnerID), ModRevision: parents.project.Revision},
-			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), current.Record.Desired.OwnerID)},
+			etcdstore.Condition{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), current.Record.Desired.OwnerID)},
 		)
 	}
 	mutations := []etcdstore.Mutation{

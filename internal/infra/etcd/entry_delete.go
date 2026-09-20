@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -27,7 +28,7 @@ func (repository *EntryRepository) DeleteEntry(
 		[]string{
 			entryrecord.RecordKey(current.Record.Entry.ID),
 			entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID),
-			deletionTombstoneKey(string(DeletionTargetEntry), current.Record.Entry.ID),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), current.Record.Entry.ID),
 		},
 		1,
 		current.Record.Entry.ID,

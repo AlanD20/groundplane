@@ -4,6 +4,7 @@ import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -111,7 +112,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 				connectorrecord.RecordKey(policy.ConnectorID),
 				connectorEnvironmentKey(environmentID, policy.ConnectorID),
 				backuppolicy.BackupPolicyConnectorReferenceKey(policy.ConnectorID, environmentID),
-				deletionTombstoneKey(string(DeletionTargetConnector), policy.ConnectorID),
+				deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), policy.ConnectorID),
 			)
 		} else if policy.ConnectorID != "" {
 			keys = append(keys, backuppolicy.BackupPolicyConnectorReferenceKey(policy.ConnectorID, environmentID))

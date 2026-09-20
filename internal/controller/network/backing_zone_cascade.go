@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -30,9 +31,9 @@ type backingZoneCascadeRepository interface {
 	GetZone(context.Context, string) (etcdstore.Versioned[zonerecord.Record], error)
 	GetDeletionTombstone(
 		context.Context,
-		etcd.DeletionTargetKind,
+		deletionrecord.DeletionTargetKind,
 		string,
-	) (etcdstore.Versioned[etcd.DeletionTombstoneRecord], bool, error)
+	) (etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord], bool, error)
 	ListAttachesByBackingNetworkAtRevision(
 		context.Context,
 		string,
@@ -46,7 +47,7 @@ type backingZoneCascadeRepository interface {
 		context.Context,
 		etcdstore.Versioned[zonerecord.Record],
 		string,
-		etcdstore.Versioned[etcd.DeletionTombstoneRecord],
+		etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord],
 		etcd.ZoneRemovalIntent,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
@@ -221,7 +222,7 @@ func (service *backingZoneCascadeService) finish(
 ) error {
 	tombstone, found, err := service.repository.GetDeletionTombstone(
 		ctx,
-		etcd.DeletionTargetZone,
+		deletionrecord.DeletionTargetZone,
 		parent.Target,
 	)
 	if err != nil {
@@ -265,7 +266,7 @@ func (service *backingZoneCascadeService) publishFinalRemoval(
 	ctx context.Context,
 	parent etcd.TaskRecord,
 	zone etcdstore.Versioned[zonerecord.Record],
-	tombstone etcdstore.Versioned[etcd.DeletionTombstoneRecord],
+	tombstone etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord],
 ) (string, error) {
 	now := service.now().UTC()
 	child := etcd.TaskRecord{

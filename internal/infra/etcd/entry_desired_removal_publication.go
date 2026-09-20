@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -59,7 +60,7 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 		)
 	}
 	keys := []string{environmentComposeProjectionKey(claim.EnvironmentID),
-		deletionTombstoneKey(string(DeletionTargetEntry), task.Target), entryRemovalIntentKey(task.ID),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), task.Target), entryRemovalIntentKey(task.ID),
 		componentTaskActiveEnvironmentKey(claim.EnvironmentID), taskMaterializationWriterKey(claim.EnvironmentID),
 		environmentBlueprintDescriptorKeyByID(claim.DescriptorID)}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
@@ -107,8 +108,8 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 	if err := validateEntryRemovalTaskOwner(task, intent); err != nil {
 		return entryDesiredRemovalPublication{}, err
 	}
-	tombstone, err := encodeDeletionTombstone(DeletionTombstoneRecord{
-		TargetKind: DeletionTargetEntry, TargetID: task.Target, TargetRevision: current.Revision,
+	tombstone, err := deletionrecord.EncodeDeletionTombstone(deletionrecord.DeletionTombstoneRecord{
+		TargetKind: deletionrecord.DeletionTargetEntry, TargetID: task.Target, TargetRevision: current.Revision,
 		TaskID: task.ID, Phase: entryRemovalTombstonePhase(intent), CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt,
 	})
 	if err != nil {

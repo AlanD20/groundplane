@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -18,7 +19,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	ctx context.Context, environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	entry etcdstore.Versioned[entryrecord.Record],
 	projection *etcdstore.Versioned[EnvironmentComposeProjection],
-	tombstone DeletionTombstoneRecord, intent EntryRemovalIntent, task TaskRecord, marker idempotencyrecord.IdempotencyMarker,
+	tombstone deletionrecord.DeletionTombstoneRecord, intent EntryRemovalIntent, task TaskRecord, marker idempotencyrecord.IdempotencyMarker,
 ) (_ IdempotencyTransactionResult, publicationErr error) {
 	if err := validateEntryHierarchy(ctx, environment, project, entry.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -26,7 +27,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	if err := validateEntryVersion(entry); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateDeletionTombstone(tombstone); err != nil {
+	if err := deletionrecord.ValidateDeletionTombstone(tombstone); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := validateEntryRemovalIntent(intent); err != nil {
@@ -38,7 +39,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	if err := validateEntryRemovalTaskOwner(task, intent); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if tombstone.TargetKind != DeletionTargetEntry || tombstone.TargetID != entry.Record.Entry.ID ||
+	if tombstone.TargetKind != deletionrecord.DeletionTargetEntry || tombstone.TargetID != entry.Record.Entry.ID ||
 		tombstone.TargetRevision != entry.Revision || tombstone.TaskID != task.ID ||
 		tombstone.Phase != entryRemovalTombstonePhase(intent) || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
 		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) || intent.TaskID != task.ID ||
@@ -74,7 +75,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	tombstoneValue, err := encodeDeletionTombstone(tombstone)
+	tombstoneValue, err := deletionrecord.EncodeDeletionTombstone(tombstone)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -90,7 +91,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	}
 	defer clear(reference)
 
-	tombstoneKey := deletionTombstoneKey(string(DeletionTargetEntry), entry.Record.Entry.ID)
+	tombstoneKey := deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), entry.Record.Entry.ID)
 	domainKeys := []string{
 		taskKey(task.ID),
 		taskOperationIndexKey(task.OperationID, task.ID),

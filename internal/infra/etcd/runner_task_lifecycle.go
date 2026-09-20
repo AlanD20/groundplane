@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -135,10 +136,10 @@ func decodeRunnerRemovalIntent(value []byte) (RunnerRemovalIntent, error) {
 	return intent, nil
 }
 
-func validateRunnerDeletionTombstone(record DeletionTombstoneRecord) error {
-	if record.TargetKind != DeletionTargetRunner || ids.Validate(ids.KindRunner, record.TargetID) != nil ||
+func validateRunnerDeletionTombstone(record deletionrecord.DeletionTombstoneRecord) error {
+	if record.TargetKind != deletionrecord.DeletionTargetRunner || ids.Validate(ids.KindRunner, record.TargetID) != nil ||
 		record.TargetRevision <= 0 || ids.Validate(ids.KindTask, record.TaskID) != nil ||
-		record.Phase != DeletionPhaseFinalizing || record.Checkpoint != (DeletionCheckpoint{}) ||
+		record.Phase != deletionrecord.DeletionPhaseFinalizing || record.Checkpoint != (deletionrecord.DeletionCheckpoint{}) ||
 		!recordcodec.IsCanonicalUTC(record.CreatedAt) || !recordcodec.IsCanonicalUTC(record.UpdatedAt) ||
 		record.UpdatedAt.Before(record.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "runner deletion tombstone is invalid")
@@ -146,20 +147,20 @@ func validateRunnerDeletionTombstone(record DeletionTombstoneRecord) error {
 	return nil
 }
 
-func encodeRunnerDeletionTombstone(record DeletionTombstoneRecord) ([]byte, error) {
+func encodeRunnerDeletionTombstone(record deletionrecord.DeletionTombstoneRecord) ([]byte, error) {
 	if err := validateRunnerDeletionTombstone(record); err != nil {
 		return nil, err
 	}
 	return recordcodec.Encode("deletion-tombstone", record)
 }
 
-func decodeRunnerDeletionTombstone(value []byte) (DeletionTombstoneRecord, error) {
+func decodeRunnerDeletionTombstone(value []byte) (deletionrecord.DeletionTombstoneRecord, error) {
 	if len(value) > runnerrecord.MaximumRunnerPersistenceBytes {
-		return DeletionTombstoneRecord{}, errs.New(errs.KindInternal, "runner deletion tombstone is corrupt")
+		return deletionrecord.DeletionTombstoneRecord{}, errs.New(errs.KindInternal, "runner deletion tombstone is corrupt")
 	}
-	record, err := recordcodec.Decode[DeletionTombstoneRecord](value, "deletion-tombstone")
+	record, err := recordcodec.Decode[deletionrecord.DeletionTombstoneRecord](value, "deletion-tombstone")
 	if err != nil || validateRunnerDeletionTombstone(record) != nil {
-		return DeletionTombstoneRecord{}, errs.New(errs.KindInternal, "runner deletion tombstone is corrupt")
+		return deletionrecord.DeletionTombstoneRecord{}, errs.New(errs.KindInternal, "runner deletion tombstone is corrupt")
 	}
 	return record, nil
 }
@@ -251,7 +252,7 @@ func sortSearchRunnerID(values []string, id string) int {
 func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 	ctx context.Context,
 	current etcdstore.Versioned[runnerrecord.RunnerRecord],
-	tombstone DeletionTombstoneRecord,
+	tombstone deletionrecord.DeletionTombstoneRecord,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -387,15 +388,15 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		{Key: runnerHostSlotKey(current.Record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
 		{Key: systemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
 		{Key: taskKey(source.ID), ModRevision: sourceResult.Entry.ModRevision},
-		{Key: deletionTombstoneKey(string(DeletionTargetRunner), current.Record.Desired.ID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), current.Record.Desired.ID)},
 		{Key: runnerRemovalIntentKey(current.Record.Desired.ID)},
 		{Key: hierarchyrecord.TenantKey(current.Record.Desired.TenantID), ModRevision: parents.tenant.Revision},
-		{Key: deletionTombstoneKey(string(DeletionTargetTenant), current.Record.Desired.TenantID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), current.Record.Desired.TenantID)},
 	}
 	if current.Record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
 		conditions = append(conditions,
 			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(current.Record.Desired.OwnerID), ModRevision: parents.project.Revision},
-			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), current.Record.Desired.OwnerID)},
+			etcdstore.Condition{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), current.Record.Desired.OwnerID)},
 		)
 	}
 	mutations := []etcdstore.Mutation{
@@ -404,7 +405,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 		{
-			Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(DeletionTargetRunner), current.Record.Desired.ID),
+			Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), current.Record.Desired.ID),
 			Value: tombstoneValue,
 		},
 		{Type: etcdstore.MutationPut, Key: runnerRemovalIntentKey(current.Record.Desired.ID), Value: intentValue},
@@ -448,7 +449,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 
 func validateRunnerDeletionTask(
 	current etcdstore.Versioned[runnerrecord.RunnerRecord],
-	tombstone DeletionTombstoneRecord,
+	tombstone deletionrecord.DeletionTombstoneRecord,
 	task TaskRecord,
 ) error {
 	evidence, evidenceErr := decodeRunnerRemovalTaskEvidence(task)
@@ -496,7 +497,7 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			runnerKey(task.Target), runnerLifecycleKey(task.Target),
-			deletionTombstoneKey(string(DeletionTargetRunner), task.Target),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
 			runnerRuntimeOwnershipKey(task.Target), runnerReadinessProofKey(task.ID),
 		},
 		Revision: revision,
@@ -548,7 +549,7 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 	conditions := []etcdstore.Condition{
 		{Key: runnerKey(task.Target), ModRevision: result.Values[0].ModRevision},
 		{Key: runnerLifecycleKey(task.Target), ModRevision: result.Values[1].ModRevision},
-		{Key: deletionTombstoneKey(string(DeletionTargetRunner), task.Target)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target)},
 		{Key: runnerReadinessProofKey(task.ID), ModRevision: keyValueRevision(proofValue)},
 		{
 			Key:         runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, record.Desired.ID),
@@ -587,7 +588,7 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 		Keys: []string{
 			runnerKey(task.Target),
 			runnerLifecycleKey(task.Target),
-			deletionTombstoneKey(string(DeletionTargetRunner), task.Target),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
 			runnerRemovalIntentKey(task.Target),
 			runnerObservationKey(task.Target),
 			runnerRuntimeOwnershipKey(task.Target),
@@ -626,7 +627,7 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 			{Key: runnerKey(task.Target), ModRevision: base.Values[0].ModRevision},
 			{Key: runnerLifecycleKey(task.Target), ModRevision: base.Values[1].ModRevision},
 			{
-				Key:         deletionTombstoneKey(string(DeletionTargetRunner), task.Target),
+				Key:         deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
 				ModRevision: base.Values[2].ModRevision,
 			},
 			{Key: runnerRemovalIntentKey(task.Target), ModRevision: base.Values[3].ModRevision},
@@ -645,7 +646,7 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 			{Key: systemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
 		},
 		mutations: []etcdstore.Mutation{
-			{Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetRunner), task.Target)},
+			{Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target)},
 			{Type: etcdstore.MutationDelete, Key: runnerRemovalIntentKey(task.Target)},
 		},
 	}
@@ -724,7 +725,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 		Keys: []string{
 			runnerKey(source.Target),
 			runnerLifecycleKey(source.Target),
-			deletionTombstoneKey(string(DeletionTargetRunner), source.Target),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), source.Target),
 			runnerRemovalIntentKey(source.Target),
 			runnerRuntimeOwnershipKey(source.Target),
 		},
@@ -767,12 +768,12 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 	}
 	parentKeys := []string{
 		hierarchyrecord.TenantKey(record.Desired.TenantID),
-		deletionTombstoneKey(string(DeletionTargetTenant), record.Desired.TenantID),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), record.Desired.TenantID),
 	}
 	if record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
 		parentKeys = append(parentKeys,
 			hierarchyrecord.ProjectKey(record.Desired.OwnerID),
-			deletionTombstoneKey(string(DeletionTargetProject), record.Desired.OwnerID),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), record.Desired.OwnerID),
 		)
 	}
 	parents, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: parentKeys, Revision: revision})
@@ -805,10 +806,10 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 			return runnerTaskChange{}, recordcodec.CorruptRecord()
 		}
 	}
-	tombstone := DeletionTombstoneRecord{
-		TargetKind: DeletionTargetRunner, TargetID: source.Target,
+	tombstone := deletionrecord.DeletionTombstoneRecord{
+		TargetKind: deletionrecord.DeletionTargetRunner, TargetID: source.Target,
 		TargetRevision: result.Values[0].ModRevision, TaskID: retry.ID,
-		Phase: DeletionPhaseFinalizing, CreatedAt: retry.CreatedAt, UpdatedAt: retry.CreatedAt,
+		Phase: deletionrecord.DeletionPhaseFinalizing, CreatedAt: retry.CreatedAt, UpdatedAt: retry.CreatedAt,
 	}
 	intent := RunnerRemovalIntent{
 		RunnerID: record.Desired.ID, TaskID: retry.ID,
@@ -833,7 +834,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 			{Key: runnerKey(source.Target), ModRevision: result.Values[0].ModRevision},
 			{Key: runnerLifecycleKey(source.Target), ModRevision: result.Values[1].ModRevision},
 			{Key: runnerRuntimeOwnershipKey(source.Target), ModRevision: keyValueRevision(result.Values[4])},
-			{Key: deletionTombstoneKey(string(DeletionTargetRunner), source.Target)},
+			{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), source.Target)},
 			{Key: runnerRemovalIntentKey(source.Target)},
 			{
 				Key:         runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, record.Desired.ID),
@@ -847,11 +848,11 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 			{Key: runnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
 			{Key: systemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
 			{Key: hierarchyrecord.TenantKey(record.Desired.TenantID), ModRevision: parents.Values[0].ModRevision},
-			{Key: deletionTombstoneKey(string(DeletionTargetTenant), record.Desired.TenantID)},
+			{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), record.Desired.TenantID)},
 		},
 		mutations: []etcdstore.Mutation{
 			{
-				Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(DeletionTargetRunner), source.Target),
+				Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), source.Target),
 				Value: tombstoneValue,
 			},
 			{Type: etcdstore.MutationPut, Key: runnerRemovalIntentKey(source.Target), Value: intentValue},
@@ -862,7 +863,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 	if record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
 		change.conditions = append(change.conditions,
 			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(record.Desired.OwnerID), ModRevision: parents.Values[2].ModRevision},
-			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), record.Desired.OwnerID)},
+			etcdstore.Condition{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), record.Desired.OwnerID)},
 		)
 	}
 	return change, nil
@@ -924,7 +925,7 @@ func (repository *TaskRepository) validateRunnerCreationAcknowledgementReplay(
 		Keys: []string{
 			runnerKey(task.Target),
 			runnerLifecycleKey(task.Target),
-			deletionTombstoneKey(string(DeletionTargetRunner), task.Target),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
 		},
 		Revision: revision,
 	})
@@ -964,7 +965,7 @@ func (repository *TaskRepository) validateRunnerRemovalAcknowledgementReplay(
 		Keys: []string{
 			runnerKey(task.Target),
 			runnerLifecycleKey(task.Target),
-			deletionTombstoneKey(string(DeletionTargetRunner), task.Target),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
 			runnerRemovalIntentKey(task.Target),
 			runnerObservationKey(task.Target),
 			runnerOwnerKey(evidence.ownerKind, evidence.ownerID, task.Target),

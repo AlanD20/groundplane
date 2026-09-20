@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -155,7 +156,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		{Key: deletionTombstoneKey("environment", record.BackingEnvironmentID)},
 		{Key: deletionTombstoneKey("project", record.BackingProjectID)},
 		{Key: deletionTombstoneKey("service", record.BackingServiceID)},
-		{Key: deletionTombstoneKey(string(DeletionTargetZone), record.BackingNetworkID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), record.BackingNetworkID)},
 		{Key: attachTaskRenderInputKey(task.PlanID)},
 		{Key: planReferenceKey},
 		{Key: hierarchyrecord.TenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},

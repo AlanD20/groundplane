@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"sort"
@@ -135,7 +136,7 @@ func scriptAttachSourceConditions(sources ScriptAttachSources) []etcdstore.Condi
 			}
 			root := environmentBlueprintRootKey(head.Record.EnvironmentID, head.Record.RevisionID)
 			byKey[root] = etcdstore.Condition{Key: root, ModRevision: network.Revision}
-			deleted := deletionTombstoneKey(string(DeletionTargetZone), network.Record.Desired.ID)
+			deleted := deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), network.Record.Desired.ID)
 			byKey[deleted] = etcdstore.Condition{Key: deleted}
 		}
 	}

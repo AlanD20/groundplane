@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"sort"
@@ -65,7 +66,7 @@ func prepareComponentTaskSecretReferences(
 		keys = append(
 			keys,
 			secretrecord.RecordKey(reference.secretID),
-			deletionTombstoneKey(string(DeletionTargetSecret), reference.secretID),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), reference.secretID),
 		)
 	}
 	stored, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
@@ -105,7 +106,7 @@ func prepareComponentTaskSecretReferences(
 		conditions = append(
 			conditions,
 			etcdstore.Condition{Key: secretrecord.RecordKey(references[index].secretID), ModRevision: recordValue.ModRevision},
-			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetSecret), references[index].secretID)},
+			etcdstore.Condition{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), references[index].secretID)},
 			etcdstore.Condition{Key: candidateKey},
 		)
 		mutations = append(mutations, etcdstore.Mutation{

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -14,7 +15,7 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalAcknowledgement(
 	ctx context.Context, task TaskRecord, intent EntryRemovalIntent, intentRevision int64,
 	status TaskStatus, terminalAt time.Time, revision int64,
 ) (routeTaskChange, error) {
-	keys := []string{deletionTombstoneKey(string(DeletionTargetEntry), intent.EntryID),
+	keys := []string{deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID)}
 	if task.Executor == TaskExecutorController {
 		keys = append(keys, taskMaterializationWriterKey(intent.EnvironmentID))
@@ -27,8 +28,8 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalAcknowledgement(
 		read.Values[0] == nil || read.Values[1] == nil || string(read.Values[1].Value) != task.ID {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal terminal ownership changed")
 	}
-	tombstone, err := decodeDeletionTombstone(read.Values[0].Value)
-	if err != nil || tombstone.TargetKind != DeletionTargetEntry || tombstone.TargetID != intent.EntryID ||
+	tombstone, err := deletionrecord.DecodeDeletionTombstone(read.Values[0].Value)
+	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetEntry || tombstone.TargetID != intent.EntryID ||
 		tombstone.TaskID != task.ID || tombstone.TargetRevision != intent.EntryRevision ||
 		tombstone.Phase != entryRemovalTombstonePhase(intent) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal tombstone changed")

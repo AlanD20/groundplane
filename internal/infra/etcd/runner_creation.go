@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -223,12 +224,12 @@ func newRunnerCreateEvidence(
 	evidence.quota = add(etcdstore.Condition{Key: runnerTenantQuotaKey(desired.TenantID), ModRevision: allocation.quota.Revision})
 	evidence.system = add(etcdstore.Condition{Key: systemPoolRegistryKey, ModRevision: allocation.system.Revision})
 	evidence.tenant = add(etcdstore.Condition{Key: hierarchyrecord.TenantKey(desired.TenantID), ModRevision: parents.tenant.Revision})
-	evidence.runnerDeletion = add(etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetRunner), desired.ID)})
-	evidence.tenantDeletion = add(etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetTenant), desired.TenantID)})
+	evidence.runnerDeletion = add(etcdstore.Condition{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), desired.ID)})
+	evidence.tenantDeletion = add(etcdstore.Condition{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), desired.TenantID)})
 	if desired.OwnerKind == runnerrecord.RunnerOwnerProject {
 		evidence.project = add(etcdstore.Condition{Key: hierarchyrecord.ProjectKey(desired.OwnerID), ModRevision: parents.project.Revision})
 		evidence.projectDeletion = add(
-			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), desired.OwnerID)},
+			etcdstore.Condition{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), desired.OwnerID)},
 		)
 	}
 	evidence.host = add(allocation.host.condition)

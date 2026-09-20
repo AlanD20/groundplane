@@ -1,17 +1,17 @@
 package runner
 
 import (
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
 func PublicProjection(
 	record runnerrecord.RunnerRecord,
 	observation *runnerrecord.RunnerObservationRecord,
-	tombstone *etcd.DeletionTombstoneRecord,
+	tombstone *deletionrecord.DeletionTombstoneRecord,
 ) (apiTypes.Runner, error) {
 	name, err := runnerrecord.RunnerName(record.Desired.ID)
 	if err != nil {

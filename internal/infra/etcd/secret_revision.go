@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
@@ -25,7 +26,7 @@ func (repository *SecretRepository) getSecretAtRevision(
 		return etcdstore.Versioned[secretrecord.Record]{}, errs.New(errs.KindValidationFailed, "Secret read revision is invalid")
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys:     []string{secretrecord.RecordKey(id), deletionTombstoneKey(string(DeletionTargetSecret), id)},
+		Keys:     []string{secretrecord.RecordKey(id), deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), id)},
 		Revision: revision,
 	})
 	if err != nil {

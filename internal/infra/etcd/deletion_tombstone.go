@@ -3,95 +3,42 @@ package etcd
 import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	"time"
-	"unicode/utf8"
-
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// DeletionTargetKind is the closed hierarchy deletion catalog. Additional
-// resource kinds enter this catalog only with their resource-specific
-// finalization contract.
-type DeletionTargetKind string
-
-const (
-	DeletionTargetTenant       DeletionTargetKind = "tenant"
-	DeletionTargetProject      DeletionTargetKind = "project"
-	DeletionTargetEnvironment  DeletionTargetKind = "environment"
-	DeletionTargetEntry        DeletionTargetKind = "entry"
-	DeletionTargetRoute        DeletionTargetKind = "route"
-	DeletionTargetScript       DeletionTargetKind = "script"
-	DeletionTargetSecret       DeletionTargetKind = "secret"
-	DeletionTargetConnector    DeletionTargetKind = "connector"
-	DeletionTargetZone         DeletionTargetKind = "zone"
-	DeletionTargetReleaseGroup DeletionTargetKind = "release_group"
-	DeletionTargetService      DeletionTargetKind = "service"
-	DeletionTargetRunner       DeletionTargetKind = "runner"
-)
-
-// DeletionPhase records which authority may advance a destructive operation.
-// A completed tombstone is never retained.
-type DeletionPhase string
-
-const (
-	DeletionPhaseHostEffects DeletionPhase = "host_effects"
-	DeletionPhaseFinalizing  DeletionPhase = "finalizing"
-)
-
-// DeletionCheckpoint identifies the last fully finalized descendant. Empty
-// fields are the initial checkpoint; nonempty fields are always paired.
-type DeletionCheckpoint struct {
-	ResourceKind string `json:"resource_kind,omitempty"`
-	StableID     string `json:"stable_id,omitempty"`
-}
-
-// DeletionTombstoneRecord fences one resource while its destructive Task
-// performs any authority-owned effects and atomic finalization.
-type DeletionTombstoneRecord struct {
-	TargetKind     DeletionTargetKind `json:"target_kind"`
-	TargetID       string             `json:"target_id"`
-	TargetRevision int64              `json:"target_revision"`
-	TaskID         string             `json:"task_id"`
-	Phase          DeletionPhase      `json:"phase"`
-	Checkpoint     DeletionCheckpoint `json:"checkpoint"`
-	CreatedAt      time.Time          `json:"created_at"`
-	UpdatedAt      time.Time          `json:"updated_at"`
-}
-
 func (repository *HierarchyRepository) GetDeletionTombstone(
 	ctx context.Context,
-	targetKind DeletionTargetKind,
+	targetKind deletionrecord.DeletionTargetKind,
 	targetID string,
-) (etcdstore.Versioned[DeletionTombstoneRecord], bool, error) {
+) (etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord], bool, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return etcdstore.Versioned[DeletionTombstoneRecord]{}, false, err
+		return etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord]{}, false, err
 	}
-	if err := validateDeletionTarget(targetKind, targetID); err != nil {
-		return etcdstore.Versioned[DeletionTombstoneRecord]{}, false, err
+	if err := deletionrecord.ValidateDeletionTarget(targetKind, targetID); err != nil {
+		return etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord]{}, false, err
 	}
 	result, err := repository.store.Get(ctx, deletionTombstoneKey(string(targetKind), targetID))
 	if err != nil {
-		return etcdstore.Versioned[DeletionTombstoneRecord]{}, false, err
+		return etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord]{}, false, err
 	}
 	if result == nil {
-		return etcdstore.Versioned[DeletionTombstoneRecord]{}, false, errs.New(
+		return etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord]{}, false, errs.New(
 			errs.KindInternal,
 			"deletion tombstone read is empty",
 		)
 	}
 	if result.Entry == nil {
-		return etcdstore.Versioned[DeletionTombstoneRecord]{ReadRevision: result.ReadRevision}, false, nil
+		return etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord]{ReadRevision: result.ReadRevision}, false, nil
 	}
-	record, err := decodeDeletionTombstone(result.Entry.Value)
+	record, err := deletionrecord.DecodeDeletionTombstone(result.Entry.Value)
 	if err != nil || record.TargetKind != targetKind || record.TargetID != targetID {
-		return etcdstore.Versioned[DeletionTombstoneRecord]{}, false, corruptDeletionTombstone()
+		return etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord]{}, false, deletionrecord.CorruptDeletionTombstone()
 	}
-	return etcdstore.Versioned[DeletionTombstoneRecord]{
+	return etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord]{
 		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, true, nil
 }
@@ -104,7 +51,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	expectedBlueprintRevision int64,
-	tombstone DeletionTombstoneRecord,
+	tombstone deletionrecord.DeletionTombstoneRecord,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -133,13 +80,13 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 			"environment hierarchy changed before deletion",
 		)
 	}
-	if err := validateDeletionTombstone(tombstone); err != nil {
+	if err := deletionrecord.ValidateDeletionTombstone(tombstone); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if tombstone.TargetKind != DeletionTargetEnvironment || tombstone.TargetID != environment.Record.ID ||
+	if tombstone.TargetKind != deletionrecord.DeletionTargetEnvironment || tombstone.TargetID != environment.Record.ID ||
 		tombstone.TargetRevision != environment.Revision ||
 		tombstone.TaskID != task.ID ||
-		tombstone.Phase != DeletionPhaseHostEffects ||
+		tombstone.Phase != deletionrecord.DeletionPhaseHostEffects ||
 		!tombstone.CreatedAt.Equal(task.CreatedAt) ||
 		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) ||
 		task.Executor != TaskExecutorAgent ||
@@ -176,9 +123,9 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 			environmentComposeProjectionKey(environment.Record.ID),
 			hierarchyrecord.EnvironmentMutationEpochKey(environment.Record.ID),
 			hierarchyrecord.EnvironmentOperationLockKey(environment.Record.ID),
-			deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID),
-			deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID),
-			deletionTombstoneKey(string(DeletionTargetTenant), project.Record.TenantID),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID),
 		},
 		Revision: readRevision,
 	})
@@ -284,7 +231,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	tombstoneValue, err := encodeDeletionTombstone(tombstone)
+	tombstoneValue, err := deletionrecord.EncodeDeletionTombstone(tombstone)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -300,7 +247,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	}
 	defer clear(reference)
 
-	tombstoneKey := deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID)
+	tombstoneKey := deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)
 	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
@@ -325,8 +272,8 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 			ModRevision: expectedBlueprintRevision,
 		},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID)},
-		{Key: deletionTombstoneKey(string(DeletionTargetTenant), project.Record.TenantID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID)},
 		{
 			Key:         hierarchyrecord.EnvironmentMutationEpochKey(environment.Record.ID),
 			ModRevision: evidence.Values[7].ModRevision,
@@ -586,100 +533,9 @@ func decodeOwnedEnvironmentDeletionLock(
 	return record, nil
 }
 
-func encodeDeletionTombstone(record DeletionTombstoneRecord) ([]byte, error) {
-	if err := validateDeletionTombstone(record); err != nil {
-		return nil, err
-	}
-	return recordcodec.Encode("deletion-tombstone", record)
-}
-
-func decodeDeletionTombstone(value []byte) (DeletionTombstoneRecord, error) {
-	record, err := recordcodec.Decode[DeletionTombstoneRecord](value, "deletion-tombstone")
-	if err != nil {
-		return DeletionTombstoneRecord{}, err
-	}
-	if err := validateDeletionTombstone(record); err != nil {
-		return DeletionTombstoneRecord{}, corruptDeletionTombstone()
-	}
-	return record, nil
-}
-
-func validateDeletionTombstone(record DeletionTombstoneRecord) error {
-	if err := validateDeletionTarget(record.TargetKind, record.TargetID); err != nil {
-		return err
-	}
-	if record.TargetRevision <= 0 || recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
-		(record.Phase != DeletionPhaseHostEffects && record.Phase != DeletionPhaseFinalizing) ||
-		record.CreatedAt.IsZero() || !record.CreatedAt.Equal(record.CreatedAt.UTC()) ||
-		record.UpdatedAt.Before(
-			record.CreatedAt,
-		) || !record.UpdatedAt.Equal(record.UpdatedAt.UTC()) {
-		return errs.New(errs.KindValidationFailed, "deletion tombstone lifecycle is invalid")
-	}
-	checkpoint := record.Checkpoint
-	if (checkpoint.ResourceKind == "") != (checkpoint.StableID == "") {
-		return errs.New(errs.KindValidationFailed, "deletion checkpoint is incomplete")
-	}
-	if checkpoint.ResourceKind != "" && (!validDeletionCheckpointKind(checkpoint.ResourceKind) ||
-		!utf8.ValidString(checkpoint.StableID) || checkpoint.StableID == "") {
-		return errs.New(errs.KindValidationFailed, "deletion checkpoint is invalid")
-	}
-	return nil
-}
-
-func validateDeletionTarget(kind DeletionTargetKind, id string) error {
-	var expected ids.Kind
-	switch kind {
-	case DeletionTargetTenant:
-		expected = ids.KindTenant
-	case DeletionTargetProject:
-		expected = ids.KindProject
-	case DeletionTargetEnvironment:
-		expected = ids.KindEnvironment
-	case DeletionTargetEntry:
-		expected = ids.KindEnvEntry
-	case DeletionTargetRoute:
-		expected = ids.KindRoute
-	case DeletionTargetScript:
-		expected = ids.KindScript
-	case DeletionTargetSecret:
-		expected = ids.KindSecret
-	case DeletionTargetConnector:
-		expected = ids.KindConnector
-	case DeletionTargetZone:
-		expected = ids.KindNetwork
-	case DeletionTargetReleaseGroup:
-		expected = ids.KindReleaseGroup
-	case DeletionTargetService:
-		expected = ids.KindService
-	case DeletionTargetRunner:
-		expected = ids.KindRunner
-	default:
-		return errs.New(errs.KindValidationFailed, "deletion target kind is invalid")
-	}
-	if recordcodec.ValidateID(expected, id) != nil {
-		return errs.New(errs.KindValidationFailed, "deletion target id is invalid")
-	}
-	return nil
-}
-
-func validDeletionCheckpointKind(value string) bool {
-	switch value {
-	case "zone", "service", "route", "volume", "entry", "script", "release_group", "component",
-		"connector", "backup_policy", "blueprint_revision", "environment", "project":
-		return true
-	default:
-		return false
-	}
-}
-
 func keyValueRevision(value *etcdstore.KeyValue) int64 {
 	if value == nil {
 		return 0
 	}
 	return value.ModRevision
-}
-
-func corruptDeletionTombstone() error {
-	return errs.New(errs.KindInternal, "deletion tombstone is corrupt")
 }

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -176,19 +177,19 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 	)
 	if prepared.taskType == TaskRemove {
-		tombstone := DeletionTombstoneRecord{
-			TargetKind: DeletionTargetReleaseGroup, TargetID: prepared.groupID,
+		tombstone := deletionrecord.DeletionTombstoneRecord{
+			TargetKind: deletionrecord.DeletionTargetReleaseGroup, TargetID: prepared.groupID,
 			TargetRevision: prepared.groupRevision, TaskID: task.ID,
-			Phase: DeletionPhaseFinalizing, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt,
+			Phase: deletionrecord.DeletionPhaseFinalizing, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt,
 		}
-		value, err := encodeDeletionTombstone(tombstone)
+		value, err := deletionrecord.EncodeDeletionTombstone(tombstone)
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
 		defer clear(value)
 		mutations = append(mutations, etcdstore.Mutation{
 			Type:  etcdstore.MutationPut,
-			Key:   deletionTombstoneKey(string(DeletionTargetReleaseGroup), prepared.groupID),
+			Key:   deletionTombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), prepared.groupID),
 			Value: value,
 		})
 	}

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
@@ -49,7 +50,7 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 	}
 	secondaryKeys := []string{
 		runnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug),
-		deletionTombstoneKey(string(DeletionTargetRunner), runnerID),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), runnerID),
 	}
 	renaming := current.Record.Desired.Slug != slug
 	if renaming {
@@ -83,7 +84,7 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 			Key:         runnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug),
 			ModRevision: secondary.Values[0].ModRevision,
 		},
-		{Key: deletionTombstoneKey(string(DeletionTargetRunner), runnerID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), runnerID)},
 	}
 	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: runnerKey(runnerID), Value: value}}
 	if renaming {

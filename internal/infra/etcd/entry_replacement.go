@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/core"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -47,7 +48,7 @@ func (repository *EntryRepository) ReplaceEntry(
 			entryrecord.RecordKey(current.Record.Entry.ID),
 			entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID),
 			generationKey,
-			deletionTombstoneKey(string(DeletionTargetEntry), current.Record.Entry.ID),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), current.Record.Entry.ID),
 		},
 		1,
 		current.Record.Entry.ID,
@@ -137,7 +138,7 @@ func (repository *EntryRepository) ReplaceEntryIdempotent(
 			entryrecord.RecordKey(current.Record.Entry.ID),
 			entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID),
 			generationKey,
-			deletionTombstoneKey(string(DeletionTargetEntry), current.Record.Entry.ID),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), current.Record.Entry.ID),
 		},
 		1,
 		current.Record.Entry.ID,

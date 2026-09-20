@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -98,7 +99,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	current etcdstore.Versioned[ServiceRecord],
 	projection etcdstore.Versioned[EnvironmentComposeProjection],
-	tombstone DeletionTombstoneRecord,
+	tombstone deletionrecord.DeletionTombstoneRecord,
 	intent ServiceRemovalIntent,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
@@ -106,7 +107,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	if err := validateServiceLifecycleHierarchy(&tenant, project, environment, current); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateDeletionTombstone(tombstone); err != nil {
+	if err := deletionrecord.ValidateDeletionTombstone(tombstone); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := validateServiceRemovalIntent(intent); err != nil {
@@ -118,9 +119,9 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	if projection.Revision != intent.CurrentProjectionRevision ||
 		!sameRouteRemovalProjection(projection.Record, intent.CurrentProjection) ||
 		intent.ServiceRevision != current.Revision || intent.ExpectedHeadRevision != projection.Revision ||
-		tombstone.TargetKind != DeletionTargetService || tombstone.TargetID != current.Record.Desired.ID ||
+		tombstone.TargetKind != deletionrecord.DeletionTargetService || tombstone.TargetID != current.Record.Desired.ID ||
 		tombstone.TargetRevision != current.Revision || tombstone.TaskID != task.ID ||
-		tombstone.Phase != DeletionPhaseHostEffects || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
+		tombstone.Phase != deletionrecord.DeletionPhaseHostEffects || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
 		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) || task.Status != TaskStatusPending {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
@@ -206,7 +207,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(reference)
-	tombstoneValue, err := encodeDeletionTombstone(tombstone)
+	tombstoneValue, err := deletionrecord.EncodeDeletionTombstone(tombstone)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -221,7 +222,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		{Key: taskActiveOperationKey(task.OperationID)}, {Key: taskQueueKey(task.Executor, task.ID)},
 		serviceDesiredCondition(current),
 		serviceRuntimeCondition(current),
-		{Key: deletionTombstoneKey(string(DeletionTargetService), current.Record.Desired.ID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetService), current.Record.Desired.ID)},
 		{Key: serviceRemovalIntentKey(task.ID)},
 		{Key: environmentComposeProjectionKey(environment.Record.ID), ModRevision: indexes.Values[1].ModRevision},
 		{Key: serviceLifecycleActiveKey(current.Record.Desired.ID)},
@@ -240,7 +241,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   deletionTombstoneKey(string(DeletionTargetService), current.Record.Desired.ID),
+			Key:   deletionTombstoneKey(string(deletionrecord.DeletionTargetService), current.Record.Desired.ID),
 			Value: tombstoneValue,
 		},
 		{Type: etcdstore.MutationPut, Key: serviceRemovalIntentKey(task.ID), Value: intentValue},

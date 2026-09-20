@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -19,7 +20,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	target etcdstore.Versioned[ServiceRecord],
 	current etcdstore.Versioned[scriptrecord.Record],
-	tombstone DeletionTombstoneRecord,
+	tombstone deletionrecord.DeletionTombstoneRecord,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -34,7 +35,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 			errs.KindResourceInUse, "active Script executions fence deletion",
 		)
 	}
-	if err := validateDeletionTombstone(tombstone); err != nil {
+	if err := deletionrecord.ValidateDeletionTombstone(tombstone); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	scriptID := current.Record.Desired.ID
@@ -45,9 +46,9 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 	if active.Record.GenerationID != current.Record.ScriptSetGeneration {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Script-set generation changed")
 	}
-	if tombstone.TargetKind != DeletionTargetScript || tombstone.TargetID != scriptID ||
+	if tombstone.TargetKind != deletionrecord.DeletionTargetScript || tombstone.TargetID != scriptID ||
 		tombstone.TargetRevision != current.Revision || tombstone.TaskID != task.ID ||
-		tombstone.Phase != DeletionPhaseFinalizing || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
+		tombstone.Phase != deletionrecord.DeletionPhaseFinalizing || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
 		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) || task.Executor != TaskExecutorController ||
 		task.Type != TaskRemove || task.Target != scriptID || task.Status != TaskStatusPending ||
 		len(task.Params) != 1 || task.Params[TaskResourceKindParam] != TaskResourceScript {
@@ -92,7 +93,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	tombstoneValue, err := encodeDeletionTombstone(tombstone)
+	tombstoneValue, err := deletionrecord.EncodeDeletionTombstone(tombstone)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -134,18 +135,18 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 			),
 			ModRevision: indexes.Values[1].ModRevision,
 		},
-		{Key: deletionTombstoneKey(string(DeletionTargetScript), scriptID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetScript), scriptID)},
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
 		serviceDesiredCondition(target),
-		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID)},
-		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
 		{Key: deletionTombstoneKey("service", target.Record.Desired.ID)},
 		{Key: scriptrecord.ScriptSetActiveKey(current.Record.EnvironmentID), ModRevision: active.Revision},
 	}
 	if project.Record.TenantID != "" {
 		conditions = append(conditions, etcdstore.Condition{
-			Key: deletionTombstoneKey(string(DeletionTargetTenant), project.Record.TenantID),
+			Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID),
 		})
 	}
 	mutations := []etcdstore.Mutation{
@@ -154,7 +155,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 		{
-			Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(DeletionTargetScript), scriptID),
+			Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetScript), scriptID),
 			Value: tombstoneValue,
 		},
 		{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptSetActiveKey(current.Record.EnvironmentID), Value: activeValue},

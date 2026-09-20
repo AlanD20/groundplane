@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -51,7 +52,7 @@ type zoneDeletionRepository interface {
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		etcdstore.Versioned[zonerecord.Record],
 		etcd.EnvironmentZoneRemovalAuthorities,
-		etcd.DeletionTombstoneRecord,
+		deletionrecord.DeletionTombstoneRecord,
 		etcd.ZoneRemovalIntent,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
@@ -487,9 +488,9 @@ func (service *zoneDeletionService) removeZoneOnce(
 		Locator: locator, ReplayTarget: &target, Intent: claim.Intent, Response: response,
 		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	}
-	tombstone := etcd.DeletionTombstoneRecord{
-		TargetKind: etcd.DeletionTargetZone, TargetID: zoneID, TargetRevision: zone.Revision,
-		TaskID: task.ID, Phase: etcd.DeletionPhaseHostEffects, CreatedAt: now, UpdatedAt: now,
+	tombstone := deletionrecord.DeletionTombstoneRecord{
+		TargetKind: deletionrecord.DeletionTargetZone, TargetID: zoneID, TargetRevision: zone.Revision,
+		TaskID: task.ID, Phase: deletionrecord.DeletionPhaseHostEffects, CreatedAt: now, UpdatedAt: now,
 	}
 	result, mutationErr := service.repository.BeginZoneDeletionWithTask(
 		ctx, environment, project, zone, authorities, tombstone, intent, task, marker,

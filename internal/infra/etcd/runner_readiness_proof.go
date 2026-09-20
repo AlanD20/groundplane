@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
@@ -73,7 +74,7 @@ func (repository *RunnerRepository) RecordRunnerReadinessProof(
 		runnerKey(task.Target),
 		runnerLifecycleKey(task.Target),
 		runnerRuntimeOwnershipKey(task.Target),
-		deletionTombstoneKey(string(DeletionTargetRunner), task.Target),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: stateKeys, Revision: initial.ReadRevision,

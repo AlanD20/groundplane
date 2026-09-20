@@ -4,6 +4,7 @@ import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -26,9 +27,9 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 		hierarchyrecord.EnvironmentOperationLockKey(input.EnvironmentID),
 		backuppolicy.BackupKeyKey(input.EnvironmentID),
 		backuppolicy.BackupKeyValueKey(input.EnvironmentID),
-		deletionTombstoneKey(string(DeletionTargetEnvironment), input.EnvironmentID),
-		deletionTombstoneKey(string(DeletionTargetProject), projectID),
-		deletionTombstoneKey(string(DeletionTargetTenant), tenantID),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), input.EnvironmentID),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), projectID),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), tenantID),
 		environmentCoordinationKey(input.EnvironmentID),
 	}})
 	if err != nil {

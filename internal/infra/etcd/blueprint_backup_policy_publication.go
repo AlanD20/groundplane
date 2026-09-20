@@ -5,6 +5,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -162,7 +163,7 @@ func prepareBlueprintBackupPolicyPublication(
 		compare(
 			backupPolicyCompareConnectorTombstone,
 			state.retainedConnectorID,
-			deletionTombstoneKey(string(DeletionTargetConnector), state.retainedConnectorID),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), state.retainedConnectorID),
 			tombstoneRevision,
 		)
 	} else if state.candidate.Connector != nil {
@@ -170,7 +171,7 @@ func prepareBlueprintBackupPolicyPublication(
 		compare(backupPolicyCompareConnector, connectorID, state.connectorNameIndex.Key, state.connectorNameIndex.ModRevision)
 		compare(backupPolicyCompareConnector, connectorID, connectorrecord.RecordKey(connectorID), state.candidate.Connector.Revision)
 		compare(backupPolicyCompareConnectorOwnerIndex, connectorID, state.candidate.ConnectorOwnerIndex.Key, state.candidate.ConnectorOwnerIndex.ModRevision)
-		compare(backupPolicyCompareConnectorTombstone, connectorID, deletionTombstoneKey(string(DeletionTargetConnector), connectorID), 0)
+		compare(backupPolicyCompareConnectorTombstone, connectorID, deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connectorID), 0)
 	}
 	for _, reference := range state.candidate.ConnectorReferences {
 		revision := int64(0)

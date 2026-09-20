@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -20,7 +21,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	target etcdstore.Versioned[ServiceRecord],
 	route etcdstore.Versioned[routerecord.Record],
 	projection *etcdstore.Versioned[EnvironmentComposeProjection],
-	tombstone DeletionTombstoneRecord,
+	tombstone deletionrecord.DeletionTombstoneRecord,
 	intent RouteRemovalIntent,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
@@ -31,7 +32,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	if err := validateRouteVersion(route); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateDeletionTombstone(tombstone); err != nil {
+	if err := deletionrecord.ValidateDeletionTombstone(tombstone); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := validateRouteRemovalIntent(intent); err != nil {
@@ -44,7 +45,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	if err := validateRouteRemovalTaskOwner(task, intent); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if tombstone.TargetKind != DeletionTargetRoute || tombstone.TargetID != route.Record.Desired.ID ||
+	if tombstone.TargetKind != deletionrecord.DeletionTargetRoute || tombstone.TargetID != route.Record.Desired.ID ||
 		tombstone.TargetRevision != route.Revision || tombstone.TaskID != task.ID ||
 		tombstone.Phase != routeRemovalTombstonePhase(intent) || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
 		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) || intent.TaskID != task.ID ||
@@ -105,7 +106,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	task = configuration.task
 	defer configuration.clear()
 	defer func() { publicationErr = configuration.finish(ctx, repository.store, publicationErr) }()
-	tombstoneValue, err := encodeDeletionTombstone(tombstone)
+	tombstoneValue, err := deletionrecord.EncodeDeletionTombstone(tombstone)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -126,7 +127,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	}
 	defer clear(reference)
 
-	tombstoneKey := deletionTombstoneKey(string(DeletionTargetRoute), route.Record.Desired.ID)
+	tombstoneKey := deletionTombstoneKey(string(deletionrecord.DeletionTargetRoute), route.Record.Desired.ID)
 	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
@@ -136,13 +137,13 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
 		{Key: routeRemovalIntentKey(task.ID)},
 		{Key: tombstoneKey},
-		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID)},
-		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
 		{Key: deletionTombstoneKey("service", target.Record.Desired.ID)},
 	}
 	if project.Record.TenantID != "" {
 		conditions = append(conditions, etcdstore.Condition{
-			Key: deletionTombstoneKey(string(DeletionTargetTenant), project.Record.TenantID),
+			Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID),
 		})
 	}
 	conditions = append(conditions, etcdstore.Condition{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)})

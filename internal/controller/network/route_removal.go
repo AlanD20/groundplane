@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -44,7 +45,7 @@ type routeRemovalRepository interface {
 		etcdstore.Versioned[etcd.ServiceRecord],
 		etcdstore.Versioned[routerecord.Record],
 		*etcdstore.Versioned[etcd.EnvironmentComposeProjection],
-		etcd.DeletionTombstoneRecord,
+		deletionrecord.DeletionTombstoneRecord,
 		etcd.RouteRemovalIntent,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
@@ -317,12 +318,12 @@ func (service *routeRemovalService) removeRouteOnce(
 		Locator: locator, ReplayTarget: &target, Intent: evidence.durable, Response: response,
 		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	}
-	phase := etcd.DeletionPhaseFinalizing
+	phase := deletionrecord.DeletionPhaseFinalizing
 	if intent.Provider != nil {
-		phase = etcd.DeletionPhaseHostEffects
+		phase = deletionrecord.DeletionPhaseHostEffects
 	}
-	tombstone := etcd.DeletionTombstoneRecord{
-		TargetKind: etcd.DeletionTargetRoute, TargetID: routeID, TargetRevision: current.Revision,
+	tombstone := deletionrecord.DeletionTombstoneRecord{
+		TargetKind: deletionrecord.DeletionTargetRoute, TargetID: routeID, TargetRevision: current.Revision,
 		TaskID: task.ID, Phase: phase, CreatedAt: now, UpdatedAt: now,
 	}
 	result, mutationErr := service.repository.BeginRouteDeletionWithTask(

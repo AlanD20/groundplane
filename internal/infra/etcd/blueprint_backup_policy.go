@@ -5,6 +5,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sync"
 	"time"
@@ -270,7 +271,7 @@ func (repository *BackupPolicyRepository) resolveBlueprintBackupConnector(
 		return "", nil, nil, nil, connectorrecord.CorruptRecord()
 	}
 	tombstone, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{deletionTombstoneKey(string(DeletionTargetConnector), connectorID)}, Revision: revision,
+		Keys: []string{deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connectorID)}, Revision: revision,
 	})
 	if err != nil {
 		return "", nil, nil, nil, err

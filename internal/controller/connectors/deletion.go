@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -36,7 +37,7 @@ type connectorDeletionRepository interface {
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		etcdstore.Versioned[connectorrecord.Record],
-		etcd.DeletionTombstoneRecord,
+		deletionrecord.DeletionTombstoneRecord,
 		etcd.ConnectorRemovalIntent,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
@@ -269,9 +270,9 @@ func (service *connectorDeletionService) deleteConnectorOnce(
 		Locator: locator, ReplayTarget: &target, Intent: evidence.durable, Response: response,
 		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	}
-	tombstone := etcd.DeletionTombstoneRecord{
-		TargetKind: etcd.DeletionTargetConnector, TargetID: connectorID,
-		TargetRevision: current.Revision, TaskID: task.ID, Phase: etcd.DeletionPhaseFinalizing,
+	tombstone := deletionrecord.DeletionTombstoneRecord{
+		TargetKind: deletionrecord.DeletionTargetConnector, TargetID: connectorID,
+		TargetRevision: current.Revision, TaskID: task.ID, Phase: deletionrecord.DeletionPhaseFinalizing,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	intent, err := etcd.NewConnectorRemovalIntent(
@@ -421,7 +422,7 @@ func (repository *durableConnectorDeletionRepository) BeginConnectorDeletionWith
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	current etcdstore.Versioned[connectorrecord.Record],
-	tombstone etcd.DeletionTombstoneRecord,
+	tombstone deletionrecord.DeletionTombstoneRecord,
 	intent etcd.ConnectorRemovalIntent,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,

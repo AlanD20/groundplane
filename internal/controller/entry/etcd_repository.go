@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -184,12 +185,12 @@ func (repository *EtcdRepository) PublishRemoval(
 		Locator: locator, ReplayTarget: &target, Intent: evidence.durable, Response: response,
 		TaskID: task.ID, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt,
 	}
-	phase := etcd.DeletionPhaseFinalizing
+	phase := deletionrecord.DeletionPhaseFinalizing
 	if state.projection != nil {
-		phase = etcd.DeletionPhaseHostEffects
+		phase = deletionrecord.DeletionPhaseHostEffects
 	}
-	tombstone := etcd.DeletionTombstoneRecord{
-		TargetKind: etcd.DeletionTargetEntry, TargetID: request.EntryID,
+	tombstone := deletionrecord.DeletionTombstoneRecord{
+		TargetKind: deletionrecord.DeletionTargetEntry, TargetID: request.EntryID,
 		TargetRevision: state.entry.Revision, TaskID: task.ID, Phase: phase,
 		CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt,
 	}

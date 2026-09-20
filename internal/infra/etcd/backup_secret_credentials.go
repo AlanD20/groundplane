@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
@@ -27,7 +28,7 @@ func (reader *BackupSecretResolutionReader) resolveEncryptedCredentialValues(
 		return errs.New(errs.KindInternal, "backup project evidence is corrupt")
 	}
 	if err := requireNoDeletionFence(
-		second.Values[dynamic.projectFence], DeletionTargetProject, project.ID,
+		second.Values[dynamic.projectFence], deletionrecord.DeletionTargetProject, project.ID,
 	); err != nil {
 		return err
 	}
@@ -85,7 +86,7 @@ func (reader *BackupSecretResolutionReader) resolveEncryptedCredentialValues(
 			id := string(candidate.Value)
 			dynamic.secretRecords[id] = dynamic.add(secretrecord.RecordKey(id))
 			dynamic.secretFences[id] = dynamic.add(
-				deletionTombstoneKey(string(DeletionTargetSecret), id),
+				deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), id),
 			)
 			dynamic.secretValues[id] = dynamic.add(secretrecord.ValueKey(id))
 		}

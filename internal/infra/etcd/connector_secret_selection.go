@@ -2,6 +2,7 @@ package etcd
 
 import (
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"sort"
@@ -65,7 +66,7 @@ func selectConnectorCredentialSecret(
 	}
 	conditions := []etcdstore.Condition{{Key: values[0].Key, ModRevision: values[0].ModRevision}}
 	if values[1] != nil {
-		if values[1].Key != deletionTombstoneKey(string(DeletionTargetSecret), record.Secret.ID) {
+		if values[1].Key != deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), record.Secret.ID) {
 			return false, nil, 0, errs.New(
 				errs.KindInternal,
 				"Connector credential Secret tombstone evidence is corrupt",
@@ -78,7 +79,7 @@ func selectConnectorCredentialSecret(
 		return false, conditions, 3, nil
 	}
 	conditions = append(conditions, etcdstore.Condition{
-		Key: deletionTombstoneKey(string(DeletionTargetSecret), record.Secret.ID),
+		Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), record.Secret.ID),
 	})
 	value, err := secretrecord.DecodeEncryptedValue(values[2].Value)
 	if err != nil {

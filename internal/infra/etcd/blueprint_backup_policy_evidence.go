@@ -5,6 +5,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -192,7 +193,7 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupConnector(
 ) (*etcdstore.Versioned[connectorrecord.Record], *etcdstore.KeyValue, *etcdstore.KeyValue, *etcdstore.KeyValue, error) {
 	keys := []string{
 		connectorrecord.RecordKey(connectorID), connectorEnvironmentKey(environmentID, connectorID),
-		deletionTombstoneKey(string(DeletionTargetConnector), connectorID),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connectorID),
 	}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {

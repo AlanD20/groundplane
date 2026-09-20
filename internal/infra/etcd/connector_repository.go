@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -74,7 +75,7 @@ func (repository *ConnectorRepository) CreateConnector(
 			connectorNameKey(connector.EnvironmentID, connector.Name),
 			connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 			connectorrecord.CredentialValueKey(connector.ID),
-			deletionTombstoneKey(string(DeletionTargetConnector), connector.ID),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID),
 		},
 	)
 	if err != nil {
@@ -198,7 +199,7 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 			connectorNameKey(connector.EnvironmentID, connector.Name),
 			connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 			connectorrecord.CredentialValueKey(connector.ID),
-			deletionTombstoneKey(string(DeletionTargetConnector), connector.ID),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID),
 		},
 	)
 	if err != nil {
@@ -326,7 +327,7 @@ func connectorCreateConditions(
 		{Key: connectorNameKey(connector.EnvironmentID, connector.Name)},
 		{Key: connectorEnvironmentKey(connector.EnvironmentID, connector.ID)},
 		{Key: connectorrecord.CredentialValueKey(connector.ID)},
-		{Key: deletionTombstoneKey(string(DeletionTargetConnector), connector.ID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID)},
 	}
 	return conditions
 }
@@ -389,7 +390,7 @@ func (repository *ConnectorRepository) loadConnectorSecretReferenceFence(
 			secretID := string(selected.Value)
 			candidateKeys = append(candidateKeys,
 				secretrecord.RecordKey(secretID),
-				deletionTombstoneKey(string(DeletionTargetSecret), secretID),
+				deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), secretID),
 				secretrecord.ValueKey(secretID),
 			)
 		}

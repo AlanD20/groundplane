@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -206,7 +207,7 @@ func (repository *SecretRepository) ListSecrets(
 	}
 	keys := make([]string, len(page.Items))
 	for index, item := range page.Items {
-		keys[index] = deletionTombstoneKey(string(DeletionTargetSecret), item.Record.Secret.ID)
+		keys[index] = deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), item.Record.Secret.ID)
 	}
 	tombstones, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: page.Revision})
 	if err != nil {
@@ -284,7 +285,7 @@ func (repository *SecretRepository) resolveSecretAtRevision(
 		stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{
 				secretrecord.RecordKey(id),
-				deletionTombstoneKey(string(DeletionTargetSecret), id),
+				deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), id),
 			},
 			Revision: indexes.ReadRevision,
 		})
@@ -324,10 +325,10 @@ func validateSecretDeletionFence(value *etcdstore.KeyValue, secretID string) err
 	if value == nil {
 		return errs.New(errs.KindInternal, "Secret deletion fence is missing")
 	}
-	tombstone, err := decodeDeletionTombstone(value.Value)
-	if err != nil || tombstone.TargetKind != DeletionTargetSecret || tombstone.TargetID != secretID ||
-		tombstone.Phase != DeletionPhaseFinalizing {
-		return corruptDeletionTombstone()
+	tombstone, err := deletionrecord.DecodeDeletionTombstone(value.Value)
+	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetSecret || tombstone.TargetID != secretID ||
+		tombstone.Phase != deletionrecord.DeletionPhaseFinalizing {
+		return deletionrecord.CorruptDeletionTombstone()
 	}
 	return nil
 }

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"strings"
@@ -102,7 +103,7 @@ func cleanupTaskEnvironmentDeletionScriptLocators(
 	environmentID string,
 	taskID string,
 ) error {
-	key := deletionTombstoneKey(string(DeletionTargetEnvironment), environmentID)
+	key := deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environmentID)
 	read, err := store.Get(ctx, key)
 	if err != nil {
 		return err
@@ -110,8 +111,8 @@ func cleanupTaskEnvironmentDeletionScriptLocators(
 	if read == nil || read.Entry == nil {
 		return errs.New(errs.KindStateConflict, "Environment deletion tombstone is missing")
 	}
-	tombstone, err := decodeDeletionTombstone(read.Entry.Value)
-	if err != nil || tombstone.TargetKind != DeletionTargetEnvironment || tombstone.TargetID != environmentID ||
+	tombstone, err := deletionrecord.DecodeDeletionTombstone(read.Entry.Value)
+	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetEnvironment || tombstone.TargetID != environmentID ||
 		tombstone.TaskID != taskID {
 		return errs.New(errs.KindStateConflict, "Environment deletion tombstone ownership changed")
 	}

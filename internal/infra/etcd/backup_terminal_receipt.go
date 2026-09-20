@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -632,7 +633,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 		hierarchyrecord.EnvironmentKey(environmentID),
 		hierarchyrecord.EnvironmentMutationEpochKey(environmentID),
 		hierarchyrecord.EnvironmentOperationLockKey(environmentID),
-		deletionTombstoneKey(string(DeletionTargetEnvironment), environmentID),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environmentID),
 		backupruntime.BackupRecoveryPointPruneDispatchKey(receipt.Task.TaskID),
 	}
 	runIndex, membershipIndex, exclusionsStart := -1, -1, -1
@@ -939,11 +940,11 @@ func (repository *TaskRepository) validateBackupTerminalOwnerSnapshot(
 	if tombstoneValue == nil {
 		return false, nil, false, errs.New(errs.KindStateConflict, "terminal backup deletion authority is torn")
 	}
-	tombstone, err := decodeDeletionTombstone(tombstoneValue.Value)
+	tombstone, err := deletionrecord.DecodeDeletionTombstone(tombstoneValue.Value)
 	if err != nil {
 		return false, nil, false, err
 	}
-	if tombstone.TargetKind != DeletionTargetEnvironment || tombstone.TargetID != environment.ID ||
+	if tombstone.TargetKind != deletionrecord.DeletionTargetEnvironment || tombstone.TargetID != environment.ID ||
 		tombstone.TargetRevision != environmentValue.ModRevision || tombstone.TaskID != lock.TaskID {
 		return false, nil, false, errs.New(errs.KindStateConflict, "terminal backup deletion authority changed")
 	}

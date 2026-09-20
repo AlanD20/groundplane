@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -43,7 +44,7 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry changed its pinned Task")
 	}
 	keys := []string{
-		zoneRemovalIntentKey(operationID), deletionTombstoneKey(string(DeletionTargetZone), source.Target),
+		zoneRemovalIntentKey(operationID), deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), source.Target),
 		environmentBlueprintHeadKey(source.Params[TaskZoneEnvironmentParam]),
 		environmentComposeProjectionKey(source.Params[TaskZoneEnvironmentParam]),
 		componentTaskActiveEnvironmentKey(source.Params[TaskZoneEnvironmentParam]),
@@ -104,9 +105,9 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 		clear(publication.publishedDescriptor)
 		return backingZoneTaskChange{}, err
 	}
-	tombstoneValue, err := encodeDeletionTombstone(DeletionTombstoneRecord{
-		TargetKind: DeletionTargetZone, TargetID: retry.Target, TargetRevision: intent.ZoneRevision,
-		TaskID: retry.ID, Phase: DeletionPhaseHostEffects, CreatedAt: retry.CreatedAt, UpdatedAt: retry.CreatedAt,
+	tombstoneValue, err := deletionrecord.EncodeDeletionTombstone(deletionrecord.DeletionTombstoneRecord{
+		TargetKind: deletionrecord.DeletionTargetZone, TargetID: retry.Target, TargetRevision: intent.ZoneRevision,
+		TaskID: retry.ID, Phase: deletionrecord.DeletionPhaseHostEffects, CreatedAt: retry.CreatedAt, UpdatedAt: retry.CreatedAt,
 	})
 	if err != nil {
 		clear(publication.publishedDescriptor)

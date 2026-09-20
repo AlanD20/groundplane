@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
@@ -14,7 +15,7 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalRetry(
 	desired := intent.Desired
 	keys := []string{environmentBlueprintHeadKey(intent.EnvironmentID),
 		deletionTombstoneKey(
-			string(DeletionTargetEntry),
+			string(deletionrecord.DeletionTargetEntry),
 			intent.EntryID,
 		), componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		environmentComposeProjectionKey(
@@ -78,7 +79,7 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalRetry(
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	tombstone, err := encodeDeletionTombstone(DeletionTombstoneRecord{TargetKind: DeletionTargetEntry,
+	tombstone, err := deletionrecord.EncodeDeletionTombstone(deletionrecord.DeletionTombstoneRecord{TargetKind: deletionrecord.DeletionTargetEntry,
 		TargetID: intent.EntryID, TargetRevision: intent.EntryRevision, TaskID: retry.ID,
 		Phase: entryRemovalTombstonePhase(intent), CreatedAt: retry.CreatedAt, UpdatedAt: retry.CreatedAt})
 	if err != nil {

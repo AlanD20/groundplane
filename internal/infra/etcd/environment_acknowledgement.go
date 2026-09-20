@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -106,7 +107,7 @@ func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 	}
 	tombstoneResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
 			hierarchyrecord.EnvironmentMutationEpochKey(task.Target),
 			hierarchyrecord.EnvironmentOperationLockKey(task.Target),
 		},
@@ -135,13 +136,13 @@ func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 		)
 	}
 	tombstoneValue := tombstoneResult.Values[0]
-	tombstone, err := decodeDeletionTombstone(tombstoneValue.Value)
+	tombstone, err := deletionrecord.DecodeDeletionTombstone(tombstoneValue.Value)
 	if err != nil {
 		return false, err
 	}
-	if tombstone.TargetKind != DeletionTargetEnvironment || tombstone.TargetID != task.Target ||
+	if tombstone.TargetKind != deletionrecord.DeletionTargetEnvironment || tombstone.TargetID != task.Target ||
 		tombstone.TaskID != task.ID ||
-		(tombstone.Phase != DeletionPhaseHostEffects && tombstone.Phase != DeletionPhaseFinalizing) {
+		(tombstone.Phase != deletionrecord.DeletionPhaseHostEffects && tombstone.Phase != deletionrecord.DeletionPhaseFinalizing) {
 		return false, errs.New(
 			errs.KindStateConflict,
 			"environment deletion tombstone does not match its Task",
@@ -167,13 +168,13 @@ func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 		return false, errs.New(errs.KindStateConflict,
 			"environment deletion retained malformed published Blueprint revision evidence")
 	}
-	tombstone.Phase = DeletionPhaseFinalizing
-	tombstone.Checkpoint = DeletionCheckpoint{
+	tombstone.Phase = deletionrecord.DeletionPhaseFinalizing
+	tombstone.Checkpoint = deletionrecord.DeletionCheckpoint{
 		ResourceKind: "blueprint_revision",
 		StableID:     revisionID,
 	}
 	tombstone.UpdatedAt = updatedAt
-	encodedTombstone, err := encodeDeletionTombstone(tombstone)
+	encodedTombstone, err := deletionrecord.EncodeDeletionTombstone(tombstone)
 	if err != nil {
 		return false, err
 	}
@@ -186,12 +187,12 @@ func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: value.Key})
 	}
 	conditions = append(conditions, etcdstore.Condition{
-		Key:         deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
+		Key:         deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
 		ModRevision: tombstoneValue.ModRevision,
 	})
 	mutations = append(mutations, etcdstore.Mutation{
 		Type:  etcdstore.MutationPut,
-		Key:   deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
+		Key:   deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
 		Value: encodedTombstone,
 	})
 	conditions, err = appendEnvironmentMutationFenceConditions(conditions, ownedFence)
@@ -245,7 +246,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			hierarchyrecord.EnvironmentKey(task.Target),
-			deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
 			environmentBlueprintHeadKey(task.Target),
 			environmentComposeProjectionKey(task.Target),
 			environmentPoolRegistryKey,
@@ -272,14 +273,14 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		return nil, nil, err
 	}
 	tombstoneValue := stored.Values[1]
-	tombstone, err := decodeDeletionTombstone(tombstoneValue.Value)
+	tombstone, err := deletionrecord.DecodeDeletionTombstone(tombstoneValue.Value)
 	if err != nil {
 		return nil, nil, err
 	}
-	if environment.ID != task.Target || tombstone.TargetKind != DeletionTargetEnvironment ||
+	if environment.ID != task.Target || tombstone.TargetKind != deletionrecord.DeletionTargetEnvironment ||
 		tombstone.TargetID != environment.ID || tombstone.TargetRevision != environmentValue.ModRevision ||
 		tombstone.TaskID != task.ID ||
-		(tombstone.Phase != DeletionPhaseHostEffects && tombstone.Phase != DeletionPhaseFinalizing) {
+		(tombstone.Phase != deletionrecord.DeletionPhaseHostEffects && tombstone.Phase != deletionrecord.DeletionPhaseFinalizing) {
 		return nil, nil, errs.New(
 			errs.KindStateConflict,
 			"environment deletion tombstone does not match its Task",
@@ -339,7 +340,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		{Key: hierarchyrecord.EnvironmentNameKey(environment.ProjectID, environment.Name), ModRevision: indexes.Values[0].ModRevision},
 		{Key: hierarchyrecord.EnvironmentOwnerKey(environment.ProjectID, environment.ID), ModRevision: indexes.Values[1].ModRevision},
 		{
-			Key:         deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID),
+			Key:         deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.ID),
 			ModRevision: tombstoneValue.ModRevision,
 		},
 		{Key: environmentBlueprintHeadKey(environment.ID), ModRevision: keyValueRevision(stored.Values[2])},
@@ -370,7 +371,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			}
 			for _, zone := range projection.DesiredZones {
 				projectedKeys = append(projectedKeys,
-					deletionTombstoneKey(string(DeletionTargetZone), zone.Desired.ID))
+					deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), zone.Desired.ID))
 			}
 		}
 		if err := requireEnvironmentDeletionLiveAuthorityEmpty(
@@ -386,7 +387,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		mutations = append(mutations,
 			etcdstore.Mutation{
 				Type: etcdstore.MutationDelete,
-				Key:  deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID),
+				Key:  deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.ID),
 			},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentOperationLockKey(environment.ID)},
 		)
@@ -531,7 +532,7 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			hierarchyrecord.EnvironmentKey(task.Target),
-			deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
 			environmentBlueprintHeadKey(task.Target),
 			environmentComposeProjectionKey(task.Target),
 			environmentPoolRegistryKey,
@@ -595,13 +596,13 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 	if environment.ID != task.Target {
 		return errs.New(errs.KindStateConflict, "environment deletion retained another target")
 	}
-	tombstone, err := decodeDeletionTombstone(stored.Values[1].Value)
+	tombstone, err := deletionrecord.DecodeDeletionTombstone(stored.Values[1].Value)
 	if err != nil {
 		return err
 	}
-	if tombstone.TargetKind != DeletionTargetEnvironment || tombstone.TargetID != task.Target ||
+	if tombstone.TargetKind != deletionrecord.DeletionTargetEnvironment || tombstone.TargetID != task.Target ||
 		tombstone.TargetRevision != stored.Values[0].ModRevision || tombstone.TaskID != task.ID ||
-		(tombstone.Phase != DeletionPhaseHostEffects && tombstone.Phase != DeletionPhaseFinalizing) {
+		(tombstone.Phase != deletionrecord.DeletionPhaseHostEffects && tombstone.Phase != deletionrecord.DeletionPhaseFinalizing) {
 		return errs.New(
 			errs.KindStateConflict,
 			"environment deletion retry tombstone ownership changed",

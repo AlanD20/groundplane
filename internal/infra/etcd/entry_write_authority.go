@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -90,7 +91,7 @@ func entryWriteConditions(
 		{Key: entryrecord.RecordKey(record.Entry.ID), ModRevision: entryRevision},
 		{Key: entryOwnerKey(record.EnvironmentID, record.Entry.ID), ModRevision: ownerRevision},
 		{Key: generationKey},
-		{Key: deletionTombstoneKey(string(DeletionTargetEntry), record.Entry.ID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), record.Entry.ID)},
 	}
 	return conditions
 }
@@ -102,7 +103,7 @@ func entryDeleteConditions(
 	conditions := []etcdstore.Condition{
 		{Key: entryrecord.RecordKey(current.Record.Entry.ID), ModRevision: current.Revision},
 		{Key: entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID), ModRevision: ownerRevision},
-		{Key: deletionTombstoneKey(string(DeletionTargetEntry), current.Record.Entry.ID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), current.Record.Entry.ID)},
 	}
 	return conditions
 }

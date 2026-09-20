@@ -7,6 +7,7 @@ package network
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -168,7 +169,7 @@ func (repository *Repository) BeginZoneDeletionWithTask(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	zone etcdstore.Versioned[zonerecord.Record],
 	authorities etcd.EnvironmentZoneRemovalAuthorities,
-	tombstone etcd.DeletionTombstoneRecord,
+	tombstone deletionrecord.DeletionTombstoneRecord,
 	intent etcd.ZoneRemovalIntent,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
@@ -249,7 +250,7 @@ func (repository *Repository) BeginRouteDeletionWithTask(
 	target etcdstore.Versioned[etcd.ServiceRecord],
 	route etcdstore.Versioned[routerecord.Record],
 	projection *etcdstore.Versioned[etcd.EnvironmentComposeProjection],
-	tombstone etcd.DeletionTombstoneRecord,
+	tombstone deletionrecord.DeletionTombstoneRecord,
 	intent etcd.RouteRemovalIntent,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
@@ -261,9 +262,9 @@ func (repository *Repository) BeginRouteDeletionWithTask(
 
 func (repository *Repository) GetDeletionTombstone(
 	ctx context.Context,
-	kind etcd.DeletionTargetKind,
+	kind deletionrecord.DeletionTargetKind,
 	id string,
-) (etcdstore.Versioned[etcd.DeletionTombstoneRecord], bool, error) {
+) (etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord], bool, error) {
 	return repository.hierarchy.GetDeletionTombstone(ctx, kind, id)
 }
 
@@ -309,7 +310,7 @@ func (repository *Repository) HandoffBackingZoneDeletion(
 	ctx context.Context,
 	zone etcdstore.Versioned[zonerecord.Record],
 	parentTaskID string,
-	tombstone etcdstore.Versioned[etcd.DeletionTombstoneRecord],
+	tombstone etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord],
 	intent etcd.ZoneRemovalIntent,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,

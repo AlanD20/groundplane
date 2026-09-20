@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -20,7 +21,7 @@ func (repository *TaskRepository) prepareReleaseGroupProjectEvidence(
 	projectResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		hierarchyrecord.ProjectKey(environment.ProjectID),
 		hierarchyrecord.EnvironmentOwnerKey(environment.ProjectID, environment.ID),
-		deletionTombstoneKey(string(DeletionTargetProject), environment.ProjectID),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), environment.ProjectID),
 	}})
 	if err != nil {
 		return nil, err
@@ -43,14 +44,14 @@ func (repository *TaskRepository) prepareReleaseGroupProjectEvidence(
 	conditions := []etcdstore.Condition{
 		{Key: hierarchyrecord.ProjectKey(project.ID), ModRevision: projectResult.Values[0].ModRevision},
 		{Key: hierarchyrecord.EnvironmentOwnerKey(project.ID, environment.ID), ModRevision: projectResult.Values[1].ModRevision},
-		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.ID)},
+		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.ID)},
 	}
 	ownerIndex := hierarchyrecord.ProjectOwnerKey(project)
 	ownerKeys := []string{ownerIndex}
 	if project.Kind == hierarchyrecord.ProjectKindTenant {
 		ownerKeys = append(ownerKeys,
 			hierarchyrecord.TenantKey(project.TenantID),
-			deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID),
 		)
 	}
 	ownerResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: ownerKeys})
@@ -81,7 +82,7 @@ func (repository *TaskRepository) prepareReleaseGroupProjectEvidence(
 		}
 		conditions = append(conditions,
 			etcdstore.Condition{Key: hierarchyrecord.TenantKey(project.TenantID), ModRevision: ownerResult.Values[1].ModRevision},
-			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID)},
+			etcdstore.Condition{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID)},
 		)
 	}
 	return conditions, nil

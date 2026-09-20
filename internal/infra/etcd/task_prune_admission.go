@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -87,7 +88,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		ids.Validate(ids.KindEnvironment, task.Target) == nil {
 		environmentDeletionFenceStart = len(companionKeys)
 		environmentDeletionFenceKeys = []string{
-			deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
+			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
 			hierarchyrecord.EnvironmentOperationLockKey(task.Target),
 			environmentDeletionIntentKey(task.OperationID),
 		}
