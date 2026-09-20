@@ -1,5 +1,10 @@
 "use client";
 import {
+  createScriptActions,
+  type ScriptActions,
+} from "@/features/script/actions";
+import { listAllScripts } from "@/features/script/api";
+import {
   createVolumeActions,
   type VolumeActions,
 } from "@/features/volume/actions";
@@ -32,14 +37,6 @@ import {
   type ConnectorState,
   type ConnectorActions,
 } from "@/features/connectors/use-connector-store";
-import {
-  scriptFromAPI,
-  scriptCreateToAPI,
-  scriptPatchToAPI,
-  type ScriptCreateResponse,
-  type ScriptEditResponse,
-} from "./script-api";
-import type { ScriptInput, ScriptPatch } from "./script-types";
 import { entryFromAPI } from "./entry-api";
 import {
   emptyTaskJournal,
@@ -98,7 +95,6 @@ import type {
   EnvironmentComponent,
   Project,
   ReleaseGroup,
-  Script,
   Service,
   ServiceRuntimeIntent,
   TaskJournalScope,
@@ -194,10 +190,6 @@ type TaskAbortResponse =
   operations["task.abort"]["responses"][202]["content"]["application/json"];
 type BackingRuntimeTaskAccepted =
   operations["backing-service.start"]["responses"][202]["content"]["application/json"];
-type ScriptPageResponse =
-  operations["script.list"]["responses"][200]["content"]["application/json"];
-type ScriptRunResponse =
-  operations["script.run"]["responses"][202]["content"]["application/json"];
 type EntryPageResponse =
   operations["entry.list"]["responses"][200]["content"]["application/json"];
 type EntryResponse =
@@ -342,29 +334,6 @@ async function listAllEntries(
     cursor = page.next_cursor ?? "";
   } while (cursor);
   return entries;
-}
-
-async function listAllScripts(
-  environmentId: string,
-  signal?: AbortSignal,
-): Promise<Script[]> {
-  const scripts: Script[] = [];
-  let cursor = "";
-  do {
-    const query = new URLSearchParams({
-      environment: environmentId,
-      limit: "200",
-    });
-    if (cursor) query.set("cursor", cursor);
-    const page = await controllerRequest<ScriptPageResponse>(
-      `/scripts?${query}`,
-      200,
-      { signal },
-    );
-    scripts.push(...(page.items ?? []).map(scriptFromAPI));
-    cursor = page.next_cursor ?? "";
-  } while (cursor);
-  return scripts;
 }
 
 async function listAllReleaseGroups(
@@ -826,6 +795,7 @@ type StoreContext = State &
   ServiceActions &
   NetworkActions &
   VolumeActions &
+  ScriptActions &
   ReturnType<typeof useControllerPlatform> &
   ReturnType<typeof useBackupStore> & {
     adapters: typeof seedAdapters;
@@ -965,14 +935,6 @@ type StoreContext = State &
       onMalformed: (message: string) => void,
     ) => () => void;
     deleteEnvironment: (envId: string) => Promise<string>;
-    addScript: (envId: string, script: ScriptInput) => Promise<Script>;
-    updateScript: (
-      envId: string,
-      scriptId: string,
-      patch: ScriptPatch,
-    ) => Promise<Script>;
-    runScript: (scriptId: string) => Promise<string>;
-    removeScript: (envId: string, scriptId: string) => Promise<string>;
     addAttach: (envId: string, input: AttachCreateInput) => Promise<string>;
     renameAttach: (
       envId: string,
@@ -2231,69 +2193,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         dispatchResourceRemoval,
       ),
       ...createVolumeActions(update, assertEnvironmentMutable),
-      addScript: async (envId, script) => {
-        assertEnvironmentMutable(envId, "Script mutation");
-        const generation = nextEnvironmentGeneration(envId, "child");
-        const targetService = (await listAllServices(envId)).find(
-          (service) => service.name === script.service,
-        );
-        if (!targetService)
-          throw new Error(
-            `Service ${script.service} was not found in this Environment`,
-          );
-        const body = scriptCreateToAPI(envId, targetService.id, script);
-        const created = scriptFromAPI(
-          await controllerRequest<ScriptCreateResponse>("/scripts", 201, {
-            method: "POST",
-            body,
-          }),
-        );
-        update((d) => {
-          if ((environmentGenerations.current.get(envId) ?? 0) !== generation)
-            return;
-          findEnvironment(d, envId)?.scripts.push(created);
-        });
-        return created;
-      },
-      updateScript: async (envId, scriptId, patch) => {
-        assertEnvironmentMutable(envId, "Script mutation");
-        const generation = nextEnvironmentGeneration(envId, "child");
-        const body = scriptPatchToAPI(patch);
-        const edited = scriptFromAPI(
-          await controllerRequest<ScriptEditResponse>(
-            `/scripts/${encodeURIComponent(scriptId)}`,
-            200,
-            { method: "PATCH", body },
-          ),
-        );
-        update((d) => {
-          if ((environmentGenerations.current.get(envId) ?? 0) !== generation)
-            return;
-          const script = findEnvironment(d, envId)?.scripts.find(
-            (candidate) => candidate.id === scriptId,
-          );
-          if (script) Object.assign(script, edited);
-        });
-        return edited;
-      },
-      runScript: async (scriptId) => {
-        const accepted = await controllerRequest<ScriptRunResponse>(
-          `/scripts/${encodeURIComponent(scriptId)}/run`,
-          202,
-          {
-            method: "POST",
-            body: undefined,
-          },
-        );
-        return requireTaskId(accepted, "Script run");
-      },
-      removeScript: (envId, scriptId) => (
-        assertEnvironmentMutable(envId, "Script mutation"),
-        dispatchResourceRemoval({
-          kind: "script",
-          environmentId: envId,
-          resourceId: scriptId,
-        })
+      ...createScriptActions(
+        update,
+        assertEnvironmentMutable,
+        nextEnvironmentGeneration,
+        environmentGenerations,
+        dispatchResourceRemoval,
       ),
       addReleaseGroup: async (envId, group) => {
         assertEnvironmentMutable(envId, "Release group mutation");
