@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { useStore } from '@/lib/store'
 import type { Environment, Service } from '@/lib/types'
+import { Checkbox } from '@/components/ui/checkbox'
 
 // The full service form, shared between:
 //  - tenant environments ("Add service" / "Edit service") — one container
@@ -231,8 +232,8 @@ export function ServiceFormBody({
               <div className="flex flex-wrap gap-2">
                 {env.zones.map((z) => (
                   <label key={z.name} className="flex items-center gap-1.5 text-xs">
-                    <input
-                      type="checkbox"
+                    <Checkbox
+
                       checked={zones.includes(z.name)}
                       onChange={(e) =>
                         setZones((prev) => (e.target.checked ? [...prev, z.name] : prev.filter((x) => x !== z.name)))

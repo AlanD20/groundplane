@@ -18,10 +18,10 @@ function TabsTab({ className, ...props }: TabsPrimitive.Tab.Props) {
   return (
     <TabsPrimitive.Tab
       className={cn(
-        'relative inline-flex cursor-pointer select-none items-center gap-1.5 whitespace-nowrap rounded-t-lg border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground outline-none transition-all duration-150',
+        'relative inline-flex cursor-pointer select-none items-center gap-1.5 whitespace-nowrap rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-muted-foreground outline-none transition-all duration-150',
         'hover:bg-muted hover:text-foreground active:scale-[0.98]',
-        'focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50',
-        'data-[selected]:border-primary data-[selected]:bg-surface data-[selected]:text-foreground data-[selected]:shadow-[inset_0_-1px_0_0_var(--color-primary)]',
+        'focus-visible:text-foreground focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/70',
+        'data-[selected]:bg-accent data-[selected]:text-primary',
         '[&_svg]:size-4',
         className,
       )}

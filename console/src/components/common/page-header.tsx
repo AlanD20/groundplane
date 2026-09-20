@@ -18,7 +18,7 @@ export function PageHeader({
   className?: string
 }) {
   return (
-    <div className={cn('flex flex-col gap-3 border-b border-border pb-5', className)}>
+    <div className={cn('flex flex-col gap-3 pb-2', className)}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           {icon && (
@@ -27,8 +27,8 @@ export function PageHeader({
             </div>
           )}
           <div className="flex flex-col gap-1">
-            {eyebrow && <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">{eyebrow}</span>}
-            <h1 className="text-pretty text-lg font-semibold leading-tight">{title}</h1>
+            {eyebrow && <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">{eyebrow}</span>}
+            <h1 className="text-pretty text-[30px] font-medium tracking-tight leading-tight">{title}</h1>
             {description && <p className="max-w-2xl text-sm text-muted-foreground">{description}</p>}
           </div>
         </div>

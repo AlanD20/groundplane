@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from '@/components/ui/input'
 import { useStore } from '@/lib/store'
 import type { LogTarget, TransientLogEvent } from '@/lib/transient-logs'
+import { Checkbox } from '@/components/ui/checkbox'
 
 export function LogViewer({ target, label = 'Logs' }: { target: LogTarget; label?: string }) {
   const store = useStore()
@@ -16,6 +17,8 @@ export function LogViewer({ target, label = 'Logs' }: { target: LogTarget; label
   const [events, setEvents] = useState<TransientLogEvent[]>([])
   const [error, setError] = useState<string | null>(null)
   const [streaming, setStreaming] = useState(false)
+  const outputRef = useRef<HTMLDivElement>(null)
+  const pinnedToEnd = useRef(true)
   const abortRef = useRef<AbortController | null>(null)
 
   const stop = () => {
@@ -29,6 +32,7 @@ export function LogViewer({ target, label = 'Logs' }: { target: LogTarget; label
     const controller = new AbortController()
     abortRef.current = controller
     setEvents([])
+    pinnedToEnd.current = true
     setError(null)
     setStreaming(true)
     void store.watchLogs(target, { tail, follow, signal: controller.signal }, (event) => {
@@ -46,6 +50,7 @@ export function LogViewer({ target, label = 'Logs' }: { target: LogTarget; label
   }
 
   useEffect(() => stop, [])
+  useEffect(() => { if (follow && pinnedToEnd.current && outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight }, [events, follow])
 
   return (
     <>
@@ -64,7 +69,7 @@ export function LogViewer({ target, label = 'Logs' }: { target: LogTarget; label
               <Input className="w-32" type="number" min={0} max={1000} value={tail} onChange={(event) => setTail(Number(event.target.value))} />
             </label>
             <label className="flex h-9 items-center gap-2 text-sm">
-              <input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} /> Follow
+              <Checkbox checked={follow} onChange={(event) => setFollow(event.target.checked)} /> Follow
             </label>
             <Button onClick={start} disabled={streaming || !Number.isSafeInteger(tail) || tail < 0 || tail > 1000}>
               {streaming ? 'Streaming' : 'Open stream'}
@@ -72,12 +77,14 @@ export function LogViewer({ target, label = 'Logs' }: { target: LogTarget; label
             {streaming ? <Button variant="outline" onClick={stop}>Stop</Button> : null}
           </div>
           {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-          <div className="h-[55vh] overflow-auto rounded-lg bg-[#101510] p-4 font-mono text-xs text-[#d8e3c9]">
-            {events.length === 0 ? <p className="text-[#83907a]">No log lines received.</p> : events.map((event) => (
-              <div key={event.sequence} className="grid grid-cols-[9rem_8rem_5rem_1fr] gap-3 border-b border-white/5 py-1">
-                <span className="text-[#849a7c]">{new Date(event.timestamp).toLocaleTimeString()}</span>
-                <span className="truncate text-[#b8cc87]">{event.service_name}</span>
-                <span className={event.stream === 'stderr' ? 'text-[#ff9d7a]' : 'text-[#8bc6b6]'}>{event.stream}</span>
+          <div className="flex items-center justify-between text-xs text-muted-foreground"><span role="status">{streaming ? 'Streaming' : error ? 'Disconnected' : 'Stopped'}</span><span>{events.length} / 1,000 buffered lines</span></div>
+          <div ref={outputRef} tabIndex={0} aria-label="Log output" onScroll={(event) => { const el = event.currentTarget; pinnedToEnd.current = el.scrollHeight - el.clientHeight - el.scrollTop < 32 }}
+            className="h-[55vh] overflow-auto rounded-xl border border-border bg-background p-4 font-mono text-xs text-foreground">
+            {events.length === 0 ? <p className="text-muted-foreground">No log lines received.</p> : events.map((event) => (
+              <div key={event.sequence} className="grid grid-cols-[5rem_6rem_4rem_minmax(12rem,1fr)] gap-3 border-b border-border py-1">
+                <span className="text-muted-foreground">{new Date(event.timestamp).toLocaleTimeString()}</span>
+                <span className="truncate text-primary">{event.service_name}</span>
+                <span className={event.stream === 'stderr' ? 'text-destructive' : 'text-success'}>{event.stream}</span>
                 <span className="whitespace-pre-wrap break-all">{event.line}{event.truncated ? ' [truncated]' : ''}</span>
               </div>
             ))}

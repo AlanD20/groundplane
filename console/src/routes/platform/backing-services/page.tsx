@@ -1,5 +1,7 @@
 'use client'
 
+import { Select } from '@/components/ui/select'
+
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Database, HardDrive, Plug, Plus, RefreshCw } from 'lucide-react'
@@ -20,6 +22,7 @@ import {
 } from '@/lib/valkey-authentication'
 import { serviceObservationState } from '@/features/service/service-observation'
 import { useVisibleServiceObservations } from '@/features/service/use-service-observation-refresh'
+import { Checkbox } from '@/components/ui/checkbox'
 
 export default function PlatformBackingServicesPage() {
   const store = useStore()
@@ -192,33 +195,18 @@ export default function PlatformBackingServicesPage() {
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="backing-adapter">Adapter</Label>
-              <select
-                id="backing-adapter"
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                value={adapter}
-                onChange={(event) => {
-                  setAdapter(event.target.value as 'postgres:16' | 'valkey:9')
-                  setAuthentication('')
-                }}
-              >
-                <option value="postgres:16">PostgreSQL 16</option>
-                <option value="valkey:9">Valkey 9</option>
-              </select>
+              <Select id="backing-adapter" value={adapter} onValueChange={(value) => {
+                if (value !== 'postgres:16' && value !== 'valkey:9') return
+                setAdapter(value)
+                setAuthentication('')
+              }} options={[{ value: 'postgres:16', label: 'PostgreSQL 16' }, { value: 'valkey:9', label: 'Valkey 9' }]} />
             </div>
             {adapter === 'valkey:9' && (
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="backing-authentication">Authentication</Label>
-                <select
-                  id="backing-authentication"
-                  className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                  value={authentication}
-                  onChange={(event) => setAuthentication(event.target.value as ValkeyAuthenticationSelection)}
-                >
-                  <option value="" disabled>Select authentication</option>
-                  <option value="username_password">Username + password</option>
-                  <option value="password">Password only · shared default user</option>
-                  <option value="none">None · no authentication</option>
-                </select>
+                <Select id="backing-authentication" value={authentication} placeholder="Select authentication"
+                  onValueChange={(value) => { if (value === 'username_password' || value === 'password' || value === 'none') setAuthentication(value) }}
+                  options={[{ value: 'username_password', label: 'Username + password' }, { value: 'password', label: 'Password only' }, { value: 'none', label: 'None · no authentication' }]} />
                 <p className="text-xs text-muted-foreground">Immutable for this backing instance. Every Attach inherits this mode.</p>
               </div>
             )}
@@ -235,7 +223,7 @@ export default function PlatformBackingServicesPage() {
               <Input id="backing-subnet" value={zoneSubnet} onChange={(event) => setZoneSubnet(event.target.value)} placeholder="10.200.20.0/24" />
             </div>
             <label className="flex items-center gap-2 text-sm sm:col-span-2">
-              <input type="checkbox" checked={zoneInternal} onChange={(event) => setZoneInternal(event.target.checked)} />
+              <Checkbox checked={zoneInternal} onChange={(event) => setZoneInternal(event.target.checked)} />
               Isolate this backing Zone from outbound host traffic
             </label>
             {adapter === 'valkey:9' && authentication === 'none' && (

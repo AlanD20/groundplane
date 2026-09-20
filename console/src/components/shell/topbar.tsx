@@ -151,7 +151,7 @@ export function Topbar({ pathname }: { pathname: string }) {
   )
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-border bg-background/80 px-4 backdrop-blur">
+    <header className="relative z-20 flex min-h-14 items-center justify-between gap-3 bg-background px-4 py-3 sm:px-6 lg:px-9">
       <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1 text-sm">
         {crumbs.map((c, i) => (
           <Fragment key={i}>
@@ -162,7 +162,7 @@ export function Topbar({ pathname }: { pathname: string }) {
                   to={c.href}
                   className={cn(
                     'whitespace-nowrap rounded-md px-1.5 py-0.5 outline-none transition-colors',
-                    'hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
+                    'hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring',
                     i < crumbs.length - 1 ? 'text-muted-foreground' : 'font-medium text-foreground',
                   )}
                 >
@@ -182,7 +182,7 @@ export function Topbar({ pathname }: { pathname: string }) {
                 <DropdownMenu>
                   <DropdownMenuTrigger
                     aria-label={`Open ${c.label} menu`}
-                    className="flex items-center rounded-md p-1 text-muted-foreground/60 outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex items-center rounded-md p-1 text-muted-foreground/60 outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
                   >
                     <ChevronDown className="size-3.5" />
                   </DropdownMenuTrigger>

@@ -1,5 +1,6 @@
 import type { EnvironmentEntry } from '@/lib/entry-types'
 import { maximumScriptEntries } from '@/lib/script-execution'
+import { Checkbox } from '@/components/ui/checkbox'
 
 export function ScriptEntryGrants({ entries, service, selected, onChange }: {
   entries: EnvironmentEntry[]
@@ -26,7 +27,7 @@ export function ScriptEntryGrants({ entries, service, selected, onChange }: {
           const checked = selected.includes(entry.id)
           return (
             <label key={entry.id} className="flex cursor-pointer items-start gap-2 text-sm">
-              <input type="checkbox" checked={checked} className="mt-0.5 size-4 shrink-0 accent-primary"
+              <Checkbox checked={checked} className="mt-0.5 size-4 shrink-0 accent-primary"
                 disabled={!checked && (!entry.available || selected.length >= maximumScriptEntries)}
                 onChange={(event) => onChange(event.target.checked ? [...selected, entry.id] : selected.filter((id) => id !== entry.id))} />
               <span className="flex min-w-0 flex-col">

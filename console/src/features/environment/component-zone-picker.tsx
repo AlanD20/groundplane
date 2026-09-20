@@ -11,6 +11,7 @@ import {
   toggleSelectedZone,
   type ZoneCreateInput,
 } from './component-zone-picker-state'
+import { Checkbox } from '@/components/ui/checkbox'
 
 export type ComponentZonePickerProps = {
   zones: Zone[]
@@ -84,8 +85,8 @@ export function ComponentZonePicker({
                 key={zone.id}
                 className="flex items-start gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm"
               >
-                <input
-                  type="checkbox"
+                <Checkbox
+
                   className="mt-0.5 accent-primary"
                   checked={selectedZoneIds.includes(zone.id)}
                   onChange={(event) => onChange(toggleSelectedZone(selectedZoneIds, zone.id, event.target.checked))}
@@ -144,8 +145,8 @@ export function ComponentZonePicker({
             </p>
           </div>
           <label className="flex items-center gap-2 text-sm sm:col-span-2">
-            <input
-              type="checkbox"
+            <Checkbox
+
               className="accent-primary"
               checked={internal}
               onChange={(event) => setInternal(event.target.checked)}

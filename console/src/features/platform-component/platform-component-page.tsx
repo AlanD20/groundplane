@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Textarea } from '@/components/ui/textarea'
+import { CodeEditor } from '@/components/ui/code-editor'
 
 const kindIcon: Record<string, React.ReactNode> = {
   coredns: <Network className="size-4 text-muted-foreground" />,
@@ -372,12 +372,11 @@ function CoreDnsSettings({
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="corefile-template">Template</Label>
-          <Textarea
+          <CodeEditor
             id="corefile-template"
+            label="Corefile template"
             value={template}
-            onChange={(event) => setTemplate(event.target.value)}
-            className="min-h-[18rem] font-mono text-xs"
-            spellCheck={false}
+            onValueChange={setTemplate}
           />
           <span className="text-xs text-muted-foreground">
             Include exactly one <span className="font-mono">{'{groundplane}'}</span> marker. The Controller replaces it with bind, hosts, forwarders, catch-all, and reload directives.
@@ -406,12 +405,11 @@ function CoreDnsSettings({
         </div>
       ) : null}
       {!managedConfigLoading && !managedConfigError && managedCorefile ? (
-        <Textarea
+        <CodeEditor
           id="rendered-corefile"
+          label="Controller-rendered Corefile"
           value={managedCorefile.rendered}
           readOnly
-          className="min-h-[18rem] bg-muted/40 font-mono text-xs"
-          spellCheck={false}
         />
       ) : null}
       {!managedConfigLoading && !managedConfigError && !managedCorefile ? (

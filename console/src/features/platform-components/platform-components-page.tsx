@@ -1,4 +1,5 @@
 'use client'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 
 import { useEffect, useState } from 'react'
 import {
@@ -181,63 +182,63 @@ export default function PlatformInfraPage() {
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs font-semibold text-muted-foreground">
-                  <th className="py-2 pr-4">Host</th>
-                  <th className="py-2 pr-4">Version</th>
-                  <th className="py-2 pr-4">Labels</th>
-                  <th className="py-2 pr-4">In-flight tasks</th>
-                  <th className="py-2 pr-4">Last report</th>
-                  <th className="py-2 pr-4">Status</th>
-                  <th className="py-2 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table className="w-full text-sm">
+              <TableHeader>
+                <TableRow className="border-b border-border text-left text-xs font-semibold text-muted-foreground">
+                  <TableHead className="py-2 pr-4">Host</TableHead>
+                  <TableHead className="py-2 pr-4">Version</TableHead>
+                  <TableHead className="py-2 pr-4">Labels</TableHead>
+                  <TableHead className="py-2 pr-4">In-flight tasks</TableHead>
+                  <TableHead className="py-2 pr-4">Last report</TableHead>
+                  <TableHead className="py-2 pr-4">Status</TableHead>
+                  <TableHead className="py-2 text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {platform.agents.map((a) => (
-                  <tr key={a.id} className="border-b border-border last:border-0">
-                    <td className="py-2 pr-4 font-mono text-xs">
+                  <TableRow key={a.id} className="border-b border-border last:border-0">
+                    <TableCell className="py-2 pr-4 font-mono text-xs">
                       <Link to={`/platform/agents/${a.id}`} className="font-medium text-primary hover:underline">
                         {a.host}
                       </Link>
-                    </td>
-                    <td className="py-2 pr-4 font-mono text-xs">{a.version ?? '—'}</td>
-                    <td className="py-2 pr-4 font-mono text-xs">{formatAgentLabels(a.labels).join(' · ')}</td>
-                    <td className="py-2 pr-4 text-xs">{a.inFlight}</td>
-                    <td className="py-2 pr-4 text-xs text-muted-foreground">{formatLastReportAt(a.lastReportAt)}</td>
-                    <td className="py-2 pr-4">
+                    </TableCell>
+                    <TableCell className="py-2 pr-4 font-mono text-xs">{a.version ?? '—'}</TableCell>
+                    <TableCell className="py-2 pr-4 font-mono text-xs">{formatAgentLabels(a.labels).join(', ')}</TableCell>
+                    <TableCell className="py-2 pr-4 text-xs">{a.inFlight}</TableCell>
+                    <TableCell className="py-2 pr-4 text-xs text-muted-foreground">{formatLastReportAt(a.lastReportAt)}</TableCell>
+                    <TableCell className="py-2 pr-4">
                       <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                         <StatusDot status={a.status} /> {a.status}
                       </span>
-                    </td>
-                    <td className="py-2 text-right">
+                    </TableCell>
+                    <TableCell className="py-2 text-right">
                       <PlatformAgentActions agent={a} compact allowRemove />
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
                 {agentsLoading && (
-                  <tr>
-                    <td colSpan={7} className="py-6 text-center text-xs text-muted-foreground">
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-6 text-center text-xs text-muted-foreground">
                       Loading the local Agent…
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )}
                 {!agentsLoading && agentError && (
-                  <tr>
-                    <td colSpan={7} className="py-6 text-center text-xs text-destructive">
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-6 text-center text-xs text-destructive">
                       {agentError}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )}
                 {!agentsLoading && !agentError && platform.agents.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="py-6 text-center text-xs text-muted-foreground">
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-6 text-center text-xs text-muted-foreground">
                       No local Agent is joined. Join it to let the Controller create and manage the Agent container.
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
           <p className="mt-3 max-w-3xl text-xs text-muted-foreground">
             One local Agent in the MVP. The Controller creates and removes its container; labels remain Controller-owned
@@ -296,7 +297,7 @@ export default function PlatformInfraPage() {
             </p>
             <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-surface p-0.5">
               {filters.map((f) => (
-                <button
+                <Button variant="ghost" size="content"
                   key={f.key}
                   type="button"
                   onClick={() => setFilter(f.key)}
@@ -307,7 +308,7 @@ export default function PlatformInfraPage() {
                   }
                 >
                   {f.label}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -325,7 +326,7 @@ export default function PlatformInfraPage() {
           ) : (
             <div className="flex flex-col gap-1.5">
               {visible.map((t) => (
-                <button
+                <Button variant="ghost" size="content"
                   key={t.id}
                   type="button"
                   onClick={() => setOpen(t)}
@@ -342,7 +343,7 @@ export default function PlatformInfraPage() {
                     </span>
                     <ChevronRight className="size-3.5 text-muted-foreground/50" />
                   </div>
-                </button>
+                </Button>
               ))}
             </div>
           )}

@@ -117,10 +117,10 @@ export function ReleaseGroupFormDrawer({
               {env.services.map((service) => {
                 const selected = draft.services.includes(service.name)
                 return (
-                  <button key={service.id} type="button" aria-pressed={selected} onClick={() => toggleService(service.name)} className={`flex items-center justify-between rounded-lg border p-3 text-left transition-colors ${selected ? 'border-primary/50 bg-primary/10' : 'border-border bg-surface hover:bg-muted/40'}`}>
+                  <Button variant="ghost" size="content" key={service.id} type="button" aria-pressed={selected} onClick={() => toggleService(service.name)} className={`flex items-center justify-between rounded-lg border p-3 text-left transition-colors ${selected ? 'border-primary/50 bg-primary/10' : 'border-border bg-surface hover:bg-muted/40'}`}>
                     <span><span className="block font-mono text-sm">{service.name}</span><span className="block text-xs text-muted-foreground">{service.role}</span></span>
                     <Badge variant={selected ? 'primary' : 'outline'}>{selected ? 'Selected' : 'Add'}</Badge>
-                  </button>
+                  </Button>
                 )
               })}
             </div>

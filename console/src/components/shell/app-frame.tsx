@@ -1,21 +1,22 @@
 'use client'
 
+import { Brand } from './brand'
+import { ThemeToggle } from '@/components/common/theme-toggle'
+
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Link } from 'react-router-dom'
-import { Menu, Ship, X } from 'lucide-react'
+import { Menu } from 'lucide-react'
 import { Sidebar } from './sidebar'
 import { Topbar } from './topbar'
 import { WorkspaceSwitcher } from './workspace-switcher'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Drawer, DrawerContent } from '@/components/ui/drawer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useStore } from '@/lib/store'
 import { useLinkedSlug } from '@/lib/use-linked-slug'
-import { cn } from '@/lib/utils'
 
 function useWorkspace(pathname: string): { kind: 'platform' | 'tenant'; slug: string } {
   const parts = pathname.split('/').filter(Boolean)
@@ -69,17 +70,10 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
   return (
     <TooltipProvider>
-      <div className="flex min-h-screen w-full">
+      <header className="fixed inset-x-0 top-0 z-40 flex h-[74px] items-center justify-between border-b border-border bg-background px-5 sm:px-8"><Brand /><ThemeToggle /></header>
+      <div className="flex min-h-screen w-full pt-[74px]">
         {/* Desktop sidebar */}
-        <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-border bg-sidebar lg:flex">
-          <div className="flex h-14 items-center gap-2 border-b border-border px-4">
-            <Link to="/platform/overview" className="flex items-center gap-2 outline-none">
-              <span className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                <Ship className="size-4" />
-              </span>
-              <span className="text-sm font-semibold tracking-tight">groundplane</span>
-            </Link>
-          </div>
+        <aside className="fixed bottom-0 left-0 top-[74px] z-30 hidden w-[216px] flex-col border-r border-border bg-sidebar lg:flex">
           <div className="px-3 py-3">
             <WorkspaceSwitcher workspace={workspace} onNewTenant={() => setNewTenantOpen(true)} />
           </div>
@@ -88,57 +82,36 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           </div>
         </aside>
 
-        {/* Mobile drawer */}
-        <div className={cn('fixed inset-0 z-50 lg:hidden', mobileOpen ? 'pointer-events-auto' : 'pointer-events-none')}>
-          <div
-            className={cn(
-              'absolute inset-0 bg-black/60 transition-opacity',
-              mobileOpen ? 'opacity-100' : 'opacity-0',
-            )}
-            onClick={() => setMobileOpen(false)}
-          />
-          <aside
-            className={cn(
-              'absolute inset-y-0 left-0 flex w-72 flex-col border-r border-border bg-sidebar transition-transform',
-              mobileOpen ? 'translate-x-0' : '-translate-x-full',
-            )}
-          >
-            <div className="flex h-14 items-center justify-between border-b border-border px-4">
-              <span className="flex items-center gap-2">
-                <span className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                  <Ship className="size-4" />
-                </span>
-                <span className="text-sm font-semibold tracking-tight">groundplane</span>
-              </span>
-              <button onClick={() => setMobileOpen(false)} className="rounded-md p-1 text-muted-foreground hover:text-foreground">
-                <X className="size-5" />
-                <span className="sr-only">Close menu</span>
-              </button>
+        <Drawer open={mobileOpen} onOpenChange={setMobileOpen}>
+          <DrawerContent className="left-0 right-auto max-w-72 border-l-0 border-r p-0 data-[ending-style]:-translate-x-full data-[starting-style]:-translate-x-full" onClick={(event) => {
+            if (event.target instanceof Element && event.target.closest('a')) setMobileOpen(false)
+          }}>
+            <DialogTitle className="sr-only">Navigation</DialogTitle>
+            <div className="border-b border-border p-4"><Brand /></div>
+            <div className="px-3">
+              <WorkspaceSwitcher workspace={workspace} onNewTenant={() => { setMobileOpen(false); setNewTenantOpen(true) }} />
             </div>
-            <div className="px-3 py-3" onClick={() => setMobileOpen(false)}>
-              <WorkspaceSwitcher workspace={workspace} onNewTenant={() => setNewTenantOpen(true)} />
-            </div>
-            <div className="flex-1 overflow-y-auto" onClick={() => setMobileOpen(false)}>
+            <div className="flex-1 overflow-y-auto">
               <Sidebar workspace={workspace} projectSlug={projectSlug} pathname={pathname} />
             </div>
-          </aside>
-        </div>
+          </DrawerContent>
+        </Drawer>
 
         {/* Main column */}
-        <div className="flex min-w-0 flex-1 flex-col lg:pl-64">
+        <div className="flex min-w-0 flex-1 flex-col lg:pl-[216px]">
           <div className="flex items-center gap-2 lg:block">
-            <button
+            <Button variant="outline" size="icon"
               onClick={() => setMobileOpen(true)}
               className="ml-3 mt-3 flex items-center justify-center rounded-md border border-border bg-surface p-2 text-muted-foreground lg:hidden"
             >
               <Menu className="size-5" />
               <span className="sr-only">Open menu</span>
-            </button>
+            </Button>
             <div className="min-w-0 flex-1">
               <Topbar pathname={pathname} />
             </div>
           </div>
-          <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+          <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-7 sm:px-6 lg:px-9 console-content"><div className="console-page" key={pathname}>{children}</div></main>
         </div>
       </div>
 

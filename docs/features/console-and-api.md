@@ -46,6 +46,28 @@ toolchains and the lockfile, with generated-output drift rejected.
 | HTTP startup/shutdown ownership | [Server lifecycle](../decisions/0014-http-server-lifecycle.md) |
 | UI module placement | [Console seams](../agents.md#console-module-seams) |
 
+### Shared presentation
+
+The Console uses one plum/lavender palette with dark and light themes. Semantic
+tokens live in `console/src/index.css`; feature pages do not define another
+palette. Shared controls, tables, dialogs and drawers live in `components/ui`.
+Shell navigation and breadcrumbs preserve workspace and project context.
+Focus outlines are thin, transitions respect reduced motion, and clicking
+outside a dialog or drawer dismisses it.
+
+CodeMirror provides the shared document editor and read-only preview. YAML,
+JSON and shell have syntax highlighting. YAML/JSON formatting is an explicit,
+local action using lazily loaded Prettier parsers; it never saves or applies a
+document. Unsupported languages remain plain text. Controller validation and
+protected apply requests remain authoritative.
+
+The zone map repeats each Service in its actual memberships, always includes
+No zone, and highlights shared membership on selection. Selecting it again clears
+the highlight. A zone index supports wide topologies; the list view filters and
+sorts loaded Services without changing Controller state. Runtime badges retain
+their observation expiry rules. Service and Environment logs retain their live
+Controller stream, bounded buffer and explicit stop controls.
+
 ### Verification design
 
 The intended automated stack is Vitest for unit checks, React Testing Library

@@ -29,7 +29,7 @@ export function ResourceActionMenu({ label, actions }: { label: string; actions:
       <DropdownMenuTrigger
         aria-label={label}
         title={label}
-        className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
       >
         <Ellipsis className="size-4" />
       </DropdownMenuTrigger>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { CodeEditor } from '@/components/ui/code-editor'
 import { useStore } from '@/lib/store'
 import type { ManagedConfigFile } from '@/lib/types'
 import { caddyTemplateError, readCaddyTemplate } from './caddy-template'
@@ -39,15 +40,14 @@ export function CaddyTemplateEditor({ componentId, enabled, value, onChange, onB
 
   return <div className="flex min-w-0 flex-col gap-2">
     <Label htmlFor="caddy-template">Complete Caddyfile template</Label>
-    <textarea
+    <CodeEditor
       id="caddy-template"
-      className="min-h-40 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+      label="Caddyfile template"
       value={value}
       disabled={reading}
-      spellCheck={false}
       aria-invalid={error !== null}
       aria-describedby="caddy-template-help caddy-template-error"
-      onChange={(event) => { setReadError(null); onChange(event.target.value) }}
+      onValueChange={(value) => { setReadError(null); onChange(value) }}
     />
     <p id="caddy-template-help" className="text-xs text-muted-foreground">
       Empty uses <code>{'{gp.routes}'}</code>. Full files can reference a declared Route with{' '}
@@ -107,8 +107,7 @@ function SavedCaddyPreview({ componentId, enabled }: { componentId: string; enab
       <p className="text-xs text-muted-foreground">No rendered file is available from the Controller.</p>}
     {!loading && !error && files.map((file, index) => <div key={file.path} className="flex min-w-0 flex-col gap-1">
       <Label htmlFor={`rendered-caddyfile-${index}`} className="break-all">{file.path}</Label>
-      <textarea id={`rendered-caddyfile-${index}`} readOnly value={file.rendered} spellCheck={false}
-        className="min-h-40 w-full rounded-md border border-input bg-muted px-3 py-2 font-mono text-xs" />
+      <CodeEditor id={`rendered-caddyfile-${index}`} label={file.path} readOnly value={file.rendered} />
     </div>)}
   </div>
 }

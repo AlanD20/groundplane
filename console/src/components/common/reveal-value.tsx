@@ -73,17 +73,17 @@ export function RevealValue({
       {revealed ? (
         <>
           <CopyButton value={displayedValue ?? ''} />
-          <button
+          <Button variant="ghost" size="content"
             type="button"
             onClick={hide}
             className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="Hide value"
           >
             <EyeOff className="size-3.5" />
-          </button>
+          </Button>
         </>
       ) : (
-        <button
+        <Button variant="ghost" size="content"
           type="button"
           onClick={() => {
             if (sensitive && requireRevealConfirm) {
@@ -98,7 +98,7 @@ export function RevealValue({
           disabled={loading}
         >
           <Eye className="size-3.5" />
-        </button>
+        </Button>
       )}
       {error && <span className="text-xs text-destructive">{error}</span>}
 

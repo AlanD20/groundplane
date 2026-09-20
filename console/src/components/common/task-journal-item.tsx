@@ -1,5 +1,7 @@
 'use client'
 
+import { Button } from '@/components/ui/button'
+
 import { useState } from 'react'
 import { ChevronRight, Search } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -58,7 +60,7 @@ export function TaskJournalItem({ entry, scope }: { entry: ActivityEntry; scope:
         ) : (
           <div className="flex min-w-0 flex-1 items-start gap-3 p-3.5">{body}</div>
         )}
-        <button
+        <Button variant="ghost" size="content"
           type="button"
           onClick={(event) => {
             event.stopPropagation()
@@ -69,7 +71,7 @@ export function TaskJournalItem({ entry, scope }: { entry: ActivityEntry; scope:
         >
           <Search className="size-3.5" />
           <span className="hidden sm:inline">Inspect</span>
-        </button>
+        </Button>
       </div>
       {open && (
         <TaskDetailDrawer

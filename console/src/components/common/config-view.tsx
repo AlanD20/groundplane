@@ -2,7 +2,8 @@
 
 import { FileCode2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { CopyButton } from '@/components/common/copy-button'
+import { useId } from 'react'
+import { CodeEditor } from '@/components/ui/code-editor'
 
 // The Controller-rendered config file for a platform component — the full
 // file as written, exactly like the desired-state (Blueprint) views. What
@@ -18,6 +19,7 @@ export function ConfigView({
   content: string
   note?: string
 }) {
+  const id = useId()
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between">
@@ -27,13 +29,10 @@ export function ConfigView({
         </CardTitle>
         <span className="flex items-center gap-2">
           <span className="font-mono text-xs text-muted-foreground">{path}</span>
-          <CopyButton value={content} label="copy" />
         </span>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <pre className="overflow-x-auto rounded-lg border border-border bg-surface p-3 text-xs leading-relaxed text-muted-foreground">
-          <code>{content}</code>
-        </pre>
+        <CodeEditor id={id} label={title} value={content} language={/\.ya?ml$/.test(path) ? 'yaml' : path.endsWith('.json') ? 'json' : 'text'} readOnly />
         {note ? <p className="text-xs text-muted-foreground">{note}</p> : null}
       </CardContent>
     </Card>

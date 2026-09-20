@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
+import { CodeEditor } from '@/components/ui/code-editor'
 import { DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ScriptExecutionFields } from './script-execution-fields'
 import { parseScriptOrder } from './script-order'
@@ -62,8 +62,7 @@ export function ScriptEditor({ env, script, onSave, onClose }: {
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="script-body">Script (one line or many)</Label>
-          <Textarea id="script-body" value={body} onChange={(event) => setBody(event.target.value)} rows={6}
-            spellCheck={false} className="font-mono text-xs" placeholder={'set -eu\n# Prepare or migrate selected data'} />
+          <CodeEditor id="script-body" label="Script body" language="shell" value={body} onValueChange={setBody} disabled={submitting} />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">

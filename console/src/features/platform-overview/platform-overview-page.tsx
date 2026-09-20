@@ -98,8 +98,8 @@ export default function PlatformOverviewPage() {
           icon={<Cpu />}
           label="Services"
           value={totalServices}
-          hint={unavailableServices ? `${unavailableServices} runtime state${unavailableServices === 1 ? '' : 's'} unavailable` : incompleteServices ? `${incompleteServices} incomplete runtime${incompleteServices === 1 ? '' : 's'}` : 'all healthy or running unchecked'}
-          tone={incompleteServices || unavailableServices ? 'warning' : 'success'}
+          hint={totalServices === 0 ? 'No Service observations loaded' : unavailableServices ? `${unavailableServices} runtime state${unavailableServices === 1 ? '' : 's'} unavailable` : incompleteServices ? `${incompleteServices} incomplete runtime${incompleteServices === 1 ? '' : 's'}` : 'all healthy or running unchecked'}
+          tone={totalServices === 0 ? undefined : incompleteServices || unavailableServices ? 'warning' : 'success'}
         />
         <StatCard icon={<Database />} label="Backing services" value={backingProjects.length} hint="attachable datastores" />
       </div>

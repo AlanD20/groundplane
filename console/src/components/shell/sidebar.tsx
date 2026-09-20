@@ -104,7 +104,7 @@ export function Sidebar({
                 to={item.href}
                 className={cn(
                   'flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm font-medium outline-none transition-colors',
-                  '[&_svg]:size-4 [&_svg]:shrink-0 focus-visible:ring-2 focus-visible:ring-ring',
+                  '[&_svg]:size-4 [&_svg]:shrink-0 focus-visible:ring-1 focus-visible:ring-ring',
                   active
                     ? 'bg-sidebar-accent text-sidebar-accent-foreground [&_svg]:text-primary'
                     : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground [&_svg]:text-muted-foreground',

@@ -1,5 +1,7 @@
 'use client'
 
+import { Select } from '@/components/ui/select'
+
 import { useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { ArrowDown, ArrowUp, FileArchive, FolderOpen, Plus, Trash2, Upload } from 'lucide-react'
 import { TaskRunnerDialog } from '@/components/common/task-runner-dialog'
@@ -148,7 +150,7 @@ export function BlueprintApplyAction({ environment, workspace }: { environment: 
             <div className="grid gap-2 sm:grid-cols-2">
               <Label className="flex h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border border-input bg-background px-3 hover:bg-muted/50">
                 <FolderOpen className="size-4" /> Select directory
-                <input
+                <Input
                   id="blueprint-directory"
                   name="blueprint-directory"
                   className="sr-only"
@@ -160,7 +162,7 @@ export function BlueprintApplyAction({ environment, workspace }: { environment: 
               </Label>
               <Label className="flex h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border border-input bg-background px-3 hover:bg-muted/50">
                 <FileArchive className="size-4" /> Select files instead
-                <input id="blueprint-files" name="blueprint-files" className="sr-only" type="file" multiple onChange={(event) => void selectFiles(event, false)} />
+                <Input id="blueprint-files" name="blueprint-files" className="sr-only" type="file" multiple onChange={(event) => void selectFiles(event, false)} />
               </Label>
             </div>
             <div className="flex flex-wrap gap-2 text-xs">
@@ -180,10 +182,7 @@ export function BlueprintApplyAction({ environment, workspace }: { environment: 
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="blueprint-root">Root Blueprint</Label>
-              <select id="blueprint-root" name="blueprint-root" className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm" value={rootPath} onChange={(event) => changeRoot(event.target.value)}>
-                <option value="">Select the root file…</option>
-                {inputOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
+              <Select id="blueprint-root" value={rootPath} onValueChange={changeRoot} options={inputOptions} placeholder="Select the root file…" />
             </div>
             {rootPath && <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm"><span className="font-mono text-xs text-muted-foreground">01</span><span className="min-w-0 truncate font-mono">{rootPath}</span><Badge className="ml-auto" variant="outline">root</Badge></div>}
             {composeSources.map((source, index) => (
@@ -196,10 +195,7 @@ export function BlueprintApplyAction({ environment, workspace }: { environment: 
               </div>
             ))}
             <div className="flex flex-col gap-2 sm:flex-row">
-              <select id="blueprint-compose-source" name="blueprint-compose-source" aria-label="Additional Compose source" className="h-8 min-w-0 flex-1 rounded-lg border border-input bg-background px-2.5 text-sm" value={sourceCandidate} onChange={(event) => setSourceCandidate(event.target.value)}>
-                <option value="">Select an additional source…</option>
-                {sourceOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
+              <Select id="blueprint-compose-source" aria-label="Additional Compose source" value={sourceCandidate} onValueChange={setSourceCandidate} options={sourceOptions} placeholder="Select an additional source…" />
               <Button variant="outline" disabled={!sourceCandidate} onClick={addSource}><Plus /> Add source</Button>
             </div>
           </section>

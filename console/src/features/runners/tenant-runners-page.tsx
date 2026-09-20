@@ -1,5 +1,7 @@
 'use client'
 
+import { Select } from '@/components/ui/select'
+
 import { useEffect, useMemo, useState } from 'react'
 import { Cpu, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useRequiredParams } from '@/lib/router'
@@ -202,15 +204,8 @@ export default function TenantRunnersPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="runner-create-owner">Owner</Label>
-              <select
-                id="runner-create-owner"
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                value={createOwner}
-                onChange={(event) => setCreateOwner(event.target.value)}
-              >
-                <option value="tenant">Tenant · {tenant.slug}</option>
-                {projects.map((project) => <option key={project.id} value={project.id}>Project · {project.slug}</option>)}
-              </select>
+              <Select id="runner-create-owner" value={createOwner} onValueChange={setCreateOwner}
+                options={[{ value: 'tenant', label: `Tenant · ${tenant.slug}` }, ...projects.map((project) => ({ value: project.id, label: `Project · ${project.slug}` }))]} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="runner-create-github">GitHub URL</Label>

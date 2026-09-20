@@ -1,10 +1,9 @@
 'use client'
 
-import { Eye, Globe, Moon, Settings as SettingsIcon, Sun } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Eye, Globe, Settings as SettingsIcon, Sun } from 'lucide-react'
 import { PageHeader } from '@/components/common/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { ThemeToggle } from './theme-toggle'
 import { Switch } from '@/components/ui/switch'
 import { useStore } from '@/lib/store'
 
@@ -13,23 +12,6 @@ import { useStore } from '@/lib/store'
 // Components page, per component.
 export function SettingsContent({ workspace }: { workspace: 'platform' | string }) {
   const { requireRevealConfirm, setRequireRevealConfirm } = useStore()
-  const [dark, setDark] = useState(true)
-
-  useEffect(() => {
-    setDark(document.documentElement.classList.contains('dark'))
-  }, [])
-
-  function toggleTheme() {
-    const next = !dark
-    setDark(next)
-    document.documentElement.classList.toggle('dark', next)
-    try {
-      localStorage.setItem('groundplane-theme', next ? 'dark' : 'light')
-    } catch {
-      /* private mode */
-    }
-  }
-
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -45,15 +27,13 @@ export function SettingsContent({ workspace }: { workspace: 'platform' | string 
         <CardContent className="flex flex-col">
           <div className="flex items-center justify-between border-b border-border py-3">
             <div className="flex items-center gap-2.5">
-              {dark ? <Moon className="size-4 text-muted-foreground" /> : <Sun className="size-4 text-muted-foreground" />}
+              <Sun className="size-4 text-muted-foreground" />
               <div className="flex flex-col">
                 <span className="text-sm font-medium">Theme</span>
                 <span className="text-xs text-muted-foreground">dark is the primary experience</span>
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={toggleTheme}>
-              {dark ? 'Toggle to light' : 'Toggle to dark'}
-            </Button>
+            <ThemeToggle />
           </div>
           <div className="flex items-center justify-between py-3">
             <div className="flex items-center gap-2.5">

@@ -8,7 +8,7 @@ import { StatusBadge } from '@/components/common/status-badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
+import { CodeEditor } from '@/components/ui/code-editor'
 import { useStore } from '@/lib/store'
 import { ControllerUpdateCard } from './controller-update-card'
 
@@ -93,12 +93,12 @@ export default function PlatformControllerPage() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="controller-config-document">Controller YAML</Label>
-                <Textarea
+                <CodeEditor
                   id="controller-config-document"
+                  label="Controller YAML"
+                  language="yaml"
                   value={content}
-                  onChange={(event) => setContent(event.target.value)}
-                  className="min-h-[34rem] resize-y font-mono text-xs leading-5"
-                  spellCheck={false}
+                  onValueChange={setContent}
                   aria-describedby="controller-config-help"
                 />
                 <p id="controller-config-help" className="text-xs text-muted-foreground">

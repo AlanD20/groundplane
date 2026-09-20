@@ -58,95 +58,95 @@
   --radius-2xl: calc(var(--radius) * 1.8);
 }
 
-/* Light theme (slate) */
+/* Approved Console palette: lavender light and deep plum dark. */
 :root {
   color-scheme: light;
-  --background: oklch(0.985 0.003 250);
-  --foreground: oklch(0.21 0.02 260);
-  --surface: oklch(0.995 0.002 250);
-  --surface-foreground: oklch(0.21 0.02 260);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.21 0.02 260);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.21 0.02 260);
-  --primary: oklch(0.55 0.16 255);
-  --primary-foreground: oklch(0.99 0.005 250);
-  --secondary: oklch(0.96 0.006 250);
-  --secondary-foreground: oklch(0.28 0.02 260);
-  --muted: oklch(0.965 0.005 250);
-  --muted-foreground: oklch(0.52 0.015 258);
-  --accent: oklch(0.95 0.01 255);
-  --accent-foreground: oklch(0.3 0.03 260);
-  --destructive: oklch(0.58 0.22 25);
-  --destructive-foreground: oklch(0.99 0.005 250);
-  --success: oklch(0.62 0.15 155);
-  --success-foreground: oklch(0.99 0.005 250);
-  --warning: oklch(0.7 0.15 70);
-  --warning-foreground: oklch(0.25 0.03 70);
-  --info: oklch(0.55 0.16 255);
-  --info-foreground: oklch(0.99 0.005 250);
-  --border: oklch(0.9 0.008 255);
-  --input: oklch(0.9 0.008 255);
-  --ring: oklch(0.55 0.16 255);
-  --chart-1: oklch(0.55 0.16 255);
-  --chart-2: oklch(0.62 0.15 155);
-  --chart-3: oklch(0.7 0.15 70);
-  --chart-4: oklch(0.58 0.22 25);
-  --chart-5: oklch(0.6 0.12 300);
-  --radius: 0.5rem;
-  --sidebar: oklch(0.975 0.004 250);
-  --sidebar-foreground: oklch(0.21 0.02 260);
-  --sidebar-primary: oklch(0.55 0.16 255);
-  --sidebar-primary-foreground: oklch(0.99 0.005 250);
-  --sidebar-accent: oklch(0.95 0.01 255);
-  --sidebar-accent-foreground: oklch(0.3 0.03 260);
-  --sidebar-border: oklch(0.9 0.008 255);
-  --sidebar-ring: oklch(0.55 0.16 255);
+  --background: #f8f5fc;
+  --foreground: #261c32;
+  --surface: #f0eaf7;
+  --surface-foreground: #261c32;
+  --card: #ffffff;
+  --card-foreground: #261c32;
+  --popover: #ffffff;
+  --popover-foreground: #261c32;
+  --primary: #7441b6;
+  --primary-foreground: #ffffff;
+  --secondary: #f0eaf7;
+  --secondary-foreground: #261c32;
+  --muted: #f0eaf7;
+  --muted-foreground: #71617e;
+  --accent: color-mix(in srgb, #7441b6 12%, #ffffff);
+  --accent-foreground: #7441b6;
+  --destructive: #b52d49;
+  --destructive-foreground: #ffffff;
+  --success: #207953;
+  --success-foreground: #f8f5fc;
+  --warning: #936311;
+  --warning-foreground: #f8f5fc;
+  --info: #7441b6;
+  --info-foreground: #ffffff;
+  --border: #e0d5ea;
+  --input: #e0d5ea;
+  --ring: #7441b6;
+  --chart-1: #7441b6;
+  --chart-2: #207953;
+  --chart-3: #936311;
+  --chart-4: #b52d49;
+  --chart-5: #71617e;
+  --radius: 0.625rem;
+  --sidebar: #f8f5fc;
+  --sidebar-foreground: #261c32;
+  --sidebar-primary: #7441b6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: #7441b6;
+  --sidebar-border: #e0d5ea;
+  --sidebar-ring: #7441b6;
 }
 
-/* Dark theme (slate) - primary experience */
 .dark {
   color-scheme: dark;
-  --background: oklch(0.17 0.012 260);
-  --foreground: oklch(0.96 0.004 250);
-  --surface: oklch(0.205 0.014 260);
-  --surface-foreground: oklch(0.96 0.004 250);
-  --card: oklch(0.215 0.015 260);
-  --card-foreground: oklch(0.96 0.004 250);
-  --popover: oklch(0.235 0.016 260);
-  --popover-foreground: oklch(0.96 0.004 250);
-  --primary: oklch(0.65 0.16 255);
-  --primary-foreground: oklch(0.16 0.02 260);
-  --secondary: oklch(0.27 0.016 260);
-  --secondary-foreground: oklch(0.94 0.005 250);
-  --muted: oklch(0.25 0.014 260);
-  --muted-foreground: oklch(0.68 0.015 258);
-  --accent: oklch(0.3 0.02 260);
-  --accent-foreground: oklch(0.96 0.004 250);
-  --destructive: oklch(0.68 0.19 25);
-  --destructive-foreground: oklch(0.98 0.005 250);
-  --success: oklch(0.72 0.16 158);
-  --success-foreground: oklch(0.16 0.02 260);
-  --warning: oklch(0.8 0.14 78);
-  --warning-foreground: oklch(0.2 0.03 70);
-  --info: oklch(0.68 0.14 250);
-  --info-foreground: oklch(0.16 0.02 260);
-  --border: oklch(1 0 0 / 9%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.65 0.16 255);
-  --chart-1: oklch(0.65 0.16 255);
-  --chart-2: oklch(0.72 0.16 158);
-  --chart-3: oklch(0.8 0.14 78);
-  --chart-4: oklch(0.68 0.19 25);
-  --chart-5: oklch(0.68 0.13 300);
-  --sidebar: oklch(0.195 0.013 260);
-  --sidebar-foreground: oklch(0.96 0.004 250);
-  --sidebar-primary: oklch(0.65 0.16 255);
-  --sidebar-primary-foreground: oklch(0.16 0.02 260);
-  --sidebar-accent: oklch(0.28 0.018 260);
-  --sidebar-accent-foreground: oklch(0.96 0.004 250);
-  --sidebar-border: oklch(1 0 0 / 9%);
-  --sidebar-ring: oklch(0.65 0.16 255);
+  --background: #100d17;
+  --foreground: #f3effa;
+  --surface: #211929;
+  --surface-foreground: #f3effa;
+  --card: #19131f;
+  --card-foreground: #f3effa;
+  --popover: #19131f;
+  --popover-foreground: #f3effa;
+  --primary: #c4a3ff;
+  --primary-foreground: #100d17;
+  --secondary: #211929;
+  --secondary-foreground: #f3effa;
+  --muted: #211929;
+  --muted-foreground: #b1a4c0;
+  --accent: color-mix(in srgb, #c4a3ff 12%, #19131f);
+  --accent-foreground: #c4a3ff;
+  --destructive: #f49da9;
+  --destructive-foreground: #100d17;
+  --success: #82d9b0;
+  --success-foreground: #100d17;
+  --warning: #e6bc76;
+  --warning-foreground: #100d17;
+  --info: #c4a3ff;
+  --info-foreground: #100d17;
+  --border: #372b42;
+  --input: #372b42;
+  --ring: #c4a3ff;
+  --chart-1: #c4a3ff;
+  --chart-2: #82d9b0;
+  --chart-3: #e6bc76;
+  --chart-4: #f49da9;
+  --chart-5: #b1a4c0;
+  --radius: 0.625rem;
+  --sidebar: #100d17;
+  --sidebar-foreground: #f3effa;
+  --sidebar-primary: #c4a3ff;
+  --sidebar-primary-foreground: #100d17;
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: #c4a3ff;
+  --sidebar-border: #372b42;
+  --sidebar-ring: #c4a3ff;
 }
 
 @layer base {
@@ -161,6 +161,8 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-size: 14px;
+    line-height: 1.55;
   }
   /* Browsers render <button> with the default arrow cursor; every enabled
      interactive element should signal it is clickable. */
@@ -194,4 +196,32 @@
       linear-gradient(to bottom, var(--border) 1px, transparent 1px);
     background-size: 22px 22px;
   }
+}
+
+@layer base {
+  :focus-visible { outline: 1px solid var(--ring); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  }
+}
+@keyframes console-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@layer components {
+  .console-page { animation: console-enter 180ms ease-out; }
+  .console-content { background: radial-gradient(ellipse at 95% 0%, color-mix(in srgb, var(--primary) 5%, transparent), transparent 45%); }
+  [data-slot='checkbox'], [data-slot='radio'] {
+    appearance: none; display: inline-grid; place-content: center; flex-shrink: 0;
+    width: 1.125rem; height: 1.125rem; margin: 0; border: 1px solid var(--muted-foreground);
+    border-radius: 5px; background: var(--background); vertical-align: middle; cursor: pointer;
+    transition: background 160ms, border-color 160ms;
+  }
+  [data-slot='checkbox']::before { content: ''; width: 8px; height: 5px; border: solid var(--primary-foreground); border-width: 0 0 2px 2px; transform: rotate(-45deg) scale(0); transition: transform 160ms; margin-top: -2px; }
+  [data-slot='checkbox']:checked { background: var(--primary); border-color: var(--primary); }
+  [data-slot='checkbox']:checked::before { transform: rotate(-45deg) scale(1); }
+  [data-slot='checkbox']:indeterminate { background: var(--primary); border-color: var(--primary); }
+  [data-slot='checkbox']:indeterminate::before { border-width: 0 0 2px; transform: none; }
+  [data-slot='radio'] { border-radius: 50%; }
+  [data-slot='radio']::before { content: ''; width: 8px; height: 8px; background: var(--primary); border-radius: 50%; transform: scale(0); transition: transform 160ms; }
+  [data-slot='radio']:checked { border-color: var(--primary); }
+  [data-slot='radio']:checked::before { transform: scale(1); }
+  [data-slot='checkbox']:disabled, [data-slot='radio']:disabled { opacity: .4; cursor: not-allowed; }
 }

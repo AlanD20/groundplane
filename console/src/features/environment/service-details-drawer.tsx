@@ -88,7 +88,7 @@ export function ServiceDetailsDrawer({
             <DetailRow label="Resources" value={`${service.resources.mem} · ${service.resources.cpus} cpu`} mono />
             <DetailRow
               label="Environment"
-              value={service.environment.map((e) => `${e.key}=${e.value}`).join(' · ') || '—'}
+              value={service.environment.map((e) => `${e.key}=${e.value}`).join(', ') || '—'}
               mono
             />
             <DetailRow
@@ -98,7 +98,7 @@ export function ServiceDetailsDrawer({
                   .map((m) =>
                     m.type === 'volume' ? `${m.volume} → ${m.mount}` : `${m.file} → ${m.mount} :ro`,
                   )
-                  .join(' · ') || '—'
+                  .join(', ') || '—'
               }
               mono
             />

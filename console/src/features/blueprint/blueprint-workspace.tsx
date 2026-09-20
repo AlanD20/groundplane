@@ -1,5 +1,7 @@
 'use client'
 
+import { Input } from '@/components/ui/input'
+
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Download, FileCode2, FileUp, Pencil, RefreshCw, Upload } from 'lucide-react'
 import { TaskRunnerDialog } from '@/components/common/task-runner-dialog'
@@ -7,7 +9,7 @@ import { CopyButton } from '@/components/common/copy-button'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Textarea } from '@/components/ui/textarea'
+import { CodeEditor } from '@/components/ui/code-editor'
 import { BlueprintApplyAction } from '@/features/blueprint/blueprint-apply-action'
 import {
   createBlueprintTextApplyRequest,
@@ -118,7 +120,7 @@ export function BlueprintWorkspace({
             <Button variant="outline" size="sm" disabled={!snapshot} onClick={() => fileInput.current?.click()}>
               <FileUp /> Import file
             </Button>
-            <input
+            <Input
               ref={fileInput}
               className="hidden"
               type="file"
@@ -168,12 +170,13 @@ export function BlueprintWorkspace({
               )}
             </div>
           </div>
-          <Textarea
-            aria-label="Environment Blueprint YAML"
-            className="min-h-[34rem] resize-y font-mono text-xs leading-relaxed"
+          <CodeEditor
+            id="environment-blueprint"
+            label="Environment Blueprint YAML"
+            language="yaml"
             value={loading ? 'Loading Blueprint…' : draft}
             readOnly={!editing || loading}
-            onChange={(event) => setDraft(event.target.value)}
+            onValueChange={setDraft}
           />
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <p className="text-xs text-muted-foreground">

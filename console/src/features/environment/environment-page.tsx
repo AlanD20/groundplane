@@ -1,4 +1,6 @@
 'use client'
+
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useNavigate } from 'react-router-dom'
@@ -66,12 +68,14 @@ import { environmentRuntimeHint, environmentRuntimeState } from '@/features/serv
 import { useVisibleServiceObservations } from '@/features/service/use-service-observation-refresh'
 import { DetailRow } from './service-details-drawer'
 import { ServiceCard, ServicesPanel } from './services-list'
+import { ZoneMap, type ZoneSelection } from './zone-map'
 import { routeSummaryHint } from './route-summary'
 import { ComponentZonePicker } from './component-zone-picker'
 import { CaddyTemplateEditor } from './caddy-template-editor'
 import { cn, newId } from '@/lib/utils'
 import { valkeyAuthenticationDetails } from '@/lib/valkey-authentication'
 import type { ActivityEntry, Attach, BackupPolicyReplacement, BackupPolicySourceInput, BackupPolicySourceRecord, Environment, EnvironmentEntry, Route, Service, TaskJournalScope, TaskStep, Zone } from '@/lib/types'
+import { Checkbox } from '@/components/ui/checkbox'
 
 type EnvTab =
   | 'overview'
@@ -526,122 +530,23 @@ function deploySteps(env: Environment, serviceName: string, strategy: Service['s
   ]
 }
 
-// Drag-to-scroll for horizontal overflow containers. A drag only starts after
-// 5px of movement, and any click that follows a real drag is suppressed so
-// cards inside the container keep working normally.
-function useDragScroll() {
-  const ref = useRef<HTMLDivElement | null>(null)
-  const [dragging, setDragging] = useState(false)
-  const drag = useRef({ down: false, startX: 0, startScroll: 0, moved: false })
-
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const d = drag.current
-
-    const down = (e: PointerEvent) => {
-      if (e.button !== 0) return
-      d.down = true
-      d.startX = e.clientX
-      d.startScroll = el.scrollLeft
-      d.moved = false
-    }
-    const move = (e: PointerEvent) => {
-      if (!d.down) return
-      const dx = e.clientX - d.startX
-      if (Math.abs(dx) > 5) {
-        d.moved = true
-        setDragging(true)
-      }
-      if (d.moved) el.scrollLeft = d.startScroll - dx
-    }
-    const up = () => {
-      d.down = false
-      setDragging(false)
-    }
-    const clickCapture = (e: MouseEvent) => {
-      if (d.moved) {
-        e.preventDefault()
-        e.stopPropagation()
-        d.moved = false
-      }
-    }
-
-    el.addEventListener('pointerdown', down)
-    el.addEventListener('pointermove', move)
-    el.addEventListener('pointerup', up)
-    el.addEventListener('pointercancel', up)
-    el.addEventListener('click', clickCapture, true)
-    return () => {
-      el.removeEventListener('pointerdown', down)
-      el.removeEventListener('pointermove', move)
-      el.removeEventListener('pointerup', up)
-      el.removeEventListener('pointercancel', up)
-      el.removeEventListener('click', clickCapture, true)
-    }
-  }, [])
-
-  return { ref, dragging }
-}
-
-// ---- Topology: zone columns with service cards ----
-
 function Topology({ env }: { env: Environment }) {
   const [zoneOpen, setZoneOpen] = useState(false)
-  const { ref, dragging } = useDragScroll()
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-sm font-semibold">
-          <Layers className="size-4 text-muted-foreground" /> Topology
-        </h2>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setZoneOpen(true)}>
-            <Plus className="size-3.5" /> Zone
-          </Button>
-          <ServiceFormDialog env={env} />
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5">
-          <span className="size-2 rounded-full bg-success" /> service
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="size-2 rounded-full bg-muted-foreground" /> attached backing service
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="size-2 rounded-full border border-dashed border-muted-foreground" /> no zone
-        </span>
-        <span className="text-muted-foreground/60">services appear in every zone they join</span>
-      </div>
-      {env.zones.length === 0 && (
-        <p className="text-xs text-muted-foreground">
-          no zones yet — add one to start networking; services without a zone land in the column below
-        </p>
-      )}
-      <div
-        ref={ref}
-        className={cn(
-          'flex gap-4 overflow-x-auto pb-2',
-          dragging ? 'cursor-grabbing select-none' : 'cursor-grab',
-        )}
-      >
-        {env.zones.map((z) => (
-              <ZoneColumn key={z.id} zone={z} env={env} />
-        ))}
-        <UnzonedColumn env={env} />
-      </div>
-
-      <ZoneFormDialog env={env} open={zoneOpen} onOpenChange={setZoneOpen} />
-    </div>
-  )
+  return <>
+    <ZoneMap env={env}
+      actions={<><Button variant="outline" size="sm" onClick={() => setZoneOpen(true)}><Plus className="size-3.5" /> Zone</Button><ServiceFormDialog env={env} /></>}
+      renderZone={(zone, selection) => <ZoneColumn zone={zone} env={env} selection={selection} />}
+      renderUnzoned={(selection) => <UnzonedColumn env={env} selection={selection} />}
+    />
+    <ZoneFormDialog env={env} open={zoneOpen} onOpenChange={setZoneOpen} />
+  </>
 }
 
 // Services without a zone (e.g. after a zone removal) stay visible here so
 // they can never disappear from the topology: they join no network until
 // edited back into one. The column is ALWAYS rendered — even with zero
 // zones — so unzoned services can never vanish from view.
-function UnzonedColumn({ env }: { env: Environment }) {
+function UnzonedColumn({ env, selection }: { env: Environment; selection: ZoneSelection }) {
   const unzoned = env.services.filter((s) => s.zones.length === 0)
   return (
     <div className="flex min-w-[240px] flex-1 flex-col gap-2 rounded-xl border border-dashed border-muted-foreground/40 bg-card p-3">
@@ -655,14 +560,14 @@ function UnzonedColumn({ env }: { env: Environment }) {
       <div className="mt-1 flex flex-col gap-1.5">
         {unzoned.length === 0 && <div className="text-xs text-muted-foreground/60">no services</div>}
         {unzoned.map((s) => (
-          <ServiceCard key={s.id} service={s} env={env} />
+          <ServiceCard key={s.id} service={s} env={env} selection={selection} />
         ))}
       </div>
     </div>
   )
 }
 
-function ZoneColumn({ zone, env }: { zone: Zone; env: Environment }) {
+function ZoneColumn({ zone, env, selection }: { zone: Zone; env: Environment; selection: ZoneSelection }) {
   const store = useStore()
   const params = useRequiredParams('tenant')
   const [detailOpen, setDetailOpen] = useState(false)
@@ -726,7 +631,7 @@ function ZoneColumn({ zone, env }: { zone: Zone; env: Environment }) {
       <div className="mt-1 flex flex-col gap-1.5">
         {services.length === 0 && <div className="text-xs text-muted-foreground/60">no services</div>}
         {services.map((s) => (
-          <ServiceCard key={s.id} service={s} env={env} />
+          <ServiceCard key={s.id} service={s} env={env} selection={selection} />
         ))}
         {attaches.map((a) => (
           <div
@@ -1404,15 +1309,15 @@ function DetachAttach({ env, attach }: { env: Environment; attach: Attach }) {
   const manual = g ? store.adapters.find((a) => a.key === g.environments?.[0]?.services[0]?.adapter)?.manual : false
   return (
     <>
-      <button
+      <Button variant="ghost" size="content"
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-md p-1 text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring"
+        className="rounded-md p-1 text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-destructive focus-visible:ring-1 focus-visible:ring-ring"
         title={`Detach ${g?.name ?? attach.projectId}`}
         aria-label="Detach"
       >
         <Trash2 className="size-3.5" />
-      </button>
+      </Button>
       <TaskRunnerDialog
         open={open}
         onOpenChange={setOpen}
@@ -1487,7 +1392,7 @@ function TasksCard({ env }: { env: Environment }) {
           </p>
           <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-surface p-0.5">
             {filters.map((f) => (
-              <button
+              <Button variant="ghost" size="content"
                 key={f.key}
                 type="button"
                 onClick={() => setFilter(f.key)}
@@ -1498,7 +1403,7 @@ function TasksCard({ env }: { env: Environment }) {
                 }
               >
                 {f.label}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -1516,7 +1421,7 @@ function TasksCard({ env }: { env: Environment }) {
         ) : (
           <div className="flex flex-col gap-1.5">
             {visible.map((t) => (
-              <button
+              <Button variant="ghost" size="content"
                 key={t.id}
                 type="button"
                 onClick={() => setOpen(t)}
@@ -1532,7 +1437,7 @@ function TasksCard({ env }: { env: Environment }) {
                   </span>
                   <ChevronRight className="size-3.5 text-muted-foreground/50" />
                 </div>
-              </button>
+              </Button>
             ))}
           </div>
         )}
@@ -1570,28 +1475,28 @@ function ReleasesCard({ env }: { env: Environment }) {
           Live execution lives on the Tasks tab.
         </p>
         <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs font-semibold text-muted-foreground">
-                <th className="px-3 py-2">Service</th>
-                <th className="px-3 py-2">Tag</th>
-                <th className="px-3 py-2">Digest</th>
-                <th className="px-3 py-2">Strategy</th>
-                <th className="px-3 py-2">When</th>
-                <th className="px-3 py-2">Status</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table className="w-full text-sm">
+            <TableHeader>
+              <TableRow className="border-b border-border text-left text-xs font-semibold text-muted-foreground">
+                <TableHead className="px-3 py-2">Service</TableHead>
+                <TableHead className="px-3 py-2">Tag</TableHead>
+                <TableHead className="px-3 py-2">Digest</TableHead>
+                <TableHead className="px-3 py-2">Strategy</TableHead>
+                <TableHead className="px-3 py-2">When</TableHead>
+                <TableHead className="px-3 py-2">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {env.deploys.map((d, i) => (
-                <tr key={d.id} className="border-b border-border last:border-0">
-                  <td className="px-3 py-2 font-mono text-xs"><Link className="text-primary hover:underline" to={`/t/${params.tenant}/${params.project}/${params.env}/releases/${d.id}`}>{d.service}</Link></td>
-                  <td className="px-3 py-2 font-mono text-xs">{d.tag}</td>
-                  <td className="max-w-[220px] truncate px-3 py-2 font-mono text-xs text-muted-foreground">{d.digest}</td>
-                  <td className="px-3 py-2">
+                <TableRow key={d.id} className="border-b border-border last:border-0">
+                  <TableCell className="px-3 py-2 font-mono text-xs"><Link className="text-primary hover:underline" to={`/t/${params.tenant}/${params.project}/${params.env}/releases/${d.id}`}>{d.service}</Link></TableCell>
+                  <TableCell className="px-3 py-2 font-mono text-xs">{d.tag}</TableCell>
+                  <TableCell className="max-w-[220px] truncate px-3 py-2 font-mono text-xs text-muted-foreground">{d.digest}</TableCell>
+                  <TableCell className="px-3 py-2">
                     <StrategyPill strategy={d.strategy} />
-                  </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">{d.when}</td>
-                  <td className="px-3 py-2">
+                  </TableCell>
+                  <TableCell className="px-3 py-2 text-xs text-muted-foreground">{d.when}</TableCell>
+                  <TableCell className="px-3 py-2">
                     {d.status === 'active' ? (
                       <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2 py-0.5 text-xs text-success">
                         <span className="size-1.5 rounded-full bg-current" /> active
@@ -1601,18 +1506,18 @@ function ReleasesCard({ env }: { env: Environment }) {
                         <span className="size-1.5 rounded-full bg-current" /> superseded
                       </span>
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
               {env.deploys.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-3 py-3 text-center text-xs text-muted-foreground">
+                <TableRow>
+                  <TableCell colSpan={6} className="px-3 py-3 text-center text-xs text-muted-foreground">
                     no deploys yet
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </CardContent>
     </Card>
@@ -1828,32 +1733,32 @@ function BackupsCard({ env }: { env: Environment }) {
           )}
           {points.items.length > 0 && (
               <div className="overflow-x-auto rounded-lg border border-border">
-                <table className="w-full min-w-[760px] text-left text-xs">
-                  <thead className="bg-surface text-muted-foreground">
-                    <tr>
-                      <th className="px-3 py-2 font-medium">Point</th>
-                      <th className="px-3 py-2 font-medium">Source</th>
-                      <th className="px-3 py-2 font-medium">Target</th>
-                      <th className="px-3 py-2 font-medium">Created</th>
-                      <th className="px-3 py-2 font-medium">Size</th>
-                      <th className="px-3 py-2 font-medium">Encryption</th>
-                      <th className="px-3 py-2 font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
+                <Table className="w-full min-w-[760px] text-left text-xs">
+                  <TableHeader className="bg-surface text-muted-foreground">
+                    <TableRow>
+                      <TableHead className="px-3 py-2 font-medium">Point</TableHead>
+                      <TableHead className="px-3 py-2 font-medium">Source</TableHead>
+                      <TableHead className="px-3 py-2 font-medium">Target</TableHead>
+                      <TableHead className="px-3 py-2 font-medium">Created</TableHead>
+                      <TableHead className="px-3 py-2 font-medium">Size</TableHead>
+                      <TableHead className="px-3 py-2 font-medium">Encryption</TableHead>
+                      <TableHead className="px-3 py-2 font-medium">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody className="divide-y divide-border">
                     {points.items.map((point) => (
-                      <tr key={point.id}>
-                        <td className="px-3 py-2 font-mono text-primary">{point.id}</td>
-                        <td className="px-3 py-2 font-mono">{point.sourceKind} · {point.sourceId}</td>
-                        <td className="px-3 py-2 font-mono">{point.targetId}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{point.createdAt}</td>
-                        <td className="px-3 py-2 font-mono">{point.sizeBytes.toLocaleString()} B</td>
-                        <td className="px-3 py-2">{point.encrypted ? `age · era ${point.keyEra}` : 'none'}</td>
-                        <td className="px-3 py-2 text-success">{point.status}</td>
-                      </tr>
+                      <TableRow key={point.id}>
+                        <TableCell className="px-3 py-2 font-mono text-primary">{point.id}</TableCell>
+                        <TableCell className="px-3 py-2 font-mono">{point.sourceKind} · {point.sourceId}</TableCell>
+                        <TableCell className="px-3 py-2 font-mono">{point.targetId}</TableCell>
+                        <TableCell className="px-3 py-2 whitespace-nowrap">{point.createdAt}</TableCell>
+                        <TableCell className="px-3 py-2 font-mono">{point.sizeBytes.toLocaleString()} B</TableCell>
+                        <TableCell className="px-3 py-2">{point.encrypted ? `age · era ${point.keyEra}` : 'none'}</TableCell>
+                        <TableCell className="px-3 py-2 text-success">{point.status}</TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
           )}
               {points.nextCursor && (
@@ -3421,8 +3326,8 @@ function AttachFormDialog({ env, open, onOpenChange }: { env: Environment; open:
               <div className="flex flex-wrap gap-2">
                 {grantOptions.map((grant) => (
                   <label key={grant.id} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs">
-                    <input
-                      type="checkbox"
+                    <Checkbox
+
                       checked={grants.includes(grant.id)}
                       onChange={(e) =>
                         setGrants((prev) => (e.target.checked ? [...prev, grant.id] : prev.filter((x) => x !== grant.id)))
@@ -3738,8 +3643,8 @@ function BackupPolicyDialog({ env, open, onOpenChange }: { env: Environment; ope
                 return (
                   <label key={a.id} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs">
                     <span className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
+                      <Checkbox
+
                         checked={checked}
                         disabled={policyState.saving || (!checked && sources.length >= MAX_BACKUP_POLICY_SOURCES)}
                         onChange={(e) => toggleSource('attach', a.id, e.target.checked)}
@@ -3762,8 +3667,8 @@ function BackupPolicyDialog({ env, open, onOpenChange }: { env: Environment; ope
                   return (
                     <label key={v.id} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs">
                       <span className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
+                        <Checkbox
+
                           checked={checked}
                           disabled={policyState.saving || (!checked && sources.length >= MAX_BACKUP_POLICY_SOURCES)}
                           onChange={(e) => toggleSource('volume', v.id, e.target.checked)}
@@ -3780,8 +3685,8 @@ function BackupPolicyDialog({ env, open, onOpenChange }: { env: Environment; ope
               </div>
             )}
             <label className="flex items-start gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs">
-              <input
-                type="checkbox"
+              <Checkbox
+
                 checked={includesSource('config', env.id)}
                 disabled={policyState.saving || (!includesSource('config', env.id) && sources.length >= MAX_BACKUP_POLICY_SOURCES)}
                 onChange={(e) => toggleSource('config', env.id, e.target.checked)}

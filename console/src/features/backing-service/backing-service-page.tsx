@@ -1,4 +1,4 @@
-'use client'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -495,44 +495,44 @@ function BackupsTab({ g, env, svc }: { g: Project; env: NonNullable<Project['env
           <div className="text-xs text-muted-foreground">no consumers with backup sources yet</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs font-semibold text-muted-foreground">
-                  <th className="py-2 pr-4">Consumer</th>
-                  <th className="py-2 pr-4">Database</th>
-                  <th className="py-2 pr-4">Kind</th>
-                  <th className="py-2 pr-4">Policy</th>
-                  <th className="py-2 pr-4">Records</th>
-                  <th className="py-2 pr-4">Last run</th>
-                  <th className="py-2">Next run</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table className="w-full text-sm">
+              <TableHeader>
+                <TableRow className="border-b border-border text-left text-xs font-semibold text-muted-foreground">
+                  <TableHead className="py-2 pr-4">Consumer</TableHead>
+                  <TableHead className="py-2 pr-4">Database</TableHead>
+                  <TableHead className="py-2 pr-4">Kind</TableHead>
+                  <TableHead className="py-2 pr-4">Policy</TableHead>
+                  <TableHead className="py-2 pr-4">Records</TableHead>
+                  <TableHead className="py-2 pr-4">Last run</TableHead>
+                  <TableHead className="py-2">Next run</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {consumerBackups.map((c) => (
-                  <tr key={`${c.project}-${c.environment}-${c.database}`} className="border-b border-border last:border-0">
-                    <td className="py-2 pr-4">
+                  <TableRow key={`${c.project}-${c.environment}-${c.database}`} className="border-b border-border last:border-0">
+                    <TableCell className="py-2 pr-4">
                       <span className="font-mono text-xs">
                         {c.project}/{c.environment}
                       </span>
                       <span className="ml-2 font-mono text-[10px] text-muted-foreground">for {c.services}</span>
-                    </td>
-                    <td className="py-2 pr-4 font-mono text-xs">{c.database}</td>
-                    <td className="py-2 pr-4 font-mono text-xs">{c.kind}</td>
-                    <td className="py-2 pr-4">
+                    </TableCell>
+                    <TableCell className="py-2 pr-4 font-mono text-xs">{c.database}</TableCell>
+                    <TableCell className="py-2 pr-4 font-mono text-xs">{c.kind}</TableCell>
+                    <TableCell className="py-2 pr-4">
                       <span className="font-mono text-xs">
                         {c.enabled ? `${c.frequency} · keep ${c.keep}` : 'off'}
                       </span>
                       <span className="ml-2 font-mono text-[10px] text-muted-foreground">
                         {c.enabled ? c.encryption : ''}
                       </span>
-                    </td>
-                    <td className="py-2 pr-4 text-xs">{c.records}</td>
-                    <td className="py-2 pr-4 text-xs text-muted-foreground">{c.enabled ? c.lastRun : '—'}</td>
-                    <td className="py-2 text-xs text-muted-foreground">{c.enabled ? c.nextRun : '—'}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell className="py-2 pr-4 text-xs">{c.records}</TableCell>
+                    <TableCell className="py-2 pr-4 text-xs text-muted-foreground">{c.enabled ? c.lastRun : '—'}</TableCell>
+                    <TableCell className="py-2 text-xs text-muted-foreground">{c.enabled ? c.nextRun : '—'}</TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </CardContent>
