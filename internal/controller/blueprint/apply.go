@@ -17,6 +17,7 @@ import (
 	entryoperations "github.com/AlanD20/groundplane/internal/controller/entry/operations"
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	releasegroup "github.com/AlanD20/groundplane/internal/controller/releasegroup"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -42,7 +43,7 @@ type Service struct {
 	repository        environmentBlueprintRepository
 	idempotency       *desiredrevision.Idempotency
 	materials         materializationResolver
-	releaseGroups     *controller.ReleaseGroupBlueprintPlanner
+	releaseGroups     *releasegroup.ReleaseGroupBlueprintPlanner
 	blueprintReleases *blueprintrelease.Service
 	entryGeneration   *entrygeneration.EntryGenerationService
 	attachFacts       *attachments.FactService
@@ -59,7 +60,7 @@ func NewService(
 	repository environmentBlueprintRepository,
 	idempotency *desiredrevision.Idempotency,
 	materials materializationResolver,
-	releaseGroups *controller.ReleaseGroupBlueprintPlanner,
+	releaseGroups *releasegroup.ReleaseGroupBlueprintPlanner,
 	blueprintReleases *blueprintrelease.Service,
 	entryGeneration *entrygeneration.EntryGenerationService,
 	attachFacts *attachments.FactService,

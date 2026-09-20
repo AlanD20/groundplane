@@ -3,6 +3,7 @@ package blueprintrelease
 import (
 	"context"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	releasegroup "github.com/AlanD20/groundplane/internal/controller/releasegroup"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller"
@@ -27,7 +28,7 @@ type BlueprintPreflightInput struct {
 // PreflightBlueprint projects candidates and resolves their complete image
 // batch before the caller may claim or stage a Blueprint revision.
 func (service *Service) PreflightBlueprint(ctx context.Context, input BlueprintPreflightInput,
-	groups *controller.ReleaseGroupBlueprintPlanner,
+	groups *releasegroup.ReleaseGroupBlueprintPlanner,
 ) (WorkloadPreparation, error) {
 	if ctx == nil || groups == nil || input.Project == nil {
 		return WorkloadPreparation{}, errs.New(errs.KindInternal, "Blueprint image preflight inputs are incomplete")

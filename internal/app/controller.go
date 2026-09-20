@@ -998,7 +998,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry mutation service: %w", err)
 	}
-	releaseGroupBlueprints, err := controller.NewReleaseGroupBlueprintPlanner(
+	releaseGroupBlueprints, err := releasegroup.NewReleaseGroupBlueprintPlanner(
 		releaseGroups,
 		hierarchyRecords,
 	)
