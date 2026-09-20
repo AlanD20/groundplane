@@ -1,0 +1,142 @@
+package etcd
+
+import (
+	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+func (repository *BackupRuntimeRepository) GetBackupSourceTargetExclusion(
+	ctx context.Context,
+	kind BackupSourceTargetKind,
+	targetID string,
+) (etcdstore.Versioned[BackupSourceTargetExclusionRecord], bool, error) {
+	key, err := backupSourceTargetExclusionKey(kind, targetID)
+	if err != nil {
+		return etcdstore.Versioned[BackupSourceTargetExclusionRecord]{}, false, err
+	}
+	result, err := repository.store.Get(ctx, key)
+	if err != nil {
+		return etcdstore.Versioned[BackupSourceTargetExclusionRecord]{}, false, err
+	}
+	if result == nil {
+		return etcdstore.Versioned[BackupSourceTargetExclusionRecord]{}, false, errs.New(
+			errs.KindInternal,
+			"backup source-target exclusion read is empty",
+		)
+	}
+	if result.Entry == nil {
+		return etcdstore.Versioned[BackupSourceTargetExclusionRecord]{
+			ReadRevision: result.ReadRevision,
+		}, false, nil
+	}
+	defer clear(result.Entry.Value)
+	record, err := decodeBackupSourceTargetExclusionRecord(result.Entry.Value)
+	if err != nil || record.TargetKind != kind || record.TargetID != targetID {
+		return etcdstore.Versioned[BackupSourceTargetExclusionRecord]{}, false, corruptBackupRuntimeRecord()
+	}
+	return etcdstore.Versioned[BackupSourceTargetExclusionRecord]{
+		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
+	}, true, nil
+}
+
+func (repository *BackupRuntimeRepository) loadOwnedEvidence(
+	ctx context.Context,
+	run BackupRunRecord,
+	revision int64,
+) (backupRuntimeOwnedEvidence, error) {
+	fence, err := loadOwnedEnvironmentMutationFence(
+		ctx,
+		repository.store,
+		run.EnvironmentID,
+		revision,
+		environmentMutationFenceOwner{
+			Kind: BackupOperationBackup, OperationID: run.OperationID, TaskID: run.TaskID,
+		},
+	)
+	if err != nil {
+		return backupRuntimeOwnedEvidence{}, err
+	}
+	return backupRuntimeOwnedEvidence{fence: fence}, nil
+}
+
+func (repository *BackupRuntimeRepository) readCurrentKeys(
+	ctx context.Context,
+	keys []string,
+) (*etcdstore.GetManyResult, error) {
+	if len(keys) == 0 || len(keys) > etcdstore.MaximumOperations {
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"backup runtime fixed read key count is invalid",
+		)
+	}
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
+	if err != nil {
+		return nil, err
+	}
+	if result == nil || result.ReadRevision <= 0 || len(result.Values) != len(keys) {
+		return nil, errs.New(errs.KindInternal, "backup runtime fixed-revision read is incomplete")
+	}
+	for index, value := range result.Values {
+		if value != nil && value.Key != keys[index] {
+			clearKeyValues(result.Values)
+			return nil, errs.New(errs.KindInternal, "backup runtime fixed-revision read is corrupt")
+		}
+	}
+	return result, nil
+}
+
+func (repository *BackupRuntimeRepository) readFixedKeys(
+	ctx context.Context,
+	keys []string,
+	revision int64,
+) (*etcdstore.GetManyResult, error) {
+	if len(keys) == 0 || len(keys) > etcdstore.MaximumOperations || revision <= 0 {
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"backup runtime fixed read input is invalid",
+		)
+	}
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
+	if err != nil {
+		return nil, err
+	}
+	if result == nil || result.ReadRevision != revision || len(result.Values) != len(keys) {
+		return nil, errs.New(errs.KindInternal, "backup runtime fixed-revision read is incomplete")
+	}
+	for index, value := range result.Values {
+		if value != nil && value.Key != keys[index] {
+			clearKeyValues(result.Values)
+			return nil, errs.New(errs.KindInternal, "backup runtime fixed-revision read is corrupt")
+		}
+	}
+	return result, nil
+}
+
+func (repository *BackupRuntimeRepository) loadManualBackupPolicyFence(
+	ctx context.Context,
+	record BackupRunRecord,
+	fixedRevision int64,
+) ([]etcdstore.Condition, error) {
+	if record.Initiator != BackupRunInitiatorOperator {
+		return nil, nil
+	}
+	key := environmentCoordinationKey(record.EnvironmentID)
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
+		Keys: []string{key}, Revision: fixedRevision,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if read == nil || read.ReadRevision != fixedRevision || len(read.Values) != 1 || read.Values[0] == nil ||
+		read.Values[0].ModRevision <= 0 {
+		return nil, errs.New(errs.KindStateConflict, "backup policy schedule coordination changed")
+	}
+	defer clearKeyValues(read.Values)
+	coordination, err := decodeEnvironmentCoordinationRecord(read.Values[0].Value)
+	if err != nil || coordination.EnvironmentID != record.EnvironmentID ||
+		coordination.CurrentBackupScheduleState == nil {
+		return nil, errs.New(errs.KindStateConflict, "backup policy schedule coordination is invalid")
+	}
+	return []etcdstore.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}, nil
+}

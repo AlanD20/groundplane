@@ -1,0 +1,309 @@
+package etcd
+
+import (
+	"context"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+func (repository *BackupRuntimeRepository) prepareBackupRunPublication(
+	ctx context.Context,
+	record BackupRunRecord,
+	lock BackupOperationLockRecord,
+	fixedRevision int64,
+) (backupRunPublicationPlan, error) {
+	return repository.prepareBackupRunPublicationWithRetry(
+		ctx, record, lock, nil, fixedRevision,
+	)
+}
+
+func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
+	ctx context.Context,
+	record BackupRunRecord,
+	lock BackupOperationLockRecord,
+	retrySource *backupRunRetrySource,
+	fixedRevision int64,
+) (backupRunPublicationPlan, error) {
+	if err := validateContext(ctx); err != nil {
+		return backupRunPublicationPlan{}, err
+	}
+	if record.State != BackupRunQueued || fixedRevision <= 0 ||
+		(record.RetryOfTaskID == "") != (retrySource == nil) ||
+		lock.EnvironmentID != record.EnvironmentID ||
+		lock.OperationID != record.OperationID || lock.TaskID != record.TaskID ||
+		lock.Kind != BackupOperationBackup || lock.CreatedAt != record.CreatedAt ||
+		lock.UpdatedAt != record.CreatedAt {
+		return backupRunPublicationPlan{}, errs.New(
+			errs.KindValidationFailed,
+			"backup run publication ownership is invalid",
+		)
+	}
+	runValue, err := encodeBackupRunRecord(record)
+	if err != nil {
+		return backupRunPublicationPlan{}, err
+	}
+	lockValue, err := encodeBackupOperationLockRecord(lock)
+	if err != nil {
+		clear(runValue)
+		return backupRunPublicationPlan{}, err
+	}
+	membershipKey, err := backupRunEnvironmentIndexKey(record.EnvironmentID, record.TaskID)
+	if err != nil {
+		clear(runValue)
+		clear(lockValue)
+		return backupRunPublicationPlan{}, err
+	}
+	exclusions, err := backupRunExclusionRecords(record, record.CreatedAt)
+	if err != nil {
+		clear(runValue)
+		clear(lockValue)
+		return backupRunPublicationPlan{}, err
+	}
+	keys := []string{backupRunKey(record.TaskID), membershipKey}
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: keys[0], Value: runValue},
+		{Type: etcdstore.MutationPut, Key: keys[1], Value: []byte(record.TaskID)},
+	}
+	for _, exclusion := range exclusions {
+		key, keyErr := backupSourceTargetExclusionKey(exclusion.TargetKind, exclusion.TargetID)
+		if keyErr != nil {
+			clearBackupRuntimeMutations(mutations)
+			clear(lockValue)
+			return backupRunPublicationPlan{}, keyErr
+		}
+		value, encodeErr := encodeBackupSourceTargetExclusionRecord(exclusion)
+		if encodeErr != nil {
+			clearBackupRuntimeMutations(mutations)
+			clear(lockValue)
+			return backupRunPublicationPlan{}, encodeErr
+		}
+		keys = append(keys, key)
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: value})
+	}
+	anchor, err := repository.readFixedKeys(ctx, keys, fixedRevision)
+	if err != nil {
+		clearBackupRuntimeMutations(mutations)
+		clear(lockValue)
+		return backupRunPublicationPlan{}, err
+	}
+	defer clearKeyValues(anchor.Values)
+	connectorEvidence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
+		Keys: []string{
+			connectorrecord.RecordKey(record.ConnectorID), connectorrecord.CredentialValueKey(record.ConnectorID),
+		},
+		Revision: fixedRevision,
+	})
+	if err != nil {
+		clearBackupRuntimeMutations(mutations)
+		clear(lockValue)
+		return backupRunPublicationPlan{}, err
+	}
+	if connectorEvidence == nil || connectorEvidence.ReadRevision != anchor.ReadRevision ||
+		len(connectorEvidence.Values) != 2 {
+		clearBackupRuntimeMutations(mutations)
+		clear(lockValue)
+		return backupRunPublicationPlan{}, errs.New(
+			errs.KindInternal,
+			"backup connector publication evidence is incomplete",
+		)
+	}
+	defer clearKeyValues(connectorEvidence.Values)
+	if err := validateBackupConnectorSnapshotEvidence(
+		connectorEvidence.Values,
+		record,
+	); err != nil {
+		clearBackupRuntimeMutations(mutations)
+		clear(lockValue)
+		return backupRunPublicationPlan{}, err
+	}
+	snapshotConditions, snapshotMutations, err := repository.loadBackupRunPublicationEvidence(
+		ctx,
+		record,
+		retrySource,
+		fixedRevision,
+	)
+	if err != nil {
+		clearBackupRuntimeMutations(mutations)
+		clear(lockValue)
+		return backupRunPublicationPlan{}, err
+	}
+	for index, value := range anchor.Values {
+		if index == 1 {
+			continue
+		}
+		if value != nil {
+			clearBackupRuntimeMutations(mutations)
+			clear(lockValue)
+			return backupRunPublicationPlan{}, errs.New(
+				errs.KindStateConflict,
+				"backup run publication authority already exists",
+			)
+		}
+	}
+	fence, err := loadOrdinaryEnvironmentMutationFence(
+		ctx,
+		repository.store,
+		record.EnvironmentID,
+		anchor.ReadRevision,
+	)
+	if err != nil {
+		clearBackupRuntimeMutations(mutations)
+		clear(lockValue)
+		return backupRunPublicationPlan{}, err
+	}
+	policyFence := []etcdstore.Condition(nil)
+	if retrySource == nil {
+		policyFence, err = repository.loadManualBackupPolicyFence(ctx, record, fixedRevision)
+		if err != nil {
+			clearBackupRuntimeMutations(mutations)
+			clear(lockValue)
+			return backupRunPublicationPlan{}, err
+		}
+	}
+	conditions := make([]etcdstore.Condition, 0, len(keys)+len(fence.conditions)+len(policyFence))
+	for index, key := range keys {
+		if index == 1 {
+			continue
+		}
+		conditions = append(conditions, etcdstore.Condition{Key: key})
+	}
+	conditions = append(conditions, backupRunExternalConditions(record, snapshotConditions)...)
+	conditions = append(conditions, fence.transactionConditions()...)
+	conditions = append(conditions, policyFence...)
+	if retrySource != nil {
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: taskKey(retrySource.task.Record.ID), ModRevision: retrySource.task.Revision},
+			etcdstore.Condition{Key: backupRunKey(retrySource.run.Record.TaskID), ModRevision: retrySource.run.Revision},
+			etcdstore.Condition{
+				Key:         backupTerminalReceiptKey(retrySource.task.Record.ID),
+				ModRevision: retrySource.receiptRevision,
+			},
+		)
+	}
+	mutations = append(mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOperationLockKey(record.EnvironmentID), Value: lockValue,
+	})
+	mutations = append(mutations, snapshotMutations...)
+	epoch, err := fence.epochRewriteMutation()
+	if err != nil {
+		clearBackupRuntimeMutations(mutations)
+		return backupRunPublicationPlan{}, err
+	}
+	mutations = append(mutations, epoch)
+	if retrySource == nil && record.Initiator == BackupRunInitiatorSchedule {
+		scheduleConditions, scheduleMutations, scheduleErr := repository.prepareScheduledBackupPublication(
+			ctx, record, fixedRevision,
+		)
+		if scheduleErr != nil {
+			clearBackupRuntimeMutations(mutations)
+			return backupRunPublicationPlan{}, scheduleErr
+		}
+		conditions = append(conditions, scheduleConditions...)
+		mutations = append(mutations, scheduleMutations...)
+	}
+	if err := validateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
+		clearBackupRuntimeMutations(mutations)
+		return backupRunPublicationPlan{}, err
+	}
+	return backupRunPublicationPlan{
+		conditions: conditions,
+		mutations:  mutations,
+		record:     record,
+		replay:     repository.validateExistingBackupRunPublication,
+	}, nil
+}
+
+// backupRunExternalConditions retains CAS for each source definition and for
+// backing Services outside the consumer Environment. Source definitions may
+// change independently of an Environment operation; the exact Environment
+// epoch and operation lock serialize the remaining consumer-owned evidence.
+func backupRunExternalConditions(
+	run BackupRunRecord,
+	conditions []etcdstore.Condition,
+) []etcdstore.Condition {
+	allowed := make(map[string]struct{}, len(run.Sources)*2+2)
+	allowed[connectorrecord.RecordKey(run.ConnectorID)] = struct{}{}
+	if run.ConnectorHasDirectCredentials {
+		allowed[connectorrecord.CredentialValueKey(run.ConnectorID)] = struct{}{}
+	}
+	for _, source := range run.Sources {
+		allowed[backuppolicy.BackupSourceKey(source.SourceID)] = struct{}{}
+		if source.Snapshot.Postgres != nil {
+			allowed[environmentBlueprintHeadKey(source.Snapshot.Postgres.BackingEnvironmentID)] = struct{}{}
+		}
+		if source.Snapshot.Volume != nil {
+			allowed[environmentComposeProjectionKey(source.Snapshot.Volume.EnvironmentID)] = struct{}{}
+			for _, service := range source.Snapshot.Volume.Services {
+				allowed[serviceRuntimeKey(service.ServiceID)] = struct{}{}
+			}
+		}
+		if source.Snapshot.Config != nil {
+			snapshotID := source.Snapshot.Config.ConfigSnapshotID
+			allowed[backupConfigSnapshotKey(snapshotID)] = struct{}{}
+			allowed[backupConfigSnapshotTaskReferenceKey(run.RetryOfTaskID, snapshotID)] = struct{}{}
+			allowed[backupConfigSnapshotReferenceTaskKey(snapshotID, run.RetryOfTaskID)] = struct{}{}
+			allowed[backupConfigSnapshotTaskReferenceKey(run.TaskID, snapshotID)] = struct{}{}
+			allowed[backupConfigSnapshotReferenceTaskKey(snapshotID, run.TaskID)] = struct{}{}
+			allowed[hierarchyrecord.EnvironmentKey(run.EnvironmentID)] = struct{}{}
+		}
+	}
+	result := make([]etcdstore.Condition, 0, len(allowed))
+	for _, condition := range conditions {
+		if _, keep := allowed[condition.Key]; keep {
+			result = append(result, condition)
+		}
+	}
+	return result
+}
+
+func (repository *BackupRuntimeRepository) exactBackupRunConfigCompanions(
+	ctx context.Context,
+	run BackupRunRecord,
+	readRevision int64,
+	resultRevision int64,
+) bool {
+	for _, source := range run.Sources {
+		if source.Kind != BackupRuntimeSourceConfig {
+			continue
+		}
+		snapshot := source.Snapshot.Config
+		keys := []string{
+			backupConfigSnapshotKey(snapshot.ConfigSnapshotID),
+			backupConfigSnapshotTaskReferenceKey(run.TaskID, snapshot.ConfigSnapshotID),
+			backupConfigSnapshotReferenceTaskKey(snapshot.ConfigSnapshotID, run.TaskID),
+		}
+		read, err := repository.readFixedKeys(ctx, keys, readRevision)
+		if err != nil {
+			return false
+		}
+		primaryRevisionValid := read.Values[0] != nil &&
+			((run.RetryOfTaskID == "" && read.Values[0].ModRevision == resultRevision) ||
+				(run.RetryOfTaskID != "" && read.Values[0].ModRevision > 0 &&
+					read.Values[0].ModRevision < resultRevision))
+		if !primaryRevisionValid || read.Values[1] == nil || read.Values[2] == nil ||
+			read.Values[1].ModRevision != resultRevision ||
+			read.Values[2].ModRevision != resultRevision ||
+			string(read.Values[1].Value) != snapshot.ConfigSnapshotID ||
+			string(read.Values[2].Value) != run.TaskID {
+			clearKeyValues(read.Values)
+			return false
+		}
+		stored, decodeErr := decodeBackupConfigSnapshotRecord(read.Values[0].Value)
+		clearKeyValues(read.Values)
+		createdAtValid := (run.RetryOfTaskID == "" && stored.CreatedAt.Equal(run.CreatedAt)) ||
+			(run.RetryOfTaskID != "" && stored.CreatedAt.Before(run.CreatedAt))
+		if decodeErr != nil || stored.SnapshotID != snapshot.ConfigSnapshotID ||
+			stored.EnvironmentID != run.EnvironmentID || stored.SourceID != source.SourceID ||
+			stored.State == BackupConfigSnapshotUninitialized ||
+			stored.ReadRevision != snapshot.ReadRevision || !createdAtValid ||
+			(run.RetryOfTaskID == "" && (!stored.UpdatedAt.Equal(run.CreatedAt) ||
+				stored.State != BackupConfigSnapshotBuilding)) {
+			return false
+		}
+	}
+	return true
+}

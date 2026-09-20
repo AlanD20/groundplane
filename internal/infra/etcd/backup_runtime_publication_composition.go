@@ -1,0 +1,194 @@
+package etcd
+
+import (
+	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"time"
+)
+
+// backupRunPublicationPlan is the persistence-private seam used by future Task
+// publication. Its lock, run, membership, exclusions, and epoch mutations are
+// appended to the caller's Task mutations and committed once.
+type backupRunPublicationPlan struct {
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
+	record     BackupRunRecord
+	replay     func(context.Context, IdempotencyMarker, int64, int64) error
+}
+
+func (plan backupRunPublicationPlan) composeTransaction(
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
+	composedConditions := append(append([]etcdstore.Condition(nil), conditions...), plan.conditions...)
+	composedMutations := make([]etcdstore.Mutation, 0, len(mutations)+len(plan.mutations))
+	for _, mutation := range mutations {
+		copyOfMutation := mutation
+		copyOfMutation.Value = append([]byte(nil), mutation.Value...)
+		composedMutations = append(composedMutations, copyOfMutation)
+	}
+	for _, mutation := range plan.mutations {
+		copyOfMutation := mutation
+		copyOfMutation.Value = append([]byte(nil), mutation.Value...)
+		composedMutations = append(composedMutations, copyOfMutation)
+	}
+	if err := validateBackupRuntimeTransactionBounds(
+		composedConditions,
+		composedMutations,
+	); err != nil {
+		clearBackupRuntimeMutations(composedMutations)
+		return nil, nil, err
+	}
+	return composedConditions, composedMutations, nil
+}
+
+func (plan *backupRunPublicationPlan) clear() {
+	for index := range plan.mutations {
+		clear(plan.mutations[index].Value)
+		plan.mutations[index].Value = nil
+	}
+	plan.replay = nil
+}
+
+// taskIdempotencyPlan composes the real Task primary, owner indexes, runtime
+// authority, and deferred idempotency envelope into one publication plan.
+func (plan backupRunPublicationPlan) taskIdempotencyPlan(
+	record TaskRecord,
+	sealed *agentpb.ExecutionPlan,
+	marker IdempotencyMarker,
+	initiation TaskInitiation,
+) (*idempotencyMutationPlan, error) {
+	idempotencyPlan, err := prepareBackupTaskIdempotencyPlan(
+		backupTaskPublicationAuthority{
+			taskID: plan.record.TaskID, operationID: plan.record.OperationID,
+			environmentID: plan.record.EnvironmentID, taskType: TaskBackup,
+			retryOf: plan.record.RetryOfTaskID, createdAt: plan.record.CreatedAt,
+			validatePlan: func(value *agentpb.ExecutionPlan) error {
+				return validateBackupRunExecutionPlan(plan.record, value)
+			},
+		},
+		plan.conditions,
+		plan.mutations,
+		record,
+		sealed,
+		marker,
+		initiation,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if plan.replay != nil {
+		if err := idempotencyPlan.enforceExistingReplay(plan.replay); err != nil {
+			return nil, err
+		}
+	}
+	return idempotencyPlan, nil
+}
+
+type backupTaskPublicationAuthority struct {
+	taskID        string
+	operationID   string
+	environmentID string
+	taskType      TaskType
+	retryOf       string
+	createdAt     time.Time
+	validatePlan  backupTaskPlanValidator
+}
+
+func prepareBackupTaskIdempotencyPlan(
+	authority backupTaskPublicationAuthority,
+	domainConditions []etcdstore.Condition,
+	domainMutations []etcdstore.Mutation,
+	record TaskRecord,
+	sealed *agentpb.ExecutionPlan,
+	marker IdempotencyMarker,
+	initiation TaskInitiation,
+) (*idempotencyMutationPlan, error) {
+	if record.ID != authority.taskID || record.OperationID != authority.operationID ||
+		record.RetryOf != authority.retryOf ||
+		record.Owner.EnvironmentID != authority.environmentID ||
+		record.Type != authority.taskType || record.Target != authority.environmentID ||
+		record.Executor != TaskExecutorAgent || record.Status != TaskStatusPending ||
+		!record.CreatedAt.Equal(authority.createdAt) || marker.Kind != IdempotencyMarkerTask ||
+		marker.State != IdempotencyMarkerPending || marker.TaskID != record.ID ||
+		marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+		marker.Locator.ScopeID != authority.environmentID ||
+		!marker.CreatedAt.Equal(record.CreatedAt) || !marker.UpdatedAt.Equal(marker.CreatedAt) {
+		return nil, errs.New(
+			errs.KindValidationFailed,
+			"backup Task publication identity is invalid",
+		)
+	}
+	if err := validateBackupTaskSealedPlan(authority, record, sealed); err != nil {
+		return nil, err
+	}
+	record = cloneTaskRecord(record)
+	if record.IdempotencyKey == "" {
+		record.IdempotencyKey = marker.Locator.Key
+	}
+	record.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
+	if validateTaskRecord(record) != nil || validateIdempotencyMarker(marker) != nil ||
+		validateTaskInitiation(record, initiation, true) != nil {
+		return nil, errs.New(errs.KindValidationFailed, "backup Task publication is invalid")
+	}
+	taskValue, err := encodeTaskRecord(record)
+	if err != nil {
+		return nil, err
+	}
+	defer clear(taskValue)
+	reference, err := encodeTaskReference(record.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer clear(reference)
+	taskConditions := []etcdstore.Condition{
+		{Key: taskKey(record.ID)},
+		{Key: taskOperationIndexKey(record.OperationID, record.ID)},
+		{Key: taskActiveOperationKey(record.OperationID)},
+		{Key: taskQueueKey(record.Executor, record.ID)},
+	}
+	taskMutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(record.ID), Value: taskValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskOperationIndexKey(record.OperationID, record.ID),
+			Value: reference,
+		},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(record.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(record.Executor, record.ID), Value: reference},
+	}
+	domain := backupRunPublicationPlan{conditions: domainConditions, mutations: domainMutations}
+	conditions, mutations, err := domain.composeTransaction(taskConditions, taskMutations)
+	if err != nil {
+		return nil, err
+	}
+	defer clearBackupRuntimeMutations(mutations)
+	taskClassifier := classifyTaskCreateConflict(record.OperationID)
+	classify := func(revision int64, values []*etcdstore.KeyValue) error {
+		if len(values) != len(conditions) {
+			return errs.New(errs.KindInternal, "backup Task publication evidence is incomplete")
+		}
+		if err := taskClassifier(revision, values[:len(taskConditions)]); err != nil {
+			return err
+		}
+		return errs.New(errs.KindStateConflict, "backup run publication state changed")
+	}
+	idempotencyPlan, err := newTaskIdempotencyMutationPlan(
+		record,
+		initiation,
+		conditions,
+		mutations,
+		classify,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := idempotencyPlan.enforceTransactionBounds(
+		validateBackupRuntimeTransactionBounds,
+	); err != nil {
+		return nil, err
+	}
+	return idempotencyPlan, nil
+}
