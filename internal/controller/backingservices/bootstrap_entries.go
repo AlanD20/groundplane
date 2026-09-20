@@ -1,4 +1,4 @@
-package app
+package backingservices
 
 import (
 	"context"
@@ -21,7 +21,7 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (service *backingServiceCreationService) backingCreationEntries(
+func (service *CreationService) backingCreationEntries(
 	ctx context.Context,
 	projectID string,
 	environmentID string,
@@ -238,7 +238,7 @@ func backingEnvironmentMaterialization(
 			},
 		},
 	}
-	step, err := controller.BuildTaskMaterializationStep(record, artifactID, uint32(environmentBlueprintTimeoutSeconds))
+	step, err := controller.BuildTaskMaterializationStep(record, artifactID, uint32(desiredrevision.TaskTimeoutSeconds))
 	if err != nil {
 		return etcd.TaskMaterializationRecord{}, nil, err
 	}

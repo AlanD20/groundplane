@@ -1,4 +1,4 @@
-package app
+package attachments
 
 import (
 	"context"
@@ -18,12 +18,12 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type AttachGrantInput struct {
+type GrantInput struct {
 	AttachID string
 	Params   adapters.Input
 }
 
-type AttachFactRepository interface {
+type FactRepository interface {
 	ResolveAttach(context.Context, string, string) (etcd.Versioned[etcd.AttachRecord], error)
 	GetAttachFacts(
 		context.Context,
@@ -31,31 +31,31 @@ type AttachFactRepository interface {
 	) (etcd.AttachEncryptedFacts, bool, error)
 }
 
-type AttachFactService struct {
-	repository AttachFactRepository
+type FactService struct {
+	repository FactRepository
 	protector  *secretvalue.Protector
 	secrets    backingHookSecretRepository
 	random     io.Reader
 }
 
-func NewAttachFactService(
-	repository AttachFactRepository,
+func NewFactService(
+	repository FactRepository,
 	protector *secretvalue.Protector,
-) (*AttachFactService, error) {
+) (*FactService, error) {
 	if repository == nil || protector == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Attach fact repository and protector are required")
 	}
-	return &AttachFactService{repository: repository, protector: protector, random: rand.Reader}, nil
+	return &FactService{repository: repository, protector: protector, random: rand.Reader}, nil
 }
 
 // SealFactSets renders and seals the complete immutable fact bundle before an
 // Attach is published. The caller retains ownership of Input.Password.
-func (service *AttachFactService) SealFactSets(
+func (service *FactService) SealFactSets(
 	ctx context.Context,
 	attachID string,
 	adapter adapters.Adapter,
 	own adapters.Input,
-	grants []AttachGrantInput,
+	grants []GrantInput,
 ) ([]etcd.AttachFactSetMetadata, *etcd.AttachEncryptedFacts, error) {
 	if ctx == nil {
 		return nil, nil, errs.New(errs.KindValidationFailed, "Attach fact context is required")
@@ -78,8 +78,8 @@ func (service *AttachFactService) SealFactSets(
 	if err != nil || authentication != own.Authentication {
 		return nil, nil, errs.New(errs.KindValidationFailed, "Attach fact authentication mode is invalid")
 	}
-	canonicalGrants := append([]AttachGrantInput(nil), grants...)
-	slices.SortFunc(canonicalGrants, func(left AttachGrantInput, right AttachGrantInput) int {
+	canonicalGrants := append([]GrantInput(nil), grants...)
+	slices.SortFunc(canonicalGrants, func(left GrantInput, right GrantInput) int {
 		return strings.Compare(left.AttachID, right.AttachID)
 	})
 	priorGrantID := ""
@@ -170,7 +170,7 @@ func (service *AttachFactService) SealFactSets(
 
 // ResolveTaskIdentity exposes only one task-owned encrypted identity during
 // synchronous plan construction. Public fact readiness rules remain unchanged.
-func (service *AttachFactService) ResolveTaskIdentity(
+func (service *FactService) ResolveTaskIdentity(
 	ctx context.Context,
 	current etcd.Versioned[etcd.AttachRecord],
 	taskID string,
@@ -207,7 +207,7 @@ func (service *AttachFactService) ResolveTaskIdentity(
 
 // ResolveReadyDatabase exposes only the stable database identity needed to
 // construct another ready Attach's grant procedure and fact set.
-func (service *AttachFactService) ResolveReadyDatabase(
+func (service *FactService) ResolveReadyDatabase(
 	ctx context.Context,
 	current etcd.Versioned[etcd.AttachRecord],
 	consume func(string) error,
@@ -228,7 +228,7 @@ func (service *AttachFactService) ResolveReadyDatabase(
 
 // ResolveBackupIdentity opens only repository-supplied fixed-revision facts
 // and exposes the exact ready Attach database/role pair during consume.
-func (service *AttachFactService) ResolveBackupIdentity(
+func (service *FactService) ResolveBackupIdentity(
 	ctx context.Context,
 	current etcd.Versioned[etcd.AttachRecord],
 	stored etcd.AttachEncryptedFacts,
@@ -253,7 +253,7 @@ func (service *AttachFactService) ResolveBackupIdentity(
 // ResolveRemovalDatabase exposes only the stable database identity required by
 // a destructive impact preview. Failed provisioning may have applied the
 // database side effect, so its sealed identity remains part of the cascade.
-func (service *AttachFactService) ResolveRemovalDatabase(
+func (service *FactService) ResolveRemovalDatabase(
 	ctx context.Context,
 	current etcd.Versioned[etcd.AttachRecord],
 	consume func(string) error,
@@ -274,7 +274,7 @@ func (service *AttachFactService) ResolveRemovalDatabase(
 
 // ResolveFact resolves mutable labels on every call and exposes one verified
 // value only for the duration of consume.
-func (service *AttachFactService) ResolveFact(
+func (service *FactService) ResolveFact(
 	ctx context.Context,
 	environmentID string,
 	reference core.FactRef,
@@ -342,7 +342,7 @@ func (service *AttachFactService) ResolveFact(
 	})
 }
 
-func (service *AttachFactService) openBundle(
+func (service *FactService) openBundle(
 	ctx context.Context,
 	current etcd.Versioned[etcd.AttachRecord],
 	consume func(*attachFactBundle) error,
@@ -358,7 +358,7 @@ func (service *AttachFactService) openBundle(
 	return service.openStoredBundle(ctx, current.Record, stored, consume)
 }
 
-func (service *AttachFactService) openStoredBundle(
+func (service *FactService) openStoredBundle(
 	ctx context.Context,
 	record etcd.AttachRecord,
 	stored etcd.AttachEncryptedFacts,

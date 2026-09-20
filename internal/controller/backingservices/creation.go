@@ -1,4 +1,4 @@
-package app
+package backingservices
 
 import (
 	"context"
@@ -46,7 +46,7 @@ type backingServiceHookInputs interface {
 	SealBackingHookTaskInputs(context.Context, string, string, backinghook.Configuration) (*etcd.BackingHookEncryptedInputs, error)
 }
 
-type backingServiceCreationService struct {
+type CreationService struct {
 	volumeRoot       string
 	environmentPool  netip.Prefix
 	repository       backingServiceCreationRepository
@@ -58,7 +58,7 @@ type backingServiceCreationService struct {
 	now              func() time.Time
 }
 
-func newBackingServiceCreationService(
+func NewCreationService(
 	volumeRoot string,
 	environmentPool netip.Prefix,
 	repository backingServiceCreationRepository,
@@ -67,14 +67,14 @@ func newBackingServiceCreationService(
 	plans *controller.TaskPlanResolver,
 	hookInputs backingServiceHookInputs,
 	componentCatalog []controller.EnvironmentComponentRegistration,
-) (*backingServiceCreationService, error) {
+) (*CreationService, error) {
 	if volumeRoot == "" || !environmentPool.IsValid() || repository == nil || idempotency == nil || protector == nil {
 		return nil, errs.New(errs.KindInternal, "Backing-service creation dependencies are incomplete")
 	}
 	if err := controller.ValidateEnvironmentComponentCatalog(componentCatalog); err != nil {
 		return nil, err
 	}
-	return &backingServiceCreationService{
+	return &CreationService{
 		volumeRoot: volumeRoot, environmentPool: environmentPool,
 		repository: repository, idempotency: idempotency, protector: protector,
 		plans: plans, hookInputs: hookInputs,
@@ -83,7 +83,7 @@ func newBackingServiceCreationService(
 	}, nil
 }
 
-func (service *backingServiceCreationService) CreateBackingService(
+func (service *CreationService) CreateBackingService(
 	ctx context.Context,
 	input apiTypes.BackingServiceCreate,
 	idempotencyKey string,
@@ -153,7 +153,7 @@ func (service *backingServiceCreationService) CreateBackingService(
 	return service.createBackingServiceFromStage(ctx, input, requestBytes, stage, adapter, spec)
 }
 
-func (service *backingServiceCreationService) createBackingServiceFromStage(
+func (service *CreationService) createBackingServiceFromStage(
 	ctx context.Context,
 	input apiTypes.BackingServiceCreate,
 	requestBytes []byte,
@@ -337,7 +337,7 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 	steps := []*agentpb.ExecutionStep{
 		{
 			StepId:         environmentStepID,
-			TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds),
+			TimeoutSeconds: uint32(desiredrevision.TaskTimeoutSeconds),
 			Payload: &agentpb.ExecutionStep_EnvironmentDirectoryCreate{
 				EnvironmentDirectoryCreate: &agentpb.EnvironmentDirectoryCreate{
 					EnvironmentId:     environment.ID,
@@ -368,7 +368,7 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 		volumeStepID := allocator.Named(ids.KindStep, "managed-volume-directories")
 		steps = append(steps, &agentpb.ExecutionStep{
 			StepId:         volumeStepID,
-			TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds),
+			TimeoutSeconds: uint32(desiredrevision.TaskTimeoutSeconds),
 			Payload: &agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure{
 				ManagedVolumeDirectoriesEnsure: &agentpb.ManagedVolumeDirectoriesEnsure{
 					ArtifactId:   artifactID,
@@ -398,7 +398,7 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 	}
 	steps = append(steps, &agentpb.ExecutionStep{
 		StepId:         applyStepID,
-		TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds),
+		TimeoutSeconds: uint32(desiredrevision.TaskTimeoutSeconds),
 		Payload: &agentpb.ExecutionStep_ComposeApply{
 			ComposeApply: &agentpb.ComposeApply{ArtifactId: artifactID, FullReconcile: true},
 		},
@@ -408,7 +408,7 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 		healthStepID := allocator.Named(ids.KindStep, "wait-healthy")
 		steps = append(steps, &agentpb.ExecutionStep{
 			StepId:         healthStepID,
-			TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds),
+			TimeoutSeconds: uint32(desiredrevision.TaskTimeoutSeconds),
 			Payload: &agentpb.ExecutionStep_WaitHealthy{
 				WaitHealthy: &agentpb.WaitHealthy{ArtifactId: artifactID, ServiceIds: []string{serviceID}},
 			},
@@ -427,7 +427,7 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 		RenderGeneration: 1, Type: etcd.TaskUpdate, Target: environment.ID,
 		Params: taskParams, Steps: stepRecords,
 		Materializations: materializations,
-		TimeoutSeconds:   environmentBlueprintTimeoutSeconds, Status: etcd.TaskStatusPending,
+		TimeoutSeconds:   desiredrevision.TaskTimeoutSeconds, Status: etcd.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: stage.Record.CreatedAt, UpdatedAt: stage.Record.CreatedAt,
 	}
 	var hookInputs *etcd.BackingHookEncryptedInputs

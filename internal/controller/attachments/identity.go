@@ -1,4 +1,4 @@
-package app
+package attachments
 
 import (
 	"encoding/base64"
@@ -25,7 +25,7 @@ type attachNameLabels struct {
 	service     string
 }
 
-func attachProvisionIdentity(attachID string, serviceName string) (string, error) {
+func ProvisionIdentity(attachID string, serviceName string) (string, error) {
 	if err := ids.Validate(ids.KindAttach, attachID); err != nil {
 		return "", errs.New(errs.KindValidationFailed, "Attach identity requires a canonical Attach id")
 	}
@@ -45,7 +45,7 @@ func attachProvisionIdentity(attachID string, serviceName string) (string, error
 	return identity, nil
 }
 
-func generateAttachPassword(random io.Reader) ([]byte, error) {
+func GeneratePassword(random io.Reader) ([]byte, error) {
 	if random == nil {
 		return nil, errs.New(errs.KindInternal, "Attach password entropy source is required")
 	}

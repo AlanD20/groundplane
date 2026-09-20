@@ -1,4 +1,4 @@
-package app
+package backingservices
 
 import (
 	"path/filepath"

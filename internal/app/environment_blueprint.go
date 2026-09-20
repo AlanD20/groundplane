@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"io"
 	"math"
 	"net/http"
@@ -36,7 +37,6 @@ import (
 
 const (
 	environmentBlueprintRoute           = "/environments/{id}/blueprint"
-	environmentBlueprintTimeoutSeconds  = int64(120)
 	maximumEnvironmentBlueprintAttempts = 3
 )
 
@@ -130,7 +130,7 @@ type environmentBlueprintService struct {
 	releaseGroups     *controller.ReleaseGroupBlueprintPlanner
 	blueprintReleases *blueprintrelease.Service
 	entryGeneration   *entrygeneration.EntryGenerationService
-	attachFacts       *AttachFactService
+	attachFacts       *attachments.FactService
 	componentCatalog  []controller.EnvironmentComponentRegistration
 	backups           environmentBlueprintBackupRepository
 	backupKeys        environmentBlueprintBackupKeyFactory
@@ -348,7 +348,7 @@ func newEnvironmentBlueprintService(
 	releaseGroups *controller.ReleaseGroupBlueprintPlanner,
 	blueprintReleases *blueprintrelease.Service,
 	entryGeneration *entrygeneration.EntryGenerationService,
-	attachFacts *AttachFactService,
+	attachFacts *attachments.FactService,
 	componentCatalog []controller.EnvironmentComponentRegistration,
 ) (*environmentBlueprintService, error) {
 	parsedEnvironmentPool, poolErr := netip.ParsePrefix(environmentPool)
@@ -939,7 +939,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 			AllocateStep: func() string {
 				return allocator.Named(ids.KindStep, "http-router-config-activate")
 			},
-			TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds),
+			TimeoutSeconds: uint32(desiredrevision.TaskTimeoutSeconds),
 		},
 	)
 	if err != nil {
@@ -963,7 +963,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		volumeIntentDigest = intentDigest
 		stepID := allocator.Named(ids.KindStep, "managed-volume-directories")
 		steps = append(steps, &agentpb.ExecutionStep{
-			StepId: stepID, TimeoutSeconds: uint32(environmentBlueprintTimeoutSeconds),
+			StepId: stepID, TimeoutSeconds: uint32(desiredrevision.TaskTimeoutSeconds),
 			Payload: &agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure{
 				ManagedVolumeDirectoriesEnsure: &agentpb.ManagedVolumeDirectoriesEnsure{
 					ArtifactId: artifactID, VolumeIds: managedVolumeIDs,
@@ -974,7 +974,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		stepRecords = append(stepRecords, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: stepID})
 	}
 	attachSteps, attachStepRecords, err := preparedAttaches.procedureSteps(
-		taskID, environmentBlueprintTimeoutSeconds, allocator.Named,
+		taskID, desiredrevision.TaskTimeoutSeconds, allocator.Named,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -1051,7 +1051,7 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		Owner: taskOwner, Actor: etcd.TaskActorOperator,
 		Executor: etcd.TaskExecutorAgent, PlanID: planID,
 		RenderGeneration: int32(generation), Type: etcd.TaskUpdate, Target: taskTarget,
-		Params: params, Steps: stepRecords, TimeoutSeconds: environmentBlueprintTimeoutSeconds,
+		Params: params, Steps: stepRecords, TimeoutSeconds: desiredrevision.TaskTimeoutSeconds,
 		Materializations: materializations,
 		Status:           etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
@@ -1707,7 +1707,7 @@ func (service *environmentBlueprintService) environmentComponentMaterializations
 		step, err := controller.BuildTaskMaterializationStep(
 			reference,
 			artifactID,
-			uint32(environmentBlueprintTimeoutSeconds),
+			uint32(desiredrevision.TaskTimeoutSeconds),
 		)
 		if err != nil {
 			return nil, nil, err

@@ -1,4 +1,4 @@
-package app
+package backingservices
 
 import (
 	"context"
@@ -14,28 +14,28 @@ type backingServiceLifecycle interface {
 	DestroyService(context.Context, string, string) (etcd.IdempotencyResponse, error)
 }
 
-type backingServiceMutationService struct {
-	backingServices *backingServiceReadService
+type MutationService struct {
+	backingServices *ReadService
 	lifecycle       backingServiceLifecycle
-	creations       *backingServiceCreationService
+	creations       *CreationService
 }
 
-func newBackingServiceMutationService(
-	backingServices *backingServiceReadService,
+func NewMutationService(
+	backingServices *ReadService,
 	lifecycle backingServiceLifecycle,
-	creations *backingServiceCreationService,
-) (*backingServiceMutationService, error) {
+	creations *CreationService,
+) (*MutationService, error) {
 	if backingServices == nil || lifecycle == nil || creations == nil {
 		return nil, errs.New(errs.KindInternal, "Backing-service mutation dependencies are not configured")
 	}
-	return &backingServiceMutationService{
+	return &MutationService{
 		backingServices: backingServices,
 		lifecycle:       lifecycle,
 		creations:       creations,
 	}, nil
 }
 
-func (service *backingServiceMutationService) CreateBackingService(
+func (service *MutationService) CreateBackingService(
 	ctx context.Context,
 	input apiTypes.BackingServiceCreate,
 	idempotencyKey string,
@@ -43,7 +43,7 @@ func (service *backingServiceMutationService) CreateBackingService(
 	return service.creations.CreateBackingService(ctx, input, idempotencyKey)
 }
 
-func (service *backingServiceMutationService) StartBackingService(
+func (service *MutationService) StartBackingService(
 	ctx context.Context,
 	projectID string,
 	idempotencyKey string,
@@ -55,7 +55,7 @@ func (service *backingServiceMutationService) StartBackingService(
 	return service.lifecycle.StartService(ctx, backing.ServiceID, idempotencyKey)
 }
 
-func (service *backingServiceMutationService) StopBackingService(
+func (service *MutationService) StopBackingService(
 	ctx context.Context,
 	projectID string,
 	idempotencyKey string,
@@ -67,7 +67,7 @@ func (service *backingServiceMutationService) StopBackingService(
 	return service.lifecycle.StopService(ctx, backing.ServiceID, idempotencyKey)
 }
 
-func (service *backingServiceMutationService) DestroyBackingService(
+func (service *MutationService) DestroyBackingService(
 	ctx context.Context,
 	projectID string,
 	idempotencyKey string,
@@ -79,7 +79,7 @@ func (service *backingServiceMutationService) DestroyBackingService(
 	return service.lifecycle.DestroyService(ctx, backing.ServiceID, idempotencyKey)
 }
 
-func (service *backingServiceMutationService) resolve(
+func (service *MutationService) resolve(
 	ctx context.Context,
 	projectID string,
 ) (etcd.BackingServiceRecord, error) {

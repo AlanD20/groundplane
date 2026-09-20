@@ -1,4 +1,4 @@
-package app
+package attachments
 
 import (
 	"context"
@@ -23,7 +23,7 @@ type attachFactReadService struct {
 	facts   attachFactValueResolver
 }
 
-func newAttachFactReadService(
+func NewFactReadService(
 	records attachFactRecordReader,
 	facts attachFactValueResolver,
 ) (*attachFactReadService, error) {

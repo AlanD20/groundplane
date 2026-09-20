@@ -1,4 +1,4 @@
-package app
+package attachments
 
 import (
 	"context"
@@ -26,7 +26,7 @@ type backingHookSecretRepository interface {
 	GetSecretValue(context.Context, etcd.Versioned[etcd.SecretRecord]) (etcd.SecretEncryptedValue, error)
 }
 
-func (service *AttachFactService) EnableBackingHookInputs(repository backingHookSecretRepository) error {
+func (service *FactService) EnableBackingHookInputs(repository backingHookSecretRepository) error {
 	if service == nil || repository == nil || service.secrets != nil {
 		return errs.New(errs.KindInternal, "Backing hook Secret resolver is invalid")
 	}
@@ -36,7 +36,7 @@ func (service *AttachFactService) EnableBackingHookInputs(repository backingHook
 
 // SealCustomHookBundle creates the long-lived generated Attach values and the
 // operation-owned capture for literals and exact Secret revisions.
-func (service *AttachFactService) SealCustomHookBundle(
+func (service *FactService) SealCustomHookBundle(
 	ctx context.Context,
 	attachID string,
 	projectID string,
@@ -57,7 +57,7 @@ func (service *AttachFactService) SealCustomHookBundle(
 		if definition.Generate != backinghook.GeneratePassword {
 			continue
 		}
-		value, err := generateAttachPassword(service.random)
+		value, err := GeneratePassword(service.random)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -91,7 +91,7 @@ func (service *AttachFactService) SealCustomHookBundle(
 	return metadata, &encrypted, hookInputs, nil
 }
 
-func (service *AttachFactService) SealBackingHookTaskInputs(
+func (service *FactService) SealBackingHookTaskInputs(
 	ctx context.Context,
 	operationID string,
 	projectID string,
@@ -150,7 +150,7 @@ func (service *AttachFactService) SealBackingHookTaskInputs(
 	return &sealed, nil
 }
 
-func (service *AttachFactService) resolveBackingHookTaskInput(
+func (service *FactService) resolveBackingHookTaskInput(
 	ctx context.Context,
 	operationID string,
 	projectID string,
@@ -198,7 +198,7 @@ func (service *AttachFactService) resolveBackingHookTaskInput(
 	return value, pin, nil
 }
 
-func (service *AttachFactService) ResolveHookInput(
+func (service *FactService) ResolveHookInput(
 	ctx context.Context,
 	current etcd.Versioned[etcd.AttachRecord],
 	task etcd.TaskRecord,
@@ -224,7 +224,7 @@ func (service *AttachFactService) ResolveHookInput(
 	})
 }
 
-func (service *AttachFactService) ResolveDraftHookInput(
+func (service *FactService) ResolveDraftHookInput(
 	ctx context.Context,
 	current etcd.Versioned[etcd.AttachRecord],
 	stored *etcd.AttachEncryptedFacts,
@@ -245,7 +245,7 @@ func (service *AttachFactService) ResolveDraftHookInput(
 	return service.openBundle(ctx, current, consumeBundle)
 }
 
-func (service *AttachFactService) ResolveLifecycleHookInput(
+func (service *FactService) ResolveLifecycleHookInput(
 	ctx context.Context,
 	task etcd.TaskRecord,
 	serviceID string,
@@ -255,7 +255,7 @@ func (service *AttachFactService) ResolveLifecycleHookInput(
 	return service.resolveLifecycleHookInput(ctx, task, nil, serviceID, event, consume)
 }
 
-func (service *AttachFactService) ResolveDraftLifecycleHookInput(
+func (service *FactService) ResolveDraftLifecycleHookInput(
 	ctx context.Context,
 	task etcd.TaskRecord,
 	stored *etcd.BackingHookEncryptedInputs,
@@ -266,7 +266,7 @@ func (service *AttachFactService) ResolveDraftLifecycleHookInput(
 	return service.resolveLifecycleHookInput(ctx, task, stored, serviceID, event, consume)
 }
 
-func (service *AttachFactService) resolveLifecycleHookInput(
+func (service *FactService) resolveLifecycleHookInput(
 	ctx context.Context,
 	task etcd.TaskRecord,
 	draft *etcd.BackingHookEncryptedInputs,
@@ -297,7 +297,7 @@ func (service *AttachFactService) resolveLifecycleHookInput(
 	return consume(input)
 }
 
-func (service *AttachFactService) consumeHookInput(
+func (service *FactService) consumeHookInput(
 	ctx context.Context,
 	record etcd.AttachRecord,
 	task etcd.TaskRecord,
@@ -329,7 +329,7 @@ func (service *AttachFactService) consumeHookInput(
 	return consume(input)
 }
 
-func (service *AttachFactService) appendBackingHookTaskInputs(
+func (service *FactService) appendBackingHookTaskInputs(
 	ctx context.Context,
 	task etcd.TaskRecord,
 	draft *etcd.BackingHookEncryptedInputs,
@@ -361,7 +361,7 @@ func (service *AttachFactService) appendBackingHookTaskInputs(
 	return service.openBackingHookTaskInputs(ctx, task, stored, appendValues)
 }
 
-func (service *AttachFactService) SealHookResult(
+func (service *FactService) SealHookResult(
 	ctx context.Context,
 	current etcd.Versioned[etcd.AttachRecord],
 	schema []backinghook.FactDefinition,
@@ -409,7 +409,7 @@ func (service *AttachFactService) SealHookResult(
 	return sealed, err
 }
 
-func (service *AttachFactService) sealHookBundle(
+func (service *FactService) sealHookBundle(
 	ctx context.Context,
 	attachID string,
 	bundle attachFactBundle,
@@ -432,7 +432,7 @@ func (service *AttachFactService) sealHookBundle(
 	)
 }
 
-func (service *AttachFactService) openBackingHookTaskInputs(
+func (service *FactService) openBackingHookTaskInputs(
 	ctx context.Context,
 	task etcd.TaskRecord,
 	stored etcd.BackingHookEncryptedInputs,

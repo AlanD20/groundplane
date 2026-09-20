@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"slices"
 	"sort"
 	"time"
@@ -194,7 +195,7 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 		if _, exists := currentByName[name]; exists || item.spec.Credential.Mode != "new" || item.adapter.Custom() {
 			continue
 		}
-		identityName, err := attachProvisionIdentity(attachIDs[name], item.consumer.Desired.Name)
+		identityName, err := attachments.ProvisionIdentity(attachIDs[name], item.consumer.Desired.Name)
 		if err != nil {
 			return preparedBlueprintAttaches{}, err
 		}
@@ -206,7 +207,7 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 		if item.authentication == core.BackingAuthenticationNone {
 			role = ""
 		} else {
-			password, err = generateAttachPassword(service.random)
+			password, err = attachments.GeneratePassword(service.random)
 			if err != nil {
 				return preparedBlueprintAttaches{}, err
 			}
@@ -237,7 +238,7 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 			return attachIDs[grantNames[left]] < attachIDs[grantNames[right]]
 		})
 		grantIDs := make([]string, 0, len(grantNames))
-		grantFacts := make([]AttachGrantInput, 0, len(grantNames))
+		grantFacts := make([]attachments.GrantInput, 0, len(grantNames))
 		retainedGrants := make([]etcd.Versioned[etcd.AttachRecord], 0, len(grantNames))
 		identity := identities[name]
 		for _, grantName := range grantNames {
@@ -266,7 +267,7 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 				database = grantIdentity.Database
 			}
 			grantIDs = append(grantIDs, grantID)
-			grantFacts = append(grantFacts, AttachGrantInput{
+			grantFacts = append(grantFacts, attachments.GrantInput{
 				AttachID: grantID,
 				Params: adapters.Input{
 					Authentication: item.authentication,
@@ -498,7 +499,7 @@ func (overlay *blueprintAttachFactOverlay) addOwner(
 	name string,
 	own adapters.Input,
 	grantNames []string,
-	grants []AttachGrantInput,
+	grants []attachments.GrantInput,
 	adapter adapters.Adapter,
 ) error {
 	overlay.aliases[name] = name

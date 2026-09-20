@@ -611,7 +611,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		Executor: etcd.TaskExecutorAgent, PlanID: planID,
 		RenderGeneration: int32(generation), Type: etcd.TaskUpdate, Target: request.environmentID,
 		Materializations: references,
-		TimeoutSeconds:   environmentBlueprintTimeoutSeconds, Status: etcd.TaskStatusPending,
+		TimeoutSeconds:   controllerrevision.TaskTimeoutSeconds, Status: etcd.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
 	if request.action == entryDesiredMutationRemove {

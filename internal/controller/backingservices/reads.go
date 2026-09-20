@@ -1,4 +1,4 @@
-package app
+package backingservices
 
 import (
 	"context"
@@ -13,18 +13,18 @@ type backingServiceReadRepository interface {
 	ListBackingServices(context.Context, etcd.PageRequest) (etcd.Page[etcd.BackingServiceRecord], error)
 }
 
-type backingServiceReadService struct {
+type ReadService struct {
 	repository backingServiceReadRepository
 }
 
-func newBackingServiceReadService(repository backingServiceReadRepository) (*backingServiceReadService, error) {
+func NewReadService(repository backingServiceReadRepository) (*ReadService, error) {
 	if repository == nil {
 		return nil, errs.New(errs.KindInternal, "Backing-service read repository is not configured")
 	}
-	return &backingServiceReadService{repository: repository}, nil
+	return &ReadService{repository: repository}, nil
 }
 
-func (service *backingServiceReadService) GetBackingService(
+func (service *ReadService) GetBackingService(
 	ctx context.Context,
 	projectID string,
 ) (etcd.Versioned[etcd.BackingServiceRecord], error) {
@@ -43,7 +43,7 @@ func (service *backingServiceReadService) GetBackingService(
 	return service.repository.GetBackingService(ctx, projectID)
 }
 
-func (service *backingServiceReadService) ListBackingServices(
+func (service *ReadService) ListBackingServices(
 	ctx context.Context,
 	request etcd.PageRequest,
 ) (etcd.Page[etcd.BackingServiceRecord], error) {

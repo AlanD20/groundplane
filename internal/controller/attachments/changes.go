@@ -1,4 +1,4 @@
-package app
+package attachments
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *attachMutationService) ListAttaches(
+func (service *MutationService) ListAttaches(
 	ctx context.Context,
 	environmentID string,
 	request etcd.PageRequest,
@@ -39,7 +39,7 @@ func (service *attachMutationService) ListAttaches(
 	return service.repository.ListAttaches(ctx, environmentID, request)
 }
 
-func (service *attachMutationService) RenameAttach(
+func (service *MutationService) RenameAttach(
 	ctx context.Context,
 	attachID string,
 	request apiTypes.AttachRenameRequest,
@@ -67,7 +67,7 @@ func (service *attachMutationService) RenameAttach(
 	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach rename retry bound was not enforced")
 }
 
-func (service *attachMutationService) renameAttachOnce(
+func (service *MutationService) renameAttachOnce(
 	ctx context.Context,
 	attachID string,
 	request apiTypes.AttachRenameRequest,
@@ -155,7 +155,7 @@ func (service *attachMutationService) renameAttachOnce(
 	}
 }
 
-func (service *attachMutationService) replayAttachRename(
+func (service *MutationService) replayAttachRename(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	attachID string,

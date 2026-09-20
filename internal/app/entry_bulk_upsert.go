@@ -376,7 +376,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 		Type:              etcd.TaskUpdate,
 		Target:            input.environmentID,
 		Materializations:  materializationRecords,
-		TimeoutSeconds:    environmentBlueprintTimeoutSeconds,
+		TimeoutSeconds:    controllerrevision.TaskTimeoutSeconds,
 		Status:            etcd.TaskStatusPending,
 		NextEventSequence: 1,
 		CreatedAt:         claim.CreatedAt,

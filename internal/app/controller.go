@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/AlanD20/groundplane/internal/controller/attachments"
+	"github.com/AlanD20/groundplane/internal/controller/backingservices"
 	"github.com/AlanD20/groundplane/internal/controller/connectors"
 	scriptoperations "github.com/AlanD20/groundplane/internal/controller/scripts"
 	"github.com/AlanD20/groundplane/internal/controller/secrets"
@@ -83,7 +85,7 @@ type Controller struct {
 	scheduler       controllerScheduler
 	controllerTasks controllerScheduler
 	localAgent      controllerScheduler
-	attachMutations *attachMutationService
+	attachMutations *attachments.MutationService
 	container       ownedStore
 	etcdContainer   controllerEtcdLifecycle
 	store           ownedStore
@@ -345,7 +347,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backing-service repository: %w", err)
 	}
-	backingServiceReads, err := newBackingServiceReadService(backingServiceRecords)
+	backingServiceReads, err := backingservices.NewReadService(backingServiceRecords)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backing-service reads: %w", err)
@@ -424,7 +426,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Attach repository: %w", err)
 	}
-	attachFactValues, err := NewAttachFactService(attachRecords, intentProtector)
+	attachFactValues, err := attachments.NewFactService(attachRecords, intentProtector)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Attach fact service: %w", err)
@@ -433,7 +435,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backing hook inputs: %w", err)
 	}
-	attachFactReads, err := newAttachFactReadService(attachRecords, attachFactValues)
+	attachFactReads, err := attachments.NewFactReadService(attachRecords, attachFactValues)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Attach fact reads: %w", err)
@@ -894,14 +896,14 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Secret deletion service: %w", err)
 	}
-	attachMutationRecords, err := newDurableAttachMutationRepository(
+	attachMutationRecords, err := attachments.NewRepository(
 		hierarchyRecords, serviceRecords, attachRecords,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Attach mutation repository: %w", err)
 	}
-	attachMutationIdempotency, err := newDurableAttachMutationIdempotency(intentCoordinator, idempotency)
+	attachMutationIdempotency, err := attachments.NewMutationIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Attach mutation idempotency: %w", err)
@@ -912,7 +914,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Attach draft plan sealer: %w", err)
 	}
-	attachMutations, err := newAttachMutationService(
+	attachMutations, err := attachments.NewMutationService(
 		attachMutationRecords, attachFactValues, attachMutationPlans, planResolver, attachMutationIdempotency,
 	)
 	if err != nil {
@@ -1001,7 +1003,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Environment Blueprint service: %w", err)
 	}
 	environmentBlueprints.backups, environmentBlueprints.backupKeys = environmentBlueprintRepository, backupPolicyKeys
-	backingServiceCreations, err := newBackingServiceCreationService(
+	backingServiceCreations, err := backingservices.NewCreationService(
 		cfg.Storage.VolumeRoot,
 		runnerPools.Environment,
 		environmentBlueprintRepository,
@@ -1039,7 +1041,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Component mutations: %w", err)
 	}
-	backingServiceMutations, err := newBackingServiceMutationService(
+	backingServiceMutations, err := backingservices.NewMutationService(
 		backingServiceReads,
 		serviceMutations,
 		backingServiceCreations,
