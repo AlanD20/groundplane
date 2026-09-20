@@ -1,4 +1,4 @@
-package app
+package operations
 
 import (
 	"context"
@@ -90,7 +90,7 @@ type durableEntryCreationIdempotency struct {
 	repository  *etcd.IdempotencyRepository
 }
 
-func newDurableEntryCreationIdempotency(
+func NewCreationIdempotency(
 	coordinator *requestidempotency.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*durableEntryCreationIdempotency, error) {

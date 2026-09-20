@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"slices"
 	"sort"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/backingendpoint"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
+	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"

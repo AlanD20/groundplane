@@ -1,4 +1,4 @@
-package app
+package operations
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -91,7 +90,7 @@ type durableEntryEditIdempotency struct {
 	repository  *etcd.IdempotencyRepository
 }
 
-func newDurableEntryEditIdempotency(
+func NewEditIdempotency(
 	coordinator *requestidempotency.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*durableEntryEditIdempotency, error) {
@@ -179,53 +178,6 @@ type entryEditService struct {
 	generator   entryCreationGenerator
 	idempotency entryEditIdempotency
 	now         func() time.Time
-}
-
-type entryMutationService struct {
-	desired *entryDesiredMutationService
-	bulk    *entryBulkUpsertService
-}
-
-func newEntryMutationService(
-	desired *entryDesiredMutationService,
-	bulk *entryBulkUpsertService,
-) (*entryMutationService, error) {
-	if desired == nil || bulk == nil {
-		return nil, errs.New(errs.KindInternal, "Entry mutation service is not configured")
-	}
-	return &entryMutationService{desired: desired, bulk: bulk}, nil
-}
-
-func (service *entryMutationService) RemoveEntry(
-	ctx context.Context,
-	request entrycontroller.RemoveRequest,
-) (entrycontroller.RemovalOutcome, error) {
-	return service.desired.RemoveEntry(ctx, request)
-}
-
-func (service *entryMutationService) CreateEntry(
-	ctx context.Context,
-	input apiTypes.EntryCreateRequest,
-	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
-	return service.desired.CreateEntry(ctx, input, idempotencyKey)
-}
-
-func (service *entryMutationService) BulkUpsertEntries(
-	ctx context.Context,
-	input apiTypes.EntryBulkUpsertRequest,
-	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
-	return service.bulk.BulkUpsertEntries(ctx, input, idempotencyKey)
-}
-
-func (service *entryMutationService) EditEntry(
-	ctx context.Context,
-	entryID string,
-	input apiTypes.EntryEditRequest,
-	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
-	return service.desired.EditEntry(ctx, entryID, input, idempotencyKey)
 }
 
 func newEntryEditService(

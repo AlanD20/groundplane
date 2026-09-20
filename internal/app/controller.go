@@ -4,14 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/AlanD20/groundplane/internal/controller/attachments"
-	"github.com/AlanD20/groundplane/internal/controller/backingservices"
-	"github.com/AlanD20/groundplane/internal/controller/connectors"
-	scriptoperations "github.com/AlanD20/groundplane/internal/controller/scripts"
-	"github.com/AlanD20/groundplane/internal/controller/secrets"
-	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
-	serviceoperations "github.com/AlanD20/groundplane/internal/controller/services"
-	taskoperations "github.com/AlanD20/groundplane/internal/controller/tasks"
 	"log/slog"
 	"os"
 	"time"
@@ -24,12 +16,16 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/logging"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	"github.com/AlanD20/groundplane/internal/controller"
+	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"github.com/AlanD20/groundplane/internal/controller/attachplanning"
+	"github.com/AlanD20/groundplane/internal/controller/backingservices"
 	"github.com/AlanD20/groundplane/internal/controller/backupkey"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	componentcapability "github.com/AlanD20/groundplane/internal/controller/component"
+	"github.com/AlanD20/groundplane/internal/controller/connectors"
 	desiredrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	controllerdns "github.com/AlanD20/groundplane/internal/controller/dnsresolver"
+	entryoperations "github.com/AlanD20/groundplane/internal/controller/entry/operations"
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
 	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
 	hierarchycontroller "github.com/AlanD20/groundplane/internal/controller/hierarchy"
@@ -37,6 +33,11 @@ import (
 	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
 	releaseoperation "github.com/AlanD20/groundplane/internal/controller/releaseoperation"
 	runnercapability "github.com/AlanD20/groundplane/internal/controller/runner"
+	scriptoperations "github.com/AlanD20/groundplane/internal/controller/scripts"
+	"github.com/AlanD20/groundplane/internal/controller/secrets"
+	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	serviceoperations "github.com/AlanD20/groundplane/internal/controller/services"
+	taskoperations "github.com/AlanD20/groundplane/internal/controller/tasks"
 	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
 	controllerconfigstore "github.com/AlanD20/groundplane/internal/infra/controllerconfig"
 	"github.com/AlanD20/groundplane/internal/infra/docker/etcdcontainer"
@@ -269,12 +270,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry repository: %w", err)
 	}
-	entryReadRepository, err := newDurableEntryReadRepository(hierarchyRecords, entryRecords, entryValues)
+	entryReadRepository, err := entryoperations.NewReadRepository(hierarchyRecords, entryRecords, entryValues)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry read repositories: %w", err)
 	}
-	entryReads, err := newEntryReadService(entryReadRepository, intentProtector)
+	entryReads, err := entryoperations.NewReadService(entryReadRepository, intentProtector)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry reads: %w", err)
@@ -802,22 +803,22 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry generation: %w", err)
 	}
-	entryCreationIdempotency, err := newDurableEntryCreationIdempotency(intentCoordinator, idempotency)
+	entryCreationIdempotency, err := entryoperations.NewCreationIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry creation idempotency: %w", err)
 	}
-	entryBulkUpsertIdempotency, err := newDurableEntryBulkUpsertIdempotency(intentCoordinator, idempotency)
+	entryBulkUpsertIdempotency, err := entryoperations.NewBulkUpsertIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry bulk upsert idempotency: %w", err)
 	}
-	entryEditIdempotency, err := newDurableEntryEditIdempotency(intentCoordinator, idempotency)
+	entryEditIdempotency, err := entryoperations.NewEditIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry edit idempotency: %w", err)
 	}
-	entryRemovalIdempotency, err := newDurableEntryDesiredRemovalIdempotency(intentCoordinator, idempotency)
+	entryRemovalIdempotency, err := entryoperations.NewRemovalIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry removal idempotency: %w", err)
@@ -967,7 +968,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Environment Blueprint repositories: %w", err)
 	}
 	environmentBlueprintRepository.backups, environmentBlueprintRepository.connectors = backupPolicyRecords, connectorRecords
-	entryDesiredMutations, err := newEntryDesiredMutationService(
+	entryDesiredMutations, err := entryoperations.NewDesiredMutationService(
 		cfg.Storage.VolumeRoot, environmentBlueprintRepository, entryGeneration, materializationResolver,
 		entryCreationIdempotency, entryEditIdempotency, entryRemovalIdempotency, planResolver, hierarchyRecords,
 	)
@@ -975,12 +976,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry desired mutation service: %w", err)
 	}
-	entryBulkUpserts, err := newEntryBulkUpsertService(entryDesiredMutations, entryBulkUpsertIdempotency)
+	entryBulkUpserts, err := entryoperations.NewBulkUpsertService(entryDesiredMutations, entryBulkUpsertIdempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry bulk upsert service: %w", err)
 	}
-	entryMutations, err := newEntryMutationService(entryDesiredMutations, entryBulkUpserts)
+	entryMutations, err := entryoperations.NewMutationService(entryDesiredMutations, entryBulkUpserts)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry mutation service: %w", err)

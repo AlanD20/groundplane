@@ -1,4 +1,4 @@
-package app
+package operations
 
 import (
 	"context"
@@ -64,7 +64,7 @@ type durableEntryBulkUpsertIdempotency struct {
 	repository  *etcd.IdempotencyRepository
 }
 
-func newDurableEntryBulkUpsertIdempotency(
+func NewBulkUpsertIdempotency(
 	coordinator *requestidempotency.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*durableEntryBulkUpsertIdempotency, error) {
@@ -151,7 +151,7 @@ type entryBulkUpsertService struct {
 	idempotency entryBulkUpsertIdempotency
 }
 
-func newEntryBulkUpsertService(
+func NewBulkUpsertService(
 	desired *entryDesiredMutationService,
 	idempotency entryBulkUpsertIdempotency,
 ) (*entryBulkUpsertService, error) {
@@ -342,7 +342,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	removals, err := environmentBlueprintEntryRemovals(
+	removals, err := PlanEntryRemovals(
 		input.environmentID, candidateRecords.previous, candidateRecords.entries, serviceIdentities,
 	)
 	if err != nil {

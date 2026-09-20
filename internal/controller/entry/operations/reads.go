@@ -1,4 +1,4 @@
-package app
+package operations
 
 import (
 	"context"
@@ -35,7 +35,7 @@ type entryReadService struct {
 	protector  *secretvalue.Protector
 }
 
-func newEntryReadService(
+func NewReadService(
 	repository entryReadRepository,
 	protector *secretvalue.Protector,
 ) (*entryReadService, error) {
@@ -142,7 +142,7 @@ type durableEntryReadRepository struct {
 	values    *etcd.EntryValueGenerationRepository
 }
 
-func newDurableEntryReadRepository(
+func NewReadRepository(
 	hierarchy *etcd.HierarchyRepository,
 	entries *etcd.EntryRepository,
 	values *etcd.EntryValueGenerationRepository,
