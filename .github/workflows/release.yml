@@ -186,13 +186,3 @@ jobs:
             "groundplane-$VERSION-linux-amd64.tar.gz" "groundplane-$VERSION-linux-amd64.tar.gz.sha256" \
             "groundplane-$VERSION-linux-arm64.tar.gz" "groundplane-$VERSION-linux-arm64.tar.gz.sha256" \
             ../../install.sh
-
-  pages:
-    needs: [version, publish]
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    uses: ./.github/workflows/pages.yml
-    with:
-      version: ${{ needs.version.outputs.version }}

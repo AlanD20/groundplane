@@ -91,19 +91,20 @@ redirecting to it. This workflow does not change repository visibility. Its curr
 same-repository release URLs must be public; a private source repository would
 need a separate public release location before these URLs could work.
 
-The release workflow calls `.github/workflows/pages.yml` after publication.
-It can also be dispatched manually with an existing stable release version.
-Before deployment it requires publicly downloadable amd64/arm64 bundles and
-checksums, and compares the published installer with the tagged source bytes.
+The independent `.github/workflows/pages.yml` runs on every push to `main`,
+without path filters or a dependency on release/CI jobs. It can also be dispatched
+manually on `main`. It tests the site builder, validates version metadata, and
+publishes the exact installer from that commit with its checksum.
 Only the landing page, installer, installer checksum and `.nojekyll` are uploaded;
 the repository, private evidence and internal docs are not exported to Pages.
-No site is published for a draft, prerelease or inaccessible release.
+The displayed version comes from `VERSION`; site deployment does not prove that
+its release assets are published. Installation requires those public assets.
 
 One-time setup, performed by an account with GitHub and DNS administration access:
 
 1. Enable Pages with **GitHub Actions** as its source and set its custom domain to
    `gp.aland20.com`. Verify domain ownership through GitHub's account settings.
-   Ensure the `github-pages` environment permits deployments from the release tags.
+   Ensure the `github-pages` environment permits deployments from `main`.
 2. Create `CNAME gp → aland20.github.io` in the `aland20.com` DNS zone. Do not put
    a scheme, repository name or URL path in the target.
 3. Enable **Enforce HTTPS** in Pages after DNS verification and certificate issuance.
