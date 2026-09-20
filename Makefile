@@ -15,6 +15,7 @@ AGENT_VERSION ?= dev
 RUNNER_IMAGE ?= groundplane-runner:dev
 RUNNER_VERSION ?= $(shell cat .runner-version)
 DOCKER ?= docker
+PROTOC ?= protoc
 
 build: cli controller agent
 
@@ -66,7 +67,8 @@ runner-image-smoke: runner-image
 		test "$$compose_version" = '2.40.3'
 
 proto:
-	protoc \
+	@test "$$($(PROTOC) --version)" = "libprotoc $$(cat .protoc-version)" || { echo "protoc version mismatch: install the version in .protoc-version" >&2; exit 1; }
+	$(PROTOC) \
 		--plugin=protoc-gen-go="$$(go tool -n protoc-gen-go)" \
 		--plugin=protoc-gen-go-grpc="$$(go tool -n protoc-gen-go-grpc)" \
 		--go_out=. --go_opt=module=github.com/AlanD20/groundplane \

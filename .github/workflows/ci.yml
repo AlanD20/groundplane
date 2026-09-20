@@ -27,8 +27,15 @@ jobs:
           cache-dependency-path: console/package-lock.json
       - name: Install build prerequisites
         run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler
+          test "$(uname -m)" = x86_64
+          protoc_version=$(cat .protoc-version)
+          mkdir -p .tmp/protoc
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --max-time 120 \
+            "https://github.com/protocolbuffers/protobuf/releases/download/v$protoc_version/protoc-$protoc_version-linux-x86_64.zip" \
+            --output .tmp/protoc.zip
+          echo 'c4bc672d9d49214dc8cafdceadf4df92182d6ca8e3ec65a56b2d7de5602669b4  .tmp/protoc.zip' | sha256sum --check
+          unzip -q .tmp/protoc.zip -d .tmp/protoc
+          echo "$GITHUB_WORKSPACE/.tmp/protoc/bin" >> "$GITHUB_PATH"
           bash scripts/repo-env.sh npm install --global "$(node -p 'require("./console/package.json").packageManager')"
       - name: Run checks
         run: make ci

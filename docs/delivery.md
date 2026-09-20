@@ -119,6 +119,13 @@ the committed OpenAPI document, and both generated clients before compilation;
 CI fails on any drift. `make controller-dev` is the explicitly assetless
 development build; release automation uses `make controller` only.
 
+The Protobuf compiler is pinned by `.protoc-version`, independently of the Go
+plugins pinned in `go.mod`. `make proto` rejects a different compiler before
+generation. CI downloads that exact official compiler archive and verifies its
+pinned SHA256 instead of installing a distribution's `protobuf-compiler` package.
+Update the archive checksum with any compiler pin change and regenerate normally;
+never hand-edit generated version headers or waive generated-file parity.
+
 ### Approved architecture debt for 0.0.1
 
 The owner deferred structural cleanup on 2026-09-19. Release CI runs the strict
