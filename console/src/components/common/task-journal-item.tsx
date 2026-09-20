@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button'
 
 import { useState } from 'react'
-import { ChevronRight, Search } from 'lucide-react'
+import { ArrowUpRight, Search } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useStore } from '@/lib/store'
 import { ActivityIcon } from '@/components/common/activity-icon'
@@ -13,11 +13,8 @@ import { TaskJournalMetadata } from '@/components/common/task-journal-metadata'
 import { resolveTaskOperationSurface } from '@/lib/task-navigation'
 import type { ActivityEntry, TaskJournalScope } from '@/lib/types'
 
-// The activity journal IS the task stream: every journal entry is a task
-// (taskState + steps), and every task lands in the journal. Clicking an
-// entry navigates to the exact surface that task belongs to — the target
-// environment's Tasks tab, the backing service page, or the platform-infra
-// task section. Targets that resolve to nothing stay non-clickable.
+// The row always inspects the Task. Resource navigation is a separate link,
+// including an explicitly labelled journal fallback when the target is gone.
 export function TaskJournalItem({ entry, scope }: { entry: ActivityEntry; scope: TaskJournalScope }) {
   const store = useStore()
   const [open, setOpen] = useState(false)
@@ -48,30 +45,28 @@ export function TaskJournalItem({ entry, scope }: { entry: ActivityEntry; scope:
   return (
     <>
       <div className="flex w-full items-stretch rounded-xl border border-border bg-card transition-colors hover:border-ring/60">
-        {destination ? (
-          <Link
-            to={destination.href}
-            className="flex min-w-0 flex-1 items-start gap-3 rounded-l-xl p-3.5 transition-colors hover:bg-surface/40"
-            title={destination.label}
-          >
-            {body}
-            <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground/50" />
-          </Link>
-        ) : (
-          <div className="flex min-w-0 flex-1 items-start gap-3 p-3.5">{body}</div>
-        )}
         <Button variant="ghost" size="content"
           type="button"
-          onClick={(event) => {
-            event.stopPropagation()
-            setOpen(true)
-          }}
-          className="m-2 ml-0 flex shrink-0 items-center gap-1.5 self-center rounded-lg border border-border bg-surface px-2.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-ring/60 hover:text-foreground"
+          onClick={() => setOpen(true)}
+          className="min-w-0 flex-1 items-start justify-start gap-3 rounded-l-xl rounded-r-none p-3.5 text-left hover:bg-surface/40"
           aria-label={`Inspect Task ${entry.id}`}
+          aria-haspopup="dialog"
         >
-          <Search className="size-3.5" />
-          <span className="hidden sm:inline">Inspect</span>
+          {body}
+          <Search className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
         </Button>
+        {destination && (
+          <Button variant="outline" size="sm"
+            render={<Link to={destination.href} />}
+            nativeButton={false}
+            className="m-2 ml-0 self-center"
+            aria-label={`${destination.label} for Task ${entry.id}`}
+            title={destination.label}
+          >
+            <ArrowUpRight className="size-3.5" />
+            <span className="hidden sm:inline">{destination.fallback ? 'Open journal' : 'Open page'}</span>
+          </Button>
+        )}
       </div>
       {open && (
         <TaskDetailDrawer

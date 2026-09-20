@@ -1594,12 +1594,14 @@ named Network Zones, not through published host ports.
   Tenant Activity starts with its Tenant subtree and may narrow by Project or
   Environment. A filter can only narrow the starting visibility. The MVP has
   no target or Component Task index. Every Task always exposes
-  **Inspect** as the authoritative detail and action surface. A row's primary
-  navigation opens an operation/resource surface only when the immutable owner
+  **Inspect** as the authoritative detail and action surface. Clicking a Task or
+  Activity row opens Inspect. A separate **Open page** action navigates to an
+  operation/resource surface only when the immutable owner
   and live typed target resolve: an Environment-owned Task opens that
   Environment's Tasks tab (`?tab=tasks`), while a live Platform Component target
   opens its Component surface. If the target was deleted or cannot resolve, the
-  row falls back to the owning Platform Components or Tenant Activity journal;
+  navigation action is labelled **Open journal** and falls back to the owning
+  Platform Components or Tenant Activity journal;
   that fallback is not presented as the original operation surface. If even the
   owning Tenant label no longer resolves, Inspect remains available without a
   fabricated link. `operation_id` is opaque reference identity and is never
